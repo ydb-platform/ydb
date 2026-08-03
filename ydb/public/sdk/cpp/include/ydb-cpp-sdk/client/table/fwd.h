@@ -13,6 +13,7 @@ struct TPartitionStats;
 struct TSequenceDescription;
 class TChangefeedDescription;
 class TIndexDescription;
+class TMultiColumnStatisticsDescription;
 class TColumnFamilyDescription;
 class TTableDescription;
 

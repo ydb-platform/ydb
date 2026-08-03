@@ -13,6 +13,15 @@
 #undef NGROUPS_MAX
 #endif
 
+// glibc bits/uio-ext.h (via sys/uio.h) may define RWF_APPEND; bundled
+// linux/fs.h (via liburing) redefines it. Include sys/uio.h first so its
+// include guard is set, then drop the glibc macro before liburing pulls
+// linux/fs.h. Same value either way (0x10).
+#include <sys/uio.h>
+#ifdef RWF_APPEND
+#undef RWF_APPEND
+#endif
+
 #include <liburing.h>
 
 // linux/uapi headers pulled by liburing define macros that clash with YDB code.

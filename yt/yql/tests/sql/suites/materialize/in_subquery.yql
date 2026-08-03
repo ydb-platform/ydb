@@ -2,7 +2,7 @@ use plato;
 
 DEFINE SUBQUERY $process() AS
     MATERIALIZE Input INTO $tmp;
-    SELECT * FROM $tmp ORDER BY key;
+    SELECT * FROM $tmp;
 END DEFINE;
 
 SELECT * FROM $process();

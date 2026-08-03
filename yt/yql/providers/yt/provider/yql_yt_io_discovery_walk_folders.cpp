@@ -47,7 +47,7 @@ BuildFolderItemStructType(TExprContext& ctx, NYql::TPositionHandle pos) {
         .Done();
 }
 
-TCoList 
+TCoList
 BuildFolderListExpr(TExprContext& ctx, NYql::TPositionHandle pos, const TVector<NNodes::TExprBase>& folderItems) {
     return Build<TCoList>(ctx, pos)
         .ListType<TCoListType>()
@@ -100,20 +100,20 @@ BuildFolderListItemExpr(TExprContext &ctx, NYql::TPositionHandle pos,
         .Done();
 }
 
-TWalkFoldersImpl::TWalkFoldersImpl(const TString& sessionId, const TString& cluster, TYtSettings::TConstPtr config, 
+TWalkFoldersImpl::TWalkFoldersImpl(const TString& sessionId, const TString& cluster, TYtSettings::TConstPtr config,
     TPosition pos, const TYtKey::TWalkFoldersArgs& args, const IYtGateway::TPtr gateway):
     Pos_(pos), SessionId_(sessionId), Cluster_(cluster), Config_(config), Gateway_(gateway) {
-    
+
     PreHandler_ = args.PreHandler->IsCallable("Void") ? Nothing() : MakeMaybe(args.PreHandler);
     ResolveHandler_ = args.ResolveHandler;
     DiveHandler_ = args.DiveHandler;
     PostHandler_ = args.PostHandler->IsCallable("Void") ? Nothing() : MakeMaybe(args.PostHandler);
-    
+
     ProcessFoldersQueue_.emplace_back(TFolderQueueItem {
         .Folder = args.InitialFolder,
     });
     IYtGateway::TBatchFolderOptions::TFolderPrefixAttrs folder {
-        std::move(args.InitialFolder.Prefix), 
+        std::move(args.InitialFolder.Prefix),
         TSet<TString>(args.InitialFolder.Attributes.begin(), args.InitialFolder.Attributes.end())
     };
     DoFolderListOperation({folder});
@@ -177,7 +177,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::EvaluateNextUserStateExpr(TExprCont
     .Build()
     .Value()
     .Ptr();
-    
+
     ctx.Step.Repeat(TExprStep::ExprEval);
 
     YQL_CLOG(TRACE, ProviderYt) << "WalkFolders - next evaluate ast: " << ConvertToAst(*nextUserStatePickled, ctx, {}).Root->ToString();
@@ -211,6 +211,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::AfterListFolderOp(TExprContext& ctx
             ProcessingState_ = PreHandling;
         } else {
             folderListVal.ReportIssues(ctx.IssueManager);
+            return IGraphTransformer::TStatus::Error;
         }
 
         BatchFolderListFuture_ = Nothing();
@@ -260,7 +261,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::PreHandleVisitedInSingleFolder(TExp
 
     const auto folderListExpr = BuildFolderListExpr(ctx, PosHandle_, folderListItems);
 
-    const auto makeNextUserState = [&] (const TExprBase& userStateUnpickled) { 
+    const auto makeNextUserState = [&] (const TExprBase& userStateUnpickled) {
         return Build<TCoApply>(ctx, PosHandle_)
             .Callable(PreHandler_.GetRef())
             .FreeArgs()
@@ -288,15 +289,15 @@ IGraphTransformer::TStatus TWalkFoldersImpl::ResolveHandleInSingleFolder(TExprCo
     return BuildDiveOrResolveHandlerEval(ctx, args, ResolveHandler_.GetRef(), folder.LinksToResolveHandle, folder.Folder.Attributes, folder.Level, state);
 }
 
-IGraphTransformer::TStatus TWalkFoldersImpl::BuildDiveOrResolveHandlerEval(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& handler, 
+IGraphTransformer::TStatus TWalkFoldersImpl::BuildDiveOrResolveHandlerEval(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& handler,
     const TVector<IYtGateway::TBatchFolderResult::TFolderItem>& res, const TVector<TString>& attributes, ui64 level, TExprNode::TPtr& state) {
     using namespace NNodes;
 
     TVector<TExprBase> items;
     items.reserve(res.size());
     for (auto& link : res) {
-        auto itemsExpr = 
-            BuildFolderListItemExpr(ctx, PosHandle_, 
+        auto itemsExpr =
+            BuildFolderListItemExpr(ctx, PosHandle_,
                 link.Path, link.Type, NYT::NodeToYsonString(link.Attributes));
         items.push_back(itemsExpr);
     }
@@ -335,7 +336,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::BuildDiveOrResolveHandlerEval(TExpr
     .Build()
     .Value()
     .Ptr();
-    
+
     const auto resolveHandlerResPickled = ctx.Builder(PosHandle_)
         .Callable("StaticMap")
             .Add(0, handlerResult)
@@ -406,7 +407,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::AfterResolveHandle(TExprContext& ct
 
     TVector<IYtGateway::TResolveOptions::TItemWithReqAttrs> links;
     links.reserve(nameAndRequestedAttrs.size());
-    for (auto&& linkToResolve : folder.LinksToResolveHandle) { 
+    for (auto&& linkToResolve : folder.LinksToResolveHandle) {
         auto it = nameAndRequestedAttrs.find(linkToResolve.Path);
         if (it == nameAndRequestedAttrs.end()) {
             continue;
@@ -493,11 +494,11 @@ IGraphTransformer::TStatus TWalkFoldersImpl::AfterDiveHandle(TExprContext& ctx, 
         });
     });
 
-    folder.ItemsToPostHandle.insert(folder.ItemsToPostHandle.end(), 
+    folder.ItemsToPostHandle.insert(folder.ItemsToPostHandle.end(),
         std::make_move_iterator(folder.ItemsToDiveHandle.begin()),
         std::make_move_iterator(folder.ItemsToDiveHandle.end()));
     folder.ItemsToDiveHandle.clear();
-    
+
     args.UserStateExpr = args.UserStateExpr->Child(1);
     state = args.UserStateExpr;
     ProcessingState_ = PostHandling;
@@ -531,8 +532,8 @@ IGraphTransformer::TStatus TWalkFoldersImpl::PostHandleVisitedInSingleFolder(TEx
     TVector<TExprBase> folderListItems;
     for (auto&& item : folder.ItemsToPostHandle) {
         folderListItems.push_back(
-            BuildFolderListItemExpr(ctx, 
-                                    PosHandle_, 
+            BuildFolderListItemExpr(ctx,
+                                    PosHandle_,
                                     item.Path,
                                     item.Type,
                                     NYT::NodeToYsonString(item.Attributes)));
@@ -541,7 +542,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::PostHandleVisitedInSingleFolder(TEx
 
     const auto folderListExpr = BuildFolderListExpr(ctx, PosHandle_, folderListItems);
 
-    const auto makeNextUserState = [&] (const TExprBase& userStateUnpickled) { 
+    const auto makeNextUserState = [&] (const TExprBase& userStateUnpickled) {
         return Build<TCoApply>(ctx, PosHandle_)
             .Callable(PostHandler_.GetRef())
             .FreeArgs()
@@ -566,7 +567,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::PostHandleVisitedInSingleFolder(TEx
 
 IGraphTransformer::TStatus TWalkFoldersImpl::BuildFinishedState(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& state) {
     // TODO: Dump large user state to file
-    // const auto dataLen = args.UserStateExpr->IsCallable("String") 
+    // const auto dataLen = args.UserStateExpr->IsCallable("String")
     //     ? TCoString(args.UserStateExpr).Literal().StringValue().Size()
     //     : 0;
 

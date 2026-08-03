@@ -189,8 +189,7 @@ class ResponseParamsDocumenter(BaseParamsDocumenter):
                     [f'``{key}``' for key in shape.members.keys()]
                 )
                 unknown_code_example = (
-                    '\'SDK_UNKNOWN_MEMBER\': '
-                    '{\'name\': \'UnknownMemberName\'}'
+                    '\'SDK_UNKNOWN_MEMBER\': {\'name\': \'UnknownMemberName\'}'
                 )
                 tagged_union_docs.write(note % (tagged_union_members_str))
                 example = section.add_new_section('param-unknown-example')

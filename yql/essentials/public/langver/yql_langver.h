@@ -54,6 +54,16 @@ constexpr inline bool IsUnsupportedLangVersion(TLangVersion ver, TLangVersion ma
     return GetYearFromLangVersion(ver) <= GetYearFromLangVersion(max) - 3;
 }
 
+constexpr bool IsValidLangVersion(TLangVersion ver) {
+    for (const auto& version : Versions) {
+        if (ver == MakeLangVersion(version.first, version.second)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 constexpr TLangVersion MinLangVersion = MakeLangVersion(2025, 1);
 
 TLangVersion GetMaxReleasedLangVersion();
@@ -71,7 +81,6 @@ constexpr TLangVersion GetMaxLangVersion() {
 constexpr ui32 LangVersionBufferSize = 4 + 1 + 2 + 1; // year.minor\0
 using TLangVersionBuffer = std::array<char, LangVersionBufferSize>;
 
-bool IsValidLangVersion(TLangVersion ver);
 bool ParseLangVersion(TStringBuf str, TLangVersion& result);
 bool FormatLangVersion(TLangVersion ver, TLangVersionBuffer& buffer, TStringBuf& result);
 TMaybe<TString> FormatLangVersion(TLangVersion ver);

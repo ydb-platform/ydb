@@ -1,4 +1,5 @@
 #include "mkql_udf.h"
+#include "mkql_udf_profile.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
@@ -92,6 +93,7 @@ public:
         , FunctionType(functionType)
         , UserType(userType)
         , WrapDateTimeConvert(wrapDateTimeConvert)
+        , ProfileStateIndex(mutables.CurValueIndex++)
     {
         this->Stateless_ = false;
     }
@@ -117,6 +119,7 @@ public:
         TValidate<TValidatePolicy, TValidateMode>::WrapCallable(FunctionType, udf, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
         ExtendArgs(udf, CallableType, funcInfo.FunctionType);
         ConvertDateTimeArg(udf);
+        udf = MaybeWrapUdfProfiling(std::move(udf), FunctionType, FunctionName, ctx, ProfileStateIndex);
         return udf.Release();
     }
 
@@ -174,6 +177,7 @@ private:
     const TCallableType* const FunctionType;
     TType* const UserType;
     bool WrapDateTimeConvert;
+    const ui32 ProfileStateIndex;
 };
 
 class TUdfRunCodegeneratorNode: public TSimpleUdfWrapper<TValidateErrorPolicyNone, TValidateModeLazy<TValidateErrorPolicyNone>>
@@ -242,6 +246,7 @@ public:
         IComputationNode* runConfigNode,
         ui32 runConfigArgs,
         const TCallableType* callableType,
+        const TCallableType* closureFuncType,
         TType* userType,
         bool wrapDateTimeConvert)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -251,9 +256,11 @@ public:
         , RunConfigNode(runConfigNode)
         , RunConfigArgs(runConfigArgs)
         , CallableType(callableType)
+        , ClosureFuncType(closureFuncType)
         , UserType(userType)
         , WrapDateTimeConvert(wrapDateTimeConvert)
         , UdfIndex(mutables.CurValueIndex++)
+        , ProfileStateIndex(mutables.CurValueIndex++)
     {
         this->Stateless_ = false;
     }
@@ -268,6 +275,7 @@ public:
         args[0] = RunConfigNode->GetValue(ctx);
         auto callable = udf.Run(ctx.Builder, args.data());
         Wrap(callable);
+        ProfileCallable(ctx, callable);
         return callable;
     }
 #ifndef MKQL_DISABLE_CODEGEN
@@ -317,6 +325,8 @@ public:
         ValueUnRef(RunConfigNode->GetRepresentation(), runConfigValue, ctx, block);
 
         EmitFunctionCall<&TUdfWrapper::Wrap>(Type::getVoidTy(context), {self, pointer}, ctx, block);
+
+        EmitFunctionCall<&TUdfWrapper::ProfileCallable>(Type::getVoidTy(context), {self, ctx.Ctx, pointer}, ctx, block);
     }
 #endif
 private:
@@ -344,6 +354,10 @@ private:
         TValidate<TValidatePolicy, TValidateMode>::WrapCallable(CallableType, callable, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
     }
 
+    void ProfileCallable(TComputationContext& ctx, NUdf::TUnboxedValue& callable) const {
+        callable = MaybeWrapUdfProfiling(std::move(callable), ClosureFuncType, FunctionName, ctx, ProfileStateIndex);
+    }
+
     void ConvertDateTimeArg(NUdf::TUnboxedValue& callable) const {
         if (WrapDateTimeConvert) {
             callable = NUdf::TUnboxedValuePod(new TDateTimeConvertWrapper(std::move(callable)));
@@ -360,9 +374,11 @@ private:
     IComputationNode* const RunConfigNode;
     const ui32 RunConfigArgs;
     const TCallableType* CallableType;
+    const TCallableType* const ClosureFuncType;
     TType* const UserType;
     bool WrapDateTimeConvert;
     const ui32 UdfIndex;
+    const ui32 ProfileStateIndex;
 };
 
 template <bool Simple, class TValidatePolicy, class TValidateMode>
@@ -576,7 +592,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
         const auto runConfigArgs = funcInfo.FunctionType->GetArgumentsCount();
         return runConfigNodeType->IsVoid()
                    ? CreateUdfWrapper<true>(ctx, std::move(funcName), std::move(typeConfig), pos, callableNodeType, callableFuncType, userType, wrapDateTimeConvert)
-                   : CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runConfigCompNode, runConfigArgs, callableNodeType, userType, wrapDateTimeConvert);
+                   : CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runConfigCompNode, runConfigArgs, callableNodeType, closureFuncType, userType, wrapDateTimeConvert);
     }
 
     if (!callableFuncType->IsConvertableTo(*callableNodeType, true)) {
@@ -603,7 +619,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     }
 
     const auto runCfgCompNode = LocateNode(ctx.NodeLocator, *runCfgNode.GetNode());
-    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runCfgCompNode, 1U, callableNodeType, userType, wrapDateTimeConvert);
+    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runCfgCompNode, 1U, callableNodeType, callableFuncType, userType, wrapDateTimeConvert);
 }
 
 IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -653,7 +669,7 @@ IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFacto
     const auto funcTypeInfo = static_cast<TCallableType*>(callableResultType);
 
     const auto programCompNode = LocateNode(ctx.NodeLocator, *programNode.GetNode());
-    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, programCompNode, 1U, funcTypeInfo, userType, false);
+    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, programCompNode, 1U, funcTypeInfo, funcTypeInfo, userType, false);
 }
 
 } // namespace NMiniKQL

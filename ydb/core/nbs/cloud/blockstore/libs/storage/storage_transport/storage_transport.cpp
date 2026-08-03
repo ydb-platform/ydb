@@ -26,6 +26,15 @@ bool THostConnection::IsConnected() const
     return Credentials.DDiskInstanceGuid.has_value();
 }
 
+TString THostConnection::DebugPrint() const
+{
+    TStringBuilder result;
+    result << ToString(ConnectionType) << " ddisk:[" << DDiskId.ToString()
+           << "] cred:[guid:" << Credentials.DDiskInstanceGuid.value_or(0)
+           << " seqNo:" << Credentials.DDiskSessionSeqNo << "]";
+    return result;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

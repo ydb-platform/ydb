@@ -1,5 +1,7 @@
 #include "feature.h"
 
+#include <yql/essentials/utils/yql_panic.h>
+
 #include <util/string/builder.h>
 
 namespace NYql {

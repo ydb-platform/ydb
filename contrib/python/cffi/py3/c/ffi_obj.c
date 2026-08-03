@@ -185,13 +185,13 @@ static CTypeDescrObject *_ffi_type(FFIObject *ffi, PyObject *arg,
     /* Returns the CTypeDescrObject from the user-supplied 'arg'.
        Does not return a new reference!
     */
-    if ((accept & ACCEPT_STRING) && PyText_Check(arg)) {
+    if ((accept & ACCEPT_STRING) && PyUnicode_Check(arg)) {
         PyObject *types_dict = ffi->types_builder.types_dict;
         /* The types_dict keeps the reference alive. Items are never removed */
         PyObject *x = PyDict_GetItem(types_dict, arg);
 
         if (x == NULL) {
-            const char *input_text = PyText_AS_UTF8(arg);
+            const char *input_text = PyUnicode_AsUTF8(arg);
             struct _cffi_parse_info_s info;
             info.ctx = &ffi->types_builder.ctx;
             info.output_size = FFI_COMPLEXITY_OUTPUT;
@@ -241,17 +241,6 @@ static CTypeDescrObject *_ffi_type(FFIObject *ffi, PyObject *arg,
     else if ((accept & ACCEPT_CDATA) && CData_Check(arg)) {
         return ((CDataObject *)arg)->c_type;
     }
-#if PY_MAJOR_VERSION < 3
-    else if (PyUnicode_Check(arg)) {
-        CTypeDescrObject *result;
-        arg = PyUnicode_AsASCIIString(arg);
-        if (arg == NULL)
-            return NULL;
-        result = _ffi_type(ffi, arg, accept);
-        Py_DECREF(arg);
-        return result;
-    }
-#endif
     else {
         const char *m1 = (accept & ACCEPT_STRING) ? "string" : "";
         const char *m2 = (accept & ACCEPT_CTYPE) ? "ctype object" : "";
@@ -291,7 +280,7 @@ static PyObject *ffi_sizeof(FFIObject *self, PyObject *arg)
             return NULL;
         }
     }
-    return PyInt_FromSsize_t(size);
+    return PyLong_FromSsize_t(size);
 }
 
 PyDoc_STRVAR(ffi_alignof_doc,
@@ -308,7 +297,7 @@ static PyObject *ffi_alignof(FFIObject *self, PyObject *arg)
     align = get_alignment(ct);
     if (align < 0)
         return NULL;
-    return PyInt_FromLong(align);
+    return PyLong_FromLong(align);
 }
 
 PyDoc_STRVAR(ffi_typeof_doc,
@@ -526,7 +515,7 @@ static PyObject *ffi_offsetof(FFIObject *self, PyObject *args)
             return NULL;
         offset += ofs1;
     }
-    return PyInt_FromSsize_t(offset);
+    return PyLong_FromSsize_t(offset);
 }
 
 PyDoc_STRVAR(ffi_addressof_doc,
@@ -639,9 +628,7 @@ static PyObject *ffi_getctype(FFIObject *self, PyObject *args, PyObject *kwds)
     CTypeDescrObject *ct;
     size_t replace_with_len;
     static char *keywords[] = {"cdecl", "replace_with", NULL};
-#if PY_MAJOR_VERSION >= 3
     PyObject *u;
-#endif
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|s:getctype", keywords,
                                      &c_decl, &replace_with))
@@ -675,14 +662,12 @@ static PyObject *ffi_getctype(FFIObject *self, PyObject *args, PyObject *kwds)
     if (add_paren)
         p[replace_with_len] = ')';
 
-#if PY_MAJOR_VERSION >= 3
     /* bytes -> unicode string */
     u = PyUnicode_DecodeLatin1(PyBytes_AS_STRING(res),
                                PyBytes_GET_SIZE(res),
                                NULL);
     Py_DECREF(res);
     res = u;
-#endif
 
     return res;
 }
@@ -931,7 +916,7 @@ static PyObject *ffi_list_types(FFIObject *self, PyObject *noargs)
         goto error;
 
     for (i = 0; i < n1; i++) {
-        o = PyText_FromString(self->types_builder.ctx.typenames[i].name);
+        o = PyUnicode_FromString(self->types_builder.ctx.typenames[i].name);
         if (o == NULL)
             goto error;
         PyList_SET_ITEM(lst[0], i, o);
@@ -945,7 +930,7 @@ static PyObject *ffi_list_types(FFIObject *self, PyObject *noargs)
         if (s->name[0] == '$')
             continue;
 
-        o = PyText_FromString(s->name);
+        o = PyUnicode_FromString(s->name);
         if (o == NULL)
             goto error;
         index = (s->flags & _CFFI_F_UNION) ? 2 : 1;
@@ -990,14 +975,6 @@ PyDoc_STRVAR(ffi_init_once_doc,
 "of function() is done.  If function() raises an exception, it is\n"
 "propagated and nothing is cached.");
 
-#if PY_MAJOR_VERSION < 3
-/* PyCapsule_New is redefined to be PyCObject_FromVoidPtr in _cffi_backend,
-   which gives 2.6 compatibility; but the destructor signature is different */
-static void _free_init_once_lock(void *lock)
-{
-    PyThread_free_lock((PyThread_type_lock)lock);
-}
-#else
 static void _free_init_once_lock(PyObject *capsule)
 {
     PyThread_type_lock lock;
@@ -1005,7 +982,6 @@ static void _free_init_once_lock(PyObject *capsule)
     if (lock != NULL)
         PyThread_free_lock(lock);
 }
-#endif
 
 static PyObject *ffi_init_once(FFIObject *self, PyObject *args, PyObject *kwds)
 {

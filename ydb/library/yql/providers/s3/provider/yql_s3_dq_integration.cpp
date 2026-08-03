@@ -576,7 +576,7 @@ public:
                     readLimit = FromString<ui64>(sizeLimitIter->second);
                 }
 
-                YQL_ENSURE(NActors::TlsActivationContext, "s3.RuntimeListing incompatible with service"); // TODO: move actor creation elsewhere
+                YQL_ENSURE(NActors::TlsActivationContext, "Using setting `PRAGMA s3.UseRuntimeListing = \"TRUE\"` requires an actor system. Disable this option or run the query in an environment with actors."); // TODO: move actor creation elsewhere
                 auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                     NDq::CreateS3FileQueueActor(
                         0ul,

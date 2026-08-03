@@ -4,6 +4,7 @@
 #include "yql_linear_checker.h"
 
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -993,7 +994,7 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
             });
         }
 
-        if (!hasErrors && types.LangVer >= MakeLangVersion(2025, 4)) {
+        if (!hasErrors && types.LangVer >= NFeature::LinearTypes.MinLangVer) {
             hasErrors = !ValidateLinearTypes(*input, ctx);
         }
 

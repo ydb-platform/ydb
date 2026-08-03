@@ -190,10 +190,7 @@ _python_argcomplete_global() {
                 interpreter=($interpreter)
             fi
 
-            if (__python_argcomplete_scan_head_noerr "$SCRIPT_NAME" easy_install \
-                && "${interpreter[@]}" "$(__python_argcomplete_which python-argcomplete-check-easy-install-script)" "$SCRIPT_NAME") >/dev/null 2>&1; then
-                ARGCOMPLETE=1
-            elif ([[ "${interpreter[@]}" == *python* ]] || [[ "${interpreter[@]}" == *pypy* ]])\
+            if ([[ "${interpreter[@]}" == *python* ]] || [[ "${interpreter[@]}" == *pypy* ]])\
                 && __python_argcomplete_run "${interpreter[@]}" -m argcomplete._check_console_script "$SCRIPT_NAME"; then
                 ARGCOMPLETE=1
             fi

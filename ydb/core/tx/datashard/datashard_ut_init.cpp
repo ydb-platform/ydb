@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/util/pb.h>
@@ -16,6 +17,23 @@ using namespace Tests;
 using NClient::TValue;
 
 namespace {
+
+// TEvTabletSetTableInfo is not copyable (all-const members), so observers snapshot it.
+struct TReportedTableInfo {
+    ui64 TabletID;
+    ui32 FollowerId;
+    TPathId TableId;
+    TString TablePath;
+    ui64 SchemaVersion;
+
+    explicit TReportedTableInfo(const TEvTabletCounters::TEvTabletSetTableInfo &ev)
+        : TabletID(ev.TabletID)
+        , FollowerId(ev.FollowerId)
+        , TableId(ev.TableId)
+        , TablePath(ev.TablePath)
+        , SchemaVersion(ev.SchemaVersion)
+    {}
+};
 
 TString GetTablePath(TTestActorRuntime &runtime,
                      TActorId sender,
@@ -154,6 +172,72 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
 
     Y_UNIT_TEST(TestResolvePathAfterRestart) {
         TestTablePath(true, true);
+    }
+
+    Y_UNIT_TEST(TestSetTableInfoReflectsRename) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        auto shard = GetTableShards(server, sender, "/Root/table-1")[0];
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        // DataShard reports its identity from DoPeriodicTasks(), which reschedules every 5s.
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().TabletID, shard);
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().FollowerId, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().TablePath, "/Root/table-1");
+        auto prevTableId = reported.back().TableId;
+
+        WaitTxNotification(server, sender, AsyncMoveTable(server, "/Root/table-1", "/Root/table-1-moved"));
+
+        // No cache to invalidate: the very next tick reads the renamed table out of TableInfos.
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().TablePath, "/Root/table-1-moved");
+        UNIT_ASSERT_UNEQUAL(reported.back().TableId, prevTableId);
+    }
+
+    Y_UNIT_TEST(TestSetTableInfoNotSentWithoutFeatureFlag) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        // EnableDataShardDetailedMetrics defaults to false
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        UNIT_ASSERT(reported.empty());
     }
 }
 

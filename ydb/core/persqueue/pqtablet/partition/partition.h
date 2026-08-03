@@ -61,6 +61,7 @@ struct TTransaction {
         : Tx(tx)
         , Predicate(predicate)
         , SupportivePartitionActor(tx->SupportivePartitionActor)
+        , DeferredFinalizeOp(tx->DeferredFinalizeOp)
         , CalcPredicateSpan(std::move(tx->Span))
         , CalcPredicateTimestamp(calcPredicateTimestamp)
     {
@@ -113,6 +114,8 @@ struct TTransaction {
     TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> Tx;
     TMaybe<bool> Predicate;
     TActorId SupportivePartitionActor;
+    NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp DeferredFinalizeOp =
+        NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Unspecified;
 
 
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
@@ -296,12 +299,13 @@ private:
     void LogAndCollectError(NKikimrServices::EServiceKikimr service, const TString& msg, const TActorContext& ctx);
     void LogAndCollectError(const NKikimrPQ::TStatusResponse::TErrorMessage& error, const TActorContext& ctx);
 
-    void OnReadRequestFinished(ui64 cookie, ui64 answerSize, const TString& consumer, const TActorContext& ctx);
+    void OnReadRequestFinished(ui64 cookie, ui64 answerSize, ui64 consumedMessages, const TString& consumer, const TActorContext& ctx);
 
     void ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, const TActorContext& ctx);
     void ProcessChangeOwnerRequests(const TActorContext& ctx);
     void ProcessHasDataRequests(const TActorContext& ctx);
     bool ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx);
+    void FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx);
     void ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription);
     void ProcessReserveRequests(const TActorContext& ctx);
     void ProcessTimestampRead(const TActorContext& ctx);
@@ -620,7 +624,9 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateInit", ev));
+        YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Handle event",
+            {"actorState", "StateInit"},
+            {"event", EventStr("StateIdle", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -667,7 +673,8 @@ private:
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
-                ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
+                YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
+                    {"event", EventStr("StateInit", ev)});
             }
             break;
         };
@@ -677,7 +684,9 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev));
+        YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Handle event",
+            {"actorState", "StateIdle"},
+            {"event", EventStr("StateIdle", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -749,7 +758,8 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
-            ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
+            YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
+                {"event", EventStr("StateIdle", ev)});
             break;
         };
     }
@@ -1068,6 +1078,7 @@ private:
 
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgWriteBytes;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgReadBytes;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgReadMessages;
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgQuotaBytes;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgQuotaMessages;
 

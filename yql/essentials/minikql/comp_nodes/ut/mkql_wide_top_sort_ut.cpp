@@ -34,7 +34,7 @@ Y_UNIT_TEST_LLVM(TopByFirstKeyAsc) {
     const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf>>(pb);
     const auto list = NTest::ConvertValueToLiteralNode(pb, LongList);
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                               NTest::ConvertValueToLiteralNode(pb, ui64(4)), {{0U, NTest::ConvertValueToLiteralNode(pb, true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -55,7 +55,7 @@ Y_UNIT_TEST_LLVM(TopByFirstKeyDesc) {
     const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf>>(pb);
     const auto list = NTest::ConvertValueToLiteralNode(pb, LongList);
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                               NTest::ConvertValueToLiteralNode(pb, ui64(6)), {{0U, NTest::ConvertValueToLiteralNode(pb, false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -78,7 +78,7 @@ Y_UNIT_TEST_LLVM(TopBySecondKeyAsc) {
     const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf>>(pb);
     const auto list = NTest::ConvertValueToLiteralNode(pb, LongList);
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                               NTest::ConvertValueToLiteralNode(pb, ui64(3)), {{1U, NTest::ConvertValueToLiteralNode(pb, true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -98,7 +98,7 @@ Y_UNIT_TEST_LLVM(TopBySecondKeyDesc) {
     const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf>>(pb);
     const auto list = NTest::ConvertValueToLiteralNode(pb, LongList);
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                               NTest::ConvertValueToLiteralNode(pb, ui64(2)), {{1U, NTest::ConvertValueToLiteralNode(pb, false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -121,7 +121,7 @@ Y_UNIT_TEST_LLVM(TopWithLargeCount) {
                                                                {"key two", "value 2"},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                               NTest::ConvertValueToLiteralNode(pb, ui64(4000000000)), {{0U, NTest::ConvertValueToLiteralNode(pb, true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -140,7 +140,7 @@ Y_UNIT_TEST_LLVM(TopSortByFirstSecondAscDesc) {
     const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf>>(pb);
     const auto list = NTest::ConvertValueToLiteralNode(pb, LongList);
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                   NTest::ConvertValueToLiteralNode(pb, ui64(4)), {{0U, NTest::ConvertValueToLiteralNode(pb, true)}, {1U, NTest::ConvertValueToLiteralNode(pb, false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -161,7 +161,7 @@ Y_UNIT_TEST_LLVM(TopSortByFirstSecondDescAsc) {
     const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf>>(pb);
     const auto list = NTest::ConvertValueToLiteralNode(pb, LongList);
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                   NTest::ConvertValueToLiteralNode(pb, ui64(6)), {{0U, NTest::ConvertValueToLiteralNode(pb, false)}, {1U, NTest::ConvertValueToLiteralNode(pb, true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -184,7 +184,7 @@ Y_UNIT_TEST_LLVM(TopSortBySecondFirstAscDesc) {
     const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf>>(pb);
     const auto list = NTest::ConvertValueToLiteralNode(pb, LongList);
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                   NTest::ConvertValueToLiteralNode(pb, ui64(4)), {{1U, NTest::ConvertValueToLiteralNode(pb, true)}, {0U, NTest::ConvertValueToLiteralNode(pb, false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -205,7 +205,7 @@ Y_UNIT_TEST_LLVM(TopSortBySecondFirstDescAsc) {
     const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf>>(pb);
     const auto list = NTest::ConvertValueToLiteralNode(pb, LongList);
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                   NTest::ConvertValueToLiteralNode(pb, ui64(6)), {{1U, NTest::ConvertValueToLiteralNode(pb, false)}, {0U, NTest::ConvertValueToLiteralNode(pb, true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -229,7 +229,7 @@ Y_UNIT_TEST_LLVM(TopSortLargeList) {
     const auto step = pb.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&minusday, sizeof(minusday)));
     const auto list = pb.ListFromRange(pb.NewTzDataLiteral<NUdf::TTzDate>(30000u, 42u), pb.NewTzDataLiteral<NUdf::TTzDate>(10000u, 42u), step);
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(pb.Enumerate(list)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(pb.Enumerate(list), {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList {
                                                                                    const auto utf = pb.ToString<true>(pb.Nth(item, 1U));
                                                                                    const auto day = pb.StrictFromString(pb.Substring(utf, NTest::ConvertValueToLiteralNode(pb, ui32(8)), NTest::ConvertValueToLiteralNode(pb, ui32(2))), NTest::ConvertToMinikqlType<ui8>(pb));
@@ -261,7 +261,7 @@ Y_UNIT_TEST_LLVM(TopSortLargeCount) {
                                                                {"key two", "value 2"},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                   NTest::ConvertValueToLiteralNode(pb, ui64(4000000000)), {{0U, NTest::ConvertValueToLiteralNode(pb, true)}, {1U, NTest::ConvertValueToLiteralNode(pb, false)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -282,7 +282,7 @@ Y_UNIT_TEST_LLVM(SortByFirstKeyAsc) {
     const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<TStringBuf, TStringBuf>>(pb);
     const auto list = NTest::ConvertValueToLiteralNode(pb, LongList);
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                {{0U, NTest::ConvertValueToLiteralNode(pb, true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -334,7 +334,7 @@ Y_UNIT_TEST_LLVM(SortByExtDateTypeAsc) {
                                                 pb.NewTuple(tupleType, {extDate5Val, NTest::ConvertValueToLiteralNode(pb, TStringBuf("value5"))}),
                                             });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                {{0U, NTest::ConvertValueToLiteralNode(pb, true)}}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -365,7 +365,7 @@ Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingMultiKey) {
 
     const auto list = pb.NewList(tupleType, items);
 
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                              [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                 {{0U, pb.NewDataLiteral<bool>(true)}, {1U, pb.NewDataLiteral<bool>(false)}}),
                                                     [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));

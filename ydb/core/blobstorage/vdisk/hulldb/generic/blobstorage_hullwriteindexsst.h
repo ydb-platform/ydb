@@ -65,7 +65,7 @@ protected:
         ratio->IndexBytesTotal = ratio->IndexBytesKeep = info.IdxTotalSize;
         ratio->InplacedDataTotal = ratio->InplacedDataKeep = 0;
         ratio->HugeDataTotal = ratio->HugeDataKeep = 0;
-        LevelSegment->StorageRatio.Set(ratio);
+        LevelSegment->StorageRatio.Set(ratio, TInstant::Zero());
 
         TIdxDiskPlaceHolder placeHolder(SstId);
         placeHolder.Info = info;

@@ -514,14 +514,14 @@
         {
             "checksum": "91294751a47cfcb87a5a3af5e0db632c",
             "size": 1564,
-            "uri": "https://{canondata_backend}/1899731/db557cf50e84fba5e07ed252ed220f77f5fa9cc9/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1925842/486531303c5d3ec35ed8056fbdb4be070aadc061/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[expr-cast_decimal-default.txt-Results]": [
         {
             "checksum": "7bede4f19295253e7740f658c336afed",
             "size": 14064,
-            "uri": "https://{canondata_backend}/1899731/db557cf50e84fba5e07ed252ed220f77f5fa9cc9/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1925842/486531303c5d3ec35ed8056fbdb4be070aadc061/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Results_/results.txt"
         }
     ],
     "test.test[expr-dict_comp-default.txt-Debug]": [

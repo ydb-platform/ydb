@@ -24,6 +24,9 @@ def include_gen(root, subpaths):
         out = join('include', path)
         py2 = join('py2', path)
         py3 = join('py3', path)
+        if "/_core/" in out:
+            out = out.replace("/_core/", "/core/")
+            py2 = py2.replace("/_core/", "/core/")
         os.makedirs(dirname(out), exist_ok=True)
         with open(out, 'w') as f:
             f.write(template.format(
@@ -39,15 +42,13 @@ def is_header(s):
 
 
 def list_subpaths(subpaths, roots=('py2', 'py3'), test=is_header):
-    seen = set()
     for root in roots:
         for subpath in subpaths:
             for dirpath, _, filenames in os.walk(join(root, subpath)):
                 rootrel = relpath(dirpath, root)
                 for filename in filenames:
                     if test(filename):
-                        seen.add(join(rootrel, filename))
-    return seen
+                        yield join(rootrel, filename)
 
 
 if __name__ == '__main__':

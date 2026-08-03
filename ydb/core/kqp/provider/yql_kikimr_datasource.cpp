@@ -809,8 +809,9 @@ public:
         if (key.GetKeyType() == TKikimrKey::Type::Table) {
             YQL_ENSURE(tableDesc.Metadata);
             if (tableDesc.Metadata->Kind == EKikimrTableKind::External) {
-                // SHOW CREATE EXTERNAL DATA SOURCE reads have no associated table —
-                // they are rewritten downstream into reads of .sys/show_create.
+                // SHOW CREATE EXTERNAL DATA SOURCE / EXTERNAL TABLE reads never touch
+                // the external source itself — they are rewritten downstream into
+                // reads of .sys/show_create.
                 if (IsShowCreate(*read)) {
                     auto newRead = ctx.RenameNode(*read, newName);
                     auto retChildren = node->ChildrenList();

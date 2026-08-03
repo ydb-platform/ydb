@@ -63,7 +63,7 @@ void TCommandSql::Config(TConfig& config) {
             .Hidden()
             .StoreResult(&ResourcePool);
     }
-    config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
+    config.Opts->AddLongOption("syntax", "Query syntax [yql]")
         .RequiredArgument("[String]")
         .Hidden()
         .GetOpt().Handler1T<TString>("yql", [this](const TString& arg) {
@@ -212,8 +212,6 @@ void TCommandSql::SetCollectStatsMode(TString&& collectStatsMode) {
 void TCommandSql::SetSyntax(const TString& syntax) {
     if (syntax == "yql") {
         SyntaxType = NYdb::NQuery::ESyntax::YqlV1;
-    } else if (syntax == "pg") {
-        SyntaxType = NYdb::NQuery::ESyntax::Pg;
     } else {
         throw TMisuseException() << "Unknown syntax option \"" << syntax << "\"";
     }

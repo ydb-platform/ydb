@@ -13,6 +13,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 
 struct TMsgPqCodes {
@@ -308,7 +309,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Unhandled exception",
                 {"typeName", TypeName(exc)},
                 {"exception", exc.what()},
-                {"currentException", TBackTrace::FromCurrentException().PrintToString()});
+                {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
             ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, "Internal error");
 
@@ -367,7 +368,11 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
-                    Y_ABORT_UNLESS(response.ListNodeEntry->Children.size() == 1);
+                    AFL_ENSURE(response.ListNodeEntry)
+                        ("path", GetTopicPath())("database", TActorBase::Database);
+                    AFL_ENSURE(response.ListNodeEntry->Children.size() == 1)
+                        ("path", GetTopicPath())("database", TActorBase::Database)
+                        ("children", response.ListNodeEntry->Children.size());
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
 
                     if (response.Self) {

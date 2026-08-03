@@ -71,7 +71,7 @@ public:
   {
     if (pos > length_)
     {
-#  if __EXCEPTIONS
+#  if OPENTELEMETRY_HAVE_EXCEPTIONS
       throw std::out_of_range{"opentelemetry::nostd::string_view"};
 #  else
       std::terminate();

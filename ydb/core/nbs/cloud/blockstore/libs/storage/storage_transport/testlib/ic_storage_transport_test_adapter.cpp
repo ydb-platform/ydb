@@ -1,6 +1,7 @@
 #include "ic_storage_transport_test_adapter.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport_actor.h>
 
 #include <ydb/core/base/blobstorage.h>
@@ -21,7 +22,13 @@ TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
           // Register the real transport actor inside the runtime and address
           // it directly from the TICStorageTransport base.
           runtime->Register(
-              std::make_unique<TICStorageTransportActor>().release(),
+              std::make_unique<TICStorageTransportActor>(
+                  TDiskDescription{
+                      .DiskId = "disk-id",
+                      .TabletId = 100,
+                      .Generation = 1},
+                  0)
+                  .release(),
               0))
 {}
 

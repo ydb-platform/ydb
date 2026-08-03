@@ -42,6 +42,8 @@ PEERDIR(
     ydb/services/sqs_topic/queue_url/holder
     ydb/services/sqs_topic/protos/receipt
     ydb/services/ydb
+    ydb/core/metering
+    ydb/core/persqueue/public
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/mlp
     ydb/core/persqueue/public/schema
@@ -49,6 +51,7 @@ PEERDIR(
     ydb/core/ymq/base
     ydb/core/ymq/error
     library/cpp/json
+    library/cpp/openssl/crypto
 )
 
 END()

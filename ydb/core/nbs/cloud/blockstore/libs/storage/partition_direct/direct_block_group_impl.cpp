@@ -1,11 +1,13 @@
 #include "direct_block_group_impl.h"
 
+#include "partition_direct_service.h"
 #include "restore_request.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
@@ -32,6 +34,27 @@ constexpr size_t MinLockedDDiskSessionsToStart =
     QuorumDirectBlockGroupHostCount;
 
 ////////////////////////////////////////////////////////////////////////////////
+
+EDBGConnectionType ToDBGConnectionType(
+    NTransport::THostConnection::EConnectionType connectionType)
+{
+    switch (connectionType) {
+        case NTransport::THostConnection::EConnectionType::DDisk:
+            return EDBGConnectionType::DDisk;
+        case NTransport::THostConnection::EConnectionType::PBuffer:
+            return EDBGConnectionType::PBuffer;
+    }
+    Y_ABORT("Unknown EConnectionType: %d", static_cast<int>(connectionType));
+}
+
+NProto::TError MakeSessionError(ui32 nodeId, THostIndex host)
+{
+    TStringBuilder result;
+    result << "DDisk " << PrintHostAndNodeId(host, nodeId)
+           << " session is not established";
+
+    return MakeError(E_REJECTED, result);
+}
 
 TListPBufferResponse MakeListPBufferResponse(
     const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& response)
@@ -64,15 +87,89 @@ TDBGWriteBlocksToManyPBuffersResponse MakeWriteToManyPBuffersResponse(
     return result;
 }
 
+THostSnapshot MakeHostSnapshot(const TOracleHostStat& stat)
+{
+    return {
+        .Index = stat.Index,
+        .State = stat.State,
+        .Health = stat.Health,
+        .InflightByOperation = stat.InflightByOperation,
+        .Errors = stat.Errors,
+        .PBufferUsedSize = stat.PBufferUsedSize,
+    };
+}
+
+// help function for TDirectBlockGroup::SyncWithPBuffer
+std::function<void(const TFuture<NProto::TError>&)>
+CreateWaitSessionCbForSyncWithPBuffer(
+    TPromise<TDBGFlushResponse>&& promise,
+    std::weak_ptr<TDirectBlockGroup>&& weakSelf,
+    ui32 vChunkIndex,
+    THostIndex pbufferHostIndex,
+    THostIndex ddiskHostIndex,
+    ui32 nodeId,
+    const TVector<TPBufferSegment>& segments,
+    std::shared_ptr<NWilson::TSpan> childSpan)
+{
+    using TDBGFlushResponseFuture = NThreading::TFuture<TDBGFlushResponse>;
+    auto cb = [weakSelf = std::move(weakSelf),
+               promise = std::move(promise),
+               vChunkIndex,
+               pbufferHostIndex,
+               ddiskHostIndex,
+               nodeId,
+               segments = segments,
+               childSpan = std::move(childSpan)]   //
+        (const TFuture<NProto::TError>& f) mutable
+    {
+        TDBGFlushResponse flushResponse;
+        if (HasError(f.GetValue())) {
+            for (size_t i = 0; i < segments.size(); ++i) {
+                flushResponse.Errors.push_back(
+                    MakeSessionError(nodeId, ddiskHostIndex));
+            }
+            promise.SetValue(std::move(flushResponse));
+            return;
+        }
+
+        if (auto self = weakSelf.lock()) {
+            NWilson::TTraceId traceId;
+            if (childSpan) {
+                childSpan->Event("ConnectionReady");
+                traceId = childSpan->GetTraceId();
+            }
+
+            self->SyncWithPBuffer(
+                    vChunkIndex,
+                    pbufferHostIndex,
+                    ddiskHostIndex,
+                    segments,
+                    traceId)
+                .Subscribe([promise = std::move(promise)]   //
+                           (const TDBGFlushResponseFuture& f) mutable
+                           { promise.SetValue(f.GetValue()); });
+        } else {
+            for (size_t i = 0; i < segments.size(); ++i) {
+                flushResponse.Errors.push_back(MakeError(E_CANCELLED));
+            }
+            promise.SetValue(std::move(flushResponse));
+        }
+    };
+
+    return cb;
+}
+
+bool IsDDiskOperation(EOperation operation)
+{
+    return operation == EOperation::ReadFromDDisk ||
+           operation == EOperation::WriteToDDisk ||
+           operation == EOperation::Flush ||
+           operation == EOperation::FlushCrossNode;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
-
-const TFuture<NProto::TError>&
-TDirectBlockGroup::TDDiskConnection::GetFuture() const
-{
-    return ConnectFuture;
-}
 
 void TDirectBlockGroup::TDDiskConnection::ResetSession()
 {
@@ -85,79 +182,74 @@ void TDirectBlockGroup::TDDiskConnection::ResetSession()
     SessionState = EDDiskSessionState::NotLocked;
 }
 
+const TFuture<NProto::TError>&
+TDirectBlockGroup::TDDiskConnection::GetFuture() const
+{
+    return ConnectFuture;
+}
+
+TString TDirectBlockGroup::TDDiskConnection::DebugPrint() const
+{
+    TStringBuilder result;
+    result << HostConnection.DebugPrint();
+    auto f = GetFuture();
+    if (f.IsReady()) {
+        result << " c:" << FormatError(f.GetValue());
+    } else {
+        result << "c:<none>";
+    }
+    result << " s:" << ToString(SessionState);
+    result << " csn:" << ConfirmedSessionSeqNo;
+    return result;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
     TStorageConfigPtr storageConfig,
     TExecutorPtr executor,
-    const TString& diskId,
-    ui64 tabletId,
-    ui32 generation,
+    const TDiskDescription& diskDescription,
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
-    std::unique_ptr<NTransport::IStorageTransport> storageTransport)
+    std::unique_ptr<NTransport::IStorageTransport> storageTransport,
+    NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
     , Executor(std::move(executor))
-    , TabletId(tabletId)
-    , TabletGeneration(generation)
+    , TabletId(diskDescription.TabletId)
+    , TabletGeneration(diskDescription.Generation)
     , DirectBlockGroupIndex(directBlockGroupIndex)
     , StorageTransport(std::move(storageTransport))
     , LogTitle(
           GetCycleCount(),
           TLogTitle::TDirectBlockGroup{
-              .DiskId = diskId,
-              .DBGIndex = DirectBlockGroupIndex,
-              .TabletId = TabletId,
-              .Generation = TabletGeneration})
+              .DiskId = diskDescription.DiskId,
+              .TabletId = diskDescription.TabletId,
+              .Generation = diskDescription.Generation,
+              .DBGIndex = DirectBlockGroupIndex})
     , Oracle(StorageConfig, this)
+    , Counters(std::move(counters))
 {
-    Y_ASSERT(pbufferIds.size() == DirectBlockGroupHostCount);
-    Y_ASSERT(ddisksIds.size() == DirectBlockGroupHostCount);
+    Y_ASSERT(pbufferIds.size() == ddisksIds.size());
+    Y_ASSERT(pbufferIds.size() >= DirectBlockGroupHostCount);
 
-    auto addDDiskConnections = [&](const TVector<NBsController::TDDiskId>& ids,
-                                   TVector<TDDiskConnection>& connections,
-                                   EConnectionType type)
-    {
-        for (THostIndex i = 0; i < ids.size(); ++i) {
-            const auto& ddiskId = ids[i];
-            const auto credentials =
-                type == EConnectionType::PBuffer
-                    ? NDDisk::TQueryCredentials::ToPersistentBuffer(
-                          TabletId,
-                          generation,
-                          std::nullopt)
-                    : NDDisk::TQueryCredentials::ToDDisk(
-                          TabletId,
-                          generation,
-                          InitialDDiskSessionSeqNo,
-                          std::nullopt);
-            connections.push_back(TDDiskConnection{
-                .HostConnection = NTransport::THostConnection{
-                    .ConnectionType = type,
-                    .DDiskId = ddiskId,
-                    .Credentials = credentials}});
-
-            if (type == EConnectionType::PBuffer) {
-                NKikimrBlobStorage::NDDisk::TDDiskId pbufferId;
-                ddiskId.Serialize(&pbufferId);
-                PBufferIdToHostIndex.insert({pbufferId, i});
-            }
-        }
-    };
-
-    addDDiskConnections(ddisksIds, DDiskConnections, EConnectionType::DDisk);
-    addDDiskConnections(
-        pbufferIds,
-        PBufferConnections,
-        EConnectionType::PBuffer);
+    for (THostIndex host = 0; host < ddisksIds.size(); ++host) {
+        AddDDiskAndPBufferConnection(host, ddisksIds[host], pbufferIds[host]);
+    }
 }
 
-void TDirectBlockGroup::Register(TVChunkWeakPtr vChunk)
+void TDirectBlockGroup::Register(TVChunkWeakPtr weakVChunk)
 {
-    VChunks.push_back(std::move(vChunk));
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    // Catch a vchunk up as it registers: its config can lag the connections
+    // after an add-host that committed just before a restart.
+    if (auto vChunk = weakVChunk.lock()) {
+        vChunk->UpdateHostCount(GetHostCount());
+    }
+    VChunks.push_back(std::move(weakVChunk));
 }
 
 TExecutorPtr TDirectBlockGroup::GetExecutor()
@@ -193,8 +285,10 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroup::CreateChildSpan(
 }
 
 NThreading::TFuture<void> TDirectBlockGroup::Run(
+    ITraceService* traceService,
     IPartitionDirectService* service)
 {
+    TraceService = traceService;
     Service = service;
 
     ScheduleOracleThinking();
@@ -223,19 +317,65 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
 
     using TEvReadResultFuture =
         TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult>;
-
-    if (!WaitForSessionLock(hostIndex)) {
-        return MakeFuture<TDBGReadBlocksResponse>(
-            {.Error =
-                 MakeError(E_REJECTED, "DDisk session is not established")});
-    }
-
-    auto childSpan =
-        CreateChildSpan(traceId, "NbsPartition.ReadBlocks.ReadDDisk");
+    using TDBGReadBlocksResponseFuture =
+        NThreading::TFuture<TDBGReadBlocksResponse>;
 
     auto startAt = TMonotonic::Now();
     auto promise = NewPromise<TDBGReadBlocksResponse>();
     auto result = promise.GetFuture();
+    auto childSpan =
+        CreateChildSpan(traceId, "NbsPartition.ReadBlocks.ReadDDisk");
+
+    if (DDiskConnections[hostIndex].SessionState != EDDiskSessionState::Locked)
+    {
+        if (childSpan) {
+            childSpan->Event("WaitConnectionReady");
+        }
+
+        auto waitReadyCb = [weakSelf = weak_from_this(),
+                            promise = std::move(promise),
+                            vChunkIndex,
+                            hostIndex,
+                            nodeId = GetNodeId(hostIndex),
+                            range,
+                            guardedSglist = guardedSglist,
+                            childSpan = std::move(childSpan)]   //
+            (const TFuture<NProto::TError>& f) mutable
+        {
+            if (HasError(f.GetValue())) {
+                promise.SetValue(TDBGReadBlocksResponse{
+                    .Error = MakeSessionError(nodeId, hostIndex)});
+                return;
+            }
+
+            if (auto self = weakSelf.lock()) {
+                NWilson::TTraceId traceId;
+                if (childSpan) {
+                    childSpan->Event("ConnectionReady");
+                    traceId = childSpan->GetTraceId();
+                }
+
+                self->ReadBlocksFromDDisk(
+                        vChunkIndex,
+                        hostIndex,
+                        range,
+                        guardedSglist,
+                        traceId)
+                    .Subscribe([promise = std::move(promise)]   //
+                               (const TDBGReadBlocksResponseFuture& f) mutable
+                               { promise.SetValue(UnsafeExtractValue(f)); });
+
+            } else {
+                promise.SetValue(
+                    TDBGReadBlocksResponse{.Error = MakeError(E_CANCELLED)});
+            }
+        };
+        DDiskConnections[hostIndex].GetFuture().Subscribe(
+            std::move(waitReadyCb));
+
+        return result;
+    }
+
     OnRequest(hostIndex, EOperation::ReadFromDDisk);
     auto future = StorageTransport->ReadFromDDisk(
         DDiskConnections[hostIndex].HostConnection,
@@ -270,18 +410,22 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
 
-                    NProto::TError error = TranslateError(f.GetValue());
                     if (auto self = weakSelf.lock()) {
+                        NProto::TError error = TranslateError(f.GetValue());
+
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::ReadFromDDisk,
                             true,
                             error);
-                    }
 
-                    promise.SetValue(
-                        TDBGReadBlocksResponse{.Error = std::move(error)});
+                        promise.SetValue(
+                            TDBGReadBlocksResponse{.Error = std::move(error)});
+                    } else {
+                        promise.SetValue(TDBGReadBlocksResponse{
+                            .Error = MakeError(E_CANCELLED)});
+                    }
                 });
         });
     return result;
@@ -374,20 +518,65 @@ TDirectBlockGroup::WriteBlocksToDDisk(
 
     using TEvWriterResultFuture =
         NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvWriteResult>;
+    using TDBGWriteBlocksResponseFuture =
+        NThreading::TFuture<TDBGWriteBlocksResponse>;
 
     const auto startAt = TMonotonic::Now();
-
-    if (!WaitForSessionLock(hostIndex)) {
-        return MakeFuture<TDBGWriteBlocksResponse>(
-            {.Error =
-                 MakeError(E_REJECTED, "DDisk session is not established")});
-    }
-
     auto childSpan =
         CreateChildSpan(traceId, "NbsPartition.WriteBlocksToDDisk");
 
     auto promise = NewPromise<TDBGWriteBlocksResponse>();
     auto result = promise.GetFuture();
+
+    if (DDiskConnections[hostIndex].SessionState != EDDiskSessionState::Locked)
+    {
+        if (childSpan) {
+            childSpan->Event("WaitConnectionReady");
+        }
+
+        auto waitReadyCb = [weakSelf = weak_from_this(),
+                            promise = std::move(promise),
+                            vChunkIndex,
+                            hostIndex,
+                            nodeId = GetNodeId(hostIndex),
+                            range,
+                            guardedSglist = guardedSglist,
+                            childSpan = std::move(childSpan)]   //
+            (const TFuture<NProto::TError>& f) mutable
+        {
+            if (HasError(f.GetValue())) {
+                promise.SetValue(TDBGWriteBlocksResponse{
+                    .Error = MakeSessionError(nodeId, hostIndex)});
+                return;
+            }
+            if (auto self = weakSelf.lock()) {
+                NWilson::TTraceId traceId;
+                if (childSpan) {
+                    childSpan->Event("ConnectionReady");
+                    traceId = childSpan->GetTraceId();
+                }
+
+                self->WriteBlocksToDDisk(
+                        vChunkIndex,
+                        hostIndex,
+                        range,
+                        guardedSglist,
+                        traceId)
+                    .Subscribe([promise = std::move(promise)]   //
+                               (const TDBGWriteBlocksResponseFuture& f) mutable
+                               { promise.SetValue(f.GetValue()); });
+
+            } else {
+                promise.SetValue(
+                    TDBGWriteBlocksResponse{.Error = MakeError(E_CANCELLED)});
+            }
+        };
+        DDiskConnections[hostIndex].GetFuture().Subscribe(
+            std::move(waitReadyCb));
+
+        return result;
+    }
+
     OnRequest(hostIndex, EOperation::WriteToDDisk);
     auto future = StorageTransport->WriteToDDisk(
         DDiskConnections[hostIndex].HostConnection,
@@ -422,19 +611,22 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
 
-                    NProto::TError error = TranslateError(f.GetValue());
-
                     if (auto self = weakSelf.lock()) {
+                        NProto::TError error = TranslateError(f.GetValue());
+
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::WriteToDDisk,
                             true,
                             error);
-                    }
 
-                    promise.SetValue(
-                        TDBGWriteBlocksResponse{.Error = std::move(error)});
+                        promise.SetValue(
+                            TDBGWriteBlocksResponse{.Error = std::move(error)});
+                    } else {
+                        promise.SetValue(TDBGWriteBlocksResponse{
+                            .Error = MakeError(E_CANCELLED)});
+                    }
                 });
         });
     return result;
@@ -683,14 +875,29 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (!WaitForSessionLock(ddiskHostIndex)) {
-        TDBGFlushResponse rejectResponse;
-        rejectResponse.Errors.reserve(segments.size());
-        for (size_t i = 0; i < segments.size(); ++i) {
-            rejectResponse.Errors.push_back(
-                MakeError(E_REJECTED, "DDisk session is not established"));
+    auto childSpan = CreateChildSpan(traceId, "NbsPartition.SyncWithPBuffer");
+    auto promise = NewPromise<TDBGFlushResponse>();
+    auto flushFuture = promise.GetFuture();
+
+    if (DDiskConnections[ddiskHostIndex].SessionState !=
+        EDDiskSessionState::Locked)
+    {
+        if (childSpan) {
+            childSpan->Event("WaitConnectionReady");
         }
-        return MakeFuture<TDBGFlushResponse>(std::move(rejectResponse));
+
+        auto cb = CreateWaitSessionCbForSyncWithPBuffer(
+            std::move(promise),
+            std::move(weak_from_this()),
+            vChunkIndex,
+            pbufferHostIndex,
+            ddiskHostIndex,
+            GetNodeId(ddiskHostIndex),
+            segments,
+            std::move(childSpan));
+        DDiskConnections[ddiskHostIndex].GetFuture().Subscribe(std::move(cb));
+
+        return flushFuture;
     }
 
     const auto startAt = TMonotonic::Now();
@@ -702,8 +909,6 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
             segment.Range.Start * DefaultBlockSize,
             segment.Range.Size() * DefaultBlockSize));
     }
-
-    auto childSpan = CreateChildSpan(traceId, "NbsPartition.SyncWithPBuffer");
 
     if (pbufferHostIndex == ddiskHostIndex) {
         OnRequest(ddiskHostIndex, EOperation::Flush);
@@ -718,9 +923,6 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
         std::move(selectors),
         TPBufferSegment::MakeLsnVector(segments),
         childSpan.get());
-
-    auto promise = NewPromise<TDBGFlushResponse>();
-    auto flushFuture = promise.GetFuture();
 
     future.Subscribe(
         [weakSelf = weak_from_this(),
@@ -754,6 +956,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 
                     if (auto self = weakSelf.lock()) {
                         flushResponse = self->HandleSyncWithPBufferResponse(
+                            ddiskHostIndex,
                             f.GetValue(),
                             segmentCount);
                         self->OnMultiFlushResponse(
@@ -776,6 +979,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 }
 
 TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
+    THostIndex ddiskHostIndex,
     const TEvSyncResult& response,
     size_t segmentCount)
 {
@@ -793,6 +997,7 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
                 ETranslateFlags::TreatOutdatedAsSuccess));
         }
     } else {
+        NProto::TError error = TranslateError(response);
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -800,11 +1005,16 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
             LogTitle.GetWithTime().c_str(),
             segmentCount,
             response.ShortUtf8DebugString().c_str(),
-            FormatError(TranslateError(response)).c_str());
+            FormatError(error).c_str());
+
+        if (IsSessionBlockedError(error)) {
+            HandleBlockedGeneration(ddiskHostIndex, "SyncWithPBuffer");
+        } else if (IsDeviceBrokenError(error)) {
+            Oracle.OnDDiskBroken(ddiskHostIndex);
+        }
 
         for (size_t i = 0; i < segmentCount; ++i) {
-            result.Errors.push_back(
-                MakeError(E_FAIL, response.GetErrorReason()));
+            result.Errors.push_back(error);
         }
     }
 
@@ -897,7 +1107,7 @@ void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
                 lsn,
                 self->PBufferConnections.size());
 
-            auto span = self->Service->CreteRootSpan(
+            auto span = self->TraceService->CreateRootSpan(
                 "NbsPartition.BarrierEraseFromPBuffer");
 
             for (THostIndex h = 0; h < self->PBufferConnections.size(); ++h) {
@@ -912,6 +1122,13 @@ void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
     const NWilson::TTraceId& traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (!Service->TryAdvancePBufferBarrier(
+            PBufferConnections[hostIndex].HostConnection.DDiskId,
+            lsn))
+    {
+        return;
+    }
 
     using TEvErasePersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
@@ -1034,9 +1251,11 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
     }
 
     const auto& connection = PBufferConnections[hostIndex];
+    // Hold a local copy of the connect future,
+    // do not put an address of changeable field into a wait.
+    auto connectFuture = connection.GetFuture();
     // Switch co-routine context if needed.
-    const NProto::TError& connectError =
-        Executor->WaitFor(connection.GetFuture());
+    const NProto::TError& connectError = Executor->WaitFor(connectFuture);
     if (HasError(connectError)) {
         return MakeFuture(TListPBufferResponse{.Error = connectError});
     }
@@ -1072,6 +1291,60 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
     return result;
 }
 
+void TDirectBlockGroup::OnAddHostResult(
+    const NProto::TError& error,
+    THostIndex newHostIndex,
+    NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (HasError(error)) {
+        LOG_WARN(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s AddHost %s request failed: %s",
+            LogTitle.GetWithTime().c_str(),
+            PrintHostIndex(newHostIndex).c_str(),
+            FormatError(error).c_str());
+        return;
+    }
+
+    Y_ABORT_UNLESS(
+        static_cast<size_t>(newHostIndex) == DDiskConnections.size(),
+        "AddHost expects appending at the end (newHostIndex %lu vs size %lu)",
+        static_cast<size_t>(newHostIndex),
+        DDiskConnections.size());
+    Y_ABORT_UNLESS(DDiskConnections.size() == PBufferConnections.size());
+    Y_ABORT_UNLESS(DDiskConnections.size() < MaxHostCount);
+    Y_ABORT_UNLESS(!DDiskConnections.empty());
+
+    AddDDiskAndPBufferConnection(
+        newHostIndex,
+        NBsController::TDDiskId(ddiskId),
+        NBsController::TDDiskId(pbufferId));
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s AddHost %s request OK",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(newHostIndex).c_str());
+
+    DoEstablishConnection(newHostIndex, EConnectionType::DDisk);
+    DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
+}
+
+ui32 TDirectBlockGroup::GetNodeId(THostIndex host) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (DDiskConnections.size() <= host) {
+        return Max<ui32>();
+    }
+    return DDiskConnections[host].HostConnection.DDiskId.NodeId;
+}
+
 NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
 {
     auto promise = NewPromise<TDBGDumpResponse>();
@@ -1092,6 +1365,26 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
     return future;
 }
 
+NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot() const
+{
+    auto promise = NewPromise<TDbgSnapshot>();
+    auto future = promise.GetFuture();
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(),
+         index = DirectBlockGroupIndex,
+         promise = std::move(promise)]   //
+        () mutable
+        {
+            if (auto self = weakSelf.lock()) {
+                promise.SetValue(self->DoBuildMonSnapshot());
+            } else {
+                promise.SetValue({.Index = index});
+            }
+        });
+
+    return future;
+}
+
 void TDirectBlockGroup::SetHostState(
     THostIndex hostIndex,
     EHostState oldState,
@@ -1104,7 +1397,7 @@ void TDirectBlockGroup::SetHostState(
         NKikimrServices::NBS_PARTITION,
         "%s %s state changed: %s -> %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(hostIndex).c_str(),
+        PrintHostAndNode(hostIndex).c_str(),
         ToString(oldState).c_str(),
         ToString(newState).c_str());
 
@@ -1113,6 +1406,23 @@ void TDirectBlockGroup::SetHostState(
             vChunk->SetHostState(hostIndex, newState);
         }
     }
+}
+
+void TDirectBlockGroup::QueryAddHost(THostIndex newHostIndex)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(Service);
+
+    // No gate here: the authoritative MaxHostCount check is in the partition
+    // (the DBG's DDiskConnections count lags). The DBG just forwards.
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s QueryAddHost %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(newHostIndex).c_str());
+
+    Service->QueryAddHost(DirectBlockGroupIndex, newHostIndex);
 }
 
 ui64 TDirectBlockGroup::GetHostPBufferUsedSize(THostIndex hostIndex) const
@@ -1126,11 +1436,48 @@ ui64 TDirectBlockGroup::GetHostPBufferUsedSize(THostIndex hostIndex) const
     return result;
 }
 
-ui64 TDirectBlockGroup::GetDDiskSessionSeqNo(size_t index) const
+size_t TDirectBlockGroup::GetHostCount() const
 {
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    Y_ABORT_UNLESS(index < DDiskConnections.size());
-    return DDiskConnections[index].ConfirmedSessionSeqNo;
+    Y_ABORT_UNLESS(DDiskConnections.size() == PBufferConnections.size());
+    return DDiskConnections.size();
+}
+
+void TDirectBlockGroup::AddDDiskAndPBufferConnection(
+    THostIndex host,
+    const NKikimr::NBsController::TDDiskId& ddiskId,
+    const NKikimr::NBsController::TDDiskId& pbufferId)
+{
+    DDiskConnections.push_back(TDDiskConnection{
+        .HostConnection = NTransport::THostConnection{
+            .ConnectionType = EConnectionType::DDisk,
+            .DDiskId = ddiskId,
+            .Credentials = NDDisk::TQueryCredentials::ToDDisk(
+                TabletId,
+                TabletGeneration,
+                InitialDDiskSessionSeqNo,
+                std::nullopt)}});
+
+    PBufferConnections.push_back(TDDiskConnection{
+        .HostConnection = NTransport::THostConnection{
+            .ConnectionType = EConnectionType::PBuffer,
+            .DDiskId = pbufferId,
+            .Credentials = NDDisk::TQueryCredentials::ToPersistentBuffer(
+                TabletId,
+                TabletGeneration,
+                std::nullopt)}});
+
+    NKikimrBlobStorage::NDDisk::TDDiskId id;
+    pbufferId.Serialize(&id);
+    const auto [_, inserted] = PBufferIdToHostIndex.insert({id, host});
+    Y_ABORT_UNLESS(inserted);
+
+    Oracle.AddHostIfNeeded(host);
+
+    for (const auto& weakVChunk: VChunks) {
+        if (auto vChunk = weakVChunk.lock()) {
+            vChunk->UpdateHostCount(GetHostCount());
+        }
+    }
 }
 
 void TDirectBlockGroup::DoEstablishConnections()
@@ -1149,14 +1496,16 @@ void TDirectBlockGroup::DoEstablishConnections()
 }
 
 void TDirectBlockGroup::DoEstablishConnection(
-    size_t index,
+    THostIndex hostIndex,
     EConnectionType connectionType)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    Counters.OnConnectAttempt(ToDBGConnectionType(connectionType));
+
     auto& connection = connectionType == EConnectionType::DDisk
-                           ? DDiskConnections[index]
-                           : PBufferConnections[index];
+                           ? DDiskConnections[hostIndex]
+                           : PBufferConnections[hostIndex];
     ui64& actualSeqNo = connection.HostConnection.Credentials.DDiskSessionSeqNo;
     if (connectionType == EConnectionType::DDisk) {
         actualSeqNo++;
@@ -1164,9 +1513,9 @@ void TDirectBlockGroup::DoEstablishConnection(
         LOG_INFO(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s host[%zu] starting session: new seq_no: %lu ",
+            "%s %s starting session: new seq_no: %lu",
             LogTitle.GetWithTime().c_str(),
-            index,
+            PrintHostAndNode(hostIndex).c_str(),
             actualSeqNo);
     }
 
@@ -1175,15 +1524,15 @@ void TDirectBlockGroup::DoEstablishConnection(
     auto futures = StorageTransport->Connect(connection.HostConnection);
     if (connectionType == EConnectionType::DDisk) {
         futures.DisconnectFuture.Subscribe(
-            [index, weakSelf = weak_from_this(), executor = Executor]   //
+            [hostIndex, weakSelf = weak_from_this(), executor = Executor]   //
             (const TFuture<ui32>& f)
             {
                 executor->ExecuteSimple(
-                    [index, nodeId = f.GetValue(), weakSelf]   //
+                    [hostIndex, nodeId = f.GetValue(), weakSelf]   //
                     () mutable -> void
                     {
                         if (auto self = weakSelf.lock()) {
-                            self->OnNodeDisconnected(index, nodeId);
+                            self->OnNodeDisconnected(hostIndex, nodeId);
                         }
                     });
             });
@@ -1193,14 +1542,14 @@ void TDirectBlockGroup::DoEstablishConnection(
         [weakSelf = weak_from_this(),
          executor = Executor,
          connectionType = connection.HostConnection.ConnectionType,
-         index,
+         hostIndex,
          actualSeqNo]   //
         (const TFuture<TEvConnectResult>& f) mutable
         {
             executor->ExecuteSimple(
                 [weakSelf = std::move(weakSelf),
                  connectionType,
-                 index,
+                 hostIndex,
                  f,
                  actualSeqNo]   //
                 () mutable
@@ -1208,7 +1557,7 @@ void TDirectBlockGroup::DoEstablishConnection(
                     if (auto self = weakSelf.lock()) {
                         self->OnConnectionEstablished(
                             connectionType,
-                            index,
+                            hostIndex,
                             actualSeqNo,
                             f.GetValue());
                     }
@@ -1218,18 +1567,29 @@ void TDirectBlockGroup::DoEstablishConnection(
 
 void TDirectBlockGroup::OnConnectionEstablished(
     EConnectionType connectionType,
-    size_t index,
+    THostIndex hostIndex,
     ui64 seqNo,
     const NKikimrBlobStorage::NDDisk::TEvConnectResult& result)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     TDDiskConnection& connection = connectionType == EConnectionType::DDisk
-                                       ? DDiskConnections[index]
-                                       : PBufferConnections[index];
+                                       ? DDiskConnections[hostIndex]
+                                       : PBufferConnections[hostIndex];
 
     NProto::TError error = TranslateError(result);
+
+    LOG_LOG(
+        *ActorSystem,
+        HasError(error) ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_TRACE,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnConnectionEstablished: %s %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(hostIndex).c_str(),
+        FormatError(error).c_str());
+
     if (!HasError(error)) {
+        Counters.OnConnectOk(ToDBGConnectionType(connectionType));
         connection.HostConnection.Credentials.DDiskInstanceGuid =
             result.GetDDiskInstanceGuid();
         if (connectionType == EConnectionType::DDisk) {
@@ -1237,31 +1597,43 @@ void TDirectBlockGroup::OnConnectionEstablished(
                 LOG_WARN(
                     *ActorSystem,
                     NKikimrServices::NBS_PARTITION,
-                    "%s host[%zu] attempt to establish a session with an old "
-                    "seq_no: %lu while actual seq_no: %lu ",
+                    "%s %s attempt to establish a session with an old "
+                    "seq_no: %lu while actual seq_no: %lu",
                     LogTitle.GetWithTime().c_str(),
-                    index,
+                    PrintHostAndNode(hostIndex).c_str(),
                     seqNo,
                     connection.ConfirmedSessionSeqNo);
                 return;
             }
             connection.SessionState = EDDiskSessionState::Locked;
             connection.ConfirmedSessionSeqNo = seqNo;
-            Oracle.OnDDiskConnected(index, TInstant::Now());
+            Oracle.OnDDiskConnected(hostIndex, TInstant::Now());
         }
         // INVARIANT: PBuffer does NOT require a session/lock
+    } else if (IsSessionBlockedError(error)) {
+        Counters.OnConnectErr(ToDBGConnectionType(connectionType));
+        // Terminal: our tablet generation is stale. Suicide, no reconnect.
+        HandleBlockedGeneration(hostIndex, "Connect");
+        // Unblock waiters on ConnectFuture with the error.
+        connection.ConnectPromise.SetValue(error);
+        return;
     } else {
-        // TODO (future phase): handle the error code/BLOCKED, transition to
-        // Broken/suicide.
-        Y_ABORT("Unhandled branch of connect error");
+        Counters.OnConnectErr(ToDBGConnectionType(connectionType));
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s connection failed %s: %s",
+            LogTitle.GetWithTime().c_str(),
+            PrintHostAndNode(hostIndex).c_str(),
+            FormatError(error).c_str());
+        ReEstablishConnection(connectionType, hostIndex);
+        return;
     }
 
     // ConnectPromise resolves both "connection ready" and "session ready" in
     // this phase. Unblocks waiters in ReadFromDDisk/WriteToDDisk/ListPBuffers.
     connection.ConnectPromise.SetValue(error);
-    if (!InitialReadyPromise.HasValue() && HasLockedQuorum() &&
-        HasPBufferQuorum())
-    {
+    if (!IsInitialized() && HasLockedQuorum() && HasPBufferQuorum()) {
         InitialReadyPromise.SetValue();
         LOG_INFO(
             *ActorSystem,
@@ -1272,20 +1644,38 @@ void TDirectBlockGroup::OnConnectionEstablished(
     }
 }
 
-void TDirectBlockGroup::ReEstablishDDiskConnection(
-    size_t index,
-    TDuration reconnectDelay)
+void TDirectBlockGroup::ReEstablishConnection(
+    EConnectionType connectionType,
+    THostIndex hostIndex)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    Y_ABORT_UNLESS(index < DDiskConnections.size());
+    auto& connections = connectionType == EConnectionType::DDisk
+                            ? DDiskConnections
+                            : PBufferConnections;
+    Y_ABORT_UNLESS(hostIndex < connections.size());
+    TDDiskConnection& connection = connections[hostIndex];
 
-    DDiskConnections[index].ResetSession();
+    Counters.OnReconnect(ToDBGConnectionType(connectionType));
+
+    if (BlockedGenerationDetected) {
+        LOG_WARN(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s reconnect %s suppressed: blocked generation, suicide in "
+            "progress",
+            LogTitle.GetWithTime().c_str(),
+            PrintHostAndNode(hostIndex).c_str());
+        return;
+    }
+
+    connection.ResetSession();
+    TDuration reconnectDelay = Oracle.GetHostReconnectDelay(hostIndex);
     Schedule(
         reconnectDelay,
-        [index, weakSelf = weak_from_this()]()
+        [hostIndex, weakSelf = weak_from_this(), connectionType]()
         {
             if (auto self = weakSelf.lock()) {
-                self->DoEstablishConnection(index, EConnectionType::DDisk);
+                self->DoEstablishConnection(hostIndex, connectionType);
             }
         });
 }
@@ -1297,15 +1687,15 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s OnNodeDisconnected, %s, nodeId: %d",
+        "%s OnNodeDisconnected %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(hostIndex).c_str(),
-        nodeId);
+        PrintHostAndNodeId(hostIndex, nodeId).c_str());
 
+    Counters.OnDisconnect(EDBGConnectionType::DDisk);
     Oracle.OnDDiskDisconnected(hostIndex, TInstant::Now());
+
     // OnNodeDisconnected may be called only for DDisk
-    TDuration reconnectDelay = Oracle.GetDDiskReconnectDelay(hostIndex);
-    ReEstablishDDiskConnection(hostIndex, reconnectDelay);
+    ReEstablishConnection(EConnectionType::DDisk, hostIndex);
 }
 
 bool TDirectBlockGroup::HasPBufferQuorum() const
@@ -1408,12 +1798,17 @@ void TDirectBlockGroup::OnResponse(
             NKikimrServices::NBS_PARTITION,
             "%s OnResponse %s %s %s",
             LogTitle.GetWithTime().c_str(),
-            PrintHostIndex(hostIndex).c_str(),
+            PrintHostAndNode(hostIndex).c_str(),
             ToString(operation).c_str(),
             FormatError(error).c_str());
 
         if (IsCancelledError(error)) {
             Oracle.OnRequestCancelled(hostIndex, operation, TInstant::Now());
+        } else if (IsDDiskOperation(operation) && IsSessionBlockedError(error))
+        {
+            HandleBlockedGeneration(hostIndex, ToString(operation));
+        } else if (IsDeviceBrokenError(error)) {
+            Oracle.OnDDiskBroken(hostIndex);
         } else {
             Oracle.OnRequestFailed(hostIndex, operation, TInstant::Now());
         }
@@ -1524,23 +1919,49 @@ void TDirectBlockGroup::ScheduleOracleThinking()
         });
 }
 
-bool TDirectBlockGroup::WaitForSessionLock(THostIndex hostIndex)
+void TDirectBlockGroup::HandleBlockedGeneration(
+    THostIndex hostIndex,
+    TStringBuf context)
 {
-    const auto& conn = DDiskConnections[hostIndex];
-    if (conn.SessionState != EDDiskSessionState::Locked) {
-        const auto sessionReadyFuture = conn.GetFuture();
-        Executor->WaitFor(sessionReadyFuture);
-        return conn.SessionState == EDDiskSessionState::Locked;
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (BlockedGenerationDetected) {
+        return;
     }
-    return true;
+    BlockedGenerationDetected = true;
+
+    DDiskConnections[hostIndex].SessionState = EDDiskSessionState::Broken;
+    const TString reason =
+        TStringBuilder() << "dbg:" << DirectBlockGroupIndex << " "
+                         << PrintHostAndNode(hostIndex)
+                         << " DDisk returned BLOCKED (stale tablet generation) "
+                         << context;
+
+    LOG_ERROR(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s SUICIDE: %s",
+        LogTitle.GetWithTime().c_str(),
+        reason.c_str());
+
+    // No retry/reconnect: signal the actor to suicide.
+    Service->StopTablet(reason);
 }
 
-TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
+TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     TStringBuilder sb;
     sb << "DBG[" << DirectBlockGroupIndex << "]\n";
+
+    for (const auto& conn: DDiskConnections) {
+        sb << " " << conn.DebugPrint() << "\n";
+    }
+    for (const auto& conn: PBufferConnections) {
+        sb << " " << conn.DebugPrint() << "\n";
+    }
+
     sb << Oracle.Dump();
 
     TDBGDumpResponse result;
@@ -1555,6 +1976,53 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
         }
     }
     return result;
+}
+
+TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const auto hostStats = Oracle.BuildHostStats(TInstant::Now());
+    TVector<THostSnapshot> hosts;
+    hosts.reserve(hostStats.size());
+    for (const auto& stat: hostStats) {
+        hosts.push_back(MakeHostSnapshot(stat));
+    }
+
+    TVector<TConnectionSnapshot> connections;
+    connections.reserve(DDiskConnections.size());
+    for (size_t host = 0; host < DDiskConnections.size(); ++host) {
+        connections.push_back(MakeConnectionSnapshot(host));
+    }
+
+    return {
+        .Index = DirectBlockGroupIndex,
+        .VChunkCount = VChunks.size(),
+        .Hosts = std::move(hosts),
+        .Connections = std::move(connections),
+    };
+}
+
+TConnectionSnapshot TDirectBlockGroup::MakeConnectionSnapshot(
+    size_t hostIndex) const
+{
+    const auto& ddisk = DDiskConnections[hostIndex];
+    const bool hasPBuffer = hostIndex < PBufferConnections.size();
+    const auto* pbuffer = hasPBuffer ? &PBufferConnections[hostIndex] : nullptr;
+
+    return {
+        .HostIndex = static_cast<THostIndex>(hostIndex),
+        .DDiskId = ddisk.HostConnection.DDiskId,
+        .PBufferId = pbuffer ? std::optional(pbuffer->HostConnection.DDiskId)
+                             : std::nullopt,
+        .DDiskSession = ToString(ddisk.SessionState),
+        .PBufferConnected = pbuffer && pbuffer->ConnectPromise.HasValue(),
+    };
+}
+
+TString TDirectBlockGroup::PrintHostAndNode(THostIndex host) const
+{
+    return PrintHostAndNodeId(host, GetNodeId(host));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

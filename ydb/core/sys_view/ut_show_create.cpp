@@ -7,6 +7,7 @@
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 
+#include <util/string/cast.h>
 #include <util/string/subst.h>
 
 namespace NKikimr {
@@ -49,6 +50,10 @@ public:
 
     std::string ShowCreateExternalDataSource(NQuery::TSession& session, const std::string& dataSourceName) {
         return ShowCreate(session, "EXTERNAL DATA SOURCE", dataSourceName);
+    }
+
+    std::string ShowCreateExternalTable(NQuery::TSession& session, const std::string& tableName) {
+        return ShowCreate(session, "EXTERNAL TABLE", tableName);
     }
 
     void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false, bool initialScan = false) {
@@ -731,6 +736,88 @@ Y_UNIT_TEST(TableDefaultLiteral) {
                 Value Decimal(35, 10) DEFAULT CAST("110.111" AS Decimal(35, 10)),
                 PRIMARY KEY (Key)
             );
+        )", "test_show_create"
+    );
+}
+
+Y_UNIT_TEST(TableWithMultiColumnStatistics) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    TShowCreateChecker checker(env);
+
+    // Exact-output check for a row table.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64,
+                `a` Uint64,
+                `b` Utf8,
+                STATISTICS `s` ON (`a`, `b`) WITH (COUNT_MIN_SKETCH),
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    // Round-trip check (create -> SHOW CREATE -> recreate -> compare) for a column table.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+            )
+            WITH (STORE = COLUMN);
+        )", "test_show_create"
+    );
+}
+
+Y_UNIT_TEST(TableWithMultiColumnStatisticsWithoutWith) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64,
+                `a` Uint64,
+                `b` Utf8,
+                STATISTICS `s` ON (`a`, `b`),
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b)
+            )
+            WITH (STORE = COLUMN);
         )", "test_show_create"
     );
 }
@@ -1964,7 +2051,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
     );
 }
 
-Y_UNIT_TEST(TableColumnAlterColumn) {
+void CheckAlterColumnShowCreate(double dictionaryUniqueFraction, bool enableNativeColumns) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableCsDictionaryEncoding = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
@@ -1974,8 +2061,10 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
 
     TShowCreateChecker checker(env);
 
-    checker.CheckShowCreateTable(
-        R"(
+    const TString fractionStr = ToString(dictionaryUniqueFraction);
+    const TString nativeColumnsStr = enableNativeColumns ? "true" : "false";
+
+    const TString query = Sprintf(R"(
             CREATE TABLE `/Root/test_show_create` (
                 Col1 Uint64 NOT NULL,
                 Col2 JsonDocument,
@@ -1986,15 +2075,16 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`, `DICTIONARY_UNIQUE_FRACTION`=`0.5`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`, `DICTIONARY_UNIQUE_FRACTION`=`%s`, `ENABLE_NATIVE_COLUMNS`=`%s`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col2 SET COMPRESSION (algorithm=zstd, level=4);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col3 SET ENCODING (DICT);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col4 SET ENCODING ();
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col4 SET COMPRESSION ();
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col5 SET ENCODING (OFF);
-        )", "test_show_create",
-        R"(
+        )", fractionStr.c_str(), nativeColumnsStr.c_str());
+
+    const TString expected = Sprintf(R"(
             CREATE TABLE `test_show_create` (
                 `Col1` Uint64 NOT NULL,
                 `Col2` JsonDocument COMPRESSION (algorithm = zstd, level = 4),
@@ -2009,11 +2099,20 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DICTIONARY_UNIQUE_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DICTIONARY_UNIQUE_FRACTION` = `%s`, `ENABLE_NATIVE_COLUMNS` = `%s`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
-        )"
-    );
+        )", fractionStr.c_str(), nativeColumnsStr.c_str());
+
+    checker.CheckShowCreateTable(query.c_str(), "test_show_create", expected);
+}
+
+Y_UNIT_TEST(TableColumnAlterColumn) {
+    CheckAlterColumnShowCreate(0.5, true);
+}
+
+Y_UNIT_TEST(TableColumnAlterColumnExplicitlyUnsetValues) {
+    CheckAlterColumnShowCreate(0, false);
 }
 
 Y_UNIT_TEST(TableColumnUpsertOptions) {
@@ -2456,9 +2555,9 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
     // When trying to SHOW CREATE TABLE on a system table that has empty key column IDs,
     // the formatter crashes at line 347 with: Y_ENSURE(!tableDesc.GetKeyColumnIds().empty())
     //
-    // The issue specifically mentions `.sys/tables` as causing the crash.
-    // This test verifies that SHOW CREATE TABLE on system tables either succeeds
-    // or returns a proper error status, but does not crash the server.
+    // The issue was triggered by system tables with empty key column IDs (e.g. some
+    // `.sys/*` views). This test verifies that SHOW CREATE TABLE on representative
+    // system tables either succeeds or returns a proper error status, but does not crash.
 
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 
@@ -2469,10 +2568,9 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
     NQuery::TQueryClient queryClient(env.GetDriver());
     auto session = queryClient.GetSession().GetValueSync().GetSession();
 
-    // The issue specifically mentions .sys/tables as the problematic table
-    // We test this and a few other system tables to ensure robustness
+    // We test a few representative system tables to ensure SHOW CREATE TABLE is robust
     TVector<TString> systemTablesToTest = {
-        "/Root/.sys/tables",  // The specific table mentioned in issue #30332
+        "/Root/.sys/query_sessions",
         "/Root/.sys/partition_stats",
         "/Root/.sys/nodes"
     };
@@ -2819,6 +2917,138 @@ Y_UNIT_TEST(ExternalDataSource) {
         UNIT_ASSERT_C(noAuthRecreated.find(expected) != std::string::npos,
             "recreated eds_none is missing '" << expected << "': " << noAuthRecreated);
     }
+}
+
+Y_UNIT_TEST(ExternalTable) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    auto session = NQuery::TQueryClient(env.GetDriver()).GetSession().GetValueSync().GetSession();
+
+    // `tier1` is created by the checker's constructor as an ObjectStorage
+    // external data source.
+    ExecuteQuery(session, R"(
+        CREATE EXTERNAL TABLE `ext_table` (
+            Key Uint64 NOT NULL,
+            Value Utf8,
+            Year Int32 NOT NULL
+        ) WITH (
+            DATA_SOURCE = "tier1",
+            LOCATION = "/folder1/",
+            FORMAT = "csv_with_names",
+            COMPRESSION = "gzip",
+            PARTITIONED_BY = "['Year']"
+        );
+    )");
+
+    auto query = checker.ShowCreateExternalTable(session, "ext_table");
+    UNIT_ASSERT_C(query.find("CREATE EXTERNAL TABLE") != std::string::npos, query);
+    // The data source is referenced by its absolute path, the same way
+    // SHOW CREATE TABLE reports external data sources used for tiering.
+    for (const auto& expected : {
+             "`Key` Uint64 NOT NULL",
+             "`Value` Utf8",
+             "`Year` Int32 NOT NULL",
+             "DATA_SOURCE = '/Root/tier1'",
+             "LOCATION = '/folder1/'",
+             "FORMAT = 'csv_with_names'",
+             "COMPRESSION = 'gzip'",
+             "PARTITIONED_BY = '[\"Year\"]'",
+         }) {
+        UNIT_ASSERT_C(query.find(expected) != std::string::npos,
+            "ext_table is missing '" << expected << "': " << query);
+    }
+
+    // Round-trip: drop the external table, recreate it from the SHOW CREATE
+    // output and confirm every column and setting survived. (Full-string
+    // equality is not stable — WITH-clause property order in the formatted
+    // output is not deterministic.)
+    ExecuteQuery(session, "DROP EXTERNAL TABLE `ext_table`;");
+    ExecuteQuery(session, query);
+    auto recreated = checker.ShowCreateExternalTable(session, "ext_table");
+    for (const auto& expected : {
+             "`Key` Uint64 NOT NULL",
+             "`Value` Utf8",
+             "`Year` Int32 NOT NULL",
+             "DATA_SOURCE = '/Root/tier1'",
+             "LOCATION = '/folder1/'",
+             "FORMAT = 'csv_with_names'",
+             "COMPRESSION = 'gzip'",
+             "PARTITIONED_BY = '[\"Year\"]'",
+         }) {
+        UNIT_ASSERT_C(recreated.find(expected) != std::string::npos,
+            "recreated ext_table is missing '" << expected << "': " << recreated);
+    }
+
+    // A minimal external table: no optional settings beyond the mandatory ones.
+    ExecuteQuery(session, R"(
+        CREATE EXTERNAL TABLE `ext_table_minimal` (
+            Key Utf8 NOT NULL
+        ) WITH (
+            DATA_SOURCE = "tier1",
+            LOCATION = "obj",
+            FORMAT = "json_each_row"
+        );
+    )");
+    auto minimalQuery = checker.ShowCreateExternalTable(session, "ext_table_minimal");
+    UNIT_ASSERT_C(minimalQuery.find("`Key` Utf8 NOT NULL") != std::string::npos, minimalQuery);
+    UNIT_ASSERT_C(minimalQuery.find("DATA_SOURCE = '/Root/tier1'") != std::string::npos, minimalQuery);
+    UNIT_ASSERT_C(minimalQuery.find("LOCATION = 'obj'") != std::string::npos, minimalQuery);
+
+    ExecuteQuery(session, "DROP EXTERNAL TABLE `ext_table_minimal`;");
+    ExecuteQuery(session, minimalQuery);
+    auto minimalRecreated = checker.ShowCreateExternalTable(session, "ext_table_minimal");
+    UNIT_ASSERT_C(minimalRecreated.find("`Key` Utf8 NOT NULL") != std::string::npos, minimalRecreated);
+    UNIT_ASSERT_C(minimalRecreated.find("FORMAT = 'json_each_row'") != std::string::npos, minimalRecreated);
+
+    // Several partition columns: the list keeps its declared order and stays a
+    // JSON list. `ext_table` above covers the one-column case, where the array
+    // must not collapse into a scalar.
+    ExecuteQuery(session, R"(
+        CREATE EXTERNAL TABLE `ext_table_multi_partition` (
+            Key Uint64 NOT NULL,
+            Year Int32 NOT NULL,
+            Month Int32 NOT NULL
+        ) WITH (
+            DATA_SOURCE = "tier1",
+            LOCATION = "/folder2/",
+            FORMAT = "csv_with_names",
+            PARTITIONED_BY = "['Year', 'Month']"
+        );
+    )");
+    auto multiQuery = checker.ShowCreateExternalTable(session, "ext_table_multi_partition");
+    UNIT_ASSERT_C(multiQuery.find("PARTITIONED_BY = '[\"Year\", \"Month\"]'") != std::string::npos, multiQuery);
+
+    ExecuteQuery(session, "DROP EXTERNAL TABLE `ext_table_multi_partition`;");
+    ExecuteQuery(session, multiQuery);
+    auto multiRecreated = checker.ShowCreateExternalTable(session, "ext_table_multi_partition");
+    for (const auto& expected : {
+             "`Key` Uint64 NOT NULL",
+             "`Year` Int32 NOT NULL",
+             "`Month` Int32 NOT NULL",
+             "LOCATION = '/folder2/'",
+             "PARTITIONED_BY = '[\"Year\", \"Month\"]'",
+         }) {
+        UNIT_ASSERT_C(multiRecreated.find(expected) != std::string::npos,
+            "recreated ext_table_multi_partition is missing '" << expected << "': " << multiRecreated);
+    }
+
+    // A path type mismatch must be reported instead of silently formatting the
+    // wrong kind of object: `tier1` is an external data source, not an
+    // external table.
+    auto mismatch = session.ExecuteQuery(
+        "SHOW CREATE EXTERNAL TABLE `tier1`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_UNEQUAL_C(mismatch.GetStatus(), EStatus::SUCCESS, "expected SHOW CREATE EXTERNAL TABLE to fail on an external data source");
+    UNIT_ASSERT_STRING_CONTAINS(mismatch.GetIssues().ToString(), "Path type mismatch");
+
+    // And the other way round: an external table is not a table.
+    auto reverseMismatch = session.ExecuteQuery(
+        "SHOW CREATE TABLE `ext_table`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_UNEQUAL_C(reverseMismatch.GetStatus(), EStatus::SUCCESS, "expected SHOW CREATE TABLE to fail on an external table");
+    UNIT_ASSERT_STRING_CONTAINS(reverseMismatch.GetIssues().ToString(), "Path type mismatch");
 }
 
 Y_UNIT_TEST(TableColumnLocalBloomNgramFilterIndex) {

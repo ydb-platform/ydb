@@ -1,0 +1,80 @@
+--- contrib/restricted/wavm_llvm16/Lib/LLVMJIT/EmitFunction.cpp	(312badd895de32e15e6526c993b10a772fee96e0)
++++ contrib/restricted/wavm_llvm16/Lib/LLVMJIT/EmitFunction.cpp	(index)
+@@ -380,6 +380,9 @@ void EmitFunctionContext::emit()
+ 				emitLiteralIptr(offsetof(Runtime::Function, code), moduleContext.iptrType))});
+ 	}
+ 
++	emitRuntimeIntrinsic(
++		"checkCallStackDepth", FunctionType({}, {}, IR::CallingConvention::intrinsic), {});
++
+ 	// Decode the WebAssembly opcodes and emit LLVM IR for them.
+ 	OperatorDecoderStream decoder(functionDef.code);
+ 	UnreachableOpVisitor unreachableOpVisitor(*this);
+--- contrib/restricted/wavm_llvm16/Lib/Runtime/Context.cpp	(312badd895de32e15e6526c993b10a772fee96e0)
++++ contrib/restricted/wavm_llvm16/Lib/Runtime/Context.cpp	(index)
+@@ -61,6 +61,11 @@ Runtime::Context::~Context()
+ 
+ Compartment* Runtime::getCompartment(const Context* context) { return context->compartment; }
+ 
++void Runtime::setCheckStackDepthCallback(Context* context, void (*callback)())
++{
++	context->setCheckStackDepthCallback(callback);
++}
++
+ Context* Runtime::cloneContext(const Context* context, Compartment* newCompartment)
+ {
+ 	// Create a new context and initialize its runtime data with the values from the source context.
+@@ -70,6 +75,7 @@ Context* Runtime::cloneContext(const Context* context, Compartment* newCompartme
+ 		memcpy(clonedContext->runtimeData->mutableGlobals,
+ 			   context->runtimeData->mutableGlobals,
+ 			   maxMutableGlobals * sizeof(IR::UntaggedValue));
++		clonedContext->checkStackDepthCallback = context->checkStackDepthCallback;
+ 	}
+ 	return clonedContext;
+ }
+--- contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h	(312badd895de32e15e6526c993b10a772fee96e0)
++++ contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h	(index)
+@@ -247,12 +247,15 @@ namespace WAVM { namespace Runtime {
+ 	{
+ 		Uptr id = UINTPTR_MAX;
+ 		struct ContextRuntimeData* runtimeData = nullptr;
++		void (*checkStackDepthCallback)() = nullptr;
+ 
+ 		Context(Compartment* inCompartment, std::string&& inDebugName)
+ 		: GCObject(ObjectKind::context, inCompartment, std::move(inDebugName))
+ 		{
+ 		}
+ 		~Context();
++
++		void setCheckStackDepthCallback(void (*callback)()) { checkStackDepthCallback = callback; }
+ 	};
+ 
+ 	struct Compartment : GCObject
+--- contrib/restricted/wavm_llvm16/Lib/Runtime/WAVMIntrinsics.cpp	(312badd895de32e15e6526c993b10a772fee96e0)
++++ contrib/restricted/wavm_llvm16/Lib/Runtime/WAVMIntrinsics.cpp	(index)
+@@ -70,6 +70,12 @@ WAVM_DEFINE_INTRINSIC_FUNCTION(wavmIntrinsics,
+ 				function->mutableData->debugName.c_str());
+ }
+ 
++WAVM_DEFINE_INTRINSIC_FUNCTION(wavmIntrinsics, "checkCallStackDepth", void, checkCallStackDepth)
++{
++	Context* context = getContextFromRuntimeData(contextRuntimeData);
++	if(context->checkStackDepthCallback) { context->checkStackDepthCallback(); }
++}
++
+ WAVM_DEFINE_INTRINSIC_FUNCTION(wavmIntrinsics, "debugBreak", void, debugBreak)
+ {
+ 	Log::printf(Log::debug, "================== wavmIntrinsics.debugBreak\n");
+--- contrib/restricted/wavm_llvm16/Include/WAVM/Runtime/Runtime.h	(312badd895de32e15e6526c993b10a772fee96e0)
++++ contrib/restricted/wavm_llvm16/Include/WAVM/Runtime/Runtime.h	(index)
+@@ -546,6 +546,10 @@ namespace WAVM { namespace Runtime {
+ 	// Creates a new context, initializing its mutable global state from the given context.
+ 	WAVM_API Context* cloneContext(const Context* context, Compartment* newCompartment);
+ 
++	// Sets a callback to check call stack depth. The callback is invoked on function entry.
++	// Since stacks are user-provided, user must provide their own callback to check stack depth.
++	WAVM_API void setCheckStackDepthCallback(Context* context, void (*callback)());
++
+ 	//
+ 	// Foreign objects
+ 	//

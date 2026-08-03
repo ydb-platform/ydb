@@ -2,8 +2,11 @@
 #include "columnshard_private_events.h"
 #include "columnshard_schema.h"
 
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/dq.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -34,8 +37,10 @@ public:
         const auto txKind = record.GetTxKind();
         const ui64 txId = record.GetTxId();
         const auto& txBody = record.GetTxBody();
-        NActors::TLogContextGuard lGuard =
-            NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("tx_id", txId)("this", (ui64)this);
+        YDB_LOG_CREATE_CONTEXT(
+            {"tabletId", Self->TabletID()},
+            {"txId", txId},
+            {"this", (ui64)this});
 
         if (!Self->ProcessingParams && record.HasProcessingParams()) {
             Self->ProcessingParams.emplace().CopyFrom(record.GetProcessingParams());
@@ -52,7 +57,9 @@ public:
             if (txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA) {
                 if (record.HasSubDomainPathId()) {
                     ui64 subDomainPathId = record.GetSubDomainPathId();
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "propose")("subdomain_id", subDomainPathId);
+                    YDB_LOG_DEBUG("",
+                        {"event", "propose"},
+                        {"subdomainId", subDomainPathId});
                     Self->SpaceWatcher->PersistSubDomainPathId(subDomainPathId, txc);
                     Self->SpaceWatcher->StartWatchingSubDomainPathId();
                 } else {
@@ -82,8 +89,11 @@ public:
         AFL_VERIFY(!!TxOperator);
         AFL_VERIFY(!!TxInfo);
         const ui64 txId = record.GetTxId();
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())(
-            "request_tx", TxInfo->DebugString())("this", (ui64)this)("op_tx", TxOperator->GetTxInfo().DebugString());
+        YDB_LOG_CREATE_CONTEXT(
+            {"tabletId", Self->TabletID()},
+            {"requestTx", TxInfo->DebugString()},
+            {"this", (ui64)this},
+            {"opTx", TxOperator->GetTxInfo().DebugString()});
 
         Self->TryRegisterMediatorTimeCast();
 
@@ -91,21 +101,25 @@ public:
             TxOperator->SendReply(*Self, ctx);
             return;
         }
-        auto internalOp = Self->GetProgressTxController().GetTxOperatorOptional(txId);
+        auto internalOp = Self->GetProgressTxController().GetTxOperator(txId, ETxOperatorStatus::InProgress, /*optional*/ true);
         if (!internalOp) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "removed tx operator");
+            YDB_LOG_WARN("",
+                {"event", "removed tx operator"});
             return;
         }
-        NActors::TLogContextGuard lGuardTx =
-            NActors::TLogContextBuilder::Build()("int_op_tx", internalOp->GetTxInfo().DebugString())("int_this", (ui64)internalOp.get());
+        ::NActors::NStructuredLog::TLogStack::TLogGuard ydblogContextGuard2;
+        YDB_LOG_UPDATE_CONTEXT(
+            {"intOpTx", internalOp->GetTxInfo().DebugString()},
+            {"intThis", (ui64)internalOp.get()});
         if (!internalOp->CheckTxInfoForReply(*TxInfo)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "deprecated tx operator");
+            YDB_LOG_WARN("",
+                {"event", "deprecated tx operator"});
             return;
         }
 
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "actual tx operator");
-        const bool waitForAsyncCompletion = internalOp->IsAsync() && (!internalOp->NeedResendReply() || !internalOp->IsProposeReplyReady(*Self));
-        if (waitForAsyncCompletion) {
+        YDB_LOG_DEBUG("",
+            {"event", "actual tx operator"});
+        if (internalOp->IsAsync()) {
             Self->GetProgressTxController().StartProposeOnComplete(*internalOp, ctx);
         } else {
             Self->GetProgressTxController().FinishProposeOnComplete(*internalOp, ctx);

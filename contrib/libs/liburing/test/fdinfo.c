@@ -183,13 +183,19 @@ static int __test_io(const char *file, struct io_uring *ring, int write,
 	fdinfo_read(ring);
 
 	ret = io_uring_submit(ring);
-	if (!mixed && ret != BUFFERS) {
-		fprintf(stderr, "submit got %d, wanted %d\n", ret, BUFFERS);
-		goto err;
-	} else if (mixed && ret != BUFFERS + (BUFFERS >> 1)) {
-		fprintf(stderr, "submit got %d, wanted %d\n", ret,
-			BUFFERS + (BUFFERS >> 1));
-		goto err;
+	if (!sqthread) {
+		if (ret < 0) {
+			fprintf(stderr, "submit: %d\n", ret);
+			goto err;
+		}
+		if (!mixed && ret != BUFFERS) {
+			fprintf(stderr, "submit got %d, wanted %d\n", ret, BUFFERS);
+			goto err;
+		} else if (mixed && ret != BUFFERS + (BUFFERS >> 1)) {
+			fprintf(stderr, "submit got %d, wanted %d\n", ret,
+				BUFFERS + (BUFFERS >> 1));
+			goto err;
+		}
 	}
 
 	for (i = 0; i < 10; i++) {

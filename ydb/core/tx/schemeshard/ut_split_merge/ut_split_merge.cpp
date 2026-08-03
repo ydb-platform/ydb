@@ -4,6 +4,7 @@
 #include <ydb/core/tablet_flat/util_fmt_cell.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/mon_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers_flags_n.h>  // for Y_UNIT_TEST_FLAGS_N
@@ -15,7 +16,6 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 // defined in ut_table_partitions_format.cpp
-TString PostSwitchAction(TTestActorRuntime& runtime, ui64 schemeShard, TPathId pathId, TStringBuf format);
 TPathId GetPathId(TTestActorRuntime& runtime, const TString& path);
 
 namespace {

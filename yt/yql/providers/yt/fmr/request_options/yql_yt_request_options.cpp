@@ -124,6 +124,7 @@ void TYtTableTaskRef::Save(IOutputStream* buffer) const {
         SaveRichPath(buffer, path);
     }
     ::Save(buffer, FilePaths);
+    ::Save(buffer, TableIndices);
 }
 
 void TYtTableTaskRef::Load(IInputStream* buffer) {
@@ -138,6 +139,7 @@ void TYtTableTaskRef::Load(IInputStream* buffer) {
     }
     RichPaths = richPaths;
     ::Load(buffer, FilePaths);
+    ::Load(buffer, TableIndices);
 }
 
 void TTableRange::Save(IOutputStream* buffer) const {
@@ -168,7 +170,8 @@ void TFmrTableInputRef::Save(IOutputStream* buffer) const {
         IsFirstRowInclusive,
         IsLastRowInclusive,
         FirstRowKeys,
-        LastRowKeys
+        LastRowKeys,
+        TableIndex
     );
 }
 
@@ -182,7 +185,8 @@ void TFmrTableInputRef::Load(IInputStream* buffer) {
         IsFirstRowInclusive,
         IsLastRowInclusive,
         FirstRowKeys,
-        LastRowKeys
+        LastRowKeys,
+        TableIndex
     );
 }
 

@@ -22,6 +22,7 @@ public:
         THostMask enabledHosts,
         TVector<std::optional<ui64>> watermarks);
 
+    [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t GetHostCount() const;
     [[nodiscard]] ui32 GetVChunkIndex() const;
 
@@ -34,6 +35,9 @@ public:
     // Temporarily disables the host. Does not change the ddisk status for the
     // host.
     void DisableHost(THostIndex hostIndex);
+
+    // Add new host and assign new role for it.
+    void AppendHost();
 
     // Disables the host. Demote ddisk and pbuffer. If possible, adds ddisk on
     // the new host. Returns the text of the error or message to be logged.
@@ -65,12 +69,21 @@ public:
     // Get a list of all healthy DDisks (enabled and full filed).
     [[nodiscard]] THostMask GetHealthyDDisks() const;
 
-    void SetWatermark(THostIndex hostIndex, std::optional<ui64> watermark);
+    // If std::nullopt is set, it means that the disk is fully filled with data
+    // and the waterline value is higher than the disk size. If the waterline
+    // value is set, it means that disk blocks less than this value can be read,
+    // and those that are equal to or higher than this value are not yet filled.
+    // In other words, if the value is 0, no disk blocks can be read.
+    void SetWatermark(
+        THostIndex hostIndex,
+        std::optional<ui64> watermarkBlockCount);
     [[nodiscard]] std::optional<ui64> GetWatermark(THostIndex hostIndex) const;
 
     [[nodiscard]] THostMask GetDisabledHosts() const;
 
     [[nodiscard]] bool IsValid() const;
+
+    bool operator==(const TVChunkConfig& other) const;
 
     [[nodiscard]] TString DebugPrint() const;
 

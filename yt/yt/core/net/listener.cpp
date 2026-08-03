@@ -36,12 +36,13 @@ public:
         , ServerSocket_(serverSocket)
         , Poller_(poller)
         , Acceptor_(acceptor)
+        , LoggingTags_(NLogging::TLoggingTagList().With("Listener", Name_))
     { }
 
     // IPollable implementation
-    const std::string& GetLoggingTag() const override
+    const NLogging::TLoggingTagList& GetLoggingTags() const override
     {
-        return Name_;
+        return LoggingTags_;
     }
 
     void OnEvent(EPollControl /*control*/) override
@@ -156,6 +157,7 @@ private:
     const SOCKET ServerSocket_;
     const IPollerPtr Poller_;
     const IPollerPtr Acceptor_;
+    const NLogging::TLoggingTagList LoggingTags_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
     std::atomic<bool> Pending_ = false;

@@ -134,6 +134,7 @@ import random
 import socket
 import string
 import threading
+from logging import NullHandler
 
 from botocore.compat import six  # noqa: F401
 from botocore.exceptions import IncompleteReadError, ResponseStreamingError
@@ -145,12 +146,7 @@ import s3transfer.compat
 from s3transfer.exceptions import RetriesExceededError, S3UploadFailedError
 
 __author__ = 'Amazon Web Services'
-__version__ = '0.10.4'
-
-
-class NullHandler(logging.Handler):
-    def emit(self, record):
-        pass
+__version__ = '0.14.0'
 
 
 logger = logging.getLogger(__name__)
@@ -513,7 +509,7 @@ class ShutdownQueue(queue.Queue):
         with self._shutdown_lock:
             if self._shutdown:
                 raise QueueShutdownError(
-                    "Cannot put item to queue when " "queue has been shutdown."
+                    "Cannot put item to queue when queue has been shutdown."
                 )
         return queue.Queue.put(self, item)
 
@@ -717,12 +713,22 @@ class S3Transfer:
 
     def __init__(self, client, config=None, osutil=None):
         self._client = client
+        self._client.meta.events.register(
+            'before-call.s3.*', self._update_checksum_context
+        )
         if config is None:
             config = TransferConfig()
         self._config = config
         if osutil is None:
             osutil = OSUtils()
         self._osutil = osutil
+
+    def _update_checksum_context(self, params, **kwargs):
+        request_context = params.get("context", {})
+        checksum_context = request_context.get("checksum", {})
+        if "request_algorithm" in checksum_context:
+            # Force request checksum algorithm in the header if specified.
+            checksum_context["request_algorithm"]["in"] = "header"
 
     def upload_file(
         self, filename, bucket, key, callback=None, extra_args=None
@@ -790,8 +796,7 @@ class S3Transfer:
             )
         except Exception:
             logger.debug(
-                "Exception caught in download_file, removing partial "
-                "file: %s",
+                "Exception caught in download_file, removing partial file: %s",
                 temp_filename,
                 exc_info=True,
             )

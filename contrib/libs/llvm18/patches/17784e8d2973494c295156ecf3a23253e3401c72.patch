@@ -1,0 +1,15 @@
+# this commit is backport 17784e8d2973494c295156ecf3a23253e3401c72
+# can be removed in 21+ version
+--- a/include/llvm/Support/Endian.h
++++ b/include/llvm/Support/Endian.h
+@@ -214,6 +214,10 @@ struct packed_endian_specific_integral {
+
+   explicit packed_endian_specific_integral(value_type val) { *this = val; }
+
++  value_type value() const {
++    return endian::read<value_type, alignment>((const void *)Value.buffer,
++                                               endian);
++  }
+   operator value_type() const {
+     return endian::read<value_type, endian, alignment>(
+       (const void*)Value.buffer);

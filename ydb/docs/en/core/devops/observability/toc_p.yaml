@@ -11,3 +11,5 @@ items:
   href: ../../reference/observability/tracing/setup.md
 - name: Alerting
   href: alerting.md
+- name: Diagnostics
+  href: diagnostics.md

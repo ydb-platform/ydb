@@ -1,4 +1,4 @@
-# {{ ydb-short-name }} для DevOps-инженеров
+# Администрирование кластеров
 
 В этом разделе документации {{ ydb-short-name }} описано всё, что нужно знать для работы с кластерами {{ ydb-short-name }}.
 
@@ -6,7 +6,7 @@
 
 Основные подразделы:
 
-* [{#T}](concepts/index.md) — дополнения к общему разделу [концепций](../concepts/index.md), актуальные для DevOps-инженеров.
+* [{#T}](concepts/index.md) — дополнения к общему разделу [концепций](../concepts/index.md), актуальные для администрирования кластеров.
 * [{#T}](configuration-management/index.md) — управление конфигурацией кластеров {{ ydb-short-name }}.
 * [{#T}](deployment-options/index.md) — способы развёртывания кластеров {{ ydb-short-name }}.
     * **[Ansible](deployment-options/ansible/index.md)**: для развертываний на физическом оборудовании и виртуальных машинах.
@@ -15,4 +15,3 @@
 
 * [{#T}](observability/index.md) — инструменты для наблюдения за кластерами {{ ydb-short-name }}.
 * [{#T}](backup-and-recovery/index.md) — резервное копирование и восстановление кластеров {{ ydb-short-name }}.
-

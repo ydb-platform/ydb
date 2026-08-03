@@ -572,7 +572,8 @@ private:
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
 
-    std::optional<ui64> ProgressTxInFlight;
+    ui64 InProgressTxId = 0;
+    bool ProgressTxScheduled = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
     TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;
@@ -685,14 +686,26 @@ public:
         return TablesManager;
     }
 
-    void EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId);
+    void EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId = 0);
 
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
     }
 
-    NOlap::TSnapshot GetCurrentSnapshotForInternalModification() const {
+    NOlap::TSnapshot GetOutdatedSnapshot() const {
         return NOlap::TSnapshot::MaxForPlanStep(GetOutdatedStep());
+    }
+
+    // NoTxWrites may be visible sometimes to current reads. It is a bug, and we are going to fix it
+    // someday https://github.com/ydb-platform/ydb/issues/32061
+    NOlap::TSnapshot GetSnapshotForNoTxWrites() const {
+        return GetOutdatedSnapshot();
+    }
+
+    // Internal write MUST NOT be visible to current reads, so we must commit them strictly after
+    // the youngest possible read snapshot.
+    NOlap::TSnapshot GetCurrentSnapshotForInternalModification() const {
+        return NOlap::TSnapshot::MaxForPlanStep(GetOutdatedStep() + 1);
     }
 
     const std::shared_ptr<NOlap::NDataSharing::TSessionsManager>& GetSharingSessionsManager() const {

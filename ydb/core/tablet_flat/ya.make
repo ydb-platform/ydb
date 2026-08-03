@@ -15,6 +15,7 @@ SRCS(
     flat_database.h
     flat_dbase_scheme.cpp
     flat_dbase_apply.cpp
+    flat_direct_part_writer.h
     flat_exec_broker.cpp
     flat_exec_commit.cpp
     flat_exec_commit_mgr.cpp

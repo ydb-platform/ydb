@@ -9,7 +9,9 @@ Y_UNIT_TEST_SUITE(SelectGroups) {
     // VDisk status flags changed too -- which they don't for a fresh empty disk -- so the request hung
     // forever.
     Y_UNIT_TEST(BlockUntilAllResourcesAreComplete) {
-        TEnvironmentSetup env(false);
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .ReportVDiskMetricsInPDiskMock = true,
+        });
 
         // create a fresh group; at this point it has no VDisk metrics yet
         env.CreateBoxAndPool();

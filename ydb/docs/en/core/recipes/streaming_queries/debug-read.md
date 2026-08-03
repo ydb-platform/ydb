@@ -1,6 +1,6 @@
 # Debug reads from a topic
 
-When developing [streaming queries](../../concepts/streaming-query.md), it is often useful to inspect what arrives in a [topic](../../concepts/datamodel/topic.md) without creating a full streaming query. Run a regular `SELECT` with `STREAMING = TRUE`.
+When developing [streaming queries](../../concepts/streaming-query.md), it is often useful to inspect what arrives in a [topic](../../concepts/datamodel/topic.md) without creating a full streaming query. Run a regular `SELECT` with `STREAMING = "TRUE"`.
 
 {% note warning %}
 
@@ -28,7 +28,7 @@ WITH (
     SCHEMA = (
         Data String
     ),
-    STREAMING = TRUE
+    STREAMING = "TRUE"
 )
 LIMIT 1
 ```
@@ -51,7 +51,7 @@ WITH (
         Level String NOT NULL,
         Host String NOT NULL
     ),
-    STREAMING = TRUE
+    STREAMING = "TRUE"
 )
 LIMIT 5
 ```
@@ -60,4 +60,4 @@ LIMIT 5
 
 * [{#T}](../../concepts/streaming-query.md)
 * [{#T}](../../dev/streaming-query/streaming-query-formats.md) — supported data formats
-* [{#T}](../../yql/reference/syntax/select/streaming.md) — `STREAMING = TRUE` in the YQL reference
+* [{#T}](../../yql/reference/syntax/select/streaming.md) — `STREAMING = "TRUE"` in the YQL reference

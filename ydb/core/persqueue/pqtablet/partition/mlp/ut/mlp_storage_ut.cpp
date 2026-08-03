@@ -614,7 +614,7 @@ Y_UNIT_TEST(AddMessageWithOffsetGapsReturnsAllMessages_WithKeepMessageOrder) {
     AddMessageWithOffsetGapsReturnsAllMessagesImpl(true);
 }
 
-Y_UNIT_TEST(AddMessageWithOffsetGapPreservesNonCommittedMessages) {
+void AddMessageWithOffsetGapPreservesNonCommittedMessagesImpl(const ui64 commitOffset) {
     TUtils utils;
     auto ts = utils.TimeProvider->Now();
 
@@ -624,28 +624,29 @@ Y_UNIT_TEST(AddMessageWithOffsetGapPreservesNonCommittedMessages) {
     utils.Storage.AddMessage(1, true, 101, ts);
     utils.Storage.AddMessage(2, true, 102, ts);
 
-    UNIT_ASSERT(utils.Commit(1));
+    UNIT_ASSERT(utils.Commit(commitOffset));
     const ui64 lockedOffset = utils.Next();
-    UNIT_ASSERT_VALUES_UNEQUAL(utils.Next(), 1); // 0 or 2
+    UNIT_ASSERT_VALUES_UNEQUAL(lockedOffset, commitOffset);
+    Cerr << "DUMP 1: " << utils.Storage.DebugString() << Endl;
 
     // Offset gap: move all to slow zone
     utils.Storage.AddMessage(5, true, 105, ts);
 
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 5);
+    Cerr << "DUMP 2: " << utils.Storage.DebugString() << Endl;
 
-    // L C U . . U
-    // U C L . . U
     for (const auto& message : utils.Storage) {
+        const TString descr = TStringBuilder() << LabeledOutput(message.Offset, lockedOffset);
         if (message.Offset == 5) {
-            UNIT_ASSERT(!message.SlowZone);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+            UNIT_ASSERT_C(!message.SlowZone, descr);
+            UNIT_ASSERT_VALUES_EQUAL_C(message.Status, TStorage::EMessageStatus::Unprocessed, descr);
         } else if (message.Offset == lockedOffset) {
-            UNIT_ASSERT(message.SlowZone);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
+            UNIT_ASSERT_C(message.SlowZone, descr);
+            UNIT_ASSERT_VALUES_EQUAL_C(message.Status, TStorage::EMessageStatus::Locked, descr);
         } else {
-            UNIT_ASSERT(IsIn({0, 2}, message.Offset));
-            UNIT_ASSERT(message.SlowZone);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+            UNIT_ASSERT_C(IsIn({0, 1, 2}, message.Offset), descr);
+            UNIT_ASSERT_C(message.SlowZone, descr);
+            UNIT_ASSERT_VALUES_EQUAL_C(message.Status, TStorage::EMessageStatus::Unprocessed, descr);
         }
     }
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMessageCount(), 3);
@@ -654,11 +655,19 @@ Y_UNIT_TEST(AddMessageWithOffsetGapPreservesNonCommittedMessages) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 3);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
-    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);   // offset 1 was removed from slow zone
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);  // offset `commitOffset` was removed from slow zone
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 
     utils.End();
     utils.AssertLoad();
+}
+
+Y_UNIT_TEST(AddMessageWithOffsetGapPreservesNonCommittedMessages0) {
+    AddMessageWithOffsetGapPreservesNonCommittedMessagesImpl(0);
+}
+
+Y_UNIT_TEST(AddMessageWithOffsetGapPreservesNonCommittedMessages1) {
+    AddMessageWithOffsetGapPreservesNonCommittedMessagesImpl(1);
 }
 
 Y_UNIT_TEST(AddMessageWithDelay) {

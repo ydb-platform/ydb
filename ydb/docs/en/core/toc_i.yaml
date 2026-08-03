@@ -53,15 +53,15 @@ items:
   include:
     mode: link
     path: faq/toc_p.yaml
-- name: Public materials
-  include:
-    mode: link
-    path: public-materials/toc_p.yaml
 - name: Downloads
   href: downloads/index.md
   include:
     mode: link
     path: downloads/toc_i.yaml
+- name: Public materials
+  include:
+    mode: link
+    path: public-materials/toc_p.yaml
 - name: Changelog
   include:
     mode: link

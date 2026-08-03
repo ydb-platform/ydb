@@ -20,9 +20,10 @@ namespace NKikimr::NPQ::NPartitionChooser {
 
 class TTableHelper {
 public:
-    TTableHelper(const TString& topicName, const TString& topicHashName)
+    TTableHelper(const TString& topicName, const TString& topicHashName, ui64 pathId = 0)
         : TopicName(topicName)
-        , TopicHashName(topicHashName) {
+        , TopicHashName(topicHashName)
+        , PathId(pathId) {
     };
 
     std::optional<ui32> PartitionId() const {
@@ -35,6 +36,7 @@ public:
 
     [[nodiscard]] bool Initialize(const TActorContext& ctx, const TString& sourceId) {
         const auto& pqConfig = AppData(ctx)->PQConfig;
+        const auto& featureFlags = AppData(ctx)->FeatureFlags;
 
         TableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
                                                                    : ESourceIdTableGeneration::SrcIdMeta2;
@@ -46,9 +48,20 @@ public:
             return false;
         }
 
-        SelectQuery = GetSelectSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration);
-        UpdateQuery = GetUpdateSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration);
-        UpdateAccessTimeQuery = GetUpdateAccessTimeQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration);
+        // Primary Topic key value. When PathId is known, use the PathId-encoded value.
+        // WithFallback keeps writing/reading the legacy plain-name row during migration for safe
+        // rollback; it is disabled once TopicPartitionMappingByPathIdMigrationComplete is set.
+        if (PathId != 0) {
+            PrimaryTopic = EncodeTopicWithPathId(PathId, TopicName);
+            WithFallback = !featureFlags.GetTopicPartitionMappingByPathIdMigrationComplete();
+        } else {
+            PrimaryTopic = TopicName;
+            WithFallback = false;
+        }
+
+        SelectQuery = GetSelectSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration, WithFallback);
+        UpdateQuery = GetUpdateSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration, WithFallback);
+        UpdateAccessTimeQuery = GetUpdateAccessTimeQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration, WithFallback);
 
         YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper",
             {"selectQuery", SelectQuery});
@@ -143,11 +156,18 @@ public:
 
         paramsBuilder
             .AddParam("$Topic")
-                .Utf8(TopicName)
+                .Utf8(PrimaryTopic)
                 .Build()
             .AddParam("$SourceId")
                 .Utf8(EncodedSourceId.EscapedSourceId)
                 .Build();
+
+        if (WithFallback) {
+            paramsBuilder
+                .AddParam("$TopicName")
+                    .Utf8(TopicName)
+                    .Build();
+        }
 
         NYdb::TParams params = paramsBuilder.Build();
 
@@ -222,7 +242,7 @@ public:
 
         paramsBuilder
             .AddParam("$Topic")
-                .Utf8(TopicName)
+                .Utf8(PrimaryTopic)
                 .Build()
             .AddParam("$SourceId")
                 .Utf8(EncodedSourceId.EscapedSourceId)
@@ -240,6 +260,13 @@ public:
                 .Uint32(partitionId)
                 .Build();
 
+        if (WithFallback) {
+            paramsBuilder
+                .AddParam("$TopicName")
+                    .Utf8(TopicName)
+                    .Build();
+        }
+
         NYdb::TParams params = paramsBuilder.Build();
 
         ev->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(params)));
@@ -250,6 +277,12 @@ public:
 private:
     const TString TopicName;
     const TString TopicHashName;
+    const ui64 PathId;
+
+    // Primary Topic column value: PathId-encoded when PathId is known, otherwise the plain name.
+    TString PrimaryTopic;
+    // When true, queries also handle the legacy plain-name row (migration phase, safe rollback).
+    bool WithFallback = false;
 
     NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
 

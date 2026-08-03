@@ -17,127 +17,187 @@
 
 namespace NKikimr::NPQ {
 
-TString GetSelectSourceIdQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
+// During migration (withFallback == true) queries handle two Topic values in a single request:
+//   $Topic     - primary, PathId-encoded value ("pathId:<pathId>:<topicName>")
+//   $TopicName - legacy plain topic name
+// This keeps the one-response-per-phase contract of the partition chooser state machine intact.
+TString GetSelectSourceIdQueryFromPath(const TString& path, ESourceIdTableGeneration generation, bool withFallback) {
     switch (generation) {
-        case ESourceIdTableGeneration::SrcIdMeta2:
-            return TStringBuilder() << "--!syntax_v1\n"
+        case ESourceIdTableGeneration::SrcIdMeta2: {
+            TStringBuilder query;
+            query << "--!syntax_v1\n"
                    "DECLARE $Hash AS Uint32; "
-                   "DECLARE $Topic AS Utf8; "
-                   "DECLARE $SourceId AS Utf8;\n"
+                   "DECLARE $Topic AS Utf8; ";
+            if (withFallback) {
+                query << "DECLARE $TopicName AS Utf8; ";
+            }
+            query << "DECLARE $SourceId AS Utf8;\n"
                    "SELECT Partition, CreateTime, AccessTime, SeqNo FROM `" << path << "` "
-                   "WHERE Hash == $Hash AND Topic == $Topic AND SourceId == $SourceId;";
-        case ESourceIdTableGeneration::PartitionMapping:
-            return TStringBuilder() << "--!syntax_v1\n"
+                   "WHERE Hash == $Hash AND "
+                   << (withFallback ? "(Topic == $Topic OR Topic == $TopicName)" : "Topic == $Topic")
+                   << " AND SourceId == $SourceId;";
+            return query;
+        }
+        case ESourceIdTableGeneration::PartitionMapping: {
+            TStringBuilder query;
+            query << "--!syntax_v1\n"
                    "DECLARE $Hash AS Uint64; "
-                   "DECLARE $Topic AS Utf8; "
-                   "DECLARE $SourceId AS Utf8;\n"
+                   "DECLARE $Topic AS Utf8; ";
+            if (withFallback) {
+                query << "DECLARE $TopicName AS Utf8; ";
+            }
+            query << "DECLARE $SourceId AS Utf8;\n"
                    "SELECT Partition, CreateTime, AccessTime, SeqNo FROM `"
                    << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
-                   << "` WHERE Hash == $Hash AND Topic == $Topic AND ProducerId == $SourceId;";
+                   << "` WHERE Hash == $Hash AND "
+                   << (withFallback ? "(Topic == $Topic OR Topic == $TopicName)" : "Topic == $Topic")
+                   << " AND ProducerId == $SourceId;";
+            return query;
+        }
         default:
             AFL_ENSURE(false)("generation", static_cast<int>(generation));
     }
 }
 
-TString GetSelectSourceIdQuery(const TString& root, ESourceIdTableGeneration generation) {
+TString GetSelectSourceIdQuery(const TString& root, ESourceIdTableGeneration generation, bool withFallback) {
     switch (generation) {
         case ESourceIdTableGeneration::SrcIdMeta2:
-            return GetSelectSourceIdQueryFromPath(root + "/SourceIdMeta2", generation);
+            return GetSelectSourceIdQueryFromPath(root + "/SourceIdMeta2", generation, withFallback);
         case ESourceIdTableGeneration::PartitionMapping:
             return GetSelectSourceIdQueryFromPath(
                     NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath(),
-                    generation
+                    generation, withFallback
             );
         default:
             AFL_ENSURE(false)("generation", static_cast<int>(generation));
     }
 }
 
-TString GetUpdateSourceIdQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
+TString GetUpdateSourceIdQueryFromPath(const TString& path, ESourceIdTableGeneration generation, bool withFallback) {
     switch (generation) {
-        case ESourceIdTableGeneration::SrcIdMeta2:
-            return TStringBuilder() << "--!syntax_v1\n"
+        case ESourceIdTableGeneration::SrcIdMeta2: {
+            TStringBuilder query;
+            query << "--!syntax_v1\n"
                    "DECLARE $SourceId AS Utf8; "
-                   "DECLARE $Topic AS Utf8; "
-                   "DECLARE $Hash AS Uint32; "
+                   "DECLARE $Topic AS Utf8; ";
+            if (withFallback) {
+                query << "DECLARE $TopicName AS Utf8; ";
+            }
+            query << "DECLARE $Hash AS Uint32; "
                    "DECLARE $Partition AS Uint32; "
                    "DECLARE $CreateTime AS Uint64; "
                    "DECLARE $AccessTime AS Uint64;"
                    "DECLARE $SeqNo AS Uint64;\n"
                    "UPSERT INTO `" << path << "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
-                                              "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo);";
-        case ESourceIdTableGeneration::PartitionMapping:
-            return TStringBuilder() << "--!syntax_v1\n"
+                   "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo)";
+            if (withFallback) {
+                query << ", ($Hash, $TopicName, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo)";
+            }
+            query << ";";
+            return query;
+        }
+        case ESourceIdTableGeneration::PartitionMapping: {
+            TStringBuilder query;
+            query << "--!syntax_v1\n"
                    "DECLARE $SourceId AS Utf8; "
-                   "DECLARE $Topic AS Utf8; "
-                   "DECLARE $Hash AS Uint64; "
+                   "DECLARE $Topic AS Utf8; ";
+            if (withFallback) {
+                query << "DECLARE $TopicName AS Utf8; ";
+            }
+            query << "DECLARE $Hash AS Uint64; "
                    "DECLARE $Partition AS Uint32; "
                    "DECLARE $CreateTime AS Uint64; "
                    "DECLARE $AccessTime AS Uint64; "
                    "DECLARE $SeqNo AS Uint64;\n"
                    "UPSERT INTO `" << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
                     << "` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
-                                              "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo);";
+                   "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo)";
+            if (withFallback) {
+                query << ", ($Hash, $TopicName, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo)";
+            }
+            query << ";";
+            return query;
+        }
         default:
             AFL_ENSURE(false)("generation", static_cast<int>(generation));
     }
 }
 
-TString GetUpdateAccessTimeQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
+TString GetUpdateAccessTimeQueryFromPath(const TString& path, ESourceIdTableGeneration generation, bool withFallback) {
     switch (generation) {
-        case ESourceIdTableGeneration::SrcIdMeta2:
-            return TStringBuilder() << "--!syntax_v1\n"
+        case ESourceIdTableGeneration::SrcIdMeta2: {
+            TStringBuilder query;
+            query << "--!syntax_v1\n"
                    "DECLARE $SourceId AS Utf8; "
-                   "DECLARE $Topic AS Utf8; "
-                   "DECLARE $Hash AS Uint32; "
+                   "DECLARE $Topic AS Utf8; ";
+            if (withFallback) {
+                query << "DECLARE $TopicName AS Utf8; ";
+            }
+            query << "DECLARE $Hash AS Uint32; "
                    "DECLARE $Partition AS Uint32; "
                    "DECLARE $CreateTime AS Uint64; "
                    "DECLARE $AccessTime AS Uint64;\n"
                    "UPDATE `" << path << "` "
                    "SET AccessTime = $AccessTime "
-                   "WHERE Hash = $Hash AND Topic = $Topic AND SourceId = $SourceId AND Partition = $Partition;";
-        case ESourceIdTableGeneration::PartitionMapping:
-            return TStringBuilder() << "--!syntax_v1\n"
+                   "WHERE Hash = $Hash AND "
+                   << (withFallback ? "(Topic = $Topic OR Topic = $TopicName)" : "Topic = $Topic")
+                   << " AND SourceId = $SourceId AND Partition = $Partition;";
+            return query;
+        }
+        case ESourceIdTableGeneration::PartitionMapping: {
+            TStringBuilder query;
+            query << "--!syntax_v1\n"
                    "DECLARE $SourceId AS Utf8; "
-                   "DECLARE $Topic AS Utf8; "
-                   "DECLARE $Hash AS Uint64; "
+                   "DECLARE $Topic AS Utf8; ";
+            if (withFallback) {
+                query << "DECLARE $TopicName AS Utf8; ";
+            }
+            query << "DECLARE $Hash AS Uint64; "
                    "DECLARE $Partition AS Uint32; "
                    "DECLARE $CreateTime AS Uint64; "
                    "DECLARE $AccessTime AS Uint64;\n"
                    "UPDATE `" << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath() << "` "
                    "SET AccessTime = $AccessTime "
-                   "WHERE Hash = $Hash AND Topic = $Topic AND ProducerId = $SourceId AND Partition = $Partition;";
+                   "WHERE Hash = $Hash AND "
+                   << (withFallback ? "(Topic = $Topic OR Topic = $TopicName)" : "Topic = $Topic")
+                   << " AND ProducerId = $SourceId AND Partition = $Partition;";
+            return query;
+        }
         default:
             AFL_ENSURE(false)("generation", static_cast<int>(generation));
     }
 }
 
-TString GetUpdateSourceIdQuery(const TString& root, ESourceIdTableGeneration generation) {
+TString GetUpdateSourceIdQuery(const TString& root, ESourceIdTableGeneration generation, bool withFallback) {
     switch (generation) {
         case ESourceIdTableGeneration::SrcIdMeta2:
-            return GetUpdateSourceIdQueryFromPath(root + "/SourceIdMeta2", generation);
+            return GetUpdateSourceIdQueryFromPath(root + "/SourceIdMeta2", generation, withFallback);
         case ESourceIdTableGeneration::PartitionMapping:
             return GetUpdateSourceIdQueryFromPath(
                     NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath(),
-                    generation
+                    generation, withFallback
             );
         default:
             AFL_ENSURE(false)("generation", static_cast<int>(generation));
     }
 }
 
-TString GetUpdateAccessTimeQuery(const TString& root, ESourceIdTableGeneration generation) {
+TString GetUpdateAccessTimeQuery(const TString& root, ESourceIdTableGeneration generation, bool withFallback) {
     switch (generation) {
         case ESourceIdTableGeneration::SrcIdMeta2:
-            return GetUpdateAccessTimeQueryFromPath(root + "/SourceIdMeta2", generation);
+            return GetUpdateAccessTimeQueryFromPath(root + "/SourceIdMeta2", generation, withFallback);
         case ESourceIdTableGeneration::PartitionMapping:
             return GetUpdateAccessTimeQueryFromPath(
                     NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath(),
-                    generation
+                    generation, withFallback
             );
         default:
             AFL_ENSURE(false)("generation", static_cast<int>(generation));
     }
+}
+
+TString EncodeTopicWithPathId(ui64 pathId, const TString& topicName) {
+    return TStringBuilder() << "pathId:" << pathId << ":" << topicName;
 }
 
 namespace NSourceIdEncoding {

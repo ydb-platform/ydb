@@ -39,13 +39,14 @@ public:
                                    NPersQueue::TTopicConverterPtr& fullConverter,
                                    const TString& sourceId,
                                    std::optional<ui32> preferedPartition,
-                                   NWilson::TTraceId traceId)
+                                   NWilson::TTraceId traceId,
+                                   ui64 pathId = 0)
         : Parent(parentId)
         , SourceId(sourceId)
         , PreferedPartition(preferedPartition)
         , Chooser(chooser)
         , Span(TWilsonTopic::TopicDetailed, std::move(traceId), "Topic.ChoosePartition")
-        , TableHelper(fullConverter->GetClientsideName(), fullConverter->GetTopicForSrcIdHash())
+        , TableHelper(fullConverter->GetClientsideName(), fullConverter->GetTopicForSrcIdHash(), pathId)
         , PartitionHelper(Span.GetTraceId())
     {
     }

@@ -348,6 +348,85 @@ void AssertTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 
     UNIT_ASSERT_VALUES_EQUAL(s.GetOptionalUint64().value(), seqNo);
 }
 
+// --- Helpers for LOGBROKER-10398 PathId migration tests ---
+// These operate on the same table but let the caller specify the exact Topic column value,
+// so the test can distinguish the legacy plain-name row from the PathId-encoded row.
+
+// Writes a single row using an explicit Topic column value.
+void WriteToTableWithTopic(NPersQueue::TTestServer& server, const TString& sourceId,
+                           const TString& topicValue, ui32 partitionId, ui64 seqNo = 0) {
+    InitTable(server);
+
+    const auto& pqConfig = server.CleverServer->GetRuntime()->GetAppData().PQConfig;
+    auto tableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
+                                                               : ESourceIdTableGeneration::SrcIdMeta2;
+
+    NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+    NKikimr::NPQ::NSourceIdEncoding::TEncodedSourceId encoded = NSourceIdEncoding::EncodeSrcId(
+                fullConverter->GetTopicForSrcIdHash(), sourceId, tableGeneration
+        );
+
+    TString query = TStringBuilder() << "--!syntax_v1\n"
+        "UPSERT INTO `//Root/.metadata/TopicPartitionsMapping` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
+                                          "(" << encoded.KeysHash << ", \"" << topicValue << "\", \""
+                                          << encoded.EscapedSourceId << "\", " << TInstant::Now().MilliSeconds() << ", "
+                                          << TInstant::Now().MilliSeconds() << ", " << partitionId << ", " << seqNo << ");";
+    Cerr << "Run query:\n" << query << Endl;
+    server.AnnoyingClient->RunYqlDataQuery(query);
+}
+
+// Selects the row for an explicit Topic column value.
+TMaybe<NYdb::TResultSet> SelectTableWithTopic(NPersQueue::TTestServer& server, const TString& sourceId,
+                                              const TString& topicValue) {
+    const auto& pqConfig = server.CleverServer->GetRuntime()->GetAppData().PQConfig;
+    auto tableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
+                                                               : ESourceIdTableGeneration::SrcIdMeta2;
+
+    NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+    NKikimr::NPQ::NSourceIdEncoding::TEncodedSourceId encoded = NSourceIdEncoding::EncodeSrcId(
+                fullConverter->GetTopicForSrcIdHash(), sourceId, tableGeneration
+        );
+
+    TString query = TStringBuilder() << "--!syntax_v1\n"
+        "SELECT Partition, SeqNo "
+        "FROM  `//Root/.metadata/TopicPartitionsMapping` "
+        "WHERE Hash = " << encoded.KeysHash <<
+        "  AND Topic = \"" << topicValue << "\"" <<
+        "  AND ProducerId = \"" << encoded.EscapedSourceId << "\"";
+    Cerr << "Run query:\n" << query << Endl;
+    return server.AnnoyingClient->RunYqlDataQuery(query);
+}
+
+void AssertTableTopic(NPersQueue::TTestServer& server, const TString& sourceId,
+                      const TString& topicValue, ui32 partitionId, ui64 seqNo) {
+    auto result = SelectTableWithTopic(server, sourceId, topicValue);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->RowsCount(), 1,
+        "Table must contain row for SourceId='" << sourceId << "' Topic='" << topicValue << "'");
+
+    NYdb::TResultSetParser parser(*result);
+    UNIT_ASSERT(parser.TryNextRow());
+    NYdb::TValueParser p(parser.GetValue(0));
+    NYdb::TValueParser s(parser.GetValue(1));
+    UNIT_ASSERT_VALUES_EQUAL(p.GetOptionalUint32().value(), partitionId);
+    UNIT_ASSERT_VALUES_EQUAL(s.GetOptionalUint64().value(), seqNo);
+}
+
+void AssertTableTopicEmpty(NPersQueue::TTestServer& server, const TString& sourceId, const TString& topicValue) {
+    auto result = SelectTableWithTopic(server, sourceId, topicValue);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->RowsCount(), 0,
+        "Table must not contain row for SourceId='" << sourceId << "' Topic='" << topicValue << "'");
+}
+
+// The PathId-encoded Topic value used by the chooser during/after migration.
+TString PathIdTopic(ui64 pathId) {
+    NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+    return NKikimr::NPQ::EncodeTopicWithPathId(pathId, fullConverter->GetClientsideName());
+}
+
 class TPQTabletMock: public TActor<TPQTabletMock> {
 public:
     TPQTabletMock(ETopicPartitionStatus status, std::optional<ui64> seqNo)
@@ -707,6 +786,110 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_BadSourceId_Test) {
     auto r = ChoosePartition(server, config, "base64:a***");
 
     UNIT_ASSERT(r->Error);
+}
+
+// --- LOGBROKER-10398: PathId migration tests (SplitMergeEnabled) ---
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_PathIdMigration_NewSourceId_DualWrites) {
+    // Migration phase (flag = false): choosing a partition for a brand new SourceId must write
+    // BOTH the PathId-encoded row and the legacy plain-name row so that old code can still read it.
+    NPersQueue::TTestServer server = CreateServer();
+    const ui64 pathId = 100500;
+
+    auto config = CreateConfig0(true);
+    config.SetPathId(pathId);
+    AddPartition(config, 0, {}, {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+
+    auto r = ChoosePartition(server, config, "A_Source_PathId_New");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
+
+    NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+    // Legacy plain-name row is present for rollback safety.
+    AssertTableTopic(server, "A_Source_PathId_New", fullConverter->GetClientsideName(), 0, 0);
+    // PathId-encoded row is present as the primary key.
+    AssertTableTopic(server, "A_Source_PathId_New", PathIdTopic(pathId), 0, 0);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_PathIdMigration_LegacyRowFound_FallbackRead) {
+    // Migration phase: only the legacy plain-name row exists (written by old code). The chooser must
+    // find it via the fallback read and reuse the stored partition, then re-persist the PathId row.
+    NPersQueue::TTestServer server = CreateServer();
+    const ui64 pathId = 100501;
+
+    auto config = CreateConfig0(true);
+    config.SetPathId(pathId);
+    AddPartition(config, 0, {}, "F");
+    AddPartition(config, 1, "F", {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+
+    NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+    // Simulate a mapping written by the old (pre-migration) code: legacy plain-name row only.
+    WriteToTableWithTopic(server, "A_Source_PathId_Legacy", fullConverter->GetClientsideName(), 0, 42);
+
+    auto r = ChoosePartition(server, config, "A_Source_PathId_Legacy");
+
+    UNIT_ASSERT(r->Result);
+    // Existing partition is reused via fallback read of the legacy row.
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
+    // After choosing, the PathId-encoded row is now populated as well (dual write).
+    AssertTableTopic(server, "A_Source_PathId_Legacy", PathIdTopic(pathId), 0, 42);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_PathIdMigration_RecreatedTopic_OldMappingIgnored) {
+    // A topic was recreated with the same name but a different PathId. A stale row exists under the
+    // OLD PathId-encoded Topic value pointing at an old partition with a non-zero SeqNo. With the new
+    // PathId, the lookup must miss that stale mapping and its SeqNo must NOT leak into the new topic.
+    NPersQueue::TTestServer server = CreateServer();
+    const ui64 oldPathId = 111;
+    const ui64 newPathId = 222;
+
+    auto config = CreateConfig0(true);
+    config.SetPathId(newPathId);
+    AddPartition(config, 0, {}, "F");
+    AddPartition(config, 1, "F", {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+
+    // Stale row from the previous incarnation, stored under the OLD PathId-encoded Topic value.
+    WriteToTableWithTopic(server, "A_Source_Recreated", PathIdTopic(oldPathId), 0, 777);
+
+    auto r = ChoosePartition(server, config, "A_Source_Recreated");
+
+    UNIT_ASSERT(r->Result);
+    // The stale SeqNo=777 from the old PathId row must not be reused for the new topic.
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo.value_or(0), 0);
+    // The new PathId-encoded row is written with a clean SeqNo.
+    AssertTableTopic(server, "A_Source_Recreated", PathIdTopic(newPathId), r->Result->Get()->PartitionId, 0);
+    // The stale old-PathId row is left untouched.
+    AssertTableTopic(server, "A_Source_Recreated", PathIdTopic(oldPathId), 0, 777);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_PathIdCutover_NoLegacyWrite) {
+    // Cutover phase (flag = true): only the PathId-encoded row is written; no legacy plain-name row.
+    NPersQueue::TTestServer server = CreateServer();
+    server.CleverServer->GetRuntime()->GetAppData().FeatureFlags
+        .SetTopicPartitionMappingByPathIdMigrationComplete(true);
+    const ui64 pathId = 100502;
+
+    auto config = CreateConfig0(true);
+    config.SetPathId(pathId);
+    AddPartition(config, 0, {}, {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+
+    auto r = ChoosePartition(server, config, "A_Source_Cutover");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
+
+    NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+    // PathId-encoded row is written.
+    AssertTableTopic(server, "A_Source_Cutover", PathIdTopic(pathId), 0, 0);
+    // Legacy plain-name row is NOT written after cutover.
+    AssertTableTopicEmpty(server, "A_Source_Cutover", fullConverter->GetClientsideName());
 }
 
 

@@ -360,4 +360,7 @@ message TFeatureFlags {
     optional bool EnableKafkaServerlessTransactions = 307 [default = false];
     optional bool EnableGeneratedStored = 308 [default = false];
     optional bool EnableGeneratedVirtual = 309 [default = false];
+    // false (default) = migration phase: write+read both PathId-encoded and legacy Topic rows (safe rollback)
+    // true            = cutover: use only PathId-encoded Topic rows
+    optional bool TopicPartitionMappingByPathIdMigrationComplete = 310 [default = false];
 }

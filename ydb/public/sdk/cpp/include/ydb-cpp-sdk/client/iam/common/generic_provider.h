@@ -237,9 +237,10 @@ private:
                 RequestFiller_(req);
                 Rpc_(Stub_.get(), &*Context_, &req, response.get(), std::move(cb));
             } catch (...) {
-                std::lock_guard guard(Lock_);
+                std::unique_lock guard(Lock_);
                 ResetContextImpl();
-                RescheduleOnFailure();
+                guard.unlock();
+                Fail(CurrentExceptionMessage());
             }
         }
 

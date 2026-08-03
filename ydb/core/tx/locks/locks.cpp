@@ -555,11 +555,18 @@ void TLockInfo::SetFrozen(ILocksDb* db) {
 bool TLockInfo::SetWriteIndex(ui64 writerIndex, ui64 writeIndex, ILocksDb* db) {
     WriterIndex = writerIndex;
     WriteIndex = writeIndex;
+    // The statistics describe the write that is being replaced
+    WriteIndexStats.reset();
     if (db && IsPersistent()) {
         db->PersistLockWriteIndex(LockId, writerIndex, writeIndex);
         return true;
     }
     return false;
+}
+
+void TLockInfo::SetWriteIndexStats(const NKikimrQueryStats::TTxStats& stats) {
+    Y_ENSURE(WriteIndex, "Statistics of an uncommitted write imply its position in the chain");
+    WriteIndexStats = std::make_unique<NKikimrQueryStats::TTxStats>(stats);
 }
 
 void TLockInfo::AddWaitPersistentCallback(ILocksDb* db) {

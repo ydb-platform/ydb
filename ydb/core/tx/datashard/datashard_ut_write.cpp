@@ -4546,10 +4546,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1);
 
-        auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 3,
-            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
-        UNIT_ASSERT_C(result.GetIssues(0).message().Contains("expected 2"), result.GetIssues(0).message());
-        UNIT_ASSERT_C(result.GetIssues(0).message().Contains("got 3"), result.GetIssues(0).message());
+        // A gap is not the shard's business: KQP notices a lost write on its own.
+        NKikimrDataEvents::TLock lock;
+        {
+            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 3);
+            lock = result.GetTxLocks().at(0);
+            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(lock).GetWriteIndex(), 3u);
+        }
+
+        CommitLock(runtime, sender, shard, lock);
+
+        auto tableState = ReadTable(server, shards, tableId);
+        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 22\n");
     }
 
     Y_UNIT_TEST(PipelinedUncommittedWriteMultipleWriters) {
@@ -4702,14 +4710,20 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1);
 
         NKikimrDataEvents::TLock lock;
+        NKikimrQueryStats::TTableAccessStats access;
         {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 2);
             lock = result.GetTxLocks().at(0);
             UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(lock).GetWriteIndex(), 2u);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().TableAccessStatsSize(), 1u);
+            access = result.GetTxStats().GetTableAccessStats(0);
+            UNIT_ASSERT_VALUES_EQUAL(access.GetUpdateRow().GetRows(), 1u);
         }
 
         {
-            // A duplicate delivery of the same flush must not re-apply it
+            // A duplicate delivery of the same flush must not re-apply it, but must report
+            // it the same way, statistics included: KQP never saw the first reply.
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 2,
                 NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
@@ -4718,12 +4732,77 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(echoed).GetWriteIndex(), 2u);
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetGeneration(), lock.GetGeneration());
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetCounter(), lock.GetCounter());
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().TableAccessStatsSize(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().GetTableAccessStats(0).DebugString(),
+                access.DebugString());
+        }
+
+        {
+            // An older write's result is not remembered, so its duplicate is an error
+            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1,
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("already applied"), result.GetIssues(0).message());
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("writer is at 2"), result.GetIssues(0).message());
         }
 
         CommitLock(runtime, sender, shard, lock);
 
         auto tableState = ReadTable(server, shards, tableId);
         UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 22\n");
+    }
+
+    // A write that applies no rows still takes a position in the chain, and its duplicate
+    // must report the read-only lock it created.
+    Y_UNIT_TEST(PipelinedUncommittedWriteAlreadyAppliedMissingRow) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const auto& columns = opts.Columns_;
+        const ui64 shard = shards.at(0);
+
+        const ui64 lockTxId = 1234567890001;
+        const ui64 lockNodeId = runtime.GetNodeId(0);
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
+
+        auto updateMissingRow = [&](NKikimrDataEvents::TEvWriteResult::EStatus expected) {
+            auto req = MakeWriteRequestOneKeyValue(std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE,
+                tableId, columns, 1, 11);
+            req->SetLockId(lockTxId, lockNodeId);
+            req->Record.MutableWriteIndex()->SetWriteIndex(1);
+            return Write(runtime, sender, shard, std::move(req), expected);
+        };
+
+        NKikimrQueryStats::TTableAccessStats access;
+        {
+            auto result = updateMissingRow(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            const auto& lock = result.GetTxLocks().at(0);
+            UNIT_ASSERT(!lock.GetHasWrites());
+            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(lock).GetWriteIndex(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().TableAccessStatsSize(), 1u);
+            access = result.GetTxStats().GetTableAccessStats(0);
+        }
+
+        {
+            auto result = updateMissingRow(NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
+            const auto& echoed = result.GetTxLocks().at(0);
+            UNIT_ASSERT(!echoed.GetHasWrites());
+            UNIT_ASSERT_VALUES_EQUAL(echoed.GetSchemeShard(), tableId.PathId.OwnerId);
+            UNIT_ASSERT_VALUES_EQUAL(echoed.GetPathId(), tableId.PathId.LocalPathId);
+            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(echoed).GetWriteIndex(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().TableAccessStatsSize(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().GetTableAccessStats(0).DebugString(),
+                access.DebugString());
+        }
     }
 
     Y_UNIT_TEST(PipelinedUncommittedWriteRepliesBeforeCommit) {
@@ -4782,7 +4861,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     // Drops write 2's tablet commit and restarts, losing an acknowledged write.
-    // Returns the lock the client believes it holds.
+    // Returns the lock KQP believes it holds.
     NKikimrDataEvents::TLock LoseUncommittedWrite(
             TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
             const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
@@ -4837,7 +4916,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         auto staleLock = LoseUncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId);
 
-        // The chain is short of what the client reports: the transaction aborts.
+        // The chain is short of what KQP reports: the transaction aborts.
         CommitLock(runtime, sender, shard, staleLock, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
 
         auto tableState = ReadTable(server, shards, tableId);
@@ -4925,6 +5004,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             // The lock must report the table it was acquired on
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetSchemeShard(), tableId.PathId.OwnerId);
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetPathId(), tableId.PathId.LocalPathId);
+            // The restart lost the statistics of the write, only its index is restored
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().TableAccessStatsSize(), 0u);
         }
 
         CommitLock(runtime, sender, shard, lock);
@@ -5049,7 +5130,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     // A shard that is not pipelining (rolling restart: KQP already sends WriteIndex) must still
-    // wait for persistence before replying, and still validate the chain it is sent.
+    // wait for persistence before replying, and still track the chain it is sent.
     Y_UNIT_TEST(PipelinedUncommittedWriteShardNotPipelining) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -5097,9 +5178,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(ev->Get()->Record.GetTxLocks().at(0)).GetWriteIndex(), 1u);
         }
 
-        // Chain validation still applies even with the flag off
-        UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 3,
-            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        // The chain is still tracked even with the flag off
+        {
+            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 2);
+            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(result.GetTxLocks().at(0)).GetWriteIndex(), 2u);
+        }
+        UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 3, 33, 0, 1,
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardWrite)

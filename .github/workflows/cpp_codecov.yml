@@ -1,0 +1,276 @@
+name: Codecov C++ (SDK / CLI / workload)
+
+# Dogfood: pull_request. Switch to pull_request_target before merging to main.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    branches: [main]
+    paths:
+      - "ydb/public/sdk/cpp/**"
+      - "ydb/apps/ydb/**"
+      - "ydb/public/lib/ydb_cli/**"
+      - "ydb/tests/functional/ydb_cli/**"
+      - "ydb/library/workload/**"
+      - ".github/actions/run_clang_codecov/**"
+      - ".github/scripts/tests/codecov_suites.py"
+      - ".github/scripts/tests/detect_codecov_matrix.py"
+      - ".github/scripts/tests/export_coverage_lcov.py"
+      - ".github/scripts/tests/generate_coverage_landing.py"
+      - ".github/workflows/cpp_codecov.yml"
+      - ".github/codecov.yml"
+  schedule:
+    # Weekly full refresh for carryforward baselines (Sunday 03:00 UTC).
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: Suites to run (use "all" to seed Codecov / S3 baselines on main)
+        type: choice
+        options:
+          - all
+          - cpp_sdk
+          - cli
+          - cli_workload
+        default: all
+
+concurrency:
+  group: >-
+    ${{
+      github.event_name == 'pull_request' && format('codecov-pr-{0}', github.event.pull_request.number)
+      || github.event_name == 'schedule' && 'codecov-weekly'
+      || github.event_name == 'workflow_dispatch' && 'codecov-manual'
+      || 'codecov-main'
+    }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+jobs:
+  detect:
+    name: Detect suites
+    # Upstream only; PRs only when targeting main (stable-* etc. skip the whole job).
+    if: >-
+      github.repository == 'ydb-platform/ydb' &&
+      (github.event_name != 'pull_request' || github.base_ref == 'main')
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.decide.outputs.matrix || '[]' }}
+      should_run: ${{ steps.decide.outputs.should_run || 'false' }}
+      hanging_labels: ${{ steps.decide.outputs.hanging_labels || '[]' }}
+      # Head SHA for Codecov/S3 meta; PR number for S3 prefix (empty on push/schedule/manual).
+      commit_sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      pr_number: ${{ github.event.pull_request.number || '' }}
+    steps:
+      - name: Collaborator check on labeled
+        if: github.event_name == 'pull_request' && github.event.action == 'labeled'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const label = context.payload.label?.name || '';
+            if (!label.startsWith('coverage/')) {
+              core.info(`Ignoring non-coverage label: ${label}`);
+              return;
+            }
+            const sender = context.payload.sender.login;
+            try {
+              await github.rest.repos.checkCollaborator({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: sender,
+              });
+            } catch (error) {
+              if (!error.status || error.status != 404) throw error;
+              core.setFailed(
+                `Only repository collaborators can trigger Codecov via labels (sender: @${sender}).`
+              );
+            }
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Strip coverage labels on sync/open/reopen
+        if: >-
+          github.event_name == 'pull_request' &&
+          (github.event.action == 'synchronize' ||
+           github.event.action == 'opened' ||
+           github.event.action == 'reopened')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          labels=$(gh api "repos/${{ github.repository }}/issues/${PR}/labels" --jq '.[].name')
+          for lab in coverage/sdk coverage/cli coverage/workload coverage/all; do
+            if printf '%s\n' "$labels" | grep -qx "$lab"; then
+              echo "Removing label $lab (paths-only mode after ${{ github.event.action }})"
+              enc=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$lab")
+              gh api -X DELETE "repos/${{ github.repository }}/issues/${PR}/labels/${enc}" || true
+            fi
+          done
+
+      - name: Collect changed files / labels
+        id: inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          MODE=paths
+          CHANGED_FILE=$(mktemp)
+          LABELS_FILE=$(mktemp)
+          echo '[]' > "$LABELS_FILE"
+
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            MODE=labels
+            echo '["coverage/all"]' > "$LABELS_FILE"
+            : > "$CHANGED_FILE"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MODE=labels
+            case "${{ inputs.suites }}" in
+              all) echo '["coverage/all"]' > "$LABELS_FILE" ;;
+              cpp_sdk) echo '["coverage/sdk"]' > "$LABELS_FILE" ;;
+              cli) echo '["coverage/cli"]' > "$LABELS_FILE" ;;
+              cli_workload) echo '["coverage/workload"]' > "$LABELS_FILE" ;;
+              *) echo "Unknown suites input: ${{ inputs.suites }}" >&2; exit 1 ;;
+            esac
+            : > "$CHANGED_FILE"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.sha }}"
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              git diff --name-only HEAD~1 HEAD > "$CHANGED_FILE" || git ls-files > "$CHANGED_FILE"
+            else
+              git diff --name-only "$BEFORE" "$AFTER" > "$CHANGED_FILE"
+            fi
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            if [ "${{ github.event.action }}" = "labeled" ]; then
+              gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels" \
+                --jq '[.[].name]' > "$LABELS_FILE"
+              if python3 -c 'import json,sys; labs=json.load(open(sys.argv[1])); sys.exit(0 if any(str(l).startswith("coverage/") for l in labs) else 1)' "$LABELS_FILE"; then
+                MODE=labels
+              else
+                MODE=paths
+                gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+                  --paginate --jq '.[].filename' > "$CHANGED_FILE"
+              fi
+            else
+              MODE=paths
+              gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+                --paginate --jq '.[].filename' > "$CHANGED_FILE"
+            fi
+          fi
+
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "changed_files_file=$CHANGED_FILE" >> "$GITHUB_OUTPUT"
+          echo "labels_file=$LABELS_FILE" >> "$GITHUB_OUTPUT"
+          echo "mode=$MODE"
+          echo "changed files:" && head -50 "$CHANGED_FILE" || true
+          echo "labels:" && cat "$LABELS_FILE"
+
+      - name: Decide matrix
+        id: decide
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.action }}" = "labeled" ]; then
+            LAB="${{ github.event.label.name }}"
+            case "$LAB" in
+              coverage/*) ;;
+              *)
+                echo "matrix=[]" >> "$GITHUB_OUTPUT"
+                echo "should_run=false" >> "$GITHUB_OUTPUT"
+                echo "hanging_labels=[]" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+          fi
+
+          LABELS=$(cat "${{ steps.inputs.outputs.labels_file }}")
+          python3 .github/scripts/tests/detect_codecov_matrix.py \
+            --mode "${{ steps.inputs.outputs.mode }}" \
+            --changed-files-file "${{ steps.inputs.outputs.changed_files_file }}" \
+            --labels "$LABELS"
+
+  coverage:
+    name: Coverage (${{ matrix.suite }})
+    needs: detect
+    if: needs.detect.outputs.should_run == 'true'
+    runs-on: [self-hosted, auto-provisioned, build-preset-relwithdebinfo]
+    timeout-minutes: 480
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJson(needs.detect.outputs.matrix) }}
+    steps:
+      - name: Verify PR is mergeable
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            let pr = context.payload.pull_request;
+            if (pr.mergeable == null || !pr.merge_commit_sha) {
+              const { data } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+              });
+              pr = data;
+            }
+            if (!pr.mergeable || !pr.merge_commit_sha) {
+              core.setFailed(
+                'Unable to merge PR into the base branch. Please rebase or resolve conflicts and re-request coverage.'
+              );
+            }
+
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.sha }}
+          fetch-depth: 0
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+
+      - name: Run suite
+        uses: ./.github/actions/run_clang_codecov
+        with:
+          suite: ${{ matrix.suite }}
+          codecov_token: ${{ secrets.CODECOV_TOKEN }}
+          aws_access_key_id: ${{ secrets.YDB_TECH_AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.YDB_TECH_AWS_SECRET_ACCESS_KEY }}
+          bazel_remote_uri: ${{ vars.REMOTE_CACHE_URL_YA }}
+          bazel_remote_username: ${{ secrets.REMOTE_CACHE_USERNAME }}
+          bazel_remote_password: ${{ secrets.REMOTE_CACHE_PASSWORD }}
+          pr_number: ${{ needs.detect.outputs.pr_number }}
+          commit_sha: ${{ needs.detect.outputs.commit_sha }}
+
+  finalize:
+    name: Finalize PR labels
+    needs: [detect, coverage]
+    if: >-
+      always() &&
+      !cancelled() &&
+      github.event_name == 'pull_request' &&
+      needs.detect.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove coverage labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          labels=$(gh api "repos/${{ github.repository }}/issues/${PR}/labels" --jq '.[].name')
+          for lab in coverage/sdk coverage/cli coverage/workload coverage/all; do
+            if printf '%s\n' "$labels" | grep -qx "$lab"; then
+              echo "Removing label $lab"
+              enc=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$lab")
+              gh api -X DELETE "repos/${{ github.repository }}/issues/${PR}/labels/${enc}" || true
+            fi
+          done

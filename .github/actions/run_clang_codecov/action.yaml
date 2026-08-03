@@ -1,0 +1,184 @@
+name: Run Clang Codecov Suite
+description: Build/test with clang coverage, upload LCOV to Codecov, publish HTML to S3
+inputs:
+  suite:
+    description: "Suite name: cpp_sdk | cli | cli_workload"
+    required: true
+  codecov_token:
+    description: Codecov upload token
+    required: true
+  aws_access_key_id:
+    description: Yandex Object Storage access key
+    required: false
+    default: ""
+  aws_secret_access_key:
+    description: Yandex Object Storage secret key
+    required: false
+    default: ""
+  bazel_remote_uri:
+    description: Remote cache URI
+    required: false
+    default: ""
+  bazel_remote_username:
+    description: Remote cache username
+    required: false
+    default: ""
+  bazel_remote_password:
+    description: Remote cache password
+    required: false
+    default: ""
+  test_threads:
+    description: ya --test-threads
+    required: false
+    default: "28"
+  link_threads:
+    description: ya --link-threads
+    required: false
+    default: "12"
+  pr_number:
+    description: PR number (empty on push/schedule)
+    required: false
+    default: ""
+  commit_sha:
+    description: Commit SHA for meta/links
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Resolve suite config
+      id: suite
+      shell: bash
+      run: |
+        set -euo pipefail
+        CFG_FILE=$(mktemp)
+        python3 .github/scripts/tests/codecov_suites.py json-suite "${{ inputs.suite }}" > "$CFG_FILE"
+        EXCL=$(python3 .github/scripts/tests/codecov_suites.py exclude-regexp)
+        echo "exclude_regexp=${EXCL}" >> "$GITHUB_OUTPUT"
+        python3 -c 'import json,os,sys; cfg=json.load(open(sys.argv[1],encoding="utf-8")); open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8").write("regexp="+cfg["regexp"]+"\nflag="+cfg["flag"]+"\ntargets="+" ".join(cfg["targets"])+"\n")' "$CFG_FILE"
+        rm -f "$CFG_FILE"
+
+    - name: Ya make with clang coverage
+      id: ya
+      shell: bash
+      env:
+        BUILD_PRESET: profile
+      run: |
+        set -euxo pipefail
+        OUT="$(pwd)/coverage_workspace/${{ inputs.suite }}"
+        mkdir -p "$OUT"
+        echo "out_dir=$OUT" >> "$GITHUB_OUTPUT"
+
+        BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
+        echo -n "${{ inputs.bazel_remote_password }}" > "$BAZEL_REMOTE_PASSWORD_FILE"
+
+        REGEXP='${{ steps.suite.outputs.regexp }}'
+        EXCL='${{ steps.suite.outputs.exclude_regexp }}'
+        # shellcheck disable=SC2206
+        TARGETS=( ${{ steps.suite.outputs.targets }} )
+
+        params=(
+          -tA --build profile
+          --clang-coverage --coverage-report --keep-temps
+          "-DCOVERAGE_TARGET_REGEXP=${REGEXP}"
+          "--coverage-exclude-regexp=${EXCL}"
+          --test-threads "${{ inputs.test_threads }}"
+          --link-threads "${{ inputs.link_threads }}"
+          --output "$OUT"
+          --no-dir-outputs
+        )
+        if [ -n "${{ inputs.bazel_remote_uri }}" ]; then
+          params+=(--bazel-remote-store --bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
+          params+=(
+            --bazel-remote-put
+            --dist-cache-max-file-size=209715200
+            --dist-cache-evict-test-runs
+            --dist-cache-evict-bins
+          )
+        fi
+
+        ./ya make "${params[@]}" "${TARGETS[@]}"
+
+    - name: Export filtered LCOV
+      shell: bash
+      run: |
+        set -euxo pipefail
+        OUT="${{ steps.ya.outputs.out_dir }}"
+        python3 .github/scripts/tests/export_coverage_lcov.py \
+          --suite "${{ inputs.suite }}" \
+          --ya-output "$OUT" \
+          --output "$OUT/coverage.lcov"
+
+    - name: Upload to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ inputs.codecov_token }}
+        files: ${{ steps.ya.outputs.out_dir }}/coverage.lcov
+        flags: ${{ steps.suite.outputs.flag }}
+        fail_ci_if_error: false
+        name: ${{ inputs.suite }}
+
+    - name: Publish HTML report to Object Storage
+      continue-on-error: true
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws_access_key_id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws_secret_access_key }}
+        AWS_DEFAULT_REGION: ru-central1
+        SUITE: ${{ inputs.suite }}
+        OUT: ${{ steps.ya.outputs.out_dir }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        COMMIT_SHA: ${{ inputs.commit_sha }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -euxo pipefail
+        if [ -z "${AWS_ACCESS_KEY_ID}" ] || [ -z "${AWS_SECRET_ACCESS_KEY}" ]; then
+          echo "AWS credentials empty; skip S3 upload"
+          exit 0
+        fi
+        if ! command -v aws >/dev/null 2>&1; then
+          pip3 install --user awscli
+          export PATH="$HOME/.local/bin:$PATH"
+        fi
+
+        bucket=ydb-appteam-sdk-reports
+        endpoint=https://storage.yandexcloud.net
+
+        if [ -n "${PR_NUMBER}" ]; then
+          prefix="ydb/pr-${PR_NUMBER}/coverage"
+        else
+          prefix="ydb/coverage"
+        fi
+
+        report_dir="${OUT}/coverage.report"
+        if [ ! -d "${report_dir}" ]; then
+          echo "No coverage.report directory; skip object storage upload"
+          exit 0
+        fi
+
+        python3 -c 'import json,os; from datetime import datetime,timezone; meta={"suite":os.environ["SUITE"],"sha":os.environ["COMMIT_SHA"],"commit":os.environ["COMMIT_SHA"][:12],"event":os.environ.get("GITHUB_EVENT_NAME",""),"run_url":os.environ["RUN_URL"],"generated_at":datetime.now(timezone.utc).isoformat(),"pr":os.environ.get("PR_NUMBER") or None}; open(os.environ["OUT"]+"/meta.json","w",encoding="utf-8").write(json.dumps(meta,indent=2)+"\n")'
+        meta="${OUT}/meta.json"
+
+        aws --endpoint-url "$endpoint" s3 sync \
+          "${report_dir}/" \
+          "s3://${bucket}/${prefix}/${SUITE}/" \
+          --delete
+        aws --endpoint-url "$endpoint" s3 cp \
+          "$meta" \
+          "s3://${bucket}/${prefix}/${SUITE}/meta.json"
+
+        land_dir="${OUT}/landing"
+        mkdir -p "$land_dir"
+        python3 .github/scripts/tests/generate_coverage_landing.py \
+          --output "${land_dir}/index.html" \
+          --title "YDB C++ coverage" \
+          --meta-json "$meta" \
+          --suite "cpp_sdk=./cpp_sdk/index.html" \
+          --suite "cli=./cli/index.html" \
+          --suite "cli_workload=./cli_workload/index.html"
+        aws --endpoint-url "$endpoint" s3 cp \
+          "${land_dir}/index.html" \
+          "s3://${bucket}/${prefix}/index.html"
+
+        echo "Uploaded coverage HTML for ${SUITE} to object storage (prefix ${prefix}/${SUITE}/)" >> "$GITHUB_STEP_SUMMARY"

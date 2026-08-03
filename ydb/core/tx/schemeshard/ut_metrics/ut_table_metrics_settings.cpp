@@ -6,6 +6,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -902,5 +903,118 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
             true /* sourceHasMetricsLevel */,
             NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
         );
+    }
+}
+
+/**
+ * Unit test for the logic in Scheme Shard, which configures the database-wide default
+ * detailed metrics level (TABLES_METRICS_LEVEL) for row/column tables and publishes it
+ * in the subdomain description, where DataShard picks it up.
+ */
+Y_UNIT_TEST_SUITE(TSchemeShardDatabaseDetailedMetricsSettingsTest) {
+    constexpr const char* SubDomainSettings =
+        "PlanResolution: 50 "
+        "Coordinators: 1 "
+        "Mediators: 1 "
+        "TimeCastBucketsPerMediator: 2 "
+        "Name: \"USER_0\" ";
+
+    ui32 GetPublishedTablesMetricsLevel(TTestBasicRuntime& runtime, const TString& path) {
+        const auto describeResult = DescribePath(runtime, path);
+        UNIT_ASSERT(describeResult.GetPathDescription().HasDomainDescription());
+        return describeResult.GetPathDescription().GetDomainDescription().GetTablesMetricsLevel();
+    }
+
+    void VerifyAlterDatabaseTablesMetricsLevel(
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level
+    ) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // No database default configured yet
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedTablesMetricsLevel(runtime, "/MyRoot/USER_0"),
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified));
+
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot",
+            Sprintf("%sTablesMetricsLevel: %u", SubDomainSettings, ui32(level)));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedTablesMetricsLevel(runtime, "/MyRoot/USER_0"), ui32(level));
+
+        // The database default is persisted, so it survives a Scheme Shard restart
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedTablesMetricsLevel(runtime, "/MyRoot/USER_0"), ui32(level));
+
+        // An ALTER that says nothing about the level keeps the current one
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedTablesMetricsLevel(runtime, "/MyRoot/USER_0"), ui32(level));
+
+        // Setting the level back to Unspecified clears the database default
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot",
+            Sprintf("%sTablesMetricsLevel: %u", SubDomainSettings,
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified)));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedTablesMetricsLevel(runtime, "/MyRoot/USER_0"),
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified));
+    }
+
+    Y_UNIT_TEST(AlterDatabaseTablesMetricsLevelDisabled) {
+        VerifyAlterDatabaseTablesMetricsLevel(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled
+        );
+    }
+
+    Y_UNIT_TEST(AlterDatabaseTablesMetricsLevelTable) {
+        VerifyAlterDatabaseTablesMetricsLevel(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+        );
+    }
+
+    Y_UNIT_TEST(AlterDatabaseTablesMetricsLevelPartition) {
+        VerifyAlterDatabaseTablesMetricsLevel(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+        );
+    }
+
+    Y_UNIT_TEST(AlterDatabaseTablesMetricsLevelNotAllowedFeatureFlagDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(false);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot",
+            Sprintf("%sTablesMetricsLevel: %u", SubDomainSettings,
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable)),
+            {NKikimrScheme::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST(CreateDatabaseWithTablesMetricsLevel) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot",
+            Sprintf("%sTablesMetricsLevel: %u", SubDomainSettings,
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable)));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedTablesMetricsLevel(runtime, "/MyRoot/USER_0"),
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
     }
 }

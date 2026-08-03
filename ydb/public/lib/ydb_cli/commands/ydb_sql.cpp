@@ -79,6 +79,7 @@ void TCommandSql::Config(TConfig& config) {
         EDataFormat::Csv,
         EDataFormat::Tsv,
         EDataFormat::Parquet,
+        EDataFormat::Svg,
     });
 
     AddParametersOption(config);

@@ -1,3 +1,5 @@
 items:
 - name: Блум-индексы
   href: ../bloom-skip-indexes.md
+- name: min_max-индекс
+  href: ../min_max-skip-index.md

@@ -31,7 +31,7 @@ public:
         req.set_limit(Limit);
         req.set_page_token(std::move(continuationToken));
 
-        SRC_LOG_T("listing bindings");
+        LOG_LOG_S(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::FQ_INTERNAL_SERVICE, TLogCtx{.Owner_ = *this} << "listing bindings");
 
         Become(&ListDirectoryRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);

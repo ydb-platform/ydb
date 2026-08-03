@@ -41,7 +41,7 @@ public:
         auto& filter = *req.mutable_filter();
         filter.set_name(BindingName_);
 
-        SRC_LOG_T("listing bindings");
+        LOG_LOG_S(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::FQ_INTERNAL_SERVICE, TLogCtx{.Owner_ = *this} << "listing bindings");
 
         Become(&DescribeTableRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);
@@ -57,7 +57,7 @@ public:
 
         if (result.next_page_token().empty()) {
             TString errorMsg = TStringBuilder{} << "couldn't find binding with matching name for " << BindingName_;
-            SRC_LOG_I("failed: " << errorMsg);
+            LOG_LOG_S(ctx, NActors::NLog::PRI_INFO, NKikimrServices::FQ_INTERNAL_SERVICE, TLogCtx{.Owner_ = *this} << "failed: " << errorMsg);
             Reply(
                 Ydb::StatusIds_StatusCode_NOT_FOUND, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             return;
@@ -74,7 +74,7 @@ public:
         FederatedQuery::DescribeBindingRequest req;
         req.set_binding_id(bindingId);
 
-        SRC_LOG_T("describing binding: " << bindingId);
+        LOG_LOG_S(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::FQ_INTERNAL_SERVICE, TLogCtx{.Owner_ = *this} << "describing binding: " << bindingId);
 
         Become(&DescribeTableRPC::DescribeBindingState);
         MakeLocalCall(std::move(req), ctx);
@@ -96,7 +96,7 @@ public:
         default:
             TString errorMsg = TStringBuilder{} << "binding " << result.binding().meta().id() << " got unexpected type: " <<
                 static_cast<int>(settings.binding_case());
-            SRC_LOG_I("failed: " << errorMsg);
+            LOG_LOG_S(ctx, NActors::NLog::PRI_INFO, NKikimrServices::FQ_INTERNAL_SERVICE, TLogCtx{.Owner_ = *this} << "failed: " << errorMsg);
             Reply(
                 Ydb::StatusIds_StatusCode_INTERNAL_ERROR, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             return;

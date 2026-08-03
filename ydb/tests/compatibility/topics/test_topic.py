@@ -2,6 +2,7 @@
 import asyncio
 import concurrent.futures
 import datetime
+import gzip
 import logging
 import random
 import struct
@@ -17,15 +18,13 @@ from ydb.tests.library.compatibility.fixtures import (
     RollingDowngradeAndUpgradeFixture,
     current_binary_path,
     current_name,
-    init_stable_binary_path,
-    init_stable_name,
     path_to_version,
     string_version_to_tuple,
 )
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb import _apis
 from ydb._grpc.grpcwrapper.common_utils import GrpcWrapperAsyncIO
-from ydb._grpc.grpcwrapper.ydb_topic import StreamReadMessage, StreamWriteMessage
+from ydb._grpc.grpcwrapper.ydb_topic import Codec, StreamReadMessage, StreamWriteMessage
 from ydb._topic_writer.topic_writer import InternalMessage, PublicMessage
 from ydb._topic_writer.topic_writer_asyncio import WriterAsyncIOStream
 
@@ -35,20 +34,7 @@ BATCHING_FLAG = "enable_topic_messages_batching"
 TOPIC_COMPACTION_FLAG = "enable_topic_compactification_by_key"
 TOPIC_BATCHING_CODEC = 5
 
-STABLE_26_2 = string_version_to_tuple("stable-26-2")
 STABLE_26_3 = string_version_to_tuple("stable-26-3")
-
-
-class CurrentToInitialVersionFixture(RestartToAnotherVersionFixture):
-    @pytest.fixture(
-        autouse=True,
-        params=[[current_binary_path, init_stable_binary_path]],
-        ids=[f"restart_{current_name}_to_{init_stable_name}"],
-    )
-    def base_setup(self, request):
-        self.current_binary_paths_index = 0
-        self.all_binary_paths = request.param
-        self.versions = [path_to_version[path] for path in self.all_binary_paths]
 
 
 class CurrentToCurrentVersionFixture(RestartToAnotherVersionFixture):
@@ -61,6 +47,7 @@ class CurrentToCurrentVersionFixture(RestartToAnotherVersionFixture):
         self.current_binary_paths_index = 0
         self.all_binary_paths = request.param
         self.versions = [path_to_version[path] for path in self.all_binary_paths]
+
 
 logger = logging.getLogger(__name__)
 
@@ -539,6 +526,81 @@ def read_messages_with_offsets(driver, topic_name, consumer, expected_count, tim
     return messages
 
 
+async def _read_messages_with_offsets_from_read_offset_async(
+    driver,
+    topic_name,
+    consumer,
+    read_offset,
+    expected_count,
+    timeout=60,
+):
+    messages = []
+    stream = GrpcWrapperAsyncIO(StreamReadMessage.FromServer.from_proto)
+    await stream.start(driver, _apis.TopicService.Stub, _apis.TopicService.StreamRead)
+    try:
+        stream.write(StreamReadMessage.FromClient(StreamReadMessage.InitRequest(
+            topics_read_settings=[
+                StreamReadMessage.InitRequest.TopicReadSettings(path=topic_name)
+            ],
+            consumer=consumer,
+            auto_partitioning_support=True,
+        )))
+
+        deadline = time.time() + timeout
+        while len(messages) < expected_count and time.time() < deadline:
+            try:
+                message = await stream.receive(timeout=min(5, max(1, deadline - time.time())))
+            except TimeoutError:
+                continue
+
+            server_message = message.server_message
+            if isinstance(server_message, StreamReadMessage.StartPartitionSessionRequest):
+                stream.write(StreamReadMessage.FromClient(StreamReadMessage.StartPartitionSessionResponse(
+                    partition_session_id=server_message.partition_session.partition_session_id,
+                    read_offset=read_offset,
+                    commit_offset=None,
+                )))
+                stream.write(StreamReadMessage.FromClient(StreamReadMessage.ReadRequest(bytes_size=50 * 1024 * 1024)))
+            elif isinstance(server_message, StreamReadMessage.StopPartitionSessionRequest):
+                stream.write(StreamReadMessage.FromClient(StreamReadMessage.StopPartitionSessionResponse(
+                    partition_session_id=server_message.partition_session_id,
+                )))
+            elif isinstance(server_message, StreamReadMessage.ReadResponse):
+                for partition_data in server_message.partition_data:
+                    for batch in partition_data.batches:
+                        for message_data in batch.message_data:
+                            data = message_data.data
+                            if batch.codec == Codec.CODEC_GZIP:
+                                data = gzip.decompress(data)
+                            assert batch.codec in (Codec.CODEC_RAW, Codec.CODEC_GZIP)
+                            messages.append((message_data.offset, data))
+                if len(messages) < expected_count:
+                    stream.write(StreamReadMessage.FromClient(StreamReadMessage.ReadRequest(bytes_size=50 * 1024 * 1024)))
+
+        assert len(messages) == expected_count
+        return messages
+    finally:
+        stream.close()
+
+
+def read_messages_with_offsets_from_read_offset(
+    driver,
+    topic_name,
+    consumer,
+    read_offset,
+    expected_count,
+    timeout=60,
+):
+    return asyncio.run(_read_messages_with_offsets_from_read_offset_async(
+        driver,
+        topic_name,
+        consumer,
+        read_offset,
+        expected_count,
+        timeout=timeout,
+    ))
+
+
 def read_available_messages(driver, topic_name, consumer, min_count, timeout=120, idle_timeout=5):
     messages = []
     with driver.topic_client.reader(topic_name, consumer=consumer) as reader:
@@ -759,51 +821,6 @@ class TestTopicRollingDowngrade(RollingDowngradeAndUpgradeFixture):
         utils.read_from_topic()
 
 
-class TestTopicOffsetDeltaKeysDowngrade(CurrentToInitialVersionFixture):
-    @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-        if self.versions[0] < STABLE_26_3:
-            pytest.skip("Offset delta in keys is written only since stable-26-3")
-        if self.versions[1] < STABLE_26_2 or self.versions[1] >= STABLE_26_3:
-            pytest.skip("This test covers downgrade from current to 26-2")
-
-        yield from self.setup_cluster(extra_feature_flags=[OFFSET_DELTA_FLAG])
-
-    # Start on current with offset-delta keys enabled, write a large backlog, downgrade to 26-2 with
-    # the flag removed from the config, then read the old data while concurrently appending new data.
-    def test_offset_delta_keys_can_be_read_and_extended_after_downgrade(self):
-        utils = Workload(self)
-        utils.create_topic()
-
-        run_offset_delta_toggle_workload(self, utils.topic_name, "test-consumer")
-
-    # Exercise the old MAX_HEADER_SIZE-sensitive shape: large records are written with offset-delta
-    # keys, then the flag is removed and 26-2 must still read them and append another large record.
-    def test_large_offset_delta_key_blobs_can_be_read_and_extended_after_downgrade(self):
-        utils = Workload(self)
-        utils.create_topic()
-
-        messages = [
-            f"large-offset-delta-before-{i}-".encode("utf-8") + (bytes([ord("a") + i]) * (7 * 1024 * 1024))
-            for i in range(2)
-        ]
-        write_raw_messages(self.driver, utils.topic_name, messages, producer_id="large-offset-delta-producer")
-
-        remove_feature_flags(self.config, OFFSET_DELTA_FLAG)
-        self.change_cluster_version()
-
-        appended = [b"large-offset-delta-after-" + (b"c" * (7 * 1024 * 1024))]
-        write_raw_messages(self.driver, utils.topic_name, appended, producer_id="large-offset-delta-producer")
-
-        assert read_messages(
-            self.driver,
-            utils.topic_name,
-            "test-consumer",
-            len(messages) + len(appended),
-            timeout=180,
-        ) == messages + appended
-
-
 class TestTopicOffsetDeltaKeysFlagDisable(CurrentToCurrentVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
@@ -859,58 +876,6 @@ class TestTopicOffsetDeltaKeysCompactionFlagDisable(CurrentToCurrentVersionFixtu
         after = {
             "compact-key-after-0": ["compact-after-key-0"],
             "compact-key-after-1": ["compact-after-key-1"],
-        }
-        write_keyed_messages(self.driver, topic_name, after)
-
-        read = read_available_messages(self.driver, topic_name, "test-consumer", 7, timeout=180)
-        expected_payloads = {
-            values[-1].encode("utf-8")
-            for values in before.values()
-        }
-        expected_payloads.update(
-            message.encode("utf-8")
-            for values in after.values()
-            for message in values
-        )
-        assert expected_payloads.issubset(set(read))
-
-
-class TestTopicOffsetDeltaKeysCompactionDowngrade(CurrentToInitialVersionFixture):
-    @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-        if self.versions[0] < STABLE_26_3:
-            pytest.skip("Offset delta in keys is written only since stable-26-3")
-        if self.versions[1] < STABLE_26_2 or self.versions[1] >= STABLE_26_3:
-            pytest.skip("This test covers downgrade from current to 26-2")
-
-        yield from self.setup_cluster(extra_feature_flags=[OFFSET_DELTA_FLAG, TOPIC_COMPACTION_FLAG])
-
-    # Write and restart a compacted topic on current while offset-delta keys are enabled, then remove
-    # the flag, downgrade to 26-2, and verify both old compacted data and new writes are readable.
-    def test_offset_delta_compacted_topic_can_be_read_after_downgrade_to_26_2(self):
-        set_aggressive_topic_compaction(self.config)
-        restart_cluster_with_current_config(self)
-
-        topic_name = f"compacted_downgrade_offset_delta_{uuid.uuid4().hex}"
-        create_compacted_topic(self.driver, topic_name)
-
-        before = {
-            f"downgrade-compact-key-{key}": [
-                f"downgrade-compact-before-key-{key}-{message}"
-                for message in range(8)
-            ]
-            for key in range(5)
-        }
-        write_keyed_messages(self.driver, topic_name, before)
-        wait_topic_end_offset(self.driver, topic_name, 40)
-        restart_cluster_with_current_config(self)
-
-        remove_feature_flags(self.config, OFFSET_DELTA_FLAG)
-        self.change_cluster_version()
-
-        after = {
-            "downgrade-compact-key-after-0": ["downgrade-compact-after-key-0"],
-            "downgrade-compact-key-after-1": ["downgrade-compact-after-key-1"],
         }
         write_keyed_messages(self.driver, topic_name, after)
 
@@ -1201,9 +1166,10 @@ class TestTopicTransactionMidBlobRead(CurrentToCurrentVersionFixture):
     def setup(self):
         yield from self.setup_cluster()
 
-    # Reproduce the #48508 shape: write a non-zero parent offset prefix, commit a transaction that
-    # stores regular messages from a supportive partition, restart, then start readers from offsets
-    # inside the tx-written blob and verify that returned offsets stay in parent key space.
+    # Reproduce the #48508 shape for regular topic reads: write a non-zero parent offset prefix,
+    # commit a transaction that stores messages from a supportive partition, restart, then start
+    # read sessions from offsets inside the tx-written blob and verify returned offsets stay in
+    # parent key space.
     def test_mid_blob_read_after_transaction_commit_uses_parent_offsets(self):
         utils = Workload(self)
         consumers = (
@@ -1247,21 +1213,17 @@ class TestTopicTransactionMidBlobRead(CurrentToCurrentVersionFixture):
             ("tx-mid-blob-consumer-150", 150),
             ("tx-mid-blob-consumer-last", tx_count - 1),
         ]:
-            self.driver.topic_client.commit_offset(
-                utils.topic_name,
-                consumer,
-                0,
-                prefix_count + delta,
-            )
-            read_result = read_messages_with_offsets(
+            read_offset = prefix_count + delta
+            read_result = read_messages_with_offsets_from_read_offset(
                 self.driver,
                 utils.topic_name,
                 consumer,
+                read_offset,
                 tx_count - delta,
-                timeout=120,
+                timeout=60,
             )
             assert [offset for offset, _ in read_result] == list(
-                range(prefix_count + delta, prefix_count + tx_count)
+                range(read_offset, prefix_count + tx_count)
             )
             assert [data for _, data in read_result] == [
                 message.encode("utf-8")

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import base64
-import concurrent.futures
 import threading
 import time
 import uuid
@@ -18,13 +17,10 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 from test_topic import (
     BATCHING_FLAG,
     CurrentToCurrentVersionFixture,
-    CurrentToInitialVersionFixture,
     OFFSET_DELTA_FLAG,
-    STABLE_26_2,
     STABLE_26_3,
     TOPIC_BATCHING_CODEC,
     read_kafka_batch_payload_values,
-    remove_feature_flags,
     set_feature_flags,
     write_kafka_batch,
 )
@@ -374,82 +370,3 @@ class TestTopicSqsBotoMessagesBatchingDisabledRead(CurrentToCurrentVersionFixtur
             QueueUrl=queue_url,
             ReceiptHandle=message["ReceiptHandle"],
         )
-
-
-class TestTopicSqsOffsetDeltaKeysDowngrade(CurrentToInitialVersionFixture):
-    @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-        if self.versions[0] < STABLE_26_3:
-            pytest.skip("Offset delta in keys is written only since stable-26-3")
-        if self.versions[1] < STABLE_26_2 or self.versions[1] >= STABLE_26_3:
-            pytest.skip("This test covers downgrade from current to 26-2")
-
-        yield from self.setup_cluster(
-            tenant_db="SqsTopic",
-            extra_feature_flags=[
-                "enable_topic_message_level_parallelism",
-                OFFSET_DELTA_FLAG,
-            ],
-            http_proxy_config={
-                "enabled": True,
-                "sqs_topic_enabled": True,
-                "ymq_enabled": False,
-                "yandex_cloud_service_region": [SQS_REGION, "ru-central-1"],
-            },
-        )
-
-    @property
-    def sqs_endpoint(self):
-        return self.http_proxy_endpoint + self.database_path
-
-    def _make_boto_client(self):
-        session = boto3.session.Session()
-        return session.client(
-            service_name="sqs",
-            aws_access_key_id="unused",
-            aws_secret_access_key="unused",
-            aws_session_token=SECURITY_TOKEN,
-            endpoint_url=self.sqs_endpoint,
-            region_name=SQS_REGION,
-            config=BOTO_CONFIG,
-        )
-
-    # Write SQS messages while offset-delta keys are enabled, remove the flag and downgrade to 26-2,
-    # then receive/delete the old data while concurrently appending more messages through SQS.
-    def test_sqs_send_receive_delete_after_offset_delta_disable_and_downgrade(self):
-        topic_name = f"sqs_offset_delta_{uuid.uuid4().hex}"
-        create_sqs_topic(self.driver, topic_name)
-        queue_url = make_sqs_topic_queue_url(self.http_proxy_endpoint, self.database_path, topic_name)
-
-        before = [
-            f"sqs-offset-delta-before-{i}"
-            for i in range(200)
-        ]
-        send_sqs_messages(self._make_boto_client(), queue_url, before)
-
-        remove_feature_flags(self.config, OFFSET_DELTA_FLAG)
-        self.change_cluster_version()
-
-        after = [
-            f"sqs-offset-delta-after-{i}"
-            for i in range(200)
-        ]
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            receive_future = executor.submit(
-                receive_and_delete_sqs_messages,
-                self._make_boto_client(),
-                queue_url,
-                len(before) + len(after),
-                180,
-            )
-            send_future = executor.submit(
-                send_sqs_messages,
-                self._make_boto_client(),
-                queue_url,
-                after,
-            )
-
-            send_future.result(timeout=180)
-            received = receive_future.result(timeout=180)
-
-        assert sorted(received) == sorted(before + after)

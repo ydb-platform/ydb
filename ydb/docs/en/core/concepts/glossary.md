@@ -16,7 +16,7 @@ Clusters {{ ydb-short-name }} are multi-tenant and can contain several isolated 
 
 As in most database management systems, a **database** in {{ ydb-short-name }} is a logical container for other entities, such as [tables](#table). However, in {{ ydb-short-name }}, the namespace within databases is hierarchical, like in [virtual file systems](https://en.wikipedia.org/wiki/Virtual_file_system), and thus [directories](#folder) allow for a more structured organization of entities.
 
-Another important characteristic of databases {{ ydb-short-name }} is that they are usually allocated dedicated computing resources. As a result, creating a database requires additional actions by [cluster administrators](../devops/index.md).
+Another important characteristic of {{ ydb-short-name }} databases is that they are usually allocated dedicated computing resources. As a result, creating a database requires additional actions from [DevOps engineers](../devops/index.md).
 
 ### Node {#node}
 
@@ -406,7 +406,7 @@ Below are explanations of several terms related to federated queries. How federa
 
 ### Client certificate {#client-certificate}
 
-A **client certificate** is a [digital certificate](https://en.wikipedia.org/wiki/X.509) issued and used by a client — an application, user, or [{{ ydb-short-name }} node](#node) — to confirm its identity when interacting with {{ ydb-short-name }}.
+**Client certificate** — a [digital certificate](https://en.wikipedia.org/wiki/X.509) issued and used by a client — an application, user, or [{{ ydb-short-name }} node](#node) — for [device authentication](../security/authentication.md#device-auth) during the TLS handshake and for [client certificate authentication](../security/authentication.md#client-certificate) at the request level.
 
 ### Cluster schema {#scheme}
 
@@ -530,7 +530,7 @@ The optional suffix `@<auth-domain>` identifies the source of the access subject
 
 ### Compilation cache {#compile-cache}
 
-**Compilation cache** or **compile cache** is a cache of compiled queries on each [node](#node) of the cluster. It is used to avoid recompilation: if the query text is already in the node's cache, no additional compilation is performed. For more details, see the [Query compilation cache](../dev/system-views.md#top-tli-partitions) section.
+**Compilation cache** or **compile cache** is a cache of compiled queries on each [node](#node) of the cluster. It is used to avoid recompilation: if the query text is already in the node's cache, no additional compilation is performed. For more details, see the [Query compilation cache](../dev/system-views.md#compile-cache-queries) section.
 
 ## Advanced terminology {#advanced-terminology}
 
@@ -746,19 +746,19 @@ Information in the state storage is volatile. Thus, it is lost on power loss or 
 
 Due to its nature, the state storage service operates on a best-effort basis. For example, the absence of multiple tablet leaders is guaranteed through the leader election protocol on [distributed storage](#distributed-storage), not on state storage.
 
-For more details on the StateStorage architecture and related subsystems, see the Metadata distribution services section.
+For more details about the StateStorage architecture and related subsystems, see the Metadata Distribution Services section.
 
 ### Board {#board}
 
 **Board** is a distributed service designed to store metadata as key-value pairs. It is used, among other things, to store information about [endpoints](../concepts/connect.md#endpoint).
 
-For more details on the Board architecture and related subsystems, see the Metadata distribution services section.
+For more details about the Board architecture and related subsystems, see the Metadata Distribution Services section.
 
 ### SchemeBoard {#scheme-board}
 
 **SchemeBoard** is a distributed service designed to store metadata as key-value pairs. It is used, among other things, to store information about [schemas](#global-schema).
 
-For more details on the SchemeBoard architecture and related subsystems, see the Metadata distribution services section.
+For more details about the SchemeBoard architecture and related subsystems, see the Metadata Distribution Services section.
 
 #### Compaction {#compaction}
 

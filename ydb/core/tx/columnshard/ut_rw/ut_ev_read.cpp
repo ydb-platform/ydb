@@ -57,23 +57,38 @@ std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(TTestBasicRuntime& runtime
     return std::unique_ptr<TEvDataShard::TEvReadResult>(ev->Release().Release());
 }
 
+// Common test setup: creates and boots a column shard, returns runtime and sender.
+struct TTestSetup {
+    TTestBasicRuntime Runtime;
+    TActorId Sender;
+    ui64 TabletId = TTestTxConfig::TxTablet0;
+    NKikimr::NYDBTest::TControllers::TGuard<TDefaultTestsController> CsControllerGuard;
+
+    TTestSetup()
+        : CsControllerGuard(NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>())
+    {
+        CsControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        CsControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
+        CsControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        TTester::Setup(Runtime);
+
+        Sender = Runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(Runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        Runtime.DispatchEvents(options);
+    }
+};
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
     Y_UNIT_TEST(PointLookupSingleKey) {
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-        csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
-        csControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-        runtime.DispatchEvents(options);
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
 
         ui64 tableId = 1;
         TestTableDescription table;
@@ -120,19 +135,9 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
     }
 
     Y_UNIT_TEST(PointLookupMultipleKeys) {
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-        csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
-        csControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-        runtime.DispatchEvents(options);
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
 
         ui64 tableId = 1;
         TestTableDescription table;
@@ -168,19 +173,9 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
     }
 
     Y_UNIT_TEST(PointLookupMissingKey) {
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-        csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
-        csControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-        runtime.DispatchEvents(options);
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
 
         ui64 tableId = 1;
         TestTableDescription table;
@@ -213,19 +208,9 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
     }
 
     Y_UNIT_TEST(PointLookupSelectedColumns) {
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-        csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
-        csControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-        runtime.DispatchEvents(options);
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
 
         ui64 tableId = 1;
         TestTableDescription table;
@@ -257,20 +242,49 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
         }
     }
 
+    Y_UNIT_TEST(PointLookupWithDataVerification) {
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
+
+        ui64 tableId = 1;
+        TestTableDescription table;
+        auto planStep = SetupSchema(runtime, sender, tableId, table);
+        const auto& ydbSchema = table.Schema;
+
+        // Write data for keys [0, 10).
+        ui64 writeId = 0;
+        std::vector<ui64> intWriteIds;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 10 }, ydbSchema), ydbSchema, true, &intWriteIds));
+
+        // Commit.
+        ui64 txId = 100;
+        planStep = ProposeCommit(runtime, sender, txId, intWriteIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        // Point lookup for key 5 and verify the returned row has cells.
+        {
+            auto readSender = runtime.AllocateEdgeActor();
+            TVector<TCell> keyCells = { TCell::Make(ui64(5)) };
+            std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
+
+            auto req = MakeReadRequest(1, 1, tableId, TTestSchema::ExtractIds(ydbSchema), keys);
+            auto res = SendRead(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
+
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetRowCount(), 1u);
+
+            // Verify that the returned row has the expected number of cells.
+            const auto& cells = res->GetCells(0);
+            UNIT_ASSERT_VALUES_EQUAL(cells.size(), TTestSchema::ExtractIds(ydbSchema).size());
+        }
+    }
+
     Y_UNIT_TEST(NoKeysRejected) {
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-        csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
-        csControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-        runtime.DispatchEvents(options);
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
 
         ui64 tableId = 1;
         TestTableDescription table;
@@ -287,20 +301,38 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
         }
     }
 
+    Y_UNIT_TEST(NoTableIdRejected) {
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
+
+        ui64 tableId = 1;
+        TestTableDescription table;
+        Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+
+        // TEvRead without TableId should be rejected.
+        {
+            auto readSender = runtime.AllocateEdgeActor();
+            auto req = std::make_unique<TEvDataShard::TEvRead>();
+            auto& record = req->Record;
+            record.SetReadId(1);
+            // Don't set TableId
+            record.AddColumns(1);
+            record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+            auto* res = ev->Get();
+
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
+        }
+    }
+
     Y_UNIT_TEST(RangeReadsRejected) {
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-        csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
-        csControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-        runtime.DispatchEvents(options);
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
 
         ui64 tableId = 1;
         TestTableDescription table;
@@ -331,19 +363,9 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
     }
 
     Y_UNIT_TEST(UnknownTableRejected) {
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-        csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
-        csControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-        runtime.DispatchEvents(options);
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
 
         ui64 tableId = 1;
         TestTableDescription table;
@@ -360,6 +382,65 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
 
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::NOT_FOUND);
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
+        }
+    }
+
+    Y_UNIT_TEST(UnknownColumnIdRejected) {
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
+
+        ui64 tableId = 1;
+        TestTableDescription table;
+        Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+
+        // Request a column ID that doesn't exist (9999).
+        {
+            auto readSender = runtime.AllocateEdgeActor();
+            TVector<TCell> keyCells = { TCell::Make(ui64(0)) };
+            std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
+
+            auto req = MakeReadRequest(1, 1, tableId, { 9999 }, keys);
+            auto res = SendRead(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
+
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SCHEME_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
+        }
+    }
+
+    Y_UNIT_TEST(EmptyColumnsRequest) {
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
+
+        ui64 tableId = 1;
+        TestTableDescription table;
+        auto planStep = SetupSchema(runtime, sender, tableId, table);
+        const auto& ydbSchema = table.Schema;
+
+        // Write data for keys [0, 10).
+        ui64 writeId = 0;
+        std::vector<ui64> intWriteIds;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 10 }, ydbSchema), ydbSchema, true, &intWriteIds));
+
+        // Commit.
+        ui64 txId = 100;
+        planStep = ProposeCommit(runtime, sender, txId, intWriteIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        // Request with no columns (e.g. Count(*) pattern) should still succeed,
+        // falling back to reading the first PK column internally.
+        {
+            auto readSender = runtime.AllocateEdgeActor();
+            TVector<TCell> keyCells = { TCell::Make(ui64(5)) };
+            std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
+
+            auto req = MakeReadRequest(1, 1, tableId, {}, keys);
+            auto res = SendRead(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
+
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetRowCount(), 1u);
         }
     }
 

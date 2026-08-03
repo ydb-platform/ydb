@@ -10,9 +10,13 @@
 
 #include <ydb/core/scheme/scheme_tablecell.h>
 
+#include <atomic>
+
 namespace NKikimr::NColumnShard {
 
 namespace {
+
+constexpr TDuration DEFAULT_READ_TIMEOUT = TDuration::Seconds(60);
 
 // Adapter that translates a DataShard read-iterator point lookup (TEvDataShard::TEvRead)
 // into a ColumnShard internal scan (TEvColumnShard::TEvInternalScan), collects the
@@ -48,7 +52,7 @@ private:
     const std::vector<TSerializedCellVec> Keys;
 
     TOwnedCellVecBatch ResultBatch;
-    bool Finished = false;
+    std::atomic<bool> Finished{false};
     TString Error;
 
     class TRowWriter: public NArrow::IRowWriter {
@@ -109,10 +113,10 @@ private:
     }
 
     void SendResult(const Ydb::StatusIds::StatusCode code) {
-        if (Finished) {
+        bool expected = false;
+        if (!Finished.compare_exchange_strong(expected, true)) {
             return;
         }
-        Finished = true;
 
         auto ev = std::make_unique<TEvDataShard::TEvReadResult>();
         auto& record = ev->Record;
@@ -139,7 +143,7 @@ private:
 
 public:
     virtual bool IsActive() const override {
-        return !Finished;
+        return !Finished.load();
     }
 
     virtual TString GetErrorMessage() const override {
@@ -147,7 +151,7 @@ public:
     }
 
     virtual TDuration GetTimeout() const override {
-        return TDuration::Seconds(60);
+        return DEFAULT_READ_TIMEOUT;
     }
 
     TReadIteratorRestoreTask(const ui64 tabletId, const NActors::TActorId& tabletActorId, const NActors::TActorId& replyTo,

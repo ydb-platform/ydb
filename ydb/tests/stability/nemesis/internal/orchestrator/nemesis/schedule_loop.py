@@ -26,7 +26,6 @@ from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     target_kind_for,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     DEFAULT_RECOVERY_SEC,
     FailureModelGuard,

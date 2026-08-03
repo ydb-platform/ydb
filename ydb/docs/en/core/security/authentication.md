@@ -22,15 +22,15 @@ By default, {{ ydb-short-name }} allows executing queries without specifying aut
 
 {% note warning %}
 
-However, if a user or token is specified, the corresponding authentication mode will work with subsequent authorization.
+Anonymous authentication should be used only for informational purposes for local databases that are not accessible over the network.
 
 {% endnote %}
 
 The `enforce_user_token_requirement` flag in the [authentication mode settings](../reference/configuration/security_config.md#security-auth) {{ ydb-short-name }} is responsible for disabling anonymous authentication mode.
 
-Anonymous authentication should be used only for informational purposes for local databases that are not accessible over the network.
+Depending on the authentication mode settings, the actual authentication may not be anonymous.
 
-- This access type implies that each database user has a username and password.
+- A token missing from requests can be replaced with a default token.
 - A token explicitly specified in queries can be validated according to appropriate rules.
 
 Then queries will be executed not anonymously, and permission checking will also be performed.
@@ -45,7 +45,7 @@ This type of access implies that each database user has a login and password.
 A user login can only contain lowercase Latin letters, digits, and the `@` character.
 Various [criteria](#password-complexity) for password complexity can be set.
 
-A token is returned in response to the username and password. Tokens have a default lifetime of 12 hours. To rotate tokens, the client, such as the [SDK](https://en.wikipedia.org/wiki/Argon2), independently sends requests to the authentication service. Tokens accelerate authentication and enhance security.
+The user login and hashed password are stored in a table inside the authentication component. The password is hashed using the [Argon2](https://en.wikipedia.org/wiki/Argon2) method. Only the system administrator has access to this table.
 
 In response to the login and password, an [authentication token](../concepts/glossary.md#auth-token) is returned. The default token lifetime is 12 hours. For token rotation, the client, for example, [SDK](../reference/ydb-sdk/index.md), independently contacts the authentication service. Using a token speeds up the authentication process and improves security.
 
@@ -92,7 +92,7 @@ Examples of supported LDAP implementations include [OpenLDAP](https://openldap.o
 
 ### Authentication through a third-party IAM provider
 
-**Service Account Key**: Service account attributes and a signature key set as parameters for the client (SDK or CLI), which the client periodically sends to the IAM API in the background to rotate a token (obtain a new one) to pass in requests.
+Authentication via the LDAP protocol is similar to the process of authenticating with a login and password. The only difference is that the LDAP directory acts as the authentication component. The LDAP directory is used to verify the login/password pair and to determine the groups to which the user belongs.
 
 {% note info %}
 
@@ -104,18 +104,18 @@ Currently, {{ ydb-short-name }} supports only one method of LDAP user authentica
 
 {% note info %}
 
-**Metadata**: Client (SDK or CLI) periodically accesses a local service to rotate a token (obtain a new one) to pass in requests.
+A service account refers to a separate account in the LDAP directory that applications or services use to connect to LDAP and perform necessary operations.
 
 {% endnote %}
 
 Service account credentials for connecting to LDAP are specified in the configuration settings: use the `bind_dn` and `bind_password` parameters, or configure [mTLS](../concepts/glossary.md#mtls) (for details, see the [Service account authentication](#ldap-service-account-auth) section).
 
-Any owner of a valid token can get access to perform operations; therefore, the principal objective of the security system is to ensure that a token remains private and to protect it from being compromised.
+The authentication process follows the following scheme:
 
 1. Authentication modes with token rotation, such as **Refresh Token** and **Service Account Key**, provide a higher level of security compared to the **Access Token** mode that uses a fixed token, since only secrets with a short validity period are transmitted to the {{ ydb-short-name }} server over the network.
 2. After a successful connection, the system searches for the user attempting to authenticate. The search is performed across the entire subtree specified in the `base_dn` configuration parameter and using the filter specified in the `search_filter` parameter.
 3. **You would normally use Anonymous** on self-deployed local {{ ydb-short-name }} clusters that are inaccessible over the network.
-4. Authentication using the LDAP protocol is similar to the static credentials authentication process (using a login and password). The difference is that the LDAP directory acts as the authentication component. The LDAP directory is used solely to verify the login/password pair.
+4. The final result — successful or unsuccessful authentication — is determined by the outcome of the second bind operation (on behalf of the user).
 
 Once the user entry is found, {{ ydb-short-name }} performs another *bind* operation using the found user's entry and the password provided earlier. The success of this second *bind* operation determines whether the user authentication is successful.
 
@@ -129,7 +129,7 @@ When using LDAP authentication, no user passwords are stored in {{ ydb-short-nam
 
 #### Token verification {#ldap-service-account-auth}
 
-After a user is authenticated in the system, a token is generated and verified before executing the requested operation. During the token verification process, the system determines on whose behalf the action is being requested and identifies the groups the user belongs to. For users from the LDAP directory, the token does not include information about group memberships. Therefore, after the token is verified, an additional query is made to the LDAP server to retrieve the list of groups the user is a member of.
+A service account can be authenticated in two main ways:
 
 * Using a login and password.  
   In this case, you need to specify the login (`bind_dn`) and password (`bind_password`) in the configuration. These parameters will be used to connect to the LDAP server on behalf of a service account.
@@ -138,7 +138,7 @@ After a user is authenticated in the system, a token is generated and verified b
 
 ### Token verification
 
-Groups, like users, are entities that can have assigned access rights to perform operations on database schema objects and other resources. These assigned rights determine which operations a user is authorized to perform.
+After a user is authenticated in the system, a token is generated and verified before executing the requested operation. During the token verification process, the system determines on whose behalf the action is being requested and identifies the groups the user belongs to. For users from the LDAP directory, the token does not include information about group memberships. Therefore, after the token is verified, an additional query is made to the LDAP server to retrieve the list of groups the user is a member of.
 
 Groups, like the user themselves, are subjects that perform operations on database schema objects. To differentiate access to various database resources, subjects can be assigned access rights. And according to the list of assigned rights, subjects will be authorized to perform certain operations.
 

@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
 #include <ydb/library/actors/async/event.h>
@@ -458,6 +459,10 @@ public:
     ui64 GetWriteIndex() const { return WriteIndex; }
     bool SetWriteIndex(ui64 writerIndex, ui64 writeIndex, ILocksDb* db);
 
+    // Statistics of the write at WriteIndex, null when the shard doesn't remember them
+    const NKikimrQueryStats::TTxStats* GetWriteIndexStats() const { return WriteIndexStats.get(); }
+    void SetWriteIndexStats(const NKikimrQueryStats::TTxStats& stats);
+
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 
 private:
@@ -507,6 +512,9 @@ private:
     ui64 WaitPersistentCounter = 0;
     ui64 WriterIndex = 0;
     ui64 WriteIndex = 0;
+    // Statistics of the write at WriteIndex. In-memory only and never migrated, so a
+    // duplicate that arrives after a restart is answered without statistics.
+    std::unique_ptr<NKikimrQueryStats::TTxStats> WriteIndexStats;
 
 public:
     TAsyncEvent OnBrokenEvent;

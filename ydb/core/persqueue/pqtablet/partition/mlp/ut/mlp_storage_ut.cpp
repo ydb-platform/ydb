@@ -611,7 +611,7 @@ Y_UNIT_TEST(AddMessageWithOffsetGapsReturnsAllMessages_WithKeepMessageOrder) {
     AddMessageWithOffsetGapsReturnsAllMessagesImpl(true);
 }
 
-void AddMessageWithOffsetGapPreservesNonCommittedMessagesImpl(const ui64 commitOffset) {
+static void AddMessageWithOffsetGapPreservesNonCommittedMessagesImpl(const ui64 commitOffset) {
     TUtils utils;
     auto ts = utils.TimeProvider->Now();
 

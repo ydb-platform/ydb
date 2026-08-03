@@ -12,6 +12,9 @@
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/util/affinity.h>
+#include <ydb/library/actors/util/cpu_topology.h>
+#include <ydb/library/actors/util/cpumask.h>
 
 #include <library/cpp/getopt/small/last_getopt.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -19,6 +22,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 #include <util/string/printf.h>
@@ -27,6 +31,7 @@
 #include <condition_variable>
 #include <inttypes.h>
 #include <mutex>
+#include <optional>
 
 using namespace NActors;
 
@@ -51,6 +56,17 @@ namespace {
         bool ProtobufPayload = true;
         bool EnableRdma = false;
         bool Verbose = false;
+
+        // CPU pinning. Applied to the whole process before any actor/uring threads are started so they
+        // inherit the mask and first-touch allocations stay on the chosen NUMA node. Empty = no pinning.
+        TString CpuMask;              // explicit list, e.g. "0-5,12-17"
+        std::optional<ui32> NumaNode; // pick CPUs of this NUMA node (ignored when CpuMask is set)
+        bool Pin = false;             // shorthand: pin to NUMA 0 (or the only node) preferring physical cores
+        bool AllowSmt = false;        // when deriving a mask from --numa-node/--pin, keep hyperthread siblings
+
+        // Filled in by ApplyCpuPinning once the effective mask is known, for the report header.
+        TString EffectiveCpuMask;
+        ui32 EffectiveCpuCount = 0;
 
         // v2-only knobs. One shard by default: a two-node run has a single connection per node, and every
         // extra shard adds an idle worker thread (plus, under SQPOLL, a spinning kernel thread) whose CPU
@@ -116,6 +132,20 @@ namespace {
         opts.AddLongOption("preserialize", "v2: serialize events on the session mailbox before the engine sees them")
             .NoArgument().SetFlag(&cfg.Preserialize);
 
+        opts.AddLongOption("pin", "pin the process to NUMA node 0 (or the only node), preferring physical cores. "
+                "Do this before comparing runs on a multi-socket machine.")
+            .NoArgument().SetFlag(&cfg.Pin);
+        opts.AddLongOption("numa-node", "pin the process to the CPUs of this NUMA node (preferring physical cores "
+                "unless --smt is set). Overrides --pin's node selection.")
+            .RequiredArgument("N")
+            .Handler1T<ui32>([&](ui32 n) { cfg.NumaNode = n; });
+        opts.AddLongOption("cpu-mask", "pin the process to an explicit CPU list (e.g. 0-5,12-17). Overrides "
+                "--numa-node/--pin.")
+            .RequiredArgument("LIST").StoreResult(&cfg.CpuMask);
+        opts.AddLongOption("smt", "when deriving a mask from --pin/--numa-node, keep hyperthread siblings too "
+                "(default: physical cores only)")
+            .NoArgument().SetFlag(&cfg.AllowSmt);
+
         opts.SetFreeArgsNum(0);
         const NLastGetopt::TOptsParseResult parsed(&opts, argc, argv);
         Y_UNUSED(parsed);
@@ -127,7 +157,149 @@ namespace {
         if (cfg.Warmup >= cfg.Duration) {
             ythrow yexception() << "--warmup must be less than --duration";
         }
+        if (!cfg.CpuMask.empty() && cfg.NumaNode) {
+            ythrow yexception() << "--cpu-mask and --numa-node are mutually exclusive";
+        }
         return cfg;
+    }
+
+    TString ToCpuListString(const TCpuMask& mask) {
+        TStringStream out;
+        bool firstRange = true;
+        for (TCpuId cpu = 0; cpu < mask.Size();) {
+            if (!mask.IsSet(cpu)) {
+                ++cpu;
+                continue;
+            }
+            const TCpuId begin = cpu;
+            TCpuId end = cpu;
+            while (end + 1 < mask.Size() && mask.IsSet(end + 1)) {
+                ++end;
+            }
+            if (!firstRange) {
+                out << ',';
+            }
+            firstRange = false;
+            if (begin == end) {
+                out << begin;
+            } else {
+                out << begin << '-' << end;
+            }
+            cpu = end + 1;
+        }
+        return out.Str();
+    }
+
+    // Keep one logical CPU per physical core: the lowest-numbered sibling of each ThreadSiblings group.
+    // Sharing a core with an SMT sibling is a common source of run-to-run jitter on busy boxes.
+    TCpuMask PreferPhysicalCores(const TCpuMask& mask, const TCpuTopology& topology) {
+        TCpuMask result;
+        THashSet<ui32> seenCores;
+        for (TCpuId cpu = 0; cpu < mask.Size(); ++cpu) {
+            if (!mask.IsSet(cpu)) {
+                continue;
+            }
+            const TLogicalCpuInfo* info = topology.FindCpu(cpu);
+            if (!info) {
+                result.Set(cpu);
+                continue;
+            }
+            // Pick the lowest sibling that is also in the requested mask; skip the rest of the group.
+            TCpuId representative = Max<TCpuId>();
+            for (TCpuId sibling = 0; sibling < info->ThreadSiblings.Size(); ++sibling) {
+                if (info->ThreadSiblings.IsSet(sibling) && mask.IsSet(sibling)) {
+                    representative = Min(representative, sibling);
+                }
+            }
+            if (representative == Max<TCpuId>()) {
+                representative = cpu;
+            }
+            if (info->CoreId != UnknownCpuTopologyId) {
+                if (!seenCores.insert(info->CoreId).second) {
+                    continue;
+                }
+            } else if (cpu != representative) {
+                continue;
+            }
+            result.Set(representative);
+        }
+        return result;
+    }
+
+    TCpuMask ResolveCpuMask(const TConfig& cfg, const TCpuTopology& topology) {
+        if (!cfg.CpuMask.empty()) {
+            return TCpuMask(cfg.CpuMask);
+        }
+
+        std::optional<ui32> numaNode = cfg.NumaNode;
+        if (!numaNode && cfg.Pin) {
+            if (topology.NumaNodes.empty()) {
+                ythrow yexception() << "CPU topology has no NUMA nodes; pass --cpu-mask explicitly";
+            }
+            numaNode = topology.NumaNodes.front().Id;
+        }
+        if (!numaNode) {
+            return {};
+        }
+
+        const TCpuTopologyGroup* group = nullptr;
+        for (const auto& node : topology.NumaNodes) {
+            if (node.Id == *numaNode) {
+                group = &node;
+                break;
+            }
+        }
+        if (!group) {
+            TStringStream available;
+            for (size_t i = 0; i < topology.NumaNodes.size(); ++i) {
+                if (i) {
+                    available << ',';
+                }
+                available << topology.NumaNodes[i].Id;
+            }
+            ythrow yexception() << "NUMA node " << *numaNode << " not found; available: " << available.Str();
+        }
+
+        return cfg.AllowSmt ? group->Cpus : PreferPhysicalCores(group->Cpus, topology);
+    }
+
+    // Must run before any actor-system / uring threads are created: sched_setaffinity on the process is
+    // inherited by subsequent pthread_create calls, and first-touch mallocs land on the chosen node.
+    // Kernel SQPOLL threads (IORING_SETUP_SQPOLL without IORING_SETUP_SQ_AFF) are NOT bound by this and
+    // can still wander -- prefer --no-sqpoll when comparing runs.
+    void ApplyCpuPinning(TConfig& cfg) {
+        if (cfg.CpuMask.empty() && !cfg.NumaNode && !cfg.Pin) {
+            return;
+        }
+
+        auto topology = ParseCpuTopology();
+        if (!topology) {
+            ythrow yexception() << "failed to parse CPU topology: " << topology.error();
+        }
+
+        const TCpuMask mask = ResolveCpuMask(cfg, *topology);
+        if (mask.IsEmpty()) {
+            ythrow yexception() << "resolved CPU mask is empty";
+        }
+
+        TAffinity affinity(mask);
+        affinity.Set(/*pid=*/0);
+
+        cfg.EffectiveCpuMask = ToCpuListString(mask);
+        cfg.EffectiveCpuCount = mask.CpuCount();
+
+        // Rough headroom check: 2 nodes x (ic threads + 1 IO) + 2 uring shards + main. Under-provisioning
+        // does not break the run, but it forces time-sharing that swamps any data-plane signal.
+        const ui32 threadsNeeded = 2 * (cfg.NumThreads + 1) + (cfg.UseV2 ? 2 * cfg.UringShards : 0) + 1;
+        if (cfg.EffectiveCpuCount < threadsNeeded) {
+            Cerr << "warning: pinned to " << cfg.EffectiveCpuCount << " CPU(s) but the default layout wants "
+                 << "about " << threadsNeeded << "; consider raising --cpu-mask or lowering --ic-threads / "
+                 << "--uring-shards" << Endl;
+        }
+        if (cfg.UseV2 && cfg.SqPoll) {
+            Cerr << "warning: SQPOLL kernel threads ignore process affinity unless the engine pins them "
+                 << "via IORING_SETUP_SQ_AFF; use --no-sqpoll for reproducible runs" << Endl;
+        }
     }
 
     // Collects one TLoadActorStats per load actor; the callbacks fire on actor-system threads as each
@@ -303,6 +475,12 @@ namespace {
         Line("executor threads:", Sprintf("%u per node", cfg.NumThreads));
         Line("ic inflight limit:", Sprintf("%u bytes", cfg.Inflight));
         Line("rdma:", cfg.EnableRdma ? "enabled" : "disabled");
+        if (!cfg.EffectiveCpuMask.empty()) {
+            Line("cpu affinity:", Sprintf("%s (%u CPU(s), process-wide)",
+                cfg.EffectiveCpuMask.c_str(), cfg.EffectiveCpuCount));
+        } else {
+            Line("cpu affinity:", "unrestricted (pass --pin on multi-socket machines)");
+        }
         if (cfg.UseV2) {
             Line("v2 engine:", Sprintf("%u shard(s) x %u ring(s), sqpoll %s, checksum %s, preserialize %s",
                 cfg.UringShards, cfg.RingsPerShard, cfg.SqPoll ? "on" : "off",
@@ -546,7 +724,11 @@ namespace {
 
 int main(int argc, char** argv) {
     try {
-        return Run(ParseOptions(argc, argv));
+        TConfig cfg = ParseOptions(argc, argv);
+        // Pin before Run allocates anything and starts threads, so affinity and first-touch NUMA
+        // placement are deterministic for the whole process.
+        ApplyCpuPinning(cfg);
+        return Run(cfg);
     } catch (const std::exception& ex) {
         Cerr << "failed: " << ex.what() << Endl;
         return 1;

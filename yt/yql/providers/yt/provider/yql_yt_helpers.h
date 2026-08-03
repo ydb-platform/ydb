@@ -167,4 +167,8 @@ bool CanReplaceParentOutputHash(const TExprNode& node);
 
 ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& config);
 
+// Reports strict (non optional) Yson columns, which cannot be written with native YT types.
+// rowType is expected to have at least one such column
+void ReportNonWritableBareYsonError(const TPosition& pos, const TStructExprType& rowType, TExprContext& ctx);
+
 };

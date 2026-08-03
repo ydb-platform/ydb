@@ -2549,4 +2549,20 @@ ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& con
     return useNativeYtTypes ? nativeTypeCompatibility : NTCF_NONE;
 }
 
+void ReportNonWritableBareYsonError(const TPosition& pos, const TStructExprType& rowType, TExprContext& ctx) {
+    TStringBuilder columns;
+    for (auto item: rowType.GetItems()) {
+        if (!item->GetItemType()->HasBareYson()) {
+            continue;
+        }
+        if (!columns.empty()) {
+            columns << ", ";
+        }
+        columns << TString{item->GetName()}.Quote() << ": " << *item->GetItemType();
+    }
+    YQL_ENSURE(!columns.empty(), "Expected at least one column with strict Yson, but got " << static_cast<const TTypeAnnotationNode&>(rowType));
+    ctx.AddError(TIssue(pos, TStringBuilder()
+        << "Strict Yson type is not allowed to write, please use Optional<Yson> for column(s): " << columns));
+}
+
 } // NYql

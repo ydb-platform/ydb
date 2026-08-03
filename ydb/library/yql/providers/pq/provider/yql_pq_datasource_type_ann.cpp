@@ -39,15 +39,6 @@ bool HasWatermarkColumnPrefix(const TStructExprType& structType) {
     });
 }
 
-bool EnsureWatermarksEnabled(const TPqState& state, const TExprNode& watermark, TExprContext& ctx) {
-    if (state.EnableWatermarks || state.EnableWatermarksAdvanced) {
-        return true;
-    }
-
-    ctx.AddError(TIssue(ctx.GetPosition(watermark.Pos()), "Watermarks are disabled"));
-    return false;
-}
-
 const TTypeAnnotationNode* BuildPqMetaFieldExprType(const TMetaFieldDescriptor& descriptor, TExprContext& ctx) {
     switch (descriptor.Type) {
         case EMetaFieldType::Uint64:
@@ -333,10 +324,6 @@ public:
         if (input->ChildrenSize() > TPqReadTopic::idx_Watermark) {
             auto& watermarkNode = input->ChildRef(TPqReadTopic::idx_Watermark);
             if (!TCoVoid::Match(watermarkNode.Get())) {
-                if (!EnsureWatermarksEnabled(*State_, *watermarkNode, ctx)) {
-                    return TStatus::Error;
-                }
-
                 const auto status = ConvertToLambda(watermarkNode, ctx, 1, 1);
                 if (status != TStatus::Ok) {
                     return status;
@@ -444,10 +431,6 @@ public:
 
         if (TDqPqTopicSource::idx_WatermarkExpr < input->ChildrenSize()) {
             auto& watermarkExpr = input->ChildRef(TDqPqTopicSource::idx_WatermarkExpr);
-            if (!EnsureWatermarksEnabled(*State_, *watermarkExpr, ctx)) {
-                return TStatus::Error;
-            }
-
             const auto status = ConvertToLambda(watermarkExpr, ctx, 1, 1);
             if (status != TStatus::Ok) {
                 return status;

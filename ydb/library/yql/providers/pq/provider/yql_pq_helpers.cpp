@@ -179,6 +179,11 @@ TMaybe<std::pair<TCoLambda, ui64>> SplitWatermarkExpr(
 ) {
     const auto pos = ctx.GetPosition(watermark.Pos());
 
+    if (!state.EnableWatermarks && !state.EnableWatermarksAdvanced) {
+        ctx.AddError(TIssue(pos, "Watermarks are disabled"));
+        return Nothing();
+    }
+
     static constexpr std::string_view message = "Incorrect watermark expression";
     const auto args = watermark.Args();
     if (args.Size() != 1) {

@@ -161,12 +161,12 @@ public:
         AddHandler({
             TDqCnUnionAll::CallableName(),
             TDqCnParallelUnionAll::CallableName(),
+            TDqCnHashShuffle::CallableName(),
         }, Hndl(&ConstraintDqCnUnionAll));
         AddHandler({
             TDqCnBroadcast::CallableName(),
             TDqCnMap::CallableName(),
             TDqCnStreamLookup::CallableName(),
-            TDqCnHashShuffle::CallableName(),
             TDqCnResult::CallableName(),
         }, Hndl(&ConstraintDqConnection));
         AddHandler({TDqCnValue::CallableName()}, Hndl(&ConstraintDqCnValue));
@@ -309,6 +309,24 @@ TStatus ConstraintDqJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto lUnique = join.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>();
     const auto rUnique = join.RightInput().Ref().GetConstraint<TUniqueConstraintNode>();
 
+    const auto makeRename = [&ctx](const TExprBase& label) -> TPartOfConstraintBase::TPathReduce {
+        if (label.Ref().IsAtom()) {
+            const auto table = label.Cast<TCoAtom>().Value();
+            return [table, &ctx](const TPartOfConstraintBase::TPathType& path) -> std::vector<TPartOfConstraintBase::TPathType> {
+                if (path.empty()) {
+                    return {path};
+                }
+                auto out = path;
+                out.front() = ctx.AppendString(TStringBuilder() << table << '.' << out.front());
+                return {out};
+            };
+        }
+        return {};
+    };
+
+    const auto leftRename = makeRename(join.LeftLabel());
+    const auto rightRename = makeRename(join.RightLabel());
+
     if (lUnique || rUnique) {
         std::vector<std::string_view> leftJoinKeys, rightJoinKeys;
         const auto size = join.JoinKeys().Size();
@@ -341,24 +359,6 @@ TStatus ConstraintDqJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
 
         const bool lOneRow = leftAny || lUnique && lUnique->ContainsCompleteSet(leftJoinKeys);
         const bool rOneRow = rightAny || rUnique && rUnique->ContainsCompleteSet(rightJoinKeys);
-
-        const auto makeRename = [&ctx](const TExprBase& label) -> TPartOfConstraintBase::TPathReduce {
-            if (label.Ref().IsAtom()) {
-                const auto table = label.Cast<TCoAtom>().Value();
-                return [table, &ctx](const TPartOfConstraintBase::TPathType& path) -> std::vector<TPartOfConstraintBase::TPathType> {
-                    if (path.empty()) {
-                        return {path};
-                    }
-                    auto out = path;
-                    out.front() = ctx.AppendString(TStringBuilder() << table << '.' << out.front());
-                    return {out};
-                };
-            }
-            return {};
-        };
-
-        const auto leftRename = makeRename(join.LeftLabel());
-        const auto rightRename = makeRename(join.RightLabel());
 
         if (singleSide) {
             if (leftSide && lUnique) {
@@ -430,7 +430,18 @@ TStatus ConstraintDqJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+        if (lStreaming && rStreaming) {
+            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), TStringBuilder() << "Stream Join is unsupported"));
+            return IGraphTransformer::TStatus::Error;
+        } else if (lStreaming) {
+            const auto* renamed = leftRename ? lStreaming->RenameFields(ctx, leftRename) : lStreaming;
+            input->AddConstraint(renamed->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
+        } else if (rStreaming) {
+            const auto* renamed = rightRename ? rStreaming->RenameFields(ctx, rightRename) : rStreaming;
+            input->AddConstraint(renamed->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
+        } else {
+            input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+        }
     }
 
     return TStatus::Ok;

@@ -1724,6 +1724,202 @@ Y_UNIT_TEST_TWIN(MultipleSelectsAndReturningsStream, EnableIndexStreamWrite) {
     }
 }
 
+Y_UNIT_TEST_TWIN(DeleteReturningThenSelectInSameTx, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto resultCreate = session.ExecuteSchemeQuery(Q_(R"(
+            --!syntax_v1
+            CREATE TABLE repro96 (name Utf8, team Utf8, PRIMARY KEY(name));
+        )")).GetValueSync();
+        UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+        auto resultInsert = session.ExecuteDataQuery(Q_(R"(
+            --!syntax_v1
+            INSERT INTO repro96 (name, team) VALUES ("alice"u, "red"u), ("bob"u, "blue"u);
+        )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(resultInsert.IsSuccess(), resultInsert.GetIssues().ToString());
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto deleteResult = session.ExecuteQuery(R"(
+            DELETE FROM repro96 WHERE team = "red"u RETURNING name;
+        )", NYdb::NQuery::TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(deleteResult.GetStatus(), EStatus::SUCCESS, deleteResult.GetIssues().ToString());
+        CompareYson(R"([[["alice"]]])", FormatResultSetYson(deleteResult.GetResultSet(0)));
+
+        auto transaction = deleteResult.GetTransaction();
+        UNIT_ASSERT(transaction->IsActive());
+
+        auto selectResult = session.ExecuteQuery(R"(
+            SELECT name FROM repro96 WHERE team = "red"u;
+        )", NYdb::NQuery::TTxControl::Tx(*transaction).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+        // The deleted row must not be visible inside the same transaction.
+        CompareYson(R"([])", FormatResultSetYson(selectResult.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST_TWIN(UpdateReturningThenSelectInSameTx, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto resultCreate = session.ExecuteSchemeQuery(Q_(R"(
+            --!syntax_v1
+            CREATE TABLE repro96 (name Utf8, team Utf8, PRIMARY KEY(name));
+        )")).GetValueSync();
+        UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+        auto resultInsert = session.ExecuteDataQuery(Q_(R"(
+            --!syntax_v1
+            INSERT INTO repro96 (name, team) VALUES ("alice"u, "red"u), ("bob"u, "blue"u);
+        )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(resultInsert.IsSuccess(), resultInsert.GetIssues().ToString());
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto updateResult = session.ExecuteQuery(R"(
+            UPDATE repro96 SET team = "green"u WHERE team = "blue"u RETURNING name;
+        )", NYdb::NQuery::TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(updateResult.GetStatus(), EStatus::SUCCESS, updateResult.GetIssues().ToString());
+        CompareYson(R"([[["bob"]]])", FormatResultSetYson(updateResult.GetResultSet(0)));
+
+        auto transaction = updateResult.GetTransaction();
+        UNIT_ASSERT(transaction->IsActive());
+
+        auto selectResult = session.ExecuteQuery(R"(
+            SELECT name FROM repro96 WHERE team = "green"u;
+        )", NYdb::NQuery::TTxControl::Tx(*transaction).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+        // The updated value must be visible inside the same transaction.
+        CompareYson(R"([[["bob"]]])", FormatResultSetYson(selectResult.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(ReturningWithSmallChannelBuffer) {
+    auto appConfig = GetAppConfig(false);
+    appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
+    appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(1_KB);
+
+    auto serverSettings = TKikimrSettings(appConfig);
+    TKikimrRunner kikimr(serverSettings);
+
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .Syntax(NYdb::NQuery::ESyntax::YqlV1)
+        .ConcurrentResultSets(false);
+
+    {
+        auto result = session.ExecuteQuery(Q_(R"(
+            --!syntax_v1
+            CREATE TABLE test_returning_bp (
+                key Int32,
+                value String,
+                PRIMARY KEY(key)
+            );
+        )"), NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    const ui32 rowCount = 200;
+    const TString payload(500, 'x');
+
+    {
+        // Build a multi-row UPSERT ... RETURNING * query large enough to
+        // push TransformOutput past SoftLimit/HardLimit with 1KB channel buffer.
+        // Use DQ channel v1 so that ChannelBufferSize directly controls the
+        // output channel's MaxStoredBytes (v2 local buffers use a separate 8MB limit).
+        TStringBuilder query;
+        query << "pragma ydb.DqChannelVersion = \"1\";\n";
+        query << "UPSERT INTO test_returning_bp (key, value) VALUES ";
+        for (ui32 i = 0; i < rowCount; ++i) {
+            if (i > 0) query << ", ";
+            query << "(" << i << ", \"" << payload << "\")";
+        }
+        query << " RETURNING key, value;";
+
+        auto it = session.StreamExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            settings
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+        auto res = CollectStreamResult(it);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.RowsCount, rowCount,
+            "Expected " << rowCount << " rows in RETURNING result, got " << res.RowsCount);
+    }
+
+    // Verify data was actually written
+    {
+        auto result = session.ExecuteQuery(Q_(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM test_returning_bp;
+        )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[200u]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(ReturningIndexedWithSmallChannelBuffer) {
+    // Regression test for TransformOutput backpressure with indexed writes.
+    // Indexed UPSERT ... RETURNING goes through TKqpForwardWriteActor (output transform)
+    // and must handle downstream backpressure without crashing.
+    auto appConfig = GetAppConfig(false);
+    appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
+    appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(1_KB);
+
+    auto kikimr = DefaultKikimrRunner({}, appConfig);
+
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, true);
+    }
+
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .Syntax(NYdb::NQuery::ESyntax::YqlV1)
+        .ConcurrentResultSets(false);
+
+    const ui32 rowCount = 200;
+    const TString payload(500, 'x');
+
+    {
+        TStringBuilder query;
+        query << "pragma ydb.DqChannelVersion = \"1\";\n";
+        query << "UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES ";
+        for (ui32 i = 0; i < rowCount; ++i) {
+            if (i > 0) query << ", ";
+            query << "(" << (1000 + i) << ", " << (1000 + i) << ", \"" << payload << "\")";
+        }
+        query << " RETURNING Key, Fk, Value;";
+
+        auto it = session.StreamExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            settings
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+        auto res = CollectStreamResult(it);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.RowsCount, rowCount,
+            "Expected " << rowCount << " rows in RETURNING result, got " << res.RowsCount);
+    }
+}
+
 }
 
 } // namespace NKikimr::NKqp

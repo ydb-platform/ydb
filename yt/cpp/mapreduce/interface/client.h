@@ -249,7 +249,7 @@ public:
     /// All changes that are made by transactions become visible globally or to parent transaction.
     ///
     /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#commit_tx)
-    virtual void Commit() = 0;
+    virtual void Commit(const TCommitTransactionOptions& options = {}) = 0;
 
     ///
     /// @brief Abort transaction.

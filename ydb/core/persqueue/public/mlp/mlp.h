@@ -14,6 +14,13 @@ class TUserToken;
 
 namespace NKikimr::NPQ::NMLP {
 
+enum class EOperationResult : ui8 {
+    Success = 0,
+    NotFound = 1,
+    NotInFlight = 2,
+    Failed = 3,
+};
+
 enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::MLP),
     EvWriteResponse,
@@ -31,6 +38,7 @@ struct TMessageId {
 struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, EEv::EvWriteResponse> {
 
     NDescriber::EStatus DescribeStatus;
+    ui64 BalancerTabletId = 0;
 
     struct TMessage {
         size_t Index;
@@ -51,6 +59,7 @@ struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvRea
 
     Ydb::StatusIds::StatusCode Status;
     TString ErrorDescription;
+    ui64 BalancerTabletId = 0;
 
     struct TMessage {
         TMessageId MessageId;
@@ -77,10 +86,11 @@ struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::E
 
     Ydb::StatusIds::StatusCode Status;
     TString ErrorDescription;
+    ui64 BalancerTabletId = 0;
 
     struct TResult {
         TMessageId MessageId;
-        bool Success = false;
+        EOperationResult Status = EOperationResult::Failed;
     };
     std::vector<TResult> Messages;
 };
@@ -143,6 +153,10 @@ struct TReaderSettings {
     std::optional<TDuration> ProcessingTimeout;
     ui32 MaxNumberOfMessage = 1;
     std::vector<TString> SkipMessageGroups; // TODO remove after SQS migration was finished
+
+    // SQS FIFO receive-request-attempt-id replay. When set, repeated reads with the same
+    // attempt id within the configured period return the same messages.
+    TString ReceiveAttemptId;
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };

@@ -96,7 +96,7 @@ Y_UNIT_TEST_LLVM(TestFlowSortByLambdaComparator) {
 
     const auto sort =
         pgmBuilder.FromFlow(pgmBuilder.FlatMap(
-            pgmBuilder.Condense1(pgmBuilder.ToFlow(stream),
+            pgmBuilder.Condense1(pgmBuilder.ToFlow(stream, {}),
                                  [&](TRuntimeNode item) { return pgmBuilder.AsList(item); },
                                  [&](TRuntimeNode, TRuntimeNode) { return NTest::ConvertValueToLiteralNode(pgmBuilder, false); },
                                  [&](TRuntimeNode item, TRuntimeNode state) { return pgmBuilder.Append(state, item); }),
@@ -465,7 +465,7 @@ Y_UNIT_TEST_LLVM(TestFlowTopSortWithoutKey) {
     const auto n = 17ULL;
     const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
 
-    const auto pgmReturn = pgmBuilder.FromFlow(pgmBuilder.TopSort(pgmBuilder.ToFlow(list), limit, order, extractor));
+    const auto pgmReturn = pgmBuilder.FromFlow(pgmBuilder.TopSort(pgmBuilder.ToFlow(list, {}), limit, order, extractor));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto& value = graph->GetValue();
@@ -639,7 +639,7 @@ Y_UNIT_TEST(TestFlowTopSort) {
         return pgmBuilder.NewTuple({pgmBuilder.Apply(echoUdf, {pgmBuilder.Nth(item, 0U)})});
     };
     const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
-    const auto pgmRoot = pgmBuilder.FromFlow(pgmBuilder.TopSort(pgmBuilder.ToFlow(list), limit, ascending, extractor));
+    const auto pgmRoot = pgmBuilder.FromFlow(pgmBuilder.TopSort(pgmBuilder.ToFlow(list, {}), limit, ascending, extractor));
     const auto graph = setup.BuildGraph(pgmRoot);
     const auto& value = graph->GetValue();
 
@@ -691,7 +691,7 @@ Y_UNIT_TEST(TestFlowTop) {
         return pgmBuilder.NewTuple({pgmBuilder.Apply(echoUdf, {pgmBuilder.Nth(item, 0U)})});
     };
     const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
-    const auto pgmRoot = pgmBuilder.FromFlow(pgmBuilder.Top(pgmBuilder.ToFlow(list), limit, ascending, extractor));
+    const auto pgmRoot = pgmBuilder.FromFlow(pgmBuilder.Top(pgmBuilder.ToFlow(list, {}), limit, ascending, extractor));
     // XXX: The order of the result being yielded by Top
     // computation node is not defined by design, hence
     // manually sort the result to match the canonical one.

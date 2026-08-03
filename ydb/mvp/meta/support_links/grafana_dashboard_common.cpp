@@ -29,25 +29,8 @@ void InsertOrReplaceDashboardVar(TCgiParameters& queryParameters, TStringBuf lab
     queryParameters.InsertUnescaped(varName, value);
 }
 
-void ApplyGrafanaDashboardBindingPolicy(
-    TCgiParameters& queryParameters,
-    const THashMap<TString, TString>& clusterInfo,
-    const TCgiParameters& requestQueryParameters,
-    const TResolvedParamBindings& paramBindings)
-{
-    for (const auto& [name, value] : BuildNonIdentityRequestParamValues(requestQueryParameters)) {
-        InsertOrReplaceDashboardVar(queryParameters, name, value);
-    }
-
-    for (const auto& [label, value] : BuildClusterInfoParamValues(clusterInfo, paramBindings.ClusterInfoMappings)) {
-        InsertOrReplaceDashboardVar(queryParameters, label, value);
-    }
-
-    for (const auto& [label, value] : BuildStaticParamValues(paramBindings.StaticMappings)) {
-        InsertOrReplaceDashboardVar(queryParameters, label, value);
-    }
-
-    for (const auto& [label, value] : BuildRequestParamValues(requestQueryParameters, paramBindings.RequestMappings)) {
+void ApplyGrafanaDashboardBindingPolicy(TCgiParameters& queryParameters, const TVector<std::pair<TString, TString>>& parametersToAdd) {
+    for (const auto& [label, value] : parametersToAdd) {
         InsertOrReplaceDashboardVar(queryParameters, label, value);
     }
 }
@@ -78,7 +61,7 @@ TString BuildGrafanaDashboardUrl(
     const TResolvedParamBindings& paramBindings)
 {
     auto [path, queryParameters] = BuildGrafanaDashboardUrlParts(grafanaEndpoint, url);
-    ApplyGrafanaDashboardBindingPolicy(queryParameters, clusterInfo, requestQueryParameters, paramBindings);
+    ApplyGrafanaDashboardBindingPolicy(queryParameters, BuildParametersToAdd(requestQueryParameters, clusterInfo, paramBindings));
 
     return queryParameters.empty()
         ? path

@@ -121,6 +121,9 @@ TExprNode::TPtr BuildEmptyTablesRead(TPositionHandle pos, const TExprNode& userS
 TExprNode::TPtr GetFlowSettings(TPositionHandle pos, const TYtState& state, TExprContext& ctx, TExprNode::TPtr settings = {});
 TVector<TStringBuf> GetKeyFilterColumns(const NNodes::TYtSection& section, EYtSettingTypes kind);
 bool HasNonEmptyKeyFilter(const NNodes::TYtSection& section);
+NNodes::TYtPath RemoveYtQLFilters(NNodes::TYtPath path, TExprContext& ctx);
+NNodes::TYtSection RemoveYtQLFilters(NNodes::TYtSection section, TExprContext& ctx);
+NNodes::TYtSectionList RemoveYtQLFilters(NNodes::TYtSectionList sections, TExprContext& ctx);
 
 NNodes::TYtOutputOpBase GetOutputOp(NNodes::TYtOutput output, bool takeFirstInHybrid = false);
 
@@ -161,5 +164,7 @@ TMaybe<TVector<TString>> BuildLayersPaths(const TExprNode::TPtr& input, const TS
     const NLayers::ILayersIntegrationPtr& integration, const TYtSettings::TConstPtr& conf, TExprContext& ctx);
 
 bool CanReplaceParentOutputHash(const TExprNode& node);
+
+ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& config);
 
 };

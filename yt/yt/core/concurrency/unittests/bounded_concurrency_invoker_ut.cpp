@@ -167,7 +167,7 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
                 auto guard = Guard(lock);
 
                 auto concurrentInvocations = runnedCallbacks - finishedCallbacks;
-                THROW_ERROR_EXCEPTION_UNLESS(concurrentInvocations <= maxConcurrentInvocations, "Number of concurrent invocations exceeds maximum (ConcurrentInvocations: %v, MaxConcurrentInvocations: %v)",
+                THROW_ERROR_EXCEPTION_UNLESS(concurrentInvocations <= maxConcurrentInvocations, "Number of concurrent invocations %v exceeds maximum %v",
                     concurrentInvocations,
                     maxConcurrentInvocations);
                 if (callbackIndex > maxConcurrentInvocations) {
@@ -278,6 +278,25 @@ TEST_F(TBoundedConcurrencyInvokerTest, ReconfigureBeforeFirstInvocation)
     EXPECT_TRUE(promise.IsSet());
 }
 
+TEST_F(TBoundedConcurrencyInvokerTest, CurrentInvoker)
+{
+    auto underlyingInvoker = Queue1->GetInvoker();
+    auto invoker = CreateBoundedConcurrencyInvoker(underlyingInvoker, 1);
+
+    auto future = BIND([&] {
+        // The bounded concurrency invoker deliberately installs the *underlying*
+        // invoker as current (see the `// sic!` in TBoundedConcurrencyInvoker::
+        // DoRunCallback), not itself.
+        EXPECT_EQ(underlyingInvoker.Get(), GetCurrentInvoker());
+        EXPECT_NE(invoker.Get(), GetCurrentInvoker());
+        Yield();
+        EXPECT_EQ(underlyingInvoker.Get(), GetCurrentInvoker());
+    })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitUntilSet(future);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

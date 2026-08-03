@@ -3,7 +3,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/containers/top_keeper/top_keeper.h>
 
 #include <ydb/core/base/subdomain.h>

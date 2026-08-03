@@ -8,11 +8,11 @@
 
 #include <yt/yt/core/json/json_writer.h>
 
-#include <yt/yt/core/misc/string_builder.h>
-
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <yt/yt_proto/yt/formats/extension.pb.h>
+
+#include <library/cpp/yt/string/string_builder.h>
 
 #include <google/protobuf/io/tokenizer.h>
 #include <google/protobuf/text_format.h>
@@ -1010,15 +1010,13 @@ void TProtobufFormatDescriptionBase<TType>::InitFromProtobufSchema(
     if (config->Enumerations) {
         const auto& enumerationConfigMap = config->Enumerations;
         for (const auto& [name_, field] : enumerationConfigMap->GetChildren()) {
-            // TODO(babenko): migrate to std::string
-            auto name = std::string(name_);
+            const auto& name = name_;
             if (field->GetType() != ENodeType::Map) {
                 THROW_ERROR_EXCEPTION(R"(Invalid enumeration specification type: expected "map", found %Qlv)",
                     field->GetType());
             }
             const auto& enumerationConfig = field->AsMap();
-            // TODO(babenko): migrate to std::string
-            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(std::string(TimestampColumnName), enumerationConfig));
+            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(TimestampColumnName, enumerationConfig));
         }
     }
 

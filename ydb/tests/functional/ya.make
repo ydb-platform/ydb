@@ -21,7 +21,6 @@ RECURSE(
     minidumps
     mvp
     nbs
-    postgresql
     query_cache
     rename
     restarts
@@ -43,6 +42,7 @@ RECURSE(
     tpcc
     tenants
     ttl
+    udf_store
     wardens
     ydb_cli
 )

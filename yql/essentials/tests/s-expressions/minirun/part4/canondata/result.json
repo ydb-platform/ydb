@@ -251,6 +251,20 @@
             "uri": "https://{canondata_backend}/1937424/d5a759bb3d448219023419bd81b51a83c51e7fb9/resource.tar.gz#test.test_InMem-Guess--Results_/results.txt"
         }
     ],
+    "test.test[InMem-LPartitionsByKeys-default.txt-Debug]": [
+        {
+            "checksum": "c5970844f3cd290c9cd0f6da7c09a92e",
+            "size": 537,
+            "uri": "https://{canondata_backend}/1903885/04250d1ff8dfb75396270ac9221941404e83162d/resource.tar.gz#test.test_InMem-LPartitionsByKeys-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[InMem-LPartitionsByKeys-default.txt-Results]": [
+        {
+            "checksum": "3159d6b27773bf2c0b434a77a64b62b2",
+            "size": 337,
+            "uri": "https://{canondata_backend}/1903885/04250d1ff8dfb75396270ac9221941404e83162d/resource.tar.gz#test.test_InMem-LPartitionsByKeys-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[InMem-ListFromRangeForDates-default.txt-Debug]": [
         {
             "checksum": "9eb52e1fd2ea6bda896e831fdf864f27",

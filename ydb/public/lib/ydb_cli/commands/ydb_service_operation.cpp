@@ -79,7 +79,8 @@ void TCommandGetOperation::Parse(TConfig& config) {
 }
 
 int TCommandGetOperation::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
 
     switch (OperationId.GetKind()) {
     case TOperationId::EXPORT:
@@ -112,6 +113,8 @@ int TCommandGetOperation::Run(TConfig& config) {
         return GetOperation<NTable::TCompactionOperation>(client, OperationId, OutputFormat);
     case TOperationId::ANALYZE:
         return GetOperation<NTable::TAnalyzeOperation>(client, OperationId, OutputFormat);
+    case TOperationId::SET_NOT_NULL:
+        return GetOperation<NTable::TSetNotNullOperation>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";
     }
@@ -125,7 +128,8 @@ TCommandCancelOperation::TCommandCancelOperation()
 }
 
 int TCommandCancelOperation::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Cancel(OperationId).GetValueSync());
     return EXIT_SUCCESS;
 }
@@ -136,7 +140,8 @@ TCommandForgetOperation::TCommandForgetOperation()
 }
 
 int TCommandForgetOperation::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Forget(OperationId).GetValueSync());
     return EXIT_SUCCESS;
 }
@@ -154,6 +159,7 @@ void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
         {"restore", &ListOperations<NBackup::TBackupCollectionRestoreResponse>},
         {"compaction", &ListOperations<NTable::TCompactionOperation>},
         {"analyze", &ListOperations<NTable::TAnalyzeOperation>},
+        {"setnotnull", &ListOperations<NTable::TSetNotNullOperation>},
     };
     if (config.UseExportToYt) {
         KindToHandler.emplace("export", THandlerWrapper(&ListOperations<NExport::TExportToYtResponse>, true)); // deprecated
@@ -221,7 +227,8 @@ void TCommandListOperations::Parse(TConfig& config) {
 }
 
 int TCommandListOperations::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     KindToHandler.at(Kind)(client, PageSize, PageToken, OutputFormat);
     return EXIT_SUCCESS;
 }

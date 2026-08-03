@@ -27,8 +27,13 @@ from io import BytesIO
 
 import botocore
 import botocore.auth
-from botocore import utils
+from botocore import (
+    retryhandler,  # noqa: F401
+    translate,  # noqa: F401
+    utils,
+)
 from botocore.compat import (
+    MD5_AVAILABLE,  # noqa: F401
     ETree,
     OrderedDict,
     XMLParseError,
@@ -49,6 +54,7 @@ from botocore.docs.utils import (
 from botocore.endpoint_provider import VALID_HOST_LABEL_RE
 from botocore.exceptions import (
     AliasConflictParameterError,
+    MissingServiceIdError,  # noqa: F401
     ParamValidationError,
     UnsupportedTLSVersionWarning,
 )
@@ -61,22 +67,14 @@ from botocore.signers import (
 )
 from botocore.utils import (
     SAFE_CHARS,
+    SERVICE_NAME_ALIASES,  # noqa: F401
     ArnParser,
-    conditionally_calculate_checksum,
-    conditionally_calculate_md5,
+    hyphenize_service_id,  # noqa: F401
+    is_global_accesspoint,  # noqa: F401
     percent_encode,
     switch_host_with_param,
+    conditionally_calculate_md5,
 )
-
-# Keep these imported.  There's pre-existing code that uses them.
-from botocore import retryhandler  # noqa
-from botocore import translate  # noqa
-from botocore.compat import MD5_AVAILABLE  # noqa
-from botocore.exceptions import MissingServiceIdError  # noqa
-from botocore.utils import hyphenize_service_id  # noqa
-from botocore.utils import is_global_accesspoint  # noqa
-from botocore.utils import SERVICE_NAME_ALIASES  # noqa
-
 
 logger = logging.getLogger(__name__)
 
@@ -330,9 +328,8 @@ def _sse_md5(params, sse_member_prefix='SSECustomer'):
     key_as_bytes = params[sse_key_member]
     if isinstance(key_as_bytes, str):
         key_as_bytes = key_as_bytes.encode('utf-8')
-    key_md5_str = base64.b64encode(get_md5(key_as_bytes).digest()).decode(
-        'utf-8'
-    )
+    md5_val = get_md5(key_as_bytes, usedforsecurity=False).digest()
+    key_md5_str = base64.b64encode(md5_val).decode('utf-8')
     key_b64_encoded = base64.b64encode(key_as_bytes).decode('utf-8')
     params[sse_key_member] = key_b64_encoded
     params[sse_md5_member] = key_md5_str
@@ -1063,6 +1060,14 @@ def remove_qbusiness_chat(class_attributes, **kwargs):
         del class_attributes['chat']
 
 
+def remove_bedrock_runtime_invoke_model_with_bidirectional_stream(
+    class_attributes, **kwargs
+):
+    """Operation requires h2 which is currently unsupported in Python"""
+    if 'invoke_model_with_bidirectional_stream' in class_attributes:
+        del class_attributes['invoke_model_with_bidirectional_stream']
+
+
 def add_retry_headers(request, **kwargs):
     retries_context = request.context.get('retries')
     if not retries_context:
@@ -1315,6 +1320,33 @@ def add_query_compatibility_header(model, params, **kwargs):
     params['headers']['x-amzn-query-mode'] = 'true'
 
 
+def _handle_request_validation_mode_member(params, model, **kwargs):
+    client_config = kwargs.get("context", {}).get("client_config")
+    if client_config is None:
+        return
+    response_checksum_validation = client_config.response_checksum_validation
+    http_checksum = model.http_checksum
+    mode_member = http_checksum.get("requestValidationModeMember")
+    if (
+        mode_member is not None
+        and response_checksum_validation == "when_supported"
+    ):
+        params.setdefault(mode_member, "ENABLED")
+
+
+def _set_extra_headers_for_unsigned_request(
+    request, signature_version, **kwargs
+):
+    # When sending a checksum in the trailer of an unsigned chunked request, S3
+    # requires us to set the "X-Amz-Content-SHA256" header to "STREAMING-UNSIGNED-PAYLOAD-TRAILER".
+    checksum_context = request.context.get("checksum", {})
+    algorithm = checksum_context.get("request_algorithm", {})
+    in_trailer = algorithm.get("in") == "trailer"
+    headers = request.headers
+    if signature_version == botocore.UNSIGNED and in_trailer:
+        headers["X-Amz-Content-SHA256"] = "STREAMING-UNSIGNED-PAYLOAD-TRAILER"
+
+
 # This is a list of (event_name, handler).
 # When a Session is created, everything in this list will be
 # automatically registered with that Session.
@@ -1324,6 +1356,10 @@ BUILTIN_HANDLERS = [
     (
         'getattr.mturk.list_hi_ts_for_qualification_type',
         ClientMethodAlias('list_hits_for_qualification_type'),
+    ),
+    (
+        'getattr.socialmessaging.delete_whatsapp_media_message',
+        ClientMethodAlias('delete_whatsapp_message_media'),
     ),
     (
         'before-parameter-build.s3.UploadPart',
@@ -1345,6 +1381,10 @@ BUILTIN_HANDLERS = [
     ('creating-client-class.iot-data', check_openssl_supports_tls_version_1_2),
     ('creating-client-class.lex-runtime-v2', remove_lex_v2_start_conversation),
     ('creating-client-class.qbusiness', remove_qbusiness_chat),
+    (
+        'creating-client-class.bedrock-runtime',
+        remove_bedrock_runtime_invoke_model_with_bidirectional_stream,
+    ),
     ('after-call.iam', json_decode_policies),
     ('after-call.ec2.GetConsoleOutput', decode_console_output),
     ('after-call.cloudformation.GetTemplate', json_decode_template_body),
@@ -1352,6 +1392,7 @@ BUILTIN_HANDLERS = [
     ('before-parse.s3.*', handle_expires_header),
     ('before-parse.s3.*', _handle_200_error, REGISTER_FIRST),
     ('before-parameter-build', generate_idempotent_uuid),
+    ('before-parameter-build', _handle_request_validation_mode_member),
     ('before-parameter-build.s3', validate_bucket_name),
     ('before-parameter-build.s3', remove_bucket_from_url_paths_from_model),
     (
@@ -1385,11 +1426,8 @@ BUILTIN_HANDLERS = [
     ('before-call.s3', add_expect_header),
     ('before-call.glacier', add_glacier_version),
     ('before-call.apigateway', add_accept_header),
-    ('before-call.s3.PutObject', conditionally_calculate_checksum),
     ('before-call.s3.PatchObject', conditionally_calculate_md5),
-    ('before-call.s3.UploadPart', conditionally_calculate_md5),
     ('before-call.s3.DeleteObjects', escape_xml_payload),
-    ('before-call.s3.DeleteObjects', conditionally_calculate_checksum),
     ('before-call.s3.PutBucketLifecycleConfiguration', escape_xml_payload),
     ('before-call.glacier.UploadArchive', add_glacier_checksums),
     ('before-call.glacier.UploadMultipartPart', add_glacier_checksums),
@@ -1427,6 +1465,7 @@ BUILTIN_HANDLERS = [
     ('before-parameter-build.route53', fix_route53_ids),
     ('before-parameter-build.glacier', inject_account_id),
     ('before-sign.s3', remove_arn_from_signing_path),
+    ('before-sign.s3', _set_extra_headers_for_unsigned_request),
     (
         'before-sign.polly.SynthesizeSpeech',
         remove_content_type_header_for_presigning,

@@ -1,0 +1,162 @@
+--- a/include/llvm/Support/VirtualFileSystem.h
++++ b/include/llvm/Support/VirtualFileSystem.h
+@@ -26,6 +26,7 @@
+ #include "llvm/ADT/Optional.h"
+ #include "llvm/ADT/SmallVector.h"
+ #include "llvm/ADT/StringRef.h"
++#include "llvm/ADT/StringMap.h"
+ #include "llvm/ADT/STLFunctionalExtras.h"
+ #include "llvm/Support/Chrono.h"
+ #include "llvm/Support/ErrorOr.h"
+@@ -370,6 +371,37 @@ public:
+   const_reverse_iterator overlays_rend() const { return FSList.end(); }
+ };
+ 
++class CaseInsensitiveFileSystem : public FileSystem {
++  IntrusiveRefCntPtr<FileSystem> Base;
++
++  /// Try to find Path by means of case-insensitive lookup. Stores the result in
++  /// FoundPath on success, or returns an error code otherwise.
++  std::error_code findCaseInsensitivePath(StringRef Path,
++                                          SmallVectorImpl<char> &FoundPath);
++
++  /// Attempt to exclude the possibility that File exists in Dir based on
++  /// previous information.
++  bool exclude(StringRef Dir, StringRef File);
++
++  /// Map from directory to map from lowercase to real-case filename.
++  llvm::StringMap<llvm::StringMap<std::string>> Maps;
++
++public:
++  CaseInsensitiveFileSystem(IntrusiveRefCntPtr<FileSystem> Base) : Base(Base) {}
++
++  llvm::ErrorOr<Status> status(const Twine &Path) override;
++  llvm::ErrorOr<std::unique_ptr<File>>
++  openFileForRead(const Twine &Path) override;
++  directory_iterator dir_begin(const Twine &Dir, std::error_code &EC) override;
++  llvm::ErrorOr<std::string> getCurrentWorkingDirectory() const override {
++    return Base->getCurrentWorkingDirectory();
++  }
++  std::error_code setCurrentWorkingDirectory(const Twine &Path) override {
++    Maps.clear();
++    return Base->setCurrentWorkingDirectory(Path);
++  }
++};
++
+ /// By default, this delegates all calls to the underlying file system. This
+ /// is useful when derived file systems want to override some calls and still
+ /// proxy other calls.
+--- a/lib/Support/VirtualFileSystem.cpp
++++ b/lib/Support/VirtualFileSystem.cpp
+@@ -520,6 +520,111 @@ directory_iterator OverlayFileSystem::dir_begin(const Twine &Dir,
+ 
+ void ProxyFileSystem::anchor() {}
+ 
++//===-----------------------------------------------------------------------===/
++// CaseInsensitiveFileSystem implementation
++//===-----------------------------------------------------------------------===/
++
++bool CaseInsensitiveFileSystem::exclude(StringRef Dir, StringRef File) {
++  if (!Maps.count(Dir)) {
++    // We have no map for this Dir, but see if we can exclude the file by
++    // excluding Dir from its parent.
++    StringRef Parent = llvm::sys::path::parent_path(Dir);
++    if (!Parent.empty() &&
++        exclude(Parent, llvm::sys::path::filename(Dir))) {
++      return true;
++    }
++
++    return false;
++  }
++
++  return !Maps[Dir].count(File.lower());
++}
++
++std::error_code CaseInsensitiveFileSystem::findCaseInsensitivePath(
++    StringRef Path, SmallVectorImpl<char> &FoundPath) {
++  StringRef FileName = llvm::sys::path::filename(Path);
++  StringRef Dir = llvm::sys::path::parent_path(Path);
++
++  if (Dir.empty())
++    Dir = ".";
++
++  if (exclude(Dir, FileName))
++    return llvm::errc::no_such_file_or_directory;
++
++  if (Maps.count(Dir)) {
++    // If we have a map for this Dir and File wasn't excluded above, it must
++    // exist.
++    llvm::sys::path::append(FoundPath, Dir, Maps[Dir][FileName.lower()]);
++    return std::error_code();
++  }
++
++  std::error_code EC;
++  directory_iterator I = Base->dir_begin(Dir, EC);
++  if (EC == errc::no_such_file_or_directory) {
++    // If the dir doesn't exist, try to find it and try again.
++    SmallVector<char, 512> NewDir;
++    if (llvm::sys::path::parent_path(Dir).empty() ||
++        (EC = findCaseInsensitivePath(Dir, NewDir))) {
++      // Insert a dummy map value to mark the dir as non-existent.
++      Maps.lookup(Dir);
++      return EC;
++    }
++    llvm::sys::path::append(NewDir, FileName);
++    return findCaseInsensitivePath(StringRef(NewDir.data(), NewDir.size()),
++                                   FoundPath);
++  }
++
++  // These special entries always exist, but won't show up in the listing below.
++  Maps[Dir]["."] = ".";
++  Maps[Dir][".."] = "..";
++
++  directory_iterator E;
++  for (; I != E; I.increment(EC)) {
++    StringRef DirEntry = llvm::sys::path::filename(I->path());
++    Maps[Dir][DirEntry.lower()] = DirEntry.str();
++  }
++  if (EC) {
++    // If there were problems, scrap the whole map as it may not be complete.
++    Maps.erase(Dir);
++    return EC;
++  }
++
++  auto MI = Maps[Dir].find(FileName.lower());
++  if (MI != Maps[Dir].end()) {
++    llvm::sys::path::append(FoundPath, Dir, MI->second);
++    return std::error_code();
++  }
++
++  return llvm::errc::no_such_file_or_directory;
++}
++
++llvm::ErrorOr<Status> CaseInsensitiveFileSystem::status(const Twine &Path) {
++  SmallVector<char, 512> NewPath;
++  if (std::error_code EC = findCaseInsensitivePath(Path.str(), NewPath))
++    return EC;
++
++  return Base->status(NewPath);
++}
++
++llvm::ErrorOr<std::unique_ptr<File>>
++CaseInsensitiveFileSystem::openFileForRead(const Twine &Path) {
++  SmallVector<char, 512> NewPath;
++  if (std::error_code EC = findCaseInsensitivePath(Path.str(), NewPath))
++    return EC;
++
++  return Base->openFileForRead(NewPath);
++}
++
++directory_iterator CaseInsensitiveFileSystem::dir_begin(const Twine &Path,
++                                                        std::error_code &EC) {
++  SmallVector<char, 512> NewPath;
++  if ((EC = findCaseInsensitivePath(Path.str(), NewPath)))
++    return directory_iterator();
++
++  return Base->dir_begin(NewPath, EC);
++}
++
++
+ namespace llvm {
+ namespace vfs {
+ 

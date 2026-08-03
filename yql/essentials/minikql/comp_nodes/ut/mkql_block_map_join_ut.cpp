@@ -10,7 +10,7 @@ namespace {
 
 // List<Tuple<...>> -> Stream<Multi<...>>
 TRuntimeNode ToWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
-    auto wideFlow = pgmBuilder.ExpandMap(pgmBuilder.ToFlow(list),
+    auto wideFlow = pgmBuilder.ExpandMap(pgmBuilder.ToFlow(list, {}),
                                          [&](TRuntimeNode tupleNode) -> TRuntimeNode::TList {
                                              TTupleType* tupleType = AS_TYPE(TTupleType, tupleNode.GetStaticType());
                                              TRuntimeNode::TList wide;
@@ -41,7 +41,7 @@ TRuntimeNode ToBlockList(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
 
 // Stream<Multi<...>> -> List<Tuple<...>>
 TRuntimeNode FromWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
-    return pgmBuilder.Collect(pgmBuilder.NarrowMap(pgmBuilder.ToFlow(stream),
+    return pgmBuilder.Collect(pgmBuilder.NarrowMap(pgmBuilder.ToFlow(stream, {}),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode {
                                                        TVector<TRuntimeNode> tupleElements;
                                                        tupleElements.reserve(items.size());

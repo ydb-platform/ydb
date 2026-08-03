@@ -93,6 +93,8 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
             return std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE);
         case NScheme::NTypeIds::Uuid:
             return std::make_shared<arrow::StringType>();
+        case NScheme::NTypeIds::Interval:
+            return std::make_shared<arrow::Int64Type>();
         default:
             return GetArrowType(typeId);
     }

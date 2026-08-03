@@ -1,3 +1,5 @@
+#include "create_external_data_source_formatter.h"
+#include "create_external_table_formatter.h"
 #include "create_table_formatter.h"
 #include "create_view_formatter.h"
 #include "show_create.h"
@@ -29,6 +31,10 @@ TString ToString(NKikimrSchemeOp::EPathType pathType) {
             return "Table";
         case NKikimrSchemeOp::EPathTypeView:
             return "View";
+        case NKikimrSchemeOp::EPathTypeExternalDataSource:
+            return "ExternalDataSource";
+        case NKikimrSchemeOp::EPathTypeExternalTable:
+            return "ExternalTable";
         default:
             Y_ENSURE(false, "No user-friendly name for a path type: " << pathType);
             return "";
@@ -154,7 +160,7 @@ private:
         Path = cellsFrom[0].AsBuf();
         PathType = cellsFrom[1].AsBuf();
 
-        if (!IsIn({"Table", "View"}, PathType)) {
+        if (!IsIn({"Table", "View", "ExternalDataSource", "ExternalTable"}, PathType)) {
             return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
                 << "Unsupported path type: " << PathType
             );
@@ -261,6 +267,8 @@ private:
                     case NKikimrSchemeOp::EPathTypeTable:
                     case NKikimrSchemeOp::EPathTypeColumnTable:
                     case NKikimrSchemeOp::EPathTypeView:
+                    case NKikimrSchemeOp::EPathTypeExternalDataSource:
+                    case NKikimrSchemeOp::EPathTypeExternalTable:
                         break;
 
                     default: {
@@ -347,6 +355,32 @@ private:
 
                         TCreateViewFormatter formatter;
                         auto formatterResult = formatter.Format(*path, Path, description);
+                        if (formatterResult.IsSuccess()) {
+                            createQuery = formatterResult.ExtractOut();
+                        } else {
+                            return ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
+                        }
+                        break;
+                    }
+                    case NKikimrSchemeOp::EPathTypeExternalDataSource: {
+                        const auto& description = pathDescription.GetExternalDataSourceDescription();
+                        path = pathPair.second;
+
+                        TCreateExternalDataSourceFormatter formatter;
+                        auto formatterResult = formatter.Format(*path, description, pathDescription.GetSelf());
+                        if (formatterResult.IsSuccess()) {
+                            createQuery = formatterResult.ExtractOut();
+                        } else {
+                            return ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
+                        }
+                        break;
+                    }
+                    case NKikimrSchemeOp::EPathTypeExternalTable: {
+                        const auto& description = pathDescription.GetExternalTableDescription();
+                        path = pathPair.second;
+
+                        TCreateExternalTableFormatter formatter;
+                        auto formatterResult = formatter.Format(*path, description, pathDescription.GetSelf());
                         if (formatterResult.IsSuccess()) {
                             createQuery = formatterResult.ExtractOut();
                         } else {

@@ -4,7 +4,7 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/grpc/server/grpc_server.h>
-#include <ydb/public/api/grpc/ydb_topic_deferred_publish_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/draft/ydb_topic_deferred_publish_v1.grpc.pb.h>
 
 namespace NKikimr::NGRpcService::V1 {
 

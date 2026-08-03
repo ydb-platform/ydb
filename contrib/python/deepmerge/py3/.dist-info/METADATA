@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: deepmerge
-Version: 2.0
+Version: 2.1.0
 Summary: A toolset for deeply merging Python dictionaries.
 Author-email: Yusuke Tsutsumi <yusuke@tsutsumi.io>
 License: MIT Licence
@@ -19,15 +19,18 @@ Classifier: Typing :: Typed
 Requires-Python: >=3.8
 Description-Content-Type: text/x-rst
 License-File: LICENSE
-Requires-Dist: typing-extensions ; python_version <= "3.9"
+Requires-Dist: typing_extensions; python_version <= "3.9"
 Provides-Extra: dev
-Requires-Dist: validate-pyproject[all] ; extra == 'dev'
-Requires-Dist: pyupgrade ; extra == 'dev'
-Requires-Dist: black ; extra == 'dev'
-Requires-Dist: mypy ; extra == 'dev'
-Requires-Dist: pytest ; extra == 'dev'
-Requires-Dist: build ; extra == 'dev'
-Requires-Dist: twine ; extra == 'dev'
+Requires-Dist: validate-pyproject[all]; extra == "dev"
+Requires-Dist: pyupgrade; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: build; extra == "dev"
+Requires-Dist: twine; extra == "dev"
+Requires-Dist: sphinx; extra == "dev"
+Requires-Dist: sphinx-rtd-theme; extra == "dev"
+Dynamic: license-file
 
 =========
 deepmerge

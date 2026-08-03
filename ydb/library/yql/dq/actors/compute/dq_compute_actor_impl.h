@@ -476,6 +476,19 @@ protected:
             DrainAsyncOutput(outputIndex, info);
         }
 
+        for (auto& [outputIndex, transform] : OutputTransformsMap) {
+            if (!transform.OutputBuffer || !transform.AsyncOutput) {
+                continue;
+            }
+            const auto level = transform.OutputBuffer->GetFillLevel();
+            if (level != EDqFillLevel::NoLimit) {
+                transform.OutputConsumerWasLimited = true;
+            } else if (transform.OutputConsumerWasLimited) {
+                transform.OutputConsumerWasLimited = false;
+                transform.AsyncOutput->OnOutputConsumerReady();
+            }
+        }
+
         CheckRunStatus();
     }
 
@@ -1090,6 +1103,7 @@ protected:
 
     struct TAsyncOutputTransformInfo : public TAsyncOutputInfoBase {
         IDqOutputConsumer::TPtr OutputBuffer;
+        bool OutputConsumerWasLimited = false;
     };
 
 protected:
@@ -1877,6 +1891,7 @@ protected:
 
     virtual void DrainAsyncOutput(ui64 outputIndex, TAsyncOutputInfoBase& outputInfo) = 0;
 
+    // sync CA only
     ui32 SendDataChunkToAsyncOutput(ui64 outputIndex, TAsyncOutputInfoBase& outputInfo, ui64 bytes) {
         auto sink = outputInfo.Buffer;
 
@@ -1902,8 +1917,6 @@ protected:
         TMaybe<NDqProto::TCheckpoint> maybeCheckpoint;
         if (hasCheckpoint) {
             maybeCheckpoint = checkpoint;
-            CA_LOG_I("Resume inputs");
-            ResumeInputsByCheckpoint();
         }
 
         outputInfo.AsyncOutput->SendData(std::move(dataBatch), dataSize, maybeCheckpoint, outputInfo.Finished);

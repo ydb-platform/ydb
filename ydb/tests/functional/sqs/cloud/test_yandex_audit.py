@@ -1,18 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import logging
 import time
-import uuid
 
 import sys
 import os
 
 import pytest
-import yatest
 
-from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_tenant_installation
 from ydb.tests.library.sqs.test_base import IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
+from ydb.tests.library.sqs.cloud_test_base import YandexCloudSqsTestBase
+from ydb.tests.library.sqs.test_base import get_test_with_sqs_tenant_installation
 
 import random
 import string
@@ -34,7 +32,7 @@ class CaptureFileOutput:
             self.captured = f.read().decode('utf-8')
 
 
-class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
+class TestCloudEvents(get_test_with_sqs_tenant_installation(YandexCloudSqsTestBase)):
     def generate_random_audit_path():
         def generate_random_string(length):
             characters = string.ascii_letters + string.digits
@@ -43,48 +41,34 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
         return os.getcwd() + '/audit-file-' + generate_random_string(30)
 
     @classmethod
-    def _setup_config_generator(self):
-        config_generator = super(TestCloudEvents, self)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['yandex_cloud_mode'] = True
-        config_generator.yaml_config['sqs_config']['enable_queue_master'] = True
-        config_generator.yaml_config['sqs_config']['enable_dead_letter_queues'] = True
-        config_generator.yaml_config['sqs_config']['account_settings_defaults'] = {'max_queues_count': 40}
-        config_generator.yaml_config['sqs_config']['background_metrics_update_time_ms'] = 1000
-
+    def _setup_config_generator(cls):
+        config_generator = super(TestCloudEvents, cls)._setup_config_generator()
         config_generator.yaml_config['sqs_config']['cloud_events_config'] = {
             'enable_cloud_events': True,
             'retry_timeout_seconds': 2
         }
 
-        self.audit_file = self.generate_random_audit_path()
+        cls.audit_file = cls.generate_random_audit_path()
 
         if 'audit_config' not in config_generator.yaml_config:
             config_generator.yaml_config['audit_config'] = {}
             config_generator.yaml_config['audit_config']['file_backend'] = {}
 
-            with open(self.audit_file, "w") as audit_file:
+            with open(cls.audit_file, "w") as audit_file:
                 audit_file.write('')
 
-        config_generator.yaml_config['audit_config']['file_backend']['file_path'] = self.audit_file
-
-        temp_token_file = yatest.common.work_path("tokenfile")
-        with open(temp_token_file, "w") as fl:
-            fl.write("root@builtin")
-
-        config_generator.yaml_config['sqs_config']['auth_config'] = {'oauth_token': {'token_file': temp_token_file}}
+        config_generator.yaml_config['audit_config']['file_backend']['file_path'] = cls.audit_file
         return config_generator
 
     def _before_test_start(self):
-        self.cloud_account = f'acc_{uuid.uuid1()}'
+        super(TestCloudEvents, self)._before_test_start()
         self.iam_token = 't1.prefix_of_token.super_mega_well_formed_iam_token'
-        self.folder_id = f'folder_{self.cloud_account}'
-        self.cloud_id = f'CLOUD_FOR_{self.folder_id}'
 
-        self._username = self.cloud_id
-
-        print(f'run test with\ncloud_id={self.cloud_id}\nfolder_id={self.folder_id}\niam_token={self.iam_token}\ncloud_account={self.cloud_account}', file=sys.stderr)
-
-        logging.info(f'run test with cloud_id={self.cloud_id} folder_id={self.folder_id}')
+        print(
+            f'run test with\ncloud_id={self.cloud_id}\nfolder_id={self.folder_id}\n'
+            f'iam_token={self.iam_token}\ncloud_account={self.cloud_account}',
+            file=sys.stderr
+        )
 
     def separate_audit_logs(self, audit_data):
         result = audit_data.replace('\r\n', '\n')

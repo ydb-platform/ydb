@@ -901,12 +901,9 @@ Pear;15;33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    @pytest.mark.parametrize("pg_syntax", [False, True], ids=["yql_syntax", "pg_syntax"])
     @pytest.mark.parametrize("pg_types", [False, True], ids=["yql_types", "pg_types"])
-    def test_precompute_with_pg_binding(self, kikimr, s3, client, pg_syntax, pg_types, unique_prefix):
-        if pg_syntax and not pg_types:
-            pytest.skip("pg syntax is only supported with pg types")
-        test_suffix = "_{}_{}".format(1 if pg_syntax else 0, 1 if pg_types else 0)
+    def test_precompute_with_pg_binding(self, kikimr, s3, client, pg_types, unique_prefix):
+        test_suffix = "_{}".format(1 if pg_types else 0)
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -972,7 +969,7 @@ Pear;15;33'''
         )
 
         query_id = client.create_query(
-            "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS, pg_syntax=pg_syntax
+            "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS
         ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 

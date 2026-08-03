@@ -1,0 +1,13 @@
+$structVariantType = Variant<a: Int32, b: String>;
+
+$data = [
+    <|aValue: 1,  bValue: "world"|>,
+    <|aValue: 42, bValue: "moon"|>,
+    <|aValue: 7,  bValue: "hello"|>,
+    <|aValue: 99, bValue: "yql"|>,
+];
+
+SELECT
+    Variant(aValue, "a", $structVariantType) AS aAlternative,
+    Variant(bValue, "b", $structVariantType) AS bAlternative
+FROM as_table($data);

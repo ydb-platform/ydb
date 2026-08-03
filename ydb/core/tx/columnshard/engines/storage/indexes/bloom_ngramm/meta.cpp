@@ -157,7 +157,7 @@ public:
 
     template <class TFiller>
     void FillNGrammHashes(const ui32 nGrammSize, const std::shared_ptr<arrow::Array>& array, TFiller& fillData) {
-        AFL_VERIFY(array->type_id() == arrow::utf8()->id())("id", array->type()->ToString());
+        AFL_VERIFY(array->type_id() == arrow::utf8()->id() || array->type_id() == arrow::binary()->id())("id", array->type()->ToString());
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
             using T = typename TWrap::T;
@@ -200,7 +200,7 @@ void VisitAllChunksWithBuilder(
                 [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
                     builder.FillNGrammHashes(nGrammSize, arr, filler);
                 },
-                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
+                [&](const NArrow::NAccessor::TJsonValueView& data, const ui32 /*hashBase*/) {
                     auto view = data.GetScalarOptional();
                     if (!view.has_value()) {
                         return;
@@ -274,7 +274,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
                 [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
                     builder.FillNGrammHashes(ngramSize, arr, storage);
                 },
-                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
+                [&](const NArrow::NAccessor::TJsonValueView& data, const ui32 /*hashBase*/) {
                     auto view = data.GetScalarOptional();
                     if (!view.has_value()) {
                         return;

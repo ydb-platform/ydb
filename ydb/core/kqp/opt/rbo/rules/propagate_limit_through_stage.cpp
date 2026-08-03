@@ -45,6 +45,10 @@ TIntrusivePtr<TOpLimit> EmitFinalAndIntermediateLimits(const TIntrusivePtr<TOpLi
 
 } // namespace
 
+bool TPropagateLimitThroughStageRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Limit;
+}
+
 TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
@@ -75,7 +79,7 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
         const auto read = CastOperator<TOpRead>(limitInput);
         const auto limitCond = limit->GetLimitCond().Node->ChildPtr(1);
         return MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda, limitCond,
-                                      read->GetRanges(), read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
+                                      read->RangeInfo, read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
     }
     return input;
 }

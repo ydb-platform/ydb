@@ -34,6 +34,8 @@ SRCS(
     runnable.h
     sort.cpp
     sort.h
+    strong_alias.cpp
+    strong_alias.h
     swap_bytes.cpp
     swap_bytes.h
     time_provider.h
@@ -70,6 +72,7 @@ IF (OPENSOURCE_PROJECT != "yt")
         docs
         failure_injector
         fetch
+        json
         log
         memory_profiling
         network

@@ -1,7 +1,8 @@
 #include "json_value_path.h"
+#include "types.h"
 
 #include <arrow/array/array_binary.h>
-#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
+#include <ydb/core/formats/arrow/accessor/common/json_value_view.h>
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/minikql/jsonpath/jsonpath.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -120,9 +121,11 @@ TString ToSubcolumnName(TStringBuf path) {
     return result;
 }
 
-TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, const std::optional<ui64>& cookie)
+TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, const EValueType valueType,
+    const std::optional<ui64>& cookie)
     : ChunkedArrayAccessor(std::move(accessor))
     , RemainingPath(std::move(remainingPath))
+    , ValueType(valueType)
     , Cookie(cookie) {
     if (!RemainingPath.empty()) {
         NYql::TIssues issues;
@@ -138,79 +141,61 @@ void TJsonPathAccessor::VisitValues(const TValuesVisitor& visitor) const {
 
     ChunkedArrayAccessor->VisitValues([&](std::shared_ptr<arrow::Array> arr) {
         AFL_VERIFY(arr);
-        AFL_VERIFY(arr->type_id() == arrow::binary()->id());
-        const auto& binaryArray = static_cast<const arrow::BinaryArray&>(*arr);
-        for (int64_t i = 0; i < binaryArray.length(); ++i) {
-            auto value = binaryArray.Value(i);
-            if (value.empty()) {
+        for (int64_t i = 0; i < arr->length(); ++i) {
+            if (arr->IsNull(i)) {
                 visitor(std::nullopt);
                 continue;
             }
 
-            TStringBuf binaryJsonBuffer(value.data(), value.size());
-            AFL_VERIFY(NBinaryJson::IsValidBinaryJson(binaryJsonBuffer));
-            auto reader = NBinaryJson::TBinaryJsonReader::Make(binaryJsonBuffer);
-            auto rootCursor = reader->GetRootCursor();
-            if (rootCursor.GetType() == NBinaryJson::EContainerType::TopLevelScalar) {
-                if (RemainingPathPtr) {
-                    visitor(std::nullopt);
-                    continue;
-                }
-                switch (rootCursor.GetElement(0).GetType()) {
-                    case NBinaryJson::EEntryType::String:
-                        visitor(rootCursor.GetElement(0).GetString());
-                        break;
-                    case NBinaryJson::EEntryType::Number:
-                        visitor(TBinaryJsonValueView::JsonNumberToString(rootCursor.GetElement(0).GetNumber()));
-                        break;
-                    case NBinaryJson::EEntryType::BoolTrue:
-                        visitor("true");
-                        break;
-                    case NBinaryJson::EEntryType::BoolFalse:
-                        visitor("false");
-                        break;
-                    default:
-                        visitor(std::nullopt);
-                        break;
-                }
-            } else if (RemainingPathPtr) {
-                auto binaryJsonRoot = NYql::NJsonPath::TValue(reader->GetRootCursor());
-                const auto result = NYql::NJsonPath::ExecuteJsonPath(RemainingPathPtr, binaryJsonRoot, NYql::NJsonPath::TVariablesMap{}, nullptr);
-                if (result.IsError()) {
-                    visitor(std::nullopt);
-                    continue;
-                }
-                const auto& nodes = result.GetNodes();
-                if (nodes.size() != 1) {
-                    // TODO: Find case when it is needed and maybe support
-                    visitor(std::nullopt);
-                    continue;
-                }
-                const auto& node = nodes[0];
-                switch (node.GetType()) {
-                    case NYql::NJsonPath::EValueType::Bool:
-                        visitor(node.GetBool() ? "true" : "false");
-                        break;
-                    case NYql::NJsonPath::EValueType::Number:
-                        visitor(::ToString(node.GetNumber()));
-                        break;
-                    case NYql::NJsonPath::EValueType::String:
-                        visitor(node.GetString());
-                        break;
-                    case NYql::NJsonPath::EValueType::Null:
-                    case NYql::NJsonPath::EValueType::Object:
-                    case NYql::NJsonPath::EValueType::Array:
-                        visitor(std::nullopt);
-                        break;
-                }
-            } else {
+            const auto value = ArrayElementToJsonValueView(*arr, i, ValueType);
+            if (auto scalar = value.GetScalarOptional()) {
+                // A scalar has no sub-structure, so a remaining path cannot resolve against it.
+                visitor(RemainingPathPtr ? std::nullopt : scalar);
+                continue;
+            }
+
+            const auto blob = value.GetBinaryJsonBlobOptional();
+            if (!RemainingPathPtr || !blob) {
                 visitor(std::nullopt);
+                continue;
+            }
+
+            auto reader = NBinaryJson::TBinaryJsonReader::Make(*blob);
+            auto binaryJsonRoot = NYql::NJsonPath::TValue(reader->GetRootCursor());
+            const auto result = NYql::NJsonPath::ExecuteJsonPath(RemainingPathPtr, binaryJsonRoot, NYql::NJsonPath::TVariablesMap{}, nullptr);
+            if (result.IsError()) {
+                visitor(std::nullopt);
+                continue;
+            }
+            const auto& nodes = result.GetNodes();
+            if (nodes.size() != 1) {
+                // TODO: Find case when it is needed and maybe support
+                visitor(std::nullopt);
+                continue;
+            }
+            const auto& node = nodes[0];
+            switch (node.GetType()) {
+                case NYql::NJsonPath::EValueType::Bool:
+                    visitor(node.GetBool() ? "true" : "false");
+                    break;
+                case NYql::NJsonPath::EValueType::Number:
+                    visitor(::ToString(node.GetNumber()));
+                    break;
+                case NYql::NJsonPath::EValueType::String:
+                    visitor(node.GetString());
+                    break;
+                case NYql::NJsonPath::EValueType::Null:
+                case NYql::NJsonPath::EValueType::Object:
+                case NYql::NJsonPath::EValueType::Array:
+                    visitor(std::nullopt);
+                    break;
             }
         }
     });
 }
 
-TConclusionStatus TJsonPathAccessorTrie::Insert(TJsonPathBuf jsonPath, std::shared_ptr<IChunkedArray> accessor, const std::optional<ui64>& cookie) {
+TConclusionStatus TJsonPathAccessorTrie::Insert(TJsonPathBuf jsonPath, std::shared_ptr<IChunkedArray> accessor, const EValueType valueType,
+    const std::optional<ui64>& cookie) {
     auto splittedPathResult = NSubColumns::SplitJsonPath(jsonPath, NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
     if (!splittedPathResult.IsSuccess()) {
         return splittedPathResult;
@@ -232,6 +217,7 @@ TConclusionStatus TJsonPathAccessorTrie::Insert(TJsonPathBuf jsonPath, std::shar
     AFL_VERIFY(!currentNode->Accessor);
 
     currentNode->Accessor = std::move(accessor);
+    currentNode->ValueType = valueType;
     currentNode->Cookie = cookie;
 
     return TConclusionStatus::Success();
@@ -252,13 +238,15 @@ TConclusion<std::shared_ptr<TJsonPathAccessor>> TJsonPathAccessorTrie::GetAccess
         } else if (currentNode->Accessor || currentNode->Cookie) {
             auto remainingPath = jsonPath.substr(startPositions[i]);
             // strict is required, because there is a memory problem in NYql::NJsonPath::ExecuteJsonPath with lax and BinaryJson
-            return std::make_shared<TJsonPathAccessor>(currentNode->Accessor, remainingPath.empty() ? TString{} : "strict $" + TString(remainingPath.data(), remainingPath.size()), currentNode->Cookie);
+            return std::make_shared<TJsonPathAccessor>(currentNode->Accessor,
+                remainingPath.empty() ? TString{} : "strict $" + TString(remainingPath.data(), remainingPath.size()),
+                currentNode->ValueType, currentNode->Cookie);
         } else {
-            return std::make_shared<TJsonPathAccessor>(nullptr, TString{});
+            return std::make_shared<TJsonPathAccessor>(nullptr, TString{}, EValueType::BinaryJson);
         }
     }
 
-    return std::make_shared<TJsonPathAccessor>(currentNode->Accessor, TString{}, currentNode->Cookie);
+    return std::make_shared<TJsonPathAccessor>(currentNode->Accessor, TString{}, currentNode->ValueType, currentNode->Cookie);
 }
 
 } // namespace NKikimr::NArrow::NAccessor::NSubColumns

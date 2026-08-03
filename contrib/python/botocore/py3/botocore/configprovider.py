@@ -168,6 +168,30 @@ BOTOCORE_DEFAUT_SESSION_VARIABLES = {
         None,
         None,
     ),
+    'request_checksum_calculation': (
+        'request_checksum_calculation',
+        'AWS_REQUEST_CHECKSUM_CALCULATION',
+        "when_supported",
+        None,
+    ),
+    'response_checksum_validation': (
+        'response_checksum_validation',
+        'AWS_RESPONSE_CHECKSUM_VALIDATION',
+        "when_supported",
+        None,
+    ),
+    'account_id_endpoint_mode': (
+        'account_id_endpoint_mode',
+        'AWS_ACCOUNT_ID_ENDPOINT_MODE',
+        'preferred',
+        None,
+    ),
+    'disable_host_prefix_injection': (
+        'disable_host_prefix_injection',
+        'AWS_DISABLE_HOST_PREFIX_INJECTION',
+        None,
+        utils.ensure_boolean,
+    ),
 }
 
 # Evaluate AWS_STS_REGIONAL_ENDPOINTS settings
@@ -468,7 +492,7 @@ class ConfigValueStore:
 
     def get_config_variable(self, logical_name):
         """
-        Retrieve the value associeated with the specified logical_name
+        Retrieve the value associated with the specified logical_name
         from the corresponding provider. If no value is found None will
         be returned.
 

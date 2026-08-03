@@ -88,6 +88,9 @@ ELSE()
         WriteTzTimestamp64Native
         GetWrittenBytes
         FillZero
+        FillOptionalZero
+        FillNull
+        FillOptionalNull
     )
 ENDIF()
 ELSE()

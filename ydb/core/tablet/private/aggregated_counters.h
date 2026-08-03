@@ -18,14 +18,9 @@ namespace NKikimr::NPrivate {
 using TCountersVector = TVector<::NMonitoring::TDynamicCounters::TCounterPtr>;
 
 struct THistogramCounter {
-    TVector<TTabletPercentileCounter::TRangeDef> Ranges;
-    TCountersVector Values;
     NMonitoring::THistogramPtr Histogram;
 
-    THistogramCounter(
-        const TVector<TTabletPercentileCounter::TRangeDef>& ranges,
-        TCountersVector&& values,
-        NMonitoring::THistogramPtr histogram);
+    THistogramCounter(NMonitoring::THistogramPtr histogram);
 
     void Clear();
     void IncrementFor(ui64 value);
@@ -138,9 +133,9 @@ private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
 
     // monitoring counters holders, updated only during recalculation
-    TVector<TCountersVector> PercentileCounters;    // old style (ranges);
-    TVector<NMonitoring::THistogramPtr> Histograms; // new style (bins);
+    TVector<NMonitoring::THistogramPtr> Histograms;
     TVector<bool> IsDerivative;
+    TVector<bool> IsHistogramAggregate;
 
     // per percentile counter bounds.
     TVector<NMonitoring::TBucketBounds> BucketBounds;

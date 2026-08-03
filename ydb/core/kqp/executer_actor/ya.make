@@ -21,7 +21,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/library/json_index

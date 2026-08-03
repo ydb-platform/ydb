@@ -1,3 +1,4 @@
+#include <yt/yt/library/tracing/jaeger/config.h>
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
 #include <yt/yt/core/concurrency/scheduler_api.h>
@@ -103,7 +104,7 @@ int main(int argc, char* argv[])
         bool test = false;
         auto usage = Format("usage: %v [--test] COLLECTOR_ENDPOINTS", argv[0]);
 
-        if (argc >= 2 && argv[1] == TString("--test")) {
+        if (argc >= 2 && argv[1] == TStringBuf("--test")) {
             test = true;
             argv++;
             argc--;

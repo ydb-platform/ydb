@@ -37,7 +37,7 @@ protected:
     void WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerator& workloadGen, const int type);
     void PrintWindowStats(int windowIt);
 
-    std::unique_ptr<NYdb::TDriver> Driver;
+    std::unique_ptr<TScopedDriver> Driver;
     std::unique_ptr<NTable::TTableClient> TableClient;
     std::unique_ptr<NQuery::TQueryClient> QueryClient;
 
@@ -97,7 +97,7 @@ protected:
 
     NYdbWorkload::TWorkloadParams::ECommandType CommandType;
     NYdbWorkload::TWorkloadParams& Params;
-    THolder<NYdb::TDriver> Driver;
+    THolder<TScopedDriver> Driver;
     THolder<NTable::TTableClient> TableClient;
     THolder<NTopic::TTopicClient> TopicClient;
     THolder<NScheme::TSchemeClient> SchemeClient;

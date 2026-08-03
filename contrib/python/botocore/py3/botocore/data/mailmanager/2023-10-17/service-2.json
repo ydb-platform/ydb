@@ -48,6 +48,41 @@
       "documentation":"<p>Creates a subscription for an Add On representing the acceptance of its terms of use and additional pricing. The subscription can then be used to create an instance for use in rule sets or traffic policies.</p>",
       "idempotent":true
     },
+    "CreateAddressList":{
+      "name":"CreateAddressList",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"CreateAddressListRequest"},
+      "output":{"shape":"CreateAddressListResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ConflictException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Creates a new address list.</p>",
+      "idempotent":true
+    },
+    "CreateAddressListImportJob":{
+      "name":"CreateAddressListImportJob",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"CreateAddressListImportJobRequest"},
+      "output":{"shape":"CreateAddressListImportJobResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Creates an import job for an address list.</p>",
+      "idempotent":true
+    },
     "CreateArchive":{
       "name":"CreateArchive",
       "http":{
@@ -160,6 +195,22 @@
       "documentation":"<p>Deletes an Add On subscription.</p>",
       "idempotent":true
     },
+    "DeleteAddressList":{
+      "name":"DeleteAddressList",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DeleteAddressListRequest"},
+      "output":{"shape":"DeleteAddressListResponse"},
+      "errors":[
+        {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Deletes an address list.</p>",
+      "idempotent":true
+    },
     "DeleteArchive":{
       "name":"DeleteArchive",
       "http":{
@@ -240,6 +291,23 @@
       "documentation":"<p>Delete a traffic policy resource.</p>",
       "idempotent":true
     },
+    "DeregisterMemberFromAddressList":{
+      "name":"DeregisterMemberFromAddressList",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DeregisterMemberFromAddressListRequest"},
+      "output":{"shape":"DeregisterMemberFromAddressListResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Removes a member from an address list.</p>",
+      "idempotent":true
+    },
     "GetAddonInstance":{
       "name":"GetAddonInstance",
       "http":{
@@ -267,6 +335,38 @@
         {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Gets detailed information about an Add On subscription.</p>"
+    },
+    "GetAddressList":{
+      "name":"GetAddressList",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetAddressListRequest"},
+      "output":{"shape":"GetAddressListResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Fetch attributes of an address list.</p>"
+    },
+    "GetAddressListImportJob":{
+      "name":"GetAddressListImportJob",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetAddressListImportJobRequest"},
+      "output":{"shape":"GetAddressListImportJobResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Fetch attributes of an import job.</p>"
     },
     "GetArchive":{
       "name":"GetArchive",
@@ -374,6 +474,22 @@
       ],
       "documentation":"<p>Fetch ingress endpoint resource attributes.</p>"
     },
+    "GetMemberOfAddressList":{
+      "name":"GetMemberOfAddressList",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetMemberOfAddressListRequest"},
+      "output":{"shape":"GetMemberOfAddressListResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Fetch attributes of a member in an address list.</p>"
+    },
     "GetRelay":{
       "name":"GetRelay",
       "http":{
@@ -442,6 +558,37 @@
       ],
       "documentation":"<p>Lists all Add On subscriptions in your account.</p>"
     },
+    "ListAddressListImportJobs":{
+      "name":"ListAddressListImportJobs",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListAddressListImportJobsRequest"},
+      "output":{"shape":"ListAddressListImportJobsResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Lists jobs for an address list.</p>"
+    },
+    "ListAddressLists":{
+      "name":"ListAddressLists",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListAddressListsRequest"},
+      "output":{"shape":"ListAddressListsResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Lists address lists for this account.</p>"
+    },
     "ListArchiveExports":{
       "name":"ListArchiveExports",
       "http":{
@@ -502,6 +649,22 @@
       ],
       "documentation":"<p>List all ingress endpoint resources.</p>"
     },
+    "ListMembersOfAddressList":{
+      "name":"ListMembersOfAddressList",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListMembersOfAddressListRequest"},
+      "output":{"shape":"ListMembersOfAddressListResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Lists members of an address list.</p>"
+    },
     "ListRelays":{
       "name":"ListRelays",
       "http":{
@@ -555,6 +718,43 @@
       ],
       "documentation":"<p>List traffic policy resources.</p>"
     },
+    "RegisterMemberToAddressList":{
+      "name":"RegisterMemberToAddressList",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"RegisterMemberToAddressListRequest"},
+      "output":{"shape":"RegisterMemberToAddressListResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Adds a member to an address list.</p>",
+      "idempotent":true
+    },
+    "StartAddressListImportJob":{
+      "name":"StartAddressListImportJob",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"StartAddressListImportJobRequest"},
+      "output":{"shape":"StartAddressListImportJobResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ConflictException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Starts an import job for an address list.</p>",
+      "idempotent":true
+    },
     "StartArchiveExport":{
       "name":"StartArchiveExport",
       "http":{
@@ -589,6 +789,24 @@
         {"shape":"ThrottlingException"}
       ],
       "documentation":"<p>Initiates a search across emails in the specified archive.</p>"
+    },
+    "StopAddressListImportJob":{
+      "name":"StopAddressListImportJob",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"StopAddressListImportJobRequest"},
+      "output":{"shape":"StopAddressListImportJobResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Stops an ongoing import job for an address list.</p>",
+      "idempotent":true
     },
     "StopArchiveExport":{
       "name":"StopArchiveExport",
@@ -849,6 +1067,84 @@
     "AddonSubscriptions":{
       "type":"list",
       "member":{"shape":"AddonSubscription"}
+    },
+    "Address":{
+      "type":"string",
+      "max":320,
+      "min":3,
+      "sensitive":true
+    },
+    "AddressFilter":{
+      "type":"structure",
+      "members":{
+        "AddressPrefix":{
+          "shape":"AddressPrefix",
+          "documentation":"<p>Filter to limit the results to addresses having the provided prefix.</p>"
+        }
+      },
+      "documentation":"<p>Filtering options for ListMembersOfAddressList operation.</p>"
+    },
+    "AddressList":{
+      "type":"structure",
+      "required":[
+        "AddressListArn",
+        "AddressListId",
+        "AddressListName",
+        "CreatedTimestamp",
+        "LastUpdatedTimestamp"
+      ],
+      "members":{
+        "AddressListArn":{
+          "shape":"AddressListArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the address list.</p>"
+        },
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The identifier of the address list.</p>"
+        },
+        "AddressListName":{
+          "shape":"AddressListName",
+          "documentation":"<p>The user-friendly name of the address list.</p>"
+        },
+        "CreatedTimestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the address list was created.</p>"
+        },
+        "LastUpdatedTimestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the address list was last updated.</p>"
+        }
+      },
+      "documentation":"<p>An address list contains a list of emails and domains that are used in MailManager Ingress endpoints and Rules for email management.</p>"
+    },
+    "AddressListArn":{"type":"string"},
+    "AddressListId":{
+      "type":"string",
+      "max":255,
+      "min":1,
+      "pattern":"^[a-zA-Z0-9-]+$"
+    },
+    "AddressListName":{
+      "type":"string",
+      "max":255,
+      "min":1,
+      "pattern":"^[a-zA-Z0-9_.-]+$"
+    },
+    "AddressLists":{
+      "type":"list",
+      "member":{"shape":"AddressList"}
+    },
+    "AddressPageSize":{
+      "type":"integer",
+      "box":true,
+      "max":1000,
+      "min":1
+    },
+    "AddressPrefix":{
+      "type":"string",
+      "max":320,
+      "min":1,
+      "sensitive":true
     },
     "Analysis":{
       "type":"structure",
@@ -1145,6 +1441,79 @@
         }
       }
     },
+    "CreateAddressListImportJobRequest":{
+      "type":"structure",
+      "required":[
+        "AddressListId",
+        "ImportDataFormat",
+        "Name"
+      ],
+      "members":{
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The unique identifier of the address list for importing addresses to.</p>"
+        },
+        "ClientToken":{
+          "shape":"IdempotencyToken",
+          "documentation":"<p>A unique token that Amazon SES uses to recognize subsequent retries of the same request.</p>",
+          "idempotencyToken":true
+        },
+        "ImportDataFormat":{
+          "shape":"ImportDataFormat",
+          "documentation":"<p>The format of the input for an import job.</p>"
+        },
+        "Name":{
+          "shape":"JobName",
+          "documentation":"<p>A user-friendly name for the import job.</p>"
+        }
+      }
+    },
+    "CreateAddressListImportJobResponse":{
+      "type":"structure",
+      "required":[
+        "JobId",
+        "PreSignedUrl"
+      ],
+      "members":{
+        "JobId":{
+          "shape":"JobId",
+          "documentation":"<p>The identifier of the created import job.</p>"
+        },
+        "PreSignedUrl":{
+          "shape":"PreSignedUrl",
+          "documentation":"<p>The pre-signed URL target for uploading the input file.</p>"
+        }
+      }
+    },
+    "CreateAddressListRequest":{
+      "type":"structure",
+      "required":["AddressListName"],
+      "members":{
+        "AddressListName":{
+          "shape":"AddressListName",
+          "documentation":"<p>A user-friendly name for the address list.</p>"
+        },
+        "ClientToken":{
+          "shape":"IdempotencyToken",
+          "documentation":"<p>A unique token that Amazon SES uses to recognize subsequent retries of the same request.</p>",
+          "idempotencyToken":true
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>The tags used to organize, track, or control access for the resource. For example, { \"tags\": {\"key1\":\"value1\", \"key2\":\"value2\"} }.</p>"
+        }
+      }
+    },
+    "CreateAddressListResponse":{
+      "type":"structure",
+      "required":["AddressListId"],
+      "members":{
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The identifier of the created address list.</p>"
+        }
+      }
+    },
     "CreateArchiveRequest":{
       "type":"structure",
       "required":["ArchiveName"],
@@ -1205,6 +1574,10 @@
         "IngressPointName":{
           "shape":"IngressPointName",
           "documentation":"<p>A user friendly name for an ingress endpoint resource.</p>"
+        },
+        "NetworkConfiguration":{
+          "shape":"NetworkConfiguration",
+          "documentation":"<p>Specifies the network configuration for the ingress point. This allows you to create an IPv4-only, Dual-Stack, or PrivateLink type of ingress point. If not specified, the default network type is IPv4-only. </p>"
         },
         "RuleSetId":{
           "shape":"RuleSetId",
@@ -1391,6 +1764,21 @@
       "members":{
       }
     },
+    "DeleteAddressListRequest":{
+      "type":"structure",
+      "required":["AddressListId"],
+      "members":{
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The identifier of an existing address list resource to delete.</p>"
+        }
+      }
+    },
+    "DeleteAddressListResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
     "DeleteArchiveRequest":{
       "type":"structure",
       "required":["ArchiveId"],
@@ -1500,7 +1888,7 @@
       "members":{
         "ActionFailurePolicy":{
           "shape":"ActionFailurePolicy",
-          "documentation":"<p>A policy that states what to do in the case of failure. The action will fail if there are configuration errors. For example, the specified application has been deleted or the role lacks necessary permissions to call the qbusiness:BatchPutDocument API.</p>"
+          "documentation":"<p>A policy that states what to do in the case of failure. The action will fail if there are configuration errors. For example, the specified application has been deleted or the role lacks necessary permissions to call the <code>qbusiness:BatchPutDocument</code> API.</p>"
         },
         "ApplicationId":{
           "shape":"QBusinessApplicationId",
@@ -1512,10 +1900,32 @@
         },
         "RoleArn":{
           "shape":"IamRoleArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM Role to use while delivering to Amazon Q Business. This role must have access to the qbusiness:BatchPutDocument API for the given application and index.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM Role to use while delivering to Amazon Q Business. This role must have access to the <code>qbusiness:BatchPutDocument</code> API for the given application and index.</p>"
         }
       },
       "documentation":"<p>The action to deliver incoming emails to an Amazon Q Business application for indexing.</p>"
+    },
+    "DeregisterMemberFromAddressListRequest":{
+      "type":"structure",
+      "required":[
+        "Address",
+        "AddressListId"
+      ],
+      "members":{
+        "Address":{
+          "shape":"Address",
+          "documentation":"<p>The address to be removed from the address list.</p>"
+        },
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The unique identifier of the address list to remove the address from.</p>"
+        }
+      }
+    },
+    "DeregisterMemberFromAddressListResponse":{
+      "type":"structure",
+      "members":{
+      }
     },
     "Double":{
       "type":"double",
@@ -1683,6 +2093,120 @@
         "CreatedTimestamp":{
           "shape":"Timestamp",
           "documentation":"<p>The timestamp of when the Add On subscription was created.</p>"
+        }
+      }
+    },
+    "GetAddressListImportJobRequest":{
+      "type":"structure",
+      "required":["JobId"],
+      "members":{
+        "JobId":{
+          "shape":"JobId",
+          "documentation":"<p>The identifier of the import job that needs to be retrieved.</p>"
+        }
+      }
+    },
+    "GetAddressListImportJobResponse":{
+      "type":"structure",
+      "required":[
+        "AddressListId",
+        "CreatedTimestamp",
+        "ImportDataFormat",
+        "JobId",
+        "Name",
+        "PreSignedUrl",
+        "Status"
+      ],
+      "members":{
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The unique identifier of the address list the import job was created for.</p>"
+        },
+        "CompletedTimestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the import job was completed.</p>"
+        },
+        "CreatedTimestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the import job was created.</p>"
+        },
+        "Error":{
+          "shape":"ErrorMessage",
+          "documentation":"<p>The reason for failure of an import job.</p>"
+        },
+        "FailedItemsCount":{
+          "shape":"JobItemsCount",
+          "documentation":"<p>The number of input addresses that failed to be imported into the address list.</p>"
+        },
+        "ImportDataFormat":{
+          "shape":"ImportDataFormat",
+          "documentation":"<p>The format of the input for an import job.</p>"
+        },
+        "ImportedItemsCount":{
+          "shape":"JobItemsCount",
+          "documentation":"<p>The number of input addresses successfully imported into the address list.</p>"
+        },
+        "JobId":{
+          "shape":"JobId",
+          "documentation":"<p>The identifier of the import job.</p>"
+        },
+        "Name":{
+          "shape":"JobName",
+          "documentation":"<p>A user-friendly name for the import job.</p>"
+        },
+        "PreSignedUrl":{
+          "shape":"PreSignedUrl",
+          "documentation":"<p>The pre-signed URL target for uploading the input file.</p>"
+        },
+        "StartTimestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the import job was started.</p>"
+        },
+        "Status":{
+          "shape":"ImportJobStatus",
+          "documentation":"<p>The status of the import job.</p>"
+        }
+      }
+    },
+    "GetAddressListRequest":{
+      "type":"structure",
+      "required":["AddressListId"],
+      "members":{
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The identifier of an existing address list resource to be retrieved.</p>"
+        }
+      }
+    },
+    "GetAddressListResponse":{
+      "type":"structure",
+      "required":[
+        "AddressListArn",
+        "AddressListId",
+        "AddressListName",
+        "CreatedTimestamp",
+        "LastUpdatedTimestamp"
+      ],
+      "members":{
+        "AddressListArn":{
+          "shape":"AddressListArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the address list resource.</p>"
+        },
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The identifier of the address list resource.</p>"
+        },
+        "AddressListName":{
+          "shape":"AddressListName",
+          "documentation":"<p>A user-friendly name for the address list resource.</p>"
+        },
+        "CreatedTimestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date of when then address list was created.</p>"
+        },
+        "LastUpdatedTimestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date of when the address list was last updated.</p>"
         }
       }
     },
@@ -1944,6 +2468,10 @@
           "shape":"Timestamp",
           "documentation":"<p>The timestamp of when the ingress endpoint was last updated.</p>"
         },
+        "NetworkConfiguration":{
+          "shape":"NetworkConfiguration",
+          "documentation":"<p>The network configuration for the ingress point.</p>"
+        },
         "RuleSetId":{
           "shape":"RuleSetId",
           "documentation":"<p>The identifier of a rule set resource associated with the ingress endpoint.</p>"
@@ -1959,6 +2487,40 @@
         "Type":{
           "shape":"IngressPointType",
           "documentation":"<p>The type of ingress endpoint.</p>"
+        }
+      }
+    },
+    "GetMemberOfAddressListRequest":{
+      "type":"structure",
+      "required":[
+        "Address",
+        "AddressListId"
+      ],
+      "members":{
+        "Address":{
+          "shape":"Address",
+          "documentation":"<p>The address to be retrieved from the address list.</p>"
+        },
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The unique identifier of the address list to retrieve the address from.</p>"
+        }
+      }
+    },
+    "GetMemberOfAddressListResponse":{
+      "type":"structure",
+      "required":[
+        "Address",
+        "CreatedTimestamp"
+      ],
+      "members":{
+        "Address":{
+          "shape":"Address",
+          "documentation":"<p>The address retrieved from the address list.</p>"
+        },
+        "CreatedTimestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the address was created.</p>"
         }
       }
     },
@@ -2136,6 +2698,111 @@
       "max":128,
       "min":1
     },
+    "ImportDataFormat":{
+      "type":"structure",
+      "required":["ImportDataType"],
+      "members":{
+        "ImportDataType":{
+          "shape":"ImportDataType",
+          "documentation":"<p>The type of file that would be passed as an input for the address list import job.</p>"
+        }
+      },
+      "documentation":"<p>The import data format contains the specifications of the input file that would be passed to the address list import job.</p>"
+    },
+    "ImportDataType":{
+      "type":"string",
+      "enum":[
+        "CSV",
+        "JSON"
+      ]
+    },
+    "ImportJob":{
+      "type":"structure",
+      "required":[
+        "AddressListId",
+        "CreatedTimestamp",
+        "ImportDataFormat",
+        "JobId",
+        "Name",
+        "PreSignedUrl",
+        "Status"
+      ],
+      "members":{
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The unique identifier of the address list the import job was created for.</p>"
+        },
+        "CompletedTimestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the import job was completed.</p>"
+        },
+        "CreatedTimestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the import job was created.</p>"
+        },
+        "Error":{
+          "shape":"ErrorMessage",
+          "documentation":"<p>The reason for failure of an import job.</p>"
+        },
+        "FailedItemsCount":{
+          "shape":"JobItemsCount",
+          "documentation":"<p>The number of addresses in the input that failed to get imported into address list.</p>"
+        },
+        "ImportDataFormat":{
+          "shape":"ImportDataFormat",
+          "documentation":"<p>The format of the input for the import job.</p>"
+        },
+        "ImportedItemsCount":{
+          "shape":"JobItemsCount",
+          "documentation":"<p>The number of addresses in the input that were successfully imported into the address list.</p>"
+        },
+        "JobId":{
+          "shape":"JobId",
+          "documentation":"<p>The identifier of the import job.</p>"
+        },
+        "Name":{
+          "shape":"JobName",
+          "documentation":"<p>A user-friendly name for the import job.</p>"
+        },
+        "PreSignedUrl":{
+          "shape":"PreSignedUrl",
+          "documentation":"<p>The pre-signed URL target for uploading the input file.</p>"
+        },
+        "StartTimestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the import job was started.</p>"
+        },
+        "Status":{
+          "shape":"ImportJobStatus",
+          "documentation":"<p>The status of the import job.</p>"
+        }
+      },
+      "documentation":"<p>Details about an import job.</p>"
+    },
+    "ImportJobStatus":{
+      "type":"string",
+      "enum":[
+        "CREATED",
+        "PROCESSING",
+        "COMPLETED",
+        "FAILED",
+        "STOPPED"
+      ]
+    },
+    "ImportJobs":{
+      "type":"list",
+      "member":{"shape":"ImportJob"}
+    },
+    "IngressAddressListArnList":{
+      "type":"list",
+      "member":{"shape":"AddressListArn"},
+      "max":1,
+      "min":1
+    },
+    "IngressAddressListEmailAttribute":{
+      "type":"string",
+      "enum":["RECIPIENT"]
+    },
     "IngressAnalysis":{
       "type":"structure",
       "required":[
@@ -2185,6 +2852,10 @@
         "Analysis":{
           "shape":"IngressAnalysis",
           "documentation":"<p>The structure type for a boolean condition stating the Add On ARN and its returned value.</p>"
+        },
+        "IsInAddressList":{
+          "shape":"IngressIsInAddressList",
+          "documentation":"<p>The structure type for a boolean condition that provides the address lists to evaluate incoming traffic on.</p>"
         }
       },
       "documentation":"<p>The union type representing the allowed types of operands for a boolean condition.</p>",
@@ -2234,6 +2905,62 @@
         }
       },
       "documentation":"<p>The union type representing the allowed types for the left hand side of an IP condition.</p>"
+    },
+    "IngressIpv6Attribute":{
+      "type":"string",
+      "enum":["SENDER_IPV6"]
+    },
+    "IngressIpv6Expression":{
+      "type":"structure",
+      "required":[
+        "Evaluate",
+        "Operator",
+        "Values"
+      ],
+      "members":{
+        "Evaluate":{
+          "shape":"IngressIpv6ToEvaluate",
+          "documentation":"<p>The left hand side argument of an IPv6 condition expression.</p>"
+        },
+        "Operator":{
+          "shape":"IngressIpOperator",
+          "documentation":"<p>The matching operator for an IPv6 condition expression.</p>"
+        },
+        "Values":{
+          "shape":"Ipv6Cidrs",
+          "documentation":"<p>The right hand side argument of an IPv6 condition expression.</p>"
+        }
+      },
+      "documentation":"<p>The union type representing the allowed types for the left hand side of an IPv6 condition.</p>"
+    },
+    "IngressIpv6ToEvaluate":{
+      "type":"structure",
+      "members":{
+        "Attribute":{
+          "shape":"IngressIpv6Attribute",
+          "documentation":"<p>An enum type representing the allowed attribute types for an IPv6 condition.</p>"
+        }
+      },
+      "documentation":"<p>The structure for an IPv6 based condition matching on the incoming mail.</p>",
+      "union":true
+    },
+    "IngressIsInAddressList":{
+      "type":"structure",
+      "required":[
+        "AddressLists",
+        "Attribute"
+      ],
+      "members":{
+        "AddressLists":{
+          "shape":"IngressAddressListArnList",
+          "documentation":"<p>The address lists that will be used for evaluation.</p>"
+        },
+        "Attribute":{
+          "shape":"IngressAddressListEmailAttribute",
+          "documentation":"<p>The email attribute that needs to be evaluated against the address list.</p>"
+        }
+      },
+      "documentation":"<p>The address lists and the address list attribute value that is evaluated in a policy statement's conditional expression to either deny or block the incoming email.</p>"
     },
     "IngressPoint":{
       "type":"structure",
@@ -2396,6 +3123,10 @@
     "IngressStringToEvaluate":{
       "type":"structure",
       "members":{
+        "Analysis":{
+          "shape":"IngressAnalysis",
+          "documentation":"<p>The structure type for a string condition stating the Add On ARN and its returned value.</p>"
+        },
         "Attribute":{
           "shape":"IngressStringEmailAttribute",
           "documentation":"<p>The enum type representing the allowed attribute types for a string condition.</p>"
@@ -2460,6 +3191,13 @@
       "type":"integer",
       "box":true
     },
+    "IpType":{
+      "type":"string",
+      "enum":[
+        "IPV4",
+        "DUAL_STACK"
+      ]
+    },
     "Ipv4Cidr":{
       "type":"string",
       "pattern":"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/([0-9]|[12][0-9]|3[0-2])$"
@@ -2467,6 +3205,32 @@
     "Ipv4Cidrs":{
       "type":"list",
       "member":{"shape":"Ipv4Cidr"}
+    },
+    "Ipv6Cidr":{
+      "type":"string",
+      "max":49,
+      "min":0,
+      "pattern":"^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:))\\/(12[0-8]|1[0-1][0-9]|[1-9][0-9]|[0-9])$"
+    },
+    "Ipv6Cidrs":{
+      "type":"list",
+      "member":{"shape":"Ipv6Cidr"}
+    },
+    "JobId":{
+      "type":"string",
+      "max":255,
+      "min":1,
+      "pattern":"^[a-zA-Z0-9-]+$"
+    },
+    "JobItemsCount":{
+      "type":"integer",
+      "box":true
+    },
+    "JobName":{
+      "type":"string",
+      "max":255,
+      "min":1,
+      "pattern":"^[a-zA-Z0-9_.-]+$"
     },
     "KmsKeyArn":{
       "type":"string",
@@ -2523,6 +3287,65 @@
         "AddonSubscriptions":{
           "shape":"AddonSubscriptions",
           "documentation":"<p>The list of ingress endpoints.</p>"
+        },
+        "NextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>If NextToken is returned, there are more results available. The value of NextToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page.</p>"
+        }
+      }
+    },
+    "ListAddressListImportJobsRequest":{
+      "type":"structure",
+      "required":["AddressListId"],
+      "members":{
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The unique identifier of the address list for listing import jobs.</p>"
+        },
+        "NextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>If you received a pagination token from a previous call to this API, you can provide it here to continue paginating through the next page of results.</p>"
+        },
+        "PageSize":{
+          "shape":"PageSize",
+          "documentation":"<p>The maximum number of import jobs that are returned per call. You can use NextToken to retrieve the next page of jobs.</p>"
+        }
+      }
+    },
+    "ListAddressListImportJobsResponse":{
+      "type":"structure",
+      "required":["ImportJobs"],
+      "members":{
+        "ImportJobs":{
+          "shape":"ImportJobs",
+          "documentation":"<p>The list of import jobs.</p>"
+        },
+        "NextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>If NextToken is returned, there are more results available. The value of NextToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page.</p>"
+        }
+      }
+    },
+    "ListAddressListsRequest":{
+      "type":"structure",
+      "members":{
+        "NextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>If you received a pagination token from a previous call to this API, you can provide it here to continue paginating through the next page of results.</p>"
+        },
+        "PageSize":{
+          "shape":"PageSize",
+          "documentation":"<p>The maximum number of address list resources that are returned per call. You can use NextToken to retrieve the next page of address lists.</p>"
+        }
+      }
+    },
+    "ListAddressListsResponse":{
+      "type":"structure",
+      "required":["AddressLists"],
+      "members":{
+        "AddressLists":{
+          "shape":"AddressLists",
+          "documentation":"<p>The list of address lists.</p>"
         },
         "NextToken":{
           "shape":"PaginationToken",
@@ -2644,6 +3467,42 @@
         "IngressPoints":{
           "shape":"IngressPointsList",
           "documentation":"<p>The list of ingress endpoints.</p>"
+        },
+        "NextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>If NextToken is returned, there are more results available. The value of NextToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page.</p>"
+        }
+      }
+    },
+    "ListMembersOfAddressListRequest":{
+      "type":"structure",
+      "required":["AddressListId"],
+      "members":{
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The unique identifier of the address list to list the addresses from.</p>"
+        },
+        "Filter":{
+          "shape":"AddressFilter",
+          "documentation":"<p>Filter to be used to limit the results.</p>"
+        },
+        "NextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>If you received a pagination token from a previous call to this API, you can provide it here to continue paginating through the next page of results.</p>"
+        },
+        "PageSize":{
+          "shape":"AddressPageSize",
+          "documentation":"<p>The maximum number of address list members that are returned per call. You can use NextToken to retrieve the next page of members.</p>"
+        }
+      }
+    },
+    "ListMembersOfAddressListResponse":{
+      "type":"structure",
+      "required":["Addresses"],
+      "members":{
+        "Addresses":{
+          "shape":"SavedAddresses",
+          "documentation":"<p>The list of addresses.</p>"
         },
         "NextToken":{
           "shape":"PaginationToken",
@@ -2784,6 +3643,10 @@
     "Metadata":{
       "type":"structure",
       "members":{
+        "ConfigurationSet":{
+          "shape":"String",
+          "documentation":"<p>The name of the configuration set used when sent through a configuration set with archiving enabled.</p>"
+        },
         "IngressPointId":{
           "shape":"IngressPointId",
           "documentation":"<p>The ID of the ingress endpoint through which the email was received.</p>"
@@ -2799,6 +3662,22 @@
         "SenderIpAddress":{
           "shape":"SenderIpAddress",
           "documentation":"<p>The IP address of the host from which the email was received.</p>"
+        },
+        "SendingMethod":{
+          "shape":"String",
+          "documentation":"<p>The name of the API call used when sent through a configuration set with archiving enabled.</p>"
+        },
+        "SendingPool":{
+          "shape":"String",
+          "documentation":"<p>The name of the dedicated IP pool used when sent through a configuration set with archiving enabled.</p>"
+        },
+        "SourceArn":{
+          "shape":"String",
+          "documentation":"<p>Specifies the archived email source, identified by either a Rule Set's ARN with an Archive action, or a Configuration Set's Archive ARN.</p>"
+        },
+        "SourceIdentity":{
+          "shape":"String",
+          "documentation":"<p>The identity name used to authorize the sending action when sent through a configuration set with archiving enabled.</p>"
         },
         "Timestamp":{
           "shape":"Timestamp",
@@ -2829,6 +3708,21 @@
       "min":1,
       "pattern":"^[a-zA-Z0-9:_/+=,@.#-]+$"
     },
+    "NetworkConfiguration":{
+      "type":"structure",
+      "members":{
+        "PrivateNetworkConfiguration":{
+          "shape":"PrivateNetworkConfiguration",
+          "documentation":"<p>Specifies the network configuration for the private ingress point.</p>"
+        },
+        "PublicNetworkConfiguration":{
+          "shape":"PublicNetworkConfiguration",
+          "documentation":"<p>Specifies the network configuration for the public ingress point.</p>"
+        }
+      },
+      "documentation":"<p>The network type (IPv4-only, Dual-Stack, PrivateLink) of the ingress endpoint resource.</p>",
+      "union":true
+    },
     "NoAuthentication":{
       "type":"structure",
       "members":{
@@ -2856,6 +3750,10 @@
         "IpExpression":{
           "shape":"IngressIpv4Expression",
           "documentation":"<p>This represents an IP based condition matching on the incoming mail. It performs the operation configured in 'Operator' and evaluates the 'Protocol' object against the 'Value'.</p>"
+        },
+        "Ipv6Expression":{
+          "shape":"IngressIpv6Expression",
+          "documentation":"<p>This represents an IPv6 based condition matching on the incoming mail. It performs the operation configured in 'Operator' and evaluates the 'Protocol' object against the 'Value'.</p>"
         },
         "StringExpression":{
           "shape":"IngressStringExpression",
@@ -2896,6 +3794,32 @@
       "type":"list",
       "member":{"shape":"PolicyStatement"}
     },
+    "PreSignedUrl":{
+      "type":"string",
+      "sensitive":true
+    },
+    "PrivateNetworkConfiguration":{
+      "type":"structure",
+      "required":["VpcEndpointId"],
+      "members":{
+        "VpcEndpointId":{
+          "shape":"VpcEndpointId",
+          "documentation":"<p>The identifier of the VPC endpoint to associate with this private ingress point.</p>"
+        }
+      },
+      "documentation":"<p>Specifies the network configuration for the private ingress point.</p>"
+    },
+    "PublicNetworkConfiguration":{
+      "type":"structure",
+      "required":["IpType"],
+      "members":{
+        "IpType":{
+          "shape":"IpType",
+          "documentation":"<p>The IP address type for the public ingress point. Valid values are IPV4 and DUAL_STACK.</p>"
+        }
+      },
+      "documentation":"<p>Specifies the network configuration for the public ingress point.</p>"
+    },
     "QBusinessApplicationId":{
       "type":"string",
       "max":36,
@@ -2913,6 +3837,28 @@
       "member":{"shape":"EmailAddress"},
       "max":100,
       "min":1
+    },
+    "RegisterMemberToAddressListRequest":{
+      "type":"structure",
+      "required":[
+        "Address",
+        "AddressListId"
+      ],
+      "members":{
+        "Address":{
+          "shape":"Address",
+          "documentation":"<p>The address to be added to the address list.</p>"
+        },
+        "AddressListId":{
+          "shape":"AddressListId",
+          "documentation":"<p>The unique identifier of the address list where the address should be added.</p>"
+        }
+      }
+    },
+    "RegisterMemberToAddressListResponse":{
+      "type":"structure",
+      "members":{
+      }
     },
     "Relay":{
       "type":"structure",
@@ -3017,7 +3963,7 @@
       "type":"string",
       "max":256,
       "min":1,
-      "pattern":"^[\\sa-zA-Z0-9_]+$"
+      "pattern":"^(addon\\.)?[\\sa-zA-Z0-9_]+$"
     },
     "RetentionPeriod":{
       "type":"string",
@@ -3093,7 +4039,11 @@
         },
         "SenderIpAddress":{
           "shape":"SenderIpAddress",
-          "documentation":"<p>The IP address of the host from which the email was received.</p>"
+          "documentation":"<ul> <li> <p>Mail archived with Mail Manager: The IP address of the client that connects to the ingress endpoint.</p> </li> <li> <p>Mail sent through a configuration set with the archiving option enabled: The IP address of the client that makes the SendEmail API call.</p> </li> </ul>"
+        },
+        "SourceArn":{
+          "shape":"String",
+          "documentation":"<p>Specifies the archived email source, identified by either a Rule Set's ARN with an Archive action, or a Configuration Set's Archive ARN.</p>"
         },
         "Subject":{
           "shape":"String",
@@ -3168,6 +4118,10 @@
           "shape":"DropAction",
           "documentation":"<p>This action terminates the evaluation of rules in the rule set.</p>"
         },
+        "PublishToSns":{
+          "shape":"SnsAction",
+          "documentation":"<p>This action publishes the email content to an Amazon SNS topic.</p>"
+        },
         "Relay":{
           "shape":"RelayAction",
           "documentation":"<p>This action relays the email to another SMTP server.</p>"
@@ -3193,6 +4147,23 @@
       "member":{"shape":"RuleAction"},
       "max":10,
       "min":1
+    },
+    "RuleAddressListArnList":{
+      "type":"list",
+      "member":{"shape":"AddressListArn"},
+      "max":1,
+      "min":1
+    },
+    "RuleAddressListEmailAttribute":{
+      "type":"string",
+      "enum":[
+        "RECIPIENT",
+        "MAIL_FROM",
+        "SENDER",
+        "FROM",
+        "TO",
+        "CC"
+      ]
     },
     "RuleBooleanEmailAttribute":{
       "type":"string",
@@ -3230,9 +4201,17 @@
     "RuleBooleanToEvaluate":{
       "type":"structure",
       "members":{
+        "Analysis":{
+          "shape":"Analysis",
+          "documentation":"<p>The Add On ARN and its returned value to evaluate in a boolean condition expression.</p>"
+        },
         "Attribute":{
           "shape":"RuleBooleanEmailAttribute",
           "documentation":"<p>The boolean type representing the allowed attribute types for an email.</p>"
+        },
+        "IsInAddressList":{
+          "shape":"RuleIsInAddressList",
+          "documentation":"<p>The structure representing the address lists and address list attribute that will be used in evaluation of boolean expression.</p>"
         }
       },
       "documentation":"<p>The union type representing the allowed types of operands for a boolean condition.</p>",
@@ -3350,9 +4329,9 @@
     },
     "RuleIpStringValue":{
       "type":"string",
-      "max":18,
+      "max":43,
       "min":1,
-      "pattern":"^(([0-9]|.|/)*)$"
+      "pattern":"^(([0-9]|.|:|/)*)$"
     },
     "RuleIpToEvaluate":{
       "type":"structure",
@@ -3370,6 +4349,24 @@
       "member":{"shape":"RuleIpStringValue"},
       "max":10,
       "min":1
+    },
+    "RuleIsInAddressList":{
+      "type":"structure",
+      "required":[
+        "AddressLists",
+        "Attribute"
+      ],
+      "members":{
+        "AddressLists":{
+          "shape":"RuleAddressListArnList",
+          "documentation":"<p>The address lists that will be used for evaluation.</p>"
+        },
+        "Attribute":{
+          "shape":"RuleAddressListEmailAttribute",
+          "documentation":"<p>The email attribute that needs to be evaluated against the address list.</p>"
+        }
+      },
+      "documentation":"<p>The structure type for a boolean condition that provides the address lists and address list attribute to evaluate.</p>"
     },
     "RuleName":{
       "type":"string",
@@ -3515,6 +4512,10 @@
     "RuleStringToEvaluate":{
       "type":"structure",
       "members":{
+        "Analysis":{
+          "shape":"Analysis",
+          "documentation":"<p>The Add On ARN and its returned value to evaluate in a string condition expression.</p>"
+        },
         "Attribute":{
           "shape":"RuleStringEmailAttribute",
           "documentation":"<p>The email attribute to evaluate in a string condition expression.</p>"
@@ -3662,6 +4663,28 @@
       "pattern":"^[a-zA-Z0-9!_.*'()/-]+$"
     },
     "S3PresignedURL":{"type":"string"},
+    "SavedAddress":{
+      "type":"structure",
+      "required":[
+        "Address",
+        "CreatedTimestamp"
+      ],
+      "members":{
+        "Address":{
+          "shape":"Address",
+          "documentation":"<p>The email or domain that constitutes the address.</p>"
+        },
+        "CreatedTimestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of when the address was added to the address list.</p>"
+        }
+      },
+      "documentation":"<p>An address that is a member of an address list.</p>"
+    },
+    "SavedAddresses":{
+      "type":"list",
+      "member":{"shape":"SavedAddress"}
+    },
     "SearchId":{
       "type":"string",
       "max":64,
@@ -3761,6 +4784,71 @@
       "pattern":"^[A-Za-z0-9!@#$%^&*()_+\\-=\\[\\]{}|.,?]+$",
       "sensitive":true
     },
+    "SnsAction":{
+      "type":"structure",
+      "required":[
+        "RoleArn",
+        "TopicArn"
+      ],
+      "members":{
+        "ActionFailurePolicy":{
+          "shape":"ActionFailurePolicy",
+          "documentation":"<p>A policy that states what to do in the case of failure. The action will fail if there are configuration errors. For example, specified SNS topic has been deleted or the role lacks necessary permissions to call the <code>sns:Publish</code> API.</p>"
+        },
+        "Encoding":{
+          "shape":"SnsNotificationEncoding",
+          "documentation":"<p>The encoding to use for the email within the Amazon SNS notification. The default value is <code>UTF-8</code>. Use <code>BASE64</code> if you need to preserve all special characters, especially when the original message uses a different encoding format.</p>"
+        },
+        "PayloadType":{
+          "shape":"SnsNotificationPayloadType",
+          "documentation":"<p>The expected payload type within the Amazon SNS notification. <code>CONTENT</code> attempts to publish the full email content with 20KB of headers content. <code>HEADERS</code> extracts up to 100KB of header content to include in the notification, email content will not be included to the notification. The default value is <code>CONTENT</code>.</p>"
+        },
+        "RoleArn":{
+          "shape":"IamRoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM Role to use while writing to Amazon SNS. This role must have access to the <code>sns:Publish</code> API for the given topic.</p>"
+        },
+        "TopicArn":{
+          "shape":"SnsTopicArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon SNS Topic to which notification for the email received will be published.</p>"
+        }
+      },
+      "documentation":"<p>The action to publish the email content to an Amazon SNS topic. When executed, this action will send the email as a notification to the specified SNS topic.</p>"
+    },
+    "SnsNotificationEncoding":{
+      "type":"string",
+      "enum":[
+        "UTF-8",
+        "BASE64"
+      ]
+    },
+    "SnsNotificationPayloadType":{
+      "type":"string",
+      "enum":[
+        "HEADERS",
+        "CONTENT"
+      ]
+    },
+    "SnsTopicArn":{
+      "type":"string",
+      "max":2048,
+      "min":20,
+      "pattern":"^arn:(aws|aws-cn|aws-us-gov):sns:[a-z]{2}-[a-z]+-\\d{1}:\\d{12}:[\\w\\-]{1,256}$"
+    },
+    "StartAddressListImportJobRequest":{
+      "type":"structure",
+      "required":["JobId"],
+      "members":{
+        "JobId":{
+          "shape":"JobId",
+          "documentation":"<p>The identifier of the import job that needs to be started.</p>"
+        }
+      }
+    },
+    "StartAddressListImportJobResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
     "StartArchiveExportRequest":{
       "type":"structure",
       "required":[
@@ -3853,6 +4941,21 @@
       },
       "documentation":"<p>The response from initiating an archive search.</p>"
     },
+    "StopAddressListImportJobRequest":{
+      "type":"structure",
+      "required":["JobId"],
+      "members":{
+        "JobId":{
+          "shape":"JobId",
+          "documentation":"<p>The identifier of the import job that needs to be stopped.</p>"
+        }
+      }
+    },
+    "StopAddressListImportJobResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
     "StopArchiveExportRequest":{
       "type":"structure",
       "required":["ExportId"],
@@ -3925,8 +5028,7 @@
       "type":"string",
       "max":128,
       "min":1,
-      "pattern":"^[a-zA-Z0-9/_\\+=\\.:@\\-]+$",
-      "sensitive":true
+      "pattern":"^[a-zA-Z0-9/_\\+=\\.:@\\-]+$"
     },
     "TagKeyList":{
       "type":"list",
@@ -3966,8 +5068,7 @@
       "type":"string",
       "max":256,
       "min":0,
-      "pattern":"^[a-zA-Z0-9/_\\+=\\.:@\\-]*$",
-      "sensitive":true
+      "pattern":"^[a-zA-Z0-9/_\\+=\\.:@\\-]*$"
     },
     "TaggableResourceArn":{
       "type":"string",
@@ -4197,6 +5298,10 @@
       },
       "documentation":"<p>The request validation has failed. For details, see the accompanying error message.</p>",
       "exception":true
+    },
+    "VpcEndpointId":{
+      "type":"string",
+      "pattern":"^vpce-[a-zA-Z0-9]{17}$"
     }
   },
   "documentation":"<p><fullname>Amazon SES Mail Manager API</fullname> <p>The Amazon SES Mail Manager API contains operations and data types that comprise the Mail Manager feature of <a href=\"http://aws.amazon.com/ses\">Amazon Simple Email Service (SES)</a>.</p> <p>Mail Manager is a set of Amazon SES email gateway features designed to help you strengthen your organization's email infrastructure, simplify email workflow management, and streamline email compliance control. To learn more, see the <a href=\"https://docs.aws.amazon.com/ses/latest/dg/eb.html\">Mail Manager chapter</a> in the <i>Amazon SES Developer Guide</i>.</p></p>"

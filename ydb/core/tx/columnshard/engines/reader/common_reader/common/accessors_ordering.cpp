@@ -64,7 +64,10 @@ public:
                 commonContext.GetScanId(), BuildTopSourceIds(GetAccessorPortionIds()), fetchDuration);
         }
         auto& collection = plainReader->MutableScanner().MutableSourcesCollection();
-        collection.MutableConstructorsAs<TSourcesConstructorWithAccessorsImpl>().AddAccessors(std::move(Accessors));
+        const auto status = collection.MutableConstructorsAs<TSourcesConstructorWithAccessorsImpl>().AddAccessors(std::move(Accessors));
+        if (status.IsFail()) {
+            plainReader->GetSpecialReadContext()->GetCommonContext()->AbortWithError(status.GetErrorMessage());
+        }
         return true;
     }
 };

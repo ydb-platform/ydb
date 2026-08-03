@@ -343,6 +343,10 @@ private:
             }
         }
 
+        for (const auto& stat : req.statistics()) {
+            FillMultiColumnStatistics(*tableDesc->AddMultiColumnStatistics(), stat);
+        }
+
         return true;
     }
 
@@ -429,6 +433,10 @@ private:
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);
+        }
+
+        for (const auto& stat : req->statistics()) {
+            FillMultiColumnStatistics(*tableDesc->AddMultiColumnStatistics(), stat);
         }
 
         bool tableProfileSet = false;

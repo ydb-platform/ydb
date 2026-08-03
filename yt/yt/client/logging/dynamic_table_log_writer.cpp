@@ -77,7 +77,7 @@ public:
         std::unique_ptr<ILogFormatter> formatter,
         std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
         const TDynamicTableLogWriterConfigPtr& config,
-        const TString& name,
+        const std::string& name,
         IInvokerPtr invoker)
         : TRateLimitingLogWriterBase(
             std::move(systemEventProvider),
@@ -91,10 +91,9 @@ public:
             Invoker_,
             BIND(&TDynamicTableLogWriter::DoFlush, MakeWeak(this)),
             Config_->FlushPeriod))
-        , Logger(SystemLogger().WithTag(
-            "LogWriterName: %v, TablePath: %v",
-            name,
-            Config_->TablePath))
+        , Logger(SystemLogger()
+            .WithTag("LogWriterName", name)
+            .WithTag("TablePath", Config_->TablePath))
         , Profiler_(TProfiler("/dynamic_table_logging")
             .WithSparse()
             .WithTag("writer", name)

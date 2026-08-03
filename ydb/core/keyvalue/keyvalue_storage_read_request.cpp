@@ -342,6 +342,11 @@ public:
             return;
         }
 
+        Y_ABORT_UNLESS(!batch.ReadItemIndecies.empty());
+        IntermediateResult->Stat.GetLatencies.emplace_back(
+                ReadItems[batch.ReadItemIndecies.front()].ReadItem->LogoBlobId.Channel(),
+                (TActivationContext::Now() - batch.SentTime).MilliSeconds());
+
         ReceivedGetResults++;
         if (ReceivedGetResults == Batches.size()) {
             auto status = NKikimrKeyValue::Statuses::RSTATUS_OK;
@@ -359,7 +364,8 @@ public:
         Send(IntermediateResult->KeyValueActorId, new TEvKeyValue::TEvNotify(
             IntermediateResult->RequestUid,
             IntermediateResult->CreatedAtGeneration, IntermediateResult->CreatedAtStep,
-            IntermediateResult->Stat, status, std::move(IntermediateResult->RefCountsIncr)));
+            IntermediateResult->Stat, status, std::move(IntermediateResult->AcquiredChannels),
+            std::move(IntermediateResult->RefCountsIncr)));
     }
 
     std::unique_ptr<TEvKeyValue::TEvReadResponse> CreateReadResponse(NKikimrKeyValue::Statuses::ReplyStatus status,

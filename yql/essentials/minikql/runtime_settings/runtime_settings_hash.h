@@ -2,13 +2,13 @@
 
 #include "runtime_settings.h"
 
-#include <util/system/types.h>
+#include <yql/essentials/utils/strong_alias.h>
 
-#include <array>
+#include <util/system/types.h>
 
 namespace NYql {
 
-using TRuntimeSettingsStableHash = TString;
+using TRuntimeSettingsStableHash = TStrongAlias<class TRuntimeSettingsStableHashTag, TString>;
 
 TRuntimeSettingsStableHash StableHashRuntimeSettings(const TRuntimeSettings& config);
 

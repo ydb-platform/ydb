@@ -253,38 +253,46 @@ public:
         return Record.GetRecords();
     }
 
-    template <class TDataType>
-    class TSparsedBuilder {
+    class TSparsedBuilderBase {
     private:
         std::unique_ptr<arrow::ArrayBuilder> IndexBuilder;
         std::unique_ptr<arrow::ArrayBuilder> ValueBuilder;
-        ui32 RecordsCount = 0;
+        const std::shared_ptr<arrow::DataType> ValueType;
         const std::shared_ptr<arrow::Scalar> DefaultValue;
         std::optional<ui32> LastRecordIndex;
 
-    public:
-        TSparsedBuilder(const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 reserveItems, const ui32 reserveData)
-            : DefaultValue(defaultValue)
-        {
-            IndexBuilder = NArrow::MakeBuilder(arrow::uint32(), reserveItems, 0);
-            ValueBuilder = NArrow::MakeBuilder(arrow::TypeTraits<TDataType>::type_singleton(), reserveItems, reserveData);
-        }
-
-        void AddRecord(const ui32 recordIndex, const std::string_view value) {
-            if (!!LastRecordIndex) {
-                AFL_VERIFY(*LastRecordIndex < recordIndex);
+        void AdvanceRecordIndex(const ui32 recordIndex) {
+            if (LastRecordIndex) {
+                AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
             }
             LastRecordIndex = recordIndex;
+        }
+
+    protected:
+        arrow::ArrayBuilder& GetValueBuilder() {
+            return *ValueBuilder;
+        }
+
+        template <class TAppender>
+        void AddAt(const ui32 recordIndex, const TAppender& append) {
+            AdvanceRecordIndex(recordIndex);
             AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
-            AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, arrow::util::string_view(value.data(), value.size())));
-            ++RecordsCount;
+            append(*ValueBuilder);
+        }
+
+    public:
+        TSparsedBuilderBase(std::unique_ptr<arrow::ArrayBuilder> valueBuilder, const std::shared_ptr<arrow::DataType>& valueType,
+            const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 reserveItems)
+            : IndexBuilder(NArrow::MakeBuilder(arrow::uint32(), reserveItems, 0))
+            , ValueBuilder(std::move(valueBuilder))
+            , ValueType(valueType)
+            , DefaultValue(defaultValue)
+        {
+            AFL_VERIFY(!!ValueBuilder);
         }
 
         void AddNull(const ui32 recordIndex) {
-            if (!!LastRecordIndex) {
-                AFL_VERIFY(*LastRecordIndex < recordIndex);
-            }
-            LastRecordIndex = recordIndex;
+            AdvanceRecordIndex(recordIndex);
             if (!!DefaultValue && DefaultValue->type->id() != arrow::null()->id()) {
                 AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
                 TStatusValidator::Validate(ValueBuilder->AppendNull());
@@ -292,13 +300,24 @@ public:
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
-            TSparsedArray::TBuilder builder(DefaultValue, arrow::TypeTraits<TDataType>::type_singleton());
-            std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders;
-            builders.emplace_back(std::move(IndexBuilder));
-            builders.emplace_back(std::move(ValueBuilder));
-            builder.AddChunk(recordsCount, arrow::RecordBatch::Make(TSparsedArray::BuildSchema(arrow::TypeTraits<TDataType>::type_singleton()),
-                                               RecordsCount, NArrow::Finish(std::move(builders))));
+            TBuilder builder(DefaultValue, ValueType);
+            builder.AddChunk(recordsCount, NArrow::FinishBuilder(std::move(IndexBuilder)), NArrow::FinishBuilder(std::move(ValueBuilder)));
             return builder.Finish();
+        }
+    };
+
+    template <class TDataType>
+    class TSparsedBuilder: public TSparsedBuilderBase {
+    public:
+        TSparsedBuilder(const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 reserveItems, const ui32 reserveData)
+            : TSparsedBuilderBase(NArrow::MakeBuilder(arrow::TypeTraits<TDataType>::type_singleton(), reserveItems, reserveData),
+                  arrow::TypeTraits<TDataType>::type_singleton(), defaultValue, reserveItems) {
+        }
+
+        void AddRecord(const ui32 recordIndex, const std::string_view value) {
+            AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) {
+                AFL_VERIFY(NArrow::Append<TDataType>(builder, arrow::util::string_view(value.data(), value.size())));
+            });
         }
     };
 

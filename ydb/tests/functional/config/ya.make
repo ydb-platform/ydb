@@ -11,6 +11,7 @@ TEST_SRCS(
     test_module_parameter.py
     test_pdisk_metadata_cli.py
     test_distconf_faulty_pdisk_remove_host.py
+    test_distconf_static_group.py
 )
 
 SPLIT_FACTOR(10)
@@ -34,6 +35,7 @@ DEPENDS(
 
 PEERDIR(
     contrib/python/requests
+    ydb/public/api/grpc/draft
     ydb/tests/library
     ydb/tests/library/clients
     contrib/python/requests

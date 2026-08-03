@@ -4,6 +4,8 @@
 
 #include <library/cpp/streams/brotli/brotli.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/mem.h>
 
 namespace NYT::NCompression {
@@ -14,9 +16,8 @@ namespace {
 template <typename TCompressStream>
 std::string Compress(const std::string& data)
 {
-    // TODO(babenko): migrate to std::string
-    TString compressed;
-    TStringOutput output(compressed);
+    std::string compressed;
+    TStdStringOutput output(compressed);
     TCompressStream compressStream(&output, 11);
     compressStream.Write(data.data(), data.size());
     compressStream.Finish();

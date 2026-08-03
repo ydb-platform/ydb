@@ -39,7 +39,6 @@ SRCS(
     ut_printer.cpp
     ut_program_step.cpp
     ut_reader.cpp
-    ut_slicer.cpp
 )
 
 END()

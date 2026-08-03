@@ -11,7 +11,7 @@
 namespace NKikimr::NReplication::NTransfer {
 
 inline TBackoff MakeBackoff() {
-    return TBackoff(7, TDuration::Seconds(1), TDuration::Minutes(1));
+    return TBackoff(TDuration::Seconds(1), TDuration::Minutes(1));
 }
 
 template<typename TData>

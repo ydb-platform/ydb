@@ -337,10 +337,13 @@ Builds a `Callable` given a function name and optional `external user types`, `R
 * `Udf(Foo::Bar, "1e9+7" as RunConfig")(1, 'extended' As Precision)` — Call udf `Foo::Bar` with specified `RunConfig` and named parameters.
 * `Udf(Foo::Bar, $parent as Depends)` — Call udf `Foo::Bar` with specified computation dependency on specified node - since version [2025.03](../changelog/2025.03.md).
 
-You can also specify additional settings as named arguments; their type must be `String`:
+You can also specify additional settings as named arguments; their type must be `String` or numeric literal:
 
-* Cpu - a factor describing how much CPU the udf consumes. The default value is "1". The higher this value, the more parallelism is required to call such a udf.
+* Cpu - a factor describing how much CPU the udf consumes. Must be a positive number. The default value is "1". The higher this value, the more parallelism is required to call such a udf. Example: "4.5".
 * ExtraMem - the additional memory required by the udf in bytes. The default value is "0".
+  Supported formats:
+  1. Value in bytes (non-negative integer)
+  2. String representations with suffixes: "K", "M", "G" (for example, "2048M", "1G", "512K")
 
 #### Signatures
 
@@ -370,7 +373,11 @@ SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
 ```
 
 ```yql
-SELECT Udf(Foo::Bar, "4" as Cpu, "100000000" as ExtraMem)(1);
+SELECT Udf(Foo::Bar, 4.5 as Cpu, 100000000 as ExtraMem)(1);
+```
+
+```yql
+SELECT Udf(Foo::Bar, "4.5" as Cpu, "100M" as ExtraMem)(1);
 ```
 
 ## CurrentUtc... {#current-utc}

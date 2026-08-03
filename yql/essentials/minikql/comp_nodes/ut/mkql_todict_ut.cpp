@@ -74,7 +74,7 @@ Y_UNIT_TEST_LLVM(TestCompactUtf8Set) {
 
     TVector<TRuntimeNode> items;
     for (auto s : data) {
-        items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{s}));
+        items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{TString(s)}));
     }
     Shuffle(items.begin(), items.end());
     auto dataType = NTest::ConvertToMinikqlType<NTest::TUtf8>(pb);
@@ -92,7 +92,7 @@ Y_UNIT_TEST_LLVM(TestUtf8Set) {
 
     TVector<TRuntimeNode> items;
     for (auto s : data) {
-        items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{s}));
+        items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{TString(s)}));
     }
     Shuffle(items.begin(), items.end());
     auto dataType = NTest::ConvertToMinikqlType<NTest::TUtf8>(pb);
@@ -115,13 +115,13 @@ Y_UNIT_TEST_LLVM(TestSqueezeToDict) {
 
         TVector<TRuntimeNode> items;
         for (auto s : data) {
-            items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{s}));
+            items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{TString(s)}));
         }
         Shuffle(items.begin(), items.end());
 
         auto dataType = NTest::ConvertToMinikqlType<NTest::TUtf8>(pb);
         auto list = pb.NewList(dataType, items);
-        auto input = stream ? pb.Iterator(list, items) : pb.ToFlow(list);
+        auto input = stream ? pb.Iterator(list, items) : pb.ToFlow(list, {});
         auto pgmReturn = hashed
                              ? pb.SqueezeToHashedDict(input, multi, [](TRuntimeNode n) { return n; },
                                                       [&pb, withPayload](TRuntimeNode n) { return withPayload ? n : NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}); }, compact)
@@ -175,13 +175,13 @@ Y_UNIT_TEST_LLVM(TestNarrowSqueezeToDict) {
 
         TVector<TRuntimeNode> items;
         for (auto s : data) {
-            items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{s}));
+            items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{TString(s)}));
         }
         Shuffle(items.begin(), items.end());
 
         auto dataType = NTest::ConvertToMinikqlType<NTest::TUtf8>(pb);
         auto list = pb.NewList(dataType, items);
-        auto input = pb.ExpandMap(pb.ToFlow(list), [](TRuntimeNode n) -> TRuntimeNode::TList { return {n}; });
+        auto input = pb.ExpandMap(pb.ToFlow(list, {}), [](TRuntimeNode n) -> TRuntimeNode::TList { return {n}; });
         auto pgmReturn = hashed
                              ? pb.NarrowSqueezeToHashedDict(input, multi, [](TRuntimeNode::TList n) { return n.front(); },
                                                             [&pb, withPayload](TRuntimeNode::TList n) { return withPayload ? n.back() : NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}); }, compact)

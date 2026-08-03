@@ -1,12 +1,14 @@
 import logging
+import threading
 from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import Column
+from sqlalchemy.engine.default import DefaultDialect
 from sqlalchemy.exc import ArgumentError, SQLAlchemyError
-from sqlalchemy.sql.base import SchemaEventTarget
-from sqlalchemy.sql.elements import TextClause
-from sqlalchemy.sql.visitors import Visitable
+from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.sql.elements import ClauseElement, ColumnElement, TextClause
+from sqlalchemy.sql.schema import SchemaItem
 
 from clickhouse_connect.cc_sqlalchemy.sql.sqlparse import split_top_level, walk_sql
 from clickhouse_connect.driver.binding import format_str, quote_identifier
@@ -15,17 +17,50 @@ from clickhouse_connect.driver.parser import parse_callable
 logger = logging.getLogger(__name__)
 
 engine_map: dict[str, type["TableEngine"]] = {}
-EngineExpr = str | TextClause | Column
+EngineExpr = str | TextClause | ColumnElement | InstrumentedAttribute
 EngineParam = EngineExpr | Sequence[EngineExpr] | None
 ENGINE_CLAUSES = ("ORDER BY", "PARTITION BY", "PRIMARY KEY", "SAMPLE BY", "TTL", "SETTINGS")
 
+_engine_render_dialect: DefaultDialect | None = None
+_engine_render_lock = threading.Lock()
+
+
+def _get_engine_render_dialect() -> DefaultDialect:
+    global _engine_render_dialect
+    with _engine_render_lock:
+        if _engine_render_dialect is None:
+            from clickhouse_connect.cc_sqlalchemy.dialect import ClickHouseDialect  # local import avoids cycle
+
+            _engine_render_dialect = ClickHouseDialect()
+        return _engine_render_dialect
+
+
+def _compile_engine_clause(value: ColumnElement) -> str:
+    dialect = _get_engine_render_dialect()
+    from clickhouse_connect.cc_sqlalchemy.sql.compiler import EngineExprCompiler  # local import avoids cycle
+
+    compiler = EngineExprCompiler(dialect, None)
+    return compiler.process(value, include_table=False, literal_binds=True)
+
+
+def _coerce_clause_element(value: Any) -> Any:
+    """Resolve ORM-mapped attributes and other column-like objects to their clause element."""
+    if not isinstance(value, ClauseElement) and hasattr(value, "__clause_element__"):
+        return value.__clause_element__()
+    return value
+
 
 def _render_engine_expr(value: EngineExpr) -> str:
+    value = _coerce_clause_element(value)
+    if isinstance(value, str):
+        return value
     if isinstance(value, TextClause):
         return value.text
     if isinstance(value, Column):
         return quote_identifier(value.name)
-    return value
+    if isinstance(value, ColumnElement):
+        return _compile_engine_clause(value)
+    raise ArgumentError(None, f"Engine clause expression must be a column or scalar expression, got {type(value).__name__}")
 
 
 def _render_setting_value(value: Any) -> str:
@@ -36,7 +71,7 @@ def _render_setting_value(value: Any) -> str:
     return format_str(str(value))
 
 
-def tuple_expr(expr_name, value: EngineParam):
+def tuple_expr(expr_name: str, value: EngineParam) -> str:
     """
     Create a table parameter with a tuple or list correctly formatted
     :param expr_name: parameter
@@ -48,10 +83,11 @@ def tuple_expr(expr_name, value: EngineParam):
     v = f"{expr_name.strip()}"
     if isinstance(value, (tuple, list)):
         return f" {v} ({','.join(_render_engine_expr(item) for item in value)})"
-    return f"{v} {_render_engine_expr(value)}"
+    return f"{v} {_render_engine_expr(value)}"  # type: ignore[arg-type]
 
 
 def repr_engine_value(value: Any) -> str:
+    value = _coerce_clause_element(value)
     if isinstance(value, str):
         return repr(value)
     if isinstance(value, TextClause):
@@ -65,25 +101,27 @@ def repr_engine_value(value: Any) -> str:
         return f"({items})"
     if isinstance(value, list):
         return f"[{', '.join(repr_engine_value(item) for item in value)}]"
+    if isinstance(value, ColumnElement):
+        return f"sa.text({_compile_engine_clause(value)!r})"
     return repr(value)
 
 
-class TableEngine(SchemaEventTarget, Visitable):
+class TableEngine(SchemaItem):
     """
     SqlAlchemy Schema element to support ClickHouse table engines.  At the moment provides no real
     functionality other than the CREATE TABLE argument string
     """
 
-    arg_names = ()
-    quoted_args = set()
-    optional_args = set()
-    eng_params = ()
+    arg_names: Sequence[str] = ()
+    quoted_args: set[str] = set()
+    optional_args: set[str] = set()
+    eng_params: Sequence[str] = ()
 
     def __init_subclass__(cls, **kwargs):
         engine_map[cls.__name__] = cls
 
     def __init__(self, kwargs):
-        Visitable.__init__(self)
+        super().__init__()
         self.name = self.__class__.__name__
         te_name = f"{self.name} Table Engine"
         self._orig_kwargs = kwargs.copy()
@@ -167,21 +205,21 @@ class Set(TableEngine):
 class Dictionary(TableEngine):
     arg_names = ["dictionary"]
 
-    def __init__(self, dictionary: str = None):
+    def __init__(self, dictionary: str | None = None):
         super().__init__(locals())
 
 
 class Merge(TableEngine):
     arg_names = ["db_name, tables_regexp"]
 
-    def __init__(self, db_name: str = None, tables_regexp: str = None):
+    def __init__(self, db_name: str | None = None, tables_regexp: str | None = None):
         super().__init__(locals())
 
 
 class File(TableEngine):
     arg_names = ["fmt"]
 
-    def __init__(self, fmt: str = None):
+    def __init__(self, fmt: str | None = None):
         super().__init__(locals())
 
 
@@ -189,7 +227,14 @@ class Distributed(TableEngine):
     arg_names = ["cluster", "database", "table", "sharding_key", "policy_name"]
     optional_args = {"sharding_key", "policy_name"}
 
-    def __init__(self, cluster: str = None, database: str = None, table=None, sharding_key: str = None, policy_name: str = None):
+    def __init__(
+        self,
+        cluster: str | None = None,
+        database: str | None = None,
+        table=None,
+        sharding_key: str | None = None,
+        policy_name: str | None = None,
+    ):
         super().__init__(locals())
 
 
@@ -229,9 +274,9 @@ class ReplacingMergeTree(TableEngine):
 
     def __init__(
         self,
-        ver: str = None,
-        version: str = None,
-        is_deleted: str = None,
+        ver: str | None = None,
+        version: str | None = None,
+        is_deleted: str | None = None,
         order_by: EngineParam = None,
         primary_key: EngineParam = None,
         partition_by: EngineParam = None,
@@ -260,7 +305,7 @@ class CollapsingMergeTree(TableEngine):
 
     def __init__(
         self,
-        sign: str = None,
+        sign: str | None = None,
         order_by: EngineParam = None,
         primary_key: EngineParam = None,
         partition_by: EngineParam = None,
@@ -279,8 +324,8 @@ class VersionedCollapsingMergeTree(TableEngine):
 
     def __init__(
         self,
-        sign: str = None,
-        version: str = None,
+        sign: str | None = None,
+        version: str | None = None,
         order_by: EngineParam = None,
         primary_key: EngineParam = None,
         partition_by: EngineParam = None,
@@ -300,8 +345,8 @@ class GraphiteMergeTree(TableEngine):
 
     def __init__(
         self,
-        config_section: str = None,
-        version: str = None,
+        config_section: str | None = None,
+        version: str | None = None,
         order_by: EngineParam = None,
         primary_key: EngineParam = None,
         partition_by: EngineParam = None,
@@ -326,8 +371,8 @@ class ReplicatedMergeTree(TableEngine):
         primary_key: EngineParam = None,
         partition_by: EngineParam = None,
         sample_by: EngineParam = None,
-        zk_path: str = None,
-        replica: str = None,
+        zk_path: str | None = None,
+        replica: str | None = None,
         ttl: EngineExpr | None = None,
         settings: dict[str, Any] | None = None,
     ):
@@ -352,13 +397,13 @@ class ReplicatedReplacingMergeTree(TableEngine):
 
     def __init__(
         self,
-        ver: str = None,
+        ver: str | None = None,
         order_by: EngineParam = None,
         primary_key: EngineParam = None,
         partition_by: EngineParam = None,
         sample_by: EngineParam = None,
-        zk_path: str = None,
-        replica: str = None,
+        zk_path: str | None = None,
+        replica: str | None = None,
         ttl: EngineExpr | None = None,
         settings: dict[str, Any] | None = None,
     ):
@@ -375,13 +420,13 @@ class ReplicatedCollapsingMergeTree(TableEngine):
 
     def __init__(
         self,
-        sign: str = None,
+        sign: str | None = None,
         order_by: EngineParam = None,
         primary_key: EngineParam = None,
         partition_by: EngineParam = None,
         sample_by: EngineParam = None,
-        zk_path: str = None,
-        replica: str = None,
+        zk_path: str | None = None,
+        replica: str | None = None,
         ttl: EngineExpr | None = None,
         settings: dict[str, Any] | None = None,
     ):
@@ -398,14 +443,14 @@ class ReplicatedVersionedCollapsingMergeTree(TableEngine):
 
     def __init__(
         self,
-        sign: str = None,
-        version: str = None,
+        sign: str | None = None,
+        version: str | None = None,
         order_by: EngineParam = None,
         primary_key: EngineParam = None,
         partition_by: EngineParam = None,
         sample_by: EngineParam = None,
-        zk_path: str = None,
-        replica: str = None,
+        zk_path: str | None = None,
+        replica: str | None = None,
         ttl: EngineExpr | None = None,
         settings: dict[str, Any] | None = None,
     ):
@@ -422,13 +467,13 @@ class ReplicatedGraphiteMergeTree(TableEngine):
 
     def __init__(
         self,
-        config_section: str = None,
+        config_section: str | None = None,
         order_by: EngineParam = None,
         primary_key: EngineParam = None,
         partition_by: EngineParam = None,
         sample_by: EngineParam = None,
-        zk_path: str = None,
-        replica: str = None,
+        zk_path: str | None = None,
+        replica: str | None = None,
         ttl: EngineExpr | None = None,
         settings: dict[str, Any] | None = None,
     ):

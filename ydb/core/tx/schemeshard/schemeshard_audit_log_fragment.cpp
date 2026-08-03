@@ -828,7 +828,7 @@ TChangeLogin ExtractLoginChange(const NKikimrSchemeOp::TModifyScheme& tx) {
                 const auto& modify = alter.GetModifyUser();
                 result.LoginUser = modify.GetUser();
 
-                if (modify.HasPassword()) { // there is no difference beetwen password and password's hash
+                if (modify.HasHashedPassword()) {
                     result.LoginUserChange.push_back("password");
                 }
 

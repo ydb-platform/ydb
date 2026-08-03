@@ -21,7 +21,6 @@
 
 #include <library/cpp/threading/future/core/coroutine_traits.h>
 
-
 namespace NYdb::inline Dev {
 namespace NTable {
 

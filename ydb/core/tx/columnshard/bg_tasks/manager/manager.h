@@ -42,6 +42,7 @@ public:
         const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto);
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxApplyControl(const TSessionControlContainer& control);
     [[nodiscard]] ISessionLogic::TStatus GetStatus(const TString& className, const TString& identifier) const;
+    [[nodiscard]] bool IsSessionComplete(const TString& className, const TString& identifier) const;
 
     bool HasTask(const TTask& task) const;
 

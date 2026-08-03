@@ -20,7 +20,7 @@ void TWorkloadCommandIndexBase::Config(TConfig& config) {
 int TWorkloadCommandIndexBase::Run(TConfig& config) {
     Params.DbPath = config.Database;
 
-    Driver = MakeHolder<NYdb::TDriver>(CreateDriver(config));
+    Driver = MakeHolder<NYdb::NConsoleClient::TScopedDriver>(CreateDriver(config));
     QueryClient = MakeHolder<NYdb::NQuery::TQueryClient>(*Driver);
     Params.SetClients(QueryClient.get(), nullptr, nullptr, nullptr);
 
@@ -54,9 +54,14 @@ int TWorkloadCommandBuildIndex::DoRun() {
     ddlQuery << "GLOBAL USING vector_kmeans_tree\n";
     ddlQuery << "ON (embedding)\n";
     ddlQuery << "WITH (\n";
-    ddlQuery << "    " << Params.GetDistanceDDL() << ",\n";
-    ddlQuery << "    vector_type=" << Params.VectorOpts.VectorType << ",\n";
-    ddlQuery << "    vector_dimension=" << Params.VectorOpts.VectorDimension;
+    ddlQuery << "    " << Params.GetDistanceDDL();
+    // When VectorDimension is 0, omit vector_type/vector_dimension so the server
+    // autodetects them from the table data. This is used for datasets imported
+    // from an external source (e.g. S3) whose dimension is not known in advance.
+    if (Params.VectorOpts.VectorDimension) {
+        ddlQuery << ",\n    vector_type=" << Params.VectorOpts.VectorType;
+        ddlQuery << ",\n    vector_dimension=" << Params.VectorOpts.VectorDimension;
+    }
     if (Params.KmeansTreeLevels) {
         ddlQuery << ",\n    levels=" << Params.KmeansTreeLevels;
     }

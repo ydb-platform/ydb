@@ -138,7 +138,7 @@ TEST(TErrorTest, ErrorSanitizer)
         auto instant1 = TInstant::Days(123);
         TErrorSanitizerGuard guard1(
             instant1,
-            /*localHostNameOverride*/ TSharedRef::FromString("<host-override>"));
+            /*localHostNameOverride*/ TSharedRef::FromString(std::string("<host-override>")));
 
         auto error2 = TError("error2");
         checkSantizied(error2);
@@ -149,7 +149,7 @@ TEST(TErrorTest, ErrorSanitizer)
             TErrorSanitizerGuard guard2(
                 instant2,
                 /*localHostNameOverride*/
-                TSharedRef::FromString("<host-override>"));
+                TSharedRef::FromString(std::string("<host-override>")));
 
             auto error3 = TError("error3");
             checkSantizied(error3);

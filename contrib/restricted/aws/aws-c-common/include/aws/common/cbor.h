@@ -305,12 +305,25 @@ struct aws_cbor_decoder *aws_cbor_decoder_destroy(struct aws_cbor_decoder *decod
 /**
  * @brief  Get the length of the remaining bytes of the source. Once the source was decoded, it will be consumed,
  * and result in decrease of the remaining length of bytes.
+ * Note: aws_cbor_decoder_peek_type will also decrease the remaining length, as it decodes the next element
+ * internally.
  *
  * @param decoder
  * @return The length of bytes remaining of the decoder source.
  */
 AWS_COMMON_API
 size_t aws_cbor_decoder_get_remaining_length(const struct aws_cbor_decoder *decoder);
+
+/**
+ * @brief  Get the number of bytes that have not yet been consumed (popped) by the caller.
+ * Unlike aws_cbor_decoder_get_remaining_length, aws_cbor_decoder_peek_type does NOT affect this value.
+ * Only pop/consume operations reduce the unconsumed length.
+ *
+ * @param decoder
+ * @return The number of bytes not yet consumed from the decoder source.
+ */
+AWS_COMMON_API
+size_t aws_cbor_decoder_get_unconsumed_length(const struct aws_cbor_decoder *decoder);
 
 /**
  * @brief  Reset the decoder source to a new src.

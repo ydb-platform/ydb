@@ -113,7 +113,7 @@ class TestBase:
             assert vslot.VDiskMetrics.State == EVDiskState.OK
 
     def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=None,
-               mock_base_config=None, allow_http_fetch=False, fake_grpc_handler=None):
+               mock_base_config=None, allow_http_fetch=False, fake_grpc_handler=None, suppress_table_dump=False):
         random.seed(42)
         common.cache.clear()
         common.name_cache.clear()
@@ -212,7 +212,10 @@ class TestBase:
         patches.enter_context(patch('sys.stdout', captured_stdout))
         patches.enter_context(patch('sys.stderr', captured_stderr))
         patches.enter_context(patch('shutil.get_terminal_size', side_effect=mock_get_terminal_size))
-        patches.enter_context(patch.object(table.TableOutput, 'dump', mock_table_dump))
+        if suppress_table_dump:
+            patches.enter_context(patch.object(table.TableOutput, 'dump', lambda *args, **kwargs: None))
+        else:
+            patches.enter_context(patch.object(table.TableOutput, 'dump', mock_table_dump))
 
         with patches:
             try:
@@ -343,9 +346,9 @@ class Test(TestBase):
         retry_assertions(self.check_vdisks_state_ok)
         pool_name = 'dynamic_storage_pool:1'
         return [
-            self._trace('--dry-run', 'group', 'add', '--pool-name', pool_name, '--groups', '1', '--size-in-units', '4', with_grpc_calls=True),
-            self._trace('group', 'add', '--pool-name', pool_name, '--groups', '1', '--size-in-units', '2', with_grpc_calls=True),
-            self._trace('group', 'add', '--pool-name', pool_name, '--groups', '1', with_grpc_calls=True),
+            self._trace('--dry-run', 'group', 'add', '--pool-name', pool_name, '--groups', '1', '--size-in-units', '4', with_grpc_calls=True, suppress_table_dump=True),
+            self._trace('group', 'add', '--pool-name', pool_name, '--groups', '1', '--size-in-units', '2', with_grpc_calls=True, suppress_table_dump=True),
+            self._trace('group', 'add', '--pool-name', pool_name, '--groups', '1', with_grpc_calls=True, suppress_table_dump=True),
             self._trace('group', 'list', '--columns', 'GroupId', 'PoolName', 'SizeInUnits'),
         ]
 
@@ -524,7 +527,7 @@ class Test(TestBase):
                 pending_reassigns = {}
             fake_grpc_handler = FakeReassignGroupDiskHandler(pending_reassigns, base_config)
             return self._trace('--verbose', 'cluster', 'balance', '--storage-pool=test-pool', '--max-iterations=1', *args,
-                               with_grpc_calls=True, allow_http_fetch=True,
+                               with_grpc_calls=True,
                                mock_base_config=base_config,
                                fake_grpc_handler=fake_grpc_handler)
 
@@ -561,7 +564,7 @@ class Test(TestBase):
             fake_grpc_handler = FakeReassignGroupDiskHandler(pending_reassigns, base_config)
             return self._trace('--verbose', 'cluster', 'balance', '--only-from-overpopulated-pdisks',
                                '--storage-pool=test-pool', '--max-iterations=1',
-                               with_grpc_calls=True, allow_http_fetch=True,
+                               with_grpc_calls=True,
                                mock_base_config=base_config,
                                fake_grpc_handler=fake_grpc_handler)
 
@@ -573,3 +576,72 @@ class Test(TestBase):
                 builder=make_builder(2, [2, 2, 2, 2, 1, 2, 2, 2, 2]),
                 pending_reassigns={0x80000005: (1, 1002, 1000)}),
         ]
+
+    def test_filter_healthy_groups_requires_bsc_ready(self):
+        """Status=READY alone is not enough: BSC ReadyStablePeriod uses TVSlot.Ready."""
+        from ydb.apps.dstool.lib.dstool_cmd_cluster_balance import ClusterInfo, GroupsInfo
+
+        builder = (
+            BaseConfigBuilder()
+            .add_node(node_id=1)
+            .add_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=8)
+            .add_group(group_id=0x80000001, vslot_ids=[(1, 1001, 1000)])
+            .add_group(group_id=0x80000002, vslot_ids=[(1, 1001, 1001)])
+            # Fully BSC-ready
+            .add_vslot(node_id=1, pdisk_id=1001, vslot_id=1000, group_id=0x80000001, group_generation=1)
+            # Status=READY + metrics OK, but Ready=False (still in ReadyStablePeriod)
+            .add_vslot(node_id=1, pdisk_id=1001, vslot_id=1001, group_id=0x80000002, group_generation=1, ready=False)
+            .add_storage_pool(name='test-pool', erasure_species='none', kind='hdd')
+        )
+        mock_config = builder.build()
+        base_config = mock_config['BaseConfig']
+        vslot_map = common.build_vslot_map(base_config)
+        groups = common.select_groups(base_config)
+
+        healthy = common.filter_healthy_groups(groups, base_config, vslot_map)
+        assert healthy == {0x80000001}, healthy
+
+        with patch.object(common, 'fetch_base_config_and_storage_pools', return_value=mock_config):
+            cluster_info = ClusterInfo.collect_cluster_info()
+            groups_info = GroupsInfo.collect_groups_info(cluster_info)
+
+        assert groups_info.healthy_groups == {0x80000001}
+        assert 0x80000002 in groups_info.unhealthy_groups
+        # One group fully ready (diff 0), one group missing BSC-ready (diff -1)
+        assert cluster_info.vdisks_groups_count_map[0] == 1
+        assert cluster_info.vdisks_groups_count_map[-1] == 1
+
+    def test_cluster_balance_skips_not_bsc_ready(self):
+        """Balance must not relocate VDisks from groups still in ReadyStablePeriod."""
+        builder = (
+            BaseConfigBuilder()
+            .add_node(node_id=1)
+            .add_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=1)
+            .add_pdisk(node_id=1, pdisk_id=1002, expected_slot_count=4)
+            .add_group(group_id=0x80000001, vslot_ids=[(1, 1001, 1000)], group_size_in_units=1)
+            .add_group(group_id=0x80000002, vslot_ids=[(1, 1001, 1001)], group_size_in_units=1)
+            # Overpopulated pdisk 1001 has two slots; only group 2 is BSC-ready.
+            .add_vslot(node_id=1, pdisk_id=1001, vslot_id=1000, group_id=0x80000001, group_generation=1, ready=False)
+            .add_vslot(node_id=1, pdisk_id=1001, vslot_id=1001, group_id=0x80000002, group_generation=1)
+            .add_storage_pool(name='test-pool', erasure_species='none', kind='hdd')
+        )
+
+        base_config = builder.build()
+        # Fake handler would succeed for either group; balance must only pick the BSC-ready one.
+        fake_grpc_handler = FakeReassignGroupDiskHandler(
+            {
+                0x80000001: (1, 1002, 1000),
+                0x80000002: (1, 1002, 1001),
+            },
+            base_config,
+        )
+        return self._trace(
+            '--verbose', 'cluster', 'balance',
+            '--only-from-overpopulated-pdisks',
+            '--storage-pool=test-pool',
+            '--max-iterations=1',
+            '--waiting-time=0',
+            with_grpc_calls=True,
+            mock_base_config=base_config,
+            fake_grpc_handler=fake_grpc_handler,
+        )

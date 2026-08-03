@@ -719,6 +719,145 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         StopFastPathService(env, partition, edge);
     }
 
+    Y_UNIT_TEST(ShouldRequestDDiskAllocationForAddedHost)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        // The add-host allocation is the only request that uses
+        // DirectBlockGroupOperations (the initial bulk allocation uses
+        // Queries).
+        ui32 addHostRequestCount = 0;
+        ui32 addHostNumDDisks = 0;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() > 0) {
+                    ++addHostRequestCount;
+                    addHostNumDDisks =
+                        msg->Record.GetDirectBlockGroupOperations(0)
+                            .GetDefineDirectBlockGroup()
+                            .GetNumDDisks();
+                }
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // Drop the throwaway sender right after sending: its strict edge actor
+        // would otherwise abort on the pipe notifications during the
+        // free-running Sim. The payload is still delivered by the pipe client.
+        const TActorId sender = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        env.Runtime->SendToPipe(
+            partition,
+            sender,
+            new TEvPartitionDirectPrivate::TEvAddHostToDBG(0, 5),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        runtime->DestroyActor(sender);
+
+        env.Sim(TDuration::Seconds(10));
+
+        // The add persisted its intent and asked BSController to grow the group
+        // to DirectBlockGroupHostCount + 1 DDisks.
+        UNIT_ASSERT_VALUES_EQUAL(1u, addHostRequestCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<ui32>(DirectBlockGroupHostCount + 1),
+            addHostNumDDisks);
+    }
+
+    Y_UNIT_TEST(ShouldReplayInFlightAddHostAfterRestart)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        ui32 addHostRequestCount = 0;
+        bool dropNextAddHostResult = false;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() > 0) {
+                    ++addHostRequestCount;
+                }
+            }
+            // Drop the first add-host result so the connection is never
+            // persisted (the intent stays), forcing a replay on restart.
+            if (dropNextAddHostResult &&
+                type ==
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+                        EventType)
+            {
+                dropNextAddHostResult = false;
+                return false;
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // Trigger an add whose BSController result is dropped: the intent is
+        // persisted but the connection is not.
+        dropNextAddHostResult = true;
+        {
+            const TActorId sender = runtime->AllocateEdgeActor(
+                env.Settings.ControllerNodeId,
+                __FILE__,
+                __LINE__);
+            env.Runtime->SendToPipe(
+                partition,
+                sender,
+                new TEvPartitionDirectPrivate::TEvAddHostToDBG(0, 5),
+                0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+            runtime->DestroyActor(sender);
+        }
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, addHostRequestCount);
+
+        // Restart: the persisted intent must be replayed.
+        {
+            scopedService.reset();
+            env.RestartNode(env.Settings.ControllerNodeId);
+            env.Sim(TDuration::Seconds(1));
+            scopedService = std::make_unique<TScopedNbsService>(
+                CreateNbsConfig(EWriteMode::DirectWrite));
+        }
+        WaitForTabletBoot(env);
+        env.Sim(TDuration::Seconds(10));
+
+        // The replay re-sent the BSController allocation request.
+        UNIT_ASSERT_VALUES_EQUAL(2u, addHostRequestCount);
+    }
+
     Y_UNIT_TEST(BasicWriteReadPBufferReplication)
     {
         BasicWriteRead(EWriteMode::IndirectWrite);
@@ -771,7 +910,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        auto scopedService = SetupStorage(env, EWriteMode::IndirectWrite);
+        // set big writeHedgingDelay for test pure fallback to direct writes
+        auto scopedService = SetupStorage(
+            env,
+            EWriteMode::IndirectWrite,
+            TDuration::Seconds(10));
 
         auto partition = CreatePartitionTablet(env);
 
@@ -1261,6 +1404,97 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         StopFastPathService(env, partition, edge);
     }
 
+    // The tablet-wide cleanup barrier is broadcast per DBG, and many DBGs of
+    // the tablet share the same pbuffer endpoints (each node/pdisk/slot keeps
+    // one barrier per tabletId). Without dedup a single cleanup tick sends the
+    // same barrier lsn to a shared endpoint once per DBG on it - a
+    // non-advancing MoveBarrier that DDisk logs as an error. Assert each
+    // pbuffer receives any given barrier lsn at most once.
+    Y_UNIT_TEST(ShouldNotResendSameBarrierToPBuffer)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(
+            env,
+            EWriteMode::DirectWrite,
+            TDuration::Seconds(1),
+            /*pbufferCleanupLsnStep=*/4,
+            /*syncRequestsBatchSize=*/1);
+
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        // Barrier lsn of every TEvErasePersistentBuffer, grouped by the pbuffer
+        // it was sent to.
+        TMap<TActorId, TVector<ui64>> barrierLsnsByRecipient;
+        runtime->FilterFunction =
+            [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                NDDisk::TEvErasePersistentBuffer::EventType)
+            {
+                barrierLsnsByRecipient[ev->GetRecipientRewrite()].push_back(
+                    ev->Get<NDDisk::TEvErasePersistentBuffer>()
+                        ->Record.GetLsn());
+            }
+            return true;
+        };
+
+        constexpr ui64 BlockCount = 16;
+        TVector<TString> data(BlockCount);
+        for (ui64 i = 0; i < BlockCount; ++i) {
+            data[i] = NUnitTest::RandomString(DefaultBlockSize, i);
+        }
+
+        // Two batches so the cleanup floor moves past lsn 1 and a non-zero
+        // barrier fires while later writes are still in flight - each cleanup
+        // tick fans the same bound out to the shared pbuffer endpoints.
+        for (ui64 i = 0; i < BlockCount / 2; ++i) {
+            WriteBlock(env, loadActorAdapter, edge, i, data[i]);
+        }
+        env.Sim(TDuration::Seconds(10));
+        for (ui64 i = BlockCount / 2; i < BlockCount; ++i) {
+            WriteBlock(env, loadActorAdapter, edge, i, data[i]);
+        }
+        env.Sim(TDuration::Seconds(10));
+
+        // A non-zero barrier actually reached a pbuffer (so the check is not
+        // vacuous), and no pbuffer received the same barrier lsn twice.
+        ui64 maxBarrierLsn = 0;
+        for (const auto& [recipient, lsns]: barrierLsnsByRecipient) {
+            THashSet<ui64> seen;
+            for (const ui64 lsn: lsns) {
+                UNIT_ASSERT_C(
+                    seen.insert(lsn).second,
+                    "pbuffer " << recipient << " got barrier lsn " << lsn
+                               << " more than once");
+                maxBarrierLsn = Max(maxBarrierLsn, lsn);
+            }
+        }
+        UNIT_ASSERT_C(
+            maxBarrierLsn > 0,
+            "no non-zero barrier reached a pbuffer");
+
+        // No data lost.
+        for (ui64 i = 0; i < BlockCount; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                ReadBlock(env, loadActorAdapter, edge, i),
+                data[i]);
+        }
+
+        StopFastPathService(env, partition, edge);
+    }
+
     Y_UNIT_TEST(MonitoringPageRenders)
     {
         TEnvironmentSetup env{{
@@ -1294,6 +1528,231 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT(!html.empty());
         UNIT_ASSERT_STRING_CONTAINS(html, "partition_direct tablet");
         UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
+    }
+
+    Y_UNIT_TEST(StandardTabletPageRenders)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        const ui64 tabletId = CreatePartitionTablet(env);
+
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        // Empty path (not "/app") renders the standard flat-tablet page.
+        runtime->SendToPipe(
+            tabletId,
+            edge,
+            new NActors::NMon::TEvRemoteHttpInfo(
+                "?TabletID=" + ToString(tabletId)),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+
+        auto response =
+            env.WaitForEdgeActorEvent<NActors::NMon::TEvRemoteHttpInfoRes>(
+                edge);
+        UNIT_ASSERT(response);
+
+        const TString& html = response->Get()->Html;
+        // The standard tablet page: the info block, the Restart action, and the
+        // "App" link to this tablet's own monitoring page.
+        UNIT_ASSERT_STRING_CONTAINS(html, "Tablet generation");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "RestartTabletID=" + ToString(tabletId));
+        UNIT_ASSERT_STRING_CONTAINS(html, "tablets/app?");
+    }
+
+    Y_UNIT_TEST(ShouldSuicideOnPoisonByBlockedGeneration)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        const ui64 tabletId = CreatePartitionTablet(env);
+
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        // Observe the tablet death via TEvTabletDead.
+        bool tabletDead = false;
+        runtime->FilterFunction =
+            [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
+        {
+            Y_UNUSED(nodeId);
+            if (ev->GetTypeRewrite() == TEvTablet::TEvTabletDead::EventType) {
+                tabletDead = true;
+            }
+            if (ev->GetRecipientRewrite() == edge) {
+                return false;
+            }
+            return true;
+        };
+
+        runtime->SendToPipe(
+            tabletId,
+            edge,
+            std::make_unique<TEvPartitionDirectPrivate::TEvPoison>("test")
+                .release(),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+
+        env.Sim(TDuration::Seconds(1));
+
+        UNIT_ASSERT(tabletDead);
+    }
+
+    Y_UNIT_TEST(ShouldKeepOtherDBGConnectionsWhenAddingHosts)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        // Record every add-host allocation round-trip. The request's NumDDisks
+        // is the partition's belief about the group's size (current + 1); the
+        // result's DDiskId count is BSController's post-op group size. An add
+        // to one DBG must not affect either side's view of any other DBG.
+        struct TAddHostRoundTrip
+        {
+            ui64 DbgId = 0;
+            ui32 RequestedNumDDisks = 0;
+            ui32 ResultNumDDisks = 0;
+        };
+
+        TVector<TAddHostRoundTrip> roundTrips;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() == 1) {
+                    const auto& op =
+                        msg->Record.GetDirectBlockGroupOperations(0);
+                    roundTrips.push_back({
+                        .DbgId = op.GetDirectBlockGroupId(),
+                        .RequestedNumDDisks =
+                            op.GetDefineDirectBlockGroup().GetNumDDisks(),
+                    });
+                }
+            }
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+                    EventType)
+            {
+                auto* msg =
+                    ev->Get<TEvBlobStorage::
+                                TEvControllerAllocateDDiskBlockGroupResult>();
+                if (msg->Record.DirectBlockGroupsSize() == 1 &&
+                    !roundTrips.empty())
+                {
+                    roundTrips.back().ResultNumDDisks = static_cast<ui32>(
+                        msg->Record.GetDirectBlockGroups(0).DDiskIdSize());
+                }
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // See ShouldRequestDDiskAllocationForAddedHost for the throwaway
+        // sender.
+        auto addHost = [&](size_t dbgId, size_t newHostIndex)
+        {
+            const TActorId sender = runtime->AllocateEdgeActor(
+                env.Settings.ControllerNodeId,
+                __FILE__,
+                __LINE__);
+            env.Runtime->SendToPipe(
+                partition,
+                sender,
+                new TEvPartitionDirectPrivate::TEvAddHostToDBG(
+                    dbgId,
+                    newHostIndex),
+                0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+            runtime->DestroyActor(sender);
+            env.Sim(TDuration::Seconds(10));
+        };
+
+        const auto defaultCount = static_cast<ui32>(DirectBlockGroupHostCount);
+
+        // Grow DBG 0, then DBG 1: each add sees its own group at the default
+        // size and grows only it.
+        addHost(0, 5);
+        addHost(1, 5);
+
+        UNIT_ASSERT_VALUES_EQUAL(2u, roundTrips.size());
+        UNIT_ASSERT_VALUES_EQUAL(0u, roundTrips[0].DbgId);
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultCount + 1,
+            roundTrips[0].RequestedNumDDisks);
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultCount + 1,
+            roundTrips[0].ResultNumDDisks);
+        UNIT_ASSERT_VALUES_EQUAL(1u, roundTrips[1].DbgId);
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultCount + 1,
+            roundTrips[1].RequestedNumDDisks);
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultCount + 1,
+            roundTrips[1].ResultNumDDisks);
+
+        // A third add probes DBG 0 after DBG 1's add: the partition must still
+        // carry DBG 0's grown connections (request 7), and BSController must
+        // still hold its 6-disk group (result 7).
+        addHost(0, 6);
+
+        UNIT_ASSERT_VALUES_EQUAL(3u, roundTrips.size());
+        UNIT_ASSERT_VALUES_EQUAL(0u, roundTrips[2].DbgId);
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultCount + 2,
+            roundTrips[2].RequestedNumDDisks);
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultCount + 2,
+            roundTrips[2].ResultNumDDisks);
+
+        // Restart and probe DBG 0 again: the persisted connections must carry
+        // all three adds. Only the request is asserted - it is sent before
+        // (and regardless of) BSController's capacity for one more disk.
+        {
+            scopedService.reset();
+            env.RestartNode(env.Settings.ControllerNodeId);
+            env.Sim(TDuration::Seconds(1));
+            scopedService = std::make_unique<TScopedNbsService>(
+                CreateNbsConfig(EWriteMode::DirectWrite));
+        }
+        WaitForTabletBoot(env);
+        env.Sim(TDuration::Seconds(10));
+
+        addHost(0, 7);
+
+        UNIT_ASSERT_VALUES_EQUAL(4u, roundTrips.size());
+        UNIT_ASSERT_VALUES_EQUAL(0u, roundTrips[3].DbgId);
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultCount + 3,
+            roundTrips[3].RequestedNumDDisks);
     }
 }
 

@@ -139,6 +139,7 @@
 #include <ydb/services/persqueue_v1/topic_deferred_publish.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/replication/grpc_service.h>
+#include <ydb/services/distributed_storage/grpc_service.h>
 #include <ydb/services/test_shard/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
@@ -201,6 +202,16 @@
 namespace NKikimr {
 
 namespace {
+
+// client_certificate_authorization (request/required) applies to grpc_config.ssl_port only.
+void FillGrpcSslDataFromClientCertificateAuthorization(
+    NYdbGrpc::TSslData& sslData,
+    const NKikimrConfig::TAppConfig& appConfig
+) {
+    const auto& clientCertificateAuthorization = appConfig.GetClientCertificateAuthorization();
+    sslData.DoRequestClientCertificate = clientCertificateAuthorization.GetRequestClientCertificate();
+    sslData.ClientCertificateRequired = clientCertificateAuthorization.GetClientCertificateRequired();
+}
 
 void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
     auto wrapper = grpcServersWrapper.lock();
@@ -450,6 +461,7 @@ public:
         const auto& securityConfig(Config.GetDomainsConfig().GetSecurityConfig());
         appData->EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
         appData->EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
+        appData->AlwaysSetSystemOwner = securityConfig.GetAlwaysSetSystemOwner();
         if (securityConfig.AdministrationAllowedSIDsSize() > 0) {
             TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
             appData->AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
@@ -668,6 +680,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.CertificateFile = appConfig.GetMonitoringConfig().GetMonitoringCertificateFile();
         monConfig.PrivateKeyFile = appConfig.GetMonitoringConfig().GetMonitoringPrivateKeyFile();
         monConfig.CaFile = appConfig.GetMonitoringConfig().GetMonitoringCaFile();
+        monConfig.ClientCertificateRequired = appConfig.GetMonitoringConfig().GetClientCertificateRequired();
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
         monConfig.RequireCountersAuthentication = appConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
         if (appConfig.GetMonitoringConfig().CompressContentTypesSize() > 0) {
@@ -871,6 +884,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["config"] = &hasConfig;
         TServiceCfg hasBridge = services.empty();
         names["bridge"] = &hasBridge;
+        TServiceCfg hasDistributedStorage = services.empty();
+        names["distributed_storage"] = &hasDistributedStorage;
         TServiceCfg hasTestShard = services.empty();
         names["test_shard"] = &hasTestShard;
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
@@ -1192,8 +1207,12 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
             server.AddService(new NGRpcService::TBridgeGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
+        if (hasDistributedStorage) {
+            server.AddService(new NGRpcService::TDistributedStorageGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+        }
+
         if (hasTestShard) {
-            server.AddService(new NGRpcService::TTestShardGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+            server.AddService(new NGRpcService::TTestShardSetGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
         if (hasNbs) {
@@ -1294,7 +1313,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
             sslData.Root = ReadFile(pathToCaFile);
             sslData.Cert = ReadFile(pathToCertificateFile);
             sslData.Key = ReadFile(pathToPrivateKeyFile);
-            sslData.DoRequestClientCertificate = appConfig.GetClientCertificateAuthorization().GetRequestClientCertificate();
+            FillGrpcSslDataFromClientCertificateAuthorization(sslData, appConfig);
             sslOpts.SetSslData(sslData);
 
             grpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(sslOpts, Counters) });
@@ -1351,6 +1370,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
                     pathToPrivateKeyFile = GET_PATH_TO_FILE(grpcConfig, PathToPrivateKeyFile, Key);
                 }
                 sslData.Key = ReadFile(pathToPrivateKeyFile);
+                // client_certificate_authorization applies to the main grpcs port only.
+                // ext_endpoints need their own mTLS settings (not implemented yet).
 #undef GET_PATH_TO_FILE
 
                 xopts.SetSslData(sslData);
@@ -2126,16 +2147,16 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
+    if (serviceMask.EnableWorkloadManagerService) {
+        sil->AddServiceInitializer(new TWorkloadManagerServiceInitializer(runConfig));
+    }
+
     if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));
     }
 
     if (serviceMask.EnableMetadataProvider) {
         sil->AddServiceInitializer(new TMetadataProviderInitializer(runConfig));
-    }
-
-    if (serviceMask.EnableExternalIndex) {
-        sil->AddServiceInitializer(new TExternalIndexInitializer(runConfig));
     }
 
     if (serviceMask.EnableCompDiskLimiter) {
@@ -2231,10 +2252,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TReplicationServiceInitializer(runConfig));
     }
 
-    if (serviceMask.EnableLocalPgWire) {
-        sil->AddServiceInitializer(new TLocalPgWireServiceInitializer(runConfig));
-    }
-
     if (serviceMask.EnableKafkaProxy) {
         sil->AddServiceInitializer(new TKafkaProxyServiceInitializer(runConfig));
     }
@@ -2262,6 +2279,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TNbsServiceInitializer(runConfig));
     }
 #endif
+
+    if (serviceMask.EnableUdfStore) {
+        sil->AddServiceInitializer(new TUdfStoreInitializer(runConfig, FunctionRegistry));
+    }
 
     return sil;
 }

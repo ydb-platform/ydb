@@ -76,6 +76,14 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 partitionConfig->SetWriteSpeedInBytesPerSecond(parameters.writeSpeed);
                 partitionConfig->SetBurstSize(parameters.writeSpeed);
             }
+            if (parameters.readSpeed > 0) {
+                partitionConfig->SetReadSpeedInBytesPerSecond(parameters.readSpeed);
+                partitionConfig->SetReadBurstBytes(parameters.readSpeed);
+            }
+            if (parameters.readSpeedInMessages > 0) {
+                partitionConfig->SetReadSpeedInMessagesPerSecond(parameters.readSpeedInMessages);
+                partitionConfig->SetReadBurstMessages(parameters.readSpeedInMessages);
+            }
 
             partitionConfig->SetMaxCountInPartition(parameters.maxCountInPartition);
             partitionConfig->SetMaxSizeInPartition(parameters.maxSizeInPartition);
@@ -111,6 +119,14 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 }
                 if (u.MetricsLevel.has_value()) {
                     consumer->SetMetricsLevel(*u.MetricsLevel);
+                }
+                if (u.ReadSpeedInBytesPerSecond.has_value() || u.ReadSpeedInMessagesPerSecond.has_value()) {
+                    auto* readQuota = NPQ::GetOrAddReadQuota(*tabletConfig, u.Name);
+                    readQuota->SetSpeedInBytesPerSecond(u.ReadSpeedInBytesPerSecond.value_or(0));
+                    readQuota->SetBurstSize(u.ReadSpeedInBytesPerSecond.value_or(0));
+
+                    readQuota->SetSpeedInMessagesPerSecond(u.ReadSpeedInMessagesPerSecond.value_or(0));
+                    readQuota->SetBurstSizeInMessages(u.ReadSpeedInMessagesPerSecond.value_or(0));
                 }
             }
 

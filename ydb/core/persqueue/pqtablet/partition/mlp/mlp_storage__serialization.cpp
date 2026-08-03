@@ -748,9 +748,8 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
             serializer.Add(offset, msg);
         };
 
-        // New messages that were moved to the slow zone within this batch (e.g. when an offset gap
-        // appears) live below FirstOffset, so they are emitted here in offset order.
-        for (auto it = Storage->SlowMessages.lower_bound(FirstNewMessage.value()); it != Storage->SlowMessages.end() && it->first < Storage->FirstOffset; ++it) {
+        // New messages that were moved to the slow zone within this batch
+        for (auto it = Storage->SlowMessages.lower_bound(FirstNewMessage.value()); it != Storage->SlowMessages.end(); ++it) {
             add(it->first, it->second);
         }
 

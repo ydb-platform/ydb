@@ -545,6 +545,89 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.SetFillTables(true);
         tester.Execute();
     }
+
+    // Reads between upserts force a chain of uncommitted writes; results must be identical
+    // whether or not the shard acknowledges them before they are persistent.
+    class TPipelinedUncommittedWrites : public TTableDataModificationTester {
+    protected:
+        YDB_ACCESSOR(bool, Enabled, true);
+        YDB_ACCESSOR(TString, Table, "/Root/KV");
+
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(Enabled);
+        }
+
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session = client.GetSession().GetValueSync().GetSession();
+
+            auto tx = session.BeginTransaction(TTxSettings::SerializableRW())
+                .ExtractValueSync()
+                .GetTransaction();
+
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    UPSERT INTO `%s` (Key, Value) VALUES (10u, "Ten"), (4000000010u, "BigTen");
+                )", Table.c_str()), TTxControl::Tx(tx)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // Forces the first flush; must observe the transaction's own writes
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    SELECT Key, Value FROM `%s` WHERE Key IN (10u, 4000000010u) ORDER BY Key;
+                )", Table.c_str()), TTxControl::Tx(tx)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]];[4000000010u;["BigTen"]]])",
+                    FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    UPSERT INTO `%s` (Key, Value) VALUES (11u, "Eleven");
+                )", Table.c_str()), TTxControl::Tx(tx)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // The second flush is chained onto the first
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    SELECT Key, Value FROM `%s` WHERE Key IN (10u, 11u) ORDER BY Key;
+                )", Table.c_str()), TTxControl::Tx(tx)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]];[11u;["Eleven"]]])",
+                    FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            auto commitResult = tx.Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+            {
+                auto result = session.ExecuteQuery(Sprintf(R"(
+                    SELECT Key, Value FROM `%s` WHERE Key IN (10u, 11u, 4000000010u) ORDER BY Key;
+                )", Table.c_str()), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]];[11u;["Eleven"]];[4000000010u;["BigTen"]]])",
+                    FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    // Keys 10 and 4000000010 land on different shards, so the commit goes through ValidateLocks.
+    Y_UNIT_TEST_TWIN(PipelinedUncommittedWrites, Enabled) {
+        TPipelinedUncommittedWrites tester;
+        tester.SetEnabled(Enabled);
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    // KQP must skip ColumnShard, which does not implement WriteIndex
+    Y_UNIT_TEST(PipelinedUncommittedWritesOlap) {
+        TPipelinedUncommittedWrites tester;
+        tester.SetEnabled(true);
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

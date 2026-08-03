@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <ydb/core/tx/locks/sys_tables.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -109,6 +111,16 @@ public:
             if (lock.Proto.GetHasWrites()) {
                 lockPtr->Lock.Proto.SetHasWrites(true);
             }
+            // Merge per writer so an echo from a later write can't drop another writer's entry.
+            for (const auto& writeIndex : lock.Proto.GetWriteIndexes()) {
+                auto* existing = FindIfPtr(*lockPtr->Lock.Proto.MutableWriteIndexes(),
+                    [&](const auto& entry) { return entry.GetWriterIndex() == writeIndex.GetWriterIndex(); });
+                if (existing) {
+                    existing->SetWriteIndex(writeIndex.GetWriteIndex());
+                } else {
+                    *lockPtr->Lock.Proto.AddWriteIndexes() = writeIndex;
+                }
+            }
 
             lockPtr->LocksAcquireFailure |= isLocksAcquireFailure;
             if (!lockPtr->LocksAcquireFailure) {
@@ -160,6 +172,11 @@ public:
         }
 
         return true;
+    }
+
+    ui64 NextWriteIndex(ui64 writerIndex, ui64 shardId) override {
+        AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
+        return ++ShardsInfo.at(shardId).WriteIndexes[writerIndex];
     }
 
     void BreakLock(ui64 shardId) override {
@@ -685,6 +702,9 @@ private:
         // All QuerySpanIds of queries that wrote to this shard in insertion order.
         TVector<ui64> BreakerQuerySpanIds;
         THashSet<ui64> BreakerQuerySpanIdsSet;
+
+        // Last uncommitted write index sent to this shard, per writer (absent = none)
+        std::map<ui64, ui64> WriteIndexes;
     };
 
     static void AddBreakerQuerySpanId(TShardInfo& shardInfo, ui64 querySpanId) {

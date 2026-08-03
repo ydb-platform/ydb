@@ -40,6 +40,8 @@ public:
                 lock.Counter = rowset.template GetValue<typename Schema::Locks::Counter>();
                 lock.CreateTs = rowset.template GetValue<typename Schema::Locks::CreateTimestamp>();
                 lock.Flags = rowset.template GetValue<typename Schema::Locks::Flags>();
+                lock.WriterIndex = rowset.template GetValue<typename Schema::Locks::WriterIndex>();
+                lock.WriteIndex = rowset.template GetValue<typename Schema::Locks::WriteIndex>();
                 lockIndex[lock.LockId] = rows.size() - 1;
                 if (!rowset.Next()) {
                     return false;
@@ -121,7 +123,9 @@ public:
             NIceDb::TUpdate<typename Schema::Locks::Generation>(generation),
             NIceDb::TUpdate<typename Schema::Locks::Counter>(counter),
             NIceDb::TUpdate<typename Schema::Locks::CreateTimestamp>(createTs),
-            NIceDb::TUpdate<typename Schema::Locks::Flags>(flags));
+            NIceDb::TUpdate<typename Schema::Locks::Flags>(flags),
+            NIceDb::TUpdate<typename Schema::Locks::WriterIndex>(0),
+            NIceDb::TUpdate<typename Schema::Locks::WriteIndex>(0));
         HasChanges_ = true;
     }
 
@@ -138,6 +142,15 @@ public:
         NIceDb::TNiceDb db(DB);
         db.Table<typename Schema::Locks>().Key(lockId).Update(
             NIceDb::TUpdate<typename Schema::Locks::Flags>(flags));
+        HasChanges_ = true;
+    }
+
+    void PersistLockWriteIndex(ui64 lockId, ui64 writerIndex, ui64 writeIndex) override {
+        using Schema = TSchemaDescription;
+        NIceDb::TNiceDb db(DB);
+        db.Table<typename Schema::Locks>().Key(lockId).Update(
+            NIceDb::TUpdate<typename Schema::Locks::WriterIndex>(writerIndex),
+            NIceDb::TUpdate<typename Schema::Locks::WriteIndex>(writeIndex));
         HasChanges_ = true;
     }
 

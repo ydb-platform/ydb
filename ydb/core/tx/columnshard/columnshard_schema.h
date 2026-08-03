@@ -612,8 +612,12 @@ struct Schema: NIceDb::Schema {
 
         struct Flags: Column<6, NScheme::NTypeIds::Uint64> {};
 
+        struct WriteIndex: Column<7, NScheme::NTypeIds::Uint64> {};
+
+        struct WriterIndex: Column<8, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<LockId>;
-        using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags>;
+        using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags, WriteIndex, WriterIndex>;
     };
 
     struct LockRanges: Table<LockRangesTableId> {

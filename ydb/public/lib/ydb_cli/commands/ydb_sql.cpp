@@ -113,6 +113,9 @@ void TCommandSql::Parse(TConfig& config) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain-AST mode\" (\"--explain-ast\") "
             << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
     }
+    if (OutputFormat == EDataFormat::Svg && !ExecSettings.ExplainMode && !ExecSettings.ExplainAnalyzeMode && !ExecSettings.ExplainAst) {
+        throw TMisuseException() << "SVG output format is only available with --explain or --explain-analyze options";
+    }
     if (ExecSettings.ExplainAnalyzeMode && !CollectStatsMode.empty()) {
         throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain-analyze mode. "
             "Relevant for execution mode only.";

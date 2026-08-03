@@ -27,8 +27,13 @@ from io import BytesIO
 
 import botocore
 import botocore.auth
-from botocore import utils
+from botocore import (
+    retryhandler,  # noqa: F401
+    translate,  # noqa: F401
+    utils,
+)
 from botocore.compat import (
+    MD5_AVAILABLE,  # noqa: F401
     ETree,
     OrderedDict,
     XMLParseError,
@@ -49,6 +54,7 @@ from botocore.docs.utils import (
 from botocore.endpoint_provider import VALID_HOST_LABEL_RE
 from botocore.exceptions import (
     AliasConflictParameterError,
+    MissingServiceIdError,  # noqa: F401
     ParamValidationError,
     UnsupportedTLSVersionWarning,
 )
@@ -61,21 +67,14 @@ from botocore.signers import (
 )
 from botocore.utils import (
     SAFE_CHARS,
+    SERVICE_NAME_ALIASES,  # noqa: F401
     ArnParser,
+    hyphenize_service_id,  # noqa: F401
+    is_global_accesspoint,  # noqa: F401
     percent_encode,
     switch_host_with_param,
     conditionally_calculate_md5,
 )
-
-# Keep these imported.  There's pre-existing code that uses them.
-from botocore import retryhandler  # noqa
-from botocore import translate  # noqa
-from botocore.compat import MD5_AVAILABLE  # noqa
-from botocore.exceptions import MissingServiceIdError  # noqa
-from botocore.utils import hyphenize_service_id  # noqa
-from botocore.utils import is_global_accesspoint  # noqa
-from botocore.utils import SERVICE_NAME_ALIASES  # noqa
-
 
 logger = logging.getLogger(__name__)
 
@@ -329,9 +328,8 @@ def _sse_md5(params, sse_member_prefix='SSECustomer'):
     key_as_bytes = params[sse_key_member]
     if isinstance(key_as_bytes, str):
         key_as_bytes = key_as_bytes.encode('utf-8')
-    key_md5_str = base64.b64encode(get_md5(key_as_bytes).digest()).decode(
-        'utf-8'
-    )
+    md5_val = get_md5(key_as_bytes, usedforsecurity=False).digest()
+    key_md5_str = base64.b64encode(md5_val).decode('utf-8')
     key_b64_encoded = base64.b64encode(key_as_bytes).decode('utf-8')
     params[sse_key_member] = key_b64_encoded
     params[sse_md5_member] = key_md5_str
@@ -1062,6 +1060,14 @@ def remove_qbusiness_chat(class_attributes, **kwargs):
         del class_attributes['chat']
 
 
+def remove_bedrock_runtime_invoke_model_with_bidirectional_stream(
+    class_attributes, **kwargs
+):
+    """Operation requires h2 which is currently unsupported in Python"""
+    if 'invoke_model_with_bidirectional_stream' in class_attributes:
+        del class_attributes['invoke_model_with_bidirectional_stream']
+
+
 def add_retry_headers(request, **kwargs):
     retries_context = request.context.get('retries')
     if not retries_context:
@@ -1352,6 +1358,10 @@ BUILTIN_HANDLERS = [
         ClientMethodAlias('list_hits_for_qualification_type'),
     ),
     (
+        'getattr.socialmessaging.delete_whatsapp_media_message',
+        ClientMethodAlias('delete_whatsapp_message_media'),
+    ),
+    (
         'before-parameter-build.s3.UploadPart',
         convert_body_to_file_like_object,
         REGISTER_LAST,
@@ -1371,6 +1381,10 @@ BUILTIN_HANDLERS = [
     ('creating-client-class.iot-data', check_openssl_supports_tls_version_1_2),
     ('creating-client-class.lex-runtime-v2', remove_lex_v2_start_conversation),
     ('creating-client-class.qbusiness', remove_qbusiness_chat),
+    (
+        'creating-client-class.bedrock-runtime',
+        remove_bedrock_runtime_invoke_model_with_bidirectional_stream,
+    ),
     ('after-call.iam', json_decode_policies),
     ('after-call.ec2.GetConsoleOutput', decode_console_output),
     ('after-call.cloudformation.GetTemplate', json_decode_template_body),

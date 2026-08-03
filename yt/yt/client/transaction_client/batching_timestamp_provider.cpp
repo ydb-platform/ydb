@@ -156,7 +156,7 @@ private:
             auto timestamp = firstTimestampOrError.Value();
             for (const auto& request : requests) {
                 request.Promise.Set(timestamp);
-                timestamp += request.Count;
+                timestamp = TTimestamp(timestamp.Underlying() + request.Count);
             }
         } else {
             for (const auto& request : requests) {

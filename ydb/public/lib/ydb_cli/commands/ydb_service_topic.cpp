@@ -434,6 +434,9 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .Hidden()
             .StoreMappedResult(&PartitionsPerTablet_, ParsePartitionPerTabletValue);
+        config.Opts->AddLongOption("content-based-deduplication", "Content based deduplication for topic")
+            .Optional()
+            .StoreTrue(&ContentBasedDeduplication_);
 
         config.Opts->MutuallyExclusive("retention-period-hours", "retention-period");
     }
@@ -492,6 +495,10 @@ namespace NYdb::NConsoleClient {
             settings.MetricsLevel(*level);
         }
 
+        if (ContentBasedDeduplication_) {
+            settings.ContentBasedDeduplication(ContentBasedDeduplication_);
+        }
+
         auto status = topicClient.CreateTopic(TopicName, settings).GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
@@ -526,10 +533,9 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("retention-storage-mb", "Storage retention in megabytes")
             .Optional()
             .StoreResult(&RetentionStorageMb_);
-        config.Opts->AddLongOption("content-based-deduplication", "Content based deduplication for topic")
+        config.Opts->AddLongOption("content-based-deduplication", "Content based deduplication for topic (true/false)")
             .Optional()
-            .Hidden()
-            .StoreTrue(&ContentBasedDeduplication_);
+            .StoreResult(&ContentBasedDeduplication_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
@@ -595,8 +601,8 @@ namespace NYdb::NConsoleClient {
             settings.SetRetentionPeriod(*RetentionPeriod_);
         }
 
-        if (ContentBasedDeduplication_ && describeResult.GetTopicDescription().GetContentBasedDeduplication() != ContentBasedDeduplication_) {
-            settings.SetContentBasedDeduplication(ContentBasedDeduplication_);
+        if (ContentBasedDeduplication_.Defined() && describeResult.GetTopicDescription().GetContentBasedDeduplication() != *ContentBasedDeduplication_) {
+            settings.SetContentBasedDeduplication(*ContentBasedDeduplication_);
         }
 
         if (PartitionWriteSpeedKbps_.Defined() && describeResult.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond() / 1_KB != *PartitionWriteSpeedKbps_) {

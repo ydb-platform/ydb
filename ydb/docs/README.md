@@ -12,6 +12,40 @@ YDB follows the "Documentation as Code" approach. For comprehensive information 
 - **[Structure](https://ydb.tech/docs/en/contributor/documentation/structure/?version=main)** - Organization and hierarchy of documentation content
 - **[Genres](https://ydb.tech/docs/en/contributor/documentation/genres/?version=main)** - Different types of documentation and their purposes
 
+## Documentation Writing Skill 🤖
+
+YDB provides an AI-powered documentation writing skill that helps developers create well-integrated documentation automatically.
+
+### Quick Start with the Skill
+
+1. **Prepare your material first** - gather all information about what needs to be documented:
+   - Description and purpose
+   - Parameters, options, configurations
+   - Code examples and usage patterns
+   - Limitations and constraints
+   - Links to PR/Issue where it was implemented
+
+2. **Run `ruler apply`** to generate agent configurations:
+
+```bash
+npm install -g @intellectronica/ruler
+ruler apply
+```
+
+3. **In any IDE** (Cursor, VSCode, JetBrains, Copilot, etc.), provide the information and ask the skill to create documentation
+
+The skill will guide you through a 5-stage workflow to create fully-integrated documentation with glossary, reference, recipes, cross-links, and TOC updates — all in Russian and English.
+
+**Important:** The skill cannot invent technical details. Provide complete information for best results.
+
+### Key Resources
+
+All documentation tools are in [`.ruler/`](.ruler/):
+- **[DOCUMENTATION_SKILL.md](.ruler/DOCUMENTATION_SKILL.md)** — Complete 5-stage workflow
+- **[DOCUMENTATION_RULES.md](.ruler/DOCUMENTATION_RULES.md)** — 15 content rules
+- **[FORMAT_RULES.md](.ruler/FORMAT_RULES.md)** — Markdown formatting standards
+- **[ruler.toml](.ruler/ruler.toml)** — Agent configuration
+
 ## Quick Start
 
 This folder provides two scripts to help you work with the documentation locally:

@@ -36,6 +36,7 @@ class SchemeEntryType(enum.IntEnum):
     RESOURCE_POOL = 21
     TRANSFER = 23
     SYS_VIEW = 24
+    SECRET = 25
 
     @classmethod
     def _missing_(cls, value):
@@ -163,6 +164,14 @@ class SchemeEntryType(enum.IntEnum):
         """
         return entry == SchemeEntryType.SYS_VIEW
 
+    @staticmethod
+    def is_secret(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a secret and False otherwise
+        """
+        return entry == SchemeEntryType.SECRET
+
 
 class SchemeEntry(object):
     __slots__ = (
@@ -274,6 +283,12 @@ class SchemeEntry(object):
         :return: True if scheme entry is a system view and False otherwise
         """
         return SchemeEntryType.is_sysview(self.type)
+
+    def is_secret(self):
+        """
+        :return: True if scheme entry is a secret and False otherwise
+        """
+        return SchemeEntryType.is_secret(self.type)
 
 
 class Directory(SchemeEntry):

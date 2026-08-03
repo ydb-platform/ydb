@@ -11,8 +11,7 @@
 #define NPY_NO_DEPRECATED_API NPY_API_VERSION
 #include "numpy/arrayobject.h"
 #include "numpy/ufuncobject.h"
-
-#include "npy_pycompat.h"
+#include "numpy/npy_math.h"
 
 #include "npy_config.h"
 
@@ -28,16 +27,13 @@
 
 static const char* umath_linalg_version_string = "0.1.5";
 
-struct scalar_trait {};
-struct complex_trait {};
-template<typename typ>
-using dispatch_scalar = typename std::conditional<std::is_scalar<typ>::value, scalar_trait, complex_trait>::type;
-
 /*
  ****************************************************************************
  *                        Debugging support                                 *
  ****************************************************************************
  */
+#define _UMATH_LINALG_DEBUG 0
+
 #define TRACE_TXT(...) do { fprintf (stderr, __VA_ARGS__); } while (0)
 #define STACK_TRACE do {} while (0)
 #define TRACE\
@@ -50,7 +46,7 @@ using dispatch_scalar = typename std::conditional<std::is_scalar<typ>::value, sc
         STACK_TRACE;                            \
     } while (0)
 
-#if 0
+#if _UMATH_LINALG_DEBUG
 #if defined HAVE_EXECINFO_H
 #include <execinfo.h>
 #elif defined HAVE_LIBUNWIND_H
@@ -471,16 +467,16 @@ const double numeric_limits<double>::nan = NPY_NAN;
 
 template<>
 struct numeric_limits<npy_cfloat> {
-static constexpr npy_cfloat one = {1.0f, 0.0f};
-static constexpr npy_cfloat zero = {0.0f, 0.0f};
-static constexpr npy_cfloat minus_one = {-1.0f, 0.0f};
+static constexpr npy_cfloat one = {1.0f};
+static constexpr npy_cfloat zero = {0.0f};
+static constexpr npy_cfloat minus_one = {-1.0f};
 static const npy_cfloat ninf;
 static const npy_cfloat nan;
 };
 constexpr npy_cfloat numeric_limits<npy_cfloat>::one;
 constexpr npy_cfloat numeric_limits<npy_cfloat>::zero;
 constexpr npy_cfloat numeric_limits<npy_cfloat>::minus_one;
-const npy_cfloat numeric_limits<npy_cfloat>::ninf = {-NPY_INFINITYF, 0.0f};
+const npy_cfloat numeric_limits<npy_cfloat>::ninf = {-NPY_INFINITYF};
 const npy_cfloat numeric_limits<npy_cfloat>::nan = {NPY_NANF, NPY_NANF};
 
 template<>
@@ -499,30 +495,30 @@ const f2c_complex numeric_limits<f2c_complex>::nan = {NPY_NANF, NPY_NANF};
 
 template<>
 struct numeric_limits<npy_cdouble> {
-static constexpr npy_cdouble one = {1.0, 0.0};
-static constexpr npy_cdouble zero = {0.0, 0.0};
-static constexpr npy_cdouble minus_one = {-1.0, 0.0};
+static constexpr npy_cdouble one = {1.0};
+static constexpr npy_cdouble zero = {0.0};
+static constexpr npy_cdouble minus_one = {-1.0};
 static const npy_cdouble ninf;
 static const npy_cdouble nan;
 };
 constexpr npy_cdouble numeric_limits<npy_cdouble>::one;
 constexpr npy_cdouble numeric_limits<npy_cdouble>::zero;
 constexpr npy_cdouble numeric_limits<npy_cdouble>::minus_one;
-const npy_cdouble numeric_limits<npy_cdouble>::ninf = {-NPY_INFINITY, 0.0};
+const npy_cdouble numeric_limits<npy_cdouble>::ninf = {-NPY_INFINITY};
 const npy_cdouble numeric_limits<npy_cdouble>::nan = {NPY_NAN, NPY_NAN};
 
 template<>
 struct numeric_limits<f2c_doublecomplex> {
-static constexpr f2c_doublecomplex one = {1.0, 0.0};
-static constexpr f2c_doublecomplex zero = {0.0, 0.0};
-static constexpr f2c_doublecomplex minus_one = {-1.0, 0.0};
+static constexpr f2c_doublecomplex one = {1.0};
+static constexpr f2c_doublecomplex zero = {0.0};
+static constexpr f2c_doublecomplex minus_one = {-1.0};
 static const f2c_doublecomplex ninf;
 static const f2c_doublecomplex nan;
 };
 constexpr f2c_doublecomplex numeric_limits<f2c_doublecomplex>::one;
 constexpr f2c_doublecomplex numeric_limits<f2c_doublecomplex>::zero;
 constexpr f2c_doublecomplex numeric_limits<f2c_doublecomplex>::minus_one;
-const f2c_doublecomplex numeric_limits<f2c_doublecomplex>::ninf = {-NPY_INFINITY, 0.0};
+const f2c_doublecomplex numeric_limits<f2c_doublecomplex>::ninf = {-NPY_INFINITY};
 const f2c_doublecomplex numeric_limits<f2c_doublecomplex>::nan = {NPY_NAN, NPY_NAN};
 
 /*
@@ -543,41 +539,36 @@ const f2c_doublecomplex numeric_limits<f2c_doublecomplex>::nan = {NPY_NAN, NPY_N
  * column_strides: the number of bytes between consecutive columns.
  * output_lead_dim: BLAS/LAPACK-side leading dimension, in elements
  */
-typedef struct linearize_data_struct
+struct linearize_data
 {
   npy_intp rows;
   npy_intp columns;
   npy_intp row_strides;
   npy_intp column_strides;
   npy_intp output_lead_dim;
-} LINEARIZE_DATA_t;
+};
 
-static inline void
-init_linearize_data_ex(LINEARIZE_DATA_t *lin_data,
-                       npy_intp rows,
+static inline
+linearize_data init_linearize_data_ex(npy_intp rows,
                        npy_intp columns,
                        npy_intp row_strides,
                        npy_intp column_strides,
                        npy_intp output_lead_dim)
 {
-    lin_data->rows = rows;
-    lin_data->columns = columns;
-    lin_data->row_strides = row_strides;
-    lin_data->column_strides = column_strides;
-    lin_data->output_lead_dim = output_lead_dim;
+    return {rows, columns, row_strides, column_strides, output_lead_dim};
 }
 
-static inline void
-init_linearize_data(LINEARIZE_DATA_t *lin_data,
-                    npy_intp rows,
+static inline
+linearize_data init_linearize_data(npy_intp rows,
                     npy_intp columns,
                     npy_intp row_strides,
                     npy_intp column_strides)
 {
-    init_linearize_data_ex(
-        lin_data, rows, columns, row_strides, column_strides, columns);
+    return init_linearize_data_ex(
+        rows, columns, row_strides, column_strides, columns);
 }
 
+#if _UMATH_LINALG_DEBUG
 static inline void
 dump_ufunc_object(PyUFuncObject* ufunc)
 {
@@ -604,7 +595,7 @@ dump_ufunc_object(PyUFuncObject* ufunc)
 }
 
 static inline void
-dump_linearize_data(const char* name, const LINEARIZE_DATA_t* params)
+dump_linearize_data(const char* name, const linearize_data* params)
 {
     TRACE_TXT("\n\t%s rows: %zd columns: %zd"\
               "\n\t\trow_strides: %td column_strides: %td"\
@@ -655,7 +646,7 @@ dump_matrix(const char* name,
         TRACE_TXT(" |\n");
     }
 }
-
+#endif
 
 /*
  *****************************************************************************
@@ -765,12 +756,6 @@ update_pointers(npy_uint8** bases, ptrdiff_t* offsets, size_t count)
 }
 
 
-/* disable -Wmaybe-uninitialized as there is some code that generate false
-   positives with this warning
-*/
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-
 /*
  *****************************************************************************
  **                             DISPATCHER FUNCS                            **
@@ -840,13 +825,19 @@ template<> struct basetype<f2c_doublecomplex> { using type = fortran_doublereal;
 template<typename T>
 using basetype_t = typename basetype<T>::type;
 
+struct scalar_trait {};
+struct complex_trait {};
+template<typename typ>
+using dispatch_scalar = typename std::conditional<sizeof(basetype_t<typ>) == sizeof(typ), scalar_trait, complex_trait>::type;
+
+
              /* rearranging of 2D matrices using blas */
 
 template<typename typ>
 static inline void *
 linearize_matrix(typ *dst,
                         typ *src,
-                        const LINEARIZE_DATA_t* data)
+                        const linearize_data* data)
 {
     using ftyp = fortran_type_t<typ>;
     if (dst) {
@@ -891,7 +882,7 @@ template<typename typ>
 static inline void *
 delinearize_matrix(typ *dst,
                           typ *src,
-                          const LINEARIZE_DATA_t* data)
+                          const linearize_data* data)
 {
 using ftyp = fortran_type_t<typ>;
 
@@ -938,7 +929,7 @@ using ftyp = fortran_type_t<typ>;
 
 template<typename typ>
 static inline void
-nan_matrix(typ *dst, const LINEARIZE_DATA_t* data)
+nan_matrix(typ *dst, const linearize_data* data)
 {
     int i, j;
     for (i = 0; i < data->rows; i++) {
@@ -954,7 +945,7 @@ nan_matrix(typ *dst, const LINEARIZE_DATA_t* data)
 
 template<typename typ>
 static inline void
-zero_matrix(typ *dst, const LINEARIZE_DATA_t* data)
+zero_matrix(typ *dst, const linearize_data* data)
 {
     int i, j;
     for (i = 0; i < data->rows; i++) {
@@ -975,7 +966,7 @@ identity_matrix(typ *matrix, size_t n)
 {
     size_t i;
     /* in IEEE floating point, zeroes are represented as bitwise 0 */
-    memset(matrix, 0, n*n*sizeof(typ));
+    memset((void *)matrix, 0, n*n*sizeof(typ));
 
     for (i = 0; i < n; ++i)
     {
@@ -983,23 +974,6 @@ identity_matrix(typ *matrix, size_t n)
         matrix += n+1;
     }
 }
-
-         /* lower/upper triangular matrix using blas (in place) */
-
-template<typename typ>
-static inline void
-triu_matrix(typ *matrix, size_t n)
-{
-    size_t i, j;
-    matrix += n;
-    for (i = 1; i < n; ++i) {
-        for (j = 0; j < i; ++j) {
-            matrix[j] = numeric_limits<typ>::zero;
-        }
-        matrix += n;
-    }
-}
-
 
 /* -------------------------------------------------------------------------- */
                           /* Determinants */
@@ -1046,8 +1020,26 @@ det_from_slogdet(typ sign, typ logdet)
 npy_float npyabs(npy_cfloat z) { return npy_cabsf(z);}
 npy_double npyabs(npy_cdouble z) { return npy_cabs(z);}
 
-#define RE(COMPLEX) (COMPLEX).real
-#define IM(COMPLEX) (COMPLEX).imag
+inline float RE(npy_cfloat *c) { return npy_crealf(*c); }
+inline double RE(npy_cdouble *c) { return npy_creal(*c); }
+#if NPY_SIZEOF_COMPLEX_LONGDOUBLE != NPY_SIZEOF_COMPLEX_DOUBLE
+inline longdouble_t RE(npy_clongdouble *c) { return npy_creall(*c); }
+#endif
+inline float IM(npy_cfloat *c) { return npy_cimagf(*c); }
+inline double IM(npy_cdouble *c) { return npy_cimag(*c); }
+#if NPY_SIZEOF_COMPLEX_LONGDOUBLE != NPY_SIZEOF_COMPLEX_DOUBLE
+inline longdouble_t IM(npy_clongdouble *c) { return npy_cimagl(*c); }
+#endif
+inline void SETRE(npy_cfloat *c, float real) { npy_csetrealf(c, real); }
+inline void SETRE(npy_cdouble *c, double real) { npy_csetreal(c, real); }
+#if NPY_SIZEOF_COMPLEX_LONGDOUBLE != NPY_SIZEOF_COMPLEX_DOUBLE
+inline void SETRE(npy_clongdouble *c, double real) { npy_csetreall(c, real); }
+#endif
+inline void SETIM(npy_cfloat *c, float real) { npy_csetimagf(c, real); }
+inline void SETIM(npy_cdouble *c, double real) { npy_csetimag(c, real); }
+#if NPY_SIZEOF_COMPLEX_LONGDOUBLE != NPY_SIZEOF_COMPLEX_DOUBLE
+inline void SETIM(npy_clongdouble *c, double real) { npy_csetimagl(c, real); }
+#endif
 
 template<typename typ>
 static inline typ
@@ -1055,8 +1047,8 @@ mult(typ op1, typ op2)
 {
     typ rv;
 
-    RE(rv) = RE(op1)*RE(op2) - IM(op1)*IM(op2);
-    IM(rv) = RE(op1)*IM(op2) + IM(op1)*RE(op2);
+    SETRE(&rv, RE(&op1)*RE(&op2) - IM(&op1)*IM(&op2));
+    SETIM(&rv, RE(&op1)*IM(&op2) + IM(&op1)*RE(&op2));
 
     return rv;
 }
@@ -1077,8 +1069,8 @@ slogdet_from_factored_diagonal(typ* src,
     {
         basetyp abs_element = npyabs(*src);
         typ sign_element;
-        RE(sign_element) = RE(*src) / abs_element;
-        IM(sign_element) = IM(*src) / abs_element;
+        SETRE(&sign_element, RE(src) / abs_element);
+        SETIM(&sign_element, IM(src) / abs_element);
 
         sign_acc = mult(sign_acc, sign_element);
         logdet_acc += npylog(abs_element);
@@ -1094,12 +1086,10 @@ static inline typ
 det_from_slogdet(typ sign, basetyp logdet)
 {
     typ tmp;
-    RE(tmp) = npyexp(logdet);
-    IM(tmp) = numeric_limits<basetyp>::zero;
+    SETRE(&tmp, npyexp(logdet));
+    SETIM(&tmp, numeric_limits<basetyp>::zero);
     return mult(sign, tmp);
 }
-#undef RE
-#undef IM
 
 
 /* As in the linalg package, the determinant is computed via LU factorization
@@ -1170,9 +1160,8 @@ slogdet(char **args,
     tmp_buff = (char *)malloc(matrix_size + pivot_size);
 
     if (tmp_buff) {
-        LINEARIZE_DATA_t lin_data;
         /* swapped steps to get matrix in FORTRAN order */
-        init_linearize_data(&lin_data, m, m, steps[1], steps[0]);
+        linearize_data lin_data = init_linearize_data(m, m, steps[1], steps[0]);
         BEGIN_OUTER_LOOP_3
             linearize_matrix((typ*)tmp_buff, (typ*)args[0], &lin_data);
             slogdet_single_element(m,
@@ -1222,11 +1211,11 @@ det(char **args,
     tmp_buff = (char *)malloc(matrix_size + pivot_size);
 
     if (tmp_buff) {
-        LINEARIZE_DATA_t lin_data;
+        /* swapped steps to get matrix in FORTRAN order */
+        linearize_data lin_data = init_linearize_data(m, m, steps[1], steps[0]);
+
         typ sign;
         basetyp logdet;
-        /* swapped steps to get matrix in FORTRAN order */
-        init_linearize_data(&lin_data, m, m, steps[1], steps[0]);
 
         BEGIN_OUTER_LOOP_2
             linearize_matrix((typ*)tmp_buff, (typ*)args[0], &lin_data);
@@ -1526,20 +1515,11 @@ eigh_wrapper(char JOBZ,
                            JOBZ,
                            UPLO,
                            (fortran_int)dimensions[0], dispatch_scalar<typ>())) {
-        LINEARIZE_DATA_t matrix_in_ld;
-        LINEARIZE_DATA_t eigenvectors_out_ld;
-        LINEARIZE_DATA_t eigenvalues_out_ld;
-
-        init_linearize_data(&matrix_in_ld,
-                            eigh_params.N, eigh_params.N,
-                            steps[1], steps[0]);
-        init_linearize_data(&eigenvalues_out_ld,
-                            1, eigh_params.N,
-                            0, steps[2]);
+        linearize_data matrix_in_ld = init_linearize_data(eigh_params.N, eigh_params.N, steps[1], steps[0]);
+        linearize_data eigenvalues_out_ld = init_linearize_data(1, eigh_params.N, 0, steps[2]);
+        linearize_data eigenvectors_out_ld  = {}; /* silence uninitialized warning */
         if ('V' == eigh_params.JOBZ) {
-            init_linearize_data(&eigenvectors_out_ld,
-                                eigh_params.N, eigh_params.N,
-                                steps[4], steps[3]);
+            eigenvectors_out_ld = init_linearize_data(eigh_params.N, eigh_params.N, steps[4], steps[3]);
         }
 
         for (iter = 0; iter < outer_dim; ++iter) {
@@ -1743,11 +1723,9 @@ using ftyp = fortran_type_t<typ>;
     n = (fortran_int)dimensions[0];
     nrhs = (fortran_int)dimensions[1];
     if (init_gesv(&params, n, nrhs)) {
-        LINEARIZE_DATA_t a_in, b_in, r_out;
-
-        init_linearize_data(&a_in, n, n, steps[1], steps[0]);
-        init_linearize_data(&b_in, nrhs, n, steps[3], steps[2]);
-        init_linearize_data(&r_out, nrhs, n, steps[5], steps[4]);
+        linearize_data a_in = init_linearize_data(n, n, steps[1], steps[0]);
+        linearize_data b_in = init_linearize_data(nrhs, n, steps[3], steps[2]);
+        linearize_data r_out = init_linearize_data(nrhs, n, steps[5], steps[4]);
 
         BEGIN_OUTER_LOOP_3
             int not_ok;
@@ -1782,10 +1760,9 @@ using ftyp = fortran_type_t<typ>;
 
     n = (fortran_int)dimensions[0];
     if (init_gesv(&params, n, 1)) {
-        LINEARIZE_DATA_t a_in, b_in, r_out;
-        init_linearize_data(&a_in, n, n, steps[1], steps[0]);
-        init_linearize_data(&b_in, 1, n, 1, steps[2]);
-        init_linearize_data(&r_out, 1, n, 1, steps[3]);
+        linearize_data a_in = init_linearize_data(n, n, steps[1], steps[0]);
+        linearize_data b_in = init_linearize_data(1, n, 1, steps[2]);
+        linearize_data r_out = init_linearize_data(1, n, 1, steps[3]);
 
         BEGIN_OUTER_LOOP_3
             int not_ok;
@@ -1819,9 +1796,8 @@ using ftyp = fortran_type_t<typ>;
 
     n = (fortran_int)dimensions[0];
     if (init_gesv(&params, n, n)) {
-        LINEARIZE_DATA_t a_in, r_out;
-        init_linearize_data(&a_in, n, n, steps[1], steps[0]);
-        init_linearize_data(&r_out, n, n, steps[3], steps[2]);
+        linearize_data a_in = init_linearize_data(n, n, steps[1], steps[0]);
+        linearize_data r_out = init_linearize_data(n, n, steps[3], steps[2]);
 
         BEGIN_OUTER_LOOP_2
             int not_ok;
@@ -1855,6 +1831,40 @@ struct POTR_PARAMS_t
     char UPLO;
 };
 
+
+         /* zero the undefined part in a upper/lower triangular matrix */
+          /* Note: matrix from fortran routine, so column-major order */
+
+template<typename typ>
+static inline void
+zero_lower_triangle(POTR_PARAMS_t<typ> *params)
+{
+    fortran_int n = params->N;
+    typ *matrix = params->A;
+    fortran_int i, j;
+    for (i = 0; i < n-1; ++i) {
+        for (j = i+1; j < n; ++j) {
+            matrix[j] = numeric_limits<typ>::zero;
+        }
+        matrix += n;
+    }
+}
+
+template<typename typ>
+static inline void
+zero_upper_triangle(POTR_PARAMS_t<typ> *params)
+{
+    fortran_int n = params->N;
+    typ *matrix = params->A;
+    fortran_int i, j;
+    matrix += n;
+    for (i = 1; i < n; ++i) {
+        for (j = 0; j < i; ++j) {
+            matrix[j] = numeric_limits<typ>::zero;
+        }
+        matrix += n;
+    }
+}
 
 static inline fortran_int
 call_potrf(POTR_PARAMS_t<fortran_real> *params)
@@ -1944,19 +1954,21 @@ cholesky(char uplo, char **args, npy_intp const *dimensions, npy_intp const *ste
     fortran_int n;
     INIT_OUTER_LOOP_2
 
-    assert(uplo == 'L');
-
     n = (fortran_int)dimensions[0];
     if (init_potrf(&params, uplo, n)) {
-        LINEARIZE_DATA_t a_in, r_out;
-        init_linearize_data(&a_in, n, n, steps[1], steps[0]);
-        init_linearize_data(&r_out, n, n, steps[3], steps[2]);
+        linearize_data a_in = init_linearize_data(n, n, steps[1], steps[0]);
+        linearize_data r_out = init_linearize_data(n, n, steps[3], steps[2]);
         BEGIN_OUTER_LOOP_2
             int not_ok;
             linearize_matrix(params.A, (ftyp*)args[0], &a_in);
             not_ok = call_potrf(&params);
             if (!not_ok) {
-                triu_matrix(params.A, params.N);
+                if (uplo == 'L') {
+                    zero_upper_triangle(&params);
+                }
+                else {
+                    zero_lower_triangle(&params);
+                }
                 delinearize_matrix((ftyp*)args[1], params.A, &r_out);
             } else {
                 error_occurred = 1;
@@ -1975,6 +1987,14 @@ cholesky_lo(char **args, npy_intp const *dimensions, npy_intp const *steps,
                 void *NPY_UNUSED(func))
 {
     cholesky<typ>('L', args, dimensions, steps);
+}
+
+template<typename typ>
+static void
+cholesky_up(char **args, npy_intp const *dimensions, npy_intp const *steps,
+                void *NPY_UNUSED(func))
+{
+    cholesky<typ>('U', args, dimensions, steps);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -2422,27 +2442,25 @@ eig_wrapper(char JOBVL,
     if (init_geev(&geev_params,
                            JOBVL, JOBVR,
                            (fortran_int)dimensions[0], dispatch_scalar<ftype>())) {
-        LINEARIZE_DATA_t a_in;
-        LINEARIZE_DATA_t w_out;
-        LINEARIZE_DATA_t vl_out;
-        LINEARIZE_DATA_t vr_out;
+        linearize_data vl_out = {}; /* silence uninitialized warning */
+        linearize_data vr_out = {}; /* silence uninitialized warning */
 
-        init_linearize_data(&a_in,
+        linearize_data a_in = init_linearize_data(
                             geev_params.N, geev_params.N,
                             steps[1], steps[0]);
         steps += 2;
-        init_linearize_data(&w_out,
+        linearize_data w_out = init_linearize_data(
                             1, geev_params.N,
                             0, steps[0]);
         steps += 1;
         if ('V' == geev_params.JOBVL) {
-            init_linearize_data(&vl_out,
+            vl_out = init_linearize_data(
                                 geev_params.N, geev_params.N,
                                 steps[1], steps[0]);
             steps += 2;
         }
         if ('V' == geev_params.JOBVR) {
-            init_linearize_data(&vr_out,
+            vr_out = init_linearize_data(
                                 geev_params.N, geev_params.N,
                                 steps[1], steps[0]);
         }
@@ -2910,13 +2928,13 @@ using basetyp = basetype_t<typ>;
                    (fortran_int)dimensions[0],
                    (fortran_int)dimensions[1],
 dispatch_scalar<typ>())) {
-        LINEARIZE_DATA_t a_in, u_out, s_out, v_out;
+        linearize_data u_out = {}, s_out = {}, v_out = {};
         fortran_int min_m_n = params.M < params.N ? params.M : params.N;
 
-        init_linearize_data(&a_in, params.N, params.M, steps[1], steps[0]);
+        linearize_data a_in = init_linearize_data(params.N, params.M, steps[1], steps[0]);
         if ('N' == params.JOBZ) {
             /* only the singular values are wanted */
-            init_linearize_data(&s_out, 1, min_m_n, 0, steps[2]);
+            s_out = init_linearize_data(1, min_m_n, 0, steps[2]);
         } else {
             fortran_int u_columns, v_rows;
             if ('S' == params.JOBZ) {
@@ -2926,13 +2944,13 @@ dispatch_scalar<typ>())) {
                 u_columns = params.M;
                 v_rows = params.N;
             }
-            init_linearize_data(&u_out,
+            u_out = init_linearize_data(
                                 u_columns, params.M,
                                 steps[3], steps[2]);
-            init_linearize_data(&s_out,
+            s_out = init_linearize_data(
                                 1, min_m_n,
                                 0, steps[4]);
-            init_linearize_data(&v_out,
+            v_out = init_linearize_data(
                                 params.N, v_rows,
                                 steps[6], steps[5]);
         }
@@ -3253,10 +3271,9 @@ using ftyp = fortran_type_t<typ>;
     n = (fortran_int)dimensions[1];
 
     if (init_geqrf(&params, m, n)) {
-        LINEARIZE_DATA_t a_in, tau_out;
 
-        init_linearize_data(&a_in, n, m, steps[1], steps[0]);
-        init_linearize_data(&tau_out, 1, fortran_int_min(m, n), 1, steps[2]);
+        linearize_data a_in = init_linearize_data(n, m, steps[1], steps[0]);
+        linearize_data tau_out = init_linearize_data(1, fortran_int_min(m, n), 1, steps[2]);
 
         BEGIN_OUTER_LOOP_2
             int not_ok;
@@ -3279,7 +3296,7 @@ using ftyp = fortran_type_t<typ>;
 
 
 /* -------------------------------------------------------------------------- */
-                 /* qr common code (modes - reduced and complete) */ 
+                 /* qr common code (modes - reduced and complete) */
 
 template<typename typ>
 struct GQR_PARAMS_t
@@ -3516,7 +3533,7 @@ init_gqr(GQR_PARAMS_t<ftyp> *params,
                    fortran_int n)
 {
     return init_gqr_common(
-        params, m, n, 
+        params, m, n,
         fortran_int_min(m, n));
 }
 
@@ -3547,11 +3564,9 @@ using ftyp = fortran_type_t<typ>;
     n = (fortran_int)dimensions[1];
 
     if (init_gqr(&params, m, n)) {
-        LINEARIZE_DATA_t a_in, tau_in, q_out;
-
-        init_linearize_data(&a_in, n, m, steps[1], steps[0]);
-        init_linearize_data(&tau_in, 1, fortran_int_min(m, n), 1, steps[2]);
-        init_linearize_data(&q_out, fortran_int_min(m, n), m, steps[4], steps[3]);
+        linearize_data a_in = init_linearize_data(n, m, steps[1], steps[0]);
+        linearize_data tau_in = init_linearize_data(1, fortran_int_min(m, n), 1, steps[2]);
+        linearize_data q_out = init_linearize_data(fortran_int_min(m, n), m, steps[4], steps[3]);
 
         BEGIN_OUTER_LOOP_3
             int not_ok;
@@ -3603,11 +3618,9 @@ using ftyp = fortran_type_t<typ>;
 
 
     if (init_gqr_complete(&params, m, n)) {
-        LINEARIZE_DATA_t a_in, tau_in, q_out;
-
-        init_linearize_data(&a_in, n, m, steps[1], steps[0]);
-        init_linearize_data(&tau_in, 1, fortran_int_min(m, n), 1, steps[2]);
-        init_linearize_data(&q_out, m, m, steps[4], steps[3]);
+        linearize_data a_in = init_linearize_data(n, m, steps[1], steps[0]);
+        linearize_data tau_in = init_linearize_data(1, fortran_int_min(m, n), 1, steps[2]);
+        linearize_data q_out = init_linearize_data(m, m, steps[4], steps[3]);
 
         BEGIN_OUTER_LOOP_3
             int not_ok;
@@ -3984,7 +3997,7 @@ abs2(typ *p, npy_intp n, complex_trait) {
     basetype_t<typ> res = 0;
     for (i = 0; i < n; i++) {
         typ el = p[i];
-        res += el.real*el.real + el.imag*el.imag;
+        res += RE(&el)*RE(&el) + IM(&el)*IM(&el);
     }
     return res;
 }
@@ -4010,13 +4023,11 @@ using basetyp = basetype_t<typ>;
     excess = m - n;
 
     if (init_gelsd(&params, m, n, nrhs, dispatch_scalar<ftyp>{})) {
-        LINEARIZE_DATA_t a_in, b_in, x_out, s_out, r_out;
-
-        init_linearize_data(&a_in, n, m, steps[1], steps[0]);
-        init_linearize_data_ex(&b_in, nrhs, m, steps[3], steps[2], fortran_int_max(n, m));
-        init_linearize_data_ex(&x_out, nrhs, n, steps[5], steps[4], fortran_int_max(n, m));
-        init_linearize_data(&r_out, 1, nrhs, 1, steps[6]);
-        init_linearize_data(&s_out, 1, fortran_int_min(n, m), 1, steps[7]);
+        linearize_data a_in = init_linearize_data(n, m, steps[1], steps[0]);
+        linearize_data b_in = init_linearize_data_ex(nrhs, m, steps[3], steps[2], fortran_int_max(n, m));
+        linearize_data x_out = init_linearize_data_ex(nrhs, n, steps[5], steps[4], fortran_int_max(n, m));
+        linearize_data r_out = init_linearize_data(1, nrhs, 1, steps[6]);
+        linearize_data s_out = init_linearize_data(1, fortran_int_min(n, m), 1, steps[7]);
 
         BEGIN_OUTER_LOOP_7
             int not_ok;
@@ -4064,8 +4075,6 @@ dispatch_scalar<typ>{});
 
     set_fp_invalid_or_clear(error_occurred);
 }
-
-#pragma GCC diagnostic pop
 
 /* -------------------------------------------------------------------------- */
               /* gufunc registration  */
@@ -4165,6 +4174,7 @@ GUFUNC_FUNC_ARRAY_REAL_COMPLEX__(solve);
 GUFUNC_FUNC_ARRAY_REAL_COMPLEX__(solve1);
 GUFUNC_FUNC_ARRAY_REAL_COMPLEX__(inv);
 GUFUNC_FUNC_ARRAY_REAL_COMPLEX__(cholesky_lo);
+GUFUNC_FUNC_ARRAY_REAL_COMPLEX__(cholesky_up);
 GUFUNC_FUNC_ARRAY_REAL_COMPLEX__(svd_N);
 GUFUNC_FUNC_ARRAY_REAL_COMPLEX__(svd_S);
 GUFUNC_FUNC_ARRAY_REAL_COMPLEX__(svd_A);
@@ -4175,14 +4185,14 @@ GUFUNC_FUNC_ARRAY_REAL_COMPLEX__(lstsq);
 GUFUNC_FUNC_ARRAY_EIG(eig);
 GUFUNC_FUNC_ARRAY_EIG(eigvals);
 
-static char equal_2_types[] = {
+static const char equal_2_types[] = {
     NPY_FLOAT, NPY_FLOAT,
     NPY_DOUBLE, NPY_DOUBLE,
     NPY_CFLOAT, NPY_CFLOAT,
     NPY_CDOUBLE, NPY_CDOUBLE
 };
 
-static char equal_3_types[] = {
+static const char equal_3_types[] = {
     NPY_FLOAT, NPY_FLOAT, NPY_FLOAT,
     NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE,
     NPY_CFLOAT, NPY_CFLOAT, NPY_CFLOAT,
@@ -4190,47 +4200,47 @@ static char equal_3_types[] = {
 };
 
 /* second result is logdet, that will always be a REAL */
-static char slogdet_types[] = {
+static const char slogdet_types[] = {
     NPY_FLOAT, NPY_FLOAT, NPY_FLOAT,
     NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE,
     NPY_CFLOAT, NPY_CFLOAT, NPY_FLOAT,
     NPY_CDOUBLE, NPY_CDOUBLE, NPY_DOUBLE
 };
 
-static char eigh_types[] = {
+static const char eigh_types[] = {
     NPY_FLOAT, NPY_FLOAT, NPY_FLOAT,
     NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE,
     NPY_CFLOAT, NPY_FLOAT, NPY_CFLOAT,
     NPY_CDOUBLE, NPY_DOUBLE, NPY_CDOUBLE
 };
 
-static char eighvals_types[] = {
+static const char eighvals_types[] = {
     NPY_FLOAT, NPY_FLOAT,
     NPY_DOUBLE, NPY_DOUBLE,
     NPY_CFLOAT, NPY_FLOAT,
     NPY_CDOUBLE, NPY_DOUBLE
 };
 
-static char eig_types[] = {
+static const char eig_types[] = {
     NPY_FLOAT, NPY_CFLOAT, NPY_CFLOAT,
     NPY_DOUBLE, NPY_CDOUBLE, NPY_CDOUBLE,
     NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE
 };
 
-static char eigvals_types[] = {
+static const char eigvals_types[] = {
     NPY_FLOAT, NPY_CFLOAT,
     NPY_DOUBLE, NPY_CDOUBLE,
     NPY_CDOUBLE, NPY_CDOUBLE
 };
 
-static char svd_1_1_types[] = {
+static const char svd_1_1_types[] = {
     NPY_FLOAT, NPY_FLOAT,
     NPY_DOUBLE, NPY_DOUBLE,
     NPY_CFLOAT, NPY_FLOAT,
     NPY_CDOUBLE, NPY_DOUBLE
 };
 
-static char svd_1_3_types[] = {
+static const char svd_1_3_types[] = {
     NPY_FLOAT,   NPY_FLOAT,   NPY_FLOAT,  NPY_FLOAT,
     NPY_DOUBLE,  NPY_DOUBLE,  NPY_DOUBLE, NPY_DOUBLE,
     NPY_CFLOAT,  NPY_CFLOAT,  NPY_FLOAT,  NPY_CFLOAT,
@@ -4238,25 +4248,25 @@ static char svd_1_3_types[] = {
 };
 
 /* A, tau */
-static char qr_r_raw_types[] = {
+static const char qr_r_raw_types[] = {
     NPY_DOUBLE,  NPY_DOUBLE,
     NPY_CDOUBLE, NPY_CDOUBLE,
 };
 
 /* A, tau, q */
-static char qr_reduced_types[] = {
+static const char qr_reduced_types[] = {
     NPY_DOUBLE,  NPY_DOUBLE,  NPY_DOUBLE,
     NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE,
 };
 
 /* A, tau, q */
-static char qr_complete_types[] = {
+static const char qr_complete_types[] = {
     NPY_DOUBLE,  NPY_DOUBLE,  NPY_DOUBLE,
     NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE,
 };
 
 /*  A,           b,           rcond,      x,           resid,      rank,    s,        */
-static char lstsq_types[] = {
+static const char lstsq_types[] = {
     NPY_FLOAT,   NPY_FLOAT,   NPY_FLOAT,  NPY_FLOAT,   NPY_FLOAT,  NPY_INT, NPY_FLOAT,
     NPY_DOUBLE,  NPY_DOUBLE,  NPY_DOUBLE, NPY_DOUBLE,  NPY_DOUBLE, NPY_INT, NPY_DOUBLE,
     NPY_CFLOAT,  NPY_CFLOAT,  NPY_FLOAT,  NPY_CFLOAT,  NPY_FLOAT,  NPY_INT, NPY_FLOAT,
@@ -4271,7 +4281,7 @@ typedef struct gufunc_descriptor_struct {
     int nin;
     int nout;
     PyUFuncGenericFunction *funcs;
-    char *types;
+    const char *types;
 } GUFUNC_DESCRIPTOR_t;
 
 GUFUNC_DESCRIPTOR_t gufunc_descriptors [] = {
@@ -4379,11 +4389,21 @@ GUFUNC_DESCRIPTOR_t gufunc_descriptors [] = {
     {
         "cholesky_lo",
         "(m,m)->(m,m)",
-        "cholesky decomposition of hermitian positive-definite matrices. \n"\
-        "Broadcast to all outer dimensions. \n"\
-        "    \"(m,m)->(m,m)\" \n",
+        "cholesky decomposition of hermitian positive-definite matrices,\n"\
+        "using lower triangle. Broadcast to all outer dimensions.\n"\
+        "    \"(m,m)->(m,m)\"\n",
         4, 1, 1,
         FUNC_ARRAY_NAME(cholesky_lo),
+        equal_2_types
+    },
+    {
+        "cholesky_up",
+        "(m,m)->(m,m)",
+        "cholesky decomposition of hermitian positive-definite matrices,\n"\
+        "using upper triangle. Broadcast to all outer dimensions.\n"\
+        "    \"(m,m)->(m,m)\"\n",
+        4, 1, 1,
+        FUNC_ARRAY_NAME(cholesky_up),
         equal_2_types
     },
     {
@@ -4532,7 +4552,7 @@ addUfuncs(PyObject *dictionary) {
         if (f == NULL) {
             return -1;
         }
-#if 0
+#if _UMATH_LINALG_DEBUG
         dump_ufunc_object((PyUFuncObject*) f);
 #endif
         int ret = PyDict_SetItemString(dictionary, d->name, f);

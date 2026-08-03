@@ -835,6 +835,10 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
                 node->MutableLocation()->SetDataCenter(dataCenter);
                 node->MutableLocation()->SetRack(rack);
             }
+
+            auto *baseNode = BaseConfig.AddNode();
+            baseNode->SetNodeId(nodeId);
+            baseNode->SetConnected(true);
         }
 
         void AddCandidatePDisk(ui32 nodeId, ui32 pdiskId) {
@@ -949,6 +953,40 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             }
             UNIT_FAIL("PDisk not found");
         }
+
+        void SetNodeConnected(ui32 nodeId, bool connected) {
+            for (auto& node : *BaseConfig.MutableNode()) {
+                if (node.GetNodeId() == nodeId) {
+                    node.SetConnected(connected);
+                    return;
+                }
+            }
+            UNIT_FAIL("Node not found");
+        }
+
+        void SetPDiskState(ui32 nodeId, NKikimrBlobStorage::TPDiskState::E state) {
+            for (auto& pdisk : *BaseConfig.MutablePDisk()) {
+                if (pdisk.GetNodeId() == nodeId) {
+                    pdisk.MutablePDiskMetrics()->SetState(state);
+                    return;
+                }
+            }
+            UNIT_FAIL("PDisk not found");
+        }
+
+        void SetPDiskDriveStatus(ui32 nodeId, NKikimrBlobStorage::EDriveStatus status) {
+            for (auto& pdisk : *BaseConfig.MutablePDisk()) {
+                if (pdisk.GetNodeId() == nodeId) {
+                    pdisk.SetDriveStatus(status);
+                    return;
+                }
+            }
+            UNIT_FAIL("PDisk not found");
+        }
+
+        ui32 GetGroupGeneration() const {
+            return Config.GetBlobStorageConfig().GetServiceSet().GetGroups(0).GetGroupGeneration();
+        }
     };
 
     NKikimrBlobStorage::TGroupGeometry Geometry(ui32 numFailDomains) {
@@ -960,7 +998,11 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
     }
 
     void Reallocate(TSetup& s, const NProtoBuf::RepeatedField<ui32>& allowedNodeIds, bool applyNodeAllowList,
-            i32 erasureSpecies = TBlobStorageGroupType::ErasureNone, ui32 numFailDomains = 1, bool allowUnusableDisks = false) {
+            i32 erasureSpecies = TBlobStorageGroupType::ErasureNone, ui32 numFailDomains = 1,
+            bool allowUnusableDisks = false, bool settleOnlyOnOperationalDisks = false,
+            NBsController::TPDiskId targetPDiskId = {},
+            TVDiskIdShort vdiskId = TVDiskIdShort(0, 0, 0),
+            NKikimr::NStorage::TDistributedConfigKeeper::TStaticGroupReassignments *reassignments = nullptr) {
         auto *selfManagementConfig = s.Config.MutableSelfManagementConfig();
         selfManagementConfig->MutableGeometry()->CopyFrom(Geometry(numFailDomains));
         selfManagementConfig->SetPDiskType(NKikimrBlobStorage::EPDiskType::ROT);
@@ -968,7 +1010,7 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
 
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
-        replacedDisks.emplace(TVDiskIdShort(0, 0, 0), NBsController::TPDiskId());
+        replacedDisks.emplace(vdiskId, targetPDiskId);
         NBsController::TGroupMapper::TForbiddenPDisks forbid;
         keeper.AllocateStaticGroup({
             .Config = &s.Config,
@@ -980,7 +1022,9 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             .BaseConfig = &s.BaseConfig,
             .IgnoreVSlotQuotaCheck = true,
             .AllowUnusableDisks = allowUnusableDisks,
+            .SettleOnlyOnOperationalDisks = settleOnlyOnOperationalDisks,
             .ApplySelfHealNodeAllowList = applyNodeAllowList,
+            .Reassignments = reassignments,
         });
     }
 
@@ -1040,6 +1084,94 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
     Y_UNIT_TEST(EmptyAllowListMeansNoRestriction) {
         TSetup s = MakeSetup();
         UNIT_ASSERT_NO_EXCEPTION(Reallocate(s, NodeIds({}), /*applyNodeAllowList=*/ true));
+    }
+
+    Y_UNIT_TEST(PrefersOperationalPDisk) {
+        TSetup s = MakeSetup();
+        s.SetNodeConnected(2, false);
+        s.SetNodeConnected(4, false);
+        s.SetNodeConnected(5, false);
+        Reallocate(s, NodeIds({}), false);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 3u);
+    }
+
+    Y_UNIT_TEST(FallsBackToNonOperationalPDiskByDefault) {
+        TSetup s = MakeSetup();
+        for (ui32 nodeId = 2; nodeId <= 5; ++nodeId) {
+            s.SetNodeConnected(nodeId, false);
+        }
+        UNIT_ASSERT_NO_EXCEPTION(Reallocate(s, NodeIds({}), false));
+    }
+
+    Y_UNIT_TEST(FailsWithoutOperationalPDiskWhenRequested) {
+        TSetup s = MakeSetup();
+        for (ui32 nodeId = 2; nodeId <= 5; ++nodeId) {
+            s.SetNodeConnected(nodeId, false);
+        }
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false,
+                /*settleOnlyOnOperationalDisks=*/ true),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(RejectsNonNormalPDiskWhenOperationalRequired) {
+        TSetup s = MakeSetup();
+        s.SetPDiskState(2, NKikimrBlobStorage::TPDiskState::OpenFileError);
+        for (ui32 nodeId = 3; nodeId <= 5; ++nodeId) {
+            s.SetNodeConnected(nodeId, false);
+        }
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false,
+                /*settleOnlyOnOperationalDisks=*/ true),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(RejectsUnknownVDiskWithoutChangingGeneration) {
+        TSetup s = MakeSetup();
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false, false, {},
+                TVDiskIdShort(0, 1, 0)),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupGeneration(), 1u);
+    }
+
+    Y_UNIT_TEST(RejectsUnusableExplicitTarget) {
+        TSetup s = MakeSetup();
+        s.SetPDiskDriveStatus(2, NKikimrBlobStorage::EDriveStatus::INACTIVE);
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false, false,
+                NBsController::TPDiskId(2, 1)),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(RejectsNonOperationalExplicitTargetWhenRequested) {
+        TSetup s = MakeSetup();
+        s.SetNodeConnected(2, false);
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false, true,
+                NBsController::TPDiskId(2, 1)),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(UsesValidExplicitTarget) {
+        TSetup s = MakeSetup();
+        NKikimr::NStorage::TDistributedConfigKeeper::TStaticGroupReassignments reassignments;
+        UNIT_ASSERT_NO_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false, false,
+                NBsController::TPDiskId(3, 1), TVDiskIdShort(0, 0, 0), &reassignments));
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 3u);
+
+        UNIT_ASSERT_VALUES_EQUAL(reassignments.size(), 1u);
+        const auto it = reassignments.find(TVDiskIdShort(0, 0, 0));
+        UNIT_ASSERT(it != reassignments.end());
+        UNIT_ASSERT(it->second.SourceSlotId);
+        UNIT_ASSERT(it->second.TargetSlotId);
+        UNIT_ASSERT_VALUES_EQUAL(it->second.SourceSlotId->GetNodeId(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(it->second.SourceSlotId->GetPDiskId(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(it->second.SourceSlotId->GetVSlotId(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(it->second.TargetSlotId->GetNodeId(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(it->second.TargetSlotId->GetPDiskId(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(it->second.TargetSlotId->GetVSlotId(), 1u);
     }
 
     Y_UNIT_TEST(Block42KeepsExistingVDisksOnNonAllowedNodes) {

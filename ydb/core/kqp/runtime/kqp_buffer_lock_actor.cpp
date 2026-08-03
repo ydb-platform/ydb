@@ -13,6 +13,8 @@
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -68,7 +70,8 @@ public:
     }
 
     void Bootstrap() {
-        CA_LOG_D("Start buffer lock actor");
+        YDB_LOG_DEBUG("Starting buffer lock actor",
+            {"logPrefix", this->LogPrefix});
 
         Settings.Counters->StreamLookupActorsCount->Inc();
         Become(&TKqpBufferLockActor::StateFunc);
@@ -78,7 +81,7 @@ public:
 
     void PassAway() final {
         Settings.Counters->StreamLookupActorsCount->Dec();
-        
+
         if (!LockSendTime.empty()) {
             TInstant now = AppData()->TimeProvider->Now();
             TDuration maxInFlightTime = TDuration::Zero();
@@ -251,8 +254,11 @@ public:
         Settings.Counters->SentLocks->Inc();
         auto& record = request->Record;
 
-        CA_LOG_D("Start locking of table: " << Settings.TablePath << ", requestId: " << record.GetRequestId()
-            << ", shardId: " << shardId);
+        YDB_LOG_DEBUG("Starting row lock request",
+            {"logPrefix", this->LogPrefix},
+            {"table", Settings.TablePath},
+            {"requestId", record.GetRequestId()},
+            {"shardId", shardId});
 
         Settings.TxManager->AddShard(shardId, false, Settings.TablePath);
 
@@ -282,7 +288,7 @@ public:
                 .ShardId = shardId,
                 .Blocked = false,
             }).second);
-        
+
         LockSendTime[requestId] = AppData()->TimeProvider->Now();
     }
 
@@ -291,7 +297,9 @@ public:
 
         auto requestIt = LockIdToState.find(record.GetRequestId());
         if (requestIt == LockIdToState.end() || requestIt->second.Blocked) {
-            CA_LOG_D("Drop lock with requestId: " << record.GetRequestId() << ", because it's already completed or blocked");
+            YDB_LOG_DEBUG("Dropping lock request because it is already completed or blocked",
+                {"logPrefix", this->LogPrefix},
+                {"requestId", record.GetRequestId()});
             return;
         }
 
@@ -307,13 +315,15 @@ public:
         AFL_ENSURE(lockState.Worker);
         AFL_ENSURE(lockState.LocksInflight > 0);
 
-        CA_LOG_D("Recv TEvLockRowsResult (buffer lock) from ShardID=" << shardId
-            << ", Table = " << Settings.TablePath
-            << ", RequestId=" << record.GetRequestId()
-            << ", Status=" << NKikimrDataEvents::TEvLockRowsResult::EStatus_Name(record.GetStatus()));
+        YDB_LOG_DEBUG("Received TEvLockRowsResult for buffer lock",
+            {"logPrefix", this->LogPrefix},
+            {"shardID", shardId},
+            {"tablePath", Settings.TablePath},
+            {"requestId", record.GetRequestId()},
+            {"status", NKikimrDataEvents::TEvLockRowsResult::EStatus_Name(record.GetStatus())});
 
         ui64 requestId = record.GetRequestId();
-        
+
         if (auto it = LockSendTime.find(requestId); it != LockSendTime.end()) {
             Settings.Counters->LockLatencyHistogram->Collect((AppData()->TimeProvider->Now() - it->second).MilliSeconds());
             LockSendTime.erase(it);
@@ -329,7 +339,9 @@ public:
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS:
                 break;
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN: {
-                CA_LOG_D("STATUS_LOCKS_BROKEN from shard: " << shardId);
+                YDB_LOG_DEBUG("Received STATUS_LOCKS_BROKEN from datashard",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", shardId});
                 BrokenLocksCount += record.GetLocks().size();
                 Settings.TxManager->SetError(shardId);
                 RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
@@ -338,7 +350,9 @@ public:
                 return;
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_OVERLOADED: {
-                CA_LOG_D("STATUS_OVERLOADED from shard: " << shardId);
+                YDB_LOG_DEBUG("Received STATUS_OVERLOADED from datashard",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", shardId});
                 if (!RetryLockRequest(record.GetRequestId(), false)) {
                     return RuntimeError(
                         NYql::NDqProto::StatusIds::OVERLOADED,
@@ -349,7 +363,9 @@ public:
                 return;
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK: {
-                CA_LOG_D("STATUS_DEADLOCK from shard: " << shardId);
+                YDB_LOG_DEBUG("Received STATUS_DEADLOCK from datashard",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", shardId});
                 return RuntimeError(
                     NYql::NDqProto::StatusIds::ABORTED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
@@ -421,7 +437,9 @@ public:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        YDB_LOG_DEBUG("Received TEvDeliveryProblem from datashard",
+            {"logPrefix", this->LogPrefix},
+            {"tablet", ev->Get()->TabletId});
         ShardToState.at(ev->Get()->TabletId).HasPipe = false;
 
         TVector<ui64> toRetry;
@@ -449,7 +467,9 @@ public:
         const ui64 failedRequestId = ev->Get()->RequestId;
         auto requestIt = LockIdToState.find(failedRequestId);
         if (requestIt == LockIdToState.end()) {
-            CA_LOG_D("received retry request for already finished/non-existing request, request_id: " << failedRequestId);
+            YDB_LOG_DEBUG("Received retry request for already finished/non-existing request",
+                {"logPrefix", this->LogPrefix},
+                {"requestId", failedRequestId});
             return;
         }
 
@@ -461,8 +481,11 @@ public:
     bool RetryLockRequest(const ui64 failedRequestId, bool allowInstantRetry) {
         auto& failedRequest = LockIdToState.at(failedRequestId);
         auto& lockState = CookieToLockState.at(failedRequest.LockCookie);
-        CA_LOG_D("Retry locking of table: " << Settings.TablePath << ", failedRequestId: " << failedRequestId
-            << ", shardId: " << failedRequest.ShardId);
+        YDB_LOG_DEBUG("Retrying row lock request",
+            {"logPrefix", this->LogPrefix},
+            {"table", Settings.TablePath},
+            {"failedRequestId", failedRequestId},
+            {"shardId", failedRequest.ShardId});
         failedRequest.Blocked = true;
 
         if (failedRequest.RetryAttempts >= MaxShardRetries()) {

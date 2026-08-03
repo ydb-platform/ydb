@@ -1126,6 +1126,13 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropSecret, NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropSecret, NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret)
 
+    void TestCreateSecretOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
+        auto* ev = CreateSecretRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
     // streaming query
     GENERIC_HELPERS(CreateStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableCreateStreamingQuery)
     GENERIC_HELPERS(AlterStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableCreateStreamingQuery)

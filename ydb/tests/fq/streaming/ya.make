@@ -22,6 +22,7 @@ PY_SRCS(
 )
 
 REQUIREMENTS(cpu:4)
+REQUIREMENTS(ram:16)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -50,3 +51,8 @@ DEPENDS(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    streaming_large
+    generic
+)

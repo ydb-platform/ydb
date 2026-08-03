@@ -12,7 +12,6 @@
 
 #include "opentelemetry/common/spin_lock_mutex.h"
 #include "opentelemetry/common/timestamp.h"
-#include "opentelemetry/metrics/async_instruments.h"
 #include "opentelemetry/metrics/noop.h"
 #include "opentelemetry/metrics/sync_instruments.h"
 #include "opentelemetry/nostd/function_ref.h"
@@ -41,7 +40,6 @@
 #include "opentelemetry/version.h"
 
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
-#  include "opentelemetry/sdk/metrics/exemplar/filter_type.h"
 #  include "opentelemetry/sdk/metrics/exemplar/reservoir_utils.h"
 #endif
 

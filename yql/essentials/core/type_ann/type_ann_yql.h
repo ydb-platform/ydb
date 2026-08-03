@@ -5,6 +5,12 @@
 
 namespace NYql::NTypeAnnImpl {
 
+struct TYqlFromSettings {
+    bool IsCTE = false;
+
+    static TMaybe<TYqlFromSettings> Parse(const TExprNode::TPtr& settings, TExtContext& ctx);
+};
+
 IGraphTransformer::TStatus PromoteYqlAggOptions(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
@@ -27,6 +33,19 @@ IGraphTransformer::TStatus InferYqlInferUnionType(
     TExtContext& ctx,
     bool& areColumnsOrdered,
     bool& isUniversal);
+
+/// NB: this is a light version only for a simple and sound static analysis.
+TMaybe<TVector<std::pair<TString, /*isSynthetic=*/bool>>>
+InferYqlSimpleColumnOrder(const TExprNode::TPtr& input);
+
+IGraphTransformer::TStatus ValidateYqlExplicitColumnOrders(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TExtContext& ctx,
+    TPositionHandle position,
+    const TVector<TPositionHandle>& expectedPositions,
+    const TVector<TString>& expectedOrder,
+    const TVector<std::pair<TString, /*isSynthetic=*/bool>>& actualOrder);
 
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);

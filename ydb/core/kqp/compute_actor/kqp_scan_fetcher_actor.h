@@ -20,6 +20,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
@@ -74,8 +75,10 @@ public:
     void Bootstrap();
 
     STATEFN(StateFunc) {
-        NActors::TLogContextGuard lGuard =
-            NActors::TLogContextBuilder::Build()("self_id", SelfId())("scan_id", ScanId)("tx_id", std::get<ui64>(TxId));
+        YDB_LOG_CREATE_CONTEXT(
+            {"selfId", SelfId()},
+            {"scanId", ScanId},
+            {"txId", std::get<ui64>(TxId)});
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);

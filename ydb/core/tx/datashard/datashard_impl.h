@@ -1491,6 +1491,10 @@ class TDataShard
     void DoPeriodicTasks(const TActorContext &ctx);
     void DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TActorContext &ctx);
 
+    // Reports the identity of this shard's primary user table to the node's tablet counters
+    // aggregator, so detailed metrics can attribute the executor's counter deltas to a table.
+    void SendTableInfoToCountersAggregator(const TActorContext &ctx);
+
     TDuration GetTxCompleteLag()
     {
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;

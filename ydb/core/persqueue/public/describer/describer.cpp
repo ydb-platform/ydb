@@ -189,7 +189,7 @@ public:
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
                             Result[originalPath] = TTopicInfo{
-                                .Status = EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS
+                                .Status = EStatus::UNAUTHORIZED
                             };
                         } else {
                             Result[originalPath] = TTopicInfo{

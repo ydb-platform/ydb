@@ -1,0 +1,10 @@
+/* yt can not : no gw patch support */
+/* hybridfile can not : no gw patch support */
+USE plato;
+
+DROP TABLE IF EXISTS Output;
+COMMIT;
+CREATE TABLE Output (
+    b    Int64  NOT NULL,
+    a    String NOT NULL
+);

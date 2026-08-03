@@ -5,6 +5,7 @@
 #endif
 
 #include "tagged_payload.h"
+#include "tag.h"
 
 #include <library/cpp/yt/yson_string/convert.h>
 #include <library/cpp/yt/yson_string/string.h>
@@ -22,10 +23,25 @@ inline bool TLogger::IsAnchorUpToDate(const TLoggingAnchor& anchor) const
         anchor.CurrentVersion == Category_->ActualVersion->load(std::memory_order::relaxed);
 }
 
-template <class... TArgs>
-void TLogger::AddTag(TFormatString<TArgs...> format, TArgs&&... args)
+template <class TValue>
+TLogger& TLogger::AddTag(TLoggingTagKey key, const TValue& value)
 {
-    AddRawTag(Format(format, std::forward<TArgs>(args)...));
+    GetMutableCoWState()->Tags.Add(key, value);
+    return *this;
+}
+
+template <class TValue>
+TLogger& TLogger::AddTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec)
+{
+    GetMutableCoWState()->Tags.Add(key, value, spec);
+    return *this;
+}
+
+template <class... TArgs>
+TLogger& TLogger::AddTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args)
+{
+    GetMutableCoWState()->Tags.AddFormat(key, format, std::forward<TArgs>(args)...);
+    return *this;
 }
 
 template <class TType>
@@ -35,18 +51,48 @@ void TLogger::AddStructuredTag(TStringBuf key, TType value)
     state->StructuredTags.emplace_back(key, NYson::ConvertToYsonString(value));
 }
 
-template <class... TArgs>
-TLogger TLogger::WithTag(TFormatString<TArgs...> format, TArgs&&... args) const &
+template <class TValue>
+TLogger TLogger::WithTag(TLoggingTagKey key, const TValue& value) const &
 {
     auto result = *this;
-    result.AddTag(format, std::forward<TArgs>(args)...);
+    result.AddTag(key, value);
+    return result;
+}
+
+template <class TValue>
+TLogger TLogger::WithTag(TLoggingTagKey key, const TValue& value) &&
+{
+    AddTag(key, value);
+    return std::move(*this);
+}
+
+template <class TValue>
+TLogger TLogger::WithTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) const &
+{
+    auto result = *this;
+    result.AddTag(key, value, spec);
+    return result;
+}
+
+template <class TValue>
+TLogger TLogger::WithTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) &&
+{
+    AddTag(key, value, spec);
+    return std::move(*this);
+}
+
+template <class... TArgs>
+TLogger TLogger::WithTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) const &
+{
+    auto result = *this;
+    result.AddTagFormat(key, format, std::forward<TArgs>(args)...);
     return result;
 }
 
 template <class... TArgs>
-TLogger TLogger::WithTag(TFormatString<TArgs...> format, TArgs&&... args) &&
+TLogger TLogger::WithTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) &&
 {
-    AddTag(format, std::forward<TArgs>(args)...);
+    AddTagFormat(key, format, std::forward<TArgs>(args)...);
     return std::move(*this);
 }
 
@@ -113,16 +159,28 @@ inline bool HasMessageTags(
     const TLoggingContext& loggingContext,
     const TLogger& logger)
 {
-    if (!logger.GetTag().empty()) {
+    if (!logger.GetTags().IsEmpty()) {
         return true;
     }
-    if (!loggingContext.TraceLoggingTag.empty()) {
+    if (!loggingContext.TraceLoggingTags.Underlying().empty()) {
         return true;
     }
-    if (!GetThreadMessageTag().empty()) {
+    if (!GetThreadMessageTags().IsEmpty()) {
         return true;
     }
     return false;
+}
+
+//! Splices the contextual tag sections into #writer, in the order they are rendered by
+//! #AppendMessageTags. Must precede any well-known tag.
+inline void AppendContextualTags(
+    TTaggedPayloadWriter* writer,
+    const TLoggingContext& loggingContext,
+    const TLogger& logger)
+{
+    writer->AppendTags(AsView(logger.GetTags().GetPayload()));
+    writer->AppendTags(loggingContext.TraceLoggingTags);
+    writer->AppendTags(AsView(GetThreadMessageTags().GetPayload()));
 }
 
 inline void AppendMessageTags(
@@ -131,24 +189,19 @@ inline void AppendMessageTags(
     const TLogger& logger)
 {
     bool printComma = false;
-    if (const auto& loggerTag = logger.GetTag(); !loggerTag.empty()) {
-        builder->AppendString(loggerTag);
-        printComma = true;
-    }
-    if (const auto& traceLoggingTag = loggingContext.TraceLoggingTag; !traceLoggingTag.empty()) {
+    auto append = [&] (TLoggingTagListPayloadView tags) {
+        if (tags.Underlying().empty()) {
+            return;
+        }
         if (printComma) {
             builder->AppendString(", "_sb);
         }
-        builder->AppendString(traceLoggingTag);
+        FormatValue(builder, tags, "v"_sb);
         printComma = true;
-    }
-    if (const auto& threadMessageTag = GetThreadMessageTag(); !threadMessageTag.empty()) {
-        if (printComma) {
-            builder->AppendString(", "_sb);
-        }
-        builder->AppendString(threadMessageTag);
-        printComma = true;
-    }
+    };
+    append(AsView(logger.GetTags().GetPayload()));
+    append(loggingContext.TraceLoggingTags);
+    append(AsView(GetThreadMessageTags().GetPayload()));
 }
 
 inline void AppendLogMessage(
@@ -343,35 +396,6 @@ struct TStaticAnchorRef
     std::atomic<bool>* Registered;
 };
 
-//! Wraps the format spec passed to |TTaggedLoggingGuard::With| and validates at compile
-//! time that it is a |%|-prefixed string literal (e.g. |"%v"|, |"%08x"|). The stored
-//! spec has the leading |%| stripped, as expected by |FormatValue|.
-class TLoggingTagSpec
-{
-public:
-    template <size_t N>
-    consteval TLoggingTagSpec(const char (&spec)[N])
-        : Spec_(spec + 1, N - 2)
-    {
-        static_assert(N >= 2, "Logging tag format spec must be a non-empty string literal");
-        if (spec[0] != '%') {
-            TheLoggingTagFormatSpecMustStartWithPercentSign();
-        }
-    }
-
-    TStringBuf Get() const
-    {
-        return Spec_;
-    }
-
-private:
-    const TStringBuf Spec_;
-
-    // Undefined on purpose: calling it from the |consteval| ctor turns a missing
-    // leading |%| into a compile error that names the violated rule.
-    static void TheLoggingTagFormatSpecMustStartWithPercentSign();
-};
-
 class TWellKnownTaggedLoggingGuard;
 
 //! Accumulates a tagged log message via a fluent |.With| chain and emits the event in
@@ -408,16 +432,42 @@ public:
         return Enabled_;
     }
 
+    //! The fluent macros end their expansion in a call to this instead of naming the guard
+    //! directly. A tag-less |YT_TLOG_INFO("Message");| would otherwise expand to a discarded
+    //! id-expression, and -Wunused-value fires on those whenever the call is spelled inside
+    //! a macro argument (e.g. within |BIND(...)|) rather than a macro body.
+    TTaggedLoggingGuard& Self() &
+    {
+        return *this;
+    }
+
     template <class TValue>
-    TTaggedLoggingGuard& With(TStringBuf tag, const TValue& value) &
+    TTaggedLoggingGuard& With(TLoggingTagKey tag, const TValue& value) &
     {
         return DoWith(tag, value, "v"_sb);
     }
 
     template <class TValue>
-    TTaggedLoggingGuard& With(TStringBuf tag, const TValue& value, TLoggingTagSpec spec) &
+    TTaggedLoggingGuard& With(TLoggingTagKey tag, const TValue& value, TLoggingTagSpec spec) &
     {
         return DoWith(tag, value, spec.Get());
+    }
+
+    //! Attaches a keyed tag composed from several values, e.g. |.WithFormat("Method", "%v.%v", service, method)|.
+    template <class... TArgs>
+    TTaggedLoggingGuard& WithFormat(TLoggingTagKey tag, TFormatString<TArgs...> format, TArgs&&... args) &
+    {
+        Format(Writer_.BeginTag(tag.Get()), format, std::forward<TArgs>(args)...);
+        Writer_.EndTag();
+        return *this;
+    }
+
+    //! Splices a pre-built list of keyed tags, preserving them as individual tags. Chosen
+    //! over the well-known single-argument |With| below by exact match.
+    TTaggedLoggingGuard& With(const TLoggingTagList& tags) &
+    {
+        Writer_.AppendTags(AsView(tags.GetPayload()));
+        return *this;
     }
 
     //! Attaches a well-known tag whose key is resolved from #value's type via the
@@ -480,22 +530,19 @@ protected:
 
         LoggingContext_ = GetLoggingContext();
 
-        auto* builder = Writer_.BeginMessage();
-        builder->AppendString(message);
-        if (HasMessageTags(LoggingContext_, Logger_)) {
-            builder->AppendString(" ("_sb);
-            AppendMessageTags(builder, LoggingContext_, Logger_);
-            builder->AppendChar(')');
-        }
+        Writer_.BeginMessage()->AppendString(message);
         Writer_.EndMessage();
+        // Contextual tags stay structured here, rather than being folded into the message
+        // text as the legacy YT_LOG_* path has to do.
+        AppendContextualTags(&Writer_, LoggingContext_, Logger_);
     }
 
 private:
     template <class TValue>
-    TTaggedLoggingGuard& DoWith(TStringBuf tag, const TValue& value, TStringBuf spec) &
+    TTaggedLoggingGuard& DoWith(TLoggingTagKey tag, const TValue& value, TStringBuf spec) &
     {
         // Format the value straight into the payload buffer; no temporary.
-        FormatValue(Writer_.BeginTag(tag), value, spec);
+        FormatValue(Writer_.BeginTag(tag.Get()), value, spec);
         Writer_.EndTag();
         return *this;
     }
@@ -615,6 +662,12 @@ class TNullTaggedLoggingGuard
 public:
     template <class... TArgs>
     TNullTaggedLoggingGuard& With(TArgs&&...)
+    {
+        return *this;
+    }
+
+    template <class... TArgs>
+    TNullTaggedLoggingGuard& WithFormat(TArgs&&...)
     {
         return *this;
     }

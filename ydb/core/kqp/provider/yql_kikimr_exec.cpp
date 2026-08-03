@@ -453,6 +453,8 @@ namespace {
         if (auto inheritPermissions = TString(createSecret.InheritPermissions())) {
             settings.InheritPermissions = FromString<bool>(inheritPermissions);
         }
+        settings.ReplaceIfExists = (TString(createSecret.ReplaceIfExists()) == "1");
+        settings.ExistingOk = (TString(createSecret.ExistingOk()) == "1");
         return settings;
     }
 
@@ -465,12 +467,14 @@ namespace {
         if (auto paramName = TString(alterSecret.ValueParamName())) {
             settings.ValueParamName = std::move(paramName);
         }
+        settings.MissingOk = (TString(alterSecret.MissingOk()) == "1");
         return settings;
     }
 
     TSecretSettings ParseSecretSettings(TKiDropSecret dropSecret) {
         TSecretSettings settings;
         settings.Name = TString(dropSecret.Secret());
+        settings.MissingOk = (TString(dropSecret.MissingOk()) == "1");
         return settings;
     }
 
@@ -990,7 +994,7 @@ namespace {
 
     bool ParseAsyncReplicationSettingsBase(
         TReplicationSettingsBase& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
-        const TString& objectName = "replication"
+        bool disableOldSecretCreation, const TString& objectName = "replication"
     ) {
         for (auto setting : srcSettings) {
             auto name = setting.Name().Value();
@@ -1089,14 +1093,40 @@ namespace {
             return false;
         }
 
+        if (disableOldSecretCreation) {
+            auto checkSecret = [&](const TString& secretName) {
+                if (secretName && !secretName.StartsWith('/')) {
+                    ctx.AddError(
+                        TIssue(
+                            ctx.GetPosition(pos),
+                            "Old secrets are disabled for creating new objects. Please use new secrets"
+                        )
+                    );
+                    return false;
+                }
+                return true;
+            };
+
+            if (const auto& x = dstSettings.OAuthToken; x && !checkSecret(x->TokenSecretName)) {
+                return false;
+            }
+            if (const auto& x = dstSettings.StaticCredentials; x && !checkSecret(x->PasswordSecretName)) {
+                return false;
+            }
+            if (const auto& x = dstSettings.IamCredentials; x && !checkSecret(x->InitialToken.TokenSecretName)) {
+                return false;
+            }
+        }
+
         return true;
     }
 
     bool ParseAsyncReplicationSettings(
-        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
+        bool disableOldSecretCreation
     ) {
 
-        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos)) {
+        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, disableOldSecretCreation)) {
             return false;
         }
 
@@ -1138,9 +1168,10 @@ namespace {
     }
 
     bool ParseTransferSettings(
-        TTransferSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+        TTransferSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
+        bool disableOldSecretCreation
     ) {
-        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, "transfer")) {
+        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, disableOldSecretCreation, "transfer")) {
             return false;
         }
 
@@ -1806,12 +1837,6 @@ public:
         }
 
         if (auto maybeTruncateTable = TMaybeNode<TKiTruncateTable>(input)) {
-            if (!SessionCtx->Config().FeatureFlags.GetEnableTruncateTable()) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                    TStringBuilder() << "TRUNCATE TABLE statement is disabled. Please contact your system administrator to enable it"));
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, TKiExecDataQuery::idx_World);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -2035,6 +2060,10 @@ public:
                                     ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                         "Column addition with serial data type is unsupported"));
                                     return SyncError();
+                                } else if (constraint.Name().Value() == "generated") {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                        "Column addition with a GENERATED ALWAYS AS expression is not supported"));
+                                    return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
                                         ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
@@ -2145,6 +2174,26 @@ public:
                 } else if (name == "alterColumns") {
                     std::vector<TString> notNullColumns;
                     auto listNode = action.Value().Cast<TExprList>();
+
+                    THashSet<TString> generatedColumns;
+                    THashSet<TString> virtualGeneratedColumns;
+                    THashSet<TString> generatedDependencyColumns;
+
+                    for (const auto& [genName, genMeta] : table.Metadata->Columns) {
+                        if (!genMeta.IsDefaultFromExpression()) {
+                            continue;
+                        }
+
+                        generatedColumns.insert(genName);
+                        if (!genMeta.DefaultExpression->Stored) {
+                            virtualGeneratedColumns.insert(genName);
+                        }
+
+                        for (const auto& dep : genMeta.DefaultExpression->Dependencies) {
+                            generatedDependencyColumns.insert(dep);
+                        }
+                    }
+
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
@@ -2154,6 +2203,34 @@ public:
 
                         auto alter_columns = alterTableRequest.add_alter_columns();
                         alter_columns->set_name(TString(columnName));
+
+                        const TString columnNameStr(columnName.Value());
+                        const bool isGenerated = generatedColumns.contains(columnNameStr);
+                        const bool isGeneratedDependency = generatedDependencyColumns.contains(columnNameStr);
+
+                        if (alterColumnAction == "changeColumnConstraints" && (isGenerated || isGeneratedDependency)) {
+                            ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), TStringBuilder()
+                                << "Cannot alter the NOT NULL constraint of column " << columnNameStr
+                                << (isGenerated ? ": it is a GENERATED column" : ": it is referenced by a GENERATED column")));
+                            return SyncError();
+                        }
+
+                        if ((alterColumnAction == "setDefault" || alterColumnAction == "setDefaultValue"
+                            || alterColumnAction == "dropDefault") && isGenerated)
+                        {
+                            ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), TStringBuilder()
+                                << "Cannot alter the DEFAULT of GENERATED column " << columnNameStr));
+                            return SyncError();
+                        }
+
+                        if ((alterColumnAction == "setFamily" || alterColumnAction == "changeEncoding" ||
+                            alterColumnAction == "changeCompression") && virtualGeneratedColumns.contains(columnNameStr))
+                        {
+                            ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), TStringBuilder()
+                                << "Cannot alter the column family, encoding or compression of VIRTUAL GENERATED column "
+                                << columnNameStr));
+                            return SyncError();
+                        }
 
                         if (alterColumnAction == "setDefault") {
                             auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
@@ -2811,7 +2888,6 @@ public:
                                 return SyncError();
                             }
 
-
                             TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
                             for (auto&& is : alterIndexSettings) {
                                 YQL_ENSURE(is.Value().Maybe<TCoAtom>());
@@ -3392,7 +3468,13 @@ public:
                 );
             }
 
-            if (!ParseAsyncReplicationSettings(settings.Settings, createReplication.ReplicationSettings(), ctx, createReplication.Pos())) {
+            if (!ParseAsyncReplicationSettings(
+                settings.Settings,
+                createReplication.ReplicationSettings(),
+                ctx,
+                createReplication.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -3448,7 +3530,10 @@ public:
             TAlterReplicationSettings settings;
             settings.Name = TString(alterReplication.Replication());
 
-            if (!ParseAsyncReplicationSettings(settings.Settings, alterReplication.ReplicationSettings(), ctx, alterReplication.Pos())) {
+            if (!ParseAsyncReplicationSettings(
+                settings.Settings, alterReplication.ReplicationSettings(), ctx, alterReplication.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -3503,7 +3588,13 @@ public:
                 createTransfer.TransformLambda()
             };
 
-            if (!ParseTransferSettings(settings.Settings, createTransfer.TransferSettings(), ctx, createTransfer.Pos())) {
+            if (!ParseTransferSettings(
+                settings.Settings,
+                createTransfer.TransferSettings(),
+                ctx,
+                createTransfer.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -3560,7 +3651,9 @@ public:
             settings.Name = TString(alterTransfer.Transfer());
             settings.TranformLambda = alterTransfer.TransformLambda();
 
-            if (!ParseTransferSettings(settings.Settings, alterTransfer.TransferSettings(), ctx, alterTransfer.Pos())) {
+            if (!ParseTransferSettings(settings.Settings, alterTransfer.TransferSettings(), ctx, alterTransfer.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 

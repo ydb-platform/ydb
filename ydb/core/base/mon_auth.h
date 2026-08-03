@@ -24,6 +24,8 @@ bool IsTabletDevUiSecurePath(TStringBuf pathInfo);
 // True if the tablet type uses `/app/secure` and EnableTabletDevUiSecurePath is set.
 bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type);
 
+bool IsTabletDevUiAppPageAdminOnly(const TAppData* appData, TTabletTypes::EType type);
+
 // Check, caller must reply with HTTPFORBIDDEN when false.
 bool IsTabletDevUiAccessAllowed(
     const TAppData* appData,

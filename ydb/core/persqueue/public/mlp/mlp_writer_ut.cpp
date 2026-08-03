@@ -294,6 +294,180 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
         }
     }
 
+    Y_UNIT_TEST(WriteWithoutMessageGroupId) {
+        auto setup = CreateSetup();
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer", 2);
+
+        auto& runtime = setup->GetRuntime();
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Messages = {
+                {
+                    .Index = 0,
+                    .MessageBody = "message_body",
+                }
+            }
+        });
+
+        auto response = GetWriteResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(response->Messages[0].MessageId.has_value());
+        UNIT_ASSERT_LT(response->Messages[0].MessageId->PartitionId, 2u);
+    }
+
+    Y_UNIT_TEST(WriteWithDelay) {
+        auto setup = CreateSetup();
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+        auto& runtime = setup->GetRuntime();
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Messages = {
+                {
+                    .Index = 0,
+                    .MessageBody = "delayed_message",
+                    .Delay = TDuration::Seconds(3),
+                }
+            }
+        });
+
+        {
+            auto response = GetWriteResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Status, Ydb::StatusIds::SUCCESS);
+        }
+
+        {
+            CreateReaderActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Consumer = "mlp-consumer",
+                .WaitTime = TDuration::Seconds(0),
+                .ProcessingTimeout = TDuration::Seconds(5),
+                .MaxNumberOfMessage = 1,
+            });
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
+        }
+
+        Sleep(TDuration::Seconds(4));
+
+        {
+            CreateReaderActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Consumer = "mlp-consumer",
+                .WaitTime = TDuration::Seconds(1),
+                .ProcessingTimeout = TDuration::Seconds(5),
+                .MaxNumberOfMessage = 1,
+            });
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "delayed_message");
+        }
+    }
+
+    Y_UNIT_TEST(WriteAttributesRoundTrip) {
+        auto setup = CreateSetup();
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+        auto& runtime = setup->GetRuntime();
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Messages = {
+                {
+                    .Index = 0,
+                    .MessageBody = "message_with_attrs",
+                    .MessageGroupId = "group-1",
+                    .MessageDeduplicationId = "dedup-1",
+                    .Attributes = {
+                        {"attr-a", "value-a"},
+                        {"attr-b", "value-b"},
+                    },
+                }
+            }
+        });
+
+        {
+            auto response = GetWriteResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Status, Ydb::StatusIds::SUCCESS);
+        }
+
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(5),
+            .MaxNumberOfMessage = 1,
+        });
+
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "message_with_attrs");
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageGroupId, "group-1");
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageDeduplicationId, "dedup-1");
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Attributes.count("attr-a"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Attributes.find("attr-a")->second, "value-a");
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Attributes.count("attr-b"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Attributes.find("attr-b")->second, "value-b");
+    }
+
+    Y_UNIT_TEST(WriteShouldBeCharged) {
+        auto setup = CreateSetup();
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+        auto& runtime = setup->GetRuntime();
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Messages = {
+                {
+                    .Index = 0,
+                    .MessageBody = "charged_message",
+                }
+            },
+            .ShouldBeCharged = true,
+        });
+
+        auto response = GetWriteResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(response->Messages[0].MessageId.has_value());
+    }
+
+    Y_UNIT_TEST(UnauthorizedWriter) {
+        auto setup = CreateSetup();
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+        NACLib::TDiffACL acl;
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, "user1@staff");
+        ModifyTopicAcl(*setup, "topic1", acl);
+
+        auto& runtime = setup->GetRuntime();
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Messages = {
+                {
+                    .Index = 0,
+                    .MessageBody = "message_body",
+                }
+            },
+            .UserToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{}),
+        });
+
+        auto response = GetWriteResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::UNAUTHORIZED);
+    }
+
     Y_UNIT_TEST(WriteToAutopartitioningTopic) {
         auto setup = CreateSetup();
 

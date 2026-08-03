@@ -114,6 +114,16 @@ public:
     //! Ends the current tag, filling in the value's reserved length prefix.
     TTaggedPayloadWriter& EndTag() &;
 
+    //! Splices an already-serialized tag section (see #TLoggingTagList::GetPayload)
+    //! verbatim. Must follow #EndMessage, must not interrupt a tag, and must precede
+    //! any well-known tag, which the layout requires to come last.
+    TTaggedPayloadWriter& AppendTags(TLoggingTagListPayloadView tags) &;
+
+    //! Appends a single framed keyed tag to #tags, for producers that hold an
+    //! already-formatted value and accumulate a tag section of their own (see
+    //! #TLoggingTagList).
+    static void AppendTag(TLoggingTagListPayload* tags, TStringBuf key, TStringBuf value);
+
     //! Returns the serialized payload. Must follow #EndMessage.
     TTaggedLogEventPayload Finish() &;
 
@@ -158,6 +168,10 @@ public:
     };
 
     explicit TTaggedPayloadReader(const TTaggedLogEventPayload& payload);
+
+    //! Parses a bare tag section carrying no message field (see #TLoggingTagList::GetPayload).
+    //! #ReadMessage must not be called on a reader constructed this way.
+    explicit TTaggedPayloadReader(TLoggingTagListPayloadView tags);
 
     //! Reads the message field. Must be called exactly once, before any #TryReadTag.
     TStringBuf ReadMessage();

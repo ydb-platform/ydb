@@ -76,6 +76,19 @@ public:
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(Settings.ParentTraceId), "LookupActor") {
     }
 
+    ~TKqpBufferLookupActor() {
+        AFL_ENSURE(Settings.Alloc);
+        {
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
+            for (auto& [cookie, state] : CookieToLookupState) {
+                if (state.Worker) {
+                    state.Worker->ClearResults(Settings.Alloc->Ref());
+                }
+            }
+            CookieToLookupState.clear();
+        }
+    }
+
     void Bootstrap() {
         YDB_LOG_DEBUG("Starting buffer lookup actor",
             {"logPrefix", this->LogPrefix});
@@ -92,6 +105,11 @@ public:
         AFL_ENSURE(Settings.Alloc);
         {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
+            for (auto& [cookie, state] : CookieToLookupState) {
+                if (state.Worker) {
+                    state.Worker->ClearResults(Settings.Alloc->Ref());
+                }
+            }
             CookieToLookupState.clear();
         }
 

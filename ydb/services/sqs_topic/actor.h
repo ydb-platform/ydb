@@ -1,5 +1,7 @@
 #pragma once
 
+#include "error.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
@@ -7,8 +9,13 @@
 #include <ydb/core/protos/sqs.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/http_proxy/error/error.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
+
+#include <util/system/type_name.h>
+#include <util/system/backtrace.h>
 
 namespace NKikimr::NSqsTopic::V1 {
 
@@ -40,6 +47,19 @@ namespace NKikimr::NSqsTopic::V1 {
             this->Request_->ReplyWithYdbStatus(Ydb::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED);
             this->Die(this->ActorContext());
             TBase::IsDead = true;
+        }
+
+        bool OnUnhandledException(const std::exception& exc) override {
+            const auto& ctx = this->ActorContext();
+            YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::SQS, "Unhandled exception in SQS topic actor",
+                {"typeName", TypeName(exc)},
+                {"exception", exc.what()},
+                {"path", this->GetTopicPath()},
+                {"database", this->Database},
+                {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
+
+            ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Internal error"));
+            return true;
         }
 
         void DescribeTopic(NACLib::EAccessRights accessRights) {

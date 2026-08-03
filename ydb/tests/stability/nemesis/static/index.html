@@ -26,12 +26,22 @@
         :processes="processes"
         :schedule-status="scheduleStatus"
         :process-types="processTypes"
+        :inventory="inventory"
       ></nemesis-group-accordion>
     </div>
 
-    <!-- Right Column: Hosts Status, Warden Checks & Schedule History (5 cols) -->
+    <!-- Right Column: Scheduler, Hosts Status, Warden Checks & Schedule History (5 cols) -->
     <div class="col-span-5">
       <div class="sticky top-4 space-y-6">
+        <!-- Nemesis Scheduler (boundary-walking): state, failure budget, problems -->
+        <scheduler-card
+          :scheduler="scheduler"
+          :problems="problems"
+          :is-busy="schedulerBusy"
+          @start="startScheduler"
+          @stop="stopScheduler">
+        </scheduler-card>
+
         <!-- Hosts Status -->
         <div>
           <h2 class="text-xl font-bold mb-4">Hosts Status</h2>
@@ -69,7 +79,7 @@
                 <tr>
                   <th>Type</th>
                   <th>Action</th>
-                  <th>Host</th>
+                  <th>Target</th>
                   <th>Time</th>
                 </tr>
               </thead>
@@ -81,7 +91,7 @@
                       {{ entry.action }}
                     </span>
                   </td>
-                  <td class="font-mono text-xs">{{ entry.host }}</td>
+                  <td class="font-mono text-xs">{{ formatTarget(entry) }}</td>
                   <td class="text-xs opacity-70">{{ new Date(entry.timestamp).toLocaleTimeString() }}</td>
                 </tr>
                 <tr v-if="scheduleHistory.length === 0">
@@ -101,6 +111,7 @@
   import ProcessTypeGroup from './ProcessTypeGroup.js'
   import WardenChecksCard from './WardenChecksCard.js'
   import NemesisGroupAccordion from './NemesisGroupAccordion.js'
+  import SchedulerCard from './SchedulerCard.js'
 
   const { createApp, ref, computed } = Vue
 
@@ -109,7 +120,8 @@
       HostStatusItem,
       ProcessTypeGroup,
       WardenChecksCard,
-      NemesisGroupAccordion
+      NemesisGroupAccordion,
+      SchedulerCard
     },
     setup() {
       const message = ref('Nemesis')
@@ -124,6 +136,10 @@
       const scheduleStatus = ref({}) // Schedule status for all nemesis types
       const wardenResults = ref({}) // Warden check results per host
       const wardenLoading = ref(false)
+      const inventory = ref({ hosts: [], nodes: [], slots: [] })
+      const scheduler = ref({ available: false })
+      const problems = ref({ count: 0, problems: [], by_kind: {} })
+      const schedulerBusy = ref(false)
 
       // Axios interceptor for global error handling
       axios.interceptors.response.use(
@@ -144,6 +160,36 @@
         }
       )
 
+      function formatTarget(entry) {
+        const t = entry && entry.target
+        if (!t) {
+          return entry.host || ''
+        }
+        const kind = t.kind || 'host'
+        if (kind === 'node') {
+          const id = t.node_id != null ? `node=${t.node_id}` : ''
+          const port = t.ic_port != null ? `ic=${t.ic_port}` : ''
+          return [kind, entry.host || t.host, id, port].filter(Boolean).join(' ')
+        }
+        if (kind === 'slot') {
+          const id = t.slot_idx != null ? `slot=${t.slot_idx}` : ''
+          const port = t.ic_port != null ? `ic=${t.ic_port}` : ''
+          return [kind, entry.host || t.host, id, port].filter(Boolean).join(' ')
+        }
+        if (kind === 'disk') {
+          const id = t.node_id != null ? `node=${t.node_id}` : ''
+          const path = t.disk_path ? t.disk_path : ''
+          return [kind, entry.host || t.host, id, path].filter(Boolean).join(' ')
+        }
+        if (kind === 'tablet') {
+          return t.tablet_id != null ? `tablet=${t.tablet_id}` : `tablet @${t.host || entry.host}`
+        }
+        if (kind === 'datacenter' || kind === 'pile') {
+          return `${kind}=${t.group_id || '?'} @${t.host || entry.host}`
+        }
+        return `${kind} ${t.host || entry.host || ''}`
+      }
+
       function get_hosts_health() {
         return axios
           .get('/api/hosts/health')
@@ -154,6 +200,62 @@
           .catch(err => {
             hostsFetchError.value = err
           })
+      }
+
+      // Inventory is built once at orchestrator startup, so it is fetched once, not polled.
+      function get_inventory() {
+        axios.get('/api/inventory')
+          .then(response => {
+            inventory.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch inventory', err)
+          })
+      }
+
+      function get_scheduler() {
+        return axios.get('/api/scheduler')
+          .then(response => {
+            scheduler.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch scheduler state', err)
+          })
+      }
+
+      function get_problems() {
+        return axios.get('/api/problems')
+          .then(response => {
+            problems.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch nemesis problems', err)
+          })
+      }
+
+      function post_scheduler(action) {
+        schedulerBusy.value = true
+        return axios.post(`/api/scheduler/${action}`, {})
+          .then(response => {
+            if (response.data && response.data.scheduler) {
+              scheduler.value = response.data.scheduler
+            }
+          })
+          .catch(err => {
+            console.error(`Failed to ${action} scheduler`, err)
+          })
+          .finally(() => {
+            schedulerBusy.value = false
+            get_problems()
+          })
+      }
+
+      function startScheduler() {
+        return post_scheduler('start')
+      }
+
+      function stopScheduler() {
+        return post_scheduler('stop')
       }
 
       function get_process_types() {
@@ -248,6 +350,7 @@
 
       // Initial load
       get_hosts_health()
+      get_inventory()
       get_process_types()
       get_grouped_process_types()
       get_all_processes()
@@ -255,8 +358,10 @@
       get_schedule_history()
       get_schedule_status()
       get_warden_results()
+      get_scheduler()
+      get_problems()
 
-      // Poll every 5 seconds
+      // Poll every 5 seconds (inventory is static — fetched once above)
       setInterval(() => {
         get_hosts_health()
         get_all_processes()
@@ -264,6 +369,8 @@
         get_schedule_history()
         get_schedule_status()
         get_warden_results()
+        get_scheduler()
+        get_problems()
       }, 5000)
 
       return {
@@ -279,6 +386,13 @@
         scheduleStatus,
         wardenResults,
         wardenLoading,
+        inventory,
+        scheduler,
+        problems,
+        schedulerBusy,
+        startScheduler,
+        stopScheduler,
+        formatTarget,
         getProcessesByType,
         runWardenChecks
       }

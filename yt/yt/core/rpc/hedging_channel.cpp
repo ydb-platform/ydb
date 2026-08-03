@@ -46,7 +46,7 @@ public:
         TSharedRefArray message,
         const std::string& address,
         NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer) override;
-    void HandleError(TError error) override;
+    void HandleError(TError error, const std::string& address) override;
     void HandleStreamingPayload(const TStreamingPayload& /*payload*/) override;
     void HandleStreamingFeedback(const TStreamingFeedback& /*feedback*/) override;
 
@@ -140,7 +140,8 @@ public:
                     NRpc::EErrorCode::ProtocolError,
                     "Error parsing response header from backup")
                     << TErrorAttribute(BackupFailedKey, Request_->GetRequestId())
-                    << TErrorAttribute("request_id", Request_->GetRequestId()));
+                    << TErrorAttribute("request_id", Request_->GetRequestId()),
+                    address);
                 return;
             }
 
@@ -152,7 +153,7 @@ public:
         responseHandler->HandleResponse(std::move(message), address, std::move(attachmentsTransfer));
     }
 
-    void HandleError(TError error, bool backup)
+    void HandleError(TError error, const std::string& address, bool backup)
     {
         IClientResponseHandlerPtr responseHandler;
         {
@@ -174,7 +175,7 @@ public:
         if (backup) {
             error <<= TErrorAttribute(BackupFailedKey, true);
         }
-        responseHandler->HandleError(std::move(error));
+        responseHandler->HandleError(std::move(error), address);
     }
 
     // IClientRequestControl implementation.
@@ -297,9 +298,9 @@ void THedgingResponseHandler::HandleAcknowledgement()
     Session_->HandleAcknowledgement(Backup_);
 }
 
-void THedgingResponseHandler::HandleError(TError error)
+void THedgingResponseHandler::HandleError(TError error, const std::string& address)
 {
-    Session_->HandleError(std::move(error), Backup_);
+    Session_->HandleError(std::move(error), address, Backup_);
 }
 
 void THedgingResponseHandler::HandleResponse(

@@ -42,12 +42,14 @@ struct IServer: public IStartable
 {
     virtual NThreading::TFuture<NProto::TError> StartEndpoint(
         TString socketPath,
-        IPartitionDirectServicePtr partitionDirectService,
+        ITraceServicePtr traceService,
         IStoragePtr storage,
         const TStorageOptions& options) = 0;
 
     virtual NThreading::TFuture<NProto::TError> StopEndpoint(
         const TString& socketPath) = 0;
+
+    virtual void DetachStorage(const TString& socketPath) = 0;
 
     virtual NProto::TError UpdateEndpoint(
         const TString& socketPath,

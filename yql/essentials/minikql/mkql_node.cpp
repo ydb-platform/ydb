@@ -201,6 +201,10 @@ TInternName TTypeEnvironment::InternName(const TStringBuf& name) const {
     return TInternName(*NamesPool_.insert(TStringBuf(data, name.size())).first);
 }
 
+TType* TTypeEnvironment::InternType(TType* type) const {
+    return *TypesPool_.emplace(type).first;
+}
+
 #define LITERALS_LIST(xx)                                                \
     xx(Void, TVoid)                                                      \
         xx(Null, TNull)                                                  \

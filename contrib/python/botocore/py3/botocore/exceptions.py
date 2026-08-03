@@ -351,7 +351,7 @@ class ValidationError(BotoCoreError):
     :ivar type_name: The name of the underlying type.
     """
 
-    fmt = "Invalid value ('{value}') for param {param} " "of type {type_name} "
+    fmt = "Invalid value ('{value}') for param {param} of type {type_name} "
 
 
 class ParamValidationError(BotoCoreError):
@@ -371,8 +371,7 @@ class UnknownKeyError(ValidationError):
     """
 
     fmt = (
-        "Unknown key '{value}' for param '{param}'.  Must be one "
-        "of: {choices}"
+        "Unknown key '{value}' for param '{param}'.  Must be one of: {choices}"
     )
 
 
@@ -482,9 +481,7 @@ class WaiterError(BotoCoreError):
 class IncompleteReadError(BotoCoreError):
     """HTTP response did not return expected number of bytes."""
 
-    fmt = (
-        '{actual_bytes} read, but total bytes ' 'expected is {expected_bytes}.'
-    )
+    fmt = '{actual_bytes} read, but total bytes expected is {expected_bytes}.'
 
 
 class InvalidExpressionError(BotoCoreError):

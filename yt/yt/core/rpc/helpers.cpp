@@ -393,7 +393,7 @@ private:
                 std::move(attachmentsTransfer));
         }
 
-        void HandleError(TError error) override
+        void HandleError(TError error, const std::string& address) override
         {
             if (IsError_(error)) {
                 OnFailure_.Run(Channel_, error);
@@ -403,7 +403,7 @@ private:
                 error = MaybeTransformError_(std::move(error));
             }
 
-            UnderlyingHandler_->HandleError(std::move(error));
+            UnderlyingHandler_->HandleError(std::move(error), address);
         }
 
         void HandleStreamingPayload(const TStreamingPayload& payload) override

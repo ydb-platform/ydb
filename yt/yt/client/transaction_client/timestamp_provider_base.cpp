@@ -76,7 +76,7 @@ TFuture<TTimestamp> TTimestampProviderBase::OnGenerateTimestamps(
     }
 
     auto firstTimestamp = timestampOrError.Value();
-    auto lastTimestamp = firstTimestamp + count - 1;
+    auto lastTimestamp = TTimestamp(firstTimestamp.Underlying() + count - 1);
 
     YT_LOG_DEBUG("Fresh timestamps generated (Timestamps: %v-%v, ClockClusterTag: %v)",
         firstTimestamp,

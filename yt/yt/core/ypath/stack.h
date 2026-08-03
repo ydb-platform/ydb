@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <yt/yt/core/misc/property.h>
+#include <library/cpp/yt/misc/property.h>
 
 #include <variant>
 

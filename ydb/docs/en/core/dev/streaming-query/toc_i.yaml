@@ -1,15 +1,19 @@
 items:
-- name: Typical patterns
+- name: Local and External Topics
+  href: local-and-external-topics.md
+- name: Typical Patterns
   href: patterns.md
-- name: Writing to tables
+- name: Writing to Tables
   href: table-writing.md
-- name: Data enrichment
+- name: Data Enrichment
   href: enrichment.md
 - name: Data formats for reading/writing topics
   href: streaming-query-formats.md
-- name: Delivery guarantees
+- name: Data Delivery Guarantees
   href: guarantees.md
 - name: Checkpoints
   href: checkpoints.md
+- name: Watermarks
+  href: watermarks.md
 - name: Local and external topics
   href: local-and-external-topics.md

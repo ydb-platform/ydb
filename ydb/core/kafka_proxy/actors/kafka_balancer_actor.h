@@ -1,6 +1,7 @@
 #pragma once
 
 #include "actors.h"
+#include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
 #include <ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.h>
 #include <ydb/core/kafka_proxy/kqp_helper.h>
@@ -27,7 +28,6 @@ constexpr ui32 MAX_REBALANCE_TIMEOUT_MS = 300000;
 
 constexpr ui32 DEFAULT_SESSION_TIMEOUT_MS = 45000;
 constexpr ui32 MIN_SESSION_TIMEOUT_MS = 5000;
-constexpr ui32 MAX_SESSION_TIMEOUT_MS = 300000;
 
 constexpr ui32 MAX_GROUPS_COUNT = 1000;
 constexpr ui32 LIMIT_MEMBERS_PER_REQUEST = 999;
@@ -143,7 +143,9 @@ public:
         InstanceId = JoinGroupRequestData->GroupInstanceId.value_or("");
         MemberId = JoinGroupRequestData->MemberId.value_or("");
 
-        KAFKA_LOG_D(TStringBuilder() << "JOIN_GROUP request. MemberId# " << MemberId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KAFKA_PROXY, "JOIN_GROUP request",
+            {LogPrefix()},
+            {"memberId", MemberId});
 
         if (JoinGroupRequestData->SessionTimeoutMs) {
             SessionTimeoutMs = JoinGroupRequestData->SessionTimeoutMs;
@@ -308,7 +310,8 @@ private:
     void SendLeaveGroupResponseFail(const TActorContext&, ui64 corellationId,
                                     EKafkaErrors error, TString message = "");
 
-    TString LogPrefix();
+    NActors::NStructuredLog::TStructuredMessage LogPrefix();
+    TString GetMetadataDatabasePath() const;
     void SendResponseFail(const TActorContext& ctx, EKafkaErrors error, const TString& message);
 
     std::optional<TGroupStatus> ParseGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);

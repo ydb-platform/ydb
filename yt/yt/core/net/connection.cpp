@@ -787,9 +787,9 @@ public:
         return impl;
     }
 
-    const std::string& GetLoggingTag() const override
+    const NLogging::TLoggingTagList& GetLoggingTags() const override
     {
-        return LoggingTag_;
+        return Logger.GetTags();
     }
 
     void OnEvent(EPollControl control) override
@@ -1050,7 +1050,6 @@ public:
 protected:
     const TConnectionId Id_ = TConnectionId::Create();
     const std::string Endpoint_;
-    const std::string LoggingTag_;
     const NLogging::TLogger Logger;
     TFileDescriptor FD_ = -1;
     int SynchronousIOCount_ = 0;
@@ -1065,8 +1064,7 @@ protected:
         // COMPAT(pogorelov)
         bool useDeliveryFence)
         : Endpoint_(Format("File{%v}", filePath))
-        , LoggingTag_(MakeLoggingTag(Id_, Endpoint_))
-        , Logger(NetLogger().WithRawTag(LoggingTag_))
+        , Logger(MakeLogger(Id_, Endpoint_))
         , FD_(fd)
         , FDEpollControl_(FDEpollControl)
         , ReadEpollControl_(readEpollControl)
@@ -1085,8 +1083,7 @@ protected:
         const TNetworkAddress& remoteAddress,
         IPollerPtr poller)
         : Endpoint_(Format("FD{%v<->%v}", localAddress, remoteAddress))
-        , LoggingTag_(MakeLoggingTag(Id_, Endpoint_))
-        , Logger(NetLogger().WithRawTag(LoggingTag_))
+        , Logger(MakeLogger(Id_, Endpoint_))
         , FD_(fd)
         , FDEpollControl_(epollControl)
         , ReadEpollControl_(readEpollControl)
@@ -1230,12 +1227,11 @@ private:
     TDelayedExecutorCookie ReadTimeoutCookie_;
     TDelayedExecutorCookie WriteTimeoutCookie_;
 
-    static std::string MakeLoggingTag(TConnectionId id, const std::string& endpoint)
+    static NLogging::TLogger MakeLogger(TConnectionId id, const std::string& endpoint)
     {
-       return Format(
-            "ConnectionId: %v, Endpoint: %v",
-            id,
-            endpoint);
+        return NetLogger()
+            .WithTag("ConnectionId", id)
+            .WithTag("Endpoint", endpoint);
     }
 
     TError AnnotateError(TError error) const

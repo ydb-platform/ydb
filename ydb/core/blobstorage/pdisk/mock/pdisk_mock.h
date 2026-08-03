@@ -49,6 +49,7 @@ namespace NKikimr {
         TPtr Snapshot(); // create a copy of PDisk whole state
 
         void SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly);
+        void SetReportVDiskMetrics(bool reportVDiskMetrics);
 
         bool IsDiskReadOnly() const;
     };

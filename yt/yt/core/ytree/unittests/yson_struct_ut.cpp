@@ -4329,6 +4329,25 @@ TEST(TYsonStructTest, ProtoSerialize)
     EXPECT_TRUE(AreNodesEqual(node, expectedNode));
     auto otherStruct = ConvertTo<TTestYsonStructWithProtoPtr>(node);
     EXPECT_EQ(*otherStruct, *ysonStruct);
+
+    // Converting from a YSON string goes through the pull parser rather than the node overloads.
+    EXPECT_EQ(*ConvertTo<TTestYsonStructWithProtoPtr>(ConvertToYsonString(ysonStruct)), *ysonStruct);
+}
+
+TEST(TYsonStructTest, ProtoDeserializeMalformedString)
+{
+    // Field 2, length-delimited, declares 5 bytes of payload but carries only 2.
+    auto yson = BuildYsonStringFluently()
+        .BeginMap()
+            .Item("string_proto").Value(TStringBuf("\x12\x05" "ab"))
+        .EndMap();
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        ConvertTo<TTestYsonStructWithProtoPtr>(ConvertToNode(yson)),
+        "Error parsing protobuf message from string");
+    EXPECT_THROW_WITH_SUBSTRING(
+        ConvertTo<TTestYsonStructWithProtoPtr>(yson),
+        "Error parsing protobuf message from string");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

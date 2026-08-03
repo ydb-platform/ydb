@@ -44,10 +44,7 @@ TString BuildGrafanaLoggingExpr(const TVector<std::pair<TString, TString>>& bind
     return expr;
 }
 
-NJson::TJsonValue BuildGrafanaLoggingPanesJson(
-    const TString& datasource,
-    const TVector<std::pair<TString, TString>>& bindings)
-{
+NJson::TJsonValue BuildGrafanaLoggingPanesJson(const TString& datasource, const TVector<std::pair<TString, TString>>& bindings) {
     NJson::TJsonValue panesJson(NJson::JSON_MAP);
     NJson::TJsonValue paneJson(NJson::JSON_MAP);
     NJson::TJsonValue queryJson(NJson::JSON_MAP);
@@ -91,25 +88,15 @@ bool TryBuildGrafanaLoggingUrl(
     }
 
     const TCgiParameters forwardedParameters = BuildForwardedParameters(input.Identity, input.AdditionalRequestParams);
-    TVector<std::pair<TString, TString>> bindings = BuildNonIdentityRequestParamValues(forwardedParameters);
-    for (auto& binding : BuildRequestParamValues(forwardedParameters, paramBindings.RequestMappings)) {
-        bindings.push_back(std::move(binding));
-    }
-    for (auto& binding : BuildClusterInfoParamValues(input.ClusterInfo, paramBindings.ClusterInfoMappings)) {
-        bindings.push_back(std::move(binding));
-    }
-    for (auto& binding : BuildStaticParamValues(paramBindings.StaticMappings)) {
-        bindings.push_back(std::move(binding));
-    }
-
-    TVector<std::pair<TString, TString>> resolvedBindings;
-    resolvedBindings.reserve(bindings.size());
-    for (auto& binding : bindings) {
-        if (binding.first == "datasource") {
-            datasource = std::move(binding.second);
+    auto parametersToAdd = BuildParametersToAdd(forwardedParameters, input.ClusterInfo, paramBindings);
+    TVector<std::pair<TString, TString>> bindings;
+    bindings.reserve(parametersToAdd.size());
+    for (auto& paramValue : parametersToAdd) {
+        if (paramValue.first == "datasource") {
+            datasource = std::move(paramValue.second);
             continue;
         }
-        resolvedBindings.push_back(std::move(binding));
+        bindings.push_back(std::move(paramValue));
     }
 
     if (datasource.empty()) {
@@ -120,7 +107,7 @@ bool TryBuildGrafanaLoggingUrl(
     TCgiParameters queryParameters;
     queryParameters.InsertUnescaped("schemaVersion", "1");
     queryParameters.InsertUnescaped("panes", NJson::WriteJson(
-        BuildGrafanaLoggingPanesJson(datasource, resolvedBindings),
+        BuildGrafanaLoggingPanesJson(datasource, bindings),
         false));
     queryParameters.InsertUnescaped("orgId", "1");
 
@@ -181,6 +168,9 @@ void ValidateGrafanaLoggingSourceConfig(const TSupportLinkEntryConfig& config, c
     const TStringBuf url = config.GetUrl().empty()
         ? GRAFANA_LOGGING_DEFAULT_URL
         : TStringBuf(config.GetUrl());
+    if (url.Contains('{') || url.Contains('}')) {
+        ythrow yexception() << "url template placeholders are not supported for source=" << config.GetSource();
+    }
     if (url.Contains('?')) {
         ythrow yexception() << "query parameters are not supported in url for source=" << config.GetSource();
     }

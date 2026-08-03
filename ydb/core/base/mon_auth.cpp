@@ -33,11 +33,26 @@ bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type
         TTabletTypes::DataShard,
         TTabletTypes::Hive,
         TTabletTypes::GraphShard,
+        TTabletTypes::BSController,
         TTabletTypes::SchemeShard,
     };
 
     return std::find(tabletTypes.begin(), tabletTypes.end(), type) != tabletTypes.end()
         && appData->FeatureFlags.GetEnableTabletDevUiSecurePath();
+}
+
+bool IsTabletDevUiAppPageAdminOnly(const TAppData* appData, TTabletTypes::EType type) {
+    if (!appData) {
+        return false;
+    }
+
+    constexpr std::array tabletTypes = {
+        TTabletTypes::DataShard,
+        TTabletTypes::BSController,
+    };
+
+    return appData->FeatureFlags.GetEnableTabletDevUiSecurePath() &&
+           std::find(tabletTypes.begin(), tabletTypes.end(), type) != tabletTypes.end();
 }
 
 bool IsTabletDevUiAccessAllowed(

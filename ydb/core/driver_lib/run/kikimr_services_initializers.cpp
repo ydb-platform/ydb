@@ -84,6 +84,7 @@
 #include <ydb/core/kafka_proxy/kafka_proxy.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 
+#include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -114,6 +115,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/volume/volume.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller/dbs_controller.h>
 #endif
 
 #include <ydb/core/mon/mon.h>
@@ -219,6 +221,7 @@
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/core/tx/priorities/usage/config.h>
+#include <ydb/core/tx/priorities/service/service.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 
 #include <ydb/core/tx/limiter/grouped_memory/usage/config.h>
@@ -253,11 +256,11 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
+#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
 #include <ydb/library/actors/interconnect/handshake_broker.h>
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
-#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
@@ -576,6 +579,9 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     if (config.HasRdmaChecksum()) {
         result.RdmaChecksum = config.GetRdmaChecksum();
     }
+    if (config.HasEnableRdmaSendReceive()) {
+        result.EnableRdmaSendReceive = config.GetEnableRdmaSendReceive();
+    }
     if (config.HasRdmaPayloadCopySizeThreshold()) {
         result.RdmaPayloadCopySizeThreshold = config.GetRdmaPayloadCopySizeThreshold();
     }
@@ -587,12 +593,16 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.CollectSubscriptionStackTrace = config.GetCollectSubscriptionStackTrace();
     }
 
-    if (config.HasUseUring()) {
-        result.UseUring = config.GetUseUring();
-    }
-
-    if (config.HasEnableUringSQPOLL()) {
-        result.EnableUringSQPOLL = config.GetEnableUringSQPOLL();
+    if (config.HasV2Config()) {
+        const auto& v2 = config.GetV2Config();
+        result.V2.Enable = v2.GetEnable();
+        result.V2.ChecksumEvents = v2.GetChecksumEvents();
+        result.V2.EnableSQPOLL = v2.GetEnableSQPOLL();
+        result.V2.EnablePreserializeEvents = v2.GetEnablePreserializeEvents();
+        result.V2.UringEngineThreads = v2.GetUringEngineThreads();
+        result.V2.UringEngineRingsPerShard = v2.GetUringEngineRingsPerShard();
+        result.V2.UringEngineSqThreadIdleMs = v2.GetUringEngineSqThreadIdleMs();
+        result.V2.ShareRingsAmongThreads = v2.GetShareRingsAmongThreads();
     }
 
     return result;
@@ -711,11 +721,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(
                 CreatePollerActor(schedulerConfig.MonCounters), TMailboxType::ReadAsFilled, systemPoolId));
 
-            if (settings.UseUring && TUringContext::IsSupported()) {
-                setup->LocalServices.emplace_back(MakeUringPollerActorId(), TActorSetupCmd(
-                    CreateUringPollerActor(settings.EnableUringSQPOLL), TMailboxType::ReadAsFilled, systemPoolId));
-            }
-
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 
             TIntrusivePtr<TInterconnectProxyCommon> icCommon;
@@ -755,6 +760,21 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             icCommon->ChannelsConfig = channels;
             icCommon->Settings = settings;
             icCommon->DestructorId = GetDestructActorID();
+
+            if (settings.V2.Enable) {
+                // Create the shared v2 io_uring data-plane engine once, at startup, and publish it in Common.
+                // The actor system does not exist yet, so the engine is bound to it later (once it is up,
+                // TInterconnectProxyTCP::Registered calls SetActorSystem). CreateUringEngine returns null when
+                // io_uring is unavailable, in which case v2 is simply never negotiated during the handshake.
+                // The engine takes its parameters from Common, so Settings/MonCounters/DestructorId must
+                // already be filled in by this point.
+                icCommon->UringEngineV2 = CreateUringEngine(icCommon);
+                setup->OnActorSystemCreated.push_back([engine = icCommon->UringEngineV2](TActorSystem *actorSystem) {
+                    if (engine) {
+                        engine->SetActorSystem(actorSystem);
+                    }
+                });
+            }
             icCommon->DestructorQueueSize = destructorQueueSize;
             icCommon->HandshakeBallastSize = icConfig.GetHandshakeBallastSize();
             icCommon->LocalScopeId = ScopeId.GetInterconnectScopeId();
@@ -1335,6 +1355,7 @@ void TLocalServiceInitializer::InitializeServices(
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
     addToLocalConfig(TTabletTypes::BlockStoreVolumeDirect, &NYdb::NBS::NStorage::CreateVolumeTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BlockStorePartitionDirect, &NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::DbsController, &NYdb::NBS::NBlockStore::NStorage::NDbsController::CreateDbsControllerTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
 #endif
 
     if (Config.GetShutdownConfig().HasDrainTimeoutSeconds()) {
@@ -2420,6 +2441,17 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
     );
 }
 
+TWorkloadManagerServiceInitializer::TWorkloadManagerServiceInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TWorkloadManagerServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    auto workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData->Counters));
+    setup->LocalServices.push_back(std::make_pair(
+        NWorkloadManager::MakeServiceId(NodeId),
+        TActorSetupCmd(workloadManager, TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
 TKqpServiceInitializer::TKqpServiceInitializer(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories,
@@ -2610,7 +2642,7 @@ void TCompPrioritiesInitializer::InitializeServices(NActors::TActorSystemSetup* 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
         TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_COMP_PRIORITIES");
 
-        auto service = NPrioritiesQueue::TCompServiceOperator::CreateService(serviceConfig, conveyorGroup);
+        auto service = NPrioritiesQueue::CreateService<NPrioritiesQueue::TCompConveyorPolicy>(serviceConfig, conveyorGroup);
 
         setup->LocalServices.push_back(std::make_pair(
             NPrioritiesQueue::TCompServiceOperator::MakeServiceId(NodeId),
@@ -3227,54 +3259,56 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
     if (Config.GetKafkaProxyConfig().GetEnableKafkaProxy()) {
         NKafka::TListenerSettings settings;
         settings.Port = Config.GetKafkaProxyConfig().GetListeningPort();
+        settings.Address = Config.GetKafkaProxyConfig().GetListeningAddress();
         settings.SslCertificatePem = Config.GetKafkaProxyConfig().GetSslCertificate();
         settings.CertificateFile = Config.GetKafkaProxyConfig().GetCert();
         settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
         settings.TcpNotDelay = true;
 
         std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds = std::make_shared<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds>();
+        if (Config.GetKafkaProxyConfig().GetMtlsEnable()) {
+            auto readFile = [](std::optional<TString> path) {
+                if (path) {
+                    try {
+                        return TFileInput(*path).ReadAll();
+                    } catch (const std::exception& ex) {
+                        return TString();
+                    }
+                }
+                return TString();
+            };
 
-        auto readFile = [](std::optional<TString> path) {
-            if (path) {
-                try {
-                    return TFileInput(*path).ReadAll();
-                } catch (const std::exception& ex) {
-                    return TString();
+            TString serverCert = readFile(settings.CertificateFile);
+            TString serverPrivateKey = readFile(settings.PrivateKeyFile);
+            TString caCert = readFile(Config.GetKafkaProxyConfig().GetCA());
+            serverCreds->AllowSelfSignedCerts = Config.GetKafkaProxyConfig().GetEnableSelfSignedCerts();
+
+            {
+                TSslHolder<BIO> bio(BIO_new_mem_buf(serverCert.data(), serverCert.size()));
+                if (bio) {
+                    serverCreds->ServerCert = TSslHolder<X509>(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
+                } else {
+                    serverCreds->ServerCert = TSslHolder<X509>();
                 }
             }
-            return TString();
-        };
 
-        TString serverCert = readFile(settings.CertificateFile);
-        TString serverPrivateKey = readFile(settings.PrivateKeyFile);
-        TString caCert = readFile(Config.GetKafkaProxyConfig().GetCA());
-        serverCreds->AllowSelfSignedCerts = Config.GetKafkaProxyConfig().GetEnableSelfSignedCerts();
-
-        {
-            TSslHolder<BIO> bio(BIO_new_mem_buf(serverCert.data(), serverCert.size()));
-            if (bio) {
-                serverCreds->ServerCert = TSslHolder<X509>(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
-            } else {
-                serverCreds->ServerCert = TSslHolder<X509>();
+            {
+                TSslHolder<BIO> bio(BIO_new_mem_buf(serverPrivateKey.data(), serverPrivateKey.size()));
+                if (bio) {
+                    serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
+                } else {
+                    serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>();
+                }
             }
-        }
 
-        {
-            TSslHolder<BIO> bio(BIO_new_mem_buf(serverPrivateKey.data(), serverPrivateKey.size()));
-            if (bio) {
-                serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
-            } else {
-                serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>();
-            }
-        }
-
-        {
-            TSslHolder<BIO> bio(BIO_new_mem_buf(caCert.data(), caCert.size()));
-            if (bio) {
-                serverCreds->CACert = TSslHolder<X509>(
-                    PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
-            } else {
-                serverCreds->CACert = TSslHolder<X509>();
+            {
+                TSslHolder<BIO> bio(BIO_new_mem_buf(caCert.data(), caCert.size()));
+                if (bio) {
+                    serverCreds->CACert = TSslHolder<X509>(
+                        PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
+                } else {
+                    serverCreds->CACert = TSslHolder<X509>();
+                }
             }
         }
         setup->LocalServices.emplace_back(
@@ -3296,7 +3330,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
 
         setup->LocalServices.emplace_back(
             TActorId(),
-            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(), serverCreds),
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(), Config.GetKafkaProxyConfig().GetMtlsEnable() ? serverCreds : nullptr),
                            TMailboxType::HTSwap, appData->UserPoolId)
         );
 

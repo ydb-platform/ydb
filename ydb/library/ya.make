@@ -28,6 +28,7 @@ RECURSE(
     mkql_proto
     naming_conventions
     ncloud
+    nmslib
     pdisk_io
     persqueue
     planner

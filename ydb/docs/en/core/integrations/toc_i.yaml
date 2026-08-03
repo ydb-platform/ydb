@@ -39,15 +39,25 @@ items:
   include:
     mode: link
     path: orm/toc-orm.yaml
-- name: Spring
-  href: spring/index.md
-  include:
-    mode: link
-    path: spring/toc-spring.yaml
 - name: Vector search
   href: vectorsearch/index.md
   include:
     mode: link
     path: vectorsearch/toc-vectorsearch.yaml
+- name: SQL dialect conversion
+  href: sql-translation/index.md
+  include:
+    mode: link
+    path: sql-translation/toc-sql-translation.yaml
+- name: Spring
+  href: spring/index.md
+  include:
+    mode: link
+    path: spring/toc-spring.yaml
+- name: Spring
+  href: spring/index.md
+  include:
+    mode: link
+    path: spring/toc-spring.yaml
 - name: SQL Dialect Converter to YQL
   href: sql-dialect-converter.md

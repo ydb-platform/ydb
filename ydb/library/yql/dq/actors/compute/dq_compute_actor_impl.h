@@ -476,6 +476,19 @@ protected:
             DrainAsyncOutput(outputIndex, info);
         }
 
+        for (auto& [outputIndex, transform] : OutputTransformsMap) {
+            if (!transform.OutputBuffer || !transform.AsyncOutput) {
+                continue;
+            }
+            const auto level = transform.OutputBuffer->GetFillLevel();
+            if (level != EDqFillLevel::NoLimit) {
+                transform.OutputConsumerWasLimited = true;
+            } else if (transform.OutputConsumerWasLimited) {
+                transform.OutputConsumerWasLimited = false;
+                transform.AsyncOutput->OnOutputConsumerReady();
+            }
+        }
+
         CheckRunStatus();
     }
 
@@ -1090,6 +1103,7 @@ protected:
 
     struct TAsyncOutputTransformInfo : public TAsyncOutputInfoBase {
         IDqOutputConsumer::TPtr OutputBuffer;
+        bool OutputConsumerWasLimited = false;
     };
 
 protected:

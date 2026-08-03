@@ -35,6 +35,7 @@ SRCS(
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/bootstrap
     ydb/core/nbs/cloud/blockstore/config/protos
+    ydb/core/nbs/cloud/blockstore/libs/diagnostics
     ydb/core/nbs/cloud/blockstore/libs/storage/api
     ydb/core/nbs/cloud/blockstore/libs/storage/core
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map
@@ -49,7 +50,7 @@ PEERDIR(
     ydb/library/services
 
     ydb/core/mind/bscontroller
-    contrib/libs/opentelemetry-proto
+    contrib/proto/opentelemetry
 
     library/cpp/cgiparam
 )

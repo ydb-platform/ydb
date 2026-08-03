@@ -9,6 +9,8 @@ SPLIT_FACTOR(10)
 
 TEST_SRCS(
     test_topic.py
+    test_sqs_topic.py
+    test_sqs_topic_boto.py
     test_kafka_topic.py
 )
 
@@ -24,6 +26,8 @@ DEPENDS(
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/compatibility
+    ydb/tests/stress/sqs_topic/workload
+    contrib/python/boto3
 )
 
 END()

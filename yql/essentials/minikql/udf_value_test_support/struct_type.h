@@ -35,6 +35,8 @@ struct TStructMemberName {
 
 template <TStructMemberName Name, typename T>
 struct TStructMember {
+    using TValueType = T;
+
     T Value;
     static constexpr TStringBuf MemberName() {
         return Name;
@@ -60,8 +62,18 @@ private:
         return indices;
     }
 
+    static consteval std::array<size_t, sizeof...(TMembers)> GetOriginalIndexMapping() {
+        const auto sorted = GetSortedIndexMapping();
+        std::array<size_t, sizeof...(TMembers)> inverse{};
+        for (size_t sortedIdx = 0; sortedIdx < sorted.size(); ++sortedIdx) {
+            inverse[sorted[sortedIdx]] = sortedIdx;
+        }
+        return inverse;
+    }
+
 public:
     static constexpr auto SortedIndexMapping = GetSortedIndexMapping();
+    static constexpr auto OriginalIndexMapping = GetOriginalIndexMapping();
 
     std::tuple<TMembers...> Members;
 };

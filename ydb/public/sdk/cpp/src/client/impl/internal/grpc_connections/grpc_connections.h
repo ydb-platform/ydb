@@ -335,7 +335,7 @@ public:
         if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
             DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
                 [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb),
-                 rpc, dbState, requestSettings, context = std::move(context)]
+                 rpc, dbState, requestSettings, context]
                 (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
                     if (status) {
                         userResponseCb(nullptr, std::move(*status));
@@ -592,7 +592,7 @@ public:
 
         if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
             DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
-                [this, request, responseCb = std::move(responseCb), rpc, dbState, requestSettings, context = std::move(context)]
+                [this, request, responseCb = std::move(responseCb), rpc, dbState, requestSettings, context]
                 (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
                     if (status) {
                         responseCb(std::move(*status), nullptr);
@@ -699,7 +699,7 @@ public:
 
         if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
             DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
-                [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context = std::move(context)]
+                [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context]
                 (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
                     if (status) {
                         connectedCallback(std::move(*status), nullptr);

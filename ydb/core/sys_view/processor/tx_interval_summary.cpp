@@ -148,7 +148,7 @@ struct TSysViewProcessor::TTxIntervalSummary : public TTxBase {
             Record.GetTopByCpuTime().ValuesSize() != Record.GetTopByCpuTime().HashesSize() ||
             Record.GetTopByRequestUnits().ValuesSize() != Record.GetTopByRequestUnits().HashesSize())
         {
-            YDB_LOG_WARN("TTxIntervalSummary::Execute: malformed summary from node",
+            YDB_LOG_WARN("TTxIntervalSummary::Execute: malformed summary",
                 {"tabletId", Self->TabletID()},
                 {"nodeId", nodeId});
             return true;

@@ -541,7 +541,7 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
                 entries = &TopPartitionsByTliOneHour;
                 break;
             default:
-                YDB_LOG_CRIT("TSysViewProcessor::Reply: unexpected partition stats type",
+                YDB_LOG_CRIT("TSysViewProcessor::Reply: unexpected stats type",
                     {"tabletId", TabletID()},
                     {"statsType", static_cast<size_t>(record.GetType())});
                 Send(ev->Sender, std::move(response));
@@ -556,7 +556,7 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
                 entries = &MetricsOneHour;
                 break;
             default:
-                YDB_LOG_CRIT("TSysViewProcessor::Reply: unexpected query metrics type",
+                YDB_LOG_CRIT("TSysViewProcessor::Reply: unexpected stats type",
                     {"tabletId", TabletID()},
                     {"statsType", static_cast<size_t>(record.GetType())});
                 Send(ev->Sender, std::move(response));
@@ -589,7 +589,7 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
                 entries = &TopByRequestUnitsOneHour;
                 break;
             default:
-                YDB_LOG_CRIT("TSysViewProcessor::Reply: unexpected query stats type",
+                YDB_LOG_CRIT("TSysViewProcessor::Reply: unexpected stats type",
                     {"tabletId", TabletID()},
                     {"statsType", static_cast<size_t>(record.GetType())});
                 Send(ev->Sender, std::move(response));

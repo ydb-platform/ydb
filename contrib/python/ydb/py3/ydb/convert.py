@@ -11,7 +11,7 @@ _SIGN_BIT = 2**63
 _DecimalNanRepr = 10**35 + 1
 _DecimalInfRepr = 10**35
 _DecimalSignedInfRepr = -(10**35)
-_primitive_type_by_id = {}
+_primitive_type_by_id: dict[int, types.PrimitiveType] = {}
 _default_allow_truncated_result = False
 
 
@@ -395,6 +395,20 @@ class _ResultSet(object):
         self.arrow_format_meta = arrow_format_meta
         self.data = data
 
+    def _extend(self, other):
+        """Merge another stream part of the same result set into this one.
+
+        The query service streams one logical VALUE result set as several
+        response parts sharing a ``result_set_index``; this concatenates
+        ``other``'s rows onto ``self`` and carries the schema over from the
+        first part that provides it.
+        """
+        self.rows.extend(other.rows)
+        if other.truncated:
+            self.truncated = True
+        if not self.columns and other.columns:
+            self.columns = other.columns
+
     @classmethod
     def from_message(cls, message, table_client_settings=None, snapshot=None, index=None):
         rows = []
@@ -458,6 +472,53 @@ class _ResultSet(object):
 
 
 ResultSet = _ResultSet
+
+
+class _ResultSetsAccumulator:
+    """Reassembles streamed result-set parts in a single pass.
+
+    The query service streams one logical result set as several response parts
+    that share a ``result_set_index``. Parts are fed one at a time via
+    :meth:`add`: VALUE parts sharing an index are concatenated into a single
+    result set, while ARROW parts — each already carrying its own schema and
+    record-batch ``data`` — are kept as separate, independently decodable
+    result sets.
+    """
+
+    __slots__ = ("result_sets", "_by_index")
+
+    def __init__(self):
+        self.result_sets = []
+        self._by_index = {}
+
+    def add(self, result_set):
+        index = result_set.index
+        if index is None or result_set.data is not None:
+            self.result_sets.append(result_set)
+            return
+
+        target = self._by_index.get(index)
+        if target is None:
+            self._by_index[index] = result_set
+            self.result_sets.append(result_set)
+        else:
+            target._extend(result_set)
+
+
+def aggregate_result_sets_by_index(result_sets):
+    """Merge a sync stream of result-set parts into one result set per index."""
+    accumulator = _ResultSetsAccumulator()
+    for result_set in result_sets:
+        accumulator.add(result_set)
+    return accumulator.result_sets
+
+
+async def aggregate_result_sets_by_index_async(result_sets):
+    """Merge an async stream of result-set parts into one result set per index."""
+    accumulator = _ResultSetsAccumulator()
+    async for result_set in result_sets:
+        accumulator.add(result_set)
+    return accumulator.result_sets
 
 
 class _Row(_DotDict):

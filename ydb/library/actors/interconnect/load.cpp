@@ -364,12 +364,13 @@ namespace NInterconnect {
 
             msg << " Throughput# ";
             const TDuration duration = now - ThroughputFirstSample;
+            const ui64 durationUs = duration.MicroSeconds();
             const ui64 traffic = *Traffic;
             msg << "{window# " << duration
                 << " bytes# " << ThroughputBytes
                 << " samples# " << ThroughputSamples
-                << " b/s# " << ui64(ThroughputBytes * 1000000 / duration.MicroSeconds())
-                << " common# " << ui64((traffic - TrafficAtBegin) * 1000000 / duration.MicroSeconds())
+                << " b/s# " << (durationUs ? ui64(ThroughputBytes * 1000000 / durationUs) : ui64(0))
+                << " common# " << (durationUs ? ui64((traffic - TrafficAtBegin) * 1000000 / durationUs) : ui64(0))
                 << "}";
 
             if (RunFirstSample == TMonotonic::Zero()) {
@@ -478,6 +479,7 @@ namespace NInterconnect {
 
         TString RenderHTML(bool finished, const TActorContext& ctx) {
             const auto duration = ctx.Monotonic() - ThroughputFirstSample;
+            const ui64 durationUs = duration.MicroSeconds();
 
             TStringStream msg;
 
@@ -498,8 +500,8 @@ namespace NInterconnect {
                             TABLED() { str << duration; }
                             TABLED() { str << ThroughputBytes; }
                             TABLED() { str << ThroughputSamples; }
-                            TABLED() { str << ui64(ThroughputBytes * 1000000 / duration.MicroSeconds()); }
-                            TABLED() { str << ui64((*Traffic - TrafficAtBegin) * 1000000 / duration.MicroSeconds()); }
+                            TABLED() { str << (durationUs ? ui64(ThroughputBytes * 1000000 / durationUs) : ui64(0)); }
+                            TABLED() { str << (durationUs ? ui64((*Traffic - TrafficAtBegin) * 1000000 / durationUs) : ui64(0)); }
                         }
                     }
                 }

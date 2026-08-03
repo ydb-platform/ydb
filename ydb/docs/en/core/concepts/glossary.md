@@ -364,7 +364,7 @@ For more information, see [{#T}](datamodel/backup-collection.md).
 
 ### Resource pool {#resource-pool}
 
-**Resource pool** is a schema object that describes the limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By `default`, all queries are executed in a resource pool named , which imposes no restrictions. For more details on using resource pools, see the article [{#T}](../dev/resource-consumption-management.md).
+**Resource pool** is a schema object that describes the limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By default, all queries are executed in a resource pool named `default`, which imposes no restrictions. For more details on using resource pools, see the article [{#T}](../dev/resource-consumption-management.md).
 
 ### Resource pool classifier {#resource-pool-classifier}
 

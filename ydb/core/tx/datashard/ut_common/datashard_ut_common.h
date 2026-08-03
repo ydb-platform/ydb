@@ -1049,4 +1049,21 @@ ui64 AsyncTruncateTable(
     const TString& workingDir,
     const TString& tableName);
 
+NKikimrDataEvents::TEvWriteResult UncommittedWrite(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
+        ui64 lockTxId, ui64 lockNodeId, ui64 key, ui64 value,
+        ui64 writerIndex, ui64 writeIndex,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected =
+            NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+
+// Asserts the lock reports exactly one write index and returns it
+const NKikimrDataEvents::TWriteIndex& WriteIndexOf(const NKikimrDataEvents::TLock& lock);
+
+NKikimrDataEvents::TEvWriteResult CommitLock(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const NKikimrDataEvents::TLock& lock,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected =
+            NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+
 } // namespace NKikimr

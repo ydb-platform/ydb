@@ -2989,4 +2989,43 @@ TString FormatIntReadResult(const TEvDataShard::TEvReadResult* msg) {
     return sb;
 }
 
+NKikimrDataEvents::TEvWriteResult UncommittedWrite(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
+        ui64 lockTxId, ui64 lockNodeId, ui64 key, ui64 value,
+        ui64 writerIndex, ui64 writeIndex,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected)
+{
+    auto req = MakeWriteRequestOneKeyValue(std::nullopt,
+        NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+        NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+        tableId, columns, key, value);
+    req->SetLockId(lockTxId, lockNodeId);
+    if (writeIndex) {
+        auto* reqWriteIndex = req->Record.MutableWriteIndex();
+        reqWriteIndex->SetWriterIndex(writerIndex);
+        reqWriteIndex->SetWriteIndex(writeIndex);
+    }
+    return Write(runtime, sender, shard, std::move(req), expected);
+}
+
+// Asserts the lock reports exactly one write index and returns it
+const NKikimrDataEvents::TWriteIndex& WriteIndexOf(const NKikimrDataEvents::TLock& lock) {
+    UNIT_ASSERT_VALUES_EQUAL_C(lock.GetWriteIndexes().size(), 1u, lock.ShortDebugString());
+    return lock.GetWriteIndexes(0);
+}
+
+NKikimrDataEvents::TEvWriteResult CommitLock(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const NKikimrDataEvents::TLock& lock,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected)
+{
+    auto req = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+    req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+    req->Record.MutableLocks()->AddSendingShards(shard);
+    req->Record.MutableLocks()->AddReceivingShards(shard);
+    *req->Record.MutableLocks()->AddLocks() = lock;
+    return Write(runtime, sender, shard, std::move(req), expected);
+}
+
 }

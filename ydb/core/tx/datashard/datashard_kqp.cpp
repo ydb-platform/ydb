@@ -90,8 +90,29 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
         auto lockKey = MakeLockKey(lockProto);
 
         auto lock = sysLocks.GetLock(lockKey);
-        if (lock.Generation != lockProto.GetGeneration() || lock.Counter != lockProto.GetCounter()) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "ValidateLocks: broken lock " << lockProto.GetLockId() << " expected " << lockProto.GetGeneration() << ":" << lockProto.GetCounter() << " found " << lock.Generation << ":" << lock.Counter);
+        // The echoed write indexes must exactly match the shard's.
+        bool writeIndexMismatch = false;
+        if (lock.WriteIndexKnown) {
+            if (lockProto.WriteIndexesSize() > 1) {
+                writeIndexMismatch = true;
+            } else if (lockProto.WriteIndexesSize() == 1) {
+                const auto& writeIndex = lockProto.GetWriteIndexes(0);
+                writeIndexMismatch = writeIndex.GetWriterIndex() != lock.WriterIndex
+                                  || writeIndex.GetWriteIndex() != lock.WriteIndex;
+            } else {
+                writeIndexMismatch = lock.WriteIndex != 0;
+            }
+        }
+        if (lock.Generation != lockProto.GetGeneration() ||
+            lock.Counter != lockProto.GetCounter() ||
+            writeIndexMismatch)
+        {
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "ValidateLocks: broken lock "
+                << lockProto.GetLockId()
+                << " expected " << lockProto.GetGeneration() << ":" << lockProto.GetCounter()
+                << " write indexes " << lockProto.GetWriteIndexes().size()
+                << " found " << lock.Generation << ":" << lock.Counter
+                << " write index " << lock.WriterIndex << ":" << lock.WriteIndex);
             brokenLocks.emplace_back(lockProto);
         }
     }

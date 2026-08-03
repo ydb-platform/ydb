@@ -18,12 +18,15 @@ namespace configuration
 class TraceIdRatioBasedSamplerConfiguration : public SamplerConfiguration
 {
 public:
+  // TODO: spec default is 1.0, using 0.0 to preserve original behavior
+  static constexpr double kDefaultRatio = 0.0;
+
   void Accept(SamplerConfigurationVisitor *visitor) const override
   {
     visitor->VisitTraceIdRatioBased(this);
   }
 
-  double ratio{0.0};
+  double ratio{kDefaultRatio};
 };
 
 }  // namespace configuration

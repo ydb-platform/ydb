@@ -40,6 +40,7 @@ SRCS(
     propagate_hash_func_stage.cpp
     propagate_topsort_through_stage.cpp
     propagate_limit_through_stage.cpp
+    rewrite_join_to_index_lookup_join.cpp
     rewrite_right_join.cpp
     traces/kqp_cbo_trace.cpp
 )

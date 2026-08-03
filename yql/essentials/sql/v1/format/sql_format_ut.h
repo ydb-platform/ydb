@@ -247,6 +247,15 @@ Y_UNIT_TEST(ShowCreateExternalDataSource) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(ShowCreateExternalTable) {
+    TCases cases = {
+        {"use plato;show create external table mytable;", "USE plato;\n\nSHOW CREATE EXTERNAL TABLE mytable;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(Use) {
     TCases cases = {
         {"use user;", "USE user;\n"},

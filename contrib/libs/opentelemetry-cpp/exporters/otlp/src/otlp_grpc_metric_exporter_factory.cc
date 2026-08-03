@@ -27,18 +27,14 @@ OtlpGrpcMetricExporterFactory::Create()
 std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>
 OtlpGrpcMetricExporterFactory::Create(const OtlpGrpcMetricExporterOptions &options)
 {
-  std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> exporter(
-      new OtlpGrpcMetricExporter(options));
-  return exporter;
+  return std::make_unique<OtlpGrpcMetricExporter>(options);
 }
 
 std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>
 OtlpGrpcMetricExporterFactory::Create(const OtlpGrpcMetricExporterOptions &options,
                                       const std::shared_ptr<OtlpGrpcClient> &client)
 {
-  std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> exporter(
-      new OtlpGrpcMetricExporter(options, client));
-  return exporter;
+  return std::make_unique<OtlpGrpcMetricExporter>(options, client);
 }
 
 }  // namespace otlp

@@ -1,4 +1,4 @@
-import sys
+from urllib.parse import SplitResult
 
 import pytest
 
@@ -40,15 +40,9 @@ class TestScheme:
 
     def test_no_scheme1(self):
         u = URL("google.com:80")
-        # See: https://bugs.python.org/issue27657
-        if sys.version_info[:3] == (3, 8, 1) or sys.version_info >= (3, 9, 0):
-            assert u.scheme == "google.com"
-            assert u.host is None
-            assert u.path == "80"
-        else:
-            assert u.scheme == ""
-            assert u.host is None
-            assert u.path == "google.com:80"
+        assert u.scheme == "google.com"
+        assert u.host is None
+        assert u.path == "80"
         assert u.query_string == ""
         assert u.fragment == ""
 
@@ -624,7 +618,7 @@ def test_url_round_trips(
 ) -> None:
     """Verify that URLs round-trip correctly."""
     parsed = URL(url)
-    assert parsed._val.hostname == hostname_without_brackets
+    assert SplitResult(*parsed._val).hostname == hostname_without_brackets
     assert parsed.raw_host == hostname_without_brackets
     assert parsed.host_subcomponent == hostname
     assert str(parsed) == url

@@ -192,7 +192,11 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     auto& response = ev->Get()->Record;
-    AFL_ENSURE(response.GetPartitionResponse().HasCmdReadResult());
+    if (!response.GetPartitionResponse().HasCmdReadResult()
+            || response.GetPartitionResponse().GetCmdReadResult().ResultSize() == 0) {
+        return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder()
+            << "Fetch message failed: empty read result: " << response.DebugString());
+    }
     auto* result = response.MutablePartitionResponse()->MutableCmdReadResult()->MutableResult(0);
     auto messageSize = result->GetData().size();
 

@@ -1,9 +1,9 @@
 #include "interconnect_uring_engine.h"
 
-#include "uring_recv_buffer_pool.h"
-#include "uring_context.h" // for TUringContext::IsSupported() / SqThreadIdleMs
+#include "uring_context.h" // for TUringContext::IsAvailable() / SqThreadIdleMs
 
 #include "v2_event_serializer.h"
+#include "interconnect_common.h"
 #include "interconnect_direct_session.h"
 #include "interconnect_uring_event_queue.h"
 
@@ -18,6 +18,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <util/datetime/cputimer.h>
 #include <util/system/env.h>
 #include <util/system/hp_timer.h>
 
@@ -46,9 +47,33 @@ namespace NActors {
         constexpr size_t MaxSpansPerWrite = 64;
         constexpr size_t MinSerializeWindowSize = 4096;
         constexpr size_t MaxSerializeWindowSize = 262144;
-        constexpr ui32 RebalanceTimerMs = 500; // drives MaybeOffload and also issues ping packet
+        constexpr TDuration RebalancePeriod = TDuration::MilliSeconds(500); // how often MaybeOffload runs
         constexpr ui32 OffloadBusyThreshold = 700000; // ppm
         constexpr ui32 StealBusyThreshold = 300000; // ppm
+
+        // The shard timer is the only timing source for pings and dead-peer detection, so its period caps
+        // how late either of them can be. Keep it at or below this bound to limit the jitter.
+        constexpr TDuration MaxTickPeriod = TDuration::Seconds(1);
+        constexpr TDuration MinTickPeriod = TDuration::MilliSeconds(100);
+        // Number of ping opportunities that must fit into the dead-peer window, so that a single lost or
+        // late ping cannot bring a healthy link down.
+        constexpr ui32 PingsPerDeadPeerTimeout = 4;
+
+        TDuration CalculateDeadPeerTimeout(const TInterconnectSettings& settings) {
+            return settings.DeadPeer ? settings.DeadPeer : DEFAULT_DEADPEER_TIMEOUT;
+        }
+
+        TDuration CalculatePingPeriod(const TInterconnectSettings& settings, TDuration deadPeerTimeout) {
+            TDuration period = deadPeerTimeout / PingsPerDeadPeerTimeout;
+            if (settings.PingPeriod) {
+                period = Min(period, settings.PingPeriod);
+            }
+            return Max(period, MinTickPeriod);
+        }
+
+        TDuration CalculateTickPeriod(TDuration pingPeriod) {
+            return Max(Min(pingPeriod, MaxTickPeriod), MinTickPeriod);
+        }
     }
 
     struct TEvUringMonRequest : TEventLocal<TEvUringMonRequest, static_cast<ui32>(ENetwork::EvUringMonRequest)> {
@@ -59,20 +84,37 @@ namespace NActors {
         {}
     };
 
+    struct TEvDestroyEvents : TEventLocal<TEvDestroyEvents, 0> {
+        std::vector<std::unique_ptr<IEventBase>> Events;
+        std::vector<TIntrusivePtr<TEventSerializedData>> Buffers;
+    };
+
     class TUringEngine final : public IUringEngine {
         TActorSystem *ActorSystem = nullptr; // bound after construction via SetActorSystem()
         std::once_flag ActorSystemInitFlag;
         std::atomic_bool Stopping{false};
 
-        enum class EMigrateState : ui8 {
-            None = 0,
-            Draining,
-            HandedOff,
-        };
+        // Shared interconnect parameters this engine was created with. Common owns the engine as well, so
+        // the reference cycle is broken in Stop(); everything the data plane needs from Settings is derived
+        // into the const members below at construction time and Common is not dereferenced afterwards.
+        TIntrusivePtr<TInterconnectProxyCommon> Common;
+
+        const bool ChecksumEvents;
+
+        // Liveness timing. TickPeriod is the shard timer period and thus the granularity (and worst-case
+        // lateness) of both ping issuance and the dead-peer verdict.
+        const TDuration DeadPeerTimeout;
+        const TDuration PingPeriod;
+        const TDuration TickPeriod;
+        const ui64 DeadPeerTimeoutCycles;
+        const ui64 PingPeriodCycles;
 
         // Low 3 bits of the session pointer are used as an io_uring user_data op tag; heap allocation
         // alignment of this type is already >= 8 (actually 64 via base/members).
-        struct TRegisteredSession : TEventDeserializer::IEventProcessor {
+        struct TSession
+            : TEventDeserializer::IEventProcessor
+            , TIntrusiveListItem<TSession>
+        {
             std::atomic_uint32_t OwnerShard;
             const TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
             const TActorId SessionId;
@@ -98,21 +140,25 @@ namespace NActors {
             std::atomic_uint64_t IncomingSeqNo{1};
             ui64 ExpectedSeqNo = 1;
 
-            EMigrateState MigrateState = EMigrateState::None;
             ui32 MigrateTargetShard = 0;
-            ui32 MigrateSourceShard = 0;
 
             const std::shared_ptr<std::atomic<int64_t>> ClockSkew;
             const std::shared_ptr<std::atomic<uint64_t>> PingRTT;
 
             THashMap<TActorId, TIntrusivePtr<IReceiveCallback>> ReceiveCallbacks;
-            NMonitoring::TDynamicCounters::TCounterPtr EventsReceived;
 
             std::vector<TIncomingEventQueue::TRecord> PendingRecordsHeap;
 
             size_t SerializeWindowSize = MinSerializeWindowSize;
 
-            TRegisteredSession(ui32 shardIdx, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
+            ui64 BytesSent = 0;
+            ui64 BytesReceived = 0;
+
+            ui64 ReceiveCycles = 0;
+            ui64 EventsReceivedCallback = 0;
+            ui64 EventsReceivedActorSystem = 0;
+
+            TSession(ui32 shardIdx, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
                     TActorId sessionId, bool checksumming, TScopeId peerScopeId,
                     std::function<void(TDisconnectReason)> onDisconnectCallback, TActorSystem *actorSystem,
                     bool sendPings, std::shared_ptr<std::atomic<int64_t>> clockSkew,
@@ -125,6 +171,7 @@ namespace NActors {
                 , Serializer(checksumming)
                 , Deserializer(peerScopeId)
                 , SendPings(sendPings)
+                , MigrateTargetShard(shardIdx)
                 , ClockSkew(std::move(clockSkew))
                 , PingRTT(std::move(pingRTT))
             {}
@@ -145,6 +192,8 @@ namespace NActors {
             }
 
             void ApplyBytesRead(size_t num) {
+                BytesReceived += num;
+                LastInputActivityTimestamp = GetCycleCountFast();
                 TRcBuf chunk = {TRcBuf::Piece, ReadBuffer.data(), num, ReadBuffer};
                 Deserializer.Push(std::move(chunk), this, SessionId);
                 Y_ABORT_UNLESS(num <= ReadBuffer.size());
@@ -153,18 +202,21 @@ namespace NActors {
             }
 
             void PushEvent(std::unique_ptr<IEventHandle> ev) override {
+                ReceiveCycles -= GetCycleCountFast();
                 if (const auto it = ReceiveCallbacks.find(ev->Recipient); it != ReceiveCallbacks.end()) {
                     it->second->Receive(ev.release());
+                    ++EventsReceivedCallback;
                 } else {
                     ActorSystem->Send(ev.release());
+                    ++EventsReceivedActorSystem;
                 }
-                ++*EventsReceived;
+                ReceiveCycles += GetCycleCountFast();
             }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // serialization/sending
 
-            bool Serialize() {
+            void Serialize() {
                 Serializer.ResetCounters();
 
                 while (UnsentBytes < SerializeWindowSize && OutgoingSpans.size() < MaxSpansPerWrite) {
@@ -186,8 +238,6 @@ namespace NActors {
                 } else if (numb < WriteBufferSize / 2 && WriteBufferSize > MinWriteBufferSize) {
                     WriteBufferSize /= 2;
                 }
-
-                return true;
             }
 
             bool PrepareIovec() {
@@ -208,7 +258,11 @@ namespace NActors {
                 return IovLen != 0;
             }
 
-            void ApplyBytesWritten(size_t num, std::vector<ui64> *eventToWireTime) {
+            void ApplyBytesWritten(size_t num, std::vector<ui64> *eventToWireTime,
+                    std::vector<std::unique_ptr<IEventBase>> *events,
+                    std::vector<TIntrusivePtr<TEventSerializedData>> *buffers) {
+                BytesSent += num;
+
                 // Check if we need to resize serialization window. If we have issued some data and all of it has been
                 // successfully written, and it was limited by serialization window, we can increase it. If we have
                 // serialized less than the window, we can decrease the window.
@@ -237,7 +291,7 @@ namespace NActors {
                 Y_ABORT_UNLESS(num <= UnsentBytes, "num# %zu UnsentBytes# %zu", num, UnsentBytes);
                 UnsentBytes -= num;
 
-                Serializer.CommitProducedBytes(num, eventToWireTime);
+                Serializer.CommitProducedBytes(num, eventToWireTime, events, buffers);
             }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -246,12 +300,20 @@ namespace NActors {
             NHPTimer::STime PingRequestSentTimestamp = 0;
             NHPTimer::STime PingResponseSentTimestamp = 0;
 
-            void SendPingRequest() {
+            // When the last ping request was issued. Unlike PingRequestSentTimestamp (which is reset as soon
+            // as the reply arrives) this one keeps the ping cadence independent of the round-trip time.
+            ui64 LastPingSentTimestamp = 0;
+
+            // When we last got anything at all from the peer; drives dead-peer detection.
+            ui64 LastInputActivityTimestamp = GetCycleCountFast();
+
+            void SendPingRequest(ui64 timestamp) {
                 NActorsInterconnect::TSystemPayloadV2 systemRequest;
                 auto *r = systemRequest.AddRequests();
                 r->MutablePingRequest();
                 Serializer.Push(systemRequest);
-                PingRequestSentTimestamp = GetCycleCountFast();
+                PingRequestSentTimestamp = timestamp;
+                LastPingSentTimestamp = timestamp;
             }
 
             void Process(NActorsInterconnect::TSystemPayloadV2& systemRequest) override {
@@ -320,15 +382,13 @@ namespace NActors {
                 PingRTT->store(Max(PingValues[0], PingValues[1], PingValues[2]));
             }
 
-            bool IsMigratable() const {
-                return MigrateState == EMigrateState::None
-                    && !UnregisterRequested
-                    && !Terminated;
+            bool IsMigratable(ui32 shardIdx) const {
+                return !Terminated && MigrateTargetShard == shardIdx;
             }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            void RenderHtml(IOutputStream& str) const {
+            void RenderHtml(IOutputStream& str, TDuration deadPeerTimeout, TDuration pingPeriod) const {
                 HTML(str) {
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
@@ -360,15 +420,19 @@ namespace NActors {
                                     PARAM(PreferredRingIdx)
                                     PARAM2("IncomingSeqNo", IncomingSeqNo.load())
                                     PARAM(ExpectedSeqNo)
-                                    PARAM2("MigrateState", (int)MigrateState)
                                     PARAM(MigrateTargetShard)
-                                    PARAM(MigrateSourceShard)
                                     PARAM2("ClockSkew", ClockSkew->load())
                                     PARAM2("PingRTT", PingRTT->load())
+                                    PARAM2("SinceLastInputActivity",
+                                        CyclesToDuration(GetCycleCountFast() - LastInputActivityTimestamp))
+                                    PARAM2("DeadPeerTimeout", deadPeerTimeout)
+                                    PARAM2("PingPeriod", pingPeriod)
                                     PARAM2("ReceiveCallbacks size", ReceiveCallbacks.size())
                                     PARAM2("PendingRecordsHeap size", PendingRecordsHeap.size())
                                     PARAM(SerializeWindowSize)
                                     PARAM2("NumBytesInScratchBuffers", Serializer.GetNumBytesInScratchBuffers())
+                                    PARAM(BytesSent)
+                                    PARAM(BytesReceived)
                                 }
                             }
                         }
@@ -417,31 +481,33 @@ namespace NActors {
             int TimerFd = -1;
             ui64 ReadTimerBuffer;
             std::atomic_bool WaitingForCQ{false};
+            ui64 TicksPerRebalance = 1;
+            ui64 TicksSinceRebalance = 0;
 
             size_t OpShift = 0;
 
             struct TSessionHash {
-                size_t operator()(const std::unique_ptr<TRegisteredSession>& p) const { return THash<void*>{}(p.get()); }
-                size_t operator()(const TRegisteredSession *p) const { return THash<void*>{}(p); }
+                size_t operator()(const std::unique_ptr<TSession>& p) const { return THash<void*>{}(p.get()); }
+                size_t operator()(const TSession *p) const { return THash<void*>{}(p); }
                 using is_transparent = void;
             };
 
             struct TSessionEqual {
-                using T = std::unique_ptr<TRegisteredSession>;
+                using T = std::unique_ptr<TSession>;
                 bool operator()(const T& x, const T& y) const { return x == y; }
-                bool operator()(const TRegisteredSession *x, const T& y) const { return x == y.get(); }
-                bool operator()(const T& x, const TRegisteredSession *y) const { return x.get() == y; }
+                bool operator()(const TSession *x, const T& y) const { return x == y.get(); }
+                bool operator()(const T& x, const TSession *y) const { return x.get() == y; }
                 using is_transparent = void;
             };
 
-            std::unordered_set<std::unique_ptr<TRegisteredSession>, TSessionHash, TSessionEqual> Sessions;
-            // conn -> target shard while OwnerShard still points here during handoff
-            THashMap<ui64, ui32> MigratingOut;
+            std::unordered_set<std::unique_ptr<TSession>, TSessionHash, TSessionEqual> Sessions;
+            TIntrusiveList<TSession> TouchedSessions;
 
             NMonitoring::TDynamicCounters::TCounterPtr SessionsRegistered;
             NMonitoring::TDynamicCounters::TCounterPtr SessionsUnregistered;
             NMonitoring::TDynamicCounters::TCounterPtr EventsSent;
-            NMonitoring::TDynamicCounters::TCounterPtr EventsReceived;
+            NMonitoring::TDynamicCounters::TCounterPtr EventsReceivedCallback;
+            NMonitoring::TDynamicCounters::TCounterPtr EventsReceivedActorSystem;
             NMonitoring::TDynamicCounters::TCounterPtr DirectReceiveCallbacksRegistered;
             NMonitoring::TDynamicCounters::TCounterPtr DirectReceiveCallbacksUnregistered;
             NMonitoring::TDynamicCounters::TCounterPtr BytesSent;
@@ -460,14 +526,15 @@ namespace NActors {
             NMonitoring::TDynamicCounters::TCounterPtr SessionsMigratedIn;
             NMonitoring::TDynamicCounters::TCounterPtr OutOfOrderCameIn;
             NMonitoring::TDynamicCounters::TCounterPtr OutOfOrderProcessed;
+            NMonitoring::TDynamicCounters::TCounterPtr DeadPeersDetected;
 
             NMonitoring::TDynamicCounters::TCounterPtr OtherTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr CompleteWaitTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr SubmitWaitTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr ApplyBytesReadTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr ApplyBytesWrittenTotalTime;
-            NMonitoring::TDynamicCounters::TCounterPtr SerializeBufferTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr SerializeEventTotalTime;
+            NMonitoring::TDynamicCounters::TCounterPtr ReceiveCallbackTotalTime;
 
             NMonitoring::THistogramPtr CommandDeliveryTime;
             NMonitoring::THistogramPtr EventToWireTime;
@@ -486,6 +553,8 @@ namespace NActors {
             std::vector<ui64> EventToWireTimeVec;
 
             TShardLoad& Load;
+
+            std::unique_ptr<TEvDestroyEvents> EvDestroyEvents = std::make_unique<TEvDestroyEvents>();
 
         private:
             class TActivityMeasure {
@@ -559,7 +628,8 @@ namespace NActors {
                 , COUNTER(SessionsRegistered, true)
                 , COUNTER(SessionsUnregistered, true)
                 , COUNTER(EventsSent, true)
-                , COUNTER(EventsReceived, true)
+                , COUNTER(EventsReceivedCallback, true)
+                , COUNTER(EventsReceivedActorSystem, true)
                 , COUNTER(DirectReceiveCallbacksRegistered, true)
                 , COUNTER(DirectReceiveCallbacksUnregistered, true)
                 , COUNTER(BytesSent, true)
@@ -578,14 +648,15 @@ namespace NActors {
                 , COUNTER(SessionsMigratedIn, true)
                 , COUNTER(OutOfOrderCameIn, true)
                 , COUNTER(OutOfOrderProcessed, true)
+                , COUNTER(DeadPeersDetected, true)
 #define TOTAL_TIME(NAME) NAME(shardCounters->GetCounter("TotalTime/" #NAME, true))
                 , TOTAL_TIME(OtherTotalTime)
                 , TOTAL_TIME(CompleteWaitTotalTime)
                 , TOTAL_TIME(SubmitWaitTotalTime)
                 , TOTAL_TIME(ApplyBytesReadTotalTime)
                 , TOTAL_TIME(ApplyBytesWrittenTotalTime)
-                , TOTAL_TIME(SerializeBufferTotalTime)
                 , TOTAL_TIME(SerializeEventTotalTime)
+                , TOTAL_TIME(ReceiveCallbackTotalTime)
                 , CommandDeliveryTime(shardCounters->GetNamedHistogram("sensor", "CommandDeliveryTime", TimeCollector()))
                 , EventToWireTime(shardCounters->GetNamedHistogram("sensor", "EventToWireTime", TimeCollector()))
                 , CompletionWaitTime(shardCounters->GetNamedHistogram("sensor", "CompletionWaitTime", TimeCollector()))
@@ -619,13 +690,17 @@ namespace NActors {
 
                 // Keep the timer armed for the shard lifetime. Disarming while an io_uring read is
                 // outstanding would leave a stuck SQE; idle CPU is controlled via sq_thread_idle instead.
+                const TDuration tickPeriod = Engine.TickPeriod;
                 itimerspec spec{};
-                spec.it_interval.tv_sec = RebalanceTimerMs / 1000;
-                spec.it_interval.tv_nsec = 1'000'000 * (RebalanceTimerMs % 1000);
+                spec.it_interval.tv_sec = tickPeriod.Seconds();
+                spec.it_interval.tv_nsec = tickPeriod.NanoSecondsOfSecond();
                 spec.it_value = spec.it_interval;
                 if (timerfd_settime(TimerFd, 0, &spec, nullptr) < 0) {
                     Y_ABORT("timerfd_settime failed: %s", strerror(errno));
                 }
+
+                // The tick drives liveness, which may be much more frequent than rebalancing needs to be.
+                TicksPerRebalance = Max<ui64>(1, RebalancePeriod.GetValue() / tickPeriod.GetValue());
             }
 
             ~TShard() {
@@ -643,7 +718,7 @@ namespace NActors {
                 Worker = std::thread(std::bind(&TShard::WorkerThread, this));
             }
 
-            void Register(std::unique_ptr<TRegisteredSession> session) {
+            void Register(std::unique_ptr<TSession> session) {
                 ++*SessionsRegistered;
 
                 // this would be the session's first event, so its sequencing is not the problem
@@ -651,7 +726,7 @@ namespace NActors {
                     {}, nullptr, false);
             }
 
-            void AcceptMigrated(std::unique_ptr<TRegisteredSession> session) {
+            void AcceptMigrated(std::unique_ptr<TSession> session) {
                 ++*SessionsMigratedIn;
 
                 // this event isn't the first one, but its sequence doesn't matter, because all further events are kept
@@ -703,10 +778,6 @@ namespace NActors {
                     true);
             }
 
-            void NotifyMigrateDone(ui64 conn) {
-                SendInternal(conn, static_cast<ui32>(ENetwork::EvMigrateDone), {}, nullptr, false);
-            }
-
             void Stop() {
                 if (Worker.joinable()) {
                     SendInternal(0, static_cast<ui32>(ENetwork::EvStop), {}, nullptr, false);
@@ -724,18 +795,19 @@ namespace NActors {
             }
 
             void IssueMonRequest(ui64 conn, NMon::TEvHttpInfoRes::TPtr ev) {
-                SendImpl(conn, std::make_unique<IEventHandle>(TActorId(), TActorId(), new TEvUringMonRequest(std::move(ev))),
-                    nullptr, false);
+                // send this event serializable, otherwise we can get a race
+                SendImpl(conn, std::make_unique<IEventHandle>(TActorId(), TActorId(),
+                    new TEvUringMonRequest(std::move(ev))), nullptr, true);
             }
 
         private:
             // Pops and frees any commands still sitting in the queue after the worker has stopped. Mirrors
             // the ownership handling of the worker loop: destroys the embedded TEventPayload and reclaims a
-            // TRegisteredSession handed off via an unprocessed EvRegisterSession.
+            // TSession handed off via an unprocessed EvRegisterSession.
             void DrainQueue() {
                 while (auto record = IncomingEventQueue.Pop()) {
                     if (record->Ev->Type == static_cast<ui32>(ENetwork::EvRegisterSession)) {
-                        delete reinterpret_cast<TRegisteredSession*>(record->Conn);
+                        delete reinterpret_cast<TSession*>(record->Conn);
                     }
                 }
             }
@@ -745,7 +817,7 @@ namespace NActors {
                 ui64 seqNo = 0;
                 if (Y_LIKELY(ensureSequence)) {
                     Y_DEBUG_ABORT_UNLESS(conn);
-                    auto& session = *reinterpret_cast<TRegisteredSession*>(conn);
+                    auto& session = *reinterpret_cast<TSession*>(conn);
                     seqNo = session.IncomingSeqNo.fetch_add(1);
                 }
                 Enqueue(TIncomingEventQueue::TRecord{
@@ -763,20 +835,9 @@ namespace NActors {
                     std::move(callback), ensureSequence);
             }
 
-            bool ForwardIfMigratingOut(TIncomingEventQueue::TRecord *record) {
-                if (Y_LIKELY(MigratingOut.empty())) {
-                    return false;
-                }
-                if (const auto it = MigratingOut.find(record->Conn); it != MigratingOut.end()) {
-                    Engine.Shards[it->second]->Enqueue(std::move(*record));
-                    return true;
-                }
-                return false;
-            }
-
             // GetSQE returns next available SQ entry, setting up ItemsToSubmit counter in order to commence submission
             // on the end of the worker loop. Event/timer control ops always use ring 0.
-            io_uring_sqe *GetSQE(TRegisteredSession *session, EOperationType op, int ringIdx = -1) {
+            io_uring_sqe *GetSQE(TSession *session, EOperationType op, int ringIdx = -1) {
                 io_uring_sqe *sqe = nullptr;
 
                 if (ringIdx != -1) {
@@ -885,6 +946,23 @@ namespace NActors {
                         break;
                     }
 
+                    // process touched sessions
+                    while (!TouchedSessions.Empty()) {
+                        TSession *session = TouchedSessions.PopFront();
+                        MaybeIssueReadForSession(*session);
+                        MaybeIssueWriteForSession(*session);
+                        if (MaybeFinishMigrate(*session)) {
+                            continue;
+                        }
+                        MaybeEraseSession(*session);
+                    }
+
+                    // discard pending events/buffers, if any
+                    if (!EvDestroyEvents->Events.empty() || !EvDestroyEvents->Buffers.empty()) {
+                        Engine.ActorSystem->Send(new IEventHandle(Engine.DestructorActorId, {}, EvDestroyEvents.release()));
+                        EvDestroyEvents = std::make_unique<TEvDestroyEvents>();
+                    }
+
                     ui64 waitStartTimestamp = 0;
                     if (!progress) { // wait for something to happen -- no progress were made in this loop
                         WaitingForCQ.store(true, std::memory_order_release);
@@ -934,9 +1012,10 @@ namespace NActors {
                     }
 
                     if (Y_LIKELY(record->SeqNo)) {
-                        if (ForwardIfMigratingOut(&record.value())) {
-                            // this record is just sent to the other thread
-                        } else if (auto& session = GetSession(record->Conn); record->SeqNo != session.ExpectedSeqNo) {
+                        auto& session = *reinterpret_cast<TSession*>(record->Conn);
+                        if (Sessions.find(&session) == Sessions.end()) { // forward event to other shard
+                            Engine.GetShard(record->Conn).Enqueue(std::move(*record));
+                        } else if (record->SeqNo != session.ExpectedSeqNo) {
                             Y_DEBUG_ABORT_UNLESS(session.ExpectedSeqNo < record->SeqNo);
                             session.PendingRecordsHeap.push_back(std::move(*record));
                             std::ranges::push_heap(session.PendingRecordsHeap, std::greater<ui64>{},
@@ -981,7 +1060,7 @@ namespace NActors {
             void ProcessIncomingEvent(TIncomingEventQueue::TRecord *record) {
                 switch (record->Ev->Type) {
                     case static_cast<ui32>(ENetwork::EvRegisterCallback):
-                        if (TRegisteredSession& session = GetSession(record->Conn); record->Callback) {
+                        if (TSession& session = GetSession(record); record->Callback) {
                             session.ReceiveCallbacks[record->Ev->Sender] = std::move(record->Callback);
                         } else {
                             session.ReceiveCallbacks.erase(record->Ev->Sender);
@@ -989,45 +1068,29 @@ namespace NActors {
                         break;
 
                     case static_cast<ui32>(ENetwork::EvRegisterSession): {
-                        std::unique_ptr<TRegisteredSession> session(reinterpret_cast<TRegisteredSession*>(record->Conn));
-                        if (session->MigrateState == EMigrateState::HandedOff) {
-                            session->OwnerShard.store(ShardIdx, std::memory_order_release); // all new events will arrive here from now on
-                            Engine.Shards[session->MigrateSourceShard]->NotifyMigrateDone(record->Conn);
-                            session->MigrateState = EMigrateState::None;
-                        } else {
-                            Y_DEBUG_ABORT_UNLESS(session->MigrateState == EMigrateState::None);
-                        }
+                        std::unique_ptr<TSession> session(reinterpret_cast<TSession*>(record->Conn));
                         session->PreferredRingIdx = OpShift++ % Rings.size();
+                        session->OwnerShard.store(ShardIdx, std::memory_order_release);
                         const auto [it, inserted] = Sessions.emplace(std::move(session));
                         Y_ABORT_UNLESS(inserted);
-                        (*it)->EventsReceived = EventsReceived;
-                        IssueReadForSession(**it);
+                        TouchedSessions.PushBack(it->get());
                         break;
                     }
 
                     case static_cast<ui32>(ENetwork::EvUnregisterSession): {
-                        TRegisteredSession& session = GetSession(record->Conn);
+                        TSession& session = GetSession(record);
                         // Do NOT free the session while it still has an armed recv or an in-flight
                         // writev: their io_uring completions carry a raw pointer to this object and
                         // would dereference freed memory. Mark it terminated (so no new ops are armed)
                         // and erase only once both are drained. The session actor has already shut the
                         // socket down before requesting unregistration, so the pending ops complete
                         // promptly (EOF/EPIPE).
-                        if (session.MigrateState != EMigrateState::None) {
-                            session.MigrateState = EMigrateState::None; // unregister wins over migrate
-                        }
                         session.Terminated = true;
                         session.UnregisterRequested = true;
                         if (session.ReadPending) { // cancel pending read in order to unregister the session
                             CancelOp(session, kOpRead, session.ReadPendingRingIdx);
                         }
-                        MaybeEraseSession(session);
-                        break;
-                    }
-
-                    case static_cast<ui32>(ENetwork::EvMigrateDone): {
-                        const size_t num = MigratingOut.erase(record->Conn);
-                        Y_DEBUG_ABORT_UNLESS(num == 1);
+                        TouchedSessions.PushBack(&session);
                         break;
                     }
 
@@ -1035,16 +1098,18 @@ namespace NActors {
                         Y_ABORT();
 
                     case static_cast<ui32>(ENetwork::EvUringMonRequest):
-                        ProcessMonRequest(GetSession(record->Conn), std::move(record->Ev->Get<TEvUringMonRequest>()->Ev));
+                        ProcessMonRequest(GetSession(record), std::move(record->Ev->Get<TEvUringMonRequest>()->Ev));
                         break;
 
                     default: {
-                        TRegisteredSession& session = GetSession(record->Conn);
+                        TSession& session = GetSession(record);
                         if (record->Callback) { // register callback coming along with the message
                             session.ReceiveCallbacks[record->Ev->Sender] = std::move(record->Callback);
                         }
                         session.Serializer.Push(std::move(record->Ev));
-                        IssueWritesForSession(session);
+                        if (!session.WritePending) {
+                            TouchedSessions.PushBack(&session);
+                        }
                         break;
                     }
                 }
@@ -1053,9 +1118,9 @@ namespace NActors {
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // monitoring
 
-            void ProcessMonRequest(TRegisteredSession& session, NMon::TEvHttpInfoRes::TPtr ev) {
+            void ProcessMonRequest(TSession& session, NMon::TEvHttpInfoRes::TPtr ev) {
                 TStringOutput str(const_cast<TString&>(static_cast<NMon::TEvHttpInfoRes*>(ev->Get())->Answer));
-                session.RenderHtml(str);
+                session.RenderHtml(str, Engine.DeadPeerTimeout, Engine.PingPeriod);
                 Engine.ActorSystem->Send(ev.Release());
             }
 
@@ -1086,7 +1151,7 @@ namespace NActors {
             }
 
             void DispatchCompletion(io_uring_cqe& cqe) {
-                auto *session = reinterpret_cast<TRegisteredSession*>(uintptr_t(cqe.user_data) & ~uintptr_t(kOpMask));
+                auto *session = reinterpret_cast<TSession*>(uintptr_t(cqe.user_data) & ~uintptr_t(kOpMask));
                 Y_ABORT_UNLESS(!(cqe.flags & IORING_CQE_F_MORE)); // not expecting multiple completions
                 const auto op = static_cast<EOperationType>(cqe.user_data & kOpMask);
                 switch (op) {
@@ -1122,16 +1187,36 @@ namespace NActors {
             }
 
             void DispatchTimer() {
+                const ui64 now = GetCycleCountFast();
+
                 for (auto& session : Sessions) {
-                    if (!session->Terminated && session->MigrateState == EMigrateState::None && session->SendPings &&
-                            session->PingRequestSentTimestamp == 0) {
-                        session->SendPingRequest();
-                        IssueWritesForSession(*session);
+                    if (session->Terminated || session->MigrateTargetShard != ShardIdx) {
+                        continue;
+                    }
+
+                    // Anything arriving from the peer -- payload, ping request, ping response -- counts as
+                    // proof of life; when nothing has for the whole timeout, the link is declared dead. The
+                    // peer keeps the stream flowing either by pinging us or by answering our pings, so this
+                    // works on both sides of the connection.
+                    if (now - session->LastInputActivityTimestamp >= Engine.DeadPeerTimeoutCycles) {
+                        ++*DeadPeersDetected;
+                        session->Disconnect(TDisconnectReason::DeadPeer());
+                        continue;
+                    }
+
+                    if (session->SendPings && session->PingRequestSentTimestamp == 0 &&
+                            now - session->LastPingSentTimestamp >= Engine.PingPeriodCycles) {
+                        session->SendPingRequest(now);
+                        TouchedSessions.PushBack(session.get());
                     }
                 }
 
-                // Rebalance at most once per ping period to limit churn under short load spikes.
-                MaybeOffload();
+                // Rebalancing is far less urgent than liveness, so it runs on its own, coarser period to
+                // limit churn under short load spikes.
+                if (++TicksSinceRebalance >= TicksPerRebalance) {
+                    TicksSinceRebalance = 0;
+                    MaybeOffload();
+                }
             }
 
             void MaybeOffload() {
@@ -1154,9 +1239,9 @@ namespace NActors {
                     return;
                 }
 
-                TRegisteredSession *candidate = nullptr;
+                TSession *candidate = nullptr;
                 for (auto& session : Sessions) {
-                    if (session->IsMigratable()) {
+                    if (session->IsMigratable(ShardIdx)) {
                         candidate = session.get();
                         break;
                     }
@@ -1165,19 +1250,16 @@ namespace NActors {
                     return;
                 }
 
-                candidate->MigrateState = EMigrateState::Draining;
                 candidate->MigrateTargetShard = bestTarget;
-                candidate->MigrateSourceShard = ShardIdx;
-                Y_DEBUG_ABORT_UNLESS(candidate->MigrateTargetShard != candidate->MigrateSourceShard);
 
                 if (candidate->ReadPending) {
                     CancelOp(*candidate, kOpRead, candidate->ReadPendingRingIdx);
                 }
 
-                MaybeFinishMigrate(*candidate);
+                TouchedSessions.PushBack(candidate);
             }
 
-            void CancelOp(TRegisteredSession& session, EOperationType op, int ringIdx) {
+            void CancelOp(TSession& session, EOperationType op, int ringIdx) {
                 Y_DEBUG_ABORT_UNLESS(ringIdx != -1);
                 io_uring_sqe *sqe = GetSQE(&session, kOpCancel, ringIdx);
                 Y_ABORT_UNLESS(sqe, "failed to obtain cancel SQE");
@@ -1185,65 +1267,62 @@ namespace NActors {
                 io_uring_prep_cancel64(sqe, targetUserData, 0);
             }
 
-            bool MaybeFinishMigrate(TRegisteredSession& session) {
-                if (session.MigrateState != EMigrateState::Draining || session.ReadPending || session.WritePending ||
-                        session.UnregisterRequested || session.Terminated) {
+            bool MaybeFinishMigrate(TSession& session) {
+                if (session.MigrateTargetShard == ShardIdx || session.ReadPending || session.WritePending || session.Terminated) {
                     return false;
                 }
-
-                const ui64 conn = reinterpret_cast<ui64>(&session);
-                const ui32 target = session.MigrateTargetShard;
-                session.MigrateState = EMigrateState::HandedOff;
 
                 auto it = Sessions.find(&session);
                 Y_DEBUG_ABORT_UNLESS(it != Sessions.end());
                 auto node = Sessions.extract(it);
                 Y_DEBUG_ABORT_UNLESS(node);
 
-                MigratingOut[conn] = target;
                 ++*SessionsMigratedOut;
-                Engine.Shards[target]->AcceptMigrated(std::move(node.value()));
+                Engine.Shards[session.MigrateTargetShard]->AcceptMigrated(std::move(node.value()));
 
                 return true;
             }
 
-            void DispatchRead(TRegisteredSession& session, i32 res) {
+            void DispatchRead(TSession& session, i32 res) {
                 Y_DEBUG_ABORT_UNLESS(session.ReadPending);
                 session.ReadPending = false;
 
                 if (session.Terminated) {
-                    // teardown in progress: don't process further data or re-arm; just let the session drain
-                    // toward erasure below
+                    // teardown in progress: don't retry the read or re-arm; just let the session drain toward erasure below
                 } else if (res == -ECANCELED) {
                     // cancelled without migrate (should be rare); re-arm unless terminating
-                    IssueReadForSession(session);
                 } else if (res == -EAGAIN) {
                     ++*ReadUnavail;
-                    IssueReadForSession(session);
                 } else if (res < 0) {
                     session.Disconnect(TDisconnectReason::FromErrno(-res));
                 } else if (res == 0) {
                     session.Disconnect(TDisconnectReason::EndOfStream());
                 } else {
                     *BytesReceived += res;
+                    session.ReceiveCycles = 0;
+                    session.EventsReceivedCallback = 0;
+                    session.EventsReceivedActorSystem = 0;
                     ACTIVITY(&ApplyBytesReadTotalTime) {
                         session.ApplyBytesRead(res);
+                        LastActivitySwitchTimestamp += session.ReceiveCycles;
+                        *ReceiveCallbackTotalTime += session.ReceiveCycles * Freq;
+                        if (const ui64 n = session.EventsReceivedCallback) {
+                            *EventsReceivedCallback += n;
+                        }
+                        if (const ui64 n = session.EventsReceivedActorSystem) {
+                            *EventsReceivedActorSystem += n;
+                        }
                     }
-                    IssueReadForSession(session);
-                    IssueWritesForSession(session);
                 }
 
-                if (MaybeFinishMigrate(session)) { // NB: may free/move `session`
-                    return;
-                }
-                MaybeEraseSession(session); // NB: may free `session`; must be the last use
+                TouchedSessions.PushBack(&session);
             }
 
-            void IssueReadForSession(TRegisteredSession& session) {
-                if (session.Terminated || session.MigrateState != EMigrateState::None) {
+            void MaybeIssueReadForSession(TSession& session) {
+                if (session.ReadPending || session.Terminated || session.MigrateTargetShard != ShardIdx) {
                     return;
                 }
-                Y_DEBUG_ABORT_UNLESS(!session.ReadPending);
+
                 TMutableContiguousSpan span = session.GetReadSpan();
                 io_uring_sqe *sqe = GetSQE(&session, kOpRead, session.PreferredRingIdx);
                 Y_ABORT_UNLESS(sqe);
@@ -1251,18 +1330,16 @@ namespace NActors {
                 session.ReadPending = true;
             }
 
-            void DispatchWrite(TRegisteredSession& session, i32 res) {
+            void DispatchWrite(TSession& session, i32 res) {
                 Y_ABORT_UNLESS(session.WritePending);
                 session.WritePending = false;
 
                 if (session.Terminated) {
-                    // teardown in progress: don't retry the write or re-arm; just let the session drain
-                    // toward erasure below
+                    // teardown in progress: don't retry the write or re-arm; just let the session drain toward erasure below
                 } else if (res == -ECANCELED) {
-                    IssueWritesForSession(session);
+                    // we should probably restart operation
                 } else if (res == -EAGAIN) {
                     ++*WriteUnavail;
-                    SubmitIovec(session);
                 } else if (res < 0) {
                     session.Disconnect(TDisconnectReason::FromErrno(-res));
                 } else if (res == 0) {
@@ -1270,63 +1347,51 @@ namespace NActors {
                 } else {
                     *BytesSent += res;
                     ACTIVITY(&ApplyBytesWrittenTotalTime) {
-                        session.ApplyBytesWritten(res, &EventToWireTimeVec);
+                        session.ApplyBytesWritten(res, &EventToWireTimeVec, &EvDestroyEvents->Events,
+                            &EvDestroyEvents->Buffers);
                         for (const ui64 time : EventToWireTimeVec) {
                             EventToWireTime->Collect(time * Freq, 1u);
                         }
                         EventToWireTimeVec.clear();
                     }
-                    IssueWritesForSession(session);
                 }
 
-                if (MaybeFinishMigrate(session)) {
-                    return;
-                }
-                MaybeEraseSession(session); // NB: may free `session`; must be the last use
+                TouchedSessions.PushBack(&session);
             }
 
-            void IssueWritesForSession(TRegisteredSession& session) {
-                if (session.WritePending || session.Terminated || session.MigrateState != EMigrateState::None ||
-                        !session.Serializer.IsTrafficPending()) {
+            void MaybeIssueWriteForSession(TSession& session) {
+                if (session.WritePending || session.Terminated || session.MigrateTargetShard != ShardIdx) {
                     return;
                 }
-                if (session.Serialize()) {
-                    const ui64 serializeBufferTime = session.Serializer.GetSerializeBufferTime();
+                if (session.Serializer.IsTrafficPending()) {
+                    session.Serialize();
                     const ui64 serializeEventTime = session.Serializer.GetSerializeEventTime();
                     const ui64 prevTimestamp = std::exchange(LastActivitySwitchTimestamp, GetCycleCountFast());
-                    **CurrentActivityTime += (LastActivitySwitchTimestamp - prevTimestamp) * Freq - (serializeBufferTime + serializeEventTime);
-                    *SerializeBufferTotalTime += serializeBufferTime;
-                    *SerializeEventTotalTime += serializeEventTime;
+                    **CurrentActivityTime += (LastActivitySwitchTimestamp - prevTimestamp - serializeEventTime) * Freq;
+                    *SerializeEventTotalTime += serializeEventTime * Freq;
                     *BytesCopied += session.Serializer.GetBytesCopied();
                     *BytesAliased += session.Serializer.GetBytesAliased();
                 }
                 if (session.PrepareIovec()) {
-                    SubmitIovec(session);
+                    io_uring_sqe *sqe = GetSQE(&session, kOpWrite, session.PreferredRingIdx);
+                    Y_ABORT_UNLESS(sqe);
+                    io_uring_prep_writev(sqe, *session.Socket, session.Iov, session.IovLen, -1);
+                    session.WritePending = true;
                 }
-            }
-
-            void SubmitIovec(TRegisteredSession& session) {
-                if (session.MigrateState != EMigrateState::None) {
-                    return;
-                }
-                io_uring_sqe *sqe = GetSQE(&session, kOpWrite, session.PreferredRingIdx);
-                Y_ABORT_UNLESS(sqe);
-                io_uring_prep_writev(sqe, *session.Socket, session.Iov, session.IovLen, -1);
-                session.WritePending = true;
             }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // commands from outer threads
 
-            TRegisteredSession& GetSession(ui64 conn) const {
-                TRegisteredSession *ptr = reinterpret_cast<TRegisteredSession*>(conn);
+            TSession& GetSession(TIncomingEventQueue::TRecord *record) {
+                TSession *ptr = reinterpret_cast<TSession*>(record->Conn);
                 Y_ABORT_UNLESS(Sessions.find(ptr) != Sessions.end());
                 return *ptr;
             }
 
             // Frees an unregistered session once it has no io_uring operation in flight. It is unsafe to
             // erase earlier because any pending read/write completion references the session by raw pointer.
-            void MaybeEraseSession(TRegisteredSession& session) {
+            void MaybeEraseSession(TSession& session) {
                 if (session.UnregisterRequested && !session.ReadPending && !session.WritePending) {
                     auto it = Sessions.find(&session);
                     Y_ABORT_UNLESS(it != Sessions.end());
@@ -1340,23 +1405,37 @@ namespace NActors {
         std::atomic_uint64_t NextShardIdx;
 
         NMonitoring::TDynamicCounterPtr UringCounters;
+        TActorId DestructorActorId;
 
     public:
-        TUringEngine(ui32 numShards, NMonitoring::TDynamicCounterPtr counters, bool sqpoll, ui32 ringsPerShard,
-                ui32 sqThreadIdleMs, bool shareRingsAmongThreads)
-            : UringCounters(std::move(counters))
+        TUringEngine(TIntrusivePtr<TInterconnectProxyCommon> common)
+            : Common(std::move(common))
+            , ChecksumEvents(Common->Settings.V2.ChecksumEvents)
+            , DeadPeerTimeout(CalculateDeadPeerTimeout(Common->Settings))
+            , PingPeriod(CalculatePingPeriod(Common->Settings, DeadPeerTimeout))
+            , TickPeriod(CalculateTickPeriod(PingPeriod))
+            , DeadPeerTimeoutCycles(DurationToCycles(DeadPeerTimeout))
+            , PingPeriodCycles(DurationToCycles(PingPeriod))
+            , UringCounters(Common->MonCounters->GetSubgroup("subsystem", "uring"))
         {
+            const auto& v2 = Common->Settings.V2;
+            const ui32 numShards = Max<ui32>(1, v2.UringEngineThreads);
+            const ui32 ringsPerShard = Max<ui32>(1, v2.UringEngineRingsPerShard);
+            const ui32 sqThreadIdleMs = v2.UringEngineSqThreadIdleMs
+                ? v2.UringEngineSqThreadIdleMs
+                : TUringContext::SqThreadIdleMs;
+
             ShardLoads = std::vector<TShardLoad>(numShards);
             Shards.reserve(numShards);
             for (ui32 i = 0; i < numShards; ++i) {
                 Shards.push_back(std::make_unique<TShard>(*this,
                     i, // shardIdx
                     UringCounters->GetSubgroup("shard", "0" /*ToString(i)*/),
-                    sqpoll,
+                    v2.EnableSQPOLL,
                     ringsPerShard,
                     sqThreadIdleMs,
                     ShardLoads[i],
-                    shareRingsAmongThreads && !Shards.empty() ? Shards.front().get() : nullptr));
+                    v2.ShareRingsAmongThreads && !Shards.empty() ? Shards.front().get() : nullptr));
             }
             for (auto& shard : Shards) {
                 shard->Start();
@@ -1369,6 +1448,10 @@ namespace NActors {
 
         void SetActorSystem(TActorSystem* actorSystem) override {
             Y_ABORT_UNLESS(actorSystem);
+            // DestructorId is filled in after the engine is created, so it is picked up here rather than in
+            // the constructor. Published together with ActorSystem, i.e. before the first Register and thus
+            // before any shard worker can reach the code using either of them.
+            DestructorActorId = Common->DestructorId;
             ActorSystem = actorSystem;
             // Stop the reaper threads while the actor system is still up, so no completion is posted to a
             // torn-down system.
@@ -1376,7 +1459,7 @@ namespace NActors {
         }
 
         ui64 Register(TIntrusivePtr<NInterconnect::TStreamSocket> socket, const TActorId& sessionActorId,
-                bool checksumming, TScopeId peerScopeId, std::function<void(TDisconnectReason)> onDisconnectCallback,
+                TScopeId peerScopeId, std::function<void(TDisconnectReason)> onDisconnectCallback,
                 bool sendPings, std::shared_ptr<std::atomic<int64_t>> clockSkew,
                 std::shared_ptr<std::atomic<uint64_t>> pingRTT) override {
             if (Stopping) {
@@ -1394,9 +1477,9 @@ namespace NActors {
                 }
             }
 
-            auto session = std::make_unique<TRegisteredSession>(shardIdx, std::move(socket), sessionActorId,
-                checksumming, peerScopeId, std::move(onDisconnectCallback), ActorSystem, sendPings, std::move(clockSkew),
-                std::move(pingRTT));
+            auto session = std::make_unique<TSession>(shardIdx, std::move(socket), sessionActorId,
+                ChecksumEvents, peerScopeId, std::move(onDisconnectCallback), ActorSystem, sendPings,
+                std::move(clockSkew), std::move(pingRTT));
             const ui64 conn = reinterpret_cast<ui64>(session.get());
             Shards[shardIdx]->Register(std::move(session));
             return conn;
@@ -1404,7 +1487,7 @@ namespace NActors {
 
         TShard& GetShard(ui64 conn) const {
             // OwnerShard is the indirection for dynamic mapping: stable conn handle, mutable owner.
-            return *Shards[reinterpret_cast<TRegisteredSession*>(conn)->OwnerShard.load(std::memory_order_acquire)];
+            return *Shards[reinterpret_cast<TSession*>(conn)->OwnerShard.load(std::memory_order_acquire)];
         }
 
         void Send(ui64 conn, std::unique_ptr<IEventHandle> ev, TIntrusivePtr<IReceiveCallback> replyCallback) override {
@@ -1440,6 +1523,10 @@ namespace NActors {
                 for (auto& shard : Shards) {
                     shard->Stop();
                 }
+                // Common holds this engine, so keeping a reference to it here would make the pair
+                // unreclaimable. The workers are joined by now and nothing dereferences Common past this
+                // point (all of its data the engine needs is cached in const members).
+                Common.Reset();
             }
         }
 
@@ -1448,22 +1535,13 @@ namespace NActors {
         }
     };
 
-    TUringEnginePtr CreateUringEngine(ui32 numShards, NMonitoring::TDynamicCounterPtr counters, bool sqpoll,
-            ui32 ringsPerShard, ui32 sqThreadIdleMs, bool shareRingsAmongThreads) {
+    TUringEnginePtr CreateUringEngine(TIntrusivePtr<TInterconnectProxyCommon> common) {
         if (!TUringContext::IsAvailable()) {
             return nullptr;
         }
-        if (numShards < 1) {
-            numShards = 1;
-        }
-        if (ringsPerShard < 1) {
-            ringsPerShard = 1;
-        }
-        if (sqThreadIdleMs < 1) {
-            sqThreadIdleMs = TUringContext::SqThreadIdleMs;
-        }
-        return MakeIntrusive<TUringEngine>(numShards, std::move(counters), sqpoll, ringsPerShard, sqThreadIdleMs,
-            shareRingsAmongThreads);
+        Y_ABORT_UNLESS(common);
+        Y_ABORT_UNLESS(common->MonCounters);
+        return MakeIntrusive<TUringEngine>(std::move(common));
     }
 
 } // namespace NActors

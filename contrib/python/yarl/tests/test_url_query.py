@@ -1,4 +1,4 @@
-from typing import List, Sequence, Tuple
+from collections.abc import Sequence
 from urllib.parse import parse_qs, urlencode
 
 import pytest
@@ -10,7 +10,7 @@ from yarl import URL
 # Basic chars in query values
 # ========================================
 
-URLS_WITH_BASIC_QUERY_VALUES: List[Tuple[URL, MultiDict]] = [
+URLS_WITH_BASIC_QUERY_VALUES: list[tuple[URL, MultiDict]] = [
     # Empty strings, keys and values
     (
         URL("http://example.com"),
@@ -88,7 +88,7 @@ def test_query_dont_unqoute_twice():
 _SEMICOLON_XFAIL = pytest.mark.xfail(
     condition="separator" not in parse_qs.__code__.co_varnames,
     reason=(
-        "Python versions < 3.8.8 and < 3.9.2 lack a fix for "
+        "Python versions < 3.9.2 lack a fix for "
         'CVE-2021-23336 dropping ";" as a valid query parameter separator, '
         "making this test fail."
     ),
@@ -209,3 +209,34 @@ def test_skip_dropping_query_params(
     url = URL(f"http://example.com?{original_query_string}")
     new_url = url.without_query_params(*keys_to_drop)
     assert new_url is url
+
+
+def test_update_query_rejects_bytes():
+    url = URL("http://example.com")
+    with pytest.raises(TypeError):
+        url.update_query(b"foo=bar")
+
+
+def test_update_query_rejects_bytearray():
+    url = URL("http://example.com")
+    with pytest.raises(TypeError):
+        url.update_query(bytearray(b"foo=bar"))
+
+
+def test_update_query_rejects_memoryview():
+    url = URL("http://example.com")
+    with pytest.raises(TypeError):
+        url.update_query(memoryview(b"foo=bar"))
+
+
+def test_update_query_rejects_invalid_type():
+    url = URL("http://example.com")
+    with pytest.raises(TypeError):
+        url.update_query(42)
+
+
+def test_update_query_with_sequence_of_pairs():
+    url = URL("http://example.com")
+    new_url = url.update_query([("a", "1"), ("b", "2")])
+    assert new_url.query == MultiDict([("a", "1"), ("b", "2")])
+    assert new_url.query_string == "a=1&b=2"

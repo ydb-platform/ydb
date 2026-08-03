@@ -2306,8 +2306,17 @@ private:
 
     TFuture<TGenericResult> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request, bool failedOnAlreadyExists = false)
     {
+        const auto& modifyScheme = request->Record.GetTransaction().GetModifyScheme();
+        bool actualFailedOnAlreadyExists = failedOnAlreadyExists;
+        bool successOnNotExist = false;
+        if (modifyScheme.HasFailedOnAlreadyExists()) {
+            actualFailedOnAlreadyExists = modifyScheme.GetFailedOnAlreadyExists();
+        }
+        if (modifyScheme.HasSuccessOnNotExist()) {
+            successOnNotExist = modifyScheme.GetSuccessOnNotExist();
+        }
         auto promise = NewPromise<TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(request, promise, failedOnAlreadyExists);
+        IActor* requestHandler = new TSchemeOpRequestHandler(request, promise, actualFailedOnAlreadyExists, successOnNotExist);
         RegisterActor(requestHandler);
 
         return promise.GetFuture();

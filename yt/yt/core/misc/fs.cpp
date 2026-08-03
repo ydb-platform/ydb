@@ -1103,7 +1103,7 @@ TFuture<TSpliceResult> SpliceAsync(
                     .Run())
                 .ThrowOnError();
         },
-        "SimplePollable");
+        NLogging::TLoggingTagList().With("Pollable", "Simple"));
 
     bool registered = poller->TryRegister(pollable);
     THROW_ERROR_EXCEPTION_UNLESS(registered, "Failed to register pollable");

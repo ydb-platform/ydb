@@ -416,7 +416,8 @@ class Array(ChSqlaType, ARRAY):  # type: ignore[misc]
         ChSqlaType.__init__(self, type_def)
         # Set item_type directly; calling ARRAY.__init__ would reject nested Array(Array(T)),
         # which CH supports natively (CH expresses dimensions via nesting, not a dim count).
-        # as_tuple has no class-level default, so set it here to satisfy ARRAY result processing.
+        # as_tuple has no class-level default and ARRAY reads it (e.g. the hashable property), so set it
+        # here since we skip ARRAY.__init__.
         self.item_type = cast("TypeEngine[Any]", sqla_type_from_name(type_def.values[0]))
         self.as_tuple = False
 

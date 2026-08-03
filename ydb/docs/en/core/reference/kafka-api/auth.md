@@ -50,7 +50,7 @@ Note that the logic for forming `<sasl.username>` and `<sasl.password>` in cloud
 
 For authentication examples, see [Reading and Writing](./examples.md).
 
-### mTLS authentication {#mtls-auth}
+### mTLS authentication {#device-auth}
 
 To allow a Kafka client to authenticate via mTLS, perform the following steps.
 
@@ -202,10 +202,10 @@ kafka_proxy_config:
   listening_port: your_port
 
   mtls_enable: true
-  key: "server-key.pem" # укажите правильные пути до файлов
+  key: "server-key.pem" # specify the correct paths to the files
   cert: "server-cert.pem"
   ca: "ca-cert.pem"
-  enable_self_signed_certs: true # разрешаете ли вы самоподписанные сертификаты
+  enable_self_signed_certs: true # do you allow self-signed certificates
 ```
 
 
@@ -219,9 +219,9 @@ client_certificate_authorization:
       subject_terms:
         - short_name: CN
           suffixes:
-            - '.myhost.net' # нужно заменить на нужный суффикс
+            - '.myhost.net' # need to replace with the required suffix
       member_groups:
-        - user@cert # заменить на нужную member группу
+        - user@cert # replace with the required member group
   request_client_certificate: true
 ```
 

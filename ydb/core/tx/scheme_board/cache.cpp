@@ -9,7 +9,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/domain.h>
-#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>

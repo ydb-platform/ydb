@@ -494,9 +494,10 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT(!tiling.MiddleLevels.at(3).PortionById.contains(100));
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(3).WidthByPortionId.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).PortionById.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).WidthByPortionId.at(100), 4);
+        // Forced aging placement does not recalculate the natural-routing width.
+        UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).WidthByPortionId.at(100), 0);
         UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 2);
-        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Width, 4);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Width, 0);
         UNIT_ASSERT(tiling.InsertTimeByPortionId.contains(100));
         UNIT_ASSERT(tiling.InsertTimeByPortionId.at(100) >= tick1);
         UNIT_ASSERT_VALUES_EQUAL(tiling.PortionsByTime.size(), 1);
@@ -1073,8 +1074,8 @@ Y_UNIT_TEST_SUITE(TilingAccumulatorCompactionGating) {
         UNIT_ASSERT(tiling.AreOtherLevelsEmpty());   // candidates=0, middle levels=0
     }
 
-    // 7) Single accumulator portion promoted to last level when all other levels empty.
-    Y_UNIT_TEST(SingleAccumulatorPortionPromotedToLastLevel) {
+    // 7) A single accumulator portion settles on the last level when all other levels are empty.
+    Y_UNIT_TEST(SingleAccumulatorPortionSettlesOnLastLevel) {
         auto settings = MakeGatingSettings();
         settings.AgingSettings.Enabled = true;
         settings.AgingSettings.PromoteTime = TDuration::Seconds(60);
@@ -1092,12 +1093,11 @@ Y_UNIT_TEST_SUITE(TilingAccumulatorCompactionGating) {
         const TInstant now = TInstant::Now();
         tiling.PromoteExpiredPortions(now);
 
-        // The portion should now be on the last level (level 1) as a candidate — not a stable
-        // Optimized portion — so it stays compactable instead of stranding as INSERTED.
+        // With no existing last-level portion to merge with, it settles as the stable base portion.
         UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(1).Level, 1);
-        UNIT_ASSERT(tiling.LastLevel.CandidateIds.contains(1));
-        UNIT_ASSERT(!tiling.LastLevel.PortionIds.contains(1));
+        UNIT_ASSERT(!tiling.LastLevel.CandidateIds.contains(1));
+        UNIT_ASSERT(tiling.LastLevel.PortionIds.contains(1));
     }
 
     // 8) Single accumulator portion NOT promoted when other levels have work.
@@ -1149,9 +1149,8 @@ Y_UNIT_TEST_SUITE(TilingAccumulatorCompactionGating) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(2).Level, 0);
     }
 
-    // 10) A lone accumulator portion promoted to the last level becomes a candidate and is compacted
-    //     solo (rewritten to SPLIT_COMPACTED) rather than stranding as an un-compacted portion.
-    Y_UNIT_TEST(PromotedLonePortionCompactsSolo) {
+    // 10) A lone accumulator portion promoted to the last level settles without a solo compaction.
+    Y_UNIT_TEST(PromotedLonePortionDoesNotCompactSolo) {
         auto settings = MakeGatingSettings();
         settings.AgingSettings.Enabled = true;
 
@@ -1160,18 +1159,16 @@ Y_UNIT_TEST_SUITE(TilingAccumulatorCompactionGating) {
 
         tiling.AddPortion(MakePortion(1, 0, 10, 100));
         tiling.PromoteExpiredPortions(TInstant::Now());
-        UNIT_ASSERT(tiling.LastLevel.CandidateIds.contains(1));
+        UNIT_ASSERT(tiling.LastLevel.PortionIds.contains(1));
+        UNIT_ASSERT(!tiling.LastLevel.CandidateIds.contains(1));
 
-        // No neighbour exists, so the candidate is compacted solo (single-portion repack).
+        // Compaction tasks always contain at least two portions.
         const auto task = tiling.GetNextOptimizationTask(NeverLocked());
-        UNIT_ASSERT(task);
-        UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, 1);
-        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(task->Portions[0]->GetPortionId(), 1);
+        UNIT_ASSERT(!task);
     }
 
-    // 11) Two non-intersecting last-level candidates are compacted together as neighbours.
-    Y_UNIT_TEST(NonIntersectingCandidatesMergeAsNeighbours) {
+    // 11) A non-intersecting candidate is compacted with its stable last-level neighbour.
+    Y_UNIT_TEST(NonIntersectingCandidateMergesWithStableNeighbour) {
         TLastLevelSettings settings;
         settings.Compaction.Bytes = 1'000'000;
         settings.Compaction.Portions = 100;
@@ -1180,10 +1177,12 @@ Y_UNIT_TEST_SUITE(TilingAccumulatorCompactionGating) {
         TCounters counters;
         TTestLastLevel lastLevel(settings, counters);
 
-        // Two non-overlapping candidates (as the promotion path would create).
+        // The first forced portion becomes the stable base when the last level is empty. The second
+        // remains a candidate and uses that base as its nearest merge partner.
         lastLevel.AddCandidatePortion(MakePortion(1, 0, 10, 100));
         lastLevel.AddCandidatePortion(MakePortion(2, 20, 30, 100));
-        UNIT_ASSERT(lastLevel.CandidateIds.contains(1));
+        UNIT_ASSERT(lastLevel.PortionIds.contains(1));
+        UNIT_ASSERT(!lastLevel.CandidateIds.contains(1));
         UNIT_ASSERT(lastLevel.CandidateIds.contains(2));
 
         const auto task = lastLevel.DoGetNextOptimizationTask(NeverLocked());
@@ -1199,13 +1198,8 @@ Y_UNIT_TEST_SUITE(TilingAccumulatorCompactionGating) {
         UNIT_ASSERT_VALUES_EQUAL(ids[1], 2);
     }
 
-    // 12) Convergence: a promoted lone portion compacted solo must NOT be re-promoted and
-    //     re-compacted forever. Simulates the engine's apply loop — each task removes its inputs
-    //     and re-adds one SPLIT_COMPACTED result at the task's target level (see
-    //     wrapper.cpp: SetTargetCompactionLevel(task->TargetLevel)). Before the fix, the small
-    //     compacted result routes back to the accumulator, is promoted again, and loops (which
-    //     spins compaction and hangs WaitCompactions -> KqpOlapScheme::DropThenAddColumnCompaction).
-    Y_UNIT_TEST(PromotedLonePortionConverges) {
+    // 12) A promoted lone portion converges immediately instead of producing repeated solo tasks.
+    Y_UNIT_TEST(PromotedLonePortionConvergesWithoutSoloCompaction) {
         auto settings = MakeGatingSettings();
         settings.AgingSettings.Enabled = true;
 
@@ -1246,6 +1240,7 @@ Y_UNIT_TEST_SUITE(TilingAccumulatorCompactionGating) {
         }
 
         UNIT_ASSERT_C(iter < maxIterations, "compaction never converged (looped " << compactions << " times)");
+        UNIT_ASSERT_VALUES_EQUAL(compactions, 0);
     }
 }
 

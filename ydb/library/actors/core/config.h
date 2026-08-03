@@ -27,6 +27,7 @@ namespace NActors {
         i16 MaxThreadCount = 0;
         i16 DefaultThreadCount = 0;
         i16 Priority = 0;
+        ui8 HarmonizerNeedyCpuWindowSeconds = 1;
         i16 SharedExecutorsCount = 0;
         i16 SoftProcessingDurationTs = 0;
         EASProfile ActorSystemProfile = EASProfile::Default;

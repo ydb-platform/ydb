@@ -80,7 +80,8 @@ private:
     NYDBTest::TControllers::TGuard<NYDBTest::NColumnShard::TController> CSController;
 };
 
-Ydb::StatusIds::StatusCode ExecuteYqlScript(TTestEnv& env, const TString& script, bool mustSucceed = true);
+Ydb::StatusIds::StatusCode ExecuteYqlScript(TTestEnv& env, const TString& script,
+    bool mustSucceed = true, const TString& database = {});
 
 TString CreateDatabase(TTestEnv& env, const TString& databaseName,
     size_t nodeCount = 1, bool isShared = false, const TString& poolName = "hdd1");
@@ -122,8 +123,9 @@ void InsertDataIntoTable(
 TTableInfo PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
 
 // Create a column table, enable count-min-sketch column indexes,
-// and insert ColumnTableRowsNumber rows with some overlap to trigger compaction.
-TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
+// and insert ColumnTableRowsNumber rows with some overlap. Force compaction by default.
+TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseName, const TString& tableName,
+    int shardCount, bool forceCompaction = true);
 
 // Create a column table with a two-column COUNT_MIN_SKETCH multi-column statistic
 // (see MultiColumnValueColumns) and insert ColumnTableRowsNumber rows.

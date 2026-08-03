@@ -168,8 +168,9 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TPushdownOptions& push
         // When OptEnableOlapPushdownRegexp is enabled, also allow plain REGEXP (Re2.Match / Re2.Grep)
         // with a constant/parameter pattern to be pushed down to the column shard.
         constexpr auto like = "Re2.PatternFromLike"sv;
-        if (!pushdownOptions.PushdownRegexp &&
-            udfName.Content().starts_with("Re2.") && !udfName.IsAtom({like, "Re2.Options"}) &&
+        if (udfName.Content().starts_with("Re2.") &&
+            !udfName.IsAtom({like, "Re2.Options"}) &&
+            !(pushdownOptions.PushdownRegexp && (udfName.IsAtom("Re2.Match") || udfName.IsAtom("Re2.Grep"))) &&
             !FindNode(udf.ChildPtr(1U), [like] (const TExprNode::TPtr& node) { return node->IsCallable("Udf") && node->Head().IsAtom(like); })) {
             return false;
         }

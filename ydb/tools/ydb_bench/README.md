@@ -28,16 +28,18 @@ ydb/tools/ydb_bench/ydb_bench run actors-core \
 Every scenario is run in five placement modes by default:
 
 - `none`: no explicit affinity;
-- `single-numa`: CPUs from one NUMA node;
+- `one-whole-numa`: all allowed CPUs from one NUMA node;
 - `multi-numa`: CPUs spread across NUMA nodes;
-- `single-chiplet`: CPUs from one L3-cache group (chiplet);
+- `one-whole-chiplet`: all allowed CPUs from one L3-cache group (chiplet);
 - `multi-chiplet`: CPUs spread across chiplets inside one NUMA node.
 
-Pinned modes use the same number of CPUs as the largest requested thread count.
-Topology is read from Linux sysfs and intersected with the process's allowed CPU
-set. A mode that the machine cannot provide is recorded as `unsupported` in
-`run.json`; it is never silently replaced with a different placement. Use, for
-example, `--affinity none,single-numa` to run a subset.
+The `one-whole-*` modes use the complete allowed CPU set of the selected topology
+group, independently of the largest requested thread count. The `multi-*` modes
+use the same number of CPUs as that thread count. Topology is read from Linux
+sysfs and intersected with the process's allowed CPU set. A mode that the machine
+cannot provide is recorded as `unsupported` in `run.json`; it is never silently
+replaced with a different placement. Use, for example,
+`--affinity none,one-whole-numa` to run a subset.
 
 Use `--work-dir` when the system temporary directory is mounted with `noexec`.
 The tool extracts the bundled executable atomically into a unique temporary

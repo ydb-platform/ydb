@@ -6,9 +6,9 @@ from typing import Optional
 
 AFFINITY_MODES = (
     "none",
-    "single-numa",
+    "one-whole-numa",
     "multi-numa",
-    "single-chiplet",
+    "one-whole-chiplet",
     "multi-chiplet",
 )
 
@@ -140,11 +140,11 @@ def plan_affinity(mode, topology, required_cpus):
     if not hasattr(os, "sched_setaffinity"):
         return _unsupported(mode, "CPU affinity is not supported by this operating system")
 
-    if mode == "single-numa":
-        node = next((cpus for _, cpus in topology.numa_nodes if len(cpus) >= required_cpus), None)
+    if mode == "one-whole-numa":
+        node = next((cpus for _, cpus in topology.numa_nodes if cpus), None)
         if node is None:
-            return _unsupported(mode, "no NUMA node contains {} allowed CPUs".format(required_cpus))
-        return AffinityPlacement(mode=mode, cpus=node[:required_cpus])
+            return _unsupported(mode, "no NUMA node contains allowed CPUs")
+        return AffinityPlacement(mode=mode, cpus=node)
 
     if mode == "multi-numa":
         groups = [cpus for _, cpus in topology.numa_nodes if cpus]
@@ -152,11 +152,11 @@ def plan_affinity(mode, topology, required_cpus):
             return _unsupported(mode, "at least two NUMA nodes and {} allowed CPUs are required".format(required_cpus))
         return AffinityPlacement(mode=mode, cpus=_spread(groups, required_cpus))
 
-    if mode == "single-chiplet":
-        chiplet = next((cpus for _, cpus in topology.chiplets if len(cpus) >= required_cpus), None)
+    if mode == "one-whole-chiplet":
+        chiplet = next((cpus for _, cpus in topology.chiplets if cpus), None)
         if chiplet is None:
-            return _unsupported(mode, "no chiplet contains {} allowed CPUs".format(required_cpus))
-        return AffinityPlacement(mode=mode, cpus=chiplet[:required_cpus])
+            return _unsupported(mode, "no chiplet contains allowed CPUs")
+        return AffinityPlacement(mode=mode, cpus=chiplet)
 
     if mode == "multi-chiplet":
         by_node = {}

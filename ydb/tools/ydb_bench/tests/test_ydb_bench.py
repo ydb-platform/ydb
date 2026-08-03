@@ -18,7 +18,7 @@ from ydb.tools.ydb_bench.lib.actors_core import (
     run_actors_core,
 )
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
-from ydb.tools.ydb_bench.lib.cli import main
+from ydb.tools.ydb_bench.lib.cli import PROFILES, main
 from ydb.tools.ydb_bench.lib.runner import run_command
 from ydb.tools.ydb_bench.lib.topology import (
     AFFINITY_MODES,
@@ -89,6 +89,9 @@ class YdbBenchTest(unittest.TestCase):
             self.assertEqual(main(["describe", "actors-core"]), 0)
         self.assertIn("actors-core", output.getvalue())
         self.assertIn("summary.csv", output.getvalue())
+
+    def test_baseline_covers_a_full_minimum_chiplet(self):
+        self.assertEqual(PROFILES["baseline"].threads, (1, 2, 4, 8, 16))
 
     def test_timeout_rejects_non_finite_values(self):
         for value in ("nan", "inf", "-inf"):
@@ -256,7 +259,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(topology.numa_nodes, ((0, (1, 2, 3)), (1, (4,))))
         self.assertEqual(topology.chiplets, ((0, (1,)), (0, (2, 3))))
 
-    def test_affinity_modes_select_equal_size_deterministic_masks(self):
+    def test_affinity_modes_select_deterministic_masks(self):
         topology = CpuTopology(
             allowed_cpus=tuple(range(8)),
             numa_nodes=((0, (0, 1, 2, 3)), (1, (4, 5, 6, 7))),
@@ -265,10 +268,22 @@ class YdbBenchTest(unittest.TestCase):
         with mock.patch.object(os, "sched_setaffinity", create=True):
             placements = {mode: plan_affinity(mode, topology, 2) for mode in AFFINITY_MODES}
         self.assertIsNone(placements["none"].cpus)
-        self.assertEqual(placements["single-numa"].cpus, (0, 1))
+        self.assertEqual(placements["one-whole-numa"].cpus, (0, 1, 2, 3))
         self.assertEqual(placements["multi-numa"].cpus, (0, 4))
-        self.assertEqual(placements["single-chiplet"].cpus, (0, 1))
+        self.assertEqual(placements["one-whole-chiplet"].cpus, (0, 1))
         self.assertEqual(placements["multi-chiplet"].cpus, (0, 2))
+
+    def test_whole_affinity_modes_do_not_limit_masks_to_requested_threads(self):
+        topology = CpuTopology(
+            allowed_cpus=tuple(range(8)),
+            numa_nodes=((0, (0, 1, 2, 3)), (1, (4, 5, 6, 7))),
+            chiplets=((0, (0, 1, 2)), (0, (3,)), (1, (4, 5)), (1, (6, 7))),
+        )
+        with mock.patch.object(os, "sched_setaffinity", create=True):
+            numa = plan_affinity("one-whole-numa", topology, 2)
+            chiplet = plan_affinity("one-whole-chiplet", topology, 2)
+        self.assertEqual(numa.cpus, (0, 1, 2, 3))
+        self.assertEqual(chiplet.cpus, (0, 1, 2))
 
     def test_unavailable_affinity_mode_is_reported_not_guessed(self):
         topology = CpuTopology(

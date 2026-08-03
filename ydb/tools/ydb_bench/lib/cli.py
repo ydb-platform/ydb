@@ -39,8 +39,8 @@ PROFILES = {
     ),
     "baseline": Profile(
         name="baseline",
-        description="fixed cross-platform comparison at 1, 2, 4, and 8 threads",
-        threads=(1, 2, 4, 8),
+        description="fixed cross-platform comparison at 1, 2, 4, 8, and 16 threads",
+        threads=(1, 2, 4, 8, 16),
         actor_pairs=(512,),
         inflights=(1,),
         duration_seconds=2,

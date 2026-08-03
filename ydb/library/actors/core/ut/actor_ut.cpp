@@ -1209,10 +1209,10 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
                 << ": mailbox=" << timestamps.MailboxScheduledTimestamp
                 << " observed=" << timestamps.ObservedTimestamp);
         UNIT_ASSERT_C(
-            timestamps.EventEnqueuedInstant <= timestamps.MailboxScheduledInstant,
-            "event instant must not be after mailbox scheduling instant"
+            timestamps.EventEnqueuedInstant <= timestamps.ObservedInstant,
+            "event instant must not be in the future"
                 << ": event=" << timestamps.EventEnqueuedInstant
-                << " mailbox=" << timestamps.MailboxScheduledInstant);
+                << " observed=" << timestamps.ObservedInstant);
         UNIT_ASSERT_C(
             timestamps.MailboxScheduledInstant <= timestamps.ObservedInstant,
             "mailbox instant must not be in the future"

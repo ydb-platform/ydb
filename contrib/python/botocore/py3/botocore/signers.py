@@ -25,10 +25,11 @@ from botocore.exceptions import (
     UnknownSignatureVersionError,
     UnsupportedSignatureVersionError,
 )
-from botocore.utils import ArnParser, datetime2timestamp
-
-# Keep these imported.  There's pre-existing code that uses them.
-from botocore.utils import fix_s3_host  # noqa
+from botocore.utils import (
+    ArnParser,
+    datetime2timestamp,
+    fix_s3_host,  # noqa: F401
+)
 
 
 class RequestSigner:

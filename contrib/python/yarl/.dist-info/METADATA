@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: yarl
-Version: 1.17.2
+Version: 1.18.3
 Summary: Yet another URL library
 Home-page: https://github.com/aio-libs/yarl
 Author: Andrew Svetlov
@@ -35,9 +35,9 @@ Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 License-File: NOTICE
-Requires-Dist: idna >=2.0
-Requires-Dist: multidict >=4.0
-Requires-Dist: propcache >=0.2.0
+Requires-Dist: idna>=2.0
+Requires-Dist: multidict>=4.0
+Requires-Dist: propcache>=0.2.0
 
 yarl
 ====
@@ -264,6 +264,104 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+1.18.3
+======
+
+*(2024-12-01)*
+
+
+Bug fixes
+---------
+
+- Fixed uppercase ASCII hosts being rejected by ``URL.build()()`` and ``yarl.URL.with_host()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#954 <https://github.com/aio-libs/yarl/issues/954>`__, `#1442 <https://github.com/aio-libs/yarl/issues/1442>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performances of multiple path properties on cache miss -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1443 <https://github.com/aio-libs/yarl/issues/1443>`__.
+
+
+----
+
+
+1.18.2
+======
+
+*(2024-11-29)*
+
+
+No significant changes.
+
+
+----
+
+
+1.18.1
+======
+
+*(2024-11-29)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved cache performance when ``~yarl.URL`` objects are constructed from ``yarl.URL.build()`` with ``encoded=True`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1432 <https://github.com/aio-libs/yarl/issues/1432>`__.
+
+- Improved cache performance for operations that produce a new ``~yarl.URL`` object -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1434 <https://github.com/aio-libs/yarl/issues/1434>`__, `#1436 <https://github.com/aio-libs/yarl/issues/1436>`__.
+
+
+----
+
+
+1.18.0
+======
+
+*(2024-11-21)*
+
+
+Features
+--------
+
+- Added ``keep_query`` and ``keep_fragment`` flags in the ``yarl.URL.with_path()``, ``yarl.URL.with_name()`` and ``yarl.URL.with_suffix()`` methods, allowing users to optionally retain the query string and fragment in the resulting URL when replacing the path -- by `@paul-nameless <https://github.com/sponsors/paul-nameless>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#111 <https://github.com/aio-libs/yarl/issues/111>`__, `#1421 <https://github.com/aio-libs/yarl/issues/1421>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- Started running downstream ``aiohttp`` tests in CI -- by `@Cycloctane <https://github.com/sponsors/Cycloctane>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1415 <https://github.com/aio-libs/yarl/issues/1415>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of converting ``~yarl.URL`` to a string -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1422 <https://github.com/aio-libs/yarl/issues/1422>`__.
+
+
+----
+
 
 1.17.2
 ======

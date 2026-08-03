@@ -277,28 +277,23 @@ private:
         Become(&TDqLocalFileSpillingService::WorkState);
     }
 
-    STRICT_STFUNC(BrokenState,
-        hFunc(TEvPrivate::TEvRetryStart, HandleRetryStart)
-        hFunc(TEvDqSpillingLocalFile::TEvOpenFile, HandleBroken)
-        hFunc(TEvDqSpillingLocalFile::TEvCloseFile, HandleBroken)
-        hFunc(TEvDqSpilling::TEvWrite, HandleBroken)
-        hFunc(TEvDqSpilling::TEvRead, HandleBroken)
-        hFunc(NMon::TEvHttpInfo, HandleBroken)
-        cFunc(TEvents::TEvPoison::EventType, PassAway)
-    );
+    // The service is registered by the well-known id before the root is created, so requests can
+    // arrive between the start attempts.
+    STFUNC(BrokenState) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvRetryStart, HandleRetryStart);
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
+            case NMon::TEvHttpInfo::EventType:
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("<html><h2>Service is not started due to IO error</h2></html>"));
+                break;
+            default:
+                LOG_E("Service is not started, send error to client " << ev->Sender);
+                Send(ev->Sender, new TEvDqSpilling::TEvError("Service not started"));
+        }
+    }
 
     void HandleRetryStart(TEvPrivate::TEvRetryStart::TPtr& ev) {
         CreateRoot(ev->Get()->RetriesLeft - 1);
-    }
-
-    template <typename TEventPtr>
-    void HandleBroken(TEventPtr& ev) {
-        LOG_E("Service is not started, send error to client " << ev->Sender);
-        Send(ev->Sender, new TEvDqSpilling::TEvError("Service not started"));
-    }
-
-    void HandleBroken(NMon::TEvHttpInfo::TPtr& ev) {
-        Send(ev->Sender, new NMon::TEvHttpInfoRes("<html><h2>Service is not started due to IO error</h2></html>"));
     }
 
     STRICT_STFUNC(WorkState,

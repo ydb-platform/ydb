@@ -105,7 +105,7 @@ public:
             case ServiceTypeTxMeta:
                 return TypeTxMeta;
         }
-        Y_ABORT();
+        AFL_ENSURE(false)("type_char", *PtrType());
         return TypeNone;
     }
 

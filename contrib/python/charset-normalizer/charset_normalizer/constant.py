@@ -1,18 +1,18 @@
-# -*- coding: utf-8 -*-
+from __future__ import annotations
+
 from codecs import BOM_UTF8, BOM_UTF16_BE, BOM_UTF16_LE, BOM_UTF32_BE, BOM_UTF32_LE
 from encodings.aliases import aliases
-from re import IGNORECASE, compile as re_compile
-from typing import Dict, List, Set, Union
+from re import IGNORECASE
+from re import compile as re_compile
 
 # Contain for each eligible encoding a list of/item bytes SIG/BOM
-ENCODING_MARKS: Dict[str, Union[bytes, List[bytes]]] = {
+ENCODING_MARKS: dict[str, bytes | list[bytes]] = {
     "utf_8": BOM_UTF8,
     "utf_7": [
         b"\x2b\x2f\x76\x38",
         b"\x2b\x2f\x76\x39",
         b"\x2b\x2f\x76\x2b",
         b"\x2b\x2f\x76\x2f",
-        b"\x2b\x2f\x76\x38\x2d",
     ],
     "gb18030": b"\x84\x31\x95\x33",
     "utf_32": [BOM_UTF32_BE, BOM_UTF32_LE],
@@ -24,8 +24,8 @@ TOO_BIG_SEQUENCE: int = int(10e6)
 
 UTF8_MAXIMAL_ALLOCATION: int = 1_112_064
 
-# Up-to-date Unicode ucd/15.0.0
-UNICODE_RANGES_COMBINED: Dict[str, range] = {
+# Up-to-date Unicode ucd/17.0.0
+UNICODE_RANGES_COMBINED: dict[str, range] = {
     "Control character": range(32),
     "Basic Latin": range(32, 128),
     "Latin-1 Supplement": range(128, 256),
@@ -212,6 +212,7 @@ UNICODE_RANGES_COMBINED: Dict[str, range] = {
     "Elbasan": range(66816, 66864),
     "Caucasian Albanian": range(66864, 66928),
     "Vithkuqi": range(66928, 67008),
+    "Todhri": range(67008, 67072),
     "Linear A": range(67072, 67456),
     "Latin Extended-F": range(67456, 67520),
     "Cypriot Syllabary": range(67584, 67648),
@@ -221,6 +222,7 @@ UNICODE_RANGES_COMBINED: Dict[str, range] = {
     "Hatran": range(67808, 67840),
     "Phoenician": range(67840, 67872),
     "Lydian": range(67872, 67904),
+    "Sidetic": range(67904, 67936),
     "Meroitic Hieroglyphs": range(67968, 68000),
     "Meroitic Cursive": range(68000, 68096),
     "Kharoshthi": range(68096, 68192),
@@ -234,6 +236,7 @@ UNICODE_RANGES_COMBINED: Dict[str, range] = {
     "Old Turkic": range(68608, 68688),
     "Old Hungarian": range(68736, 68864),
     "Hanifi Rohingya": range(68864, 68928),
+    "Garay": range(68928, 69008),
     "Rumi Numeral Symbols": range(69216, 69248),
     "Yezidi": range(69248, 69312),
     "Arabic Extended-C": range(69312, 69376),
@@ -253,12 +256,14 @@ UNICODE_RANGES_COMBINED: Dict[str, range] = {
     "Multani": range(70272, 70320),
     "Khudawadi": range(70320, 70400),
     "Grantha": range(70400, 70528),
+    "Tulu-Tigalari": range(70528, 70656),
     "Newa": range(70656, 70784),
     "Tirhuta": range(70784, 70880),
     "Siddham": range(71040, 71168),
     "Modi": range(71168, 71264),
     "Mongolian Supplement": range(71264, 71296),
     "Takri": range(71296, 71376),
+    "Myanmar Extended-C": range(71376, 71424),
     "Ahom": range(71424, 71504),
     "Dogra": range(71680, 71760),
     "Warang Citi": range(71840, 71936),
@@ -269,10 +274,13 @@ UNICODE_RANGES_COMBINED: Dict[str, range] = {
     "Unified Canadian Aboriginal Syllabics Extended-A": range(72368, 72384),
     "Pau Cin Hau": range(72384, 72448),
     "Devanagari Extended-A": range(72448, 72544),
+    "Sharada Supplement": range(72544, 72576),
+    "Sunuwar": range(72640, 72704),
     "Bhaiksuki": range(72704, 72816),
     "Marchen": range(72816, 72896),
     "Masaram Gondi": range(72960, 73056),
     "Gunjala Gondi": range(73056, 73136),
+    "Tolong Siki": range(73136, 73200),
     "Makasar": range(73440, 73472),
     "Kawi": range(73472, 73568),
     "Lisu Supplement": range(73648, 73664),
@@ -283,19 +291,24 @@ UNICODE_RANGES_COMBINED: Dict[str, range] = {
     "Cypro-Minoan": range(77712, 77824),
     "Egyptian Hieroglyphs": range(77824, 78896),
     "Egyptian Hieroglyph Format Controls": range(78896, 78944),
+    "Egyptian Hieroglyphs Extended-A": range(78944, 82944),
     "Anatolian Hieroglyphs": range(82944, 83584),
+    "Gurung Khema": range(90368, 90432),
     "Bamum Supplement": range(92160, 92736),
     "Mro": range(92736, 92784),
     "Tangsa": range(92784, 92880),
     "Bassa Vah": range(92880, 92928),
     "Pahawh Hmong": range(92928, 93072),
+    "Kirat Rai": range(93504, 93568),
     "Medefaidrin": range(93760, 93856),
+    "Beria Erfe": range(93856, 93920),
     "Miao": range(93952, 94112),
     "Ideographic Symbols and Punctuation": range(94176, 94208),
     "Tangut": range(94208, 100352),
     "Tangut Components": range(100352, 101120),
     "Khitan Small Script": range(101120, 101632),
     "Tangut Supplement": range(101632, 101760),
+    "Tangut Components Supplement": range(101760, 101888),
     "Kana Extended-B": range(110576, 110592),
     "Kana Supplement": range(110592, 110848),
     "Kana Extended-A": range(110848, 110896),
@@ -303,6 +316,8 @@ UNICODE_RANGES_COMBINED: Dict[str, range] = {
     "Nushu": range(110960, 111360),
     "Duployan": range(113664, 113824),
     "Shorthand Format Controls": range(113824, 113840),
+    "Symbols for Legacy Computing Supplement": range(117760, 118464),
+    "Miscellaneous Symbols Supplement": range(118464, 118528),
     "Znamenny Musical Notation": range(118528, 118736),
     "Byzantine Musical Symbols": range(118784, 119040),
     "Musical Symbols": range(119040, 119296),
@@ -320,6 +335,8 @@ UNICODE_RANGES_COMBINED: Dict[str, range] = {
     "Toto": range(123536, 123584),
     "Wancho": range(123584, 123648),
     "Nag Mundari": range(124112, 124160),
+    "Ol Onal": range(124368, 124416),
+    "Tai Yo": range(124608, 124672),
     "Ethiopic Extended-B": range(124896, 124928),
     "Mende Kikakui": range(124928, 125152),
     "Adlam": range(125184, 125280),
@@ -332,7 +349,7 @@ UNICODE_RANGES_COMBINED: Dict[str, range] = {
     "Enclosed Alphanumeric Supplement": range(127232, 127488),
     "Enclosed Ideographic Supplement": range(127488, 127744),
     "Miscellaneous Symbols and Pictographs": range(127744, 128512),
-    "Emoticons range(Emoji)": range(128512, 128592),
+    "Emoticons": range(128512, 128592),
     "Ornamental Dingbats": range(128592, 128640),
     "Transport and Map Symbols": range(128640, 128768),
     "Alchemical Symbols": range(128768, 128896),
@@ -347,9 +364,11 @@ UNICODE_RANGES_COMBINED: Dict[str, range] = {
     "CJK Unified Ideographs Extension D": range(177984, 178208),
     "CJK Unified Ideographs Extension E": range(178208, 183984),
     "CJK Unified Ideographs Extension F": range(183984, 191472),
+    "CJK Unified Ideographs Extension I": range(191472, 192096),
     "CJK Compatibility Ideographs Supplement": range(194560, 195104),
     "CJK Unified Ideographs Extension G": range(196608, 201552),
     "CJK Unified Ideographs Extension H": range(201552, 205744),
+    "CJK Unified Ideographs Extension J": range(205744, 210048),
     "Tags": range(917504, 917632),
     "Variation Selectors Supplement": range(917760, 918000),
     "Supplementary Private Use Area-A": range(983040, 1048576),
@@ -357,7 +376,7 @@ UNICODE_RANGES_COMBINED: Dict[str, range] = {
 }
 
 
-UNICODE_SECONDARY_RANGE_KEYWORD: List[str] = [
+UNICODE_SECONDARY_RANGE_KEYWORD: list[str] = [
     "Supplement",
     "Extended",
     "Extensions",
@@ -392,10 +411,9 @@ IANA_NO_ALIASES = [
     "koi8_u",
 ]
 
-IANA_SUPPORTED: List[str] = sorted(
+IANA_SUPPORTED: list[str] = sorted(
     filter(
-        lambda x: x.endswith("_codec") is False
-        and x not in {"rot_13", "tactis", "mbcs"},
+        lambda x: not x.endswith("_codec") and x not in {"rot_13", "tactis", "mbcs"},
         list(set(aliases.values())) + IANA_NO_ALIASES,
     )
 )
@@ -403,7 +421,7 @@ IANA_SUPPORTED: List[str] = sorted(
 IANA_SUPPORTED_COUNT: int = len(IANA_SUPPORTED)
 
 # pre-computed code page that are similar using the function cp_similarity.
-IANA_SUPPORTED_SIMILAR: Dict[str, List[str]] = {
+IANA_SUPPORTED_SIMILAR: dict[str, list[str]] = {
     "cp037": ["cp1026", "cp1140", "cp273", "cp500"],
     "cp1026": ["cp037", "cp1140", "cp273", "cp500"],
     "cp1125": ["cp866"],
@@ -492,7 +510,7 @@ IANA_SUPPORTED_SIMILAR: Dict[str, List[str]] = {
 }
 
 
-CHARDET_CORRESPONDENCE: Dict[str, str] = {
+CHARDET_CORRESPONDENCE: dict[str, str] = {
     "iso2022_kr": "ISO-2022-KR",
     "iso2022_jp": "ISO-2022-JP",
     "euc_kr": "EUC-KR",
@@ -528,27 +546,48 @@ CHARDET_CORRESPONDENCE: Dict[str, str] = {
 }
 
 
-COMMON_SAFE_ASCII_CHARACTERS: Set[str] = {
-    "<",
-    ">",
-    "=",
-    ":",
-    "/",
-    "&",
-    ";",
-    "{",
-    "}",
-    "[",
-    "]",
-    ",",
-    "|",
-    '"',
-    "-",
-}
+COMMON_SAFE_ASCII_CHARACTERS: frozenset[str] = frozenset(
+    {
+        "<",
+        ">",
+        "=",
+        ":",
+        "/",
+        "&",
+        ";",
+        "{",
+        "}",
+        "[",
+        "]",
+        ",",
+        "|",
+        '"',
+        "-",
+        "(",
+        ")",
+    }
+)
 
+# Sample character sets — replace with full lists if needed
+COMMON_CHINESE_CHARACTERS = "的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果料象员革位入常文总次品式活设及管特件长求老头基资边流路级少图山统接知较将组见计别她手角期根论运农指几九区强放决西被干做必战先回则任取据处队南给色光门即保治北造百规热领七海口东导器压志世金增争济阶油思术极交受联什认六共权收证改清己美再采转更单风切打白教速花带安场身车例真务具万每目至达走积示议声报斗完类八离华名确才科张信马节话米整空元况今集温传土许步群广石记需段研界拉林律叫且究观越织装影算低持音众书布复容儿须际商非验连断深难近矿千周委素技备半办青省列习响约支般史感劳便团往酸历市克何除消构府太准精值号率族维划选标写存候毛亲快效斯院查江型眼王按格养易置派层片始却专状育厂京识适属圆包火住调满县局照参红细引听该铁价严龙飞"
 
-KO_NAMES: Set[str] = {"johab", "cp949", "euc_kr"}
-ZH_NAMES: Set[str] = {"big5", "cp950", "big5hkscs", "hz"}
+COMMON_JAPANESE_CHARACTERS = "日一国年大十二本中長出三時行見月分後前生五間上東四今金九入学高円子外八六下来気小七山話女北午百書先名川千水半男西電校語土木聞食車何南万毎白天母火右読友左休父雨"
+
+COMMON_KOREAN_CHARACTERS = "一二三四五六七八九十百千萬上下左右中人女子大小山川日月火水木金土父母天地國名年時文校學生"
+
+# Combine all into a frozenset
+COMMON_CJK_CHARACTERS = frozenset(
+    "".join(
+        [
+            COMMON_CHINESE_CHARACTERS,
+            COMMON_JAPANESE_CHARACTERS,
+            COMMON_KOREAN_CHARACTERS,
+        ]
+    )
+)
+
+KO_NAMES: frozenset[str] = frozenset({"johab", "cp949", "euc_kr"})
+ZH_NAMES: frozenset[str] = frozenset({"big5", "cp950", "big5hkscs", "hz"})
 
 # Logging LEVEL below DEBUG
 TRACE: int = 5
@@ -556,7 +595,7 @@ TRACE: int = 5
 
 # Language label that contain the em dash "—"
 # character are to be considered alternative seq to origin
-FREQUENCIES: Dict[str, List[str]] = {
+FREQUENCIES: dict[str, list[str]] = {
     "English": [
         "e",
         "a",
@@ -783,12 +822,12 @@ FREQUENCIES: Dict[str, List[str]] = {
     ],
     "Russian": [
         "о",
-        "а",
         "е",
+        "а",
         "и",
         "н",
-        "с",
         "т",
+        "с",
         "р",
         "в",
         "л",
@@ -811,106 +850,85 @@ FREQUENCIES: Dict[str, List[str]] = {
     ],
     # Jap-Kanji
     "Japanese": [
-        "人",
-        "一",
-        "大",
-        "亅",
-        "丁",
-        "丨",
-        "竹",
-        "笑",
-        "口",
         "日",
-        "今",
-        "二",
-        "彳",
-        "行",
+        "一",
+        "人",
+        "年",
+        "大",
         "十",
-        "土",
-        "丶",
-        "寸",
-        "寺",
-        "時",
-        "乙",
-        "丿",
-        "乂",
-        "气",
-        "気",
-        "冂",
-        "巾",
-        "亠",
-        "市",
-        "目",
-        "儿",
-        "見",
-        "八",
-        "小",
-        "凵",
-        "県",
-        "月",
-        "彐",
-        "門",
-        "間",
-        "木",
-        "東",
-        "山",
-        "出",
+        "二",
         "本",
         "中",
-        "刀",
+        "長",
+        "出",
+        "三",
+        "時",
+        "行",
+        "見",
+        "月",
         "分",
-        "耳",
-        "又",
-        "取",
-        "最",
-        "言",
-        "田",
-        "心",
-        "思",
-        "刂",
+        "後",
         "前",
-        "京",
-        "尹",
-        "事",
         "生",
-        "厶",
-        "云",
-        "会",
-        "未",
-        "来",
-        "白",
-        "冫",
-        "楽",
-        "灬",
-        "馬",
-        "尸",
-        "尺",
-        "駅",
-        "明",
-        "耂",
-        "者",
-        "了",
-        "阝",
-        "都",
-        "高",
-        "卜",
-        "占",
-        "厂",
-        "广",
-        "店",
-        "子",
-        "申",
-        "奄",
-        "亻",
-        "俺",
+        "五",
+        "間",
         "上",
-        "方",
-        "冖",
+        "東",
+        "四",
+        "今",
+        "金",
+        "九",
+        "入",
         "学",
-        "衣",
-        "艮",
+        "高",
+        "円",
+        "子",
+        "外",
+        "八",
+        "六",
+        "下",
+        "来",
+        "気",
+        "小",
+        "七",
+        "山",
+        "話",
+        "女",
+        "北",
+        "午",
+        "百",
+        "書",
+        "先",
+        "名",
+        "川",
+        "千",
+        "水",
+        "半",
+        "男",
+        "西",
+        "電",
+        "校",
+        "語",
+        "土",
+        "木",
+        "聞",
         "食",
-        "自",
+        "車",
+        "何",
+        "南",
+        "万",
+        "毎",
+        "白",
+        "天",
+        "母",
+        "火",
+        "右",
+        "読",
+        "友",
+        "左",
+        "休",
+        "父",
+        "雨",
     ],
     # Jap-Katakana
     "Japanese—": [
@@ -1993,3 +2011,45 @@ FREQUENCIES: Dict[str, List[str]] = {
 }
 
 LANGUAGE_SUPPORTED_COUNT: int = len(FREQUENCIES)
+
+# Bit flags for unified character classification.
+# A single unicodedata.name() call sets all relevant flags at once.
+_LATIN: int = 1
+_ACCENTUATED: int = 1 << 1
+_CJK: int = 1 << 2
+_HANGUL: int = 1 << 3
+_KATAKANA: int = 1 << 4
+_HIRAGANA: int = 1 << 5
+_THAI: int = 1 << 6
+_ARABIC: int = 1 << 7
+_ARABIC_ISOLATED_FORM: int = 1 << 8
+
+_ACCENT_KEYWORDS: tuple[str, ...] = (
+    "WITH GRAVE",
+    "WITH ACUTE",
+    "WITH CEDILLA",
+    "WITH DIAERESIS",
+    "WITH CIRCUMFLEX",
+    "WITH TILDE",
+    "WITH MACRON",
+    "WITH RING ABOVE",
+)
+
+# Pre-built lookup structures for FREQUENCIES (computed once at import time).
+# character -> rank mapping per language (replaces list .index() calls).
+_FREQUENCIES_RANK: dict[str, dict[str, int]] = {
+    lang: {char: rank for rank, char in enumerate(chars)}
+    for lang, chars in FREQUENCIES.items()
+}
+
+# frozenset per language (avoids rebuilding set() per call).
+_FREQUENCIES_SET: dict[str, frozenset[str]] = {
+    lang: frozenset(chars) for lang, chars in FREQUENCIES.items()
+}
+
+# prebuilt list of secondary range names.
+_SECONDARY_RANGE_NAMES: frozenset[str] = frozenset(
+    range_name
+    for range_name in UNICODE_RANGES_COMBINED
+    if any(keyword in range_name for keyword in UNICODE_SECONDARY_RANGE_KEYWORD)
+)

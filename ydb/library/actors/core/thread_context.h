@@ -68,7 +68,6 @@ namespace NActors {
         ui32 ExecutedEvents = 0;
         ui32 OverwrittenEventsPerMailbox = 0;
         ui64 OverwrittenTimePerMailboxTs = 0;
-        TStackVec<TActorId, 1> PreemptionSubscribed;
         bool IsNeededToWaitNextActivation = true;
         ESendingType SendingType = ESendingType::Common;
         NHPTimer::STime HPStart = 0;

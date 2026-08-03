@@ -257,25 +257,24 @@ void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
 
 void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
     const auto& liveOut = ctx.GetLiveOut(this);
-    TInfoUnitSet leftLive;
-    TInfoUnitSet rightLive;
+    TInfoUnitSet inputLive;
     for (const auto& column : Columns) {
         if (!liveOut.contains(column)) {
             continue;
         }
-        AddInfoUnit(leftLive, column);
-        AddInfoUnit(rightLive, column);
+        AddInfoUnit(inputLive, column);
     }
 
     // The union must keep at least one column; TPruneDeadUnionAllColumnsRule
     // retains the first declared column in the same case.
-    if (leftLive.empty() && !Columns.empty()) {
-        AddInfoUnit(leftLive, Columns.front());
-        AddInfoUnit(rightLive, Columns.front());
+    if (inputLive.empty() && !Columns.empty()) {
+        AddInfoUnit(inputLive, Columns.front());
     }
 
-    ctx.AddLiveInput(this, 0, leftLive);
-    ctx.AddLiveInput(this, 1, rightLive);
+    // Every input of the union sees the same set of live columns.
+    for (ui32 childIndex = 0; childIndex < Children.size(); ++childIndex) {
+        ctx.AddLiveInput(this, childIndex, inputLive);
+    }
 }
 
 void TOpLimit::PropagateLiveness(ILivenessContext& ctx) {
@@ -294,6 +293,20 @@ void TOpSort::PropagateLiveness(ILivenessContext& ctx) {
     }
     if (LimitCond) {
         ctx.AddExpressionDeps(*LimitCond, inputLive);
+    }
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
+void TOpTableLookup::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive;
+    AddInfoUnits(inputLive, LookupKeys);
+    if (IsJoin()) {
+        const auto& liveOut = ctx.GetLiveOut(this);
+        for (const auto& iu : GetInput()->GetOutputIUs()) {
+            if (liveOut.contains(iu)) {
+                AddInfoUnit(inputLive, iu);
+            }
+        }
     }
     ctx.AddLiveInput(this, 0, inputLive);
 }

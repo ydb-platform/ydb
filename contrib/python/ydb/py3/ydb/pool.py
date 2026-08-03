@@ -10,7 +10,7 @@ import random
 from typing import Any, Callable, ContextManager, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from . import connection as connection_impl, issues, resolver, _utilities, tracing
-from .opentelemetry.tracing import SpanName, create_ydb_span
+from .observability.tracing import SpanName, create_ydb_span
 from abc import abstractmethod
 
 from .connection import Connection, EndpointKey
@@ -159,6 +159,10 @@ class ConnectionsCache:
             self.preferred.pop(connection.endpoint, None)
             self.connections.pop(connection.endpoint, None)
             self.outdated.pop(connection.endpoint, None)
+
+    def get_connection_by_node_id(self, node_id: Optional[int]) -> Optional[Connection]:
+        with self.lock:
+            return self.connections_by_node_id.get(node_id)
 
 
 class Discovery(threading.Thread):
@@ -493,6 +497,15 @@ class ConnectionPool(IConnectionPool):
         connection.close()
         if self._discovery_thread:
             self._discovery_thread.notify_disconnected()
+
+    def _pessimize_node(self, node_id: int) -> None:
+        """Deprioritize the connection attached to the given YDB node."""
+        if node_id <= 0:
+            return
+
+        connection = self._store.get_connection_by_node_id(node_id)
+        if connection is not None:
+            self._on_disconnected(connection)
 
     def discovery_debug_details(self) -> str:
         """

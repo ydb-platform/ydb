@@ -54,12 +54,12 @@ def emit_feature(name: str, attrs: dict[str, Any]) -> Generator[str]:
     min_langver = parse_langver(attrs.get("min_langver", "unknown"))
     max_langver = parse_langver(attrs.get("max_langver", "unknown"))
 
-    yield f'const TFeature {name} = (TFeature{{'
+    yield f'inline constexpr TFeature {name} = TFeature::Checked({{'
     yield f'    .Name = "{name}",'
     yield f'    .Description = "{description}",'
     yield f'    .MinLangVer = {min_langver},'
     yield f'    .MaxLangVer = {max_langver},'
-    yield f'}}).Finish();'
+    yield f'}});'
     yield ""
 
 

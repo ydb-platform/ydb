@@ -196,7 +196,7 @@ private:
     }
 
     TMaybe<TString> GetContent(antlr4::tree::TerminalNode* node) const {
-        static RE2 Regex(R"re(["']([^"'\\]*)["'])re");
+        static const RE2 Regex(R"re(["']([^"'\\]*)["'])re");
 
         TString text = GetText(node);
         TString content;

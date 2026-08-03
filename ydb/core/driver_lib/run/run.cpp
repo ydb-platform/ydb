@@ -139,6 +139,7 @@
 #include <ydb/services/persqueue_v1/topic_deferred_publish.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/replication/grpc_service.h>
+#include <ydb/services/distributed_storage/grpc_service.h>
 #include <ydb/services/test_shard/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
@@ -883,6 +884,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["config"] = &hasConfig;
         TServiceCfg hasBridge = services.empty();
         names["bridge"] = &hasBridge;
+        TServiceCfg hasDistributedStorage = services.empty();
+        names["distributed_storage"] = &hasDistributedStorage;
         TServiceCfg hasTestShard = services.empty();
         names["test_shard"] = &hasTestShard;
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
@@ -1202,6 +1205,10 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
 
         if (hasBridge) {
             server.AddService(new NGRpcService::TBridgeGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+        }
+
+        if (hasDistributedStorage) {
+            server.AddService(new NGRpcService::TDistributedStorageGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (hasTestShard) {

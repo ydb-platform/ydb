@@ -1294,6 +1294,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             Runtime->GetActorSystem(0),
             TraceService.get(),
             Service.get(),
+            DiskDescription,
             TVChunkConfig::MakeDefault(
                 100,
                 DirectBlockGroupHostCount,
@@ -1329,8 +1330,12 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             "Enabled{+++++}",
             configBefore);
 
-        // Wait for DB request completed
-        DrainExecutor(executor);
+        // Reply UpdateConfig request.
+        {
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+            DrainExecutor(executor);
+        }
+
         TString configAfter;
         TString dirtyMapDDiskAfter;
 

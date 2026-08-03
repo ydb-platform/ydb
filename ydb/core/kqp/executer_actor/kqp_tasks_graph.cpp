@@ -2759,6 +2759,11 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
 
     auto columns = BuildKqpColumns(source, tableInfo);
     const auto& snapshot = GetMeta().Snapshot;
+    
+    if (stageInfo.Meta.PrunedPartitions.empty()) {
+        return Nothing();
+    }
+
     const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
     const bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0
         && partitions.size() > source.GetSequentialInFlightShards();
@@ -3641,10 +3646,6 @@ TString TKqpTasksGraph::DumpToString() const {
 void TKqpTasksGraph::CountScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode) {
     const auto& stageId = stageInfo.Id;
     const auto& stage = stageInfo.Meta.GetStage(stageId);
-    const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
-    const auto& source = stage.GetSources(0).GetReadRangesSource();
-    bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
-    bool singlePartitionedStage = stage.GetIsSinglePartition();
 
     std::list<TStageId> inputs;
     for (const auto& input : stage.GetInputs()) {
@@ -3654,9 +3655,13 @@ void TKqpTasksGraph::CountScanTasksFromSource(TStageInfo& stageInfo, bool limitT
     const auto stageType = stage.GetTaskCount() ? TMaxTasksGraph::FIXED : TMaxTasksGraph::ANY;
     MaxTasksGraph->AddStage(stageInfo, stageType, inputs);
 
-    if (partitions.empty()) {
+    if (stageInfo.Meta.PrunedPartitions.empty() || stageInfo.Meta.PrunedPartitions.at(0).empty()) {
         return;
     }
+    const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
+    const auto& source = stage.GetSources(0).GetReadRangesSource();
+    bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
+    bool singlePartitionedStage = stage.GetIsSinglePartition();
 
     if (isSequentialInFlight || singlePartitionedStage) {
         ui64 nodeId = 0;

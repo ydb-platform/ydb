@@ -1,5 +1,7 @@
 #include "ic_storage_transport_actor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 
@@ -125,9 +127,12 @@ void RejectRequestsForNode(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TActorId CreateTransportActor(const TString& diskId, ui32 dbgIndex)
+TActorId CreateTransportActor(
+    const TDiskDescription& diskDescription,
+    ui32 dbgIndex)
 {
-    auto actor = std::make_unique<TICStorageTransportActor>(diskId, dbgIndex);
+    auto actor =
+        std::make_unique<TICStorageTransportActor>(diskDescription, dbgIndex);
 
     return TActivationContext::Register(
         actor.release(),
@@ -139,12 +144,14 @@ TActorId CreateTransportActor(const TString& diskId, ui32 dbgIndex)
 ////////////////////////////////////////////////////////////////////////////////
 
 TICStorageTransportActor::TICStorageTransportActor(
-    const TString& diskId,
+    const TDiskDescription& diskDescription,
     ui32 dbgIndex)
     : LogTitle(
           GetCycleCount(),
           TLogTitle::TInterconnectTransport{
-              .DiskId = diskId,
+              .DiskId = diskDescription.DiskId,
+              .TabletId = diskDescription.TabletId,
+              .Generation = diskDescription.Generation,
               .DBGIndex = dbgIndex})
 {}
 
@@ -1024,7 +1031,7 @@ void TICStorageTransportActor::HandleReadResult(
             SgListCopy(CreateSgList(ev->Get()->GetPayload()), sglist);
             request.Promise.SetValue(std::move(ev->Get()->Record));
         } else {
-            LOG_INFO(
+            LOG_DEBUG(
                 ctx,
                 NKikimrServices::NBS_PARTITION,
                 "%s Received TEvReadResult with requestId# %lu was failed - "

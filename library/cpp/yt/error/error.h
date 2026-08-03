@@ -164,9 +164,9 @@ public:
     void ThrowOnError(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) &&;
     inline void ThrowOnError() &&;
 
-    template <CInvocable<bool(const TError&)> TFilter>
+    template <NMpl::CInvocable<bool(const TError&)> TFilter>
     std::optional<TError> FindMatching(const TFilter& filter) const;
-    template <CInvocable<bool(TErrorCode)> TFilter>
+    template <NMpl::CInvocable<bool(TErrorCode)> TFilter>
     std::optional<TError> FindMatching(const TFilter& filter) const;
     std::optional<TError> FindMatching(TErrorCode code) const;
     std::optional<TError> FindMatching(const THashSet<TErrorCode>& codes) const;
@@ -370,10 +370,8 @@ void ThrowErrorExceptionIfFailed(TErrorLike&& error);
     ::NYT::NDetail::ThrowErrorExceptionIfFailed((error) __VA_OPT__(,) __VA_ARGS__) \
 
 #define THROW_ERROR_EXCEPTION_UNLESS(condition, head, ...) \
-    if ((condition)) {\
-    } else { \
-        THROW_ERROR ::NYT::TError(head __VA_OPT__(,) __VA_ARGS__); \
-    }
+    if ((condition)) {} else \
+        THROW_ERROR ::NYT::TError(head __VA_OPT__(,) __VA_ARGS__)
 
 #define THROW_ERROR_EXCEPTION_IF(condition, head, ...) \
     THROW_ERROR_EXCEPTION_UNLESS(!(condition), head, __VA_ARGS__)

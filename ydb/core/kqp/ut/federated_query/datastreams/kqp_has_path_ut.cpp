@@ -25,41 +25,6 @@ TString RejectClassifierDdl(TStringBuf classifierName, TStringBuf hasPath) {
     )";
 }
 
-void WaitClassifierVisible(TStreamingTestFixture& fixture,
-                           const std::string& classifierName,
-                           TDuration timeout = TDuration::Seconds(20))
-{
-    const auto probe = fmt::format(R"(
-        SELECT COUNT(*) FROM `.metadata/workload_manager/classifiers/resource_pool_classifiers`
-        WHERE name = "{name}";
-    )", "name"_a = classifierName);
-
-    auto session = fixture.GetQueryClient()->GetSession().GetValueSync().GetSession();
-    const auto execSettings = NYdb::NQuery::TExecuteQuerySettings()
-        .ResourcePool(std::string(NResourcePool::DEFAULT_POOL_ID));
-    const auto deadline = TInstant::Now() + timeout;
-
-    while (TInstant::Now() < deadline) {
-        auto result = session.ExecuteQuery(
-            probe, NYdb::NQuery::TTxControl::NoTx(), execSettings).ExtractValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
-            result.GetIssues().ToOneLineString());
-
-        NYdb::TResultSetParser parser(result.GetResultSet(0));
-        UNIT_ASSERT(parser.TryNextRow());
-
-        if (parser.ColumnParser(0).GetUint64() == 1) {
-            Sleep(TDuration::MilliSeconds(500));  // pad for workload service snapshot refresh
-            return;
-        }
-
-        Sleep(TDuration::MilliSeconds(200));
-    }
-
-    UNIT_ASSERT_C(false, "Classifier '" << classifierName << "' not visible within " << timeout);
-}
-
 }  // anonymous namespace
 
 
@@ -83,7 +48,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
         ExecSchemeQuery(RejectClassifierDdl(
             "hp_direct_topic", "/Root/test_topic"));
 
-        WaitClassifierVisible(*this, "hp_direct_topic");
+        WaitForClassifierPropagation();
 
         ExecQuery(R"(
             SELECT * FROM `/Root/test_topic` WITH (
@@ -105,7 +70,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
         ExecSchemeQuery(RejectClassifierDdl(
             "hp_cdc", "/Root/t_cdc/cf"));
 
-        WaitClassifierVisible(*this, "hp_cdc");
+        WaitForClassifierPropagation();
 
         ExecSchemeQuery(R"(
             CREATE TABLE t_cdc (
@@ -141,7 +106,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
         ExecSchemeQuery(RejectClassifierDdl(
             "hp_eds_local", "/Root/eds"));
 
-        WaitClassifierVisible(*this, "hp_eds_local");
+        WaitForClassifierPropagation();
 
         ExecSchemeQuery(fmt::format(R"(
             CREATE EXTERNAL DATA SOURCE eds WITH (
@@ -177,7 +142,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
         ExecSchemeQuery(RejectClassifierDdl(
             "hp_remote_name", "/remote_by_name_topic"));
 
-        WaitClassifierVisible(*this, "hp_remote_name");
+        WaitForClassifierPropagation();
 
         ExecSchemeQuery(fmt::format(R"(
             CREATE EXTERNAL DATA SOURCE eds WITH (
@@ -207,7 +172,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
         ExecSchemeQuery(RejectClassifierDdl(
             "hp_et", "/Root/et_s3"));
 
-        WaitClassifierVisible(*this, "hp_et");
+        WaitForClassifierPropagation();
 
         ExecSchemeQuery(R"(
             CREATE EXTERNAL DATA SOURCE eds_s3 WITH (

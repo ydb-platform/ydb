@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(SupportLinksSourceValidation) {
         return NMVP::TMVP(1, argv);
     }
 
-    Y_UNIT_TEST(RejectsMissingSourceInConfig) {
+    Y_UNIT_TEST(AllowsUrlSourceWithoutSourceField) {
         auto mvp = MakeTestMvp();
         const TString yaml = R"(
 generic:
@@ -149,7 +149,51 @@ meta:
         url: "https://example.test"
 )";
         const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(mvp.TryGetMetaOptionsFromConfig(appConfig), yexception, "source is required");
+        UNIT_ASSERT_NO_EXCEPTION(mvp.TryGetMetaOptionsFromConfig(appConfig));
+    }
+
+    Y_UNIT_TEST(UrlSourceRejectsGrafanaOnlyFields) {
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  support_links:
+    cluster:
+      - title: "Broken"
+        url: "https://example.test"
+        tag: ["ui-cluster"]
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            mvp.TryGetMetaOptionsFromConfig(appConfig),
+            yexception,
+            "tag is not supported for source=url"
+        );
+    }
+
+    Y_UNIT_TEST(NonUrlSourceRejectsTemplatePlaceholdersInUrl) {
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  support_links:
+    cluster:
+      - source: "grafana/dashboard"
+        title: "Broken"
+        url: "/d/{dashboard}"
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            mvp.TryGetMetaOptionsFromConfig(appConfig),
+            yexception,
+            "url template placeholders are not supported for source=grafana/dashboard"
+        );
     }
 
     Y_UNIT_TEST(UnsupportedSourceInConfigThrows) {

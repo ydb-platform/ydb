@@ -2,9 +2,9 @@
 
 #include "public.h"
 
-#include "mpl.h"
-
 #include <library/cpp/yt/compact_containers/compact_vector.h>
+
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <variant>
 

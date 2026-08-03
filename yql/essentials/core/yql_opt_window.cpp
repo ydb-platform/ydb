@@ -3868,6 +3868,7 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos,
         for (auto chunk : frameChunks) {
             YQL_ENSURE(!chunk.empty());
             if (TCoWinFilter::Match(chunk.front().Get())) {
+                YQL_ENSURE(!sessionKeyType, "WinFilter is not supported for session window");
                 processed = ApplyWinFilters(processed, chunk, ctx);
             } else {
                 auto nonFilterFrames = ctx.NewList(frames->Pos(), std::move(chunk));

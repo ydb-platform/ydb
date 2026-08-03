@@ -401,7 +401,8 @@ private:
         SrcColumns.reserve(entry.Columns.size());
         THashSet<TString> HasInternalConversion;
 
-        bool fillBuildInProgressColumns = AllowWriteToPrivateTable && AllowWriteToIndexImplTable && !IsIndexImplTable;
+        const bool fillBuildInProgressColumns = AllowWriteToPrivateTable && AllowWriteToIndexImplTable && !IsIndexImplTable;
+        const bool isPublicBulkUpsert = !AllowWriteToPrivateTable && !AllowWriteToIndexImplTable;
 
         for (const auto& [_, colInfo] : entry.Columns) {
             ui32 id = colInfo.Id;
@@ -422,6 +423,12 @@ private:
 
             if (colInfo.IsDefaultFromLiteral()) {
                 defaultColumnsLeft.insert(name);
+            }
+
+            if (colInfo.IsDefaultFromExpression() && colInfo.DefaultExpression->Stored && isPublicBulkUpsert) {
+                return TConclusionStatus::Fail(TStringBuilder()
+                    << "Bulk upsert is not supported for tables with STORED generated columns: column "
+                    << name);
             }
         }
 

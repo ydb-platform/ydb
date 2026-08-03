@@ -122,6 +122,12 @@ TTaggedPayloadReader::TTaggedPayloadReader(const TTaggedLogEventPayload& payload
     , End_(payload.Underlying().End())
 { }
 
+TTaggedPayloadReader::TTaggedPayloadReader(TLoggingTagListPayloadView tags)
+    : Current_(tags.Underlying().begin())
+    , End_(tags.Underlying().end())
+    , MessageRead_(true)
+{ }
+
 TStringBuf TTaggedPayloadReader::ReadMessage()
 {
     YT_ASSERT(!MessageRead_);

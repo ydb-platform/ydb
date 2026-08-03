@@ -386,7 +386,11 @@ namespace NKikimr::NStorage {
         if (msg.ErrorReason) {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
         } else {
-            Finish(TResult::OK, std::nullopt);
+            Finish(TResult::OK, std::nullopt, [&](TResult *record) {
+                if (ReassignGroupDiskResult) {
+                    record->MutableReassignGroupDisk()->CopyFrom(*ReassignGroupDiskResult);
+                }
+            });
         }
     }
 

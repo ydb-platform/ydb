@@ -4,7 +4,6 @@
 #include "opentelemetry/exporters/otlp/otlp_http_log_record_exporter_options.h"
 #include "opentelemetry/exporters/otlp/otlp_environment.h"
 #include "opentelemetry/exporters/otlp/otlp_http.h"
-#include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE

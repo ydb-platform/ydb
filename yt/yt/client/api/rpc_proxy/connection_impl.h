@@ -35,7 +35,7 @@ public:
 
     // IConnection implementation.
     TClusterTag GetClusterTag() const override;
-    const std::string& GetLoggingTag() const override;
+    const NLogging::TLoggingTagList& GetLoggingTags() const override;
     const std::string& GetClusterId() const override;
     const std::optional<std::string>& GetClusterName() const override;
     const std::optional<NAuth::TTvmId>& GetTvmId() const override;
@@ -67,7 +67,7 @@ private:
     std::atomic<bool> ProxyListUpdateStarted_ = false;
 
     const TGuid ConnectionId_;
-    const std::string LoggingTag_;
+    const NLogging::TLoggingTagList LoggingTags_;
     const std::string ClusterId_;
     const NLogging::TLogger Logger;
     const NRpc::IChannelFactoryPtr ChannelFactory_;

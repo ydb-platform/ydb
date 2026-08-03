@@ -1,5 +1,6 @@
 #include "kafka_init_producer_id_actor.h"
 #include "kafka_init_producer_id_actor_sql.h"
+#include "kafka_metadata_service.h"
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/kqp_helper.h>
@@ -55,16 +56,27 @@ namespace NKafka {
 
     void TKafkaInitProducerIdActor::Bootstrap(const NActors::TActorContext& ctx) {
         if (IsTransactionalProducerInitialization()) {
+            if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+                YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.",
+                {LogPrefix()});
+                SendResponseFail(EKafkaErrors::INVALID_TXN_STATE, "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+                Die(ctx);
+                return;
+            }
             if (!TxnTimeoutIsValid()) {
                 TString error = TStringBuilder() << "Transactional producer initialization failed. Invalid transaction timeout: " << TransactionTimeoutMs.value() << ". Maximum allowed: " << GetMaxAllowedTransactionTimeoutMs();
                 SendResponseFail(EKafkaErrors::INVALID_TRANSACTION_TIMEOUT, error);
                 Die(ctx);
                 return;
             }
-            Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+            if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+                Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+            } else {
+                Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+            }
             YDB_LOG_DEBUG("Bootstrapping actor for transactional producer. Sending init table request to KQP",
                 {LogPrefix()});
-            if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+            if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() && Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
                 Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
             } else {
                 Kqp->SendCreateSessionRequest(ctx);
@@ -131,6 +143,12 @@ namespace NKafka {
 
         if (kafkaErr != EKafkaErrors::NONE_ERROR) {
             auto kqpQueryError = TStringBuilder() <<" Kqp error. Status# " << status << ", ";
+
+            if (TryRequestProducerMetadataTablesCreation(status, GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
+                SendResponseFail(COORDINATOR_NOT_AVAILABLE, kqpQueryError);
+                Die(ctx);
+                return;
+            }
 
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
@@ -384,8 +402,12 @@ namespace NKafka {
         return std::regex_replace(
             templateStr.c_str(),
             std::regex("<table_name>"),
-            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
+            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()
         );
+    }
+
+    TString TKafkaInitProducerIdActor::GetMetadataDatabasePath() const {
+        return NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
     }
 
     NActors::NStructuredLog::TStructuredMessage TKafkaInitProducerIdActor::LogPrefix() {

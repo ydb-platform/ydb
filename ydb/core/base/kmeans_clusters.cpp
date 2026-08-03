@@ -341,13 +341,16 @@ public:
     }
 
     void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        clusters.clear();
         if (!IsExpectedFormat(embedding)) {
             return;
         }
-        clusters.clear();
         for (ui32 i = 0; const auto& cluster : Clusters) {
             auto cl = std::make_pair(i, (double)TMetric::Distance(cluster, embedding));
-            auto it = std::lower_bound(clusters.begin(), clusters.end(), cl, [](const std::pair<ui32, double>& a, const std::pair<ui32, double>& b) {
+            // upper_bound, not lower_bound: on equal distances the cluster with the lower number wins,
+            // the same way as in FindCluster(). Otherwise rows may be assigned to different clusters
+            // during the K-means and the upload passes of the index build.
+            auto it = std::upper_bound(clusters.begin(), clusters.end(), cl, [](const std::pair<ui32, double>& a, const std::pair<ui32, double>& b) {
                 return a.second < b.second;
             });
             if (clusters.size() < n) {

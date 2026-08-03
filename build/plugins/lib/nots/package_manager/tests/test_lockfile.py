@@ -98,9 +98,52 @@ def test_lockfile_get_packages_meta_ok():
 
     assert len(packages) == 1
     assert pkg.tarball_url == "@babel%2fcli/-/cli-7.6.2.tgz"
+    assert pkg.tarball_path == "@babel/cli/-/cli-7.6.2.tgz"
     assert pkg.sky_id == "rbtorrent:cb1849da3e4947e56a8f6bde6a1ec42703ddd187"
     assert pkg.integrity == "JDZ+T/br9pPfT2lmAMJypJDTTTHM9ePD/ED10TRjRzJVdEVy+JB3iRlhzYmTt5YkNgHvxWGlUVnLtdv6ruiDrQ=="
     assert pkg.integrity_algorithm == "sha512"
+
+
+def test_lockfile_get_packages_meta_scoped_tarball_with_literal_slash():
+    lf = Lockfile(path="/pnpm-lock.yaml")
+    lf.data = {
+        "packages": {
+            "@types/semver@7.7.1": {
+                "resolution": {
+                    "integrity": "sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==",
+                    "tarball": "https://npm.yandex-team.ru/@types/semver/-/semver-7.7.1.tgz",
+                },
+            },
+        },
+    }
+
+    packages = list(lf.get_packages_meta())
+
+    assert len(packages) == 1
+    assert packages[0].tarball_path == "@types/semver/-/semver-7.7.1.tgz"
+
+
+def test_lockfile_get_packages_meta_scoped_tarball_with_scope_in_filename():
+    lf = Lockfile(path="/pnpm-lock.yaml")
+    lf.data = {
+        "packages": {
+            "@yandex-lego/storybook-deploy@0.2.1": {
+                "resolution": {
+                    "integrity": "sha512-Z21GgVKGvxWmuBSo5d6OOMqYsYJaw5AMI63uPHJDmpxxrCmRy3VDWuA7Oi3IObaPofVVWZ/BO1op5m4qjRAEgw==",
+                    "tarball": "https://npm.yandex-team.ru/@yandex-lego/storybook-deploy/-/@yandex-lego/storybook-deploy-0.2.1.tgz",
+                },
+            },
+        },
+    }
+
+    packages = list(lf.get_packages_meta())
+
+    assert len(packages) == 1
+    assert packages[0].tarball_path == "@yandex-lego/storybook-deploy/-/storybook-deploy-0.2.1.tgz"
+    assert packages[0].to_uri() == (
+        "https://npm.yandex-team.ru/@yandex-lego/storybook-deploy/-/storybook-deploy-0.2.1.tgz"
+        "#integrity=sha512-Z21GgVKGvxWmuBSo5d6OOMqYsYJaw5AMI63uPHJDmpxxrCmRy3VDWuA7Oi3IObaPofVVWZ/BO1op5m4qjRAEgw=="
+    )
 
 
 def test_lockfile_get_packages_skip_directory():

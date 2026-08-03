@@ -28,11 +28,12 @@ from . import cfuncs
 from . import f90mod_rules
 from . import __version__
 from . import capi_maps
+from .cfuncs import errmess
 from numpy.f2py._backends import f2py_build_generator
 
 f2py_version = __version__.version
 numpy_version = __version__.version
-errmess = sys.stderr.write
+
 # outmess=sys.stdout.write
 show = pprint.pprint
 outmess = auxfuncs.outmess
@@ -172,7 +173,6 @@ Extra options (only effective with -c):
   Using the following macros may be required with non-gcc Fortran
   compilers:
     -DPREPEND_FORTRAN -DNO_APPEND_FORTRAN -DUPPERCASE_FORTRAN
-    -DUNDERSCORE_G77
 
   When using -DF2PY_REPORT_ATEXIT, a performance report of F2PY
   interface is printed out at exit (platforms: Linux).
@@ -636,10 +636,14 @@ def run_compile():
         r'--((f(90)?compiler(-exec|)|compiler)=|help-compiler)')
     flib_flags = [_m for _m in sys.argv[1:] if _reg3.match(_m)]
     sys.argv = [_m for _m in sys.argv if _m not in flib_flags]
-    _reg4 = re.compile(
-        r'--((f(77|90)(flags|exec)|opt|arch)=|(debug|noopt|noarch|help-fcompiler))')
-    fc_flags = [_m for _m in sys.argv[1:] if _reg4.match(_m)]
-    sys.argv = [_m for _m in sys.argv if _m not in fc_flags]
+    # TODO: Once distutils is dropped completely, i.e. min_ver >= 3.12, unify into --fflags
+    reg_f77_f90_flags = re.compile(r'--f(77|90)flags=')
+    reg_distutils_flags = re.compile(r'--((f(77|90)exec|opt|arch)=|(debug|noopt|noarch|help-fcompiler))')
+    fc_flags = [_m for _m in sys.argv[1:] if reg_f77_f90_flags.match(_m)]
+    distutils_flags = [_m for _m in sys.argv[1:] if reg_distutils_flags.match(_m)]
+    if not (MESON_ONLY_VER or backend_key == 'meson'):
+        fc_flags.extend(distutils_flags)
+    sys.argv = [_m for _m in sys.argv if _m not in (fc_flags + distutils_flags)]
 
     del_list = []
     for s in flib_flags:

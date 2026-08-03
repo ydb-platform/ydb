@@ -1,5 +1,6 @@
 #include "interconnect_tcp_session_v2.h"
 #include "interconnect_tcp_proxy.h"
+#include "subscriber_liveness_checker.h"
 
 #include <util/stream/str.h>
 #include <util/string/cast.h>
@@ -56,6 +57,10 @@ namespace NActors {
         Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(0);
         SetPrefix(Sprintf("SessionV2 %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
+        if (const TDuration interval = Proxy->Common->Settings.SubscriberLivenessCheckInterval;
+                interval != TDuration::Zero()) {
+            Schedule(interval, new TEvPrivate::TEvCheckSubscriberLiveness);
+        }
         LOG_INFO_IC_SESSION("ICS90", "v2 session created");
     }
 
@@ -78,8 +83,8 @@ namespace NActors {
             as->Send(selfId, new TEvPrivate::TEvTerminate(reason));
         };
         SetNonBlock(*Socket, false);
-        EngineHandle = Proxy->Common->UringEngineV2->Register(Socket, SelfId(),
-            Proxy->Common->Settings.ChecksumInterconnectSessionV2, Params.PeerScopeId, onDisconnectCallback);
+        EngineHandle = Proxy->Common->UringEngineV2->Register(Socket, SelfId(), Params.PeerScopeId,
+            onDisconnectCallback, SelfId().NodeId() < Proxy->PeerNodeId, ClockSkew, PingRTT);
         if (!EngineHandle) {
             LOG_ERROR_IC_SESSION("ICS99", "v2 io_uring engine failed to register the connection");
             return Terminate(TDisconnectReason::LostConnection());
@@ -106,8 +111,8 @@ namespace NActors {
             XdcSocket->Shutdown(SHUT_RDWR);
         }
 
-        for (const auto& [actorId, cookie] : Subscribers) {
-            Send(actorId, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, cookie);
+        for (const auto& [actorId, info] : Subscribers) {
+            Send(actorId, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, info.Cookie);
         }
         Subscribers.clear();
 
@@ -143,8 +148,11 @@ namespace NActors {
         Terminate(TDisconnectReason::UserRequest());
     }
 
-    void TInterconnectSessionTCPv2::AddSubscriber(const TActorId& actorId, ui64 cookie) {
-        Subscribers[actorId] = cookie;
+    void TInterconnectSessionTCPv2::AddSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex) {
+        Subscribers[actorId] = {
+            .Cookie = cookie,
+            .ActivityIndex = activityIndex,
+        };
     }
 
     IEventBase* TInterconnectSessionTCPv2::MakeNodeConnectedEvent() const {
@@ -152,7 +160,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCPv2::EnqueueOutgoing(TAutoPtr<IEventHandle> ev) {
-        if (Proxy->Common->Settings.EnablePreserializeInV2) {
+        if (Proxy->Common->Settings.V2.EnablePreserializeEvents) {
             ev->Preserialize();
         }
         Proxy->Common->UringEngineV2->Send(EngineHandle, std::unique_ptr<IEventHandle>(ev.Release()));
@@ -171,7 +179,7 @@ namespace NActors {
         Proxy->ValidateEvent(ev, "ForwardWithSubscribe");
         auto msg = ev->Release<TEvForwardSubscribeSession>();
         Y_ABORT_UNLESS(msg->Event);
-        AddSubscriber(msg->Event->Sender, msg->Event->Cookie);
+        AddSubscriber(msg->Event->Sender, msg->Event->Cookie, msg->ActivityIndex);
         Send(msg->Event->Sender, MakeNodeConnectedEvent(), 0, msg->Event->Cookie);
         EnqueueOutgoing(TAutoPtr<IEventHandle>(msg->Event.Release()));
     }
@@ -187,25 +195,31 @@ namespace NActors {
         Subscribers.erase(ev->Sender);
     }
 
+    void TInterconnectSessionTCPv2::CheckSubscriberLiveness() {
+        const TDuration interval = Proxy->Common->Settings.SubscriberLivenessCheckInterval;
+        if (interval == TDuration::Zero()) {
+            return;
+        }
+
+        RegisterSubscriberLivenessChecker(SelfId(), Subscribers);
+        Schedule(interval, new TEvPrivate::TEvCheckSubscriberLiveness);
+    }
+
     void TInterconnectSessionTCPv2::HandlePoison() {
         Terminate(TDisconnectReason::UserRequest());
     }
 
     void TInterconnectSessionTCPv2::GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) {
-        TStringStream str;
-        ev->Get()->Output(str);
+        TStringOutput str(const_cast<TString&>(static_cast<NMon::TEvHttpInfoRes*>(ev->Get())->Answer));
         str << "<div class=\"panel panel-info\">"
                "<div class=\"panel-heading\">Session (v2)</div>"
                "<div class=\"panel-body\">";
         str << "<table class=\"table\">";
-//        str << "<tr><td>Registered</td><td>" << (Registered ? "true" : "false") << "</td></tr>";
         str << "<tr><td>EngineHandle</td><td>" << EngineHandle << "</td></tr>";
-//        str << "<tr><td>OutstandingWrites</td><td>" << PendingBatches.size() << "</td></tr>";
-        str << "<tr><td>BytesSent</td><td>" << BytesSent << "</td></tr>";
-        str << "<tr><td>BytesReceived</td><td>" << BytesReceived << "</td></tr>";
+        str << "<tr><td>Subscribers.size()</td><td>" << Subscribers.size() << "</td></tr>";
         str << "</table>";
         str << "</div></div>";
-        TActivationContext::Send(new IEventHandle(ev->Recipient, ev->Sender, new NMon::TEvHttpInfoRes(str.Str())));
+        Proxy->Common->UringEngineV2->IssueMonRequest(EngineHandle, std::move(ev));
     }
 
 }

@@ -2076,6 +2076,80 @@ namespace NKikimr::NDDisk {
         Send(ev->Sender, std::move(reply), 0, ev->Cookie);
     }
 
+    bool TDDiskActor::HasPersistentBufferInflightForTablet(ui64 tabletId) const {
+        // A single scan over PersistentBufferDiskOperationInflight is sufficient: every in-flight
+        // persistent-buffer disk operation (write, batched write, erase, barrier/fast erase, read)
+        // registers exactly one entry here, and each entry's Records carry the owning TabletId. The
+        // map is bounded by the disk operations inflight limit, so this scan is cheap.
+        for (const auto& [_, inflight] : PersistentBufferDiskOperationInflight) {
+            for (const auto& record : inflight.Records) {
+                if (record.TabletId == tabletId) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    void TDDiskActor::ReplyListPersistentBuffer(TEventHandle<TEvListPersistentBuffer>& ev) {
+        const auto& record = ev.Get()->Record;
+        const TQueryCredentials creds(record.GetCredentials());
+
+        Counters.Interface.ListPersistentBuffer.Request(0);
+
+        auto reply = std::make_unique<TEvListPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        auto& rr = reply->Record;
+        rr.SetBarrierLsn(PersistentBufferBarriersManager.GetBarrier(creds.TabletId).Lsn);
+        for (auto it = PersistentBuffers.lower_bound({creds.TabletId, 0}); it != PersistentBuffers.end() &&
+                it->first.TabletId == creds.TabletId; ++it) {
+            const TPersistentBuffer& buffer = it->second;
+            for (const auto& [lsn, pr] : buffer.Records) {
+                auto *pb = rr.AddRecords();
+                auto *sel = pb->MutableSelector();
+                sel->SetVChunkIndex(pr.VChunkIndex);
+                sel->SetOffsetInBytes(pr.OffsetInBytes);
+                sel->SetSize(pr.Size);
+                pb->SetGeneration(it->first.Generation);
+                pb->SetLsn(lsn);
+            }
+        }
+
+        Counters.Interface.ListPersistentBuffer.Reply(true, 0);
+        SendReply(ev, std::move(reply));
+    }
+
+    void TDDiskActor::ProcessListPersistentBuffer(TAutoPtr<TEventHandle<TEvListPersistentBuffer>> ev, ui32 retriesLeft) {
+        const auto& record = ev->Get()->Record;
+        const TQueryCredentials creds(record.GetCredentials());
+
+        if (HasPersistentBufferInflightForTablet(creds.TabletId)) {
+            if (retriesLeft == 0) {
+                YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::ProcessListPersistentBuffer retries exhausted, replying with error",
+                    {"marker", "BSPB"},
+                    {"PBufferId", SelfId()},
+                    {"tabletId", creds.TabletId});
+                Counters.Interface.ListPersistentBuffer.Request(0);
+                Counters.Interface.ListPersistentBuffer.Reply(false, 0);
+                SendReply(*ev, std::make_unique<TEvListPersistentBufferResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED,
+                    TStringBuilder() << "persistent buffer disk operation still in flight for tablet "
+                        << creds.TabletId << " after " << PersistentBufferFormat.ListPersistentBufferMaxRetries
+                        << " retries"));
+                return;
+            }
+            YDB_LOG_TRACE_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::ProcessListPersistentBuffer waiting for inflight to drain",
+                {"marker", "BSPB"},
+                {"PBufferId", SelfId()},
+                {"tabletId", creds.TabletId},
+                {"retriesLeft", retriesLeft});
+            Schedule(TDuration::MilliSeconds(PersistentBufferFormat.ListPersistentBufferRetryPeriodMilliseconds),
+                new TEvPrivate::TEvRetryListPersistentBuffer(ev, retriesLeft - 1));
+            return;
+        }
+
+        ReplyListPersistentBuffer(*ev);
+    }
+
     void TDDiskActor::Handle(TEvListPersistentBuffer::TPtr ev) {
         if (!CheckQuery(*ev, &Counters.Interface.ListPersistentBuffer)) {
             return;
@@ -2102,30 +2176,11 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        const auto& record = ev->Get()->Record;
-        const TQueryCredentials creds(record.GetCredentials());
+        ProcessListPersistentBuffer(ev.Release(), PersistentBufferFormat.ListPersistentBufferMaxRetries);
+    }
 
-        Counters.Interface.ListPersistentBuffer.Request(0);
-
-        auto reply = std::make_unique<TEvListPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-        auto& rr = reply->Record;
-        rr.SetBarrierLsn(PersistentBufferBarriersManager.GetBarrier(creds.TabletId).Lsn);
-        for (auto it = PersistentBuffers.lower_bound({creds.TabletId, 0}); it != PersistentBuffers.end() &&
-                it->first.TabletId == creds.TabletId; ++it) {
-            const TPersistentBuffer& buffer = it->second;
-            for (const auto& [lsn, pr] : buffer.Records) {
-                auto *pb = rr.AddRecords();
-                auto *sel = pb->MutableSelector();
-                sel->SetVChunkIndex(pr.VChunkIndex);
-                sel->SetOffsetInBytes(pr.OffsetInBytes);
-                sel->SetSize(pr.Size);
-                pb->SetGeneration(it->first.Generation);
-                pb->SetLsn(lsn);
-            }
-        }
-
-        Counters.Interface.ListPersistentBuffer.Reply(true, 0);
-        SendReply(*ev, std::move(reply));
+    void TDDiskActor::Handle(TEvPrivate::TEvRetryListPersistentBuffer::TPtr ev) {
+        ProcessListPersistentBuffer(ev->Get()->Ev, ev->Get()->RetriesLeft);
     }
 
     TString TDDiskActor::PersistentBufferToString() {

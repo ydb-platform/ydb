@@ -8,6 +8,7 @@
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/public/list_topics/list_all_topics_actor.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -123,7 +124,7 @@ void TKafkaMetadataActor::ProcessTopicsFromRequest() {
 }
 
 void TKafkaMetadataActor::HandleListTopics(NKikimr::TEvPQ::TEvListAllTopicsResponse::TPtr& ev) {
-    Y_ABORT_UNLESS(PendingResponses > 0);
+    AFL_ENSURE(PendingResponses > 0)("pending", PendingResponses)("database", Context->DatabasePath);
     PendingResponses--;
     auto topics = std::move(ev->Get()->Topics);
     Response->Topics.resize(topics.size());
@@ -355,6 +356,35 @@ void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port)
     }
 }
 
+void TKafkaMetadataActor::EnsureBrokersAndController() {
+    // Unknown topics used to return brokers=[]; AdminClient then cannot CreateTopics.
+    // NeedAllNodes also requires the full discovered broker set.
+    if (!WithProxy && (Response->Brokers.empty() || NeedAllNodes)) {
+        for (const auto& [id, nodeInfo] : Nodes) {
+            AddBroker(id, nodeInfo.Host, nodeInfo.Port);
+        }
+    }
+
+    // ControllerId must be one of Brokers (SelfID may differ from discovery node ids).
+    if (Response->Brokers.empty()) {
+        return;
+    }
+
+    for (const auto& broker : Response->Brokers) {
+        if (broker.NodeId == Response->ControllerId) {
+            return;
+        }
+    }
+
+    // Prefer keeping ControllerId if that node is known from discovery.
+    if (auto it = Nodes.find(Response->ControllerId); it != Nodes.end()) {
+        AddBroker(it->first, it->second.Host, it->second.Port);
+        return;
+    }
+
+    Response->ControllerId = Response->Brokers.front().NodeId;
+}
+
 void TKafkaMetadataActor::ApplyPendingTopicResponses() {
     while (!PendingTopicResponses.empty()) {
         auto& [index, ev] = *PendingTopicResponses.begin();
@@ -379,6 +409,7 @@ void TKafkaMetadataActor::ApplyPendingTopicResponses() {
 
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     auto Respond = [&] {
+        EnsureBrokersAndController();
         CancelRequestTimeout();
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
         Die(ctx);
@@ -397,12 +428,6 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     }
 
     ApplyPendingTopicResponses();
-
-    if (NeedAllNodes) {
-        for (const auto& [id, nodeInfo] : Nodes)
-            AddBroker(id, nodeInfo.Host, nodeInfo.Port);
-    }
-
     Respond();
 }
 
@@ -417,6 +442,7 @@ void TKafkaMetadataActor::HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorCo
 
 void TKafkaMetadataActor::RespondWithTimeout(const TActorContext& ctx) {
     ApplyPendingTopicResponses();
+    EnsureBrokersAndController();
 
     ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
     for (auto& topic : Response->Topics) {

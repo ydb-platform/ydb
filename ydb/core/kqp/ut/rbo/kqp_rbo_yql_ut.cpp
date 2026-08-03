@@ -831,6 +831,75 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(mergeConnection->GetMapSafe().contains("SortColumns"), sortPlan);
     }
 
+    Y_UNIT_TEST(TopSortPushedToRowReadAndKept) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeRes = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Uint64,
+                b String,
+                PRIMARY KEY (a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeRes.IsSuccess(), schemeRes.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (ui64 i = 0; i < 5; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Uint64(i)
+                .AddMember("b").String(TStringBuilder() << "v" << i)
+                .EndStruct();
+        }
+        rows.EndList();
+        auto upsertRes = db.BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertRes.IsSuccess(), upsertRes.GetIssues().ToString());
+
+        auto explainAst = [&](const TString& query) -> TString {
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return TString(result.GetAst());
+        };
+
+        // ORDER BY a (PK) LIMIT 3: order is pushed into the read ("Sorted"), but the
+        // WideTopSort operator must stay in the AST.
+        {
+            auto ast = explainAst("SELECT a FROM `/Root/t1` ORDER BY a LIMIT 3;");
+            UNIT_ASSERT_C(ast.Contains("'\"Sorted\""),
+                "Expected the \"Sorted\" pushdown into the read settings, AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("WideTopSort"),
+                "WideTopSort must stay after the TopSort pushdown to the row read "
+                "(merge connection for row storage is not produced yet), AST: " << ast);
+        }
+
+        // ORDER BY a DESC (PK) LIMIT 3: the ascending direction is not pushed here, so
+        // WideTopSort stays and the read settings must not carry "Sorted".
+        {
+            auto ast = explainAst("SELECT a FROM `/Root/t1` ORDER BY a DESC LIMIT 3;");
+            UNIT_ASSERT_C(!ast.Contains("'\"Sorted\""),
+                "ASC-only pushdown; DESC must not push \"Sorted\" into the read, AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("WideTopSort"),
+                "WideTopSort must stay for ORDER BY PK DESC LIMIT, AST: " << ast);
+        }
+
+        // Negative control: ORDER BY b (non-PK) LIMIT 3 -> no pushdown, WideTopSort stays,
+        // the read settings must not carry "Sorted".
+        {
+            auto ast = explainAst("SELECT a FROM `/Root/t1` ORDER BY b LIMIT 3;");
+            UNIT_ASSERT_C(!ast.Contains("'\"Sorted\""),
+                "no pushdown for ORDER BY non-PK; read must not carry \"Sorted\", AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("WideTopSort"),
+                "WideTopSort must stay for ORDER BY non-PK LIMIT, AST: " << ast);
+        }
+    }
+
     Y_UNIT_TEST(ExplainReadPushdown) {
         TExplainPlanTestContext testContext;
         auto& session = testContext.GetSession();
@@ -3052,6 +3121,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 WHERE SubKey1 = 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
+            R"(
+                -- используется Index212 (not Index21), since the sort is free due to key order of covering Index212
+                SELECT Key, SubKey1, SubKey2
+                FROM Table
+                WHERE SubKey2 = "1"
+                ORDER BY SubKey2, Key, SubKey1
+                LIMIT 2;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -3064,6 +3141,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]];[[1];[0];["1"];["6"];["6"]];[[1];[1];["1"];["8"];["8"]]])",
             R"([[["1"]];[["3"]];[["5"]];[["7"]]])",
             R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
+            R"([[[0];[0];["1"]];[[0];[1];["1"]]])",
         };
 
         std::vector<TString> expectedIndexes = {
@@ -3076,6 +3154,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "Index21",
             "Index212",
             "Index12",
+            "Index212",
         };
 
         const std::string header = "PRAGMA ydb.OptDisableAutoIndexSelection = \"false\";\n";
@@ -3218,6 +3297,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 WHERE SubKey1 = 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
+            R"(
+                -- используется Index212 (not Index21), since the sort is free due to key order of covering Index212
+                SELECT Key, SubKey1, SubKey2
+                FROM Table
+                WHERE SubKey2 = "1"
+                ORDER BY SubKey2, Key, SubKey1
+                LIMIT 2;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -3230,6 +3317,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]];[[1];[0];["1"];["6"];["6"]];[[1];[1];["1"];["8"];["8"]]])",
             R"([[["1"]];[["3"]];[["5"]];[["7"]]])",
             R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
+            R"([[[0];[0];["1"]];[[0];[1];["1"]]])",
         };
 
         std::vector<TString> expectedIndexes = {
@@ -3242,6 +3330,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "Index21",
             "Index212",
             "Index12",
+            "Index212",
         };
 
         const std::string header = "PRAGMA ydb.OptDisableAutoIndexSelection = \"false\";\n";

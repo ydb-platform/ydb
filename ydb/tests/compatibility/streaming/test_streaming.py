@@ -266,6 +266,100 @@ class StreamingTestBase:
             """
             session_pool.execute_with_retries(query)
 
+    def create_multi_output_objects(self, external):
+        if min(self.versions) < (26, 1):
+            logger.debug("skip multi output into YDB table, only available since 26-1")
+            pytest.skip("Streaming query output into YDB table only available since 26-1")
+
+        logger.debug("create_multi_output_objects")
+        self.create_objects(external, with_precompute=False)
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries("""
+                CREATE TABLE multi_output_table (
+                    data String NOT NULL,
+                    PRIMARY KEY (data)
+                );
+            """)
+
+    def create_streaming_query_with_multi_output(self):
+        logger.debug("create_streaming_query_with_multi_output")
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            query = f"""
+                CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                $input = (
+                    SELECT * FROM
+                        {self.input_object} WITH (
+                            FORMAT = 'json_each_row',
+                            SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL)
+                        )
+                );
+                $filtered = (SELECT * FROM $input WHERE level == 'error');
+
+                $number_errors = (
+                    SELECT host, COUNT(*) AS error_count, CAST(HOP_START() AS String) AS ts
+                    FROM $filtered
+                    GROUP BY
+                        HOP(CAST(time AS Timestamp), 'PT600S', 'PT600S', 'PT0S'),
+                        host
+                );
+
+                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) AS data
+                    FROM $number_errors
+                );
+
+                INSERT INTO {self.output_object}
+                SELECT data FROM $json;
+
+                UPSERT INTO multi_output_table
+                SELECT data FROM $json;
+                END DO;
+
+            """
+            session_pool.execute_with_retries(query)
+
+    def create_simple_streaming_query_with_multi_output(self):
+        logger.debug("create_simple_streaming_query_with_multi_output")
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            query = f"""
+                CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                $input = (
+                    SELECT
+                        *
+                    FROM
+                        {self.input_object} WITH (
+                            FORMAT = 'json_each_row',
+                            SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL)
+                        )
+                );
+
+                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) AS data
+                    FROM $input
+                );
+
+                INSERT INTO {self.output_object}
+                SELECT data FROM $json;
+
+                UPSERT INTO multi_output_table
+                SELECT data FROM $json;
+                END DO;
+
+            """
+            session_pool.execute_with_retries(query)
+
+    def check_multi_output_table(self, expected_count):
+        logger.debug("check_multi_output_table")
+        # The table sink may commit slightly after the topic output is read, so poll until consistent
+        deadline = time.time() + 30
+        count = None
+        while True:
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                result_sets = session_pool.execute_with_retries("SELECT COUNT(*) AS cnt FROM multi_output_table")
+                count = result_sets[0].rows[0].cnt
+            if count == expected_count:
+                return
+            assert time.time() < deadline, f"multi_output_table expected {expected_count} rows, got {count}"
+            time.sleep(1)
+
     def do_write_read(self, input, expected_output):
         logger.debug("do_write_read")
         endpoint = f"localhost:{self.cluster.nodes[1].port}"
@@ -330,6 +424,16 @@ class TestStreamingMixedCluster(StreamingTestBase, MixedClusterFixture):
         self.do_test_part1(extra_suffix='-row-col')
         self.do_test_part2(extra_suffix='-row-col')
 
+    @link_test_case("#48465")
+    @pytest.mark.parametrize("external", [True, False])
+    def test_mixed_cluster_multi_output(self, external):
+        self.create_multi_output_objects(external)
+        self.create_streaming_query_with_multi_output()
+        self.do_test_part1()
+        self.check_multi_output_table(2)
+        self.do_test_part2()
+        self.check_multi_output_table(4)
+
 
 class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
@@ -354,6 +458,17 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
         self.do_test_part1(extra_suffix='-row-col')
         self.change_cluster_version()
         self.do_test_part2(extra_suffix='-row-col')
+
+    @link_test_case("#48465")
+    @pytest.mark.parametrize("external", [True, False])
+    def test_restart_to_another_version_multi_output(self, external):
+        self.create_multi_output_objects(external)
+        self.create_streaming_query_with_multi_output()
+        self.do_test_part1()
+        self.check_multi_output_table(2)
+        self.change_cluster_version()
+        self.do_test_part2()
+        self.check_multi_output_table(4)
 
 
 class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeAndDowngradeFixture):
@@ -392,4 +507,20 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
             input = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
             expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}{suffix}']
             self.do_write_read(input, expected_data)
+            time.sleep(0.5)
+
+    @link_test_case("#48465")
+    @pytest.mark.parametrize("external", [True, False])
+    def test_rolling_upgrade_multi_output(self, external):
+        self.create_multi_output_objects(external)
+        self.create_simple_streaming_query_with_multi_output()
+
+        for i, _ in enumerate(self.roll()):  # every iteration is a step in rolling upgrade process
+            #
+            # 2. check written data is correct in both outputs during rolling upgrade
+            #
+            input = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
+            expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}']
+            self.do_write_read(input, expected_data)
+            self.check_multi_output_table(i + 1)
             time.sleep(0.5)

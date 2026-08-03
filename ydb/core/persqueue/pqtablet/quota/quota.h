@@ -8,13 +8,22 @@ namespace NKikimr::NPQ {
 namespace NQuoterEvents {
 
 struct TEvQuotaUpdated : public TEventLocal<TEvQuotaUpdated, TEvPQ::EvQuotaUpdated> {
-    TEvQuotaUpdated(TVector<std::pair<TString, ui64>> updatedConsumerQuotas, ui64 updatedTotalPartitionReadQuota)
-        : UpdatedConsumerQuotas(std::move(updatedConsumerQuotas)),
-        UpdatedTotalPartitionReadQuota(updatedTotalPartitionReadQuota)
+    TEvQuotaUpdated(
+        TVector<std::pair<TString, ui64>> updatedConsumerQuotas,
+        ui64 updatedTotalPartitionReadQuota,
+        TVector<std::pair<TString, ui64>> updatedConsumerMessagesQuotas,
+        ui64 updatedTotalPartitionMessagesReadQuota
+    )
+        : UpdatedConsumerQuotas(std::move(updatedConsumerQuotas))
+        , UpdatedTotalPartitionReadQuota(updatedTotalPartitionReadQuota)
+        , UpdatedConsumerMessagesQuotas(std::move(updatedConsumerMessagesQuotas))
+        , UpdatedTotalPartitionMessagesReadQuota(updatedTotalPartitionMessagesReadQuota)
     {}
 
     TVector<std::pair<TString, ui64>> UpdatedConsumerQuotas;
     ui64 UpdatedTotalPartitionReadQuota;
+    TVector<std::pair<TString, ui64>> UpdatedConsumerMessagesQuotas;
+    ui64 UpdatedTotalPartitionMessagesReadQuota;
 };
 
 struct TEvAccountQuotaCountersUpdated : public TEventLocal<TEvAccountQuotaCountersUpdated, TEvPQ::EvAccountQuotaCountersUpdated> {

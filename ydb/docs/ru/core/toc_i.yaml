@@ -8,7 +8,7 @@ items:
   include:
     mode: link
     path: concepts/toc_p.yaml
-- name: Для администраторов БД
+- name: Администрирование кластеров
   href: devops/index.md
   include:
     mode: link

@@ -395,7 +395,8 @@ class TestDownloadSubmissionTask(BaseSubmissionTaskTest):
 
         self.bucket = 'mybucket'
         self.key = 'mykey'
-        self.extra_args = {}
+        self.etag = 'myetag'
+        self.extra_args = {'IfMatch': self.etag}
         self.subscribers = []
 
         # Create a stream to read from
@@ -452,7 +453,11 @@ class TestDownloadSubmissionTask(BaseSubmissionTaskTest):
 
     def add_head_object_response(self):
         self.stubber.add_response(
-            'head_object', {'ContentLength': len(self.content)}
+            'head_object',
+            {
+                'ContentLength': len(self.content),
+                'ETag': self.etag,
+            },
         )
 
     def add_get_responses(self):

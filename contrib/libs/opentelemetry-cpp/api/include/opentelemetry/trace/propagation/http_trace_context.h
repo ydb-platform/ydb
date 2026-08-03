@@ -191,6 +191,7 @@ private:
     return ExtractContextFromTraceHeaders(trace_parent, trace_state);
   }
 
+public:
   bool Fields(nostd::function_ref<bool(nostd::string_view)> callback) const noexcept override
   {
     return (callback(kTraceParent) && callback(kTraceState));

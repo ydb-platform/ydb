@@ -12,6 +12,7 @@
 #include <yt/yt/client/tablet_client/table_mount_cache.h>
 
 #include <yt/yt/client/transaction_client/helpers.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/iterator/zip.h>
 
@@ -29,6 +30,7 @@ using namespace NYTree;
 using namespace NYPath;
 using namespace NYson;
 using namespace NQueueClient;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -349,7 +351,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                 }
                 ToProto(req->mutable_prerequisite_options(), options);
                 ToProto(req->mutable_mutating_options(), options);
-                req->set_max_allowed_commit_timestamp(options.MaxAllowedCommitTimestamp);
+                req->set_max_allowed_commit_timestamp(ToProto(options.MaxAllowedCommitTimestamp));
                 SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
                 return req->Invoke();
             }))
@@ -381,7 +383,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
 
                 const auto& rsp = rspOrError.Value();
                 TTransactionCommitResult result{
-                    .PrimaryCommitTimestamp = rsp->primary_commit_timestamp(),
+                    .PrimaryCommitTimestamp = FromProto<NTransactionClient::TTimestamp>(rsp->primary_commit_timestamp()),
                     .CommitTimestamps = FromProto<NHiveClient::TTimestampMap>(rsp->commit_timestamps())
                 };
 
@@ -674,7 +676,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
     ToProto(req->mutable_queue_path(), queuePath);
 
     ToProto(req->mutable_session_id(), sessionId);
-    req->set_epoch(epoch.Underlying());
+    req->set_epoch(ToProto(epoch));
 
     if (options.UserMeta) {
         ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());

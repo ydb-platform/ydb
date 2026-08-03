@@ -2032,6 +2032,21 @@ Y_UNIT_TEST(StreamWriteDeferredThenRegularInSameSession) {
     WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(2, "regular-part"));
 }
 
+Y_UNIT_TEST(StreamWriteAllowsExtPublicationIdMismatchAsWarnOnly) {
+    // Mismatch is logged but must not fail the write (warn-only behavior).
+    auto fixture = TDeferredStreamWriteFixture::Enabled("deferred-mismatch-topic", "ext-first");
+    auto session = fixture.OpenWriteStream("producer-mismatch");
+
+    WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+        1,
+        "first",
+        DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+        2,
+        "second-mismatched-ext",
+        DeferredPublishWithExt(fixture.IntPublicationId, TString("ext-other"))));
+}
+
 Y_UNIT_TEST(StreamWriteMergesPartitionsIntoDestinationBlob) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("deferred-merge-topic", "ext-merge");
 

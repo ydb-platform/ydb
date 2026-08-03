@@ -642,6 +642,17 @@ class TRcBuf {
             return static_cast<bool>(Owner);
         }
 
+        bool IsRdma() const noexcept {
+            return Visit(Owner, [&](EType, auto& value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
+                    return value->GetInnerType() == IContiguousChunk::EInnerType::RDMA_MEM_REG;
+                } else {
+                    return false;
+                }
+            });
+        }
+
     private:
         static constexpr uintptr_t TypeMask = (1 << 3) - 1;
         static constexpr uintptr_t ValueMask = ~TypeMask;
@@ -1225,6 +1236,10 @@ public:
 
     explicit operator TMutableContiguousSpan() noexcept {
         return TMutableContiguousSpan(GetDataMut(), GetSize());
+    }
+
+    bool IsRdma() const noexcept {
+        return Backend.IsRdma();
     }
 };
 

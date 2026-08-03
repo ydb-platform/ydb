@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.15.5)
+VERSION(1.18.3)
 
 LICENSE(Apache-2.0)
 
@@ -19,6 +19,10 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     yarl/__init__.py
+    yarl/_parse.py
+    yarl/_path.py
+    yarl/_query.py
+    yarl/_quoters.py
     yarl/_quoting.py
     yarl/_quoting_c.pyi
     yarl/_quoting_py.py

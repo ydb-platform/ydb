@@ -123,6 +123,29 @@ def test_lockfile_get_packages_meta_scoped_tarball_with_literal_slash():
     assert packages[0].tarball_path == "@types/semver/-/semver-7.7.1.tgz"
 
 
+def test_lockfile_get_packages_meta_scoped_tarball_with_scope_in_filename():
+    lf = Lockfile(path="/pnpm-lock.yaml")
+    lf.data = {
+        "packages": {
+            "@yandex-lego/storybook-deploy@0.2.1": {
+                "resolution": {
+                    "integrity": "sha512-Z21GgVKGvxWmuBSo5d6OOMqYsYJaw5AMI63uPHJDmpxxrCmRy3VDWuA7Oi3IObaPofVVWZ/BO1op5m4qjRAEgw==",
+                    "tarball": "https://npm.yandex-team.ru/@yandex-lego/storybook-deploy/-/@yandex-lego/storybook-deploy-0.2.1.tgz",
+                },
+            },
+        },
+    }
+
+    packages = list(lf.get_packages_meta())
+
+    assert len(packages) == 1
+    assert packages[0].tarball_path == "@yandex-lego/storybook-deploy/-/storybook-deploy-0.2.1.tgz"
+    assert packages[0].to_uri() == (
+        "https://npm.yandex-team.ru/@yandex-lego/storybook-deploy/-/storybook-deploy-0.2.1.tgz"
+        "#integrity=sha512-Z21GgVKGvxWmuBSo5d6OOMqYsYJaw5AMI63uPHJDmpxxrCmRy3VDWuA7Oi3IObaPofVVWZ/BO1op5m4qjRAEgw=="
+    )
+
+
 def test_lockfile_get_packages_skip_directory():
     lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {

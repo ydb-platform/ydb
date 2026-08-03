@@ -38,7 +38,10 @@ from botocore import (
     translate,
     waiter,
 )
-from botocore.compat import HAS_CRT, MutableMapping
+from botocore.compat import (
+    HAS_CRT,  # noqa: F401
+    MutableMapping,
+)
 from botocore.configprovider import (
     BOTOCORE_DEFAUT_SESSION_VARIABLES,
     ConfigChainFactory,
@@ -72,9 +75,6 @@ from botocore.utils import (
     IMDSRegionProvider,
     validate_region_name,
 )
-
-from botocore.compat import HAS_CRT  # noqa
-
 
 logger = logging.getLogger(__name__)
 

@@ -100,7 +100,7 @@ namespace NActors {
         const ui64 UpperLimit;
     };
 
-    static constexpr TDuration DEFAULT_DEADPEER_TIMEOUT = TDuration::Seconds(10);
+    // DEFAULT_DEADPEER_TIMEOUT lives in interconnect_common.h -- it is shared with the v2 data plane.
     static constexpr TDuration DEFAULT_LOST_CONNECTION_TIMEOUT = TDuration::Seconds(10);
     static constexpr ui32 DEFAULT_MAX_INFLIGHT_DATA = 10240 * 1024;
     static constexpr ui32 DEFAULT_TOTAL_INFLIGHT_DATA = 4 * 10240 * 1024;

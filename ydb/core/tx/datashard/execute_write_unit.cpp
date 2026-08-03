@@ -120,7 +120,7 @@ public:
     // Validates this write's position in its writer's chain; on success records the new
     // position for ApplyLocks to persist. Returns a status when the operation must stop here.
     std::optional<EExecutionStatus> CheckWriteIndex(TWriteOperation* writeOp, TSetupSysLocks& guardLocks,
-        TTransactionContext& txc, const TActorContext& ctx)
+        TTransactionContext& txc)
     {
         const ui64 requested = writeOp->GetWriteIndex();
         if (!requested) {
@@ -142,32 +142,38 @@ public:
         // No lock means nothing applied yet, so current is 0.
         const ui64 current = lock ? lock->GetWriteIndex() : 0;
 
-        if (current == requested) {
-            // A duplicate we've already applied: report the unchanged lock, touch nothing else.
+        if (requested < current) {
+            // Only the last write's result is remembered, so an older duplicate cannot be
+            // answered accurately. BAD_REQUEST makes the reply unmistakably erroneous.
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                << "Uncommitted write " << writerIndex << ":" << requested
+                << " is already applied, writer is at " << current);
+            return EExecutionStatus::Executed;
+        }
+
+        if (requested == current) {
+            // A duplicate of the last write: report its result again, touch nothing else.
             Y_ENSURE(lock, "A non-zero write index implies the lock that carries it");
             auto res = NEvents::TDataEvents::TEvWriteResult::BuildAlreadyApplied(tabletId, writeOp->GetTxId());
-            for (const TPathId& pathId : lock->GetWriteTables()) {
+            if (const auto* stats = lock->GetWriteIndexStats()) {
+                *res->Record.MutableTxStats() = *stats;
+            }
+            // KQP may have missed the original reply and still needs the lock to commit
+            THashSet<TPathId> tables = lock->GetReadTables();
+            tables.insert(lock->GetWriteTables().begin(), lock->GetWriteTables().end());
+            for (const TPathId& pathId : tables) {
                 res->AddTxLock(lock->GetLockId(), tabletId, lock->GetGeneration(),
                                lock->GetCounter(), pathId.OwnerId, pathId.LocalPathId,
-                               /* hasWrites */ true, writerIndex, current);
+                               lock->IsWriteLock(), writerIndex, current);
             }
             writeOp->SetWriteResult(std::move(res));
             writeOp->ReleaseTxData(txc);
             return EExecutionStatus::Executed;
         }
 
-        if (current + 1 != requested) {
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, TStringBuilder()
-                << "Uncommitted write index mismatch for writer " << writerIndex
-                << ": expected " << (current + 1) << ", got " << requested
-                << " (some uncommitted writes were lost)");
-            writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
-            NDataIntegrity::LogVictimDetected(ctx, tabletId, "Uncommitted writes were lost",
-                DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(guardLocks.LockTxId),
-                guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
-            return EExecutionStatus::Executed;
-        }
-
+        // A gap means earlier writes never reached this shard, which is not the shard's
+        // business: more than one write may be in flight, and KQP detects the loss
+        // on its own and aborts if it has to.
         guardLocks.SetWriteIndex = TLockWriteIndex{writerIndex, requested};
         return std::nullopt;
     }
@@ -609,7 +615,7 @@ public:
                         Y_ENSURE(false, "unreachable");
                 }
 
-                if (auto status = CheckWriteIndex(writeOp, guardLocks, txc, ctx)) {
+                if (auto status = CheckWriteIndex(writeOp, guardLocks, txc)) {
                     return *status;
                 }
             }
@@ -785,6 +791,14 @@ public:
             const auto& counters = userDb.GetCounters();
             KqpUpdateDataShardStatCounters(DataShard, counters);
             KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
+
+            if (const ui64 writeIndex = writeOp->GetWriteIndex()) {
+                // Remembered for a duplicate delivery of this write
+                auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
+                if (lock && lock->GetWriteIndex() == writeIndex) {
+                    lock->SetWriteIndexStats(writeResult->Record.GetTxStats());
+                }
+            }
 
         } catch (const TNeedGlobalTxId&) {
             Y_ENSURE(op->GetGlobalTxId() == 0,

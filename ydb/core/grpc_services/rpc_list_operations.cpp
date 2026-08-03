@@ -104,7 +104,7 @@ class TListOperationsRPC
     void Handle(TEvExport::TEvListExportsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvExport::TEvListExportsResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvExport::TEvListExportsResponse"
             << ": record# " << record.ShortDebugString());
 
         TResponse response;
@@ -122,7 +122,7 @@ class TListOperationsRPC
     void Handle(TEvImport::TEvListImportsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvImport::TEvListImportsResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvImport::TEvListImportsResponse"
             << ": record# " << record.ShortDebugString());
 
         TResponse response;
@@ -140,7 +140,7 @@ class TListOperationsRPC
     void Handle(TEvIndexBuilder::TEvListResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvIndexBuilder::TEvListResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvIndexBuilder::TEvListResponse"
             << ": record# " << record.ShortDebugString());
 
         TResponse response;
@@ -160,7 +160,7 @@ class TListOperationsRPC
     void Handle(TEvForcedCompaction::TEvListResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvForcedCompaction::TEvListResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvForcedCompaction::TEvListResponse"
             << ": record# " << record.ShortDebugString());
 
         TResponse response;
@@ -180,7 +180,7 @@ class TListOperationsRPC
     void Handle(NSchemeShard::NBackground::TEvListResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvSchemeShard::TEvBGTasksListResponse: record# " << record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvSchemeShard::TEvBGTasksListResponse: record# " << record.ShortDebugString());
 
         TResponse response;
 
@@ -284,7 +284,7 @@ class TListOperationsRPC
     void Handle(NStat::TEvStatistics::TEvAnalyzeOpListResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvAnalyzeOpListResponse: record# " << record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvAnalyzeOpListResponse: record# " << record.ShortDebugString());
 
         TResponse response;
         response.set_status(record.GetStatus());
@@ -322,7 +322,7 @@ class TListOperationsRPC
     void Handle(TEvBackup::TEvListIncrementalBackupsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvListIncrementalBackupsResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvBackup::TEvListIncrementalBackupsResponse"
             << ": record# " << record.ShortDebugString());
 
         TResponse response;
@@ -340,7 +340,7 @@ class TListOperationsRPC
     void Handle(TEvBackup::TEvListBackupCollectionRestoresResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvListBackupCollectionRestoresResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvBackup::TEvListBackupCollectionRestoresResponse"
             << ": record# " << record.ShortDebugString());
 
         TResponse response;
@@ -358,7 +358,7 @@ class TListOperationsRPC
     void Handle(TEvBackup::TEvListFullBackupsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvListFullBackupsResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvBackup::TEvListFullBackupsResponse"
             << ": record# " << record.ShortDebugString());
 
         TResponse response;
@@ -376,7 +376,7 @@ class TListOperationsRPC
     void Handle(TEvSetColumnConstraint::TEvListResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvSetColumnConstraint::TEvListResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvSetColumnConstraint::TEvListResponse"
             << ": record# " << record.ShortDebugString());
 
         TResponse response;

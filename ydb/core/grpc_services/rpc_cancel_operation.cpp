@@ -160,7 +160,7 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     void Handle(TEvExport::TEvCancelExportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvExport::TEvCancelExportResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvExport::TEvCancelExportResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -169,7 +169,7 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     void Handle(TEvImport::TEvCancelImportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvImport::TEvCancelImportResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvImport::TEvCancelImportResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -178,7 +178,7 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     void Handle(TEvIndexBuilder::TEvCancelResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvIndexBuilder::TEvCancelResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvIndexBuilder::TEvCancelResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -187,7 +187,7 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     void Handle(TEvForcedCompaction::TEvCancelResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvForcedCompaction::TEvCancelResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvForcedCompaction::TEvCancelResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -196,7 +196,7 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     void Handle(TEvSetColumnConstraint::TEvCancelResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvSetColumnConstraint::TEvCancelResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvSetColumnConstraint::TEvCancelResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());

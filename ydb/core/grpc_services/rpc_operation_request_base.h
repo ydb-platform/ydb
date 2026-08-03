@@ -10,13 +10,6 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << stream)
-
 template <typename TDerived, typename TEvRequest, bool HasOperation = false>
 class TRpcOperationRequestActor: public TRpcRequestActor<TDerived, TEvRequest, HasOperation> {
 protected:
@@ -37,19 +30,19 @@ protected:
     }
 
     void AllocateTxId() {
-        LOG_D("Allocate txId");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Allocate txId");
         this->Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
         TxId = ev->Get()->TxId;
 
-        LOG_D("TEvTxUserProxy::TEvAllocateTxIdResult");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "TEvTxUserProxy::TEvAllocateTxIdResult");
         ResolveDatabase();
     }
 
     void ResolveDatabase() {
-        LOG_D("Resolve database"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Resolve database"
             << ": name# " << this->GetDatabaseName());
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
@@ -65,7 +58,7 @@ protected:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& request = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
             << ": request# " << (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (request->ResultSet.empty()) {
@@ -97,7 +90,7 @@ protected:
 
         auto domainInfo = entry.DomainInfo;
         if (!domainInfo) {
-            LOG_E("Got empty domain info");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Got empty domain info");
             return this->Reply(Ydb::StatusIds::INTERNAL_ERROR, NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR);
         }
 
@@ -105,7 +98,7 @@ protected:
     }
 
     void SendRequest(ui64 schemeShardId) {
-        LOG_D("Send request"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Send request"
             << ": schemeShardId# " << schemeShardId);
 
         if (!PipeClient) {
@@ -128,7 +121,7 @@ protected:
     }
 
     void DeliveryProblem() {
-        LOG_W("Delivery problem");
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Delivery problem");
         this->Reply(Ydb::StatusIds::UNAVAILABLE);
     }
 

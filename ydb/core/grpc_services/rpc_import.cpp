@@ -112,7 +112,7 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void Handle(TEvImport::TEvCreateImportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvImport::TEvCreateImportResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvImport::TEvCreateImportResponse"
             << ": record# " << record.ShortDebugString());
 
         this->Reply(TImportConv::ToOperation(record.GetEntry()));

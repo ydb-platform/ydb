@@ -350,7 +350,7 @@ private:
     void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvExport::TEvGetExportResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvExport::TEvGetExportResponse"
             << ": record# " << record.ShortDebugString());
 
         TEvGetOperationRequest::TResponse resp;
@@ -361,7 +361,7 @@ private:
     void Handle(NSchemeShard::TEvImport::TEvGetImportResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvImport::TEvGetImportResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvImport::TEvGetImportResponse"
             << ": record# " << record.ShortDebugString());
 
         TEvGetOperationRequest::TResponse resp;
@@ -372,7 +372,7 @@ private:
     void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvIndexBuilder::TEvGetResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvIndexBuilder::TEvGetResponse"
             << ": record# " << record.ShortDebugString());
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -388,7 +388,7 @@ private:
     void Handle(NSchemeShard::TEvForcedCompaction::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvForcedCompaction::TEvGetResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvForcedCompaction::TEvGetResponse"
             << ": record# " << record.ShortDebugString());
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -404,7 +404,7 @@ private:
     void Handle(NSchemeShard::TEvSetColumnConstraint::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvSetColumnConstraint::TEvGetResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvSetColumnConstraint::TEvGetResponse"
             << ": record# " << record.ShortDebugString());
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -439,7 +439,7 @@ private:
     void Handle(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvGetIncrementalBackupResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvBackup::TEvGetIncrementalBackupResponse"
             << ": record# " << record.ShortDebugString());
 
         TEvGetOperationRequest::TResponse resp;
@@ -450,7 +450,7 @@ private:
     void Handle(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvGetBackupCollectionRestoreResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvBackup::TEvGetBackupCollectionRestoreResponse"
             << ": record# " << record.ShortDebugString());
 
         TEvGetOperationRequest::TResponse resp;
@@ -461,7 +461,7 @@ private:
     void Handle(NSchemeShard::TEvBackup::TEvGetFullBackupResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvGetFullBackupResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvBackup::TEvGetFullBackupResponse"
             << ": record# " << record.ShortDebugString());
 
         TEvGetOperationRequest::TResponse resp;

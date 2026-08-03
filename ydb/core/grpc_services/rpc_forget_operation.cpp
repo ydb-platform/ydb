@@ -171,7 +171,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvExport::TEvForgetExportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvExport::TEvForgetExportResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvExport::TEvForgetExportResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -180,7 +180,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvImport::TEvForgetImportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvImport::TEvForgetImportResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvImport::TEvForgetImportResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -189,7 +189,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvIndexBuilder::TEvForgetResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvIndexBuilder::TEvForgetResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvIndexBuilder::TEvForgetResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -198,7 +198,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvForcedCompaction::TEvForgetResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvForcedCompaction::TEvForgetResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvForcedCompaction::TEvForgetResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -207,7 +207,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvSetColumnConstraint::TEvForgetResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvSetColumnConstraint::TEvForgetResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvSetColumnConstraint::TEvForgetResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -216,7 +216,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(NKqp::TEvForgetScriptExecutionOperationResponse::TPtr& ev) {
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issuesProto;
         NYql::IssuesToMessage(ev->Get()->Issues, &issuesProto);
-        LOG_D("Handle NKqp::TEvForgetScriptExecutionOperationResponse response"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle NKqp::TEvForgetScriptExecutionOperationResponse response"
             << ": status# " << ev->Get()->Status);
         Reply(ev->Get()->Status, issuesProto);
     }
@@ -228,7 +228,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvBackup::TEvForgetIncrementalBackupResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvForgetIncrementalBackupResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvBackup::TEvForgetIncrementalBackupResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -237,7 +237,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvBackup::TEvForgetBackupCollectionRestoreResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvForgetBackupCollectionRestoreResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvBackup::TEvForgetBackupCollectionRestoreResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -246,7 +246,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     void Handle(TEvBackup::TEvForgetFullBackupResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvForgetFullBackupResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvBackup::TEvForgetFullBackupResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());

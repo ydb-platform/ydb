@@ -344,7 +344,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& request = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
             << ": request# " << (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (request->ResultSet.empty()) {
@@ -488,7 +488,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             }
 
             if (!entry.DomainInfo) {
-                LOG_E("Got empty domain info");
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Got empty domain info");
                 return this->Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
             }
 
@@ -511,7 +511,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void Handle(TEvExport::TEvCreateExportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvExport::TEvCreateExportResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvExport::TEvCreateExportResponse"
             << ": record# " << record.ShortDebugString());
 
         this->Reply(TExportConv::ToOperation(record.GetEntry()));

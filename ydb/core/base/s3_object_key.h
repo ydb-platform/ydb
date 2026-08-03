@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/genetic/string.h>
+#include <util/generic/string.h>
 #include <util/string/builder.h>
 
 namespace NKikimr {

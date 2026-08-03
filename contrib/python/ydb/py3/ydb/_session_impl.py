@@ -125,6 +125,21 @@ def wrap_describe_table_response(rpc_state, response_pb, sesssion_state, scheme_
     )
 
 
+def wrap_describe_system_view_response(rpc_state, response_pb, scheme_entry_cls):
+    issues._process_response(response_pb.operation)
+    message = _apis.ydb_table.DescribeSystemViewResult()
+    response_pb.operation.result.Unpack(message)
+    return scheme._wrap_scheme_entry(
+        message.self,
+        scheme_entry_cls,
+        message.sys_view_id,
+        message.sys_view_name,
+        message.columns,
+        message.primary_key,
+        message.attributes,
+    )
+
+
 def explicit_partitions_factory(primary_key, columns, split_points):
     column_types = {}
     pk = set(primary_key)
@@ -248,6 +263,12 @@ def describe_table_request_factory(session_state, path, settings=None):
     if settings is not None and hasattr(settings, "include_table_stats") and settings.include_table_stats:
         request.include_table_stats = settings.include_table_stats
 
+    return request
+
+
+def describe_system_view_request_factory(path, settings=None):
+    request = _apis.ydb_table.DescribeSystemViewRequest()
+    request.path = path
     return request
 
 

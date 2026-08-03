@@ -9,6 +9,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -82,23 +83,6 @@ void DumpToFile(
     }
 }
 
-NMonitoring::TDynamicCounterPtr MakeCountersChain(
-    NMonitoring::TDynamicCounterPtr counters,
-    const TString& ddiskPool,
-    ui64 tabletId)
-{
-    if (!counters) {
-        return nullptr;
-    }
-
-    NMonitoring::TDynamicCounterPtr result =
-        GetServiceCounters(std::move(counters), "nbs_partitions");
-    result = result->GetSubgroup("ddiskPool", ddiskPool);
-    result = result->GetSubgroup("tabletId", ToString(tabletId));
-    result = result->GetSubgroup("subsystem", "interface");
-    return result;
-}
-
 TVector<TRegionPtr> CreateRegions(
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
@@ -167,7 +151,7 @@ TFastPathService::TFastPathService(
           MakeCountersChain(
               counters,
               StorageConfig->GetDDiskPoolName(),
-              DiskDescription.TabletId)))
+              DiskDescription)))
     , LogTitle(
           GetCycleCount(),
           TLogTitle::TFastPathService{
@@ -178,7 +162,7 @@ TFastPathService::TFastPathService(
     , Counters(MakeCountersChain(
           std::move(counters),
           StorageConfig->GetDDiskPoolName(),
-          DiskDescription.TabletId))
+          DiskDescription))
     , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
           .DiskId = DiskDescription.DiskId,
           .BlockSize = blockSize,
@@ -263,6 +247,8 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request)
 {
+    auto startAt = TMonotonic::Now();
+
     auto span = std::make_shared<NWilson::TSpan>(NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,
         callContext->RootTraceId.Clone(),
@@ -289,7 +275,7 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
         span->GetTraceId());
 
     result.Subscribe(
-        [weakSelf = weak_from_this(), span = std::move(span)]   //
+        [weakSelf = weak_from_this(), span = std::move(span), startAt]   //
         (const TFuture<TReadBlocksLocalResponse>& f)
         {
             const auto& response = f.GetValue();
@@ -300,7 +286,8 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
             if (auto self = weakSelf.lock()) {
                 self->Counters.RequestFinished(
                     EBlockStoreRequest::ReadBlocks,
-                    !HasError(response.Error));
+                    !HasError(response.Error),
+                    TMonotonic::Now() - startAt);
             }
         });
 
@@ -312,6 +299,8 @@ TFastPathService::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request)
 {
+    auto startAt = TMonotonic::Now();
+
     auto span = std::make_shared<NWilson::TSpan>(NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,
         callContext->RootTraceId.Clone(),
@@ -338,7 +327,7 @@ TFastPathService::WriteBlocksLocal(
         span->GetTraceId());
 
     result.Subscribe(
-        [weakSelf = weak_from_this(), span = std::move(span)]   //
+        [weakSelf = weak_from_this(), span = std::move(span), startAt]   //
         (const TFuture<TWriteBlocksLocalResponse>& f)
         {
             const auto& response = f.GetValue();
@@ -349,7 +338,8 @@ TFastPathService::WriteBlocksLocal(
             if (auto self = weakSelf.lock()) {
                 self->Counters.RequestFinished(
                     EBlockStoreRequest::WriteBlocks,
-                    !HasError(response.Error));
+                    !HasError(response.Error),
+                    TMonotonic::Now() - startAt);
             }
         });
 
@@ -376,7 +366,7 @@ TVolumeConfigPtr TFastPathService::GetVolumeConfig() const
     return VolumeConfig;
 }
 
-NWilson::TSpan TFastPathService::CreteRootSpan(TStringBuf name)
+NWilson::TSpan TFastPathService::CreateRootSpan(TStringBuf name)
 {
     auto traceId = NWilson::TTraceId::NewTraceIdThrottled(
         NKikimr::TWilsonNbs::NbsBasic,   // verbosity

@@ -98,14 +98,21 @@ private:
     void OnActivateExecutor(const NActors::TActorContext& ctx) override;
     void DefaultSignalTabletActive(const NActors::TActorContext& ctx) override;
 
+    void DetachEndpointAddDie(const NActors::TActorContext& ctx);
+
+    void HandleConnect(
+        NKikimr::TEvTabletPipe::TEvClientConnected::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleDisconnect(
+        NKikimr::TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleServerConnected(
         const NKikimr::TEvTabletPipe::TEvServerConnected::TPtr& ev,
         const NActors::TActorContext& ctx);
-
     void HandleServerDisconnected(
         const NKikimr::TEvTabletPipe::TEvServerDisconnected::TPtr& ev,
         const NActors::TActorContext& ctx);
-
     void HandleServerDestroyed(
         const NKikimr::TEvTabletPipe::TEvServerDestroyed::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -183,6 +190,8 @@ private:
         THostIndex newHostIndex);
 
     [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
+
+    [[nodiscard]] TString GetSocketPath() const;
 
     void Start(
         const NActors::TActorContext& ctx,

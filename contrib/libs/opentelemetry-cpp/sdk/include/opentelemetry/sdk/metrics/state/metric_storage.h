@@ -29,6 +29,28 @@ namespace metrics
 /* Represent the storage from which to collect the metrics */
 class CollectorHandle;
 
+#ifdef OPENTELEMETRY_HAVE_METRICS_BOUND_INSTRUMENTS_PREVIEW
+/**
+ * @since ABI_VERSION 2
+ * Storage-side interface for a bound sync metric handle. Created by
+ * SyncWritableMetricStorage::Bind(...). The hot path RecordLong/RecordDouble
+ * skips per-call attribute filtering and hashmap lookup.
+ */
+class BoundSyncWritableMetricStorage
+{
+public:
+  BoundSyncWritableMetricStorage()                                                  = default;
+  BoundSyncWritableMetricStorage(const BoundSyncWritableMetricStorage &)            = delete;
+  BoundSyncWritableMetricStorage(BoundSyncWritableMetricStorage &&)                 = delete;
+  BoundSyncWritableMetricStorage &operator=(const BoundSyncWritableMetricStorage &) = delete;
+  BoundSyncWritableMetricStorage &operator=(BoundSyncWritableMetricStorage &&)      = delete;
+  virtual ~BoundSyncWritableMetricStorage()                                         = default;
+
+  virtual void RecordLong(int64_t value) noexcept  = 0;
+  virtual void RecordDouble(double value) noexcept = 0;
+};
+#endif
+
 class MetricStorage
 {
 public:
@@ -75,9 +97,22 @@ public:
   virtual void RecordDouble(double value,
                             const opentelemetry::common::KeyValueIterable &attributes,
                             const opentelemetry::context::Context &context) noexcept = 0;
+
+#ifdef OPENTELEMETRY_HAVE_METRICS_BOUND_INSTRUMENTS_PREVIEW
+  /**
+   * @since ABI_VERSION 2
+   * Returns a bound storage handle for the given attribute set, or nullptr if
+   * the storage does not support binding. Default returns nullptr.
+   */
+  virtual std::shared_ptr<BoundSyncWritableMetricStorage> Bind(
+      const opentelemetry::common::KeyValueIterable & /* attributes */) noexcept
+  {
+    return nullptr;
+  }
+#endif
 };
 
-/* Represents the async metric stroage */
+/* Represents the async metric storage */
 class AsyncWritableMetricStorage
 {
 public:

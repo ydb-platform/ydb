@@ -102,8 +102,8 @@ public:
         Replace,
     };
 
-    explicit TFiberMessageTagGuard(std::string messageTag);
-    TFiberMessageTagGuard(std::string messageTag, EMode mode);
+    explicit TFiberMessageTagGuard(TLoggingTagList messageTags);
+    TFiberMessageTagGuard(TLoggingTagList messageTags, EMode mode);
 
     // For use with std::optional in tests.
     TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noexcept;
@@ -113,7 +113,7 @@ public:
 
 private:
     // NB: Keeping it non-const to allow moving from in the dtor.
-    std::string OldMessageTag_;
+    TLoggingTagList OldMessageTags_;
     bool Active_ = true;
 };
 

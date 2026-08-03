@@ -261,7 +261,6 @@
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
-#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
@@ -594,14 +593,6 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.CollectSubscriptionStackTrace = config.GetCollectSubscriptionStackTrace();
     }
 
-    if (config.HasUseUring()) {
-        result.UseUring = config.GetUseUring();
-    }
-
-    if (config.HasEnableUringSQPOLL()) {
-        result.EnableUringSQPOLL = config.GetEnableUringSQPOLL();
-    }
-
     if (config.HasV2Config()) {
         const auto& v2 = config.GetV2Config();
         result.V2.Enable = v2.GetEnable();
@@ -730,11 +721,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(
                 CreatePollerActor(schedulerConfig.MonCounters), TMailboxType::ReadAsFilled, systemPoolId));
 
-            if (settings.UseUring && TUringContext::IsSupported()) {
-                setup->LocalServices.emplace_back(MakeUringPollerActorId(), TActorSetupCmd(
-                    CreateUringPollerActor(settings.EnableUringSQPOLL), TMailboxType::ReadAsFilled, systemPoolId));
-            }
-
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 
             TIntrusivePtr<TInterconnectProxyCommon> icCommon;
@@ -773,25 +759,22 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             icCommon->MonCounters = interconectCounters;
             icCommon->ChannelsConfig = channels;
             icCommon->Settings = settings;
+            icCommon->DestructorId = GetDestructActorID();
 
             if (settings.V2.Enable) {
                 // Create the shared v2 io_uring data-plane engine once, at startup, and publish it in Common.
                 // The actor system does not exist yet, so the engine is bound to it later (once it is up,
                 // TInterconnectProxyTCP::Registered calls SetActorSystem). CreateUringEngine returns null when
                 // io_uring is unavailable, in which case v2 is simply never negotiated during the handshake.
-                icCommon->UringEngineV2 = CreateUringEngine(settings.V2.UringEngineThreads,
-                    interconectCounters->GetSubgroup("subsystem", "uring"),
-                    settings.V2.EnableSQPOLL,
-                    settings.V2.UringEngineRingsPerShard,
-                    settings.V2.UringEngineSqThreadIdleMs,
-                    settings.V2.ShareRingsAmongThreads);
+                // The engine takes its parameters from Common, so Settings/MonCounters/DestructorId must
+                // already be filled in by this point.
+                icCommon->UringEngineV2 = CreateUringEngine(icCommon);
                 setup->OnActorSystemCreated.push_back([engine = icCommon->UringEngineV2](TActorSystem *actorSystem) {
                     if (engine) {
                         engine->SetActorSystem(actorSystem);
                     }
                 });
             }
-            icCommon->DestructorId = GetDestructActorID();
             icCommon->DestructorQueueSize = destructorQueueSize;
             icCommon->HandshakeBallastSize = icConfig.GetHandshakeBallastSize();
             icCommon->LocalScopeId = ScopeId.GetInterconnectScopeId();

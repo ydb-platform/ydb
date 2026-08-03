@@ -1,5 +1,3 @@
-from typing import Optional
-
 class _Quoter:
     def __init__(
         self,

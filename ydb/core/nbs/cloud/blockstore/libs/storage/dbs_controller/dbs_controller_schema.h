@@ -11,13 +11,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 
 struct TDbsControllerSchema: public NKikimr::NIceDb::Schema
 {
-    enum EChannels
-    {
-        SystemChannel,
-        LogChannel,
-        IndexChannel,
-    };
-
     struct Dummy: public TTableSchema<1>
     {
         struct DummyA: public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
@@ -30,8 +23,6 @@ struct TDbsControllerSchema: public NKikimr::NIceDb::Schema
 
         using TKey = TableKey<DummyA>;
         using TColumns = TableColumns<DummyA, DummyB>;
-
-        using StoragePolicy = TStoragePolicy<IndexChannel>;
     };
 
     using TTables = SchemaTables<Dummy>;

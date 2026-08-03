@@ -1,0 +1,14 @@
+Changes a no-op call to freeP4() into an assert().
+
+https://github.com/sqlite/sqlite/commit/ec8f893e065c95a082e1e432bcacd4641ae8b13e
+--- contrib/libs/sqlite3/sqlite3.c	(index)
++++ contrib/libs/sqlite3/sqlite3.c	(working tree)
+@@ -85243,7 +85243,7 @@ static void SQLITE_NOINLINE vdbeChangeP4Full(
+   int n
+ ){
+   if( pOp->p4type ){
+-    freeP4(p->db, pOp->p4type, pOp->p4.p);
++    assert( pOp->p4type > P4_FREE_IF_LE );
+     pOp->p4type = 0;
+     pOp->p4.p = 0;
+   }

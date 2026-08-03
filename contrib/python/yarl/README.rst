@@ -4,22 +4,23 @@ yarl
 The module provides handy URL class for URL parsing and changing.
 
 .. image:: https://github.com/aio-libs/yarl/workflows/CI/badge.svg
-  :target: https://github.com/aio-libs/yarl/actions?query=workflow%3ACI
-  :align: right
+   :target: https://github.com/aio-libs/yarl/actions?query=workflow%3ACI
+   :align: right
 
 .. image:: https://codecov.io/gh/aio-libs/yarl/branch/master/graph/badge.svg
-  :target: https://codecov.io/gh/aio-libs/yarl
+   :target: https://codecov.io/gh/aio-libs/yarl
+
+.. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
+   :target: https://codspeed.io/aio-libs/yarl
 
 .. image:: https://badge.fury.io/py/yarl.svg
-    :target: https://badge.fury.io/py/yarl
-
+   :target: https://badge.fury.io/py/yarl
 
 .. image:: https://readthedocs.org/projects/yarl/badge/?version=latest
-    :target: https://yarl.aio-libs.org
-
+   :target: https://yarl.aio-libs.org
 
 .. image:: https://img.shields.io/pypi/pyversions/yarl.svg
-    :target: https://pypi.python.org/pypi/yarl
+   :target: https://pypi.python.org/pypi/yarl
 
 .. image:: https://img.shields.io/matrix/aio-libs:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
    :target: https://matrix.to/#/%23aio-libs:matrix.org
@@ -28,6 +29,7 @@ The module provides handy URL class for URL parsing and changing.
 .. image:: https://img.shields.io/matrix/aio-libs-space:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs-space%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
    :target: https://matrix.to/#/%23aio-libs-space:matrix.org
    :alt: Matrix Space — #aio-libs-space:matrix.org
+
 
 Introduction
 ------------

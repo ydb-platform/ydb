@@ -58,15 +58,6 @@ namespace NActors {
         EvSubscribeForConnection,
         EvReportConnection,
 
-        // io_uring transport events
-        EvUringRegister,
-        EvUringRegisterResult,
-        EvUringWriteComplete,
-        EvUringRecvComplete,
-        EvUringSendZcNotif,
-        EvUringUnregister,
-        EvUringRegisterFailed,
-
         // wake for the direct-session (v1) lock-free registration queue
         EvProcessDirectSessionQueue,
 
@@ -75,7 +66,6 @@ namespace NActors {
         EvRegisterSession,
         EvUnregisterSession,
         EvStop,
-        EvMigrateDone,
         EvUringMonRequest,
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

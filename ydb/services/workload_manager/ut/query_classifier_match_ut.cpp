@@ -26,7 +26,8 @@ void CheckDecision(std::function<void(NResourcePool::TPoolSettings&)> setup, EEx
     auto classifier = NWorkloadManager::CreateQueryClassifier(
         poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx));
 
-    auto result = classifier->PreCompileClassify();
+    NKqp::TUserRequestContext userRequestContext;
+    auto result = classifier->PreCompileClassify(userRequestContext);
 
     switch (expected) {
         case EExpected::Bypass:

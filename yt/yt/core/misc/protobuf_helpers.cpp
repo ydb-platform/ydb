@@ -1,5 +1,4 @@
 #include "protobuf_helpers.h"
-#include "mpl.h"
 
 #include <yt/yt/core/compression/codec.h>
 
@@ -10,6 +9,8 @@
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <library/cpp/yt/misc/cast.h>
+
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 

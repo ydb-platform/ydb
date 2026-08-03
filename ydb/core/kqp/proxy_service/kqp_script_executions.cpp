@@ -2773,7 +2773,7 @@ class TCancelScriptExecutionOperationActor final : public TActorBootstrapped<TCa
     using TBase = TActorBootstrapped<TCancelScriptExecutionOperationActor>;
     using TRetryPolicy = IRetryPolicy<>;
 
-    static constexpr ui64 MAX_CANCEL_RETRIES = 10;
+    static constexpr ui64 MAX_CANCEL_RETRIES = 30;
 
 public:
     TCancelScriptExecutionOperationActor(TEvCancelScriptExecutionOperation::TPtr&& ev, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
@@ -3013,8 +3013,7 @@ private:
         }
         RunScriptActor = {};
 
-        const bool immediateRetry = reason == TEvents::TEvUndelivered::ReasonActorUnknown; // The actor probably had finished before our cancel message arrived
-        ScheduleRetryOrReply(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to deliver cancel request to destination (delivery problem, reason: " << reason << ")", immediateRetry);
+        ScheduleRetryOrReply(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to deliver cancel request to destination (delivery problem, reason: " << reason << ")", /* immediate */ false);
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {

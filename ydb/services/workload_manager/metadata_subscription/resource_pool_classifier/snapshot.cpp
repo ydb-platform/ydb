@@ -12,7 +12,6 @@ bool TResourcePoolClassifierSnapshot::DoDeserializeFromResultSet(const Ydb::Tabl
 }
 
 void TResourcePoolClassifierSnapshot::AddConfig(TResourcePoolClassifierConfig config) {
-    config.EnsureSettings();
     auto& info = ResourcePoolClassifierConfigs[config.GetDatabase()];
     info.ByName.emplace(config.GetName(), config);
     info.ByRank.emplace(config.GetRank(), std::move(config));

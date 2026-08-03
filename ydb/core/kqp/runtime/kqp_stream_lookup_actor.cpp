@@ -1241,7 +1241,8 @@ private:
             {"snapshotTxId", record.GetSnapshot().GetTxId()},
             {"step", record.GetSnapshot().GetStep()},
             {"lockTxId", record.GetLockTxId()},
-            {"lockNodeId", record.GetLockNodeId()});
+            {"lockNodeId", record.GetLockNodeId()},
+            {"lockMode", record.GetLockMode()});
 
         const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
 

@@ -694,6 +694,7 @@ class TClusterInfo : public TThrRefBase {
 public:
     using TNodes = THashMap<ui32, TNodeInfoPtr>;
     using TTablets = THashMap<ui64, TTabletInfo>;
+    using TNodeTabletsMap = THashMap<ui32, TTablets>;
     using TPDisks = THashMap<TPDiskID, TPDiskInfoPtr, TPDiskIDHash>;
     using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>;
     using TBSGroups = THashMap<ui32, TBSGroupInfo>;
@@ -724,6 +725,7 @@ public:
 
     void GenerateTenantNodesCheckers();
     void GenerateSysTabletsNodesCheckers();
+    void GenerateNodesWithRunningSystemTablet();
     void GenerateClusterNodesCheckers();
 
     bool IsStateStorageReplicaNode(ui32 nodeId) const {
@@ -842,6 +844,10 @@ public:
     const TTablets &AllTablets() const {
         return Tablets;
     }
+
+    bool NodeHasRunningSystemTablet(ui32 nodeId) const;
+
+    bool HostHasRunningSystemTablet(const TString &hostName) const;
 
     bool HasPDisk(TPDiskID pdId) const {
         return PDisks.contains(pdId);
@@ -1084,6 +1090,7 @@ private:
 
     TNodes Nodes;
     TTablets Tablets;
+    TNodeTabletsMap NodeTabletsByNode;
     TPDisks PDisks;
     TVDisks VDisks;
     TBSGroups BSGroups;
@@ -1105,6 +1112,7 @@ public:
     bool IsLocalBootConfDiffersFromConsole = false;
     NKikimrConfig::TBootstrap BootstrapConfig;
     THashMap<ui32, TVector<NKikimrConfig::TBootstrap::ETabletType>> NodeToTabletTypes;
+    THashSet<ui32> NodesWithRunningSystemTablet;
 
     THashMap<TPileId, TSysNodesCheckers> SysNodesCheckers;
 

@@ -518,7 +518,8 @@ Y_UNIT_TEST(AddNotFirstMessageToEmptyStorage) {
 
 Y_UNIT_TEST(AddMessageWithSkippedMessage) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
-    auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
+    auto writeTimestamp3 = timeProvider->Now() - TDuration::Seconds(137);
+    auto writeTimestamp7 = timeProvider->Now() - TDuration::Seconds(113);
 
     TStorage storage(timeProvider, {});
 
@@ -528,11 +529,7 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
 
     Cerr << "DUMP 1: " << storage.DebugString() << Endl;
 
-    auto writeTimestamp3 = timeProvider->Now() - TDuration::Seconds(137);
-
-    storage.AddMessage(7, true, 5, writeTimestamp);
-    // The message with offset 3 is preserved (moved to the slow zone) rather than dropped, so that
-    // the offset gap between offsets 3 and 7 does not lose already added messages.
+    storage.AddMessage(7, true, 5, writeTimestamp7);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 7);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 8);
 
@@ -558,7 +555,7 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
         UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
         UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
-        UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
+        UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp7);
     }
     ++it;
     UNIT_ASSERT(it == storage.end());

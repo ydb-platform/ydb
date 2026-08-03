@@ -523,7 +523,7 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
 
     TStorage storage(timeProvider, {});
 
-    storage.AddMessage(3, true, 5, timeProvider->Now() - TDuration::Seconds(137));
+    storage.AddMessage(3, true, 5, writeTimestamp3);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 4);
 

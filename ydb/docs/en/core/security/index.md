@@ -12,8 +12,8 @@ Security model in {{ ydb-short-name }} introduces the following concepts:
 
   - **Access subjects**:
   - **Users**. {{ ydb-short-name }} supports both internal [users](⟦U1⟧) and external users from third-party directory services, such as LDAP and IAM systems.
-- **Groups**. {{ ydb-short-name }} allows grouping users into named collections. The list of users in a group can be modified later. A group can be empty.
-- **Access objects** in {{ ydb-short-name }} are scheme objects (tables, views, etc) for which access rights are configured.
+- **Access objects**. In {{ ydb-short-name }}, access objects are schema objects (tables, system views, etc.) for which access rights are configured.
+- **Access rights**. In {{ ydb-short-name }}, access rights define the list of allowed operations on access objects for a specific user or group.
 
   **Access rights** in ⟦V1⟧ are used to determine the list of permitted operations with access objects for a given user or group.
 

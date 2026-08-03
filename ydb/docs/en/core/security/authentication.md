@@ -31,9 +31,9 @@ The `enforce_user_token_requirement` flag in the [authentication mode settings](
 Depending on the authentication mode settings, the actual authentication may not be anonymous:
 
 - Anonymous authentication allows you to connect to ⟦V1⟧ without specifying any credentials like username and password. This type of access should be used only for educational purposes in local databases that cannot be accessed over the network.
-- However, if a user or token is specified, the corresponding authentication mode will work with subsequent authorization.
+- An explicitly specified token in requests can be verified according to the appropriate rules
 
-Anonymous authentication should be used only for informational purposes for local databases that are not accessible over the network.
+In this case, requests will not be anonymous, and access rights will be checked
 
 To enable anonymous authentication, use ⟦C1⟧ in the ⟦C2⟧ key of the cluster's [configuration file](../reference/configuration/security_config.md#security-access-levels).
 
@@ -51,7 +51,7 @@ A token is returned in response to the username and password. Tokens have a defa
 
 1. Authentication by username and password includes the following steps:
 2. The client accesses the database and presents their username and password to the ⟦V1⟧ authentication service.
-3. The service validates authentication data. If the data matches, it generates a token and returns it to the authentication service.
+3. The client accesses the database, providing the token as authentication information.
 
 The client accesses the database, presenting their token as authentication data.
 
@@ -61,7 +61,7 @@ To enable authentication by username and password, ensure that the ⟦C1⟧ and 
 
 To learn how to manage roles and users, see [{#T}](../security/authorization.md).
 
-### Password complexity
+### Forced user lock/unlock
 
 ⟦V1⟧ allows configuring requirements for password complexity. If a password specified in the ⟦C2⟧ or ⟦C3⟧ command does not meet complexity requirements, the command will result in an error. By default, ⟦V2⟧ has no password complexity requirements. A password of any length is accepted, including an empty string. A password can contain any number of digits and uppercase or lowercase letters, as well as special characters from the ⟦C4⟧ list. To set requirements for password complexity, define parameters in the ⟦C5⟧ section in the [configuration](../yql/reference/syntax/alter-user.md).
 
@@ -87,7 +87,7 @@ By default, a user has four attempts to enter a password. If a user fails to ent
 
 If necessary, a ⟦V1⟧ cluster or database administrator can [unlock](https://openldap.org/) a user before the lockout period expires.
 
-### Manual user lockout
+### Authentication
 
 Authentication using the LDAP protocol is similar to the login/password authentication process. The only difference is that the LDAP directory plays the role of the authentication component. The LDAP directory is used to verify the login/password pair and to determine the groups to which the user belongs.
 
@@ -189,7 +189,7 @@ When choosing the authentication mode among those supported by the server and en
 
 {% endnote %}
 
-### Authentication {#ldap-tls}
+### TLS connection {#ldap-tls}
 
 Depending on the specified configuration parameters, {{ ydb-short-name }} can establish either an encrypted or unencrypted connection. An encrypted connection to the LDAP server is established using the TLS protocol. This method is recommended for production clusters. There are two ways to enable a TLS connection:
 
@@ -212,7 +212,7 @@ After successful authentication, a token is generated. This token is then used i
 
 When using LDAP authentication, no user passwords are stored in ⟦V1⟧.
 
-### Token verification
+### Principle of operation
 
 1. The client establishes a TLS connection to the {{ ydb-short-name }} server, passing the client certificate (and the trust chain).
 2. When processing the request, the server extracts the certificate from the TLS context.
@@ -221,7 +221,7 @@ When using LDAP authentication, no user passwords are stored in ⟦V1⟧.
 
 The process of retrieving a user's group list from an LDAP directory is similar to the steps taken during authentication. First, a *bind* operation is performed using the service user credentials specified by the **bind_dn** and **bind_password** parameters in the [ldap_authentication](../concepts/glossary.md#auth-token) section of the configuration file. After successful authentication, a search is conducted for the user entry associated with the previously generated token. This search uses the **search_filter** parameter. If the user still exists, the result of the *search* operation will be a list of attribute values specified by the **requested_group_attribute** parameter. If this parameter is not set, the *memberOf* attribute is used as the default for reverse group membership. The *memberOf* attribute contains the distinguished names (DNs) of the groups to which the user belongs.
 
-### Group search
+### SID formation
 
 {% note info %}
 

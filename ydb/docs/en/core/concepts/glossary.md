@@ -430,9 +430,9 @@ A database schema consists of **schema objects**, which can be databases, [table
 
 For organizational convenience, schema objects form a hierarchy using [folders](#folder).
 
-### Folder {#folder}
+### Directory {#folder}
 
-As in file systems, a **folder** or **directory** is a container for [schema objects](#scheme-object).
+As in file systems, a **directory** is a container for [schema objects](#scheme-object).
 
 Folders can contain subfolders, and such nesting can be of arbitrary depth.
 

@@ -24,13 +24,12 @@ public:
 
     TKqpTableResolver(const TActorId& owner, ui64 txId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TKqpTasksGraph& tasksGraph, bool skipUnresolvedNames, NWilson::TTraceId resolveTraceId)
+        TKqpTasksGraph& tasksGraph, bool skipUnresolvedNames)
         : Owner(owner)
         , TxId(txId)
         , UserToken(userToken)
         , SkipUnresolvedNames(skipUnresolvedNames)
-        , TasksGraph(tasksGraph)
-        , ResolveTraceId(std::move(resolveTraceId)) {}
+        , TasksGraph(tasksGraph) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -472,22 +471,19 @@ private:
 
         if (!ResolvingNamesFinished) {
             NavigateWindow.Start = TInstant::Now();
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
-                0, 0, NWilson::TTraceId(ResolveTraceId));
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
             Become(&TKqpTableResolver::ResolveNamesState);
             return;
         }
 
         if (requestNavigate->ResultSet.size()) {
             NavigateWindow.Start = TInstant::Now();
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
-                0, 0, NWilson::TTraceId(ResolveTraceId));
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
         } else {
             NavigationFinished = true;
         }
         ResolveKeysWindow.Start = TInstant::Now();
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request),
-            0, 0, NWilson::TTraceId(ResolveTraceId));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
         Become(&TKqpTableResolver::ResolveKeysState);
     }
 
@@ -565,17 +561,13 @@ private:
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;
     TDuration CpuTime;
-
-    // Parent (the executer's ResolveTables span) for the scheme-cache/scheme-board round-trip spans.
-    const NWilson::TTraceId ResolveTraceId;
 };
 
 } // anonymous namespace
 
 NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph, bool skipUnknownNames,
-    NWilson::TTraceId resolveTraceId) {
-    return new TKqpTableResolver(owner, txId, userToken, tasksGraph, skipUnknownNames, std::move(resolveTraceId));
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph, bool skipUnknownNames) {
+    return new TKqpTableResolver(owner, txId, userToken, tasksGraph, skipUnknownNames);
 }
 
 } // namespace NKikimr::NKqp

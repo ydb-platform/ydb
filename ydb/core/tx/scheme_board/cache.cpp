@@ -267,7 +267,6 @@ namespace {
                 {"result", Context->Request->ToString(*AppData()->TypeRegistry)});
 
             this->Send(Context->Sender, new TEvResult(Context->Request.Release()), 0, Context->Cookie);
-            Context->Span.End();
             this->PassAway();
         }
 
@@ -2860,8 +2859,6 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         auto context = MakeContext<TNavigateContext>(ev);
-        context->Span = NWilson::TSpan(TComponentTracingLevels::TTablet::Basic, std::move(ev->TraceId),
-            "SchemeCacheNavigate", NWilson::EFlags::AUTO_END);
         auto& resultSet = context->Request->ResultSet;
         for (size_t i = 0; i < resultSet.size(); ++i) {
             auto& entry = resultSet[i];
@@ -2937,8 +2934,6 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         auto context = MakeContext<TResolveContext>(ev);
-        context->Span = NWilson::TSpan(TComponentTracingLevels::TTablet::Basic, std::move(ev->TraceId),
-            "SchemeCacheResolve", NWilson::EFlags::AUTO_END);
 
         auto pathExtractor = [](const TResolve::TEntry& entry) {
             const TKeyDesc* keyDesc = entry.KeyDescription.Get();

@@ -1,10 +1,8 @@
-#include "defs.h"
-#include "datashard_ut_common_kqp.h"
-
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
+#include <ydb/library/actors/wilson/wilson_uploader.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -34,24 +32,29 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         return {runtime, server, sender};
     }
 
-    TFakeWilsonUploader* RegisterUploader(TTestActorRuntime& runtime) {
-        auto* uploader = new TFakeWilsonUploader();
-        TActorId id = runtime.Register(uploader, 0);
-        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), id, 0);
+    std::pair<TFakeWilsonUploader*, TFakeWilsonUploader*> RegisterUploaders(TTestActorRuntime& runtime) {
+        auto* devUploader = new TFakeWilsonUploader();
+        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), runtime.Register(devUploader, 0), 0);
+        auto* userUploader = new TFakeWilsonUploader();
+        runtime.RegisterService(NWilson::MakeUserFacingWilsonUploaderId(), runtime.Register(userUploader, 0), 0);
         runtime.SimulateSleep(TDuration::Seconds(10));
-        return uploader;
+        return {devUploader, userUploader};
     }
 
     // Seeds a dev trace via the event's TraceId and, when requested, a user-facing trace via the
     // serialized Record field (the path a cross-node request takes). The proxy is bypassed here.
-    void ExecSQL(TServer::TPtr server, TActorId sender, const TString& sql, bool userTracing,
+    void ExecSQL(TServer::TPtr server, TActorId sender, const TString& sql,
+            bool devTracing, bool userTracing,
             Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS) {
         auto& runtime = *server->GetRuntime();
         THolder<NKqp::TEvKqp::TEvQueryRequest> request = MakeSQLRequest(sql, true);
         if (userTracing) {
             NWilson::TTraceId::NewTraceId(15, 4095).Serialize(request->Record.MutableUserFacingTraceId());
         }
-        NWilson::TTraceId devTrace = NWilson::TTraceId::NewTraceId(15, 4095);
+        NWilson::TTraceId devTrace;
+        if (devTracing) {
+            devTrace = NWilson::TTraceId::NewTraceId(15, 4095);
+        }
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender,
             request.Release(), 0, 0, nullptr, std::move(devTrace)));
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
@@ -70,20 +73,25 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
     Y_UNIT_TEST(UserTreeShapeAndSeparation) {
         auto [runtime, server, sender] = CreateServer();
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
-        auto* uploader = RegisterUploader(runtime);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
 
         ExecSQL(server, sender,
             "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);",
-            /*userTracing*/ true);
+            /*devTracing*/ true, /*userTracing*/ true);
 
-        UNIT_ASSERT(uploader->BuildTraceTrees());
+        UNIT_ASSERT(devUploader->BuildTraceTrees());
+        UNIT_ASSERT(userUploader->BuildTraceTrees());
 
-        // Dev and user channels are independent trees (distinct trace-ids).
-        UNIT_ASSERT_VALUES_EQUAL(2, uploader->Traces.size());
+        // Dev and user channels are independent trees in independent uploaders.
+        UNIT_ASSERT_VALUES_EQUAL(1, devUploader->Traces.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, userUploader->Traces.size());
 
-        auto* userRoot = FindRootChild(*uploader, "UPSERT /Root/table-1");
-        UNIT_ASSERT_C(userRoot, "user-facing root span missing, traces: " << uploader->PrintTraces());
-        UNIT_ASSERT_C(FindRootChild(*uploader, "Session.query.QUERY_ACTION_EXECUTE"), "dev root span missing");
+        auto* userRoot = FindRootChild(*userUploader, "UPSERT /Root/table-1");
+        UNIT_ASSERT_C(userRoot, "user-facing root span missing, traces: " << userUploader->PrintTraces());
+        UNIT_ASSERT_C(FindRootChild(*devUploader, "Session.query.QUERY_ACTION_EXECUTE"), "dev root span missing");
+        UNIT_ASSERT_C(!FindRootChild(*devUploader, "UPSERT /Root/table-1"), "user tree leaked into dev uploader");
+        UNIT_ASSERT_C(!FindRootChild(*userUploader, "Session.query.QUERY_ACTION_EXECUTE"),
+            "dev tree leaked into user uploader");
 
         // Live executer phase in the user tree: Execute groups a Prepare (resolve) node and a Run node.
         auto execute = userRoot->BFSFindOne("Execute");
@@ -115,7 +123,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         // db.query.text is sanitized: literals become '?' placeholders, no user data leaks.
         bool queryTextChecked = false;
-        for (const auto& span : uploader->Spans) {
+        for (const auto& span : userUploader->Spans) {
             for (const auto& attr : span.attributes()) {
                 if (attr.key() == "db.query.text") {
                     const TString& text = attr.value().string_value();
@@ -131,16 +139,32 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
     Y_UNIT_TEST(UserChannelOffProducesNoUserTree) {
         auto [runtime, server, sender] = CreateServer();
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
-        auto* uploader = RegisterUploader(runtime);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
 
         ExecSQL(server, sender,
             "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100);",
-            /*userTracing*/ false);
+            /*devTracing*/ true, /*userTracing*/ false);
 
-        UNIT_ASSERT(uploader->BuildTraceTrees());
-        UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size()); // dev only
-        UNIT_ASSERT_C(!FindRootChild(*uploader, "UPSERT /Root/table-1"), "user tree emitted with channel off");
-        UNIT_ASSERT_C(FindRootChild(*uploader, "Session.query.QUERY_ACTION_EXECUTE"), "dev root span missing");
+        UNIT_ASSERT(devUploader->BuildTraceTrees());
+        UNIT_ASSERT_VALUES_EQUAL(1, devUploader->Traces.size());
+        UNIT_ASSERT(userUploader->Spans.empty());
+        UNIT_ASSERT_C(FindRootChild(*devUploader, "Session.query.QUERY_ACTION_EXECUTE"), "dev root span missing");
+    }
+
+    Y_UNIT_TEST(UserChannelWorksWithoutDevTracing) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
+
+        ExecSQL(server, sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100);",
+            /*devTracing*/ false, /*userTracing*/ true);
+
+        UNIT_ASSERT(devUploader->Spans.empty());
+        UNIT_ASSERT(userUploader->BuildTraceTrees());
+        UNIT_ASSERT_VALUES_EQUAL(1, userUploader->Traces.size());
+        UNIT_ASSERT_C(FindRootChild(*userUploader, "UPSERT /Root/table-1"),
+            "user tree missing when dev tracing is off");
     }
 }
 

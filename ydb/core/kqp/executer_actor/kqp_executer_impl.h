@@ -1159,8 +1159,7 @@ protected:
 
         ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ExecuterTableResolve, "WaitForTableResolve", EUserFacingTracePhase::ResolveTables);
 
-        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false,
-            ExecuterStateSpan.GetTraceId());
+        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
         YDB_LOG_TRACE_COMP(NKikimrServices::KQP_EXECUTER, "Got request, become WaitResolveState",

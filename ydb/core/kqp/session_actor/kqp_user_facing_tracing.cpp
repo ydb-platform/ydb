@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/security/util.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
@@ -44,7 +45,8 @@ NWilson::TSpan MakePhase(const NWilson::TTraceId& parentId, TInstant start, TIns
     }
     NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
         parentId, parentId.Span(parentId.GetVerbosity()), start, end,
-        NWilson::NTraceProto::Status::STATUS_CODE_OK, name);
+        NWilson::NTraceProto::Status::STATUS_CODE_OK, name,
+        NWilson::MakeUserFacingWilsonUploaderId());
     for (const auto& [key, value] : attrs) {
         span.Attribute(key, value);
     }
@@ -176,7 +178,8 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent, const TString& stageVer
             stageParent, stageParent.Span(stageParent.GetVerbosity()),
             TInstant::MilliSeconds(startMs), TInstant::MilliSeconds(finishMs),
             NWilson::NTraceProto::Status::STATUS_CODE_OK,
-            TStringBuilder() << stageVerb << " task " << task.TaskId);
+            TStringBuilder() << stageVerb << " task " << task.TaskId,
+            NWilson::MakeUserFacingWilsonUploaderId());
         if (!span) {
             continue;
         }
@@ -184,7 +187,6 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent, const TString& stageVer
         if (task.NodeId) {
             span.Attribute("ydb.node_id", static_cast<i64>(task.NodeId));
         }
-        span.Attribute("ydb.cpu_us", static_cast<i64>(task.CpuTimeUs));
         span.Attribute("ydb.input_rows", static_cast<i64>(task.InputRows));
         span.Attribute("ydb.output_rows", static_cast<i64>(task.OutputRows));
         // Stated explicitly because the span's own duration rounds to zero for sub-ms tasks.
@@ -225,7 +227,8 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent, const TString& stageVer
                 TInstant::MilliSeconds(shard.GetStartTimeMs()),
                 TInstant::MilliSeconds(shard.GetFinishTimeMs()),
                 NWilson::NTraceProto::Status::STATUS_CODE_OK,
-                ShardDisplayName("Read from", shard.GetShardId()));
+                ShardDisplayName("Read from", shard.GetShardId()),
+                NWilson::MakeUserFacingWilsonUploaderId());
             if (!shardSpan) {
                 continue;
             }
@@ -262,7 +265,8 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TUserFacingTraceExecu
         NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
             parent, parent.Span(parent.GetVerbosity()),
             TInstant::MilliSeconds(base + startMs), TInstant::MilliSeconds(base + finishMs),
-            NWilson::NTraceProto::Status::STATUS_CODE_OK, StageDisplayName(stage, hint));
+            NWilson::NTraceProto::Status::STATUS_CODE_OK, StageDisplayName(stage, hint),
+            NWilson::MakeUserFacingWilsonUploaderId());
         if (!span) {
             continue;
         }
@@ -719,7 +723,8 @@ void FinishUserFacingSpan(TKqpQueryState& state, bool success, const TString& st
     NWilson::TSpan userSpan = NWilson::TSpan::ConstructTerminated(
         traceId, traceId.Span(traceId.GetVerbosity()),
         state.StartTime, TInstant::Now(),
-        NWilson::NTraceProto::Status::STATUS_CODE_OK, rootName);
+        NWilson::NTraceProto::Status::STATUS_CODE_OK, rootName,
+        NWilson::MakeUserFacingWilsonUploaderId());
     if (!userSpan) {
         return;
     }

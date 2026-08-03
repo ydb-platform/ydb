@@ -29,7 +29,6 @@ struct TUserFacingTaskSnapshot {
     ui64 CreateTimeMs = 0; // absolute epoch ms, as reported by the compute actor
     ui64 StartTimeMs = 0;
     ui64 FinishTimeMs = 0;
-    ui64 CpuTimeUs = 0;
     ui64 ComputeCpuTimeUs = 0;
     ui64 BuildCpuTimeUs = 0;
     ui64 InputRows = 0;
@@ -53,7 +52,6 @@ inline TUserFacingTaskSnapshot MakeUserFacingTaskSnapshot(const NYql::NDqProto::
     s.CreateTimeMs = task.GetCreateTimeMs();
     s.StartTimeMs = task.GetStartTimeMs();
     s.FinishTimeMs = task.GetFinishTimeMs();
-    s.CpuTimeUs = task.GetCpuTimeUs();
     s.ComputeCpuTimeUs = task.GetComputeCpuTimeUs();
     s.BuildCpuTimeUs = task.GetBuildCpuTimeUs();
     s.InputRows = task.GetInputRows();

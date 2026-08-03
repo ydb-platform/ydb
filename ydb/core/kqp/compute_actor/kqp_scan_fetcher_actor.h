@@ -179,7 +179,6 @@ private:
     NKikimrKqp::TKqpSnapshot Snapshot;
     TShardsScanningPolicy ShardsScanningPolicy;
     TIntrusivePtr<TKqpCounters> Counters;
-    const NWilson::TTraceId TraceId; // parent for this scan's scheme-cache resolve round-trips
     TScannedDataStats Stats;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     std::deque<std::pair<TEvKqpCompute::TEvScanData::TPtr, TInstant>> PendingScanData;

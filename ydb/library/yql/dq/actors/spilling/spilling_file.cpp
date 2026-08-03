@@ -225,28 +225,10 @@ public:
 
     void Bootstrap() {
         Root_ = Config_.Root;
-        const auto rootToRemoveOldTmp = Root_;
-        const auto sessionId = Config_.SpillingSessionId;
-        const auto nodeId = SelfId().NodeId();
-
-        Root_ /= (TStringBuilder() << NodePrefix_ << "_" << nodeId << "_" << sessionId);
+        Root_ /= (TStringBuilder() << NodePrefix_ << "_" << SelfId().NodeId() << "_" << Config_.SpillingSessionId);
         LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
 
-        try {
-            if (Root_.IsSymlink()) {
-                throw TIoException() << Root_ << " is a symlink, can not start Spilling Service";
-            }
-            Root_.ForceDelete();
-            Root_.MkDirs(DIR_MODE);
-        } catch (...) {
-            const TString root = Root_.GetPath();
-            const TString error = CurrentExceptionMessage();
-            Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), error.c_str());
-        }
-
-        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(rootToRemoveOldTmp, nodeId, sessionId));
-
-        Become(&TDqLocalFileSpillingService::WorkState);
+        TryStart();
     }
 
     static constexpr char ActorName[] = "DQ_LOCAL_FILE_SPILLING_SERVICE";
@@ -261,6 +243,39 @@ protected:
     }
 
 private:
+    static constexpr ui32 StartupRetryCount = 2;
+
+    void TryStart() {
+        try {
+            if (Root_.IsSymlink()) {
+                throw TIoException() << Root_ << " is a symlink, can not start Spilling Service";
+            }
+            Root_.ForceDelete();
+            Root_.MkDirs(DIR_MODE);
+        } catch (...) {
+            const TString root = Root_.GetPath();
+            const TString error = CurrentExceptionMessage();
+            if (StartupRetries_ < StartupRetryCount) {
+                ++StartupRetries_;
+                LOG_E("Cannot start DQ local file spilling service at " << root << ": " << error
+                    << ". Retrying in 1 second (" << StartupRetries_ << "/" << StartupRetryCount << ")");
+                Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+                Become(&TDqLocalFileSpillingService::StartupState);
+                return;
+            }
+            Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), error.c_str());
+        }
+
+        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(
+            TFsPath(Config_.Root), SelfId().NodeId(), Config_.SpillingSessionId));
+        Become(&TDqLocalFileSpillingService::WorkState);
+    }
+
+    STRICT_STFUNC(StartupState,
+        cFunc(TEvents::TEvWakeup::EventType, TryStart)
+        cFunc(TEvents::TEvPoison::EventType, PassAway)
+    );
+
     STRICT_STFUNC(WorkState,
         hFunc(TEvDqSpillingLocalFile::TEvOpenFile, HandleWork)
         hFunc(TEvDqSpillingLocalFile::TEvCloseFile, HandleWork)
@@ -1044,6 +1059,7 @@ private:
     THashMap<TActorId, TFileDesc> Files_;
     TList<const TClosedFileDesc> ClosedFiles_;
     ui64 TotalSize_ = 0;
+    ui32 StartupRetries_ = 0;
 };
 
 } // anonymous namespace

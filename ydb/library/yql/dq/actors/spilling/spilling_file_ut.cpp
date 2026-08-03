@@ -9,6 +9,7 @@
 #include <util/system/fs.h>
 #include <util/generic/string.h>
 #include <util/folder/path.h>
+#include <util/stream/file.h>
 
 namespace NYql::NDq {
 
@@ -636,6 +637,53 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         }
 
         runtime.DispatchEvents(options);
+    }
+
+    Y_UNIT_TEST(RecoverAfterStartError) {
+        TTestActorRuntime runtime;
+        runtime.SetScheduledEventFilter([](
+                TTestActorRuntimeBase& runtime,
+                TAutoPtr<IEventHandle>& event,
+                TDuration delay,
+                TInstant& deadline)
+        {
+            if (runtime.IsScheduleForActorEnabled(event->GetRecipientRewrite())) {
+                deadline = runtime.GetTimeProvider()->Now() + delay;
+                return false;
+            }
+            return true;
+        });
+        runtime.Initialize();
+
+        const TFsPath root = TFsPath::Cwd() / (runtime.GetSpillingPrefix() + "_recover");
+        root.ForceDelete();
+        {
+            TFileOutput output(root.GetPath());
+        }
+
+        runtime.StartSpillingService(1000, 500, 100, 1000, root);
+        runtime.WaitBootstrap();
+
+        // Let the first retry fail as well, then make the root usable before the second retry.
+        TDispatchOptions retryOptions;
+        retryOptions.FinalEvents.emplace_back(TEvents::TSystem::Wakeup, 1);
+        UNIT_ASSERT(runtime.DispatchEvents(retryOptions, TDuration::Seconds(2)));
+
+        root.ForceDelete();
+        UNIT_ASSERT(runtime.DispatchEvents(retryOptions, TDuration::Seconds(2)));
+
+        auto tester = runtime.AllocateEdgeActor();
+        auto spillingActor = runtime.StartSpillingActor(tester);
+        runtime.WaitBootstrap();
+
+        runtime.Send(new IEventHandle(
+            spillingActor,
+            tester,
+            new TEvDqSpilling::TEvWrite(1, CreateRope(10, 'a'))));
+
+        auto response = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(
+            tester, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->BlobId, 1);
     }
 
     Y_UNIT_TEST(NoSpillingService) {

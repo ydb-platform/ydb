@@ -2802,6 +2802,7 @@ message TColumnShardConfig {
     optional bool CombineChunksInResult = 54 [default = true];
     optional bool EnableDiagnostics = 55 [default = true];
     optional bool EnableParallelCompaction = 56 [default = true];
+    optional bool EnableTieringObjectKeyTree = 57 [default = true];
 
     message TStatistics {
         optional uint32 ReportBaseStatisticsPeriodMs = 1 [default = 60000];

@@ -1,4 +1,5 @@
 #include "gc_actor.h"
+#include "object_key.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
@@ -41,7 +42,7 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
     TLogoBlobID logoBlobId;
     TString errorMessage;
     Y_ABORT_UNLESS(ev->Get()->Key);
-    AFL_VERIFY(TLogoBlobID::Parse(logoBlobId, *ev->Get()->Key, errorMessage))("error", errorMessage);
+    AFL_VERIFY(TObjectKey::Parse(*ev->Get()->Key, logoBlobId, errorMessage))("error", errorMessage)("key", *ev->Get()->Key);
     BlobIdsToRemove.erase(logoBlobId);
     CheckFinished();
 }
@@ -65,7 +66,7 @@ void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
         BlobIdsToRemove.emplace(i.GetLogoBlobId());
     }
     for (auto&& i : BlobIdsToRemove) {
-        StartDeletingObject(i.ToString());
+        StartDeletingObject(TObjectKey::Make(i));
     }
     TBase::Bootstrap(ctx);
     Become(&TGarbageCollectionActor::StateWork);

@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include <ydb/core/base/s3_object_key.h>
+
 namespace NKikimr::NBlobDepot {
 
     static constexpr ui32 BaseDataChannel = 2;
@@ -153,14 +155,9 @@ namespace NKikimr::NBlobDepot {
         }
 
         TString MakeObjectName(const TString& basePath) const {
-            const size_t hash = MultiHash(Generation, KeyId);
-            const size_t a = hash % 36;
-            const size_t b = hash / 36 % 36;
-            static const char vec[] = "0123456789abcdefghijklmnopqrstuvwxyz";
             return TStringBuilder() << basePath
                 << '/' << Generation
-                << '/' << vec[a]
-                << '/' << vec[b]
+                << '/' << MakeS3KeyFanout(MultiHash(Generation, KeyId))
                 << '/' << KeyId;
         }
 

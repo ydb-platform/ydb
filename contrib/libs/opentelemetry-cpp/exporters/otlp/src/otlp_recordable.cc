@@ -1,8 +1,9 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include <stdint.h>
+#include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <string>
 
 #include "opentelemetry/common/attribute_value.h"
@@ -11,11 +12,11 @@
 #include "opentelemetry/exporters/otlp/otlp_populate_attribute_utils.h"
 #include "opentelemetry/exporters/otlp/otlp_recordable.h"
 #include "opentelemetry/nostd/function_ref.h"
-#include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/instrumentationscope/instrumentation_scope.h"
 #include "opentelemetry/sdk/resource/resource.h"
+#include "opentelemetry/sdk/trace/span_limits.h"
 #include "opentelemetry/trace/span_context.h"
 #include "opentelemetry/trace/span_id.h"
 #include "opentelemetry/trace/span_metadata.h"
@@ -31,8 +32,6 @@
 #include "opentelemetry/proto/trace/v1/trace.pb.h"
 #include "opentelemetry/exporters/otlp/protobuf_include_suffix.h" // IWYU pragma: keep
 // clang-format on
-
-namespace nostd = opentelemetry::nostd;
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace exporter
@@ -117,24 +116,40 @@ void OtlpRecordable::SetResource(const sdk::resource::Resource &resource) noexce
   resource_ = &resource;
 }
 
+void OtlpRecordable::SetSpanLimits(const opentelemetry::sdk::trace::SpanLimits &limits) noexcept
+{
+  // Update the span limits to be the minimum of the current limits and the new limits
+  // The initial limits are set on construction from the deprecated span limits otlp options.
+  // TODO: replace with a simple copy once the deprecated options are removed.
+  span_limits_ = {
+      (std::min)(span_limits_.attribute_count_limit, limits.attribute_count_limit),
+      (std::min)(span_limits_.attribute_value_length_limit, limits.attribute_value_length_limit),
+      (std::min)(span_limits_.event_count_limit, limits.event_count_limit),
+      (std::min)(span_limits_.link_count_limit, limits.link_count_limit),
+      (std::min)(span_limits_.event_attribute_count_limit, limits.event_attribute_count_limit),
+      (std::min)(span_limits_.link_attribute_count_limit, limits.link_attribute_count_limit),
+  };
+}
+
 void OtlpRecordable::SetAttribute(nostd::string_view key,
                                   const common::AttributeValue &value) noexcept
 {
-  if (static_cast<uint32_t>(span_.attributes_size()) >= max_attributes_)
+  if (static_cast<std::uint32_t>(span_.attributes_size()) >= span_limits_.attribute_count_limit)
   {
     span_.set_dropped_attributes_count(span_.dropped_attributes_count() + 1);
     return;
   }
 
   auto *attribute = span_.add_attributes();
-  OtlpPopulateAttributeUtils::PopulateAttribute(attribute, key, value, false);
+  OtlpPopulateAttributeUtils::PopulateAttribute(attribute, key, value, false,
+                                                span_limits_.attribute_value_length_limit);
 }
 
 void OtlpRecordable::AddEvent(nostd::string_view name,
                               common::SystemTimestamp timestamp,
                               const common::KeyValueIterable &attributes) noexcept
 {
-  if (static_cast<uint32_t>(span_.events_size()) >= max_events_)
+  if (static_cast<std::uint32_t>(span_.events_size()) >= span_limits_.event_count_limit)
   {
     span_.set_dropped_events_count(span_.dropped_events_count() + 1);
     return;
@@ -145,12 +160,14 @@ void OtlpRecordable::AddEvent(nostd::string_view name,
   event->set_time_unix_nano(timestamp.time_since_epoch().count());
 
   attributes.ForEachKeyValue([&](nostd::string_view key, common::AttributeValue value) noexcept {
-    if (static_cast<uint32_t>(event->attributes_size()) >= max_attributes_per_event_)
+    if (static_cast<std::uint32_t>(event->attributes_size()) >=
+        span_limits_.event_attribute_count_limit)
     {
       event->set_dropped_attributes_count(event->dropped_attributes_count() + 1);
       return true;
     }
-    OtlpPopulateAttributeUtils::PopulateAttribute(event->add_attributes(), key, value, false);
+    OtlpPopulateAttributeUtils::PopulateAttribute(event->add_attributes(), key, value, false,
+                                                  span_limits_.attribute_value_length_limit);
     return true;
   });
 }
@@ -158,7 +175,7 @@ void OtlpRecordable::AddEvent(nostd::string_view name,
 void OtlpRecordable::AddLink(const trace::SpanContext &span_context,
                              const common::KeyValueIterable &attributes) noexcept
 {
-  if (static_cast<uint32_t>(span_.links_size()) >= max_links_)
+  if (static_cast<std::uint32_t>(span_.links_size()) >= span_limits_.link_count_limit)
   {
     span_.set_dropped_links_count(span_.dropped_links_count() + 1);
     return;
@@ -170,12 +187,14 @@ void OtlpRecordable::AddLink(const trace::SpanContext &span_context,
                     trace::SpanId::kSize);
   link->set_trace_state(span_context.trace_state()->ToHeader());
   attributes.ForEachKeyValue([&](nostd::string_view key, common::AttributeValue value) noexcept {
-    if (static_cast<uint32_t>(link->attributes_size()) >= max_attributes_per_link_)
+    if (static_cast<std::uint32_t>(link->attributes_size()) >=
+        span_limits_.link_attribute_count_limit)
     {
       link->set_dropped_attributes_count(link->dropped_attributes_count() + 1);
       return true;
     }
-    OtlpPopulateAttributeUtils::PopulateAttribute(link->add_attributes(), key, value, false);
+    OtlpPopulateAttributeUtils::PopulateAttribute(link->add_attributes(), key, value, false,
+                                                  span_limits_.attribute_value_length_limit);
     return true;
   });
 }

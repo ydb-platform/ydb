@@ -26,6 +26,7 @@ from operator import itemgetter
 
 from botocore.compat import (
     HAS_CRT,
+    MD5_AVAILABLE,  # noqa: F401
     HTTPHeaders,
     encodebytes,
     ensure_unicode,
@@ -46,10 +47,6 @@ from botocore.utils import (
     normalize_url_path,
     percent_encode_sequence,
 )
-
-# Imports for backwards compatibility
-from botocore.compat import MD5_AVAILABLE  # noqa
-
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +85,7 @@ def _host_from_url(url):
     }
     if url_parts.port is not None:
         if url_parts.port != default_ports.get(url_parts.scheme):
-            host = '%s:%d' % (host, url_parts.port)
+            host = f'{host}:{url_parts.port}'
     return host
 
 

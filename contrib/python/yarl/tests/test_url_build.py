@@ -66,7 +66,7 @@ def test_build_with_scheme_and_host():
             id="port-only",
         ),
         pytest.param(
-            "", TypeError, r"^The port is required to be int\.$", id="port-str"
+            "", TypeError, r"^The port is required to be int, got .*\.$", id="port-str"
         ),
     ],
 )
@@ -382,3 +382,11 @@ def test_build_with_none_query_string():
 def test_build_with_none_fragment():
     with pytest.raises(TypeError):
         URL.build(scheme="http", host="example.com", fragment=None)
+
+
+def test_build_uppercase_host():
+    u = URL.build(
+        host="UPPER.case",
+        encoded=False,
+    )
+    assert u.host == "upper.case"

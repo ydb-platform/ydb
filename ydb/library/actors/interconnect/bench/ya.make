@@ -10,6 +10,7 @@ PEERDIR(
     ydb/library/actors/interconnect/mock
     ydb/library/actors/interconnect/ut/lib
     ydb/library/actors/interconnect/ut/lib/port_manager
+    ydb/library/actors/util
     library/cpp/getopt/small
     library/cpp/monlib/dynamic_counters
 )

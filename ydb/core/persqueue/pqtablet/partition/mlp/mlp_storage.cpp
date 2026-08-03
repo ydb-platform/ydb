@@ -1062,6 +1062,10 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
             for (ui64 i = 0; i < logicalMessageCount; ++i) {
                 Batch.AddNewMessage(offset + i);
             }
+            // Advance past skipped offsets so FetchMessagesIfNeeded does not re-read them forever.
+            FirstOffset = offset + logicalMessageCount;
+            FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
+            FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
             return true;
         }
     }

@@ -39,7 +39,7 @@ This is the YDB (Yandex Database) open-source project. You are helping developer
 ### When to Use the Documentation Skill
 
 When a developer needs to document a feature or functionality:
-1. **First**: Gather all information (фактура) - description, parameters, examples, limits, context
+1. **First**: Gather all information (facts) - description, parameters, examples, limits, context
 2. **Then**: Use the Documentation Writing Skill to integrate it into the structure
 
 ### What the Skill Does

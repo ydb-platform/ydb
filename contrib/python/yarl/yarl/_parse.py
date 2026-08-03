@@ -19,8 +19,10 @@ WHATWG_C0_CONTROL_OR_SPACE = (
 UNSAFE_URL_BYTES_TO_REMOVE = ["\t", "\r", "\n"]
 USES_AUTHORITY = frozenset(uses_netloc)
 
+SplitURLType = tuple[str, str, str, str, str]
 
-def split_url(url: str) -> tuple[str, str, str, str, str]:
+
+def split_url(url: str) -> SplitURLType:
     """Split URL into parts."""
     # Adapted from urllib.parse.urlsplit
     # Only lstrip url as some applications rely on preserving trailing space.
@@ -143,10 +145,10 @@ def unsplit_result(
     """Unsplit a URL without any normalization."""
     if netloc or (scheme and scheme in USES_AUTHORITY) or url[:2] == "//":
         if url and url[:1] != "/":
-            url = f"//{netloc or ''}/{url}"
+            url = f"{scheme}://{netloc}/{url}" if scheme else f"{scheme}:{url}"
         else:
-            url = f"//{netloc or ''}{url}"
-    if scheme:
+            url = f"{scheme}://{netloc}{url}" if scheme else f"//{netloc}{url}"
+    elif scheme:
         url = f"{scheme}:{url}"
     if query:
         url = f"{url}?{query}"

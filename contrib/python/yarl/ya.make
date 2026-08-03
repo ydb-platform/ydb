@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.16.0)
+VERSION(1.18.3)
 
 LICENSE(Apache-2.0)
 

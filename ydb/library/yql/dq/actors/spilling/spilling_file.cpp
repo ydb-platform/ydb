@@ -264,36 +264,28 @@ private:
             if (retriesLeft > 0) {
                 LOG_E("Cannot start DQ local file spilling service at " << root << ": " << error
                     << ". Retrying in " << StartupRetryDelay << ", retries left: " << retriesLeft);
-                Schedule(StartupRetryDelay, new TEvPrivate::TEvRetryStart(retriesLeft));
+                Schedule(StartupRetryDelay, new TEvPrivate::TEvRetryStart(retriesLeft - 1));
                 Become(&TDqLocalFileSpillingService::BrokenState);
                 return;
             }
             Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), error.c_str());
         }
 
-        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(
-            TFsPath(Config_.Root), SelfId().NodeId(), Config_.SpillingSessionId));
+        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Config_.Root, SelfId().NodeId(), Config_.SpillingSessionId));
 
         Become(&TDqLocalFileSpillingService::WorkState);
     }
 
-    // The service is registered by the well-known id before the root is created, so requests can
-    // arrive between the start attempts.
     STFUNC(BrokenState) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPrivate::TEvRetryStart, HandleRetryStart);
+            hFunc(NMon::TEvHttpInfo, HandleWork);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            case NMon::TEvHttpInfo::EventType:
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("<html><h2>Service is not started due to IO error</h2></html>"));
+            case TEvPrivate::TEvRetryStart::EventType:
+                CreateRoot(ev->Get<TEvPrivate::TEvRetryStart>()->RetriesLeft);
                 break;
             default:
-                LOG_E("Service is not started, send error to client " << ev->Sender);
                 Send(ev->Sender, new TEvDqSpilling::TEvError("Service not started"));
         }
-    }
-
-    void HandleRetryStart(TEvPrivate::TEvRetryStart::TPtr& ev) {
-        CreateRoot(ev->Get()->RetriesLeft - 1);
     }
 
     STRICT_STFUNC(WorkState,

@@ -262,8 +262,9 @@ private:
             const TString root = Root_.GetPath();
             const TString error = CurrentExceptionMessage();
             if (retriesLeft > 0) {
-                LOG_E("Cannot start DQ local file spilling service at " << root << ": " << error
-                    << ". Retrying in " << StartupRetryDelay << ", retries left: " << retriesLeft);
+                LOG_E("Cannot start DQ local file spilling service at " << root << ": " << error << ". Retry "
+                    << (MaxStartupRetries - retriesLeft + 1) << "/" << MaxStartupRetries
+                    << " in " << StartupRetryDelay.Seconds() << "s");
                 Schedule(StartupRetryDelay, new TEvPrivate::TEvRetryStart(retriesLeft - 1));
                 Become(&TDqLocalFileSpillingService::BrokenState);
                 return;
@@ -284,7 +285,8 @@ private:
                 CreateRoot(ev->Get<TEvPrivate::TEvRetryStart>()->RetriesLeft);
                 break;
             default:
-                Send(ev->Sender, new TEvDqSpilling::TEvError("Service not started"));
+                LOG_E("DQ local file spilling service is not started, send error to client " << ev->Sender);
+                Send(ev->Sender, new TEvDqSpilling::TEvError("Spilling service is not started"));
         }
     }
 

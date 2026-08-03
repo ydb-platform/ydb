@@ -671,7 +671,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             runtime.WaitBootstrap();
 
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester, TDuration::Seconds(1));
-            UNIT_ASSERT_VALUES_EQUAL("Service not started", resp->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL("Spilling service is not started", resp->Get()->Message);
         }
 
         // Unblock the root and let the scheduled retry start the service.

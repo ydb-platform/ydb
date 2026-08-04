@@ -1,11 +1,130 @@
 #!/usr/bin/env bash
+#
+# Docker HEALTHCHECK for local-ydb.
+# Strategy:
+# - Run a fast liveness probe on every check to detect failures quickly.
+# - Run a heavier readiness probe periodically; the first successful readiness gates the initial "healthy" state.
+#
+# If you need different timings, tune Docker healthcheck flags (--health-interval/--health-timeout/--health-retries/--health-start-period).
+#
+set -euo pipefail
 
-set -e
-if [ "${DEBUG}" = "true" ]; then
-    set -x
-fi
+STATE_DIR="/tmp/ydb_health"
+LAST_READY_OK_FILE="${STATE_DIR}/last_readiness_ok_epoch"
+READINESS_LOCK_DIR="${STATE_DIR}/readiness_lock"
 
-/ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -s "select 1" >/dev/null
-/ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery scheme ls /local >/dev/null
-/ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -s 'create table if not exists `/local/.sys_health/test` (key int32, value utf8, primary key(key))' >/dev/null
-/ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -s 'drop table `/local/.sys_health/test`' >/dev/null
+# Hardcoded readiness cadence (seconds). Keep heavy probe infrequent to reduce CPU load (esp. under emulation).
+READINESS_INTERVAL_SECONDS=15
+
+mkdir -p "${STATE_DIR}"
+
+now_epoch() {
+  date +%s
+}
+
+read_epoch_file() {
+  local f="$1"
+  if [ -f "$f" ]; then
+    cat "$f" 2>/dev/null | tr -cd '0-9' || true
+  else
+    echo ""
+  fi
+}
+
+write_epoch_file() {
+  local f="$1"
+  local v="$2"
+  printf '%s\n' "$v" > "$f"
+}
+
+require_executable() {
+  local p="$1"
+  if [ ! -x "$p" ]; then
+    echo "healthcheck error: required executable not found or not executable: ${p}" >&2
+    exit 1
+  fi
+}
+
+lock_mtime_epoch() {
+  # Best-effort mtime retrieval with GNU/BSD stat compatibility.
+  stat -c %Y "${READINESS_LOCK_DIR}" 2>/dev/null || stat -f %m "${READINESS_LOCK_DIR}" 2>/dev/null || true
+}
+
+acquire_readiness_lock_or_fail() {
+  # Avoid overlapping readiness probes.
+  if mkdir "${READINESS_LOCK_DIR}" 2>/dev/null; then
+    trap 'rmdir "${READINESS_LOCK_DIR}" 2>/dev/null || true' EXIT
+    return 0
+  fi
+
+  # Best-effort stale lock cleanup (in case the checker crashed).
+  local stale_after=30
+  local mtime=""
+  mtime="$(lock_mtime_epoch)"
+  if [ -n "${mtime}" ]; then
+    local now
+    now="$(now_epoch)"
+    if [ $((now - mtime)) -gt "${stale_after}" ]; then
+      rmdir "${READINESS_LOCK_DIR}" 2>/dev/null || true
+      if mkdir "${READINESS_LOCK_DIR}" 2>/dev/null; then
+        trap 'rmdir "${READINESS_LOCK_DIR}" 2>/dev/null || true' EXIT
+        return 0
+      fi
+    fi
+  fi
+
+  return 1
+}
+
+readiness_needed() {
+  local last_ok=""
+  last_ok="$(read_epoch_file "${LAST_READY_OK_FILE}")"
+
+  # Gate "healthy" on first successful readiness.
+  if [ -z "${last_ok}" ]; then
+    return 0
+  fi
+
+  local now
+  now="$(now_epoch)"
+  if [ $((now - last_ok)) -ge "${READINESS_INTERVAL_SECONDS}" ]; then
+    return 0
+  fi
+
+  return 1
+}
+
+main() {
+  require_executable "/health_liveness"
+  require_executable "/health_readiness"
+
+  # Always run liveness first: quick failure on "dead/hung".
+  if ! /health_liveness; then
+    exit 1
+  fi
+
+  if readiness_needed; then
+    local last_ok=""
+    last_ok="$(read_epoch_file "${LAST_READY_OK_FILE}")"
+
+    # If readiness is due, try to run it, but avoid overlapping heavy work.
+    if acquire_readiness_lock_or_fail; then
+      if /health_readiness; then
+        write_epoch_file "${LAST_READY_OK_FILE}" "$(now_epoch)"
+        exit 0
+      fi
+      exit 1
+    fi
+
+    # Another readiness probe is running.
+    # - If we've never seen readiness succeed yet, we must NOT report healthy.
+    # - If we have a past readiness success, keep healthy (liveness already passed).
+    if [ -z "${last_ok}" ]; then
+      exit 1
+    fi
+  fi
+
+  exit 0
+}
+
+main "$@"

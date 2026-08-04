@@ -3152,10 +3152,14 @@ Y_UNIT_TEST_F(DeleteTx_Without_FollowUp_Propose_Kafka, TPQTabletFixture)
 
 Y_UNIT_TEST_F(DeleteTx_With_Concurrent_Propose, TPQTabletFixture)
 {
-    // A1-N6: DeleteTxs flush in the same WRITE_TX cycle as a new ProposeTransaction.
+    // A1-N6: DeleteTxs and a new ProposeTransaction share one WRITE_TX persist.
     const ui64 txId = 67890;
     const ui64 nextTxId = txId + 1;
+    const ui64 unknownTxId = 424299;
     const ui64 mockTabletId = 22222;
+    const TString deleteTxKeyFrom = GetTxKey(txId);
+    const TString deleteTxKeyTo = GetTxKey(txId + 1);
+    const TString proposeTxKey = GetTxKey(nextTxId);
 
     NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
@@ -3178,17 +3182,79 @@ Y_UNIT_TEST_F(DeleteTx_With_Concurrent_Propose, TPQTabletFixture)
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
-    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    // Hold the next WRITE_TX so DeleteTx and the new propose both queue while WriteTxsInProgress.
+    TVector<TAutoPtr<IEventHandle>> heldWriteTxRequests;
+    bool holdWriteTx = true;
+    bool foundCombinedPersist = false;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                if (holdWriteTx) {
+                    heldWriteTxRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+
+                bool hasDelete = false;
+                bool hasProposeWrite = false;
+                for (const auto& cmd : msg->Record.GetCmdDeleteRange()) {
+                    if (cmd.HasRange() &&
+                        cmd.GetRange().GetFrom() == deleteTxKeyFrom &&
+                        cmd.GetRange().GetTo() == deleteTxKeyTo)
+                    {
+                        hasDelete = true;
+                    }
+                }
+                for (const auto& cmd : msg->Record.GetCmdWrite()) {
+                    if (cmd.GetKey() == proposeTxKey) {
+                        hasProposeWrite = true;
+                    }
+                }
+                if (hasDelete && hasProposeWrite) {
+                    foundCombinedPersist = true;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    // Start a WRITE_TX cycle (deferred RS ack) and keep it in flight.
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=200, .TxId=unknownTxId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldWriteTxRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
 
     SendProposeTransactionRequest({.TxId=nextTxId,
                                   .Senders={mockTabletId}, .Receivers={mockTabletId},
                                   .TxOps={
                                   {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
                                   }});
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+
+    holdWriteTx = false;
+    for (auto& held : heldWriteTxRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldWriteTxRequests.clear();
+
     WaitProposeTransactionResponse({.TxId=nextTxId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-
     WaitForTheTransactionToBeDeleted(txId);
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return foundCombinedPersist;
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    UNIT_ASSERT(foundCombinedPersist);
 }
 
 Y_UNIT_TEST_F(Deferred_ReadSetAck_For_Unknown_Tx_Without_Propose, TPQTabletFixture)

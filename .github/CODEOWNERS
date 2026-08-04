@@ -1,7 +1,5 @@
 /*.md @ydb-platform/docs
 
-/CHANGELOG.md @ydb-platform/changelog-reviewers
-
 /AGENTS.md @ydb-platform/ai-reviewers
 
 /BUILD.md @ydb-platform/ci

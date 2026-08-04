@@ -142,10 +142,11 @@ bool IsUsablePointPrefix(const TOpRead::TRangeInfo& ranges, const TVector<TStrin
         }
     }
 
-    // For left join we cannot support more than 1 point lookup.
-    if (joinKind == "Left") {
+    // For left, left only, left semi joins we cannot support more than 1 point lookup.
+    if (joinKind != "Inner") {
         pointsLimit = std::min<size_t>(pointsLimit, 1);
     }
+
     return ranges.ExpectedMaxPoints.Defined() && *ranges.ExpectedMaxPoints <= pointsLimit;
 }
 
@@ -168,9 +169,9 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
 
     // TODO: Add check for join algo specified by CBO.
     auto join = CastOperator<TOpJoin>(input);
-    // TODO: Add support for other join kind.
+
     const auto joinKind = GetValidJoinKind(join->JoinKind);
-    if (joinKind != "Inner" && joinKind != "Left") {
+    if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly") {
         return input;
     }
 

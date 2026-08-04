@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vhost_stats.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/durable_wrapper.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/overlapped_requests_guard_wrapper.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/split_requests_wrapper.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_gate.h>
@@ -134,6 +135,9 @@ using TRequestPtr = TIntrusivePtr<TRequest>;
 
 struct TAppContext
 {
+    ILoggingServicePtr Logging;
+    ITimerPtr Timer;
+    ISchedulerPtr Scheduler;
     IVHostStatsPtr VHostStats;
     IVhostQueueFactoryPtr VhostQueueFactory;
     IDeviceHandlerFactoryPtr DeviceHandlerFactory;
@@ -541,6 +545,8 @@ private:
 public:
     TServer(
         ILoggingServicePtr logging,
+        ITimerPtr timer,
+        ISchedulerPtr scheduler,
         IVHostStatsPtr vhostStats,
         IVhostQueueFactoryPtr vhostQueueFactory,
         IDeviceHandlerFactoryPtr deviceHandlerFactory,
@@ -596,6 +602,8 @@ private:
 
 TServer::TServer(
     ILoggingServicePtr logging,
+    ITimerPtr timer,
+    ISchedulerPtr scheduler,
     IVHostStatsPtr vhostStats,
     IVhostQueueFactoryPtr vhostQueueFactory,
     IDeviceHandlerFactoryPtr deviceHandlerFactory,
@@ -603,6 +611,9 @@ TServer::TServer(
     TVhostCallbacks callbacks)
 {
     Log = logging->CreateLog("BLOCKSTORE_VHOST");
+    Logging = std::move(logging);
+    Timer = std::move(timer);
+    Scheduler = std::move(scheduler);
     VHostStats = std::move(vhostStats);
     VhostQueueFactory = std::move(vhostQueueFactory);
     DeviceHandlerFactory = std::move(deviceHandlerFactory);
@@ -902,6 +913,11 @@ IStoragePtr TServer::CreateWrappers(
         storage =
             CreateOverlappedRequestsGuardStorageWrapper(std::move(storage));
     }
+    storage = CreateDurableStorageWrapper(
+        Logging,
+        std::move(storage),
+        Timer,
+        Scheduler);
     return storage;
 }
 
@@ -930,6 +946,8 @@ IDeviceHandlerPtr TServer::CreateDeviceHandler(
 
 IServerPtr CreateServer(
     ILoggingServicePtr logging,
+    ITimerPtr timer,
+    ISchedulerPtr scheduler,
     IVHostStatsPtr vhostStats,
     IVhostQueueFactoryPtr vhostQueueFactory,
     IDeviceHandlerFactoryPtr deviceHandlerFactory,
@@ -938,6 +956,8 @@ IServerPtr CreateServer(
 {
     return std::make_shared<TServer>(
         std::move(logging),
+        std::move(timer),
+        std::move(scheduler),
         std::move(vhostStats),
         std::move(vhostQueueFactory),
         std::move(deviceHandlerFactory),

@@ -16,6 +16,7 @@ TWriteRequestBundle::TWriteRequestBundle(
     TBlockRange64 vchunkRange)
     : WriteClient(std::move(writeClient))
     , Request(std::move(request))
+    , SgList(Request->Sglist.CreateDepender())
     , Span(
           NKikimr::TWilsonNbs::NbsBasic,
           traceId.Clone(),
@@ -32,7 +33,7 @@ void TWriteRequestBundle::Reply(
     THostMask requestedWrites,
     THostMask completedWrites)
 {
-    Request->Sglist.Close();
+    SgList.Close();
 
     if (auto client = WriteClient.lock()) {
         client->OnWriteBlocksResponse(
@@ -96,7 +97,7 @@ ui64 TWriteRequestBundle::GetLsn() const
 
 TGuardedSgList& TWriteRequestBundle::GetSgList()
 {
-    return Request->Sglist;
+    return SgList;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

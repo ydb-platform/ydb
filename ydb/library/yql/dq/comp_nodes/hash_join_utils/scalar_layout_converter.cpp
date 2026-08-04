@@ -8,7 +8,6 @@
 #include <yql/essentials/public/udf/arrow/defs.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/util.h>
-#include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
@@ -43,20 +42,8 @@ struct IColumnDataExtractor {
 // ------------------------------------------------------------
 
 template <typename TLayout>
-using TFixedSizeStorage = std::conditional_t<std::is_same_v<TLayout, NYql::NUdf::TUuid>, TGUID, TLayout>;
-
-template <typename TLayout>
-constexpr size_t GetFixedSizeLayoutSize() {
-    if constexpr (std::is_same_v<TLayout, NYql::NUdf::TUuid>) {
-        return NYql::NUdf::UUID_SIZE;
-    } else {
-        return sizeof(TLayout);
-    }
-}
-
-template <typename TLayout>
-void StoreFixedSizeLayout(TFixedSizeStorage<TLayout>& dst, const NYql::NUdf::TUnboxedValue& value) {
-    if constexpr (std::is_same_v<TLayout, TGUID> || std::is_same_v<TLayout, NYql::NUdf::TUuid>) {
+void StoreFixedSizeLayout(TLayout& dst, const NYql::NUdf::TUnboxedValue& value) {
+    if constexpr (std::is_same_v<TLayout, TGUID>) {
         const auto ref = value.AsStringRef();
         Y_ENSURE(ref.Size() == sizeof(TGUID), "Wrong Uuid size: " << ref.Size());
         dst = ReadUnaligned<TGUID>(ref.Data());
@@ -66,8 +53,8 @@ void StoreFixedSizeLayout(TFixedSizeStorage<TLayout>& dst, const NYql::NUdf::TUn
 }
 
 template <typename TLayout>
-NYql::NUdf::TUnboxedValue CreateFixedSizeValue(const TFixedSizeStorage<TLayout>& data) {
-    if constexpr (std::is_same_v<TLayout, TGUID> || std::is_same_v<TLayout, NYql::NUdf::TUuid>) {
+NYql::NUdf::TUnboxedValue CreateFixedSizeValue(const TLayout& data) {
+    if constexpr (std::is_same_v<TLayout, TGUID>) {
         return MakeString(NYql::NUdf::TStringRef(reinterpret_cast<const char*>(&data), sizeof(TGUID)));
     } else {
         return NYql::NUdf::TUnboxedValuePod(data);
@@ -77,28 +64,25 @@ NYql::NUdf::TUnboxedValue CreateFixedSizeValue(const TFixedSizeStorage<TLayout>&
 template <typename TLayout, bool Nullable>
 class TFixedSizeColumnDataExtractor : public IColumnDataExtractor {
 public:
-    using TStorage = TFixedSizeStorage<TLayout>;
-    static constexpr size_t StorageSize = GetFixedSizeLayoutSize<TLayout>();
-
     TFixedSizeColumnDataExtractor(TType* type)
         : Type_(type)
     {}
 
     void ExtractForPack(const NYql::NUdf::TUnboxedValue& value, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
-        auto& dataStorage = tempStorage.emplace_back(StorageSize);
+        auto& dataStorage = tempStorage.emplace_back(sizeof(TLayout));
         auto& bitmapStorage = tempStorage.emplace_back(1);
 
         if constexpr (Nullable) {
             if (!value) {
                 bitmapStorage[0] = 0; // null
-                std::memset(dataStorage.data(), 0, StorageSize);
+                std::memset(dataStorage.data(), 0, sizeof(TLayout));
             } else {
                 bitmapStorage[0] = 1; // not null
-                StoreFixedSizeLayout<TLayout>(*reinterpret_cast<TStorage*>(dataStorage.data()), value);
+                StoreFixedSizeLayout(*reinterpret_cast<TLayout*>(dataStorage.data()), value);
             }
         } else {
             bitmapStorage[0] = 1;
-            StoreFixedSizeLayout<TLayout>(*reinterpret_cast<TStorage*>(dataStorage.data()), value);
+            StoreFixedSizeLayout(*reinterpret_cast<TLayout*>(dataStorage.data()), value);
         }
 
         columnsData.push_back(dataStorage.data());
@@ -109,20 +93,20 @@ public:
         if (count == 0) return;
         
         // Allocate storage for all values at once
-        auto& dataStorage = tempStorage.emplace_back(StorageSize * count);
+        auto& dataStorage = tempStorage.emplace_back(sizeof(TLayout) * count);
         auto& bitmapStorage = tempStorage.emplace_back(count);
         
-        TStorage* dataPtr = reinterpret_cast<TStorage*>(dataStorage.data());
+        TLayout* dataPtr = reinterpret_cast<TLayout*>(dataStorage.data());
         ui8* bitmapPtr = bitmapStorage.data();
         
         if constexpr (Nullable) {
             for (ui32 i = 0; i < count; ++i) {
                 if (!values[i]) {
                     bitmapPtr[i] = 0; // null
-                    std::memset(&dataPtr[i], 0, StorageSize);
+                    std::memset(&dataPtr[i], 0, sizeof(TLayout));
                 } else {
                     bitmapPtr[i] = 1; // not null
-                    StoreFixedSizeLayout<TLayout>(dataPtr[i], values[i]);
+                    StoreFixedSizeLayout(dataPtr[i], values[i]);
                 }
                 columnsData.push_back(reinterpret_cast<const ui8*>(&dataPtr[i]));
                 columnsNullBitmap.push_back(&bitmapPtr[i]);
@@ -130,7 +114,7 @@ public:
         } else {
             for (ui32 i = 0; i < count; ++i) {
                 bitmapPtr[i] = 1;
-                StoreFixedSizeLayout<TLayout>(dataPtr[i], values[i]);
+                StoreFixedSizeLayout(dataPtr[i], values[i]);
                 columnsData.push_back(reinterpret_cast<const ui8*>(&dataPtr[i]));
                 columnsNullBitmap.push_back(&bitmapPtr[i]);
             }
@@ -150,12 +134,12 @@ public:
             }
         }
 
-        const TStorage* data = reinterpret_cast<const TStorage*>(columnsData[0]) + tupleIndex;
-        return CreateFixedSizeValue<TLayout>(*data);
+        const TLayout* data = reinterpret_cast<const TLayout*>(columnsData[0]) + tupleIndex;
+        return CreateFixedSizeValue(*data);
     }
 
     ui32 GetElementSize() override {
-        return StorageSize;
+        return sizeof(TLayout);
     }
 
     NPackedTuple::EColumnSizeType GetElementSizeType() override {

@@ -302,18 +302,20 @@ namespace TEvKeyValue {
         };
         EResult Result;
         const TLogoBlobID BlobId;
+        ui64 RequestUid = 0;
 
         explicit TEvAdvanceMoveDataResult(EResult result)
             : Result(result)
         {}
 
-        explicit TEvAdvanceMoveDataResult(const TLogoBlobID& blobId)
+        explicit TEvAdvanceMoveDataResult(const TLogoBlobID& blobId, ui64 requestUid)
             : Result(EResult::COPY_BLOB)
             , BlobId(blobId)
+            , RequestUid(requestUid)
         {}
 
-        static std::unique_ptr<TEvAdvanceMoveDataResult> CopyBlob(const TLogoBlobID& blobId) {
-            return std::make_unique<TEvAdvanceMoveDataResult>(blobId);
+        static std::unique_ptr<TEvAdvanceMoveDataResult> CopyBlob(const TLogoBlobID& blobId, ui64 requestUid) {
+            return std::make_unique<TEvAdvanceMoveDataResult>(blobId, requestUid);
         }
 
         static std::unique_ptr<TEvAdvanceMoveDataResult> Yield() {
@@ -338,12 +340,21 @@ namespace TEvKeyValue {
     };
 
     struct TEvBlobCopied : public TEventLocal<TEvBlobCopied, EvBlobCopied> {
+        enum class EResult {
+            OK,
+            NODATA,
+            ERROR,
+        };
+        EResult Result;
         const TLogoBlobID BlobId;
         const TLogoBlobID NewBlobId;
+        const ui64 RequestUid;
 
-        TEvBlobCopied(const TLogoBlobID& blobId, const TLogoBlobID& newBlobId)
-            : BlobId(blobId)
+        TEvBlobCopied(EResult result, const TLogoBlobID& blobId, const TLogoBlobID& newBlobId, ui64 requestUid)
+            : Result(result)
+            , BlobId(blobId)
             , NewBlobId(newBlobId)
+            , RequestUid(requestUid)
         {}
     };
 

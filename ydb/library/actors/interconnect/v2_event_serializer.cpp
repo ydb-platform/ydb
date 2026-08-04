@@ -243,16 +243,19 @@ namespace NActors {
                         queue.Buffer = ev.ReleaseChainBuffer();
                         queue.Iter = queue.Buffer->GetBeginIter();
                         queue.EvSerInfo = &queue.Buffer->GetSerializationInfo();
+                        queue.SerializedBytesPending = queue.Buffer->GetSize();
                     } else if (ev.HasEvent()) {
                         IEventBase *event = ev.GetBase();
                         queue.SerializeStage = ESerializeStage::kChunkSerializer;
                         queue.CoroutineChunkSerializer.SetSerializingEvent(event, /*withCachedSizes=*/ false);
                         queue.EvSerInfoHolder = event->CreateSerializationInfo(true);
                         queue.EvSerInfo = &queue.EvSerInfoHolder;
+                        queue.SerializedBytesPending = event->CalculateSerializedSizeCached();
                     } else {
                         queue.SerializeStage = ESerializeStage::kHeader;
                         queue.EvSerInfoHolder = {};
                         queue.EvSerInfo = &queue.EvSerInfoHolder;
+                        queue.SerializedBytesPending = 0;
                     }
                     if (Checksumming) {
                         XXH3_64bits_reset(&queue.ChecksumState);
@@ -276,9 +279,12 @@ namespace NActors {
                             queue.Iter.ContiguousSize());
                         addEventChunkBytes(queue.Iter.ContiguousData(), numBytes);
                         queue.Iter += numBytes;
+                        Y_ABORT_UNLESS(numBytes <= queue.SerializedBytesPending);
+                        queue.SerializedBytesPending -= numBytes;
                     }
                     if (!queue.Iter.Valid()) {
                         queue.SerializeStage = ESerializeStage::kHeader;
+                        Y_ABORT_UNLESS(queue.SerializedBytesPending == 0);
                     }
 
                     break;
@@ -292,6 +298,8 @@ namespace NActors {
                     for (const auto& chunk : queue.CoroutineChunkSerializer.FeedBuf(&span,
                             maxBytesToProduce - sizeof(TChunkHeader))) {
                         addEventChunkBytes(chunk.Buf, chunk.Size);
+                        Y_ABORT_UNLESS(chunk.Size <= queue.SerializedBytesPending);
+                        queue.SerializedBytesPending -= chunk.Size;
                     }
                     Y_DEBUG_ABORT_UNLESS(buffer.data() + buffer.size() == span.data() + span.size());
                     Y_DEBUG_ABORT_UNLESS(span.size() <= buffer.size()); // ensure span did not reduce
@@ -302,6 +310,10 @@ namespace NActors {
                     // check if we have finished serializing this event
                     if (queue.CoroutineChunkSerializer.IsComplete()) {
                         queue.SerializeStage = ESerializeStage::kHeader;
+                        Y_ABORT_UNLESS(queue.SerializedBytesPending == 0, "Type# 0x%08" PRIx32 " SerializedBytesPending# %zu"
+                            " CalculateSerializedSize# %zu CalculateSerializedSizeCached# %zu", ev.Type,
+                            queue.SerializedBytesPending, ev.GetBase()->CalculateSerializedSize(),
+                            ev.GetBase()->CalculateSerializedSizeCached());
                     }
 
                     SerializeEventTime += UpdateTimestamp();

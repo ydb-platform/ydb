@@ -104,6 +104,15 @@ namespace NActors {
             {"marker", "ICS92"},
             {"reason", reason});
 
+        if (const TString& s = reason.ToString()) {
+            Proxy->Metrics->IncDisconnectByReason(s);
+        }
+
+        Proxy->UpdateErrorStateLog(TActivationContext::Now(), "close_socket", reason.ToString().data());
+        Proxy->Metrics->IncDisconnections();
+        Proxy->Metrics->SetConnected(0);
+        Proxy->RegisterDisconnect();
+
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
 
         // atomically disconnect the direct interface so racing user threads observe a clean shutdown
@@ -123,8 +132,6 @@ namespace NActors {
             Send(actorId, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, info.Cookie);
         }
         Subscribers.clear();
-
-        Proxy->Metrics->SetConnected(0);
 
         Proxy->Common->UringEngineV2->Unregister(EngineHandle);
 
@@ -221,6 +228,10 @@ namespace NActors {
 
     void TInterconnectSessionTCPv2::HandlePoison() {
         Terminate(TDisconnectReason::UserRequest());
+    }
+
+    ui64 TInterconnectSessionTCPv2::GetTotalOutputQueueSize() const {
+        return Proxy->Common->UringEngineV2->GetTotalOutputQueueSize(EngineHandle);
     }
 
     void TInterconnectSessionTCPv2::GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) {

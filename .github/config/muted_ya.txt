@@ -1,4 +1,3 @@
-ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_race GroupReconfigurationRace.Test_block42
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeferredTopicCreation_MessagingWhileTopicPending
 ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
@@ -10,13 +9,7 @@ ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCountersWit
 ydb/core/persqueue/ut PQCountersLabeled.PartitionReadCounters
 ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
-ydb/library/actors/interconnect/ut InterconnectDirectSession.SendWithReplyCallbackRegistersReceiver
-ydb/library/actors/interconnect/ut InterconnectDirectSession.UnregisterRestoresActorSystemDelivery
-ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemRoundTrip
-ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemTeardownIdleSessions
-ydb/library/actors/interconnect/ut InterconnectSessionV2.ClosePeerSocketAndReconnect
 ydb/library/actors/interconnect/ut InterconnectSessionV2.DirectSessionRoundTrip
-ydb/library/actors/interconnect/ut InterconnectSessionV2.FallbackWithoutBufRing
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LargePayloadRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.PeerStopTriggersDisconnect
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read BasicUsage.DirectRead_ReadSessionCorrectClose

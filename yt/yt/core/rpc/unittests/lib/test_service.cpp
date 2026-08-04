@@ -355,7 +355,7 @@ public:
     {
         context->SetRequestInfo();
 
-        auto data = TSharedRef::FromString("abacaba");
+        auto data = TSharedRef::FromString(std::string("abacaba"));
         WaitFor(context->GetResponseAttachmentsStream()->Write(data))
             .ThrowOnError();
 

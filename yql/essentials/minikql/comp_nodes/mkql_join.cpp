@@ -764,6 +764,24 @@ private:
     const TMutableDataOnContext<NUdf::TLogComponentId> LogComponent;
 };
 
+// Staging buffers for the wide CommonJoinCore state. They live in a single boxed
+// value on the context (TMutableDataOnContext) rather than as raw ctx.MutableValues
+// slots: the state (TValue) pins the box with a strong reference, so releasing the
+// staged values from ~TValue never touches sibling context slots that the context's
+// own MutableValues teardown may already have destroyed.
+struct TWideJoinTempValues {
+    TWideJoinTempValues(size_t valuesSize, size_t crossValuesSize)
+        : Values(valuesSize)
+        , CrossValues1(crossValuesSize)
+        , CrossValues2(crossValuesSize)
+    {
+    }
+
+    TUnboxedValueVector Values;
+    TUnboxedValueVector CrossValues1;
+    TUnboxedValueVector CrossValues2;
+};
+
 template <EJoinKind Kind, bool TTrackRss>
 class TWideCommonJoinCoreWrapper: public TStatefulWideFlowCodegeneratorNode<TWideCommonJoinCoreWrapper<Kind, TTrackRss>>
 #ifndef MKQL_DISABLE_CODEGEN
@@ -786,6 +804,7 @@ public:
             : TBase(memInfo)
             , Self(self)
             , Fetcher(std::move(fetcher))
+            , TempValuesPin(Self->GetTempValuesBox(ctx))
             , Values(Self->GetValues(ctx))
             , CrossValues1(Self->GetCrossValues(ctx, true))
             , CrossValues2(Self->GetCrossValues(ctx, false))
@@ -1147,6 +1166,8 @@ public:
 
         bool CrossMove1;
 
+        NUdf::TUnboxedValue TempValuesPin;
+
         TArrayRef<NUdf::TUnboxedValue> Values;
         TArrayRef<NUdf::TUnboxedValue> CrossValues1;
         TArrayRef<NUdf::TUnboxedValue> CrossValues2;
@@ -1186,12 +1207,9 @@ public:
         , Logger(mutables)
         , LogComponent(mutables)
         , Fields(mutables)
-        , ValuesIndex(mutables.CurValueIndex)
-        , CrossValues1Index(ValuesIndex + InputRepresentations.size())
-        , CrossValues2Index(CrossValues1Index + InputColumnsSize)
+        , TempValues(mutables)
         , Stubs(InputRepresentations.size(), nullptr)
     {
-        mutables.CurValueIndex += InputRepresentations.size() + InputColumnsSize + InputColumnsSize;
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
@@ -1303,14 +1321,22 @@ private:
         return LogComponent.Get(ctx);
     }
 
+    TWideJoinTempValues& GetTempValues(TComputationContext& ctx) const {
+        return TempValues.GetOrCreate(ctx, InputRepresentations.size(), InputColumnsSize);
+    }
+
+    NUdf::TUnboxedValue GetTempValuesBox(TComputationContext& ctx) const {
+        GetTempValues(ctx);
+        return TempValues.GetValue(ctx);
+    }
+
     TArrayRef<NUdf::TUnboxedValue> GetValues(TComputationContext& ctx) const {
-        auto begin = &ctx.MutableValues[ValuesIndex];
-        return TArrayRef<NUdf::TUnboxedValue>(begin, InputRepresentations.size());
+        return GetTempValues(ctx).Values;
     }
 
     TArrayRef<NUdf::TUnboxedValue> GetCrossValues(TComputationContext& ctx, bool one) const {
-        auto begin = &ctx.MutableValues[one ? CrossValues1Index : CrossValues2Index];
-        return TArrayRef<NUdf::TUnboxedValue>(begin, InputColumnsSize);
+        auto& tempValues = GetTempValues(ctx);
+        return one ? tempValues.CrossValues1 : tempValues.CrossValues2;
     }
 
     const std::vector<NUdf::TUnboxedValue*>& GetFields(TComputationContext& ctx) const {
@@ -1346,9 +1372,7 @@ private:
     const TMutableDataOnContext<NUdf::TLoggerPtr> Logger;
     const TMutableDataOnContext<NUdf::TLogComponentId> LogComponent;
     const TMutableDataOnContext<std::vector<NUdf::TUnboxedValue*>> Fields;
-    const ui32 ValuesIndex;
-    const ui32 CrossValues1Index;
-    const ui32 CrossValues2Index;
+    const TMutableDataOnContext<TWideJoinTempValues> TempValues;
     const std::vector<NUdf::TUnboxedValue*> Stubs;
 #ifndef MKQL_DISABLE_CODEGEN
     typedef EFetchResult (*TFetchPtr)(TComputationContext&, NUdf::TUnboxedValue* const*);

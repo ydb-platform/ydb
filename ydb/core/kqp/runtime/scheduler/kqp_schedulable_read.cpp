@@ -1,10 +1,12 @@
 #include "kqp_schedulable_read.h"
 
-#include "log.h"
+#include <ydb/library/actors/core/log.h>
 #include "tree/dynamic.h"
 
 #include <yql/essentials/utils/yql_panic.h>
 #include <yt/yt/core/utilex/random.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE_SCHEDULER
 
 namespace NKikimr::NKqp::NScheduler {
 
@@ -25,7 +27,9 @@ TSchedulableRead::TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query)
     AvailableQuotaMs = MaxQuotaMs;
     LastRefill = TMonotonic::Now();
 
-    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] MaxQuotaMs: " << MaxQuotaMs);
+    YDB_LOG_TRACE("Created schedulable read with quota limit",
+        {"schedulableReadPtr", uintptr_t(this)},
+        {"maxQuotaMs", MaxQuotaMs});
 
     YQL_ENSURE(MaxQuotaMs <= 1000);
 }
@@ -34,7 +38,9 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     // TODO: support update of the pool's read quota on AddOrUpdatePool().
     auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
 
-    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] ExpectedQuotaMs: " << expectedQuotaMs);
+    YDB_LOG_TRACE("Trying to consume read quota",
+        {"schedulableReadPtr", uintptr_t(this)},
+        {"expectedQuotaMs", expectedQuotaMs});
 
     // Refill quota
     if (const auto now = TMonotonic::Now(); Y_LIKELY(now >= LastRefill)) {
@@ -43,7 +49,9 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
         LastRefill = now;
     }
 
-    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] AvailableQuotaMs: " << AvailableQuotaMs);
+    YDB_LOG_TRACE("Refilled read quota",
+        {"schedulableReadPtr", uintptr_t(this)},
+        {"availableQuotaMs", AvailableQuotaMs});
 
     if (AvailableQuotaMs <= 0 || !TryIncreaseUsage()) {
         return false;
@@ -53,7 +61,9 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     AvailableQuotaMs -= expectedQuotaMs;
     ReservedQuotaMs = expectedQuotaMs;
 
-    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] ReservedQuotaMs: " << ReservedQuotaMs);
+    YDB_LOG_TRACE("Reserved read quota",
+        {"schedulableReadPtr", uintptr_t(this)},
+        {"reservedQuotaMs", ReservedQuotaMs});
 
     return true;
 }
@@ -67,8 +77,12 @@ void TSchedulableRead::ReturnQuota(NHPTimer::STime elapsedCycles) {
     AvailableQuotaMs = std::min<i64>(MaxQuotaMs, AvailableQuotaMs + ReservedQuotaMs - ms);
     ReservedQuotaMs = 0;
 
-    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] ReturnedQuotaMs: " << ms);
-    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] AvailableQuotaMs: " << AvailableQuotaMs);
+    YDB_LOG_TRACE("Returned unused read quota",
+        {"schedulableReadPtr", uintptr_t(this)},
+        {"returnedQuotaMs", ms});
+    YDB_LOG_TRACE("Updated available read quota after return",
+        {"schedulableReadPtr", uintptr_t(this)},
+        {"availableQuotaMs", AvailableQuotaMs});
 
     DecreaseUsage(TDuration::MilliSeconds(ms), READ_DEFAULT);
 }

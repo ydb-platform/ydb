@@ -10,9 +10,8 @@ SRCS(
 PEERDIR(
     contrib/libs/simdjson
 
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
 
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/row_dispatcher/common
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/fq/libs/row_dispatcher/format_handler/common

@@ -13,6 +13,8 @@
 
 #include <util/string/vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -74,7 +76,8 @@ public:
     void Bootstrap() {
         //Counters->VectorResolveActorsCount->Inc();
 
-        CA_LOG_D("Start vector resolve actor");
+        YDB_LOG_DEBUG("Start vector resolve actor",
+            {"logPrefix", this->LogPrefix});
         Become(&TKqpVectorResolveActor::StateFunc);
     }
 
@@ -106,17 +109,14 @@ private:
     void PassAway() final {
         //Counters->VectorResolveActorsCount->Dec();
 
-        if (ReadActorId) {
-            Send(ReadActorId, new TEvents::TEvPoison);
-            ReadActorId = {};
-        }
-
         {
             auto guard = BindAllocator();
             Input.Clear();
             NKikimr::NMiniKQL::TUnboxedValueDeque emptyList;
             emptyList.swap(PendingRows);
         }
+
+        DestroyReadActor();
 
         MySpan.End();
 
@@ -141,7 +141,10 @@ private:
             }
         }
 
-        CA_LOG_D("Returned " << totalDataSize << " bytes, finished: " << finished);
+        YDB_LOG_DEBUG("Returned bytes",
+            {"logPrefix", this->LogPrefix},
+            {"totalDataSize", totalDataSize},
+            {"finished", finished});
         return totalDataSize;
     }
 
@@ -377,15 +380,24 @@ private:
                     Locks.push_back(resultInfo.GetLocks(i));
                 }
             }
-            Send(ReadActorId, new TEvents::TEvPoison);
-            ReadActorId = {};
-            ReadActorInput = nullptr;
+            DestroyReadActor();
             ReadingChildClusters = false;
             // Convert to NKikimr::NKMeans::TClusters
             if (!Failed) {
                 auto guard = BindAllocator();
                 ParseFetchedClusters();
             }
+        }
+    }
+
+    void DestroyReadActor() {
+        if (ReadActorInput) {
+            // Destroy ReadActor directly, just like library/yql/dq compute actor destroys us
+            // Otherwise it may reference an already destroyed TypeEnv and crash in BindAllocator
+            // when handling TEvPoison
+            ReadActorInput->PassAway();
+            ReadActorId = {};
+            ReadActorInput = nullptr;
         }
     }
 
@@ -405,9 +417,23 @@ private:
             RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
-        if (!ReadingChildClustersOf && !FetchedClusters.size()) {
-            // Index is empty
-            EmptyIndex = true;
+        if (!FetchedClusters.size()) {
+            if (!ReadingChildClustersOf) {
+                // Index is empty
+                EmptyIndex = true;
+            } else {
+                // The cluster has no children in the level table, i.e. its subtree is empty.
+                // It's possible when the cluster didn't get any rows during the index build,
+                // for example when two clusters of the same level got equal centroids.
+                // Just skip such clusters instead of failing the query - the row is either
+                // resolved into other (overlapping) clusters or isn't added to the index at all,
+                // which is the same as what the read path does for such clusters.
+                YDB_LOG_NOTICE("Cluster has no child clusters, skipping it",
+                    {"logPrefix", this->LogPrefix},
+                    {"parent", ReadingChildClustersOf});
+                CurClusters = std::move(clusters);
+                CurClusterIds.clear();
+            }
             ContinueResolveClusters();
             return;
         }

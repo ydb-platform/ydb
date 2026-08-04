@@ -1,5 +1,9 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 namespace NKikimr::NKqp {
 
@@ -8,24 +12,27 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-void MaybeSetJoinAlgo(TPhysicalOpProps& props, const TRBOContext& rboCtx) {
-    if (props.JoinAlgo.has_value()) {
-        return;
+void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
+    auto& props = join.Props;
+    if (!props.JoinAlgo.has_value()) {
+        const auto joinMode = rboCtx.KqpCtx.Config->GetHashJoinMode();
+        switch (joinMode) {
+            case NYql::NDq::EHashJoinMode::Map: {
+                props.JoinAlgo = EJoinAlgoType::MapJoin;
+                break;
+            }
+            default: {
+                props.JoinAlgo = EJoinAlgoType::GraceJoin;
+                break;
+            }
+        }
     }
 
-    auto joinMode = rboCtx.KqpCtx.Config->GetHashJoinMode();
-    NKikimr::NKqp::EJoinAlgoType joinAlgo;
-    switch (joinMode) {
-        case NYql::NDq::EHashJoinMode::Map: {
-            joinAlgo = NKikimr::NKqp::EJoinAlgoType::MapJoin;
-            break;
-        }
-        default: {
-            joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
-            break;
-        }
-    }
-    props.JoinAlgo = joinAlgo;
+    const auto joinKind = GetValidJoinKind(join.JoinKind);
+    const auto joinAlgo = *props.JoinAlgo;
+    props.UseBlockHashJoin = rboCtx.KqpCtx.Config->GetUseBlockHashJoin()
+        && (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin)
+        && (joinKind == "Inner" || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly");
 }
 
 // For row storage read we create a separate stage.
@@ -85,7 +92,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         const auto newStageId = props.StageGraph.AddStage();
         join->Props.StageId = newStageId;
 
-        MaybeSetJoinAlgo(join->Props, ctx);
+        FinalizeJoinPhysicalProps(*join, ctx);
 
         // For cross-join or map join we build a stage with map and broadcast connections
         // FIXME: We assume that right side is small one, map join also can work with hash shuffle connections.
@@ -179,17 +186,17 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
     } else if (input->Kind == EOperator::UnionAll) {
         auto unionAll = CastOperator<TOpUnionAll>(input);
 
-        auto leftStage = unionAll->GetLeftInput()->Props.StageId;
-        auto rightStage = unionAll->GetRightInput()->Props.StageId;
-
         const auto newStageId = props.StageGraph.AddStage();
         unionAll->Props.StageId = newStageId;
         const bool parallelUnionAllConnections = ctx.KqpCtx.Config->GetEnableParallelUnionAllConnectionsForExtend();
 
-        props.StageGraph.Connect(*leftStage, newStageId,
-                                 MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(*leftStage), parallelUnionAllConnections));
-        props.StageGraph.Connect(*rightStage, newStageId,
-                                 MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(*rightStage), parallelUnionAllConnections));
+        // Connect the inputs in child order: the physical conversion pairs stage arguments
+        // with the connections of this stage.
+        for (const auto& child : unionAll->Children) {
+            const auto childStageId = *child->Props.StageId;
+            props.StageGraph.Connect(childStageId, newStageId,
+                                     MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(childStageId), parallelUnionAllConnections));
+        }
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stages union_all";
     } else if (input->Kind == EOperator::Aggregate) {
@@ -208,6 +215,54 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         }
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to aggregation ";
+    } else if (input->Kind == EOperator::TableLookup) {
+        auto lookup = CastOperator<TOpTableLookup>(input);
+        auto& exprCtx = ctx.ExprCtx;
+
+        const auto inputStageId = *(lookup->GetInput()->Props.StageId);
+        const auto outputIndex = props.StageGraph.GetOutputIndex(inputStageId);
+        const auto newStageId = props.StageGraph.AddStage();
+        input->Props.StageId = newStageId;
+
+        TVector<NYql::NNodes::TCoAtom> columnAtoms;
+        for (const auto& column : lookup->FetchColumns) {
+            columnAtoms.push_back(NYql::NNodes::Build<NYql::NNodes::TCoAtom>(exprCtx, lookup->Pos).Value(column).Done());
+        }
+        auto columnsNode = NYql::NNodes::Build<NYql::NNodes::TCoAtomList>(exprCtx, lookup->Pos).Add(columnAtoms).Done().Ptr();
+
+        TKqpStreamLookupSettings settings;
+        NYql::TExprNode::TPtr inputTypeNode;
+        if (lookup->IsJoin()) {
+            settings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
+            // TODO: move this settings to lookuptable operator. It sets to 0, because it depends on pushed point predicate on the right side. 
+            // Currently we do not push them, we use original predicate to filter after.
+            settings.AllowNullKeysPrefixSize = 0;
+        } else {
+            settings.Strategy = EStreamLookupStrategyType::LookupRows;
+
+            TVector<const NYql::TItemExprType*> keyItems;
+            for (const auto& key : lookup->LookupKeys) {
+                const auto* keyType = lookup->GetInput()->GetIUType(key);
+                Y_ENSURE(keyType, "Lookup key type is not available");
+                keyItems.push_back(exprCtx.MakeType<NYql::TItemExprType>(key.GetFullName(), keyType));
+            }
+            const auto* keyStructType = exprCtx.MakeType<NYql::TStructExprType>(keyItems);
+            const auto* keyListType = exprCtx.MakeType<NYql::TListExprType>(keyStructType);
+            inputTypeNode = NYql::ExpandType(lookup->Pos, *keyListType, exprCtx);
+        }
+        auto settingsNode = settings.BuildNode(exprCtx, lookup->Pos).Ptr();
+
+        props.StageGraph.Connect(inputStageId, newStageId,
+                                 MakeIntrusive<TStreamLookupConnection>(outputIndex, lookup->Table, columnsNode, inputTypeNode, settingsNode));
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages table lookup";
+    } else if (input->Kind == EOperator::IndexLookupJoin) {
+        // The lookup join shares the stage of its table lookup: the joined pairs only exist inside
+        // the stage that the stream lookup connection feeds.
+        auto lookupJoin = CastOperator<TOpIndexLookupJoin>(input);
+        auto lookup = lookupJoin->GetTableLookup();
+        Y_ENSURE(lookup->IsSingleConsumer(), "A table lookup in join mode must feed only its lookup join");
+        input->Props.StageId = *lookup->Props.StageId;
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages index lookup join";
     } else {
         Y_ENSURE(false, "Unknown operator encountered");
     }

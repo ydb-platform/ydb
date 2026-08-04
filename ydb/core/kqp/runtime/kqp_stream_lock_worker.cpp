@@ -126,6 +126,7 @@ THolder<NEvents::TDataEvents::TEvLockRows> TKqpStreamLockWorker::BuildLockReques
     lockRequest->Record.SetLockId(Settings.LockTxId);
     lockRequest->Record.SetLockNodeId(Settings.LockNodeId);
     lockRequest->Record.SetLockMode(Settings.LockMode);
+    lockRequest->Record.SetSkipAbsent(Settings.SkipAbsent);
 
     TTableId tableId(Settings.Table.GetOwnerId(), Settings.Table.GetTableId(), Settings.Table.GetVersion());
     lockRequest->SetTableId(tableId);
@@ -145,13 +146,11 @@ THolder<NEvents::TDataEvents::TEvLockRows> TKqpStreamLockWorker::BuildLockReques
     return lockRequest;
 }
 
-TKqpStreamLockWorker::TLockRequestList TKqpStreamLockWorker::BuildLockRequests(
+void TKqpStreamLockWorker::BuildLockRequests(
     const TPartitionInfo& partitioning, ui64& requestId)
 {
-    TLockRequestList requests;
-
     if (!partitioning || InputRows.empty()) {
-        return requests;
+        return;
     }
 
     const size_t keyColumnCount = KeyColumnTypes.size();
@@ -186,13 +185,18 @@ TKqpStreamLockWorker::TLockRequestList TKqpStreamLockWorker::BuildLockRequests(
     for (auto& [shardId, keys] : keysByShard) {
         AFL_ENSURE(!keys.empty());
 
-        ui64 currentRequestId = requestId++;
+        const size_t batchSize = keys.size();
+        size_t batchBytes = 0;
+        for (const auto& [rowIndex, keyCells] : keys) {
+            batchBytes += EstimateKeyBytes(keyCells);
+        }
 
-        size_t batchSize = keys.size();
+        ui64 currentRequestId = requestId++;
 
         TRowBatchInfo batchInfo;
         batchInfo.BatchSize = batchSize;
         batchInfo.ShardId = shardId;
+        batchInfo.Bytes = batchBytes;
         batchInfo.Rows.reserve(batchSize);
         batchInfo.Keys.reserve(batchSize);
         for (auto& [rowIndex, keyCells] : keys) {
@@ -205,33 +209,48 @@ TKqpStreamLockWorker::TLockRequestList TKqpStreamLockWorker::BuildLockRequests(
 
         BatchesByRequestId[currentRequestId] = std::move(batchInfo);
 
-        requests.emplace_back(shardId, std::move(lockRequest));
+        PendingLockRequests.emplace_back(shardId, std::move(lockRequest));
     }
 
     InputRows.clear();
-
-    return requests;
 }
 
-TKqpStreamLockWorker::TLockRequestList TKqpStreamLockWorker::RebuildLockRequest(
+size_t TKqpStreamLockWorker::EstimateKeyBytes(const TOwnedCellVec& key) {
+    size_t bytes = 0;
+    for (const auto& cell : key) {
+        // TCell::Size() returns the value size; add a small per-cell header
+        // overhead to approximate the serialized form.
+        bytes += cell.Size() + sizeof(TCell);
+    }
+    return bytes;
+}
+
+std::optional<size_t> TKqpStreamLockWorker::GetBatchBytes(ui64 requestId) const {
+    auto it = BatchesByRequestId.find(requestId);
+    if (it == BatchesByRequestId.end()) {
+        return std::nullopt;
+    }
+    return it->second.Bytes;
+}
+
+void TKqpStreamLockWorker::RebuildLockRequest(
     ui64 prevRequestId, ui64& newRequestId)
 {
-    TLockRequestList requests;
-
     auto batchIt = BatchesByRequestId.find(prevRequestId);
     if (batchIt == BatchesByRequestId.end()) {
-        return requests;
+        return;
     }
 
     auto& oldBatchInfo = batchIt->second;
     size_t batchSize = oldBatchInfo.BatchSize;
     ui64 shardId = oldBatchInfo.ShardId;
+    size_t batchBytes = oldBatchInfo.Bytes;
 
     const size_t keyColumnCount = KeyColumnTypes.size();
     auto allCells = SerializeKeysToCellVec(oldBatchInfo.Keys);
 
     if (allCells.empty()) {
-        return requests;
+        return;
     }
 
     ui64 currentRequestId = newRequestId++;
@@ -241,15 +260,24 @@ TKqpStreamLockWorker::TLockRequestList TKqpStreamLockWorker::RebuildLockRequest(
     TRowBatchInfo batchInfo;
     batchInfo.BatchSize = batchSize;
     batchInfo.ShardId = shardId;
+    batchInfo.Bytes = batchBytes;
     batchInfo.Rows = std::move(oldBatchInfo.Rows);
     batchInfo.Keys = std::move(oldBatchInfo.Keys);
     BatchesByRequestId[currentRequestId] = std::move(batchInfo);
 
     BatchesByRequestId.erase(prevRequestId);
 
-    requests.emplace_back(shardId, std::move(lockRequest));
+    PendingLockRequests.emplace_back(shardId, std::move(lockRequest));
+}
 
-    return requests;
+std::pair<ui64, THolder<NEvents::TDataEvents::TEvLockRows>> TKqpStreamLockWorker::PopNextLockRequest() {
+    if (PendingLockRequests.empty()) {
+        return {0, nullptr};
+    }
+
+    auto next = std::move(PendingLockRequests.front());
+    PendingLockRequests.pop_front();
+    return next;
 }
 
 void TKqpStreamLockWorker::AddLockResult(ui64 requestId, NEvents::TDataEvents::TEvLockRowsResult* result) {
@@ -264,15 +292,19 @@ void TKqpStreamLockWorker::AddLockResult(ui64 requestId, NEvents::TDataEvents::T
     
     const auto& lockedKeys = record.GetLockedKeys();
     const auto& modifiedKeys = record.GetModifiedKeys();
+    const auto& skippedAbsentKeys = record.GetSkippedAbsentKeys();
 
     THashSet<ui64> lockedSet(lockedKeys.begin(), lockedKeys.end());
     THashSet<ui64> modifiedSet(modifiedKeys.begin(), modifiedKeys.end());
+    THashSet<ui64> skippedAbsentSet(skippedAbsentKeys.begin(), skippedAbsentKeys.end());
 
     batchInfo.LockedFlags.resize(batchInfo.BatchSize, false);
     batchInfo.ModifiedFlags.resize(batchInfo.BatchSize, false);
     for (size_t i = 0; i < batchInfo.BatchSize; ++i) {
-        AFL_ENSURE(lockedSet.contains(i)); // TODO: that's wrong, deleted rows shouldn't be locked
-        batchInfo.LockedFlags[i] = true;
+        const bool locked = lockedSet.contains(i);
+        const bool skippedAbsent = skippedAbsentSet.contains(i);
+        AFL_ENSURE(locked || skippedAbsent);
+        batchInfo.LockedFlags[i] = locked;
         batchInfo.ModifiedFlags[i] = modifiedSet.contains(i);
     }
 
@@ -289,12 +321,12 @@ void TKqpStreamLockWorker::ProcessRowsByLockResult(ui64 requestId, TProcessRowCa
     AFL_ENSURE(batchInfo.LockResultReceived);
 
     for (size_t i = 0; i < batchInfo.BatchSize; ++i) {
-        if (!batchInfo.LockedFlags[i]) {
-            continue;
+        if (batchInfo.LockedFlags[i]) {
+            NUdf::TUnboxedValue row = ConvertRowToUnboxedValue(batchInfo.Rows[i]);
+            callback(row, true, batchInfo.ModifiedFlags[i]);
+        } else {
+            callback({}, false, batchInfo.ModifiedFlags[i]);
         }
-        bool modified = batchInfo.ModifiedFlags[i];
-        NUdf::TUnboxedValue row = ConvertRowToUnboxedValue(batchInfo.Rows[i]);
-        callback(row, modified);
     }
 
     BatchesByRequestId.erase(it);
@@ -310,11 +342,10 @@ void TKqpStreamLockWorker::ProcessRowsByLockResult(ui64 requestId, TProcessRowCa
     AFL_ENSURE(batchInfo.LockResultReceived);
 
     for (size_t i = 0; i < batchInfo.BatchSize; ++i) {
-        if (!batchInfo.LockedFlags[i]) {
-            continue;
-        }
-        bool modified = batchInfo.ModifiedFlags[i];
-        callback(batchInfo.Rows[i], modified);
+        callback(
+            batchInfo.Rows[i],
+            batchInfo.LockedFlags[i],
+            batchInfo.ModifiedFlags[i]);
     }
 
     BatchesByRequestId.erase(it);

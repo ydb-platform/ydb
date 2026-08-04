@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     kqp_expression.cpp
+    kqp_olap_expr_inspection.cpp
     kqp_operator.cpp
     kqp_plan_conversion_utils.cpp
     kqp_plan_to_json.cpp
@@ -26,6 +27,8 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/absl
+    library/cpp/containers/stack_vector
     ydb/core/kqp/common
     ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/cbo/solver

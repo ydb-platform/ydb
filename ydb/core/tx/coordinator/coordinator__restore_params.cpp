@@ -3,6 +3,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COORDINATOR
+
 namespace NKikimr::NFlatTxCoordinator {
 
 class TTxCoordinator::TRestoreProcessingParamsActor
@@ -48,21 +50,22 @@ public:
         const auto& domainDescription = msg->Result->GetPathDescription().GetDomainDescription();
         if (!domainDescription.HasProcessingParams()) {
             // Wait for description with processing params
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_COORDINATOR,
-                    "Coordinator# " << TabletId
-                    << " ignoring update for path " << TenantPathId << " " << msg->Path
-                    << " without processing params");
+            YDB_LOG_WARN("Ignoring update for path without processing params",
+                {"coordinator", TabletId},
+                {"tenantPathId", TenantPathId},
+                {"path", msg->Path});
             return;
         }
 
         const auto& params = domainDescription.GetProcessingParams();
         if (params.GetVersion() < Version) {
             // Wait until the expected version is published
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_COORDINATOR,
-                    "Coordinator# " << TabletId
-                    << " ignoring update for path " << TenantPathId << " " << msg->Path
-                    << " with processing params version " << params.GetVersion()
-                    << ", waiting for version " << Version);
+            YDB_LOG_WARN("Ignoring update for path with stale version",
+                {"coordinator", TabletId},
+                {"tenantPathId", TenantPathId},
+                {"path", msg->Path},
+                {"processingParamsVersion", params.GetVersion()},
+                {"waitingForVersion", Version});
             return;
         }
 
@@ -77,11 +80,11 @@ public:
 
         if (!found) {
             // Ignore suspicious TenantPathId that points to some other subdomain
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_COORDINATOR,
-                    "Coordinator# " << TabletId
-                    << " ignoring suspicious update for path " << TenantPathId << " " << msg->Path
-                    << " with processing params version " << params.GetVersion()
-                    << " that don't have " << TabletId << " in coordinators list");
+            YDB_LOG_WARN("Ignoring suspicious update for path: coordinator is missing from coordinators list",
+                {"coordinator", TabletId},
+                {"tenantPathId", TenantPathId},
+                {"path", msg->Path},
+                {"version", params.GetVersion()});
             return PassAway();
         }
 
@@ -117,9 +120,8 @@ bool TTxCoordinator::IsTabletInStaticDomain(TAppData* appData) {
 void TTxCoordinator::RestoreProcessingParams(const TActorContext& ctx) {
     TAppData* appData = AppData(ctx);
     if (IsTabletInStaticDomain(appData)) {
-        LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
-                "Coordinator# " << TabletID()
-                << " restoring static processing params");
+        YDB_LOG_INFO_CTX(ctx, "Restoring static processing params",
+            {"coordinator", TabletID()});
         DoConfiguration(*CreateDomainConfigurationFromStatic(appData), ctx);
         return;
     }
@@ -130,10 +132,10 @@ void TTxCoordinator::RestoreProcessingParams(const TActorContext& ctx) {
     }
 
     auto tenantPathId = Info()->TenantPathId;
-    LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
-            "Coordinator# " << TabletID()
-            << " resolving missing processing params version " << Config.Version
-            << " from tenant " << tenantPathId);
+    YDB_LOG_INFO_CTX(ctx, "Resolving missing processing params version from tenant",
+        {"coordinator", TabletID()},
+        {"version", Config.Version},
+        {"tenantPathId", tenantPathId});
     RestoreProcessingParamsActor = Register(new TRestoreProcessingParamsActor(SelfId(), TabletID(), Info()->TenantPathId, Config.Version));
 }
 
@@ -145,9 +147,9 @@ void TTxCoordinator::Handle(TEvPrivate::TEvRestoredProcessingParams::TPtr& ev, c
 
     // Note: restored params may be newer than those previously presisted
     auto& params = ev->Get()->Config;
-    LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
-            "Coordinator# " << TabletID()
-            << " applying discovered processing params version " << params.GetVersion());
+    YDB_LOG_INFO_CTX(ctx, "Applying discovered processing params version",
+        {"coordinator", TabletID()},
+        {"version", params.GetVersion()});
     RestoreProcessingParamsActor = { };
     DoConfiguration(TEvSubDomain::TEvConfigure(std::move(params)), ctx);
 }

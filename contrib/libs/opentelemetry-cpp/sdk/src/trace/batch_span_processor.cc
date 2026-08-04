@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <ratio>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -23,7 +22,6 @@
 #include "opentelemetry/sdk/trace/batch_span_processor_options.h"
 #include "opentelemetry/sdk/trace/batch_span_processor_runtime_options.h"
 #include "opentelemetry/sdk/trace/exporter.h"
-#include "opentelemetry/sdk/trace/processor.h"
 #include "opentelemetry/sdk/trace/recordable.h"
 #include "opentelemetry/version.h"
 

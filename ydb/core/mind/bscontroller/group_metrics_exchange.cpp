@@ -1,5 +1,7 @@
 #include "impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
+
 namespace NKikimr::NBsController {
 
     class TBlobStorageController::TTxGroupMetricsExchange : public TTransactionBase<TBlobStorageController> {
@@ -17,7 +19,9 @@ namespace NKikimr::NBsController {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto& record = Ev->Get()->Record;
 
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXGME00, "TTxGroupMetricsExchange::Execute", (Record, record));
+            YDB_LOG_DEBUG("TTxGroupMetricsExchange::Execute",
+                {"marker", "BSCTXGME00"},
+                {"record", record});
 
             NIceDb::TNiceDb db(txc.DB);
 

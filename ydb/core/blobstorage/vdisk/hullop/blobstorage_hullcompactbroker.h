@@ -47,9 +47,9 @@ namespace NKikimr {
         TCompactionTokenId Token;
         bool Force;
         TEvReleaseCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, TCompactionTokenId token) 
-            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Token(token) {}
+            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Token(token), Force(false) {}
         TEvReleaseCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, bool force) 
-            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Force(force) {}
+            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Token(0), Force(force) {}
 
         TString ToString() const {
             TStringStream str;

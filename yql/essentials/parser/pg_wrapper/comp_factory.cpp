@@ -19,8 +19,10 @@
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 #include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/types/uuid/uuid.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/block_builder.cpp>
@@ -33,6 +35,7 @@
 #include <library/cpp/yson/detail.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/string/split.h>
+#include <util/generic/guid.h>
 #include <util/system/getpid.h>
 
 #include "arrow.h"
@@ -460,6 +463,21 @@ public:
                 };
 
                 ApplyFillers(AllPgExtensionFillers, Y_ARRAY_SIZE(AllPgExtensionFillers), PgExtensionFillers_);
+            } else if (Table_ == "pg_collation") {
+                static const std::pair<const char*, TPgCollationFiller> AllPgCollationFillers[] = {
+                    {"oid", [](const NPg::TCollationDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
+                    {"collname", [](const NPg::TCollationDesc& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"collnamespace", [](const NPg::TCollationDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(PG_CATALOG_NAMESPACE)); }},
+                    {"collowner", [](const NPg::TCollationDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"collprovider", [](const NPg::TCollationDesc& desc) { return ScalarDatumToPod(CharGetDatum((char)desc.Provider)); }},
+                    {"collisdeterministic", [](const NPg::TCollationDesc&) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"collencoding", [](const NPg::TCollationDesc& desc) { return ScalarDatumToPod(Int32GetDatum(desc.Encoding)); }},
+                    {"collcollate", [](const NPg::TCollationDesc& desc) { return desc.Collate.empty() ? NUdf::TUnboxedValuePod() : PointerDatumToPod((Datum)MakeVar(desc.Collate)); }},
+                    {"collctype", [](const NPg::TCollationDesc& desc) { return desc.Ctype.empty() ? NUdf::TUnboxedValuePod() : PointerDatumToPod((Datum)MakeVar(desc.Ctype)); }},
+                    {"colliculocale", [](const NPg::TCollationDesc& desc) { return desc.IcuLocale.empty() ? NUdf::TUnboxedValuePod() : PointerDatumToPod((Datum)MakeVar(desc.IcuLocale)); }},
+                };
+
+                ApplyFillers(AllPgCollationFillers, Y_ARRAY_SIZE(AllPgCollationFillers), PgCollationFillers_);
             }
         } else {
             if (Table_ == "tables") {
@@ -861,6 +879,19 @@ public:
                     sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
+            } else if (Table_ == "pg_collation") {
+                NPg::EnumCollation([&](ui32, const NPg::TCollationDesc& desc) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgCollationFillers_.size(), items);
+                    for (ui32 i = 0; i < PgCollationFillers_.size(); ++i) {
+                        if (PgCollationFillers_[i]) {
+                            items[i] = PgCollationFillers_[i](desc);
+                        }
+                    }
+
+                    sysFiller.Fill(items);
+                    rows.emplace_back(row);
+                });
             }
         } else {
             if (Table_ == "tables") {
@@ -949,6 +980,9 @@ private:
     using TPgProcFiller = NUdf::TUnboxedValuePod(*)(const NPg::TProcDesc&);
     TVector<TPgProcFiller> PgProcFillers_;
 
+    using TPgCollationFiller = NUdf::TUnboxedValuePod(*)(const NPg::TCollationDesc&);
+    TVector<TPgCollationFiller> PgCollationFillers_;
+
     using TPgAggregateFiller = NUdf::TUnboxedValuePod(*)(const NPg::TAggregateDesc&);
     TVector<TPgAggregateFiller> PgAggregateFillers_;
 
@@ -1030,8 +1064,8 @@ private:
 };
 
 struct TPgResolvedCallNodeState : public TPgResolvedCallState, public TComputationValue<TPgResolvedCallNodeState> {
-    TPgResolvedCallNodeState(TMemoryUsageInfo* memInfo, ui32 numArgs, const FmgrInfo* finfo)
-        : TPgResolvedCallState(numArgs, finfo)
+    TPgResolvedCallNodeState(TMemoryUsageInfo* memInfo, ui32 numArgs, const FmgrInfo* finfo, ui32 collationOid)
+        : TPgResolvedCallState(numArgs, finfo, collationOid)
         , TComputationValue(memInfo) {}
 };
 
@@ -1040,10 +1074,11 @@ class TPgResolvedCallNode : public TPgResolvedCall<UseContext>, public TMutableC
     typedef TMutableComputationNode<TPgResolvedCallNode<UseContext>> TBaseComputation;
 public:
     TPgResolvedCallNode(TComputationMutables& mutables, const std::string_view& name, ui32 id,
-        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, TType* returnType)
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, TType* returnType, ui32 collationOid)
         : TPgResolvedCall<UseContext>(name, id, std::move(argTypes), returnType)
         , TBaseComputation(mutables)
         , ArgNodes(std::move(argNodes))
+        , CollationOid(collationOid)
         , StateIndex(mutables.CurValueIndex++)
     {
         Y_ENSURE(ArgNodes.size() == this->ArgDesc.size());
@@ -1065,13 +1100,14 @@ private:
     TPgResolvedCallNodeState& GetState(TComputationContext& compCtx) const {
         auto& result = compCtx.MutableValues[this->StateIndex];
         if (!result.HasValue()) {
-            result = compCtx.HolderFactory.Create<TPgResolvedCallNodeState>(this->ArgNodes.size(), &this->FInfo);
+            result = compCtx.HolderFactory.Create<TPgResolvedCallNodeState>(this->ArgNodes.size(), &this->FInfo, CollationOid);
         }
 
         return *static_cast<TPgResolvedCallNodeState*>(result.AsBoxed().Get());
     }
 
     const TComputationNodePtrVector ArgNodes;
+    const ui32 CollationOid;
     const ui32 StateIndex;
 };
 
@@ -1084,14 +1120,14 @@ private:
         public:
             TIterator(TMemoryUsageInfo* memInfo, const std::string_view& name, const TUnboxedValueVector& args,
                 const TVector<NPg::TTypeDesc>& argDesc, const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc,
-                const FmgrInfo* fInfo, const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& holderFactory)
+                const FmgrInfo* fInfo, ui32 collationOid, const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& holderFactory)
                 : TComputationValue<TIterator>(memInfo)
                 , Name(name)
                 , Args(args)
                 , ArgDesc(argDesc)
                 , RetTypeDesc(retTypeDesc)
                 , ProcDesc(procDesc)
-                , CallInfo(argDesc.size(), fInfo)
+                , CallInfo(argDesc.size(), fInfo, collationOid)
                 , StructType(structType)
                 , StructTypeDesc(structTypeDesc)
                 , HolderFactory(holderFactory)
@@ -1299,7 +1335,7 @@ private:
 
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx,
             const std::string_view& name, TUnboxedValueVector&& args, const TVector<NPg::TTypeDesc>& argDesc,
-            const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc, const FmgrInfo* fInfo,
+            const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc, const FmgrInfo* fInfo, ui32 collationOid,
             const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& /*holderFactory*/)
             : TCustomListValue(memInfo)
             , CompCtx(compCtx)
@@ -1309,6 +1345,7 @@ private:
             , RetTypeDesc(retTypeDesc)
             , ProcDesc(procDesc)
             , FInfo(fInfo)
+            , CollationOid(collationOid)
             , StructType(structType)
             , StructTypeDesc(structTypeDesc)
         {
@@ -1316,7 +1353,7 @@ private:
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
-            return CompCtx.HolderFactory.Create<TIterator>(Name, Args, ArgDesc, RetTypeDesc, ProcDesc, FInfo, StructType, StructTypeDesc, CompCtx.HolderFactory);
+            return CompCtx.HolderFactory.Create<TIterator>(Name, Args, ArgDesc, RetTypeDesc, ProcDesc, FInfo, CollationOid, StructType, StructTypeDesc, CompCtx.HolderFactory);
         }
 
         TComputationContext& CompCtx;
@@ -1326,16 +1363,18 @@ private:
         const NPg::TTypeDesc& RetTypeDesc;
         const NPg::TProcDesc& ProcDesc;
         const FmgrInfo* FInfo;
+        const ui32 CollationOid;
         const TStructType* StructType;
         const TVector<NPg::TTypeDesc>& StructTypeDesc;
     };
 
 public:
     TPgResolvedMultiCall(TComputationMutables& mutables, const std::string_view& name, ui32 id,
-        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, TType* returnType, const TStructType* structType)
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, TType* returnType, const TStructType* structType, ui32 collationOid)
         : TPgResolvedCallBase(name, id, std::move(argTypes), returnType, true, structType)
         , TBaseComputation(mutables)
         , ArgNodes(std::move(argNodes))
+        , CollationOid(collationOid)
         , StructType(structType)
     {
         Y_ENSURE(ArgNodes.size() == ArgDesc.size());
@@ -1349,7 +1388,7 @@ public:
             args.push_back(value);
         }
 
-        return compCtx.HolderFactory.Create<TListValue>(compCtx, Name, std::move(args), ArgDesc, RetTypeDesc, ProcDesc, &FInfo, StructType, StructTypeDesc, compCtx.HolderFactory);
+        return compCtx.HolderFactory.Create<TListValue>(compCtx, Name, std::move(args), ArgDesc, RetTypeDesc, ProcDesc, &FInfo, CollationOid, StructType, StructTypeDesc, compCtx.HolderFactory);
     }
 
 private:
@@ -1359,6 +1398,7 @@ private:
         }
     }
     const TComputationNodePtrVector ArgNodes;
+    const ui32 CollationOid;
     const TStructType* StructType;
 };
 
@@ -1624,12 +1664,7 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
         return PointerDatumToPod(PointerGetDatum(res));
     }
     case NUdf::EDataSlot::Uuid: {
-        TString str;
-        str.reserve(36);
-        ui16 dw[8];
-        std::memcpy(dw, value.AsStringRef().Data(), sizeof(dw));
-        TStringOutput out(str);
-        NKikimr::NUuid::UuidToString(dw, out);
+        auto str = NKikimr::NUuid::UuidBytesToString(value.AsStringRef());
         auto res = DirectFunctionCall1Coll(uuid_in, DEFAULT_COLLATION_OID, PointerGetDatum(str.c_str()));
         return PointerDatumToPod(PointerGetDatum((void*)res));
     }
@@ -2335,9 +2370,39 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeFromPgKernel(TType* inputType,
     return kernel;
 }
 
+namespace {
+
+template <typename TTzDate, NUdf::EDataSlot Slot>
+arrow::Status ConvertTzDateBlockToPg(const arrow::ArrayData& array, size_t length, arrow::compute::KernelContext* ctx, arrow::Datum* res) {
+    using TLayout = typename NUdf::TDataType<TTzDate>::TLayout;
+    NUdf::TTzDateBlockReader<TTzDate, true> reader;
+    NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(
+        NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+    for (size_t i = 0; i < length; ++i) {
+        auto item = reader.GetItem(array, i);
+        if (!item) {
+            builder.Add(NUdf::TBlockItem());
+            continue;
+        }
+
+        NUdf::TUnboxedValuePod value{item.template Get<TLayout>()};
+        value.SetTimezoneId(item.GetTimezoneId());
+        NUdf::TUnboxedValue str = ValueToString(Slot, value);
+        const auto ref = str.AsStringRef();
+        auto ptr = builder.AddPgItem<false, VARHDRSZ>(ref);
+        UpdateCleanVarSize((text*)(ptr + sizeof(void*)), ref.Size());
+    }
+
+    *res = builder.Build(true);
+    return arrow::Status::OK();
+}
+
+} // namespace
+
 struct TToPgExec {
-    TToPgExec(NUdf::EDataSlot sourceDataSlot)
+    TToPgExec(NUdf::EDataSlot sourceDataSlot, TType* itemType)
         : SourceDataSlot(sourceDataSlot)
+        , ItemType(itemType)
     {}
 
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
@@ -2581,6 +2646,84 @@ struct TToPgExec {
             *res = builder.Build(true);
             break;
         }
+        case NUdf::EDataSlot::Uuid: {
+            NUdf::TFixedSizeBlockReader<TGUID, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto str = NKikimr::NUuid::UuidBytesToString(item.AsStringRef());
+                auto pgDatum = DirectFunctionCall1Coll(uuid_in, DEFAULT_COLLATION_OID, PointerGetDatum(str.c_str()));
+                const char* pgUuid = static_cast<const char*>(DatumGetPointer(pgDatum));
+                auto ref = NUdf::TStringRef(pgUuid, 16);
+                builder.AddPgItem<false, 0>(ref);
+                pfree(const_cast<char*>(pgUuid));
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        case NUdf::EDataSlot::Decimal: {
+            NUdf::TFixedSizeBlockReader<NYql::NDecimal::TInt128, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                NUdf::TUnboxedValuePod value(item.GetInt128());
+                auto decimalType = static_cast<TDataDecimalType*>(ItemType);
+                auto pgRes = DecimalToPgNumeric(value, decimalType->GetParams().first, decimalType->GetParams().second);
+                auto ref = NUdf::TStringRef((const char*)pgRes, GetFullVarSize((const text*)pgRes));
+                auto ptr = builder.AddPgItem<false, 0>(ref);
+                UpdateCleanVarSize((text*)(ptr + sizeof(void*)), GetCleanVarSize((const text*)pgRes));
+                pfree(pgRes);
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        case NUdf::EDataSlot::DyNumber: {
+            NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto str = NKikimr::NDyNumber::DyNumberToString(item.AsStringRef());
+                Y_ENSURE(str);
+                auto pgRes = (Numeric)DirectFunctionCall3Coll(numeric_in, DEFAULT_COLLATION_OID,
+                    PointerGetDatum(str->c_str()), Int32GetDatum(0), Int32GetDatum(-1));
+                auto ref = NUdf::TStringRef((const char*)pgRes, GetFullVarSize((const text*)pgRes));
+                auto ptr = builder.AddPgItem<false, 0>(ref);
+                UpdateCleanVarSize((text*)(ptr + sizeof(void*)), GetCleanVarSize((const text*)pgRes));
+                pfree(pgRes);
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        case NUdf::EDataSlot::TzDate:
+            return ConvertTzDateBlockToPg<NUdf::TTzDate, NUdf::EDataSlot::TzDate>(array, length, ctx, res);
+        case NUdf::EDataSlot::TzDatetime:
+            return ConvertTzDateBlockToPg<NUdf::TTzDatetime, NUdf::EDataSlot::TzDatetime>(array, length, ctx, res);
+        case NUdf::EDataSlot::TzTimestamp:
+            return ConvertTzDateBlockToPg<NUdf::TTzTimestamp, NUdf::EDataSlot::TzTimestamp>(array, length, ctx, res);
+        case NUdf::EDataSlot::TzDate32:
+            return ConvertTzDateBlockToPg<NUdf::TTzDate32, NUdf::EDataSlot::TzDate32>(array, length, ctx, res);
+        case NUdf::EDataSlot::TzDatetime64:
+            return ConvertTzDateBlockToPg<NUdf::TTzDatetime64, NUdf::EDataSlot::TzDatetime64>(array, length, ctx, res);
+        case NUdf::EDataSlot::TzTimestamp64:
+            return ConvertTzDateBlockToPg<NUdf::TTzTimestamp64, NUdf::EDataSlot::TzTimestamp64>(array, length, ctx, res);
         default:
             ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(SourceDataSlot).Name;
         }
@@ -2588,6 +2731,7 @@ struct TToPgExec {
     }
 
     const NUdf::EDataSlot SourceDataSlot;
+    TType* const ItemType;
 };
 
 std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, TType* resultType, NUdf::EDataSlot dataSlot) {
@@ -2595,7 +2739,12 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
 
     std::shared_ptr<arrow::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
-    auto exec = std::make_shared<TToPgExec>(dataSlot);
+    std::shared_ptr<TToPgExec> exec;
+    auto itemType = AS_TYPE(TBlockType, inputType)->GetItemType();
+    if (itemType->IsOptional()) {
+        itemType = AS_TYPE(TOptionalType, itemType)->GetItemType();
+    }
+    exec = std::make_shared<TToPgExec>(dataSlot, itemType);
     auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
         [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         return exec->Exec(ctx, batch, res);
@@ -2627,6 +2776,15 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
     case NUdf::EDataSlot::Yson:
     case NUdf::EDataSlot::Json:
     case NUdf::EDataSlot::JsonDocument:
+    case NUdf::EDataSlot::Uuid:
+    case NUdf::EDataSlot::DyNumber:
+    case NUdf::EDataSlot::Decimal:
+    case NUdf::EDataSlot::TzDate:
+    case NUdf::EDataSlot::TzDatetime:
+    case NUdf::EDataSlot::TzTimestamp:
+    case NUdf::EDataSlot::TzDate32:
+    case NUdf::EDataSlot::TzDatetime64:
+    case NUdf::EDataSlot::TzTimestamp64:
         kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
         break;
     default:
@@ -2636,7 +2794,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
     return kernel;
 }
 
-std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTypes, TType* resultType, TExecFunc execFunc, ui32 procId) {
+std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTypes, TType* resultType, TExecFunc execFunc, ui32 procId, ui32 collationOid) {
     std::shared_ptr<arrow::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
     auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
@@ -2657,14 +2815,14 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTy
     }
 
     kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
-    kernel->init = [procId, pgArgTypes](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
+    kernel->init = [procId, pgArgTypes, collationOid](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
         auto state = std::make_unique<TPgKernelState>();
         Zero(state->flinfo);
         GetPgFuncAddr(procId, state->flinfo);
         YQL_ENSURE(state->flinfo.fn_addr);
         state->resultinfo = nullptr;
         state->context = nullptr;
-        state->fncollation = DEFAULT_COLLATION_OID;
+        state->fncollation = collationOid ? collationOid : DEFAULT_COLLATION_OID;
         const auto& procDesc = NPg::LookupProc(procId);
         const auto& retTypeDesc = NPg::LookupType(procDesc.ResultType);
         state->Name = procDesc.Name;
@@ -2734,7 +2892,8 @@ TComputationNodeFactory GetPgFactory() {
                 return new TPgToRecord(ctx.Mutables, input, structType, std::move(members));
             }
 
-            if (name == "PgResolvedCall") {
+            if (name == "PgResolvedCall" || name == "PgResolvedCall2") {
+                const bool hasCollation = (name == "PgResolvedCall2");
                 const auto useContextData = AS_VALUE(TDataLiteral, callable.GetInput(0));
                 const auto rangeFunctionData = AS_VALUE(TDataLiteral, callable.GetInput(1));
                 const auto nameData = AS_VALUE(TDataLiteral, callable.GetInput(2));
@@ -2743,9 +2902,18 @@ TComputationNodeFactory GetPgFactory() {
                 auto rangeFunction = rangeFunctionData->AsValue().Get<bool>();
                 auto name = nameData->AsValue().AsStringRef();
                 auto id = idData->AsValue().Get<ui32>();
+
+                ui32 collationOid = 0;
+                ui32 argsStart = 4;
+                if (hasCollation) {
+                    const auto collationOidData = AS_VALUE(TDataLiteral, callable.GetInput(4));
+                    collationOid = collationOidData->AsValue().Get<ui32>();
+                    argsStart = 5;
+                }
+
                 TComputationNodePtrVector argNodes;
                 TVector<TType*> argTypes;
-                for (ui32 i = 4; i < callable.GetInputsCount(); ++i) {
+                for (ui32 i = argsStart; i < callable.GetInputsCount(); ++i) {
                     argNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
                     argTypes.emplace_back(callable.GetInput(i).GetStaticType());
                 }
@@ -2762,25 +2930,35 @@ TComputationNodeFactory GetPgFactory() {
 
                 if (isList) {
                     YQL_ENSURE(!useContext);
-                    return new TPgResolvedMultiCall(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), itemType, structType);
+                    return new TPgResolvedMultiCall(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), itemType, structType, collationOid);
                 } else {
                     YQL_ENSURE(!structType);
                     if (useContext) {
-                        return new TPgResolvedCallNode<true>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), returnType);
+                        return new TPgResolvedCallNode<true>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), returnType, collationOid);
                     } else {
-                        return new TPgResolvedCallNode<false>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), returnType);
+                        return new TPgResolvedCallNode<false>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), returnType, collationOid);
                     }
                 }
             }
 
-            if (name == "BlockPgResolvedCall") {
+            if (name == "BlockPgResolvedCall" || name == "BlockPgResolvedCall2") {
+                const bool hasCollation = (name == "BlockPgResolvedCall2");
                 const auto nameData = AS_VALUE(TDataLiteral, callable.GetInput(0));
                 const auto idData = AS_VALUE(TDataLiteral, callable.GetInput(1));
                 auto name = nameData->AsValue().AsStringRef();
                 auto id = idData->AsValue().Get<ui32>();
+
+                ui32 collationOid = 0;
+                ui32 argsStart = 2;
+                if (hasCollation) {
+                    const auto collationOidData = AS_VALUE(TDataLiteral, callable.GetInput(2));
+                    collationOid = collationOidData->AsValue().Get<ui32>();
+                    argsStart = 3;
+                }
+
                 TComputationNodePtrVector argNodes;
                 TVector<TType*> argTypes;
-                for (ui32 i = 2; i < callable.GetInputsCount(); ++i) {
+                for (ui32 i = argsStart; i < callable.GetInputsCount(); ++i) {
                     argNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
                     argTypes.emplace_back(callable.GetInput(i).GetStaticType());
                 }
@@ -2788,7 +2966,7 @@ TComputationNodeFactory GetPgFactory() {
                 auto returnType = callable.GetType()->GetReturnType();
                 auto execFunc = FindExec(id);
                 YQL_ENSURE(execFunc);
-                auto kernel = MakePgKernel(argTypes, returnType, execFunc, id);
+                auto kernel = MakePgKernel(argTypes, returnType, execFunc, id, collationOid);
                 return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), callable.GetType()->GetName(), std::move(argNodes), argTypes, returnType, *kernel, kernel);
             }
 

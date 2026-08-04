@@ -187,7 +187,8 @@ const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES =
                                                                                   {TTabletTypes::Coordinator, "C"},
                                                                                   {TTabletTypes::Mediator, "M"},
                                                                                   {TTabletTypes::BlockStoreVolume, "BV"},
-                                                                                  {TTabletTypes::BlockStorePartition2, "BP"},
+                                                                                  {TTabletTypes::BlockStorePartition, "BP"},
+                                                                                  {TTabletTypes::BlockStorePartition2, "BP2"},
                                                                                   {TTabletTypes::BlockStoreVolumeDirect, "DV"},
                                                                                   {TTabletTypes::BlockStorePartitionDirect, "DP"},
                                                                                   {TTabletTypes::Kesus, "K"},
@@ -205,6 +206,10 @@ const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES =
                                                                                  };
 
 const std::unordered_map<TString, TTabletTypes::EType> TABLET_TYPE_BY_SHORT_NAME = MakeReverseMap(TABLET_TYPE_SHORT_NAMES);
+
+TFullTabletId ToFullTabletId(TTabletId tabletId) {
+    return {tabletId, 0};
+}
 
 } // NHive
 } // NKikimr

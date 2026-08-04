@@ -33,7 +33,7 @@ Y_UNIT_TEST_LLVM(TestInnerOnTuple) {
 
     const auto resultType = pb.NewFlowType(NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"Left", TStringBuf>, NTest::TStructMember<"Right", TStringBuf>>>(pb));
 
-    const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1), dict2, EJoinKind::Inner, {0U}, {1U, 0U}, {0U, 1U}, resultType));
+    const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1, {}), dict2, EJoinKind::Inner, {0U}, {1U, 0U}, {0U, 1U}, resultType));
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<TStringBuf, TStringBuf>>{
                                                           {"B", "X"},
@@ -63,7 +63,7 @@ Y_UNIT_TEST_LLVM(TestInner) {
 
         const auto resultType = pb.NewFlowType(NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"Left", TStringBuf>, NTest::TStructMember<"Right", TStringBuf>>>(pb));
 
-        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1), dict2, EJoinKind::Inner, {0U}, {1U, 0U}, {0U, 1U}, resultType));
+        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1, {}), dict2, EJoinKind::Inner, {0U}, {1U, 0U}, {0U, 1U}, resultType));
         const auto graph = setup.BuildGraph(pgmReturn);
         AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<TStringBuf, TStringBuf>>{
                                                               {"B", "X"},
@@ -94,7 +94,7 @@ Y_UNIT_TEST_LLVM(TestInnerMulti) {
 
         const auto resultType = pb.NewFlowType(NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"Left", TStringBuf>, NTest::TStructMember<"Right", TStringBuf>>>(pb));
 
-        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1), dict2, EJoinKind::Inner, {0U}, {1U, 0U}, {0U, 1U}, resultType));
+        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1, {}), dict2, EJoinKind::Inner, {0U}, {1U, 0U}, {0U, 1U}, resultType));
         const auto graph = setup.BuildGraph(pgmReturn);
         AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<TStringBuf, TStringBuf>>{
                                                               {"B", "X"},
@@ -127,7 +127,7 @@ Y_UNIT_TEST_LLVM(TestLeft) {
 
         const auto resultType = pb.NewFlowType(NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"Left", TStringBuf>, NTest::TStructMember<"Right", TStringBuf>>>(pb));
 
-        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1), dict2, EJoinKind::Left, {0U}, {1U, 0U}, {0U, 1U}, resultType));
+        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1, {}), dict2, EJoinKind::Left, {0U}, {1U, 0U}, {0U, 1U}, resultType));
         const auto graph = setup.BuildGraph(pgmReturn);
         AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<TStringBuf, TMaybe<TStringBuf>>>{
                                                               {"A", {}},
@@ -159,7 +159,7 @@ Y_UNIT_TEST_LLVM(TestLeftMulti) {
 
         const auto resultType = pb.NewFlowType(NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"Left", TStringBuf>, NTest::TStructMember<"Right", TStringBuf>>>(pb));
 
-        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1), dict2, EJoinKind::Left, {0U}, {1U, 0U}, {0U, 1U}, resultType));
+        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1, {}), dict2, EJoinKind::Left, {0U}, {1U, 0U}, {0U, 1U}, resultType));
         const auto graph = setup.BuildGraph(pgmReturn);
         AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<TStringBuf, TMaybe<TStringBuf>>>{
                                                               {"A", {}},
@@ -193,7 +193,7 @@ Y_UNIT_TEST_LLVM(TestLeftSemi) {
 
         const auto resultType = pb.NewFlowType(NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"Key", ui32>, NTest::TStructMember<"Left", TStringBuf>>>(pb));
 
-        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1), dict2, EJoinKind::LeftSemi, {0U}, {1U, 1U, 0U, 0U}, {}, resultType));
+        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1, {}), dict2, EJoinKind::LeftSemi, {0U}, {1U, 1U, 0U, 0U}, {}, resultType));
         const auto graph = setup.BuildGraph(pgmReturn);
         AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<ui32, TStringBuf>>{
                                                               {ui32(2), "B"},
@@ -224,7 +224,7 @@ Y_UNIT_TEST_LLVM(TestLeftOnly) {
 
         const auto resultType = pb.NewFlowType(NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"Key", ui32>, NTest::TStructMember<"Left", TStringBuf>>>(pb));
 
-        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1), dict2, EJoinKind::LeftOnly, {0U}, {1U, 1U, 0U, 0U}, {}, resultType));
+        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1, {}), dict2, EJoinKind::LeftOnly, {0U}, {1U, 1U, 0U, 0U}, {}, resultType));
         const auto graph = setup.BuildGraph(pgmReturn);
         AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<ui32, TStringBuf>>{
                                                               {ui32(1), "A"},
@@ -259,7 +259,7 @@ Y_UNIT_TEST_LLVM(TestLeftSemiWithNullKey) {
 
         const auto resultType = pb.NewFlowType(NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"Key", ui32>, NTest::TStructMember<"Left", TStringBuf>>>(pb));
 
-        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1), dict2, EJoinKind::LeftSemi, {0U}, {1U, 1U, 0U, 0U}, {}, resultType));
+        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1, {}), dict2, EJoinKind::LeftSemi, {0U}, {1U, 1U, 0U, 0U}, {}, resultType));
         const auto graph = setup.BuildGraph(pgmReturn);
         AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<ui32, TStringBuf>>{
                                                               {ui32(2), "B"},
@@ -295,7 +295,7 @@ Y_UNIT_TEST_LLVM(TestLeftOnlyWithNullKey) {
 
         const auto resultType = pb.NewFlowType(NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"Key", ui32>, NTest::TStructMember<"Left", TStringBuf>>>(pb));
 
-        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1), dict2, EJoinKind::LeftOnly, {0U}, {1U, 1U, 0U, 0U}, {}, resultType));
+        const auto pgmReturn = pb.Collect(pb.MapJoinCore(pb.ToFlow(list1, {}), dict2, EJoinKind::LeftOnly, {0U}, {1U, 1U, 0U, 0U}, {}, resultType));
         const auto graph = setup.BuildGraph(pgmReturn);
         AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<TMaybe<ui32>, TStringBuf>>{
                                                               {{}, "X"},
@@ -330,7 +330,7 @@ Y_UNIT_TEST_LLVM(TestInner) {
         const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
                                                                 pb.NewDataType(NUdf::TDataType<char*>::Id)}));
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1, {}),
                                                                                    [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                       dict2, EJoinKind::Inner, {0U}, {1U, 0U}, {0U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -367,7 +367,7 @@ Y_UNIT_TEST_LLVM(TestInnerMulti) {
         const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
                                                                 pb.NewDataType(NUdf::TDataType<char*>::Id)}));
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1, {}),
                                                                                    [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                       dict2, EJoinKind::Inner, {0U}, {1U, 0U}, {0U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -406,7 +406,7 @@ Y_UNIT_TEST_LLVM(TestLeft) {
         const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
                                                                 pb.NewDataType(NUdf::TDataType<char*>::Id)}));
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1, {}),
                                                                                    [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                       dict2, EJoinKind::Left, {0U}, {1U, 0U}, {0U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -444,7 +444,7 @@ Y_UNIT_TEST_LLVM(TestLeftMulti) {
         const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
                                                                 pb.NewDataType(NUdf::TDataType<char*>::Id)}));
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1, {}),
                                                                                    [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                       dict2, EJoinKind::Left, {0U}, {1U, 0U}, {0U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -484,7 +484,7 @@ Y_UNIT_TEST_LLVM(TestLeftSemi) {
         const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
                                                                 pb.NewDataType(NUdf::TDataType<ui32>::Id)}));
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1, {}),
                                                                                    [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                       dict2, EJoinKind::LeftSemi, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -521,7 +521,7 @@ Y_UNIT_TEST_LLVM(TestLeftOnly) {
         const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
                                                                 pb.NewDataType(NUdf::TDataType<ui32>::Id)}));
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1, {}),
                                                                                    [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                       dict2, EJoinKind::LeftOnly, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -559,7 +559,7 @@ Y_UNIT_TEST_LLVM(TestLeftSemiWithNullKey) {
         const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
                                                                 pb.NewDataType(NUdf::TDataType<ui32>::Id)}));
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1, {}),
                                                                                    [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                       dict2, EJoinKind::LeftSemi, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -598,7 +598,7 @@ Y_UNIT_TEST_LLVM(TestLeftOnlyWithNullKey) {
         const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
                                                                 pb.NewDataType(NUdf::TDataType<ui32>::Id)}));
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.MapJoinCore(pb.ExpandMap(pb.ToFlow(list1, {}),
                                                                                    [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                       dict2, EJoinKind::LeftOnly, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));

@@ -2,12 +2,30 @@
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/udf_value_test_support/struct_variant_type.h>
+#include <yql/essentials/minikql/udf_value_test_support/decimal_literal.h>
+#include <yql/essentials/minikql/udf_value_test_support/pg_int.h>
+#include <yql/essentials/minikql/udf_value_test_support/singular_null.h>
+#include <yql/essentials/minikql/udf_value_test_support/singular_void.h>
+#include <yql/essentials/minikql/udf_value_test_support/tagged.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/utf8.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 namespace NKikimr::NMiniKQL::NTest {
 
+using NYql::NUdf::NTest::TDecimalLiteral;
+using NYql::NUdf::NTest::TPgInt;
+using NYql::NUdf::NTest::TSingularNull;
+using NYql::NUdf::NTest::TSingularVoid;
 using NYql::NUdf::NTest::TStructMember;
+using NYql::NUdf::NTest::TStructMemberName;
 using NYql::NUdf::NTest::TStructType;
+using NYql::NUdf::NTest::TStructVariant;
+using NYql::NUdf::NTest::TTag;
+using NYql::NUdf::NTest::TTagged;
+using NYql::NUdf::NTest::TTestDyNumber;
+using NYql::NUdf::NTest::TUtf8;
 
 namespace NPrivate {
 
@@ -69,74 +87,8 @@ template <typename... Args>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const std::variant<Args...>& v);
 template <typename T>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TVector<T>& nodes);
-
-class TSingularVoid {
-public:
-    TSingularVoid() = default;
-};
-
-class TSingularNull {
-public:
-    TSingularNull() = default;
-};
-
-enum class TTag {
-    A,
-    B,
-    C
-};
-
-template <typename T, TTag tag>
-class TTagged {
-public:
-    TTagged()
-        : Value_()
-    {};
-
-    explicit TTagged(T value)
-        : Value_(std::move(value))
-    {
-    }
-
-    const T& Value() const {
-        return Value_;
-    }
-
-    TStringBuf Tag() const {
-        switch (tag) {
-            case TTag::A:
-                return "A";
-            case TTag::B:
-                return "B";
-            case TTag::C:
-                return "C";
-        };
-    }
-
-private:
-    T Value_;
-};
-
-class TPgInt {
-public:
-    TPgInt() = default;
-
-    explicit TPgInt(i32 value)
-        : Value_(value)
-    {
-    }
-
-    TMaybe<i32> Value() const {
-        return Value_;
-    }
-
-private:
-    TMaybe<i32> Value_{};
-};
-
-struct TUtf8 {
-    TStringBuf Value;
-};
+template <typename... TMembers>
+TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TStructVariant<TMembers...>& value);
 
 template <typename T>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, T simpleNode)
@@ -173,14 +125,20 @@ inline TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, TStringBuf si
     return pb.NewDataLiteral<NUdf::EDataSlot::String>(simpleNode);
 }
 
+inline TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TGUID& uuid) {
+    return pb.NewDataLiteral<NUdf::EDataSlot::Uuid>(
+        NUdf::TStringRef(reinterpret_cast<const char*>(&uuid), sizeof(uuid)));
+}
+
+inline TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, TTestDyNumber value) {
+    const auto parsed = NDyNumber::ParseDyNumberString(value.Value);
+    MKQL_ENSURE(parsed, "Invalid DyNumber literal: " << value.Value);
+    return pb.NewDataLiteral<NUdf::EDataSlot::DyNumber>(*parsed);
+}
+
 inline TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TUtf8& utf8Node) {
     return pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(utf8Node.Value);
 }
-
-template <ui8 Precision, ui8 Scale>
-struct TDecimalLiteral {
-    NYql::NDecimal::TInt128 Value{};
-};
 
 template <ui8 Precision, ui8 Scale>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TDecimalLiteral<Precision, Scale>& decimalNode) {
@@ -264,20 +222,16 @@ TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TVector<T>& no
     return pb.NewList(type, std::move(convertedNodes));
 }
 
+template <typename... TMembers>
+TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TStructVariant<TMembers...>& value) {
+    TVector<std::pair<std::string_view, TType*>> members = {
+        {TMembers::MemberName(),
+         ConvertValueToLiteralNode(pb, std::remove_cvref_t<decltype(std::declval<TMembers>().Value)>{}).GetStaticType()}...};
+    auto varType = pb.NewVariantType(pb.NewStructType(members));
+    auto alternative = value.VisitActive([&](const auto& inner) {
+        return ConvertValueToLiteralNode(pb, inner);
+    });
+    return pb.NewVariant(alternative, value.Name(), varType);
+}
+
 } // namespace NKikimr::NMiniKQL::NTest
-
-namespace NYql::NUdf::NPrivate {
-
-template <>
-struct TUnboxedValueComparator<NKikimr::NMiniKQL::NTest::TUtf8> {
-    template <CComparatorUtilsUdfValue THolder>
-    static TUnboxedValueComparatorResult IsEqual(const THolder& value, const NKikimr::NMiniKQL::NTest::TUtf8& expected) {
-        const TStringBuf got(value.AsStringRef());
-        if (got != expected.Value) {
-            return std::unexpected(TStringBuilder() << "Expected utf8 string \"" << expected.Value << "\" but got \"" << got << "\"");
-        }
-        return {};
-    }
-};
-
-} // namespace NYql::NUdf::NPrivate

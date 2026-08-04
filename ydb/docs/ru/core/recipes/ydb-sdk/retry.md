@@ -548,83 +548,122 @@
 
   - Native SDK
 
-    В {{ ydb-short-name }} Java SDK механизм повторных запросов реализован в виде класс хелпера `SessionRetryContext`. Данный класс конструируется с помощью метода `SessionRetryContext.create` в который требуется передать реализацию интерфейса `SessionSupplier` - как правило это экземпляр класса `TableClient` или `QueryClient`.
+    В {{ ydb-short-name }} Java SDK повторные попытки реализованы классом-хелпером `SessionRetryContext`. Он создаётся через `SessionRetryContext.create`, куда передаётся `SessionSupplier` — как правило `TableClient` или `QueryClient`. Какие ошибки считаются временными и требуют повтора, описано в [Обработка ошибок](../../reference/ydb-sdk/error_handling.md#handling-retryable-errors).
 
-    Дополнительно пользователь может задавать некоторые другие опции:
+    Настройки повторов:
 
-    * `maxRetries(int maxRetries)` - максимальное количество повторов операции, не включает в себя первое выполение. Значение по умолчанию `10`
-    * `retryNotFound(boolean retryNotFound)` - опция повтора операций, вернувших статус `NOT_FOUND`. По умолчанию включено.
-    * `idempotent(boolean idempotent)` - признак идемпотентности операций. Идемпотентные операции будут повторяться для более широкого списка ошибок. По умолчанию отключено.
+    * `maxRetries(int)` — максимальное число повторов (без учёта первой попытки; по умолчанию `10`)
+    * `retryNotFound(boolean)` — повторять ли операции со статусом `NOT_FOUND` (по умолчанию `true`)
+    * `idempotent(boolean)` — идемпотентность операции; расширяет список повторяемых ошибок (по умолчанию `false`)
 
-    Для запуска операций с ретраями класс `SessionRetryContext` предоставляет два метода:
+    Методы запуска:
 
-    * `CompletableFuture<Status> supplyStatus` - выполнение операции, возвращающей статус. В качестве аргумента принимает лямбду `Function<Session, CompletableFuture<Status>> fn`
-    * `CompletableFuture<Result<T>> supplyResult` - выполнение операции, возвращающей данные. В качестве аргумента принимает лямбду `Function<Session, CompletableFuture<Result<T>>> fn`
+    * `supplyStatus` — операция, возвращающая `Status` (DDL, `createTable` и т.п.)
+    * `supplyResult` — операция, возвращающая данные (`executeDataQuery`, `QueryReader.readFrom` и т.п.)
 
-    При использовании класса `SessionRetryContext` нужно учитывать, что повторное исполнение операции будет выполняться в следующих случаях:
+    Повтор выполняется, если лямбда вернула [retryable](../../reference/ydb-sdk/error_handling.md) статус или выбросила `UnexpectedResultException` с таким статусом.
 
-    * Лямбда вернула [retryable](../../reference/ydb-sdk/error_handling.md) код ошибки
-    * В рамках исполнения лямбды была вызвано `UnexpectedResultException` c [retryable](../../reference/ydb-sdk/error_handling.md) кодом ошибки
+    ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-      {% cut "Пример кода, использующего SessionRetryContext.supplyStatus:" %}
+    public class RetryExample {
 
-      ```java
-      private void createTable(TableClient tableClient, String database, String tableName) {
-          SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-          TableDescription pets = TableDescription.newBuilder()
-                  .addNullableColumn("species", PrimitiveType.Text)
-                  .addNullableColumn("name", PrimitiveType.Text)
-                  .addNullableColumn("color", PrimitiveType.Text)
-                  .addNullableColumn("price", PrimitiveType.Float)
-                  .setPrimaryKeys("species", "name")
-                  .build();
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-          String tablePath = database + "/" + tableName;
-          retryCtx.supplyStatus(session -> session.createTable(tablePath, pets))
-                  .join().expectSuccess();
-      }
-      ```
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      {% endcut %}
+                // Настройка политики повторов
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient)
+                        .maxRetries(5)
+                        .retryNotFound(true)
+                        .idempotent(true)
+                        .build();
 
-      {% cut "Пример кода, использующего SessionRetryContext.supplyResult:" %}
+                // supplyResult — запрос с автоматическими повторами
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                )).join().getValue();
 
-      ```java
-      private void selectData(TableClient tableClient, String tableName) {
-          SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-          String selectQuery
-                  = "DECLARE $species AS Text;"
-                  + "DECLARE $name AS Text;"
-                  + "SELECT * FROM " + tableName + " "
-                  + "WHERE species = $species AND name = $name;";
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 => " + rs.getColumn("value").getInt32());
+                }
 
-          Params params = Params.of(
-                  "$species", PrimitiveValue.newText("cat"),
-                  "$name", PrimitiveValue.newText("Tom")
-          );
-
-          DataQueryResult data = retryCtx
-                  .supplyResult(session -> session.executeDataQuery(selectQuery, TxControl.onlineRo(), params))
-                  .join().getValue();
-
-          ResultSetReader rsReader = data.getResultSet(0);
-          logger.info("Result of select query:");
-          while (rsReader.next()) {
-              logger.info("  species: {}, name: {}, color: {}, price: {}",
-                      rsReader.getColumn("species").getText(),
-                      rsReader.getColumn("name").getText(),
-                      rsReader.getColumn("color").getText(),
-                      rsReader.getColumn("price").getFloat()
-              );
-          }
-      }
-      ```
-
-      {% endcut %}
+                // supplyStatus — операции без результата (DDL, createTable и т.п.)
+                // retryCtx.supplyStatus(session -> session.executeSchemeQuery("CREATE TABLE ..."))
+                //         .join().expectSuccess("DDL failed");
+            }
+        }
+    }
+    ```
 
   - JDBC
 
-    Повторные попытки на уровне `SessionRetryContext` относятся к нативному API (`TableClient` / `QueryClient`). При работе через JDBC используйте ретраи на уровне приложения или подключайте нативный транспорт и клиент, как в разделе [Инициализация драйвера](./init.md).
+    `SessionRetryContext` относится к нативному API (`TableClient` / `QueryClient`). При работе через JDBC драйвер выполняет ограниченные встроенные повторы (например, при `BAD_SESSION` вне транзакции); для остальных временных сбоев реализуйте цикл повторов на уровне приложения. Классы `YdbRetryableException` и `YdbConditionallyRetryableException` помечают ошибки, которые имеет смысл повторить — см. [Обработка ошибок](../../reference/ydb-sdk/error_handling.md#handling-retryable-errors). Подключение — в [Инициализация драйвера](./init.md).
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.SQLTransientException;
+    import java.sql.Statement;
+
+    import tech.ydb.jdbc.exception.YdbConditionallyRetryableException;
+    import tech.ydb.jdbc.exception.YdbRetryableException;
+
+    public class JdbcRetryExample {
+
+        private static final int MAX_RETRIES = 3;
+
+        public static void main(String[] args) throws SQLException {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+                try (Connection connection = DriverManager.getConnection(connectionUrl);
+                     Statement statement = connection.createStatement();
+                     ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+                    rs.next();
+                    System.out.println("SELECT 1 => " + rs.getInt("value"));
+                    return;
+                } catch (SQLException e) {
+                    if (attempt >= MAX_RETRIES || !isRetryable(e)) {
+                        throw new RuntimeException("query failed after retries", e);
+                    }
+                    sleepBeforeRetry(attempt);
+                }
+            }
+        }
+
+        private static boolean isRetryable(SQLException e) {
+            if (e instanceof YdbRetryableException
+                    || e instanceof YdbConditionallyRetryableException
+                    || e instanceof SQLTransientException) {
+                return true;
+            }
+            return e.getCause() instanceof SQLException && isRetryable((SQLException) e.getCause());
+        }
+
+        private static void sleepBeforeRetry(int attempt) {
+            try {
+                Thread.sleep(50L * (attempt + 1));
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(ie);
+            }
+        }
+    }
+    ```
 
   {% endlist %}
 

@@ -1,5 +1,7 @@
 #include "tx__set_down.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr::NHive {
 
 
@@ -31,7 +33,15 @@ bool TTxSetDown::SetDown(NIceDb::TNiceDb& db) {
         }
         return true;
     }
-    return false;
+    // setting Down = false on a non-existent node is considered a no-op and thus successful
+    if (Down) {
+        return false;
+    } else {
+        if (Forward) {
+            SideEffects.Send(Source, new TEvHive::TEvSetDownReply(), 0, Cookie);
+        }
+        return true;
+    }
 }
 
 bool TTxSetDown::Execute(TTransactionContext& txc, const TActorContext&) {
@@ -46,7 +56,11 @@ bool TTxSetDown::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxSetDown::Complete(const TActorContext& ctx) {
-    BLOG_D("THive::TTxSetDown(" << NodeId << ")::Complete");
+    YDB_LOG_DEBUG("THive::TTxSetDown::Complete setting node down state",
+        {"logPrefix", GetLogPrefix()},
+        {"nodeId", NodeId},
+        {"down", Down},
+        {"SideEffects", SideEffects});
     SideEffects.Complete(ctx);
 }
 

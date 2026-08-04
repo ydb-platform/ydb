@@ -9,6 +9,7 @@
 
 #include <util/digest/multi.h>
 #include <util/random/fast.h>
+#include <util/string/join.h>
 
 namespace {
     struct TRequestId {
@@ -2200,35 +2201,41 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             )"),
             "<empty>");
 
+        // Lock key 5 by lock 234
+        auto req2 = lockRows.SendRequest(lock2, tableId, TKeysBuilder().Add(5).Build());
+        lockRows.ExpectResult(req2);
+
         // Try locking keys 1, 2, 3, 4 by lock 234.
-        auto req2 = lockRows.SendRequest(
-            lock2, tableId, TKeysBuilder().Add(1).Add(2).Add(3).Add(4).Build(),
+        auto skippingReq = lockRows.SendRequest(
+            lock2, tableId, TKeysBuilder().Add(1).Add(2).Add(3).Add(4).Add(5).Build(),
             [&](NEvents::TDataEvents::TEvLockRows* ev) {
                 ev->Record.MutableSnapshot()->SetStep(snapshot.Step);
                 ev->Record.MutableSnapshot()->SetTxId(snapshot.TxId);
                 ev->Record.SetSkipLocked(true);
                 ev->Record.SetSkipAbsent(true);
             });
-        auto res = lockRows.ExpectResult(req2);
+        auto res = lockRows.ExpectResult(skippingReq);
 
-        // Key 1 was locked
-        const auto& locked = res->Record.GetLockedKeys();
-        UNIT_ASSERT_VALUES_EQUAL(locked.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(locked[0], 0);
+        // Key 1 was locked because it is present, and key 5 was locked because it was
+        // previously locked by the same transaction.
+        UNIT_ASSERT_VALUES_EQUAL(
+            JoinSeq(",", res->Record.GetLockedKeys()),
+            "0,4");
 
         // Key 2 was skipped because it was previously locked by req1
-        const auto& skippedLocked = res->Record.GetSkippedLockedKeys();
-        UNIT_ASSERT_VALUES_EQUAL(skippedLocked.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(skippedLocked[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            JoinSeq(",", res->Record.GetSkippedLockedKeys()),
+            "1");
 
         // Key 3 was skipped because it was deleted, and key 4 was skipped because it was absent.
-        const auto& skippedAbsent = res->Record.GetSkippedAbsentKeys();
-        UNIT_ASSERT_VALUES_EQUAL(skippedAbsent.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(skippedAbsent[0], 2);
-        UNIT_ASSERT_VALUES_EQUAL(skippedAbsent[1], 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            JoinSeq(",", res->Record.GetSkippedAbsentKeys()),
+            "2,3");
 
         // Key 3 was deleted after the snapshot, but it is not in ModifiedKeys because we skipped it.
-        UNIT_ASSERT_VALUES_EQUAL(res->Record.GetModifiedKeys().size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            JoinSeq(",", res->Record.GetModifiedKeys()),
+            "");
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardLockRows)

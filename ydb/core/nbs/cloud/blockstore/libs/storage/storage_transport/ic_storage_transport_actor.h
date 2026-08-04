@@ -3,6 +3,9 @@
 #include "ddisk_helpers.h"
 #include "ic_storage_transport_events.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/public.h>
+
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
@@ -13,6 +16,8 @@ class TICStorageTransportActor
     : public NActors::TActorBootstrapped<TICStorageTransportActor>
 {
 private:
+    TLogTitle LogTitle;
+
     ui64 RequestIdGenerator = 0;
 
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvConnect>>
@@ -54,8 +59,13 @@ private:
 
     THashMap<ui64, TWriteToManyPBuffersReqInfo> WriteToManyPBuffersRequests;
 
+    // Subscribed nodes with disconnect promises
+    THashMap<ui64, TVector<NThreading::TPromise<ui32>>> ICSubscribedNodes;
+
 public:
-    TICStorageTransportActor() = default;
+    TICStorageTransportActor(
+        const TDiskDescription& diskDescription,
+        ui32 dbgIndex);
 
     ~TICStorageTransportActor() override;
 
@@ -107,12 +117,14 @@ private:
     void HandleBatchErasePersistentBuffer(
         const TEvTransportPrivate::TEvBatchEraseFromPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
-
-    void HandleErasePersistentBuffer(
+    void HandleBarrierErasePersistentBuffer(
         const TEvTransportPrivate::TEvBarrierEraseFromPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
-    void HandleErasePersistentBufferUndelivery(
+    void HandleBatchErasePersistentBufferUndelivery(
         const NKikimr::NDDisk::TEvBatchErasePersistentBuffer::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleBarrierErasePersistentBufferUndelivery(
+        const NKikimr::NDDisk::TEvErasePersistentBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
     void HandleErasePersistentBufferResult(
         const NKikimr::NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
@@ -157,11 +169,22 @@ private:
     void HandleListPersistentBufferResult(
         const NKikimr::NDDisk::TEvListPersistentBufferResult::TPtr& ev,
         const NActors::TActorContext& ctx);
+
+    void PassAway() override;
+    void RejectAllSessionRequestsForNode(
+        ui32 nodeId,
+        const NActors::TActorContext& ctx);
+
+    void HandleICNodeDisconnected(
+        const NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev,
+        const NActors::TActorContext& ctx);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NActors::TActorId CreateTransportActor();
+NActors::TActorId CreateTransportActor(
+    const TDiskDescription& diskDescription,
+    ui32 dbgIndex);
 
 ////////////////////////////////////////////////////////////////////////////////
 

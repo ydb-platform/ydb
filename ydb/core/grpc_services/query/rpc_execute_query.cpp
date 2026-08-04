@@ -473,6 +473,12 @@ private:
                 hasTrailingMessage = true;
                 response.mutable_tx_meta()->set_id(kqpResponse.GetTxMeta().id());
             }
+
+            if (kqpResponse.HasCommitTimestamp()) {
+                hasTrailingMessage = true;
+                response.mutable_commit_timestamp()->set_plan_step(kqpResponse.GetCommitTimestamp().plan_step());
+                response.mutable_commit_timestamp()->set_tx_id(kqpResponse.GetCommitTimestamp().tx_id());
+            }
         }
 
         if (hasTrailingMessage) {

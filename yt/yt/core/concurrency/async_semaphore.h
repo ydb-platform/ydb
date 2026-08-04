@@ -90,6 +90,9 @@ public:
     //! Returns the number of free slots.
     i64 GetFree() const;
 
+    //! Returns the number of waiters.
+    int GetWaiterCount() const;
+
     TFuture<void> GetReadyEvent();
 
 private:

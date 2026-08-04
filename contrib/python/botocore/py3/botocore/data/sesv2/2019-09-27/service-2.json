@@ -791,7 +791,7 @@
         {"shape":"BadRequestException"},
         {"shape":"TooManyRequestsException"}
       ],
-      "documentation":"<p>Lists all of the contact lists available.</p>"
+      "documentation":"<p>Lists all of the contact lists available.</p> <p>If your output includes a \"NextToken\" field with a string value, this indicates there may be additional contacts on the filtered list - regardless of the number of contacts returned.</p>"
     },
     "ListContacts":{
       "name":"ListContacts",
@@ -1051,6 +1051,22 @@
         {"shape":"TooManyRequestsException"}
       ],
       "documentation":"<p>Update your Amazon SES account VDM attributes.</p> <p>You can execute this operation no more than once per second.</p>"
+    },
+    "PutConfigurationSetArchivingOptions":{
+      "name":"PutConfigurationSetArchivingOptions",
+      "http":{
+        "method":"PUT",
+        "requestUri":"/v2/email/configuration-sets/{ConfigurationSetName}/archiving-options"
+      },
+      "input":{"shape":"PutConfigurationSetArchivingOptionsRequest"},
+      "output":{"shape":"PutConfigurationSetArchivingOptionsResponse"},
+      "errors":[
+        {"shape":"NotFoundException"},
+        {"shape":"TooManyRequestsException"},
+        {"shape":"BadRequestException"}
+      ],
+      "documentation":"<p>Associate the configuration set with a MailManager archive. When you send email using the <code>SendEmail</code> or <code>SendBulkEmail</code> operations the message as it will be given to the receiving SMTP server will be archived, along with the recipient information.</p>",
+      "idempotent":true
     },
     "PutConfigurationSetDeliveryOptions":{
       "name":"PutConfigurationSetDeliveryOptions",
@@ -1527,8 +1543,7 @@
     },
     "AccountSuspendedException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The message can't be sent because the account's ability to send email has been permanently restricted.</p>",
       "error":{"httpStatusCode":400},
       "exception":true
@@ -1550,18 +1565,107 @@
     "AdminEmail":{"type":"string"},
     "AlreadyExistsException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The resource specified in your request already exists.</p>",
       "error":{"httpStatusCode":400},
       "exception":true
     },
     "AmazonResourceName":{"type":"string"},
+    "ArchiveArn":{
+      "type":"string",
+      "max":1011,
+      "min":20,
+      "pattern":"arn:(aws|aws-[a-z-]+):ses:[a-z]{2}-[a-z-]+-[0-9]:[0-9]{1,20}:mailmanager-archive/a-[a-z0-9]{24,62}"
+    },
+    "ArchivingOptions":{
+      "type":"structure",
+      "members":{
+        "ArchiveArn":{
+          "shape":"ArchiveArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the MailManager archive where the Amazon SES API v2 will archive sent emails.</p>"
+        }
+      },
+      "documentation":"<p>Used to associate a configuration set with a MailManager archive.</p>"
+    },
+    "Attachment":{
+      "type":"structure",
+      "required":[
+        "RawContent",
+        "FileName"
+      ],
+      "members":{
+        "RawContent":{
+          "shape":"RawAttachmentData",
+          "documentation":"<p> The raw data of the attachment. It needs to be base64-encoded if you are accessing Amazon SES directly through the HTTPS interface. If you are accessing Amazon SES using an Amazon Web Services SDK, the SDK takes care of the base 64-encoding for you.</p>"
+        },
+        "ContentDisposition":{
+          "shape":"AttachmentContentDisposition",
+          "documentation":"<p> A standard descriptor indicating how the attachment should be rendered in the email. Supported values: <code>ATTACHMENT</code> or <code>INLINE</code>.</p>"
+        },
+        "FileName":{
+          "shape":"AttachmentFileName",
+          "documentation":"<p>The file name for the attachment as it will appear in the email. Amazon SES restricts certain file extensions. To ensure attachments are accepted, check the <a href=\"https://docs.aws.amazon.com/ses/latest/dg/mime-types.html\">Unsupported attachment types</a> in the Amazon SES Developer Guide.</p>"
+        },
+        "ContentDescription":{
+          "shape":"AttachmentContentDescription",
+          "documentation":"<p> A brief description of the attachment content.</p>"
+        },
+        "ContentId":{
+          "shape":"AttachmentContentId",
+          "documentation":"<p> Unique identifier for the attachment, used for referencing attachments with INLINE disposition in HTML content.</p>"
+        },
+        "ContentTransferEncoding":{
+          "shape":"AttachmentContentTransferEncoding",
+          "documentation":"<p> Specifies how the attachment is encoded. Supported values: <code>BASE64</code>, <code>QUOTED_PRINTABLE</code>, <code>SEVEN_BIT</code>.</p>"
+        },
+        "ContentType":{
+          "shape":"AttachmentContentType",
+          "documentation":"<p> The MIME type of the attachment.</p> <note> <p>Example: <code>application/pdf</code>, <code>image/jpeg</code> </p> </note>"
+        }
+      },
+      "documentation":"<p> Contains metadata and attachment raw content.</p>"
+    },
+    "AttachmentContentDescription":{
+      "type":"string",
+      "max":1000
+    },
+    "AttachmentContentDisposition":{
+      "type":"string",
+      "enum":[
+        "ATTACHMENT",
+        "INLINE"
+      ]
+    },
+    "AttachmentContentId":{
+      "type":"string",
+      "max":78,
+      "min":1
+    },
+    "AttachmentContentTransferEncoding":{
+      "type":"string",
+      "enum":[
+        "BASE64",
+        "QUOTED_PRINTABLE",
+        "SEVEN_BIT"
+      ]
+    },
+    "AttachmentContentType":{
+      "type":"string",
+      "max":78,
+      "min":1
+    },
+    "AttachmentFileName":{
+      "type":"string",
+      "max":255
+    },
+    "AttachmentList":{
+      "type":"list",
+      "member":{"shape":"Attachment"}
+    },
     "AttributesData":{"type":"string"},
     "BadRequestException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The input you provided is invalid.</p>",
       "error":{"httpStatusCode":400},
       "exception":true
@@ -1817,8 +1921,7 @@
     },
     "CancelExportJobResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "CaseId":{"type":"string"},
@@ -1879,8 +1982,7 @@
     "ComplaintSubType":{"type":"string"},
     "ConcurrentModificationException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The resource is being modified by another operation or thread.</p>",
       "error":{"httpStatusCode":500},
       "exception":true,
@@ -1896,8 +1998,7 @@
     },
     "ConflictException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>If there is already an ongoing account details update under review.</p>",
       "error":{"httpStatusCode":409},
       "exception":true
@@ -2018,8 +2119,7 @@
     },
     "CreateConfigurationSetEventDestinationResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "CreateConfigurationSetRequest":{
@@ -2054,14 +2154,17 @@
         "VdmOptions":{
           "shape":"VdmOptions",
           "documentation":"<p>An object that defines the VDM options for emails that you send using the configuration set.</p>"
+        },
+        "ArchivingOptions":{
+          "shape":"ArchivingOptions",
+          "documentation":"<p>An object that defines the MailManager archiving options for emails that you send using the configuration set.</p>"
         }
       },
       "documentation":"<p>A request to create a configuration set.</p>"
     },
     "CreateConfigurationSetResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "CreateContactListRequest":{
@@ -2088,8 +2191,7 @@
     },
     "CreateContactListResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CreateContactRequest":{
       "type":"structure",
@@ -2124,8 +2226,7 @@
     },
     "CreateContactResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CreateCustomVerificationEmailTemplateRequest":{
       "type":"structure",
@@ -2167,8 +2268,7 @@
     },
     "CreateCustomVerificationEmailTemplateResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>If the action is successful, the service sends back an HTTP 200 response with an empty HTTP body.</p>"
     },
     "CreateDedicatedIpPoolRequest":{
@@ -2192,8 +2292,7 @@
     },
     "CreateDedicatedIpPoolResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "CreateDeliverabilityTestReportRequest":{
@@ -2269,8 +2368,7 @@
     },
     "CreateEmailIdentityPolicyResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "CreateEmailIdentityRequest":{
@@ -2334,8 +2432,7 @@
     },
     "CreateEmailTemplateResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>If the action is successful, the service sends back an HTTP 200 response with an empty HTTP body.</p>"
     },
     "CreateExportJobRequest":{
@@ -2593,8 +2690,7 @@
     },
     "DeleteConfigurationSetEventDestinationResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "DeleteConfigurationSetRequest":{
@@ -2612,8 +2708,7 @@
     },
     "DeleteConfigurationSetResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "DeleteContactListRequest":{
@@ -2630,8 +2725,7 @@
     },
     "DeleteContactListResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteContactRequest":{
       "type":"structure",
@@ -2656,8 +2750,7 @@
     },
     "DeleteContactResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteCustomVerificationEmailTemplateRequest":{
       "type":"structure",
@@ -2674,8 +2767,7 @@
     },
     "DeleteCustomVerificationEmailTemplateResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>If the action is successful, the service sends back an HTTP 200 response with an empty HTTP body.</p>"
     },
     "DeleteDedicatedIpPoolRequest":{
@@ -2693,8 +2785,7 @@
     },
     "DeleteDedicatedIpPoolResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "DeleteEmailIdentityPolicyRequest":{
@@ -2721,8 +2812,7 @@
     },
     "DeleteEmailIdentityPolicyResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "DeleteEmailIdentityRequest":{
@@ -2740,8 +2830,7 @@
     },
     "DeleteEmailIdentityResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "DeleteEmailTemplateRequest":{
@@ -2759,8 +2848,7 @@
     },
     "DeleteEmailTemplateResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>If the action is successful, the service sends back an HTTP 200 response with an empty HTTP body.</p>"
     },
     "DeleteMultiRegionEndpointRequest":{
@@ -2801,8 +2889,7 @@
     },
     "DeleteSuppressedDestinationResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "DeliverabilityDashboardAccountStatus":{
@@ -2959,7 +3046,7 @@
         },
         "SigningAttributesOrigin":{
           "shape":"DkimSigningAttributesOrigin",
-          "documentation":"<p>A string that indicates how DKIM was configured for the identity. These are the possible values:</p> <ul> <li> <p> <code>AWS_SES</code> – Indicates that DKIM was configured for the identity by using <a href=\"https://docs.aws.amazon.com/ses/latest/DeveloperGuide/easy-dkim.html\">Easy DKIM</a>.</p> </li> <li> <p> <code>EXTERNAL</code> – Indicates that DKIM was configured for the identity by using Bring Your Own DKIM (BYODKIM).</p> </li> <li> <p> <code>AWS_SES_AF_SOUTH_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Africa (Cape Town) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_NORTH_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (Stockholm) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTH_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Mumbai) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_WEST_3</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (Paris) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_WEST_2</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (London) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_SOUTH_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (Milan) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_WEST_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (Ireland) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_NORTHEAST_3</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Osaka) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_NORTHEAST_2</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Seoul) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_ME_SOUTH_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Middle East (Bahrain) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_NORTHEAST_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Tokyo) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_IL_CENTRAL_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Israel (Tel Aviv) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_SA_EAST_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in South America (São Paulo) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_CA_CENTRAL_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Canada (Central) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTHEAST_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Singapore) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTHEAST_2</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Sydney) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTHEAST_3</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Jakarta) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_CENTRAL_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (Frankfurt) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_EAST_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in US East (N. Virginia) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_EAST_2</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in US East (Ohio) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_WEST_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in US West (N. California) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_WEST_2</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in US West (Oregon) region using Deterministic Easy-DKIM (DEED). </p> </li> </ul>"
+          "documentation":"<p>A string that indicates how DKIM was configured for the identity. These are the possible values:</p> <ul> <li> <p> <code>AWS_SES</code> – Indicates that DKIM was configured for the identity by using <a href=\"https://docs.aws.amazon.com/ses/latest/DeveloperGuide/easy-dkim.html\">Easy DKIM</a>.</p> </li> <li> <p> <code>EXTERNAL</code> – Indicates that DKIM was configured for the identity by using Bring Your Own DKIM (BYODKIM).</p> </li> <li> <p> <code>AWS_SES_AF_SOUTH_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Africa (Cape Town) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_NORTH_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (Stockholm) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTH_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Mumbai) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTH_2</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Hyderabad) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_WEST_3</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (Paris) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_WEST_2</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (London) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_SOUTH_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (Milan) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_WEST_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (Ireland) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_NORTHEAST_3</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Osaka) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_NORTHEAST_2</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Seoul) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_ME_CENTRAL_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Middle East (UAE) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_ME_SOUTH_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Middle East (Bahrain) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_NORTHEAST_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Tokyo) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_IL_CENTRAL_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Israel (Tel Aviv) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_SA_EAST_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in South America (São Paulo) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_CA_CENTRAL_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Canada (Central) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTHEAST_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Singapore) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTHEAST_2</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Sydney) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTHEAST_3</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Asia Pacific (Jakarta) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_CENTRAL_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (Frankfurt) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_CENTRAL_2</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in Europe (Zurich) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_EAST_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in US East (N. Virginia) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_EAST_2</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in US East (Ohio) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_WEST_1</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in US West (N. California) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_WEST_2</code> – Indicates that DKIM was configured for the identity by replicating signing attributes from a parent identity in US West (Oregon) region using Deterministic Easy-DKIM (DEED). </p> </li> </ul>"
         },
         "NextSigningKeyLength":{
           "shape":"DkimSigningKeyLength",
@@ -2993,7 +3080,7 @@
         },
         "DomainSigningAttributesOrigin":{
           "shape":"DkimSigningAttributesOrigin",
-          "documentation":"<p>The attribute to use for configuring DKIM for the identity depends on the operation: </p> <ol> <li> <p>For <code>PutEmailIdentityDkimSigningAttributes</code>: </p> <ul> <li> <p>None of the values are allowed - use the <a href=\"https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_PutEmailIdentityDkimSigningAttributes.html#SES-PutEmailIdentityDkimSigningAttributes-request-SigningAttributesOrigin\"> <code>SigningAttributesOrigin</code> </a> parameter instead </p> </li> </ul> </li> <li> <p>For <code>CreateEmailIdentity</code> when replicating a parent identity's DKIM configuration: </p> <ul> <li> <p>Allowed values: All values except <code>AWS_SES</code> and <code>EXTERNAL</code> </p> </li> </ul> </li> </ol> <ul> <li> <p> <code>AWS_SES</code> – Configure DKIM for the identity by using Easy DKIM. </p> </li> <li> <p> <code>EXTERNAL</code> – Configure DKIM for the identity by using Bring Your Own DKIM (BYODKIM). </p> </li> <li> <p> <code>AWS_SES_AF_SOUTH_1</code> – Configure DKIM for the identity by replicating from a parent identity in Africa (Cape Town) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_NORTH_1</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (Stockholm) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTH_1</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Mumbai) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_WEST_3</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (Paris) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_WEST_2</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (London) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_SOUTH_1</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (Milan) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_WEST_1</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (Ireland) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_NORTHEAST_3</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Osaka) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_NORTHEAST_2</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Seoul) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_ME_SOUTH_1</code> – Configure DKIM for the identity by replicating from a parent identity in Middle East (Bahrain) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_NORTHEAST_1</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Tokyo) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_IL_CENTRAL_1</code> – Configure DKIM for the identity by replicating from a parent identity in Israel (Tel Aviv) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_SA_EAST_1</code> – Configure DKIM for the identity by replicating from a parent identity in South America (São Paulo) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_CA_CENTRAL_1</code> – Configure DKIM for the identity by replicating from a parent identity in Canada (Central) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTHEAST_1</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Singapore) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTHEAST_2</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Sydney) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTHEAST_3</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Jakarta) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_CENTRAL_1</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (Frankfurt) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_EAST_1</code> – Configure DKIM for the identity by replicating from a parent identity in US East (N. Virginia) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_EAST_2</code> – Configure DKIM for the identity by replicating from a parent identity in US East (Ohio) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_WEST_1</code> – Configure DKIM for the identity by replicating from a parent identity in US West (N. California) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_WEST_2</code> – Configure DKIM for the identity by replicating from a parent identity in US West (Oregon) region using Deterministic Easy-DKIM (DEED). </p> </li> </ul>"
+          "documentation":"<p>The attribute to use for configuring DKIM for the identity depends on the operation: </p> <ol> <li> <p>For <code>PutEmailIdentityDkimSigningAttributes</code>: </p> <ul> <li> <p>None of the values are allowed - use the <a href=\"https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_PutEmailIdentityDkimSigningAttributes.html#SES-PutEmailIdentityDkimSigningAttributes-request-SigningAttributesOrigin\"> <code>SigningAttributesOrigin</code> </a> parameter instead </p> </li> </ul> </li> <li> <p>For <code>CreateEmailIdentity</code> when replicating a parent identity's DKIM configuration: </p> <ul> <li> <p>Allowed values: All values except <code>AWS_SES</code> and <code>EXTERNAL</code> </p> </li> </ul> </li> </ol> <ul> <li> <p> <code>AWS_SES</code> – Configure DKIM for the identity by using Easy DKIM. </p> </li> <li> <p> <code>EXTERNAL</code> – Configure DKIM for the identity by using Bring Your Own DKIM (BYODKIM). </p> </li> <li> <p> <code>AWS_SES_AF_SOUTH_1</code> – Configure DKIM for the identity by replicating from a parent identity in Africa (Cape Town) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_NORTH_1</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (Stockholm) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTH_1</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Mumbai) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTH_2</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Hyderabad) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_WEST_3</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (Paris) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_WEST_2</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (London) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_SOUTH_1</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (Milan) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_WEST_1</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (Ireland) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_NORTHEAST_3</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Osaka) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_NORTHEAST_2</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Seoul) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_ME_CENTRAL_1</code> – Configure DKIM for the identity by replicating from a parent identity in Middle East (UAE) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_ME_SOUTH_1</code> – Configure DKIM for the identity by replicating from a parent identity in Middle East (Bahrain) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_NORTHEAST_1</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Tokyo) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_IL_CENTRAL_1</code> – Configure DKIM for the identity by replicating from a parent identity in Israel (Tel Aviv) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_SA_EAST_1</code> – Configure DKIM for the identity by replicating from a parent identity in South America (São Paulo) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_CA_CENTRAL_1</code> – Configure DKIM for the identity by replicating from a parent identity in Canada (Central) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTHEAST_1</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Singapore) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTHEAST_2</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Sydney) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_AP_SOUTHEAST_3</code> – Configure DKIM for the identity by replicating from a parent identity in Asia Pacific (Jakarta) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_CENTRAL_1</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (Frankfurt) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_EU_CENTRAL_2</code> – Configure DKIM for the identity by replicating from a parent identity in Europe (Zurich) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_EAST_1</code> – Configure DKIM for the identity by replicating from a parent identity in US East (N. Virginia) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_EAST_2</code> – Configure DKIM for the identity by replicating from a parent identity in US East (Ohio) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_WEST_1</code> – Configure DKIM for the identity by replicating from a parent identity in US West (N. California) region using Deterministic Easy-DKIM (DEED). </p> </li> <li> <p> <code>AWS_SES_US_WEST_2</code> – Configure DKIM for the identity by replicating from a parent identity in US West (Oregon) region using Deterministic Easy-DKIM (DEED). </p> </li> </ul>"
         }
       },
       "documentation":"<p>An object that contains configuration for Bring Your Own DKIM (BYODKIM), or, for Easy DKIM</p>"
@@ -3024,7 +3111,10 @@
         "AWS_SES_US_EAST_1",
         "AWS_SES_US_EAST_2",
         "AWS_SES_US_WEST_1",
-        "AWS_SES_US_WEST_2"
+        "AWS_SES_US_WEST_2",
+        "AWS_SES_ME_CENTRAL_1",
+        "AWS_SES_AP_SOUTH_2",
+        "AWS_SES_EU_CENTRAL_2"
       ]
     },
     "DkimSigningKeyLength":{
@@ -3186,7 +3276,7 @@
       "members":{
         "Simple":{
           "shape":"Message",
-          "documentation":"<p>The simple email message. The message consists of a subject and a message body.</p>"
+          "documentation":"<p>The simple email message. The message consists of a subject, message body and attachments list.</p>"
         },
         "Raw":{
           "shape":"RawMessage",
@@ -3197,7 +3287,7 @@
           "documentation":"<p>The template to use for the email message.</p>"
         }
       },
-      "documentation":"<p>An object that defines the entire content of the email, including the message headers and the body content. You can create a simple email message, in which you specify the subject and the text and HTML versions of the message body. You can also create raw messages, in which you specify a complete MIME-formatted message. Raw messages can include attachments and custom headers.</p>"
+      "documentation":"<p>An object that defines the entire content of the email, including the message headers, body content, and attachments. For a simple email message, you specify the subject and provide both text and HTML versions of the message body. You can also add attachments to simple and templated messages. For a raw message, you provide a complete MIME-formatted message, which can include custom headers and attachments.</p>"
     },
     "EmailInsights":{
       "type":"structure",
@@ -3280,7 +3370,7 @@
     },
     "EmailTemplateName":{
       "type":"string",
-      "documentation":"<p>The name of the template. You will refer to this name when you send email using the <code>SendTemplatedEmail</code> or <code>SendBulkTemplatedEmail</code> operations.</p>",
+      "documentation":"<p>The name of the template. You will refer to this name when you send email using the <code>SendEmail</code> or <code>SendBulkEmail</code> operations.</p>",
       "min":1
     },
     "EmailTemplateSubject":{
@@ -3346,7 +3436,7 @@
         },
         "MatchingEventTypes":{
           "shape":"EventTypes",
-          "documentation":"<p>The types of events that Amazon SES sends to the specified event destinations.</p> <ul> <li> <p> <code>SEND</code> - The send request was successful and SES will attempt to deliver the message to the recipient’s mail server. (If account-level or global suppression is being used, SES will still count it as a send, but delivery is suppressed.)</p> </li> <li> <p> <code>REJECT</code> - SES accepted the email, but determined that it contained a virus and didn’t attempt to deliver it to the recipient’s mail server.</p> </li> <li> <p> <code>BOUNCE</code> - (<i>Hard bounce</i>) The recipient's mail server permanently rejected the email. (<i>Soft bounces</i> are only included when SES fails to deliver the email after retrying for a period of time.)</p> </li> <li> <p> <code>COMPLAINT</code> - The email was successfully delivered to the recipient’s mail server, but the recipient marked it as spam.</p> </li> <li> <p> <code>DELIVERY</code> - SES successfully delivered the email to the recipient's mail server.</p> </li> <li> <p> <code>OPEN</code> - The recipient received the message and opened it in their email client.</p> </li> <li> <p> <code>CLICK</code> - The recipient clicked one or more links in the email.</p> </li> <li> <p> <code>RENDERING_FAILURE</code> - The email wasn't sent because of a template rendering issue. This event type can occur when template data is missing, or when there is a mismatch between template parameters and data. (This event type only occurs when you send email using the <a href=\"https://docs.aws.amazon.com/ses/latest/APIReference/API_SendTemplatedEmail.html\"> <code>SendTemplatedEmail</code> </a> or <a href=\"https://docs.aws.amazon.com/ses/latest/APIReference/API_SendBulkTemplatedEmail.html\"> <code>SendBulkTemplatedEmail</code> </a> API operations.) </p> </li> <li> <p> <code>DELIVERY_DELAY</code> - The email couldn't be delivered to the recipient’s mail server because a temporary issue occurred. Delivery delays can occur, for example, when the recipient's inbox is full, or when the receiving email server experiences a transient issue.</p> </li> <li> <p> <code>SUBSCRIPTION</code> - The email was successfully delivered, but the recipient updated their subscription preferences by clicking on an <i>unsubscribe</i> link as part of your <a href=\"https://docs.aws.amazon.com/ses/latest/dg/sending-email-subscription-management.html\">subscription management</a>.</p> </li> </ul>"
+          "documentation":"<p>The types of events that Amazon SES sends to the specified event destinations.</p> <ul> <li> <p> <code>SEND</code> - The send request was successful and SES will attempt to deliver the message to the recipient’s mail server. (If account-level or global suppression is being used, SES will still count it as a send, but delivery is suppressed.)</p> </li> <li> <p> <code>REJECT</code> - SES accepted the email, but determined that it contained a virus and didn’t attempt to deliver it to the recipient’s mail server.</p> </li> <li> <p> <code>BOUNCE</code> - (<i>Hard bounce</i>) The recipient's mail server permanently rejected the email. (<i>Soft bounces</i> are only included when SES fails to deliver the email after retrying for a period of time.)</p> </li> <li> <p> <code>COMPLAINT</code> - The email was successfully delivered to the recipient’s mail server, but the recipient marked it as spam.</p> </li> <li> <p> <code>DELIVERY</code> - SES successfully delivered the email to the recipient's mail server.</p> </li> <li> <p> <code>OPEN</code> - The recipient received the message and opened it in their email client.</p> </li> <li> <p> <code>CLICK</code> - The recipient clicked one or more links in the email.</p> </li> <li> <p> <code>RENDERING_FAILURE</code> - The email wasn't sent because of a template rendering issue. This event type can occur when template data is missing, or when there is a mismatch between template parameters and data. (This event type only occurs when you send email using the <a href=\"https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_SendEmail.html\"> <code>SendEmail</code> </a> or <a href=\"https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_SendBulkEmail.html\"> <code>SendBulkEmail</code> </a> API operations.) </p> </li> <li> <p> <code>DELIVERY_DELAY</code> - The email couldn't be delivered to the recipient’s mail server because a temporary issue occurred. Delivery delays can occur, for example, when the recipient's inbox is full, or when the receiving email server experiences a transient issue.</p> </li> <li> <p> <code>SUBSCRIPTION</code> - The email was successfully delivered, but the recipient updated their subscription preferences by clicking on an <i>unsubscribe</i> link as part of your <a href=\"https://docs.aws.amazon.com/ses/latest/dg/sending-email-subscription-management.html\">subscription management</a>.</p> </li> </ul>"
         },
         "KinesisFirehoseDestination":{
           "shape":"KinesisFirehoseDestination",
@@ -3582,8 +3672,7 @@
     "GeneralEnforcementStatus":{"type":"string"},
     "GetAccountRequest":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A request to obtain information about the email-sending capabilities of your Amazon SES account.</p>"
     },
     "GetAccountResponse":{
@@ -3718,6 +3807,10 @@
         "VdmOptions":{
           "shape":"VdmOptions",
           "documentation":"<p>An object that contains information about the VDM preferences for your configuration set.</p>"
+        },
+        "ArchivingOptions":{
+          "shape":"ArchivingOptions",
+          "documentation":"<p>An object that defines the MailManager archive where sent emails are archived that you send using the configuration set.</p>"
         }
       },
       "documentation":"<p>Information about a configuration set.</p>"
@@ -3950,8 +4043,7 @@
     },
     "GetDeliverabilityDashboardOptionsRequest":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Retrieve information about the status of the Deliverability dashboard for your Amazon Web Services account. When the Deliverability dashboard is enabled, you gain access to reputation, deliverability, and other metrics for your domains. You also gain the ability to perform predictive inbox placement tests.</p> <p>When you use the Deliverability dashboard, you pay a monthly subscription charge, in addition to any other fees that you accrue by using Amazon SES and other Amazon Web Services services. For more information about the features and cost of a Deliverability dashboard subscription, see <a href=\"http://aws.amazon.com/pinpoint/pricing/\">Amazon Pinpoint Pricing</a>.</p>"
     },
     "GetDeliverabilityDashboardOptionsResponse":{
@@ -4603,8 +4695,7 @@
     },
     "InternalServiceErrorException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The request couldn't be processed because an error occurred with the Amazon SES API v2.</p>",
       "error":{"httpStatusCode":500},
       "exception":true,
@@ -4612,8 +4703,7 @@
     },
     "InvalidNextTokenException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified request includes an invalid or expired token.</p>",
       "error":{"httpStatusCode":400},
       "exception":true
@@ -4708,8 +4798,7 @@
     },
     "LimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>There are too many instances of the specified resource type.</p>",
       "error":{"httpStatusCode":400},
       "exception":true
@@ -5187,7 +5276,7 @@
     },
     "ListRecommendationsFilterKey":{
       "type":"string",
-      "documentation":"<p>The <code>ListRecommendations</code> filter type. This can be one of the following:</p> <ul> <li> <p> <code>TYPE</code> – The recommendation type, with values like <code>DKIM</code>, <code>SPF</code>, <code>DMARC</code> or <code>BIMI</code>.</p> </li> <li> <p> <code>IMPACT</code> – The recommendation impact, with values like <code>HIGH</code> or <code>LOW</code>.</p> </li> <li> <p> <code>STATUS</code> – The recommendation status, with values like <code>OPEN</code> or <code>FIXED</code>.</p> </li> <li> <p> <code>RESOURCE_ARN</code> – The resource affected by the recommendation, with values like <code>arn:aws:ses:us-east-1:123456789012:identity/example.com</code>.</p> </li> </ul>",
+      "documentation":"<p>The <code>ListRecommendations</code> filter type. This can be one of the following:</p> <ul> <li> <p> <code>TYPE</code> – The recommendation type, with values like <code>DKIM</code>, <code>SPF</code>, <code>DMARC</code>, <code>BIMI</code>, or <code>COMPLAINT</code>.</p> </li> <li> <p> <code>IMPACT</code> – The recommendation impact, with values like <code>HIGH</code> or <code>LOW</code>.</p> </li> <li> <p> <code>STATUS</code> – The recommendation status, with values like <code>OPEN</code> or <code>FIXED</code>.</p> </li> <li> <p> <code>RESOURCE_ARN</code> – The resource affected by the recommendation, with values like <code>arn:aws:ses:us-east-1:123456789012:identity/example.com</code>.</p> </li> </ul>",
       "enum":[
         "TYPE",
         "IMPACT",
@@ -5328,8 +5417,7 @@
     },
     "MailFromDomainNotVerifiedException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The message can't be sent because the sending domain isn't verified.</p>",
       "error":{"httpStatusCode":400},
       "exception":true
@@ -5377,6 +5465,10 @@
         "Headers":{
           "shape":"MessageHeaderList",
           "documentation":"<p>The list of message headers that will be added to the email message.</p>"
+        },
+        "Attachments":{
+          "shape":"AttachmentList",
+          "documentation":"<p> The List of attachments to include in your email. All recipients will receive the same attachments.</p>"
         }
       },
       "documentation":"<p>Represents the email message that you're sending. The <code>Message</code> object consists of a subject line and a message body.</p>"
@@ -5492,8 +5584,7 @@
     },
     "MessageRejected":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The message can't be sent because it contains invalid content.</p>",
       "error":{"httpStatusCode":400},
       "exception":true
@@ -5694,8 +5785,7 @@
     },
     "NotFoundException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The resource you attempted to access doesn't exist.</p>",
       "error":{"httpStatusCode":404},
       "exception":true
@@ -5807,8 +5897,7 @@
     },
     "PutAccountDedicatedIpWarmupAttributesResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutAccountDetailsRequest":{
@@ -5847,8 +5936,7 @@
     },
     "PutAccountDetailsResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutAccountSendingAttributesRequest":{
@@ -5863,8 +5951,7 @@
     },
     "PutAccountSendingAttributesResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutAccountSuppressionAttributesRequest":{
@@ -5879,8 +5966,7 @@
     },
     "PutAccountSuppressionAttributesResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutAccountVdmAttributesRequest":{
@@ -5896,8 +5982,29 @@
     },
     "PutAccountVdmAttributesResponse":{
       "type":"structure",
+      "members":{}
+    },
+    "PutConfigurationSetArchivingOptionsRequest":{
+      "type":"structure",
+      "required":["ConfigurationSetName"],
       "members":{
-      }
+        "ConfigurationSetName":{
+          "shape":"ConfigurationSetName",
+          "documentation":"<p>The name of the configuration set to associate with a MailManager archive.</p>",
+          "location":"uri",
+          "locationName":"ConfigurationSetName"
+        },
+        "ArchiveArn":{
+          "shape":"ArchiveArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the MailManager archive that the Amazon SES API v2 sends email to.</p>"
+        }
+      },
+      "documentation":"<p>A request to associate a configuration set with a MailManager archive.</p>"
+    },
+    "PutConfigurationSetArchivingOptionsResponse":{
+      "type":"structure",
+      "members":{},
+      "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutConfigurationSetDeliveryOptionsRequest":{
       "type":"structure",
@@ -5926,8 +6033,7 @@
     },
     "PutConfigurationSetDeliveryOptionsResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutConfigurationSetReputationOptionsRequest":{
@@ -5949,8 +6055,7 @@
     },
     "PutConfigurationSetReputationOptionsResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutConfigurationSetSendingOptionsRequest":{
@@ -5972,8 +6077,7 @@
     },
     "PutConfigurationSetSendingOptionsResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutConfigurationSetSuppressionOptionsRequest":{
@@ -5995,8 +6099,7 @@
     },
     "PutConfigurationSetSuppressionOptionsResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutConfigurationSetTrackingOptionsRequest":{
@@ -6019,8 +6122,7 @@
     },
     "PutConfigurationSetTrackingOptionsResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutConfigurationSetVdmOptionsRequest":{
@@ -6042,8 +6144,7 @@
     },
     "PutConfigurationSetVdmOptionsResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutDedicatedIpInPoolRequest":{
@@ -6068,8 +6169,7 @@
     },
     "PutDedicatedIpInPoolResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutDedicatedIpPoolScalingAttributesRequest":{
@@ -6094,8 +6194,7 @@
     },
     "PutDedicatedIpPoolScalingAttributesResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutDedicatedIpWarmupAttributesRequest":{
@@ -6120,8 +6219,7 @@
     },
     "PutDedicatedIpWarmupAttributesResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutDeliverabilityDashboardOptionRequest":{
@@ -6141,8 +6239,7 @@
     },
     "PutDeliverabilityDashboardOptionResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A response that indicates whether the Deliverability dashboard is enabled.</p>"
     },
     "PutEmailIdentityConfigurationSetAttributesRequest":{
@@ -6164,8 +6261,7 @@
     },
     "PutEmailIdentityConfigurationSetAttributesResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>If the action is successful, the service sends back an HTTP 200 response with an empty HTTP body.</p>"
     },
     "PutEmailIdentityDkimAttributesRequest":{
@@ -6187,8 +6283,7 @@
     },
     "PutEmailIdentityDkimAttributesResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutEmailIdentityDkimSigningAttributesRequest":{
@@ -6248,8 +6343,7 @@
     },
     "PutEmailIdentityFeedbackAttributesResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutEmailIdentityMailFromAttributesRequest":{
@@ -6275,8 +6369,7 @@
     },
     "PutEmailIdentityMailFromAttributesResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "PutSuppressedDestinationRequest":{
@@ -6299,8 +6392,7 @@
     },
     "PutSuppressedDestinationResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "QueryErrorCode":{
@@ -6316,6 +6408,7 @@
       "max":255,
       "min":1
     },
+    "RawAttachmentData":{"type":"blob"},
     "RawMessage":{
       "type":"structure",
       "required":["Data"],
@@ -6344,7 +6437,7 @@
         },
         "Type":{
           "shape":"RecommendationType",
-          "documentation":"<p>The recommendation type, with values like <code>DKIM</code>, <code>SPF</code>, <code>DMARC</code> or <code>BIMI</code>.</p>"
+          "documentation":"<p>The recommendation type, with values like <code>DKIM</code>, <code>SPF</code>, <code>DMARC</code>, <code>BIMI</code>, or <code>COMPLAINT</code>.</p>"
         },
         "Description":{
           "shape":"RecommendationDescription",
@@ -6390,7 +6483,8 @@
         "DKIM",
         "DMARC",
         "SPF",
-        "BIMI"
+        "BIMI",
+        "COMPLAINT"
       ]
     },
     "RecommendationsList":{
@@ -6728,8 +6822,7 @@
     },
     "SendingPausedException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The message can't be sent because the account's ability to send email is currently paused.</p>",
       "error":{"httpStatusCode":400},
       "exception":true
@@ -6938,8 +7031,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{"type":"string"},
     "Template":{
@@ -6947,7 +7039,7 @@
       "members":{
         "TemplateName":{
           "shape":"EmailTemplateName",
-          "documentation":"<p>The name of the template. You will refer to this name when you send email using the <code>SendTemplatedEmail</code> or <code>SendBulkTemplatedEmail</code> operations. </p>"
+          "documentation":"<p>The name of the template. You will refer to this name when you send email using the <code>SendEmail</code> or <code>SendBulkEmail</code> operations. </p>"
         },
         "TemplateArn":{
           "shape":"AmazonResourceName",
@@ -6964,6 +7056,10 @@
         "Headers":{
           "shape":"MessageHeaderList",
           "documentation":"<p>The list of message headers that will be added to the email message.</p>"
+        },
+        "Attachments":{
+          "shape":"AttachmentList",
+          "documentation":"<p> The List of attachments to include in your email. All recipients will receive the same attachments.</p>"
         }
       },
       "documentation":"<p>An object that defines the email template to use for an email message, and the values to use for any message variables in that template. An <i>email template</i> is a type of message template that contains content that you want to reuse in email messages that you send. You can specifiy the email template by providing the name or ARN of an <i>email template</i> previously saved in your Amazon SES account or by providing the full template content.</p>"
@@ -7018,8 +7114,7 @@
     },
     "TooManyRequestsException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Too many requests have been made to the operation.</p>",
       "error":{"httpStatusCode":429},
       "exception":true
@@ -7131,8 +7226,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateConfigurationSetEventDestinationRequest":{
       "type":"structure",
@@ -7163,8 +7257,7 @@
     },
     "UpdateConfigurationSetEventDestinationResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "UpdateContactListRequest":{
@@ -7189,8 +7282,7 @@
     },
     "UpdateContactListResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateContactRequest":{
       "type":"structure",
@@ -7227,8 +7319,7 @@
     },
     "UpdateContactResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateCustomVerificationEmailTemplateRequest":{
       "type":"structure",
@@ -7272,8 +7363,7 @@
     },
     "UpdateCustomVerificationEmailTemplateResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>If the action is successful, the service sends back an HTTP 200 response with an empty HTTP body.</p>"
     },
     "UpdateEmailIdentityPolicyRequest":{
@@ -7305,8 +7395,7 @@
     },
     "UpdateEmailIdentityPolicyResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An HTTP 200 response if the request succeeds, or an error message if the request fails.</p>"
     },
     "UpdateEmailTemplateRequest":{
@@ -7331,8 +7420,7 @@
     },
     "UpdateEmailTemplateResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>If the action is successful, the service sends back an HTTP 200 response with an empty HTTP body.</p>"
     },
     "UseCaseDescription":{
@@ -7404,7 +7492,7 @@
         },
         "ErrorType":{
           "shape":"VerificationError",
-          "documentation":"<p>Provides the reason for the failure describing why Amazon SES was not able to successfully verify the identity. Below are the possible values: </p> <ul> <li> <p> <code>INVALID_VALUE</code> – Amazon SES was able to find the record, but the value contained within the record was invalid. Ensure you have published the correct values for the record.</p> </li> <li> <p> <code>TYPE_NOT_FOUND</code> – The queried hostname exists but does not have the requested type of DNS record. Ensure that you have published the correct type of DNS record.</p> </li> <li> <p> <code>HOST_NOT_FOUND</code> – The queried hostname does not exist or was not reachable at the time of the request. Ensure that you have published the required DNS record(s). </p> </li> <li> <p> <code>SERVICE_ERROR</code> – A temporary issue is preventing Amazon SES from determining the verification status of the domain.</p> </li> <li> <p> <code>DNS_SERVER_ERROR</code> – The DNS server encountered an issue and was unable to complete the request.</p> </li> <li> <p> <code>REPLICATION_ACCESS_DENIED</code> – The verification failed because the user does not have the required permissions to replicate the DKIM key from the primary region. Ensure you have the necessary permissions in both primary and replica regions. </p> </li> <li> <p> <code>REPLICATION_PRIMARY_NOT_FOUND</code> – The verification failed because no corresponding identity was found in the specified primary region. Ensure the identity exists in the primary region before attempting replication. </p> </li> <li> <p> <code>REPLICATION_PRIMARY_BYO_DKIM_NOT_SUPPORTED</code> – The verification failed because the identity in the primary region is configured with Bring Your Own DKIM (BYODKIM). DKIM key replication is only supported for identities using Easy DKIM. </p> </li> <li> <p> <code>REPLICATION_REPLICA_AS_PRIMARY_NOT_SUPPORTED</code> – The verification failed because the specified primary identity is a replica of another identity, and multi-level replication is not supported; the primary identity must be a non-replica identity. </p> </li> <li> <p> <code>REPLICATION_PRIMARY_INVALID_REGION</code> – The verification failed due to an invalid primary region specified. Ensure you provide a valid AWS region where Amazon SES is available and different from the replica region. </p> </li> </ul>"
+          "documentation":"<p>Provides the reason for the failure describing why Amazon SES was not able to successfully verify the identity. Below are the possible values: </p> <ul> <li> <p> <code>INVALID_VALUE</code> – Amazon SES was able to find the record, but the value contained within the record was invalid. Ensure you have published the correct values for the record.</p> </li> <li> <p> <code>TYPE_NOT_FOUND</code> – The queried hostname exists but does not have the requested type of DNS record. Ensure that you have published the correct type of DNS record.</p> </li> <li> <p> <code>HOST_NOT_FOUND</code> – The queried hostname does not exist or was not reachable at the time of the request. Ensure that you have published the required DNS record(s). </p> </li> <li> <p> <code>SERVICE_ERROR</code> – A temporary issue is preventing Amazon SES from determining the verification status of the domain.</p> </li> <li> <p> <code>DNS_SERVER_ERROR</code> – The DNS server encountered an issue and was unable to complete the request.</p> </li> <li> <p> <code>REPLICATION_ACCESS_DENIED</code> – The verification failed because the user does not have the required permissions to replicate the DKIM key from the primary region. Ensure you have the necessary permissions in both primary and replica regions. </p> </li> <li> <p> <code>REPLICATION_PRIMARY_NOT_FOUND</code> – The verification failed because no corresponding identity was found in the specified primary region. Ensure the identity exists in the primary region before attempting replication. </p> </li> <li> <p> <code>REPLICATION_PRIMARY_BYO_DKIM_NOT_SUPPORTED</code> – The verification failed because the identity in the primary region is configured with Bring Your Own DKIM (BYODKIM). DKIM key replication is only supported for identities using Easy DKIM. </p> </li> <li> <p> <code>REPLICATION_REPLICA_AS_PRIMARY_NOT_SUPPORTED</code> – The verification failed because the specified primary identity is a replica of another identity, and multi-level replication is not supported; the primary identity must be a non-replica identity. </p> </li> <li> <p> <code>REPLICATION_PRIMARY_INVALID_REGION</code> – The verification failed due to an invalid primary region specified. Ensure you provide a valid Amazon Web Services region where Amazon SES is available and different from the replica region. </p> </li> </ul>"
         },
         "SOARecord":{
           "shape":"SOARecord",

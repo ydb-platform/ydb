@@ -44,6 +44,7 @@ SRCS(
     recursive_remove.cpp
     retry_func.cpp
     root.cpp
+    scoped_driver.cpp
     scheme_path_completer.cpp
     scheme_printers.cpp
     sys.cpp

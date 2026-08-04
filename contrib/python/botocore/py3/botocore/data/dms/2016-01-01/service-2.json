@@ -54,7 +54,7 @@
         {"shape":"AccessDeniedFault"},
         {"shape":"ResourceNotFoundFault"}
       ],
-      "documentation":"<p>Starts the analysis of up to 20 source databases to recommend target engines for each source database. This is a batch version of <a href=\"https://docs.aws.amazon.com/dms/latest/APIReference/API_StartRecommendations.html\">StartRecommendations</a>.</p> <p>The result of analysis of each source database is reported individually in the response. Because the batch request can result in a combination of successful and unsuccessful actions, you should check for batch errors even when the call returns an HTTP status code of <code>200</code>.</p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Starts the analysis of up to 20 source databases to recommend target engines for each source database. This is a batch version of <a href=\"https://docs.aws.amazon.com/dms/latest/APIReference/API_StartRecommendations.html\">StartRecommendations</a>.</p> <p>The result of analysis of each source database is reported individually in the response. Because the batch request can result in a combination of successful and unsuccessful actions, you should check for batch errors even when the call returns an HTTP status code of <code>200</code>.</p>"
     },
     "CancelReplicationTaskAssessmentRun":{
       "name":"CancelReplicationTaskAssessmentRun",
@@ -160,7 +160,7 @@
         {"shape":"S3ResourceNotFoundFault"},
         {"shape":"ResourceQuotaExceededFault"}
       ],
-      "documentation":"<p>Creates a Fleet Advisor collector using the specified parameters.</p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Creates a Fleet Advisor collector using the specified parameters.</p>"
     },
     "CreateInstanceProfile":{
       "name":"CreateInstanceProfile",
@@ -381,7 +381,7 @@
         {"shape":"CollectorNotFoundFault"},
         {"shape":"AccessDeniedFault"}
       ],
-      "documentation":"<p>Deletes the specified Fleet Advisor collector.</p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Deletes the specified Fleet Advisor collector.</p>"
     },
     "DeleteFleetAdvisorDatabases":{
       "name":"DeleteFleetAdvisorDatabases",
@@ -396,7 +396,7 @@
         {"shape":"InvalidOperationFault"},
         {"shape":"AccessDeniedFault"}
       ],
-      "documentation":"<p>Deletes the specified Fleet Advisor collector databases.</p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Deletes the specified Fleet Advisor collector databases.</p>"
     },
     "DeleteInstanceProfile":{
       "name":"DeleteInstanceProfile",
@@ -695,7 +695,7 @@
       "errors":[
         {"shape":"InvalidResourceStateFault"}
       ],
-      "documentation":"<p>Returns a list of the Fleet Advisor collectors in your account.</p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Returns a list of the Fleet Advisor collectors in your account.</p>"
     },
     "DescribeFleetAdvisorDatabases":{
       "name":"DescribeFleetAdvisorDatabases",
@@ -708,7 +708,7 @@
       "errors":[
         {"shape":"InvalidResourceStateFault"}
       ],
-      "documentation":"<p>Returns a list of Fleet Advisor databases in your account.</p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Returns a list of Fleet Advisor databases in your account.</p>"
     },
     "DescribeFleetAdvisorLsaAnalysis":{
       "name":"DescribeFleetAdvisorLsaAnalysis",
@@ -721,7 +721,7 @@
       "errors":[
         {"shape":"InvalidResourceStateFault"}
       ],
-      "documentation":"<p>Provides descriptions of large-scale assessment (LSA) analyses produced by your Fleet Advisor collectors. </p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Provides descriptions of large-scale assessment (LSA) analyses produced by your Fleet Advisor collectors. </p>"
     },
     "DescribeFleetAdvisorSchemaObjectSummary":{
       "name":"DescribeFleetAdvisorSchemaObjectSummary",
@@ -734,7 +734,7 @@
       "errors":[
         {"shape":"InvalidResourceStateFault"}
       ],
-      "documentation":"<p>Provides descriptions of the schemas discovered by your Fleet Advisor collectors.</p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Provides descriptions of the schemas discovered by your Fleet Advisor collectors.</p>"
     },
     "DescribeFleetAdvisorSchemas":{
       "name":"DescribeFleetAdvisorSchemas",
@@ -747,7 +747,7 @@
       "errors":[
         {"shape":"InvalidResourceStateFault"}
       ],
-      "documentation":"<p>Returns a list of schemas detected by Fleet Advisor Collectors in your account.</p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Returns a list of schemas detected by Fleet Advisor Collectors in your account.</p>"
     },
     "DescribeInstanceProfiles":{
       "name":"DescribeInstanceProfiles",
@@ -865,7 +865,7 @@
       "errors":[
         {"shape":"ResourceNotFoundFault"}
       ],
-      "documentation":"<p>For internal use only</p>"
+      "documentation":"<p>Returns a list of upcoming maintenance events for replication instances in your account in the current Region.</p>"
     },
     "DescribeRecommendationLimitations":{
       "name":"DescribeRecommendationLimitations",
@@ -879,7 +879,7 @@
         {"shape":"InvalidResourceStateFault"},
         {"shape":"AccessDeniedFault"}
       ],
-      "documentation":"<p>Returns a paginated list of limitations for recommendations of target Amazon Web Services engines.</p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Returns a paginated list of limitations for recommendations of target Amazon Web Services engines.</p>"
     },
     "DescribeRecommendations":{
       "name":"DescribeRecommendations",
@@ -893,7 +893,7 @@
         {"shape":"InvalidResourceStateFault"},
         {"shape":"AccessDeniedFault"}
       ],
-      "documentation":"<p>Returns a paginated list of target engine recommendations for your source databases.</p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Returns a paginated list of target engine recommendations for your source databases.</p>"
     },
     "DescribeRefreshSchemasStatus":{
       "name":"DescribeRefreshSchemasStatus",
@@ -1404,7 +1404,7 @@
         {"shape":"InvalidResourceStateFault"},
         {"shape":"ResourceNotFoundFault"}
       ],
-      "documentation":"<p>Runs large-scale assessment (LSA) analysis on every Fleet Advisor collector in your account.</p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Runs large-scale assessment (LSA) analysis on every Fleet Advisor collector in your account.</p>"
     },
     "StartDataMigration":{
       "name":"StartDataMigration",
@@ -1555,7 +1555,7 @@
         {"shape":"AccessDeniedFault"},
         {"shape":"ResourceNotFoundFault"}
       ],
-      "documentation":"<p>Starts the analysis of your source database to provide recommendations of target engines.</p> <p>You can create recommendations for multiple source databases using <a href=\"https://docs.aws.amazon.com/dms/latest/APIReference/API_BatchStartRecommendations.html\">BatchStartRecommendations</a>.</p>"
+      "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Starts the analysis of your source database to provide recommendations of target engines.</p> <p>You can create recommendations for multiple source databases using <a href=\"https://docs.aws.amazon.com/dms/latest/APIReference/API_BatchStartRecommendations.html\">BatchStartRecommendations</a>.</p>"
     },
     "StartReplication":{
       "name":"StartReplication",
@@ -1755,8 +1755,7 @@
     },
     "AddTagsToResourceResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p/>"
     },
     "ApplyPendingMaintenanceActionMessage":{
@@ -1773,7 +1772,7 @@
         },
         "ApplyAction":{
           "shape":"String",
-          "documentation":"<p>The pending maintenance action to apply to this resource.</p> <p>Valid values: <code>os-upgrade</code>, <code>system-update</code>, <code>db-upgrade</code> </p>"
+          "documentation":"<p>The pending maintenance action to apply to this resource.</p> <p>Valid values: <code>os-upgrade</code>, <code>system-update</code>, <code>db-upgrade</code>, <code>os-patch</code> </p>"
         },
         "OptInType":{
           "shape":"String",
@@ -2202,6 +2201,10 @@
           "shape":"SourceDataSettings",
           "documentation":"<p>Specifies information about the source data provider.</p>"
         },
+        "TargetDataSettings":{
+          "shape":"TargetDataSettings",
+          "documentation":"<p>Specifies information about the target data provider.</p>"
+        },
         "NumberOfJobs":{
           "shape":"IntegerOptional",
           "documentation":"<p>The number of parallel jobs that trigger parallel threads to unload the tables from the source, and then load them to the target.</p>"
@@ -2242,7 +2245,11 @@
         },
         "Engine":{
           "shape":"String",
-          "documentation":"<p>The type of database engine for the data provider. Valid values include <code>\"aurora\"</code>, <code>\"aurora-postgresql\"</code>, <code>\"mysql\"</code>, <code>\"oracle\"</code>, <code>\"postgres\"</code>, <code>\"sqlserver\"</code>, <code>redshift</code>, <code>mariadb</code>, <code>mongodb</code>, and <code>docdb</code>. A value of <code>\"aurora\"</code> represents Amazon Aurora MySQL-Compatible Edition.</p>"
+          "documentation":"<p>The type of database engine for the data provider. Valid values include <code>\"aurora\"</code>, <code>\"aurora-postgresql\"</code>, <code>\"mysql\"</code>, <code>\"oracle\"</code>, <code>\"postgres\"</code>, <code>\"sqlserver\"</code>, <code>redshift</code>, <code>mariadb</code>, <code>mongodb</code>, <code>db2</code>, <code>db2-zos</code> and <code>docdb</code>. A value of <code>\"aurora\"</code> represents Amazon Aurora MySQL-Compatible Edition.</p>"
+        },
+        "Virtual":{
+          "shape":"BooleanOptional",
+          "documentation":"<p>Indicates whether the data provider is virtual.</p>"
         },
         "Settings":{
           "shape":"DataProviderSettings",
@@ -2755,7 +2762,7 @@
         },
         "KerberosAuthenticationSettings":{
           "shape":"KerberosAuthenticationSettings",
-          "documentation":"<p>Specifies the ID of the secret that stores the key cache file required for kerberos authentication, when creating a replication instance.</p>"
+          "documentation":"<p>Specifies the settings required for kerberos authentication when creating the replication instance.</p>"
         }
       },
       "documentation":"<p/>"
@@ -2784,7 +2791,7 @@
         },
         "ReplicationSubnetGroupDescription":{
           "shape":"String",
-          "documentation":"<p>The description for the subnet group.</p>"
+          "documentation":"<p>The description for the subnet group. </p> <p>Constraints: This parameter Must not contain non-printable control characters.</p>"
         },
         "SubnetIds":{
           "shape":"SubnetIdentifierList",
@@ -2933,6 +2940,10 @@
           "shape":"SourceDataSettings",
           "documentation":"<p>Specifies information about the data migration's source data provider.</p>"
         },
+        "TargetDataSettings":{
+          "shape":"TargetDataSettings",
+          "documentation":"<p>Specifies information about the data migration's target data provider.</p>"
+        },
         "DataMigrationStatistics":{
           "shape":"DataMigrationStatistics",
           "documentation":"<p>Provides information about the data migration's run, including start and stop time, latency, and data migration progress.</p>"
@@ -3049,7 +3060,11 @@
         },
         "Engine":{
           "shape":"String",
-          "documentation":"<p>The type of database engine for the data provider. Valid values include <code>\"aurora\"</code>, <code>\"aurora-postgresql\"</code>, <code>\"mysql\"</code>, <code>\"oracle\"</code>, <code>\"postgres\"</code>, <code>\"sqlserver\"</code>, <code>redshift</code>, <code>mariadb</code>, <code>mongodb</code>, and <code>docdb</code>. A value of <code>\"aurora\"</code> represents Amazon Aurora MySQL-Compatible Edition.</p>"
+          "documentation":"<p>The type of database engine for the data provider. Valid values include <code>\"aurora\"</code>, <code>\"aurora-postgresql\"</code>, <code>\"mysql\"</code>, <code>\"oracle\"</code>, <code>\"postgres\"</code>, <code>\"sqlserver\"</code>, <code>redshift</code>, <code>mariadb</code>, <code>mongodb</code>, <code>db2</code>, <code>db2-zos</code> and <code>docdb</code>. A value of <code>\"aurora\"</code> represents Amazon Aurora MySQL-Compatible Edition.</p>"
+        },
+        "Virtual":{
+          "shape":"BooleanOptional",
+          "documentation":"<p>Indicates whether the data provider is virtual.</p>"
         },
         "Settings":{
           "shape":"DataProviderSettings",
@@ -3123,6 +3138,14 @@
         "MariaDbSettings":{
           "shape":"MariaDbDataProviderSettings",
           "documentation":"<p>Provides information that defines a MariaDB data provider.</p>"
+        },
+        "IbmDb2LuwSettings":{
+          "shape":"IbmDb2LuwDataProviderSettings",
+          "documentation":"<p>Provides information that defines an IBM DB2 LUW data provider.</p>"
+        },
+        "IbmDb2zOsSettings":{
+          "shape":"IbmDb2zOsDataProviderSettings",
+          "documentation":"<p>Provides information that defines an IBM DB2 for z/OS data provider.</p>"
         },
         "MongoDbSettings":{
           "shape":"MongoDbDataProviderSettings",
@@ -3511,8 +3534,7 @@
     },
     "DeleteReplicationSubnetGroupResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p/>"
     },
     "DeleteReplicationTaskAssessmentRunMessage":{
@@ -3559,8 +3581,7 @@
     },
     "DescribeAccountAttributesMessage":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p/>"
     },
     "DescribeAccountAttributesResponse":{
@@ -3587,6 +3608,10 @@
         "ReplicationInstanceArn":{
           "shape":"String",
           "documentation":"<p>ARN of a replication instance on which you want to base the default list of individual assessments.</p>"
+        },
+        "ReplicationConfigArn":{
+          "shape":"String",
+          "documentation":"<p>Amazon Resource Name (ARN) of a serverless replication on which you want to base the default list of individual assessments.</p>"
         },
         "SourceEngineName":{
           "shape":"String",
@@ -3692,7 +3717,7 @@
       "required":["MigrationProjectIdentifier"],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The name or Amazon Resource Name (ARN) for the schema conversion project to describe.</p>"
         }
       }
@@ -3932,7 +3957,7 @@
         },
         "Filters":{
           "shape":"FilterList",
-          "documentation":"<p>Filters applied to event subscriptions.</p> <p>Valid filter names: event-subscription-arn | event-subscription-id </p>"
+          "documentation":"<p>Filters applied to event subscriptions.</p> <p>Valid filter names: <code>event-subscription-arn</code> | <code>event-subscription-id</code> </p>"
         },
         "MaxRecords":{
           "shape":"IntegerOptional",
@@ -4020,7 +4045,7 @@
       "required":["MigrationProjectIdentifier"],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The name or Amazon Resource Name (ARN) for the migration project.</p>"
         },
         "Filters":{
@@ -4145,7 +4170,7 @@
         },
         "MaxRecords":{
           "shape":"IntegerOptional",
-          "documentation":"<p>Sets the maximum number of records returned in the response.</p>"
+          "documentation":"<important> <p> End of support notice: On May 20, 2026, Amazon Web Services will end support for Amazon Web Services DMS Fleet Advisor;. After May 20, 2026, you will no longer be able to access the Amazon Web Services DMS Fleet Advisor; console or Amazon Web Services DMS Fleet Advisor; resources. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/dms_fleet.advisor-end-of-support.html\">Amazon Web Services DMS Fleet Advisor end of support</a>. </p> </important> <p>Sets the maximum number of records returned in the response.</p>"
         },
         "NextToken":{
           "shape":"String",
@@ -4231,7 +4256,7 @@
       "required":["MigrationProjectIdentifier"],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The name or Amazon Resource Name (ARN) of the migration project.</p>"
         },
         "Filters":{
@@ -4266,7 +4291,7 @@
       "required":["MigrationProjectIdentifier"],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The migration project name or Amazon Resource Name (ARN).</p>"
         },
         "Filters":{
@@ -4301,7 +4326,7 @@
       "required":["MigrationProjectIdentifier"],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The migration project name or Amazon Resource Name (ARN).</p>"
         },
         "Filters":{
@@ -4336,7 +4361,7 @@
       "required":["MigrationProjectIdentifier"],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The migration project name or Amazon Resource Name (ARN).</p>"
         },
         "Filters":{
@@ -4371,7 +4396,7 @@
       "required":["MigrationProjectIdentifier"],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The migration project name or Amazon Resource Name (ARN).</p>"
         },
         "Filters":{
@@ -4500,7 +4525,7 @@
       "members":{
         "Filters":{
           "shape":"FilterList",
-          "documentation":"<p>Filters applied to the limitations described in the form of key-value pairs.</p>"
+          "documentation":"<p>Filters applied to the limitations described in the form of key-value pairs.</p> <p>Valid filter names: <code>database-id</code> | <code>engine-name</code> </p>"
         },
         "MaxRecords":{
           "shape":"IntegerOptional",
@@ -4530,7 +4555,7 @@
       "members":{
         "Filters":{
           "shape":"FilterList",
-          "documentation":"<p>Filters applied to the target engine recommendations described in the form of key-value pairs.</p>"
+          "documentation":"<p>Filters applied to the target engine recommendations described in the form of key-value pairs.</p> <p>Valid filter names: <code>database-id</code> | <code>engine-name</code> </p>"
         },
         "MaxRecords":{
           "shape":"IntegerOptional",
@@ -4889,7 +4914,7 @@
       "members":{
         "Filters":{
           "shape":"FilterList",
-          "documentation":"<p>Filters applied to the replications.</p>"
+          "documentation":"<p>Filters applied to the replications.</p> <p> Valid filter names: <code>replication-config-arn</code> | <code>replication-config-id</code> </p>"
         },
         "MaxRecords":{
           "shape":"IntegerOptional",
@@ -5528,7 +5553,7 @@
       ],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The migration project name or Amazon Resource Name (ARN).</p>"
         },
         "SelectionRules":{
@@ -5795,6 +5820,74 @@
         }
       },
       "documentation":"<p>Provides information that defines an IBM Db2 LUW endpoint.</p>"
+    },
+    "IbmDb2LuwDataProviderSettings":{
+      "type":"structure",
+      "members":{
+        "ServerName":{
+          "shape":"String",
+          "documentation":"<p>The name of the DB2 LUW server.</p>"
+        },
+        "Port":{
+          "shape":"IntegerOptional",
+          "documentation":"<p>The port value for the DB2 LUW data provider.</p>"
+        },
+        "DatabaseName":{
+          "shape":"String",
+          "documentation":"<p>The database name on the DB2 LUW data provider.</p>"
+        },
+        "SslMode":{
+          "shape":"DmsSslModeValue",
+          "documentation":"<p>The SSL mode used to connect to the DB2 LUW data provider. The default value is <code>none</code>. Valid Values: <code>none</code> and <code>verify-ca</code>.</p>"
+        },
+        "CertificateArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the certificate used for SSL connection.</p>"
+        },
+        "S3Path":{
+          "shape":"String",
+          "documentation":"<p>The path for the Amazon S3 bucket that the application uses for accessing the user-defined schema.</p>"
+        },
+        "S3AccessRoleArn":{
+          "shape":"String",
+          "documentation":"<p>The ARN for the role the application uses to access its Amazon S3 bucket.</p>"
+        }
+      },
+      "documentation":"<p>Provides information about an IBM DB2 LUW data provider.</p>"
+    },
+    "IbmDb2zOsDataProviderSettings":{
+      "type":"structure",
+      "members":{
+        "ServerName":{
+          "shape":"String",
+          "documentation":"<p>The name of the DB2 for z/OS server.</p>"
+        },
+        "Port":{
+          "shape":"IntegerOptional",
+          "documentation":"<p>The port value for the DB2 for z/OS data provider.</p>"
+        },
+        "DatabaseName":{
+          "shape":"String",
+          "documentation":"<p>The database name on the DB2 for z/OS data provider.</p>"
+        },
+        "SslMode":{
+          "shape":"DmsSslModeValue",
+          "documentation":"<p>The SSL mode used to connect to the DB2 for z/OS data provider. The default value is <code>none</code>. Valid Values: <code>none</code> and <code>verify-ca</code>.</p>"
+        },
+        "CertificateArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the certificate used for SSL connection.</p>"
+        },
+        "S3Path":{
+          "shape":"String",
+          "documentation":"<p>The path for the Amazon S3 bucket that the application uses for accessing the user-defined schema.</p>"
+        },
+        "S3AccessRoleArn":{
+          "shape":"String",
+          "documentation":"<p>The ARN for the role the application uses to access its Amazon S3 bucket.</p>"
+        }
+      },
+      "documentation":"<p>Provides information about an IBM DB2 for z/OS data provider.</p>"
     },
     "ImportCertificateMessage":{
       "type":"structure",
@@ -6135,18 +6228,18 @@
       "members":{
         "KeyCacheSecretId":{
           "shape":"String",
-          "documentation":"<p>Specifies the secret ID of the key cache for the replication instance.</p>"
+          "documentation":"<p>Specifies the ID of the secret that stores the key cache file required for kerberos authentication.</p>"
         },
         "KeyCacheSecretIamArn":{
           "shape":"String",
-          "documentation":"<p>Specifies the Amazon Resource Name (ARN) of the IAM role that grants Amazon Web Services DMS access to the secret containing key cache file for the replication instance.</p>"
+          "documentation":"<p>Specifies the Amazon Resource Name (ARN) of the IAM role that grants Amazon Web Services DMS access to the secret containing key cache file for the kerberos authentication.</p>"
         },
         "Krb5FileContents":{
           "shape":"String",
-          "documentation":"<p>Specifies the ID of the secret that stores the key cache file required for kerberos authentication of the replication instance.</p>"
+          "documentation":"<p>Specifies the contents of krb5 configuration file required for kerberos authentication.</p>"
         }
       },
-      "documentation":"<p>Specifies using Kerberos authentication settings for use with DMS.</p>"
+      "documentation":"<p>Specifies the settings required for kerberos authentication when creating the replication instance.</p>"
     },
     "KeyList":{
       "type":"list",
@@ -6288,6 +6381,14 @@
         "CertificateArn":{
           "shape":"String",
           "documentation":"<p>The Amazon Resource Name (ARN) of the certificate used for SSL connection.</p>"
+        },
+        "S3Path":{
+          "shape":"String",
+          "documentation":"<p>The path for the Amazon S3 bucket that the application uses for accessing the user-defined schema.</p>"
+        },
+        "S3AccessRoleArn":{
+          "shape":"String",
+          "documentation":"<p>The ARN for the role the application uses to access its Amazon S3 bucket.</p>"
         }
       },
       "documentation":"<p>Provides information that defines a MariaDB data provider.</p>"
@@ -6376,7 +6477,7 @@
         },
         "AuthenticationMethod":{
           "shape":"SqlServerAuthenticationMethod",
-          "documentation":"<p>Specifies using Kerberos authentication with Microsoft SQL Server.</p>"
+          "documentation":"<p>Specifies the authentication method to be used with Microsoft SQL Server.</p>"
         }
       },
       "documentation":"<p>Provides information that defines a Microsoft SQL Server endpoint.</p>"
@@ -6403,6 +6504,14 @@
         "CertificateArn":{
           "shape":"String",
           "documentation":"<p>The Amazon Resource Name (ARN) of the certificate used for SSL connection.</p>"
+        },
+        "S3Path":{
+          "shape":"String",
+          "documentation":"<p>The path for the Amazon S3 bucket that the application uses for accessing the user-defined schema.</p>"
+        },
+        "S3AccessRoleArn":{
+          "shape":"String",
+          "documentation":"<p>The ARN for the role the application uses to access its Amazon S3 bucket.</p>"
         }
       },
       "documentation":"<p>Provides information that defines a Microsoft SQL Server data provider.</p>"
@@ -6453,6 +6562,10 @@
       },
       "documentation":"<p>Provides information that defines a migration project.</p>"
     },
+    "MigrationProjectIdentifier":{
+      "type":"string",
+      "max":255
+    },
     "MigrationProjectList":{
       "type":"list",
       "member":{"shape":"MigrationProject"}
@@ -6473,7 +6586,7 @@
       ],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The migration project name or Amazon Resource Name (ARN).</p>"
         },
         "ConversionConfiguration":{
@@ -6519,6 +6632,10 @@
           "shape":"SourceDataSettings",
           "documentation":"<p>The new information about the source data provider for the data migration.</p>"
         },
+        "TargetDataSettings":{
+          "shape":"TargetDataSettings",
+          "documentation":"<p>The new information about the target data provider for the data migration.</p>"
+        },
         "NumberOfJobs":{
           "shape":"IntegerOptional",
           "documentation":"<p>The number of parallel jobs that trigger parallel threads to unload the tables from the source, and then load them to the target.</p>"
@@ -6556,7 +6673,11 @@
         },
         "Engine":{
           "shape":"String",
-          "documentation":"<p>The type of database engine for the data provider. Valid values include <code>\"aurora\"</code>, <code>\"aurora-postgresql\"</code>, <code>\"mysql\"</code>, <code>\"oracle\"</code>, <code>\"postgres\"</code>, <code>\"sqlserver\"</code>, <code>redshift</code>, <code>mariadb</code>, <code>mongodb</code>, and <code>docdb</code>. A value of <code>\"aurora\"</code> represents Amazon Aurora MySQL-Compatible Edition.</p>"
+          "documentation":"<p>The type of database engine for the data provider. Valid values include <code>\"aurora\"</code>, <code>\"aurora-postgresql\"</code>, <code>\"mysql\"</code>, <code>\"oracle\"</code>, <code>\"postgres\"</code>, <code>\"sqlserver\"</code>, <code>redshift</code>, <code>mariadb</code>, <code>mongodb</code>, <code>db2</code>, <code>db2-zos</code> and <code>docdb</code>. A value of <code>\"aurora\"</code> represents Amazon Aurora MySQL-Compatible Edition.</p>"
+        },
+        "Virtual":{
+          "shape":"BooleanOptional",
+          "documentation":"<p>Indicates whether the data provider is virtual.</p>"
         },
         "ExactSettings":{
           "shape":"BooleanOptional",
@@ -6968,7 +7089,7 @@
         },
         "KerberosAuthenticationSettings":{
           "shape":"KerberosAuthenticationSettings",
-          "documentation":"<p>Specifies the ID of the secret that stores the key cache file required for kerberos authentication, when modifying a replication instance.</p>"
+          "documentation":"<p>Specifies the settings required for kerberos authentication when modifying a replication instance.</p>"
         }
       },
       "documentation":"<p/>"
@@ -7204,6 +7325,13 @@
       },
       "documentation":"<p/>"
     },
+    "MySQLAuthenticationMethod":{
+      "type":"string",
+      "enum":[
+        "password",
+        "iam"
+      ]
+    },
     "MySQLSettings":{
       "type":"structure",
       "members":{
@@ -7266,6 +7394,14 @@
         "ExecuteTimeout":{
           "shape":"IntegerOptional",
           "documentation":"<p>Sets the client statement timeout (in seconds) for a MySQL source endpoint.</p>"
+        },
+        "ServiceAccessRoleArn":{
+          "shape":"String",
+          "documentation":"<p>The IAM role you can use to authenticate when connecting to your endpoint. Ensure to include <code>iam:PassRole</code> and <code>rds-db:connect</code> actions in permission policy.</p>"
+        },
+        "AuthenticationMethod":{
+          "shape":"MySQLAuthenticationMethod",
+          "documentation":"<p>This attribute allows you to specify the authentication method as \"iam auth\".</p>"
         }
       },
       "documentation":"<p>Provides information that defines a MySQL endpoint.</p>"
@@ -7288,6 +7424,14 @@
         "CertificateArn":{
           "shape":"String",
           "documentation":"<p>The Amazon Resource Name (ARN) of the certificate used for SSL connection.</p>"
+        },
+        "S3Path":{
+          "shape":"String",
+          "documentation":"<p>The path for the Amazon S3 bucket that the application uses for accessing the user-defined schema.</p>"
+        },
+        "S3AccessRoleArn":{
+          "shape":"String",
+          "documentation":"<p>The ARN for the role the application uses to access its Amazon S3 bucket.</p>"
         }
       },
       "documentation":"<p>Provides information that defines a MySQL data provider.</p>"
@@ -7386,6 +7530,14 @@
         "SecretsManagerSecurityDbEncryptionAccessRoleArn":{
           "shape":"String",
           "documentation":"<p>The ARN of the IAM role that provides access to the secret in Secrets Manager that contains the TDE password.</p>"
+        },
+        "S3Path":{
+          "shape":"String",
+          "documentation":"<p>The path for the Amazon S3 bucket that the application uses for accessing the user-defined schema.</p>"
+        },
+        "S3AccessRoleArn":{
+          "shape":"String",
+          "documentation":"<p>The ARN for the role the application uses to access its Amazon S3 bucket.</p>"
         }
       },
       "documentation":"<p>Provides information that defines an Oracle data provider.</p>"
@@ -7567,7 +7719,7 @@
         },
         "AuthenticationMethod":{
           "shape":"OracleAuthenticationMethod",
-          "documentation":"<p>Specifies using Kerberos authentication with Oracle.</p>"
+          "documentation":"<p>Specifies the authentication method to be used with Oracle.</p>"
         }
       },
       "documentation":"<p>Provides information that defines an Oracle endpoint.</p>"
@@ -7678,6 +7830,13 @@
         "pglogical"
       ]
     },
+    "PostgreSQLAuthenticationMethod":{
+      "type":"string",
+      "enum":[
+        "password",
+        "iam"
+      ]
+    },
     "PostgreSQLSettings":{
       "type":"structure",
       "members":{
@@ -7780,6 +7939,14 @@
         "DisableUnicodeSourceFilter":{
           "shape":"BooleanOptional",
           "documentation":"<p>Disables the Unicode source filter with PostgreSQL, for values passed into the Selection rule filter on Source Endpoint column values. By default DMS performs source filter comparisons using a Unicode string which can cause look ups to ignore the indexes in the text columns and slow down migrations.</p> <p>Unicode support should only be disabled when using a selection rule filter is on a text column in the Source database that is indexed.</p>"
+        },
+        "ServiceAccessRoleArn":{
+          "shape":"String",
+          "documentation":"<p>The IAM role arn you can use to authenticate the connection to your endpoint. Ensure to include <code>iam:PassRole</code> and <code>rds-db:connect</code> actions in permission policy.</p>"
+        },
+        "AuthenticationMethod":{
+          "shape":"PostgreSQLAuthenticationMethod",
+          "documentation":"<p>This attribute allows you to specify the authentication method as \"iam auth\".</p>"
         }
       },
       "documentation":"<p>Provides information that defines a PostgreSQL endpoint.</p>"
@@ -7806,9 +7973,65 @@
         "CertificateArn":{
           "shape":"String",
           "documentation":"<p>The Amazon Resource Name (ARN) of the certificate used for SSL connection.</p>"
+        },
+        "S3Path":{
+          "shape":"String",
+          "documentation":"<p>The path for the Amazon S3 bucket that the application uses for accessing the user-defined schema.</p>"
+        },
+        "S3AccessRoleArn":{
+          "shape":"String",
+          "documentation":"<p>The ARN for the role the application uses to access its Amazon S3 bucket.</p>"
         }
       },
       "documentation":"<p>Provides information that defines a PostgreSQL data provider.</p>"
+    },
+    "PremigrationAssessmentStatus":{
+      "type":"structure",
+      "members":{
+        "PremigrationAssessmentRunArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of this assessment run.</p>"
+        },
+        "FailOnAssessmentFailure":{
+          "shape":"Boolean",
+          "documentation":"<p>A configurable setting you can set to <code>true</code> (the defualt setting) or <code>false</code>. Use this setting to to stop the replication from starting automatically if the assessment fails. This can help you evaluate the issue that is preventing the replication from running successfully.</p>"
+        },
+        "Status":{
+          "shape":"String",
+          "documentation":"<p>This describes the assessment run status. The status can be one of the following values:</p> <ul> <li> <p> <code>cancelling</code>: The assessment run was canceled.</p> </li> <li> <p> <code>deleting</code>: The assessment run was deleted.</p> </li> <li> <p> <code>failed</code>: At least one individual assessment completed with a failed status. </p> </li> <li> <p> <code>error-provisioning</code>: An internal error occurred while resources were provisioned (during the <code>provisioning</code> status).</p> </li> <li> <p> <code>error-executing</code> An internal error occurred while individual assessments ran (during the <code>running</code> status).</p> </li> <li> <p> <code>invalid state</code>: The assessment run is in an unknown state. </p> </li> <li> <p> <code>passed</code>: All individual assessments have completed and none have a failed status.</p> </li> <li> <p> <code>provisioning</code>: The resources required to run individual assessments are being provisioned. </p> </li> <li> <p> <code>running</code>: Individual assessments are being run. </p> </li> <li> <p> <code>starting</code>: The assessment run is starting, but resources are not yet being provisioned for individual assessments. </p> </li> <li> <p> <code>warning</code>: At least one individual assessment completed with a warning status. </p> </li> </ul>"
+        },
+        "PremigrationAssessmentRunCreationDate":{
+          "shape":"TStamp",
+          "documentation":"<p>The date which the assessment run was created.</p>"
+        },
+        "AssessmentProgress":{"shape":"ReplicationTaskAssessmentRunProgress"},
+        "LastFailureMessage":{
+          "shape":"String",
+          "documentation":"<p>The last message generated by an individual assessment failure.</p>"
+        },
+        "ResultLocationBucket":{
+          "shape":"String",
+          "documentation":"<p>The Amazon S3 bucket that Database Migration Service Serverless created to store the results of this assessment run.</p>"
+        },
+        "ResultLocationFolder":{
+          "shape":"String",
+          "documentation":"<p>The folder within an Amazon S3 bucket where you want Database Migration Service to store the results of this assessment run.</p>"
+        },
+        "ResultEncryptionMode":{
+          "shape":"String",
+          "documentation":"<p>The supported values are <code>SSE_KMS</code> and <code>SSE_S3</code>. If these values are not provided, then the files are not encrypted at rest. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/CHAP_Target.S3.html#CHAP_Target.S3.KMSKeys\">Creating Amazon Web Services KMS keys to encrypt Amazon S3 target objects</a>.</p>"
+        },
+        "ResultKmsKeyArn":{
+          "shape":"String",
+          "documentation":"<p>The ARN of a custom KMS encryption key that you specify when you set <code>ResultEncryptionMode</code> to <code>SSE_KMS</code>.</p>"
+        },
+        "ResultStatistic":{"shape":"ReplicationTaskAssessmentRunResultStatistic"}
+      },
+      "documentation":"<p>The results returned in <code>describe-replications</code> to display the results of the premigration assessment from the replication configuration.</p>"
+    },
+    "PremigrationAssessmentStatusList":{
+      "type":"list",
+      "member":{"shape":"PremigrationAssessmentStatus"}
     },
     "ProvisionData":{
       "type":"structure",
@@ -8088,6 +8311,14 @@
         "DatabaseName":{
           "shape":"String",
           "documentation":"<p>The database name on the Amazon Redshift data provider.</p>"
+        },
+        "S3Path":{
+          "shape":"String",
+          "documentation":"<p>The path for the Amazon S3 bucket that the application uses for accessing the user-defined schema.</p>"
+        },
+        "S3AccessRoleArn":{
+          "shape":"String",
+          "documentation":"<p>The ARN for the role the application uses to access its Amazon S3 bucket.</p>"
         }
       },
       "documentation":"<p>Provides information that defines an Amazon Redshift data provider.</p>"
@@ -8380,8 +8611,7 @@
     },
     "RemoveTagsFromResourceResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p/>"
     },
     "Replication":{
@@ -8414,6 +8644,10 @@
         "ProvisionData":{
           "shape":"ProvisionData",
           "documentation":"<p>Information about provisioning resources for an DMS serverless replication.</p>"
+        },
+        "PremigrationAssessmentStatuses":{
+          "shape":"PremigrationAssessmentStatusList",
+          "documentation":"<p>The status output of premigration assessment in describe-replications.</p>"
         },
         "StopReason":{
           "shape":"String",
@@ -8634,7 +8868,7 @@
         },
         "KerberosAuthenticationSettings":{
           "shape":"KerberosAuthenticationSettings",
-          "documentation":"<p>Specifies the ID of the secret that stores the key cache file required for kerberos authentication, when replicating an instance.</p>"
+          "documentation":"<p>Specifies the settings required for kerberos authentication when replicating an instance.</p>"
         }
       },
       "documentation":"<p>Provides information that defines a replication instance.</p>"
@@ -8943,7 +9177,7 @@
         },
         "Status":{
           "shape":"String",
-          "documentation":"<p>Assessment run status. </p> <p>This status can have one of the following values:</p> <ul> <li> <p> <code>\"cancelling\"</code> – The assessment run was canceled by the <code>CancelReplicationTaskAssessmentRun</code> operation.</p> </li> <li> <p> <code>\"deleting\"</code> – The assessment run was deleted by the <code>DeleteReplicationTaskAssessmentRun</code> operation.</p> </li> <li> <p> <code>\"failed\"</code> – At least one individual assessment completed with a <code>failed</code> status.</p> </li> <li> <p> <code>\"error-provisioning\"</code> – An internal error occurred while resources were provisioned (during <code>provisioning</code> status).</p> </li> <li> <p> <code>\"error-executing\"</code> – An internal error occurred while individual assessments ran (during <code>running</code> status).</p> </li> <li> <p> <code>\"invalid state\"</code> – The assessment run is in an unknown state.</p> </li> <li> <p> <code>\"passed\"</code> – All individual assessments have completed, and none has a <code>failed</code> status.</p> </li> <li> <p> <code>\"provisioning\"</code> – Resources required to run individual assessments are being provisioned.</p> </li> <li> <p> <code>\"running\"</code> – Individual assessments are being run.</p> </li> <li> <p> <code>\"starting\"</code> – The assessment run is starting, but resources are not yet being provisioned for individual assessments.</p> </li> <li> <p> <code>\"warning\"</code> – At least one individual assessment completed with a <code>warning</code> status.</p> </li> </ul>"
+          "documentation":"<p>Assessment run status. </p> <p>This status can have one of the following values:</p> <ul> <li> <p> <code>\"cancelling\"</code> – The assessment run was canceled by the <code>CancelReplicationTaskAssessmentRun</code> operation.</p> </li> <li> <p> <code>\"deleting\"</code> – The assessment run was deleted by the <code>DeleteReplicationTaskAssessmentRun</code> operation.</p> </li> <li> <p> <code>\"failed\"</code> – At least one individual assessment completed with a <code>failed</code> status.</p> </li> <li> <p> <code>\"error-provisioning\"</code> – An internal error occurred while resources were provisioned (during <code>provisioning</code> status).</p> </li> <li> <p> <code>\"error-executing\"</code> – An internal error occurred while individual assessments ran (during <code>running</code> status).</p> </li> <li> <p> <code>\"invalid state\"</code> – The assessment run is in an unknown state.</p> </li> <li> <p> <code>\"passed\"</code> – All individual assessments have completed, and none has a <code>failed</code> status.</p> </li> <li> <p> <code>\"provisioning\"</code> – Resources required to run individual assessments are being provisioned.</p> </li> <li> <p> <code>\"running\"</code> – Individual assessments are being run.</p> </li> <li> <p> <code>\"starting\"</code> – The assessment run is starting, but resources are not yet being provisioned for individual assessments.</p> </li> <li> <p> <code>\"warning\"</code> – At least one individual assessment completed with a <code>warning</code> status or all individual assessments were skipped (completed with a <code>skipped</code> status).</p> </li> </ul>"
         },
         "ReplicationTaskAssessmentRunCreationDate":{
           "shape":"TStamp",
@@ -9032,6 +9266,10 @@
         "Cancelled":{
           "shape":"Integer",
           "documentation":"<p> The number of individual assessments that were cancelled during the assessment run. </p>"
+        },
+        "Skipped":{
+          "shape":"Integer",
+          "documentation":"<p>The number of individual assessments that were skipped during the assessment run.</p>"
         }
       },
       "documentation":"<p>The object containing the result statistics for a completed assessment run.</p>"
@@ -9053,7 +9291,7 @@
         },
         "Status":{
           "shape":"String",
-          "documentation":"<p>Individual assessment status.</p> <p>This status can have one of the following values:</p> <ul> <li> <p> <code>\"cancelled\"</code> </p> </li> <li> <p> <code>\"error\"</code> </p> </li> <li> <p> <code>\"failed\"</code> </p> </li> <li> <p> <code>\"passed\"</code> </p> </li> <li> <p> <code>\"pending\"</code> </p> </li> <li> <p> <code>\"running\"</code> </p> </li> </ul>"
+          "documentation":"<p>Individual assessment status.</p> <p>This status can have one of the following values:</p> <ul> <li> <p> <code>\"cancelled\"</code> </p> </li> <li> <p> <code>\"error\"</code> </p> </li> <li> <p> <code>\"failed\"</code> </p> </li> <li> <p> <code>\"passed\"</code> </p> </li> <li> <p> <code>\"pending\"</code> </p> </li> <li> <p> <code>\"skipped\"</code> </p> </li> <li> <p> <code>\"running\"</code> </p> </li> </ul>"
         },
         "ReplicationTaskIndividualAssessmentStartDate":{
           "shape":"TStamp",
@@ -9354,7 +9592,7 @@
         },
         "DatePartitionTimezone":{
           "shape":"String",
-          "documentation":"<p>When creating an S3 target endpoint, set <code>DatePartitionTimezone</code> to convert the current UTC time into a specified time zone. The conversion occurs when a date partition folder is created and a CDC filename is generated. The time zone format is Area/Location. Use this parameter when <code>DatePartitionedEnabled</code> is set to <code>true</code>, as shown in the following example.</p> <p> <code>s3-settings='{\"DatePartitionEnabled\": true, \"DatePartitionSequence\": \"YYYYMMDDHH\", \"DatePartitionDelimiter\": \"SLASH\", \"DatePartitionTimezone\":\"<i>Asia/Seoul</i>\", \"BucketName\": \"dms-nattarat-test\"}'</code> </p>"
+          "documentation":"<p>When creating an S3 target endpoint, set <code>DatePartitionTimezone</code> to convert the current UTC time into a specified time zone. The conversion occurs when a date partition folder is created and a CDC filename is generated. The time zone format is Area/Location. Use this parameter when <code>DatePartitionedEnabled</code> is set to true, as shown in the following example:</p> <p> <code>s3-settings='{\"DatePartitionEnabled\": true, \"DatePartitionSequence\": \"YYYYMMDDHH\", \"DatePartitionDelimiter\": \"SLASH\", \"DatePartitionTimezone\":\"Asia/Seoul\", \"BucketName\": \"dms-nattarat-test\"}'</code> </p>"
         },
         "AddTrailingPaddingCharacter":{
           "shape":"BooleanOptional",
@@ -9609,7 +9847,7 @@
       "required":["MigrationProjectIdentifier"],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The migration project name or Amazon Resource Name (ARN).</p>"
         }
       }
@@ -9631,7 +9869,7 @@
       ],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The migration project name or Amazon Resource Name (ARN).</p>"
         },
         "SelectionRules":{
@@ -9657,7 +9895,7 @@
       ],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The migration project name or Amazon Resource Name (ARN).</p>"
         },
         "SelectionRules":{
@@ -9684,7 +9922,7 @@
       ],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The migration project name or Amazon Resource Name (ARN).</p>"
         },
         "SelectionRules":{
@@ -9718,7 +9956,7 @@
       ],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The migration project name or Amazon Resource Name (ARN).</p>"
         },
         "SelectionRules":{
@@ -9749,7 +9987,7 @@
       ],
       "members":{
         "MigrationProjectIdentifier":{
-          "shape":"String",
+          "shape":"MigrationProjectIdentifier",
           "documentation":"<p>The migration project name or Amazon Resource Name (ARN).</p>"
         },
         "SelectionRules":{
@@ -9828,6 +10066,10 @@
         "StartReplicationType":{
           "shape":"String",
           "documentation":"<p>The replication type.</p> <p>When the replication type is <code>full-load</code> or <code>full-load-and-cdc</code>, the only valid value for the first run of the replication is <code>start-replication</code>. This option will start the replication.</p> <p>You can also use <a>ReloadTables</a> to reload specific tables that failed during replication instead of restarting the replication.</p> <p>The <code>resume-processing</code> option isn't applicable for a full-load replication, because you can't resume partially loaded tables during the full load phase.</p> <p>For a <code>full-load-and-cdc</code> replication, DMS migrates table data, and then applies data changes that occur on the source. To load all the tables again, and start capturing source changes, use <code>reload-target</code>. Otherwise use <code>resume-processing</code>, to replicate the changes from the last stop position.</p>"
+        },
+        "PremigrationAssessmentSettings":{
+          "shape":"String",
+          "documentation":"<p>User-defined settings for the premigration assessment. The possible values are:</p> <ul> <li> <p> <code>ResultLocationFolder</code>: The folder within an Amazon S3 bucket where you want DMS to store the results of this assessment run.</p> </li> <li> <p> <code>ResultEncryptionMode</code>: The supported values are <code>SSE_KMS</code> and <code>SSE_S3</code>. If these values are not provided, then the files are not encrypted at rest. For more information, see <a href=\"https://docs.aws.amazon.com/dms/latest/userguide/CHAP_Target.S3.html#CHAP_Target.S3.KMSKeys\">Creating Amazon Web Services KMS keys to encrypt Amazon S3 target objects</a>.</p> </li> <li> <p> <code>ResultKmsKeyArn</code>: The ARN of a customer KMS encryption key that you specify when you set <code>ResultEncryptionMode</code> to <code>SSE_KMS</code>.</p> </li> <li> <p> <code>IncludeOnly</code>: A space-separated list of names for specific individual assessments that you want to include. These names come from the default list of individual assessments that Database Migration Service supports for the associated migration.</p> </li> <li> <p> <code>Exclude</code>: A space-separated list of names for specific individual assessments that you want to exclude. These names come from the default list of individual assessments that Database Migration Service supports for the associated migration.</p> </li> <li> <p> <code>FailOnAssessmentFailure</code>: A configurable setting you can set to <code>true</code> (the default setting) or <code>false</code>. Use this setting to to stop the replication from starting automatically if the assessment fails. This can help you evaluate the issue that is preventing the replication from running successfully.</p> </li> </ul>"
         },
         "CdcStartTime":{
           "shape":"TStamp",
@@ -9958,7 +10200,7 @@
         },
         "StartReplicationTaskType":{
           "shape":"StartReplicationTaskTypeValue",
-          "documentation":"<p>The type of replication task to start.</p> <p>When the migration type is <code>full-load</code> or <code>full-load-and-cdc</code>, the only valid value for the first run of the task is <code>start-replication</code>. This option will start the migration.</p> <p>You can also use <a>ReloadTables</a> to reload specific tables that failed during migration instead of restarting the task.</p> <p>The <code>resume-processing</code> option isn't applicable for a full-load task, because you can't resume partially loaded tables during the full load phase.</p> <p>For a <code>full-load-and-cdc</code> task, DMS migrates table data, and then applies data changes that occur on the source. To load all the tables again, and start capturing source changes, use <code>reload-target</code>. Otherwise use <code>resume-processing</code>, to replicate the changes from the last stop position.</p>"
+          "documentation":"<p>The type of replication task to start.</p> <p> <code>start-replication</code> is the only valid action that can be used for the first time a task with the migration type of <code>full-load</code>full-load, <code>full-load-and-cdc</code> or <code>cdc</code> is run. Any other action used for the first time on a given task, such as <code>resume-processing</code> and reload-target will result in data errors.</p> <p>You can also use <a>ReloadTables</a> to reload specific tables that failed during migration instead of restarting the task.</p> <p>For a <code>full-load</code> task, the resume-processing option will reload any tables that were partially loaded or not yet loaded during the full load phase.</p> <p>For a <code>full-load-and-cdc</code> task, DMS migrates table data, and then applies data changes that occur on the source. To load all the tables again, and start capturing source changes, use <code>reload-target</code>. Otherwise use <code>resume-processing</code>, to replicate the changes from the last stop position.</p> <p>For a <code>cdc</code> only task, to start from a specific position, you must use start-replication and also specify the start position. Check the source endpoint DMS documentation for any limitations. For example, not all sources support starting from a time.</p> <note> <p> <code>resume-processing</code> is only available for previously executed tasks.</p> </note>"
         },
         "CdcStartTime":{
           "shape":"TStamp",
@@ -10175,6 +10417,14 @@
       "type":"list",
       "member":{"shape":"TableToReload"}
     },
+    "TablePreparationMode":{
+      "type":"string",
+      "enum":[
+        "do-nothing",
+        "truncate",
+        "drop-tables-on-target"
+      ]
+    },
     "TableStatistics":{
       "type":"structure",
       "members":{
@@ -10269,6 +10519,26 @@
         "ValidationStateDetails":{
           "shape":"String",
           "documentation":"<p>Additional details about the state of validation.</p>"
+        },
+        "ResyncState":{
+          "shape":"String",
+          "documentation":"<p>Records the current state of table resynchronization in the migration task.</p> <p>This parameter can have the following values:</p> <ul> <li> <p>Not enabled – Resync is not enabled for the table in the migration task.</p> </li> <li> <p>Pending – The tables are waiting for resync.</p> </li> <li> <p>In progress – Resync in progress for some records in the table.</p> </li> <li> <p>No primary key – The table could not be resynced because it has no primary key.</p> </li> <li> <p>Last resync at: <code>date/time</code> – Resync session is finished at time. Time provided in UTC format.</p> </li> </ul>"
+        },
+        "ResyncRowsAttempted":{
+          "shape":"LongOptional",
+          "documentation":"<p>Records the total number of mismatched data rows where the system attempted to apply fixes in the target database.</p>"
+        },
+        "ResyncRowsSucceeded":{
+          "shape":"LongOptional",
+          "documentation":"<p>Records the total number of mismatched data rows where fixes were successfully applied in the target database.</p>"
+        },
+        "ResyncRowsFailed":{
+          "shape":"LongOptional",
+          "documentation":"<p>Records the total number of mismatched data rows where fix attempts failed in the target database.</p>"
+        },
+        "ResyncProgress":{
+          "shape":"DoubleOptional",
+          "documentation":"<p>Calculates the percentage of failed validations that were successfully resynced to the system.</p>"
         }
       },
       "documentation":"<p>Provides a collection of table statistics in response to a request by the <code>DescribeTableStatistics</code> operation.</p>"
@@ -10316,6 +10586,20 @@
     "TagList":{
       "type":"list",
       "member":{"shape":"Tag"}
+    },
+    "TargetDataSetting":{
+      "type":"structure",
+      "members":{
+        "TablePreparationMode":{
+          "shape":"TablePreparationMode",
+          "documentation":"<p>This setting determines how DMS handles the target tables before starting a data migration, either by leaving them untouched, dropping and recreating them, or truncating the existing data in the target tables.</p>"
+        }
+      },
+      "documentation":"<p>Defines settings for a target data provider for a data migration.</p>"
+    },
+    "TargetDataSettings":{
+      "type":"list",
+      "member":{"shape":"TargetDataSetting"}
     },
     "TargetDbType":{
       "type":"string",

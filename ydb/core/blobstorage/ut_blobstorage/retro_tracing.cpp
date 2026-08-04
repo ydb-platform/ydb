@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(BlobStorageRetroTracing) {
             });
         }
 
-        env.Sim(TDuration::Seconds(10));
+        env.Sim(TDuration::Seconds(60));
 
         ui32 retroSpansAfter = countRetroSpans();
 
@@ -330,4 +330,3 @@ Y_UNIT_TEST_SUITE(BlobStorageRetroTracing) {
         ctx.Env->Runtime->FilterFunction = {};
     }
 }
-

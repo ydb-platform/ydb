@@ -233,7 +233,7 @@ class TFromExtendedProducerYPathService
     : public TYPathServiceBase
     , public TSupportsGet
 {
-    using TUnderlyingProducer = TExtendedYsonProducer<const IAttributeDictionaryPtr&>;
+    using TUnderlyingProducer = TParametricYsonProducer<const IAttributeDictionaryPtr&>;
 public:
     explicit TFromExtendedProducerYPathService(TUnderlyingProducer producer)
         : Producer_(std::move(producer))
@@ -326,7 +326,7 @@ private:
 };
 
 IYPathServicePtr IYPathService::FromProducer(
-    NYson::TExtendedYsonProducer<const IAttributeDictionaryPtr&> producer)
+    NYson::TParametricYsonProducer<const IAttributeDictionaryPtr&> producer)
 {
     return New<TFromExtendedProducerYPathService>(std::move(producer));
 }

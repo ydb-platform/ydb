@@ -2,11 +2,13 @@
 
 #include <fmt/format.h>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
 
 namespace NFq::NRowDispatcher {
 
@@ -338,7 +340,9 @@ public:
     }
 
     void Compile() override {
-        LOG_ROW_DISPATCHER_TRACE("Send compile request with id " << Cookie_);
+        YDB_LOG_TRACE("Send compile request with id",
+            {"logPrefix", LogPrefix},
+            {"cookie", Cookie_});
 
         auto compileRequest = std::make_unique<TEvRowDispatcher::TEvPurecalcCompileRequest>(std::exchange(ProgramHolder_, nullptr), Consumer_->GetPurecalcSettings());
         NActors::TActivationContext::ActorSystem()->Send(
@@ -353,7 +357,9 @@ public:
     }
 
     void AbortCompilation() override {
-        LOG_ROW_DISPATCHER_TRACE("Send abort compile request with id " << Cookie_);
+        YDB_LOG_TRACE("Send abort compile request with id",
+            {"logPrefix", LogPrefix},
+            {"cookie", Cookie_});
         NActors::TActivationContext::ActorSystem()->Send(
             new NActors::IEventHandle(
                 CompileServiceId_,
@@ -367,12 +373,15 @@ public:
 
     void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
         ProgramHolder_ = ev->Get()->ProgramHolder.Release();
-        LOG_ROW_DISPATCHER_TRACE("Program compilation finished");
+        YDB_LOG_TRACE("Program compilation finished",
+            {"logPrefix", LogPrefix});
     }
 
     void OnCompileError(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
         auto status = TStatus::Fail(ev->Get()->Status, std::move(ev->Get()->Issues));
-        LOG_ROW_DISPATCHER_ERROR("Program compilation error: " << status.GetErrorMessage());
+        YDB_LOG_ERROR("Program compilation",
+            {"logPrefix", LogPrefix},
+            {"error", status.GetErrorMessage()});
         CompileErrors_->Inc();
         Consumer_->OnError(status.AddParentIssue("Failed to compile client program"));
     }
@@ -405,10 +414,15 @@ public:
     }
 
     void ProcessData(const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) const override {
-        LOG_ROW_DISPATCHER_TRACE("ProcessData for " << numberRows << " rows");
+        YDB_LOG_TRACE("ProcessData for rows",
+            {"logPrefix", LogPrefix},
+            {"numberRows", numberRows});
 
         if (!ProgramHolder_) {
-            LOG_ROW_DISPATCHER_TRACE("Add " << numberRows << " rows to client " << Consumer_->GetClientId() << " without processing");
+            YDB_LOG_TRACE("Add rows to client without processing",
+                {"logPrefix", LogPrefix},
+                {"numberRows", numberRows},
+                {"clientId", Consumer_->GetClientId()});
             for (ui64 rowId = 0; rowId < numberRows; ++rowId) {
                 NYql::NUdf::TUnboxedValue value = NYql::NUdf::TUnboxedValuePod{rowId};
                 Consumer_->OnData(&value);
@@ -436,7 +450,8 @@ private:
     const auto& watermarkExpr = consumer->GetWatermarkExpr();
 
     if (!filterExpr && !watermarkExpr) {
-        LOG_ROW_DISPATCHER_TRACE("No sql was generated");
+        YDB_LOG_TRACE("No sql was generated",
+            {"logPrefix", LogPrefix});
         return {};
     }
 
@@ -458,7 +473,9 @@ private:
         "watermark_expr"_a = watermarkExpr ? static_cast<TString>(TStringBuilder() << ", (" << watermarkExpr << ") AS " << WATERMARK_FIELD_NAME) : ""
     );
 
-    LOG_ROW_DISPATCHER_DEBUG("Generated sql:\n" << result);
+    YDB_LOG_DEBUG("Generated sql:\n",
+        {"logPrefix", LogPrefix},
+        {"result", result});
     return result;
 }
 

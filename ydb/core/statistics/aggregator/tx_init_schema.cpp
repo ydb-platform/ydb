@@ -1,5 +1,7 @@
 #include "aggregator_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxInitSchema : public TTxBase {
@@ -10,7 +12,8 @@ struct TStatisticsAggregator::TTxInitSchema : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxInitSchema::Execute");
+        YDB_LOG_DEBUG("TTxInitSchema::Execute",
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
 
@@ -31,7 +34,8 @@ struct TStatisticsAggregator::TTxInitSchema : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxInitSchema::Complete");
+        YDB_LOG_DEBUG("TTxInitSchema::Complete",
+            {"tabletId", Self->TabletID()});
 
         Self->Execute(Self->CreateTxInit(), ctx);
     }

@@ -100,6 +100,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptDisallowFuseJoins);
     REGISTER_SETTING(*this, OptCreateStageForAggregation);
     REGISTER_SETTING(*this, OptValidateStreamingConstraints);
+    REGISTER_SETTING(*this, OptFallbackToLegacyOptimizer);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);

@@ -52,6 +52,19 @@ namespace NTxMediator {
             str << "}";
             return str.Str();
         }
+
+        static TString DumpTxIds(const TVector<TTx>& v) {
+            TStringBuilder stream;
+            stream << '{';
+            for (auto it = v.begin(); it != v.end(); ++it) {
+                if (it != v.begin()) {
+                    stream << ", ";
+                }
+                stream << it->TxId;
+            }
+            stream << '}';
+            return std::move(stream);
+        }
     };
 
     struct TCoordinatorStep {

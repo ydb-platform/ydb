@@ -749,6 +749,7 @@ public:
 
     ui64 BatchNum_ = 0;
     TUnboxedValueVector Values_;
+    TBlockState InputState_;
     std::vector<std::unique_ptr<TAggregator>> Aggs_;
     std::vector<ui32> AggStateOffsets_;
     TUnboxedValueVector UnwrappedValues_;
@@ -779,6 +780,7 @@ public:
         , Width_(width)
         , OutputWidth_(outputWidth)
         , Values_(width)
+        , InputState_(memInfo, width)
         , UnwrappedValues_(width)
         , Readers_(keys.size())
         , Builders_(keys.size())
@@ -816,7 +818,22 @@ public:
         }
     }
 
+    NUdf::TUnboxedValue* GetInputBuffer() {
+        return InputState_.Values.data();
+    }
+
     void ProcessInput(const THolderFactory& holderFactory) {
+        InputState_.FillArrays();
+        while (InputState_.Count) {
+            const auto sliceSize = InputState_.Slice();
+            for (size_t i = 0; i < Width_; ++i) {
+                Values_[i] = InputState_.Get(sliceSize, holderFactory, i);
+            }
+            ProcessInputImpl(holderFactory);
+        }
+    }
+
+    void ProcessInputImpl(const THolderFactory& holderFactory) {
         ++BatchNum_;
         const auto batchLength = TArrowBlock::From(Values_.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
         if (!batchLength) {
@@ -973,6 +990,7 @@ public:
                     // TODO: more efficient code when grouping by scalar
                     Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), buf);
                 } else {
+                    MKQL_ENSURE(keysDatum[i].is_array(), "Expected array");
                     Readers_[i]->SaveItem(*keysDatum[i].array(), row, buf);
                 }
             }
@@ -1290,7 +1308,6 @@ private:
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             TState& state = *static_cast<TState*>(State_.AsBoxed().Get());
-            auto* inputFields = state.Values_.data();
             const size_t inputWidth = state.Width_;
             const size_t outputWidth = state.OutputWidth_;
             MKQL_ENSURE(outputWidth == width, "The given width doesn't equal to the result type size");
@@ -1301,7 +1318,7 @@ private:
                 }
 
                 while (!state.WritingOutput_) {
-                    switch (Stream_.WideFetch(inputFields, inputWidth)) {
+                    switch (Stream_.WideFetch(state.GetInputBuffer(), inputWidth)) {
                         case NUdf::EFetchStatus::Yield:
                             return NUdf::EFetchStatus::Yield;
                         case NUdf::EFetchStatus::Ok:

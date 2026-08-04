@@ -13,6 +13,25 @@
 
 namespace NKikimr::NConsole::NUT {
 
+template<typename Runtime, typename Event>
+size_t DrainEdgeEvents(Runtime& runtime, TDuration simTimeout = TDuration::MilliSeconds(100))
+{
+    size_t drainedTotal = 0;
+    TAutoPtr<IEventHandle> handle;
+    while (runtime.template GrabEdgeEventRethrow<Event>(handle, simTimeout)) {
+        drainedTotal++;
+    }
+    return drainedTotal;
+}
+
+template<typename... Events, typename Runtime>
+size_t DrainAllEvents(Runtime& runtime, TDuration simTimeout = TDuration::MilliSeconds(100))
+{
+    runtime.DispatchEvents(TDispatchOptions(), simTimeout);
+    size_t drainedTotal = (0 + ... + DrainEdgeEvents<Runtime, Events>(runtime, simTimeout));
+    return drainedTotal;
+}
+
 inline NKikimrConsole::TUsageScope MakeUsageScope(const TVector<ui32> &nodes)
 {
     NKikimrConsole::TUsageScope res;

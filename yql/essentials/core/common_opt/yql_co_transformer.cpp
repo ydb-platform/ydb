@@ -7,6 +7,7 @@
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_opt_window.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -94,7 +95,7 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr in
         return status;
     }
 
-    if (TypeCtx_->LangVer >= MakeLangVersion(2025, 4)) {
+    if (TypeCtx_->LangVer >= NFeature::LinearTypes.MinLangVer) {
         status = OptimizeBlocks(input = std::move(output), output, ctx, *TypeCtx_);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
@@ -254,6 +255,7 @@ TCoCallableRules::TCoCallableRules() {
     RegisterCoSimpleCallables3(SimpleCallables[SIMPLE_STEP_3]);
     RegisterCoFlowCallables1(FlowCallables[FLOW_STEP_1]);
     RegisterCoFlowCallables2(FlowCallables[FLOW_STEP_2]);
+    RegisterCoFlowCallables3(FlowCallables[FLOW_STEP_3]);
     RegisterCoFinalizers(Finalizers);
     RegisterCoFinalCallables(FinalCallables);
 }

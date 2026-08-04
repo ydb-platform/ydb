@@ -1862,7 +1862,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
         auto info = GetPathInfo(runtime, "/MyRoot/Simple");
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -1949,7 +1949,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, txId);
         auto info = GetPathInfo(runtime, "/MyRoot/Simple");
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -1986,7 +1986,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         WriteData(runtime, "Simple1", 0, 100, TTestTxConfig::FakeHiveTablets);
         WriteData(runtime, "Simple1", 0, 100, TTestTxConfig::FakeHiveTablets + 1);
         auto info1 = GetPathInfo(runtime, "/MyRoot/Simple1");
-        
+
         CreateTable(runtime, env, "/MyRoot", "Simple2", 2, ++txId);
         WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 2);
         WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 3);
@@ -2023,7 +2023,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
         auto info = GetPathInfo(runtime, "/MyRoot/Simple");
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -2165,7 +2165,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
                     return true;
                 }
             });
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -2197,7 +2197,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
                     ev->Get()->Record.SetStatus(::NKikimrTxDataShard::TEvCompactTableResult::FAILED);
                 }
             });
-        
+
         CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
@@ -2221,7 +2221,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        
+
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
@@ -2346,7 +2346,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        
+
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
@@ -2385,7 +2385,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         ui64 txId = 1000;
 
         CreateIndexedTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
-        
+
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", true, 5);
@@ -3064,7 +3064,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         {
             // second case: compaction should progress after stale or failed EvCompactTableResult
-            
+
             CreateTable(runtime, env, "/MyRoot", "Simple2", 2, ++txId);
             WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 2);
             WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 3);
@@ -3533,7 +3533,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), shardsTotalBefore);
     }
 
-    Y_UNIT_TEST(SchemeshardShouldNotCompactColumnTable) {
+    Y_UNIT_TEST(SchemeshardShouldCompactColumnTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         Setup(runtime, env);
@@ -3550,9 +3550,98 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", false, 1, Ydb::StatusIds::BAD_REQUEST);
-        ui64 compactionId = txId;
-        TestGetCompaction(runtime, compactionId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        // Forced compaction is supported for standalone (tiling++) column tables ...
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable");
+
+        // ... and an empty table already has no intersecting portions, so the columnshard succeeds.
+        runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 1; });
+        UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldRejectCascadeCompactionForColumnTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Cascade compaction is not supported for column tables and must be rejected up front.
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true, /*maxShardsInFlight=*/1,
+            Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldFailToCompactColumnTableInStore) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "key" Type: "Uint64" NotNull: true }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: "key"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Forced compaction is not supported for tables that belong to a column store; it is rejected
+        // up front (the store's shards are shared and are not owned by a single table).
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/OlapStore/ColumnTable", /*cascade=*/false,
+            /*maxShardsInFlight=*/1, Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldFailToCompactColumnTableWithoutTilingOptimizer) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        // Standalone column tables use the node-wide default compaction optimizer. Forced compaction
+        // is only supported for tiling++, so a table on a different optimizer must be rejected.
+        runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset("lc-buckets");
+
+        ui64 txId = 1000;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable");
+
+        runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 1; });
+        UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
     }
 
     Y_UNIT_TEST(CheckForgetCancelledOperationSuccess) {

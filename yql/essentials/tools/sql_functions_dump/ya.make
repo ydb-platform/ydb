@@ -6,7 +6,7 @@ SRCS(
 
 PEERDIR(
     yql/essentials/sql
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
     yql/essentials/utils/backtrace
     yql/essentials/sql/pg_dummy
     yql/essentials/public/udf/service/stub

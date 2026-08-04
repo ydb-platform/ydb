@@ -49,10 +49,12 @@ private:
         const TDBGReadBlocksResponse& response);
     void Reply(NProto::TError error);
 
-    void ScheduleHedging();
+    void ScheduleHedging(TDuration hedgingDelay);
     void ScheduleRequestTimeout();
     void OnHedgingTimeout();
     void OnRequestTimeout();
+
+    TString ExtendedDebugState() const;
 
     NActors::TActorSystem const* ActorSystem;
     const TChildLogTitle LogTitle;
@@ -61,9 +63,9 @@ private:
     const TCallContextPtr CallContext;
     const std::shared_ptr<TReadBlocksLocalRequest> Request;
     const NWilson::TTraceId TraceId;
-    const TDuration HedgingDelay;
     const TDuration RequestTimeout;
 
+    TInstant StartAt;
     TReadRangeHint ReadHint;
     THostMask Requested;
     THostMask Failed;

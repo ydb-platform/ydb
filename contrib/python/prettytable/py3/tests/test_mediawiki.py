@@ -7,9 +7,7 @@ from prettytable import PrettyTable, from_mediawiki
 
 class TestMediaWikiOutput:
     def test_mediawiki_output(self, helper_table: PrettyTable) -> None:
-        assert (
-            helper_table.get_mediawiki_string(header=True).strip()
-            == """
+        assert helper_table.get_mediawiki_string(header=True).strip() == """
 {| class="wikitable"
 |-
 !  !! Field 1 !! Field 2 !! Field 3
@@ -21,12 +19,9 @@ class TestMediaWikiOutput:
 | 7 || value 7 || value8 || value9
 |}
 """.strip()
-        )
 
     def test_mediawiki_output_without_header(self, helper_table: PrettyTable) -> None:
-        assert (
-            helper_table.get_mediawiki_string(header=False).strip()
-            == """
+        assert helper_table.get_mediawiki_string(header=False).strip() == """
 {| class="wikitable"
 |-
 | 1 || value 1 || value2 || value3
@@ -36,7 +31,6 @@ class TestMediaWikiOutput:
 | 7 || value 7 || value8 || value9
 |}
 """.strip()
-        )
 
     def test_mediawiki_output_with_caption(self, helper_table: PrettyTable) -> None:
         assert (

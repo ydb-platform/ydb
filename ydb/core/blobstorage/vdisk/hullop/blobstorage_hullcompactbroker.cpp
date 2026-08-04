@@ -214,6 +214,21 @@ namespace NKikimr {
             PendingCompactions.erase(key);
         }
 
+        TMaybe<TCompactionInfo> RemoveCompactionByActorId(const TActorId& actorId) {
+            auto compactionInfo = std::find_if(ActiveCompactionsInfo.begin(), ActiveCompactionsInfo.end(),
+                [&actorId](const auto& item) {
+                    return item.first.ActorId == actorId;
+                });
+            if (compactionInfo == ActiveCompactionsInfo.end()) {
+                return Nothing();
+            }
+
+            TCompactionInfo info = compactionInfo->second;
+            CompactionsToken.erase(info.Token);
+            ActiveCompactionsInfo.erase(compactionInfo);
+            return info;
+        }
+
         TMaybe<TCompactionInfo> StartNewCompaction(i64 maxCompactions, TPDiskId pdiskId, TCompactionTokenId token) {
             MaxActiveCompactions = maxCompactions;
             if (ActiveCompactionsInfo.size() >= (ui64)maxCompactions) {
@@ -267,6 +282,15 @@ namespace NKikimr {
 
         void RemoveCompaction(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId) {
             return CompactionsPerPDisk[pdiskId].RemoveCompaction(groupId, vdiskId, actorId);
+        }
+
+        TMaybe<TCompactionInfo> RemoveCompactionByActorId(const TActorId& actorId) {
+            for (auto& [_, compactionQueue] : CompactionsPerPDisk) {
+                if (auto compactionInfo = compactionQueue.RemoveCompactionByActorId(actorId)) {
+                    return compactionInfo;
+                }
+            }
+            return Nothing();
         }
 
         TMaybe<TCompactionInfo> StartNewCompaction(i64 maxCompactionsPerPDisk, TCompactionTokenId token) {
@@ -352,6 +376,24 @@ namespace NKikimr {
             ctx.Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
         }
 
+        void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Get()->SourceType != TEvCompactionTokenResult::EventType) {
+                return;
+            }
+
+            if (auto compactionInfo = CompactionsPerPDisk.RemoveCompactionByActorId(ev->Sender)) {
+                Mon->CompBrokerTokenReleases->Inc();
+                YDB_LOG_WARN_CTX(ctx, "Compaction token result was not delivered, releasing token",
+                    {"compaction", compactionInfo->ToString()},
+                    {"reason", ev->Get()->Reason});
+                TryToStartNewCompactions(ctx);
+            } else {
+                YDB_LOG_WARN_CTX(ctx, "Compaction token result was not delivered, active compaction not found",
+                    {"ActorId", ev->Sender},
+                    {"reason", ev->Get()->Reason});
+            }
+        }
+
         void TryToStartNewCompactions(const TActorContext &ctx) {
             YDB_LOG_DEBUG_CTX(ctx, "Compactions queue",
                 {"state", CompactionsPerPDisk});
@@ -361,7 +403,9 @@ namespace NKikimr {
                 YDB_LOG_DEBUG_CTX(ctx, "Start new",
                     {"compaction", compactionInfo->ToString()});
                 Mon->CompBrokerTokenGrants->Inc();
-                Send(compactionInfo->ActorId, new TEvCompactionTokenResult(compactionInfo->Token, compactionInfo->GroupId, compactionInfo->VDiskId));
+                Send(compactionInfo->ActorId,
+                    new TEvCompactionTokenResult(compactionInfo->Token, compactionInfo->GroupId, compactionInfo->VDiskId),
+                    IEventHandle::FlagTrackDelivery);
                 Token++;
             }
 
@@ -381,6 +425,7 @@ namespace NKikimr {
                     if (waitTimeSeconds >= LongWaitingThresholdSec) {
                         TStringStream ss;
                         ss << "{PDiskId# " << pdiskId
+                           << " GroupId# " << request.Key.GroupId
                            << " VDiskId# " << request.Key.VDiskId
                            << " ActorId# " << request.Key.ActorId
                            << " WaitTimeSec# " << static_cast<i64>(waitTimeSeconds)
@@ -395,6 +440,7 @@ namespace NKikimr {
                     if (workTimeSeconds >= LongWorkingThresholdSec) {
                         TStringStream ss;
                         ss << "{PDiskId# " << pdiskId
+                           << " GroupId# " << info.GroupId
                            << " VDiskId# " << info.VDiskId
                            << " ActorId# " << info.ActorId
                            << " Token# " << info.Token
@@ -414,7 +460,7 @@ namespace NKikimr {
             if (!longWorkingCompactions.empty()) {
                 YDB_LOG_WARN_CTX(ctx, "Long working compactions detected",
                     {"count", longWorkingCompactions.size()},
-                    {"longWaitingCompactions", JoinSeq(", ", longWorkingCompactions)});
+                    {"longWorkingCompactions", JoinSeq(", ", longWorkingCompactions)});
             }
         }
 
@@ -427,6 +473,7 @@ namespace NKikimr {
         STRICT_STFUNC(StateFunc,
             HFunc(TEvCompactionTokenRequest, Handle)
             HFunc(TEvReleaseCompactionToken, Handle)
+            HFunc(TEvents::TEvUndelivered, HandleUndelivered)
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
         )
     };

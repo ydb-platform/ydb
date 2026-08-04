@@ -113,6 +113,20 @@ void EnableJsonRowIdFlags(TTestActorRuntime& runtime) {
     appData.FeatureFlags.SetEnableUniqConstraint(true);
 }
 
+// Same as EnableJsonRowIdFlags plus the compact-index flag so a JSON build proto is materialized as a
+// compact (rowid-mode) index. The schemeshard caches EnableCompactFulltextIndex at activation (it read
+// appData before this runs), so reboot it to pick up the updated value.
+void EnableJsonCompactRowIdFlags(TTestActorRuntime& runtime) {
+    EnableJsonRowIdFlags(runtime);
+    runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(true);
+    RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+}
+
+TString RowIdSrcTablePath(const TString& indexPath) {
+    return TStringBuilder() << indexPath << "/"
+        << NTableIndex::ImplTable << NTableIndex::NFulltext::RowIdSrcBuildSuffix;
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
@@ -494,6 +508,60 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
                 {},
                 { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
                 /*strictCount=*/ true),
+        });
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_CompactBuildsOverCustomPkAndDropsRowIdSrc) {
+        // Compact rowid-mode JSON build over a custom (Utf8) PK: rowid mode must activate for the compact
+        // JSON type (EIndexTypeGlobalJsonCompact) exactly as it does for plain JSON. The build runs the
+        // row-id source prepass, auto-provisions __ydb_row_id + its unique index, builds the compact
+        // posting impl-table and, on completion, drops the transient "rowidsrc" build table.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableJsonCompactRowIdFlags(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        DoCreateCustomPkJsonTable(runtime, env, txId);
+        DoWriteJsonTextRows(runtime, /*withRowId=*/ false);
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", JsonIndexConfig());
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        // The auto-provisioned unique index over __ydb_row_id exists and is Ready.
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // The compact posting impl-table is keyed by [__ydb_token, __ydb_max_id, __ydb_generation] and
+        // stores the delta-encoded __ydb_segment (this is what distinguishes a compact index from a plain
+        // one, whose impl-table is keyed by [__ydb_token, __ydb_row_id] and has no segment column).
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/json_idx/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                  NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::AddedColumn,
+                  NTableIndex::NFulltext::SegmentColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                  NTableIndex::NFulltext::GenColumn },
+                /*strictCount=*/ true),
+        });
+
+        // The transient row-id source build table was dropped on completion.
+        TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/json_idx")), {
+            NLs::PathNotExist,
         });
     }
 

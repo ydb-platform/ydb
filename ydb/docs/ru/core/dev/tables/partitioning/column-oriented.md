@@ -1,3 +1,3 @@
 # Партицирование колоночных таблиц {#column-oriented-partitioning}
 
-Информация по колоночным таблицам: [{#T}](../../../concepts/datamodel/table.md#column-oriented-tables#olap-tables-partitioning).
+Информация по колоночным таблицам: [Партицирование колоночной таблицы](../../../concepts/datamodel/table.md#olap-tables-partitioning).

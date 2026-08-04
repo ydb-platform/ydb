@@ -67,9 +67,12 @@ bool TBootstrapConfigValidator::CheckTablets(const NKikimrConfig::TAppConfig &co
     THashSet<NKikimrConfig::TBootstrap::ETabletType> importantTablets = {
         NKikimrConfig::TBootstrap::CMS,
         NKikimrConfig::TBootstrap::NODE_BROKER,
-        NKikimrConfig::TBootstrap::TENANT_SLOT_BROKER,
-        NKikimrConfig::TBootstrap::DBS_CONTROLLER,
+        NKikimrConfig::TBootstrap::TENANT_SLOT_BROKER
     };
+
+    if (config.HasNbsConfig() && config.GetNbsConfig().GetEnabled()) {
+        importantTablets.insert(NKikimrConfig::TBootstrap::DBS_CONTROLLER);
+    }
 
     auto &cfg = config.GetBootstrapConfig();
     auto &nsCfg = config.GetNameserviceConfig();

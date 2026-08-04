@@ -1033,7 +1033,7 @@ namespace NActors {
                         : recvres == 0 ? "connection closed by peer"
                         : err ? err
                         : Sprintf("socket: %s", strerror(-recvres));
-                    LOG_NOTICE_NET(NodeId, "%s", message.data());
+                    LOG_LOG_NET(::NActors::NLog::PRI_NOTICE, NodeId, "%s", message.data());
                     throw TExReestablishConnection{CloseInputSessionRequested ? TDisconnectReason::Debug() :
                         recvres == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-recvres)};
                 } else if (token && !*readPending) {

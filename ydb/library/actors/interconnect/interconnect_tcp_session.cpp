@@ -862,7 +862,7 @@ namespace NActors {
             const TString message = r == 0 ? "connection closed by peer"
                 : err ? err
                 : Sprintf("socket: %s", strerror(-r));
-            LOG_NOTICE_NET(Proxy->PeerNodeId, "%s", message.data());
+            LOG_LOG_NET(::NActors::NLog::PRI_NOTICE, Proxy->PeerNodeId, "%s", message.data());
             if (r == 0 && !NumEventsInQueue && LastConfirmed == OutputCounter) {
                 Terminate(TDisconnectReason::EndOfStream());
             } else {

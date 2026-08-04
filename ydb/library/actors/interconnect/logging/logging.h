@@ -39,8 +39,6 @@
 #define LOG_INFO_IC_SESSION(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, marker, ::NActors::NLog::PRI_INFO, __VA_ARGS__)
 #define LOG_DEBUG_IC_SESSION(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, marker, ::NActors::NLog::PRI_DEBUG, __VA_ARGS__)
 
-#define LOG_NOTICE_NET(NODE_ID, FMT, ...) LOG_LOG_NET(::NActors::NLog::PRI_NOTICE, NODE_ID, FMT, __VA_ARGS__)
-
 namespace NActors {
     class TInterconnectLoggingBase {
     protected:

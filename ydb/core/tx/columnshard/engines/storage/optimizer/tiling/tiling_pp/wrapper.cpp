@@ -50,7 +50,16 @@ struct TPlannerSettings {
         json["aging_max_portion_promotion"] = TilingSettings.AgingSettings.MaxPortionPromotion;
         json["compaction_threads"] = CompactionThreads;
         json["enable_compatibility_mode"] = TilingSettings.EnableCompatibilityMode;
+<<<<<<< HEAD
         proto.SetJson(NJson::WriteJson(json, /*formatOutput=*/false));
+=======
+        json["max_priority_gap"] = TilingSettings.MaxPriorityGap;
+        return json;
+    }
+
+    void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
+        proto.SetJson(NJson::WriteJson(SerializeToJson(), /*formatOutput=*/false));
+>>>>>>> 6d9b8e510f1 (Acc promotion fix + tiling fare share (#44797))
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) {
@@ -167,6 +176,11 @@ struct TPlannerSettings {
                     return TConclusionStatus::Fail("tiling-core: enable_compatibility_mode must be boolean");
                 }
                 TilingSettings.EnableCompatibilityMode = value.GetBoolean();
+            } else if (name == "max_priority_gap") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling-core: max_priority_gap must be an unsigned integer");
+                }
+                TilingSettings.MaxPriorityGap = value.GetUInteger();
             } else {
                 YDB_LOG_ERROR("",
                     {"event", "tiling_core_unknown_setting_ignored"},

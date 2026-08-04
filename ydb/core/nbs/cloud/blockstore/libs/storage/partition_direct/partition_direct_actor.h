@@ -174,6 +174,11 @@ private:
         const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandleDeletePartition(
+        const NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionRequest::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     // Rejects (logs + notifies the DBG) and returns false if the AddHost
     // request is invalid; true if it may proceed.
     bool ValidateAddHostToDBGRequest(

@@ -1723,7 +1723,14 @@ namespace NActors {
                 PeerAddr.size() ? PeerAddr.data() : "<unknown>", explanation.data());
 
             if (network) {
-                LOG_LOG_NET_X(NActors::NLog::PRI_DEBUG, PeerNodeId, "network-related error occurred on handshake: %s", msg.data());
+                YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_NETWORK, "Network-related error occurred on handshake",
+                    {"selfNodeId", GetActorContext().SelfID.NodeId()},
+                    {"peerNodeId", PeerNodeId},
+                    {"handshakeKind", HandshakeKind.data()},
+                    {"peerHostName", PeerHostName ? PeerHostName.data() : "<unknown>"},
+                    {"peerAddr", PeerAddr.size() ? PeerAddr.data() : "<unknown>"},
+                    {"explanation", explanation.data()},
+                    {"msg", msg});
             } else {
                 // proxy emits throttled NOTICE summaries for permanent failures
                 auto severity = failType == TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT

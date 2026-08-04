@@ -53,6 +53,12 @@ class TDqProgramBuilder : public TProgramBuilder {
     );
 
   protected:
+    TRuntimeNode::TList MakeRowArgs(TRuntimeNode input, bool forceOptional);
+
+    void AddJoinFilters(TCallableBuilder& callableBuilder, TRuntimeNode leftInput, TRuntimeNode rightInput,
+                        EJoinKind joinKind, const TJoinFilterLambda& leftFilter,
+                        const TJoinFilterLambda& rightFilter, const TJoinCommonFilterLambda& commonFilter);
+
     TCallableBuilder BuildCommonCombinerParams(const TStringBuf operatorName, const TRuntimeNode operatorParams,
                                                const TRuntimeNode flow,
                                                const TProgramBuilder::TWideLambda& keyExtractor,

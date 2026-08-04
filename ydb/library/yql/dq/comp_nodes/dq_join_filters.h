@@ -7,174 +7,182 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 
-#include <memory>
+#include <optional>
 
 namespace NKikimr::NMiniKQL {
 
-inline void SetFilterRow(TComputationContext& ctx, const TComputationExternalNodePtrVector& args,
-                         const NUdf::TUnboxedValue* row) {
-    for (size_t i = 0; i < args.size(); ++i) {
-        args[i]->SetValue(ctx, NUdf::TUnboxedValue(row[i]));
-    }
-}
-
-// NULL counts as "does not pass", per SQL ON semantics.
-inline bool EvalFilterBody(TComputationContext& ctx, IComputationNode* body) {
-    const NUdf::TUnboxedValue result = body->GetValue(ctx);
-    return result && result.Get<bool>();
-}
-
-// Args are in original user column order. Body == nullptr means the filter is absent.
-struct TJoinFilter {
-    TComputationExternalNodePtrVector Args;
-    IComputationNode* Body = nullptr;
-
-    explicit operator bool() const {
-        return Body != nullptr;
-    }
-
-    bool Pass(TComputationContext& ctx, const NUdf::TUnboxedValue* row) const {
-        SetFilterRow(ctx, Args, row);
-        return EvalFilterBody(ctx, Body);
-    }
-};
-
-struct TJoinCommonFilter {
-    TComputationExternalNodePtrVector LeftArgs;
-    TComputationExternalNodePtrVector RightArgs;
-    IComputationNode* Body = nullptr;
-
-    explicit operator bool() const {
-        return Body != nullptr;
-    }
-
-    bool Pass(TComputationContext& ctx, const NUdf::TUnboxedValue* leftRow,
-              const NUdf::TUnboxedValue* rightRow) const {
-        SetFilterRow(ctx, LeftArgs, leftRow);
-        SetFilterRow(ctx, RightArgs, rightRow);
-        return EvalFilterBody(ctx, Body);
-    }
-};
-
 struct TJoinFilters {
-    TJoinFilter Left;
-    TJoinFilter Right;
-    TJoinCommonFilter Common;
+    TSides<TComputationExternalNodePtrVector> Args;
+    TSides<IComputationNode*> OneSide{};
+    IComputationNode* BothSides = nullptr;
 
     explicit operator bool() const {
-        return Left || Right || Common;
+        return OneSide.Probe || OneSide.Build || BothSides;
+    }
+
+    void RegisterDependencies(const std::function<void(IComputationNode*)>& dependsOn,
+                              const std::function<void(IComputationExternalNode*)>& own) const {
+        for (ESide side : EachSide) {
+            for (IComputationExternalNode* arg : Args.SelectSide(side)) {
+                own(arg);
+            }
+            if (IComputationNode* body = OneSide.SelectSide(side)) {
+                dependsOn(body);
+            }
+        }
+        if (BothSides) {
+            dependsOn(BothSides);
+        }
     }
 };
 
-// Consecutive callable inputs from firstIndex, where an empty args tuple means the filter is absent:
-// leftArgs, leftBody, rightArgs, rightBody, commonLeftArgs, commonRightArgs, commonBody.
-inline constexpr ui32 JoinFilterInputs = 7;
+inline constexpr ui32 JoinFilterInputs = 5;
 
-inline bool LocateFilterArgs(const TComputationNodeFactoryContext& ctx, TCallable& callable, ui32 index,
-                             TComputationExternalNodePtrVector& args) {
-    const auto tuple = AS_VALUE(TTupleLiteral, callable.GetInput(index));
-    args.reserve(tuple->GetValuesCount());
-    for (ui32 i = 0; i < tuple->GetValuesCount(); ++i) {
-        auto* external = dynamic_cast<IComputationExternalNode*>(
-            LocateNode(ctx.NodeLocator, *tuple->GetValue(i).GetNode(), /*pop=*/true));
-        MKQL_ENSURE(external, "Expected an external node as a join filter argument");
-        args.push_back(external);
-    }
-    return !args.empty();
-}
+inline TJoinFilters ParseJoinFilters(const TComputationNodeFactoryContext& ctx, TCallable& callable, ui32 firstInput) {
+    const auto locateArgs = [&](ui32 input, TComputationExternalNodePtrVector& args) {
+        const auto* tuple = AS_VALUE(TTupleLiteral, callable.GetInput(input));
+        args.reserve(tuple->GetValuesCount());
+        for (ui32 i = 0; i < tuple->GetValuesCount(); ++i) {
+            auto* arg = dynamic_cast<IComputationExternalNode*>(
+                LocateNode(ctx.NodeLocator, *tuple->GetValue(i).GetNode(), /*pop=*/true));
+            MKQL_ENSURE(arg, "Expected an external node as a join filter argument");
+            args.push_back(arg);
+        }
+    };
+    const auto locateBody = [&](ui32 input) -> IComputationNode* {
+        const auto* tuple = AS_VALUE(TTupleLiteral, callable.GetInput(input));
+        MKQL_ENSURE(tuple->GetValuesCount() <= 1, "Expected at most one join filter body per predicate");
+        if (tuple->GetValuesCount() == 0) {
+            return nullptr;
+        }
+        return LocateNode(ctx.NodeLocator, *tuple->GetValue(0).GetNode());
+    };
 
-inline TJoinFilters ParseJoinFilters(const TComputationNodeFactoryContext& ctx, TCallable& callable, ui32 firstIndex) {
     TJoinFilters filters;
-    if (LocateFilterArgs(ctx, callable, firstIndex, filters.Left.Args)) {
-        filters.Left.Body = LocateNode(ctx.NodeLocator, callable, firstIndex + 1);
-    }
-    if (LocateFilterArgs(ctx, callable, firstIndex + 2, filters.Right.Args)) {
-        filters.Right.Body = LocateNode(ctx.NodeLocator, callable, firstIndex + 3);
-    }
-    const bool hasLeft = LocateFilterArgs(ctx, callable, firstIndex + 4, filters.Common.LeftArgs);
-    const bool hasRight = LocateFilterArgs(ctx, callable, firstIndex + 5, filters.Common.RightArgs);
-    if (hasLeft || hasRight) {
-        filters.Common.Body = LocateNode(ctx.NodeLocator, callable, firstIndex + 6);
-    }
+    locateArgs(firstInput + 0, filters.Args.Probe);
+    locateArgs(firstInput + 1, filters.Args.Build);
+    filters.OneSide.Probe = locateBody(firstInput + 2);
+    filters.OneSide.Build = locateBody(firstInput + 3);
+    filters.BothSides = locateBody(firstInput + 4);
     return filters;
 }
 
-// Decides whether a matched pair passes the ON-clause predicates. Probe is the left input, Build the
-// right one. `columnPermutation` is the join's per-side "keys first" reordering (packed position i
-// holds original column columnPermutation[i]); empty means identity.
 class TPackedTuplePairFilter {
   public:
-    TPackedTuplePairFilter(TComputationContext& ctx, TSides<std::unique_ptr<IScalarLayoutConverter>> converters,
-                           TSides<TVector<int>> columnPermutation, TSides<int> widths, TJoinFilters filters)
+    static std::optional<TPackedTuplePairFilter> TryCreate(TComputationContext& ctx, const TJoinFilters& filters,
+                                                           const TSides<TVector<TType*>>& columnTypes,
+                                                           const TSides<TVector<ui32>>& keyColumns,
+                                                           const TSides<TVector<int>>& columnPermutation) {
+        if (!filters) {
+            return std::nullopt;
+        }
+        return TPackedTuplePairFilter(ctx, filters, columnTypes, keyColumns, columnPermutation);
+    }
+
+    TPackedTuplePairFilter(TComputationContext& ctx, const TJoinFilters& filters,
+                           const TSides<TVector<TType*>>& columnTypes, const TSides<TVector<ui32>>& keyColumns,
+                           const TSides<TVector<int>>& columnPermutation)
         : Ctx_(&ctx)
-        , Converters_(std::move(converters))
-        , ColumnPermutation_(std::move(columnPermutation))
-        , Filters_(std::move(filters))
-        , NeedLeft_(Filters_.Left || Filters_.Common)
-        , NeedRight_(Filters_.Right || Filters_.Common)
+        , Filters_(filters)
     {
+        TTypeInfoHelper helper;
         for (ESide side : EachSide) {
-            ValsPermuted_.SelectSide(side).resize(widths.SelectSide(side));
-            ValsOrig_.SelectSide(side).resize(widths.SelectSide(side));
+            const auto& types = columnTypes.SelectSide(side);
+            const size_t args = Filters_.Args.SelectSide(side).size();
+            if (args == 0) {
+                MKQL_ENSURE(!Filters_.OneSide.SelectSide(side),
+                            "A join filter of the " << AsString(side) << " side has no arguments to bind a row to");
+                continue;
+            }
+            MKQL_ENSURE(args == types.size(), "Join filter takes " << args << " arguments but the "
+                                                                  << AsString(side) << " side has " << types.size()
+                                                                  << " columns");
+            Decoders_.SelectSide(side).emplace(helper, types, keyColumns.SelectSide(side),
+                                               columnPermutation.SelectSide(side), ctx.HolderFactory);
         }
     }
 
-    bool operator()(TSides<TSingleTuple> pair) {
-        const NUdf::TUnboxedValue* leftRow = nullptr;
-        if (NeedLeft_) {
-            if (pair.Probe.PackedData != LastProbe_) {
-                LastProbe_ = pair.Probe.PackedData;
-                LeftRow_ = Decode(ESide::Probe, pair.Probe);
-                LeftPassed_ = !Filters_.Left || Filters_.Left.Pass(*Ctx_, LeftRow_);
-            }
-            if (!LeftPassed_) {
-                return false;
-            }
-            leftRow = LeftRow_;
+    void StartProbeRow(TSingleTuple probeRow) {
+        ProbeRow_ = probeRow;
+        ProbeChecked_ = false;
+    }
+
+    bool PairPasses(TSingleTuple buildRow) {
+        if (!ProbeChecked_) {
+            ProbeChecked_ = true;
+            ProbePasses_ = BindAndCheck(ESide::Probe, ProbeRow_);
         }
-        if (!NeedRight_) {
-            return true;
-        }
-        const NUdf::TUnboxedValue* rightRow = Decode(ESide::Build, pair.Build);
-        if (Filters_.Right && !Filters_.Right.Pass(*Ctx_, rightRow)) {
+        if (!ProbePasses_) {
             return false;
         }
-        return !Filters_.Common || Filters_.Common.Pass(*Ctx_, leftRow, rightRow);
+        if (!BindAndCheck(ESide::Build, buildRow)) {
+            return false;
+        }
+        return !Filters_.BothSides || Eval(Filters_.BothSides);
     }
 
   private:
-    const NUdf::TUnboxedValue* Decode(ESide side, TSingleTuple tuple) {
-        auto& converter = *Converters_.SelectSide(side);
-        auto& one = OneTuple_.SelectSide(side);
-        one.Clear();
-        one.AppendTuple(tuple, converter.GetTupleLayout());
-        auto& permuted = ValsPermuted_.SelectSide(side);
-        converter.Unpack(one, 0, permuted.data());
+    // Turns a single packed tuple back into unboxed values in the user's original column order.
+    class TRowDecoder {
+      public:
+        TRowDecoder(const NUdf::ITypeInfoHelper& helper, const TVector<TType*>& columnTypes,
+                    const TVector<ui32>& keyColumns, const TVector<int>& columnPermutation,
+                    const THolderFactory& holderFactory)
+            : Converter_(MakeScalarLayoutConverter(helper, columnTypes,
+                                                   MakeColumnRoles(columnTypes.size(), keyColumns), holderFactory))
+            , Permutation_(columnPermutation)
+            , Packed_(columnTypes.size())
+            , Row_(Permutation_.empty() ? 0 : columnTypes.size())
+        {}
 
-        const auto& perm = ColumnPermutation_.SelectSide(side);
-        if (perm.empty()) {
-            return permuted.data();
+        const NUdf::TUnboxedValue* Decode(TSingleTuple tuple) {
+            OneTuple_.Reset();
+            OneTuple_.AppendTuple(tuple, Converter_->GetTupleLayout());
+            Converter_->Unpack(OneTuple_, 0, Packed_.data());
+            if (Permutation_.empty()) {
+                return Packed_.data();
+            }
+            for (size_t i = 0; i < Packed_.size(); ++i) {
+                Row_[Permutation_[i]] = Packed_[i];
+            }
+            return Row_.data();
         }
-        auto& orig = ValsOrig_.SelectSide(side);
-        for (size_t i = 0; i < permuted.size(); ++i) {
-            orig[perm[i]] = permuted[i];
+
+      private:
+        IScalarLayoutConverter::TPtr Converter_;
+        const TVector<int> Permutation_;
+        TPackResult OneTuple_;
+        TVector<NUdf::TUnboxedValue> Packed_; // packed ("keys first") column order
+        TVector<NUdf::TUnboxedValue> Row_;    // user column order, unused when Permutation_ is empty
+    };
+
+    bool BindAndCheck(ESide side, TSingleTuple row) {
+        auto& decoder = Decoders_.SelectSide(side);
+        if (!decoder) {
+            return true;
         }
-        return orig.data();
+        const NUdf::TUnboxedValue* values = decoder->Decode(row);
+        const auto& args = Filters_.Args.SelectSide(side);
+        for (size_t i = 0; i < args.size(); ++i) {
+            args[i]->SetValue(*Ctx_, NUdf::TUnboxedValue(values[i]));
+        }
+        IComputationNode* body = Filters_.OneSide.SelectSide(side);
+        return !body || Eval(body);
+    }
+
+    bool Eval(IComputationNode* body) const {
+        const NUdf::TUnboxedValue result = body->GetValue(*Ctx_);
+        return result && result.Get<bool>();
     }
 
     TComputationContext* Ctx_;
-    TSides<std::unique_ptr<IScalarLayoutConverter>> Converters_;
-    TSides<TVector<int>> ColumnPermutation_;
     TJoinFilters Filters_;
-    const bool NeedLeft_;
-    const bool NeedRight_;
-    TSides<TPackResult> OneTuple_;
-    TSides<TVector<NUdf::TUnboxedValue>> ValsPermuted_;
-    TSides<TVector<NUdf::TUnboxedValue>> ValsOrig_;
-    const ui8* LastProbe_ = nullptr;
-    const NUdf::TUnboxedValue* LeftRow_ = nullptr;
-    bool LeftPassed_ = false;
+    TSides<std::optional<TRowDecoder>> Decoders_;
+    TSingleTuple ProbeRow_{};
+    bool ProbeChecked_ = false;
+    bool ProbePasses_ = false;
 };
 
 } // namespace NKikimr::NMiniKQL

@@ -517,47 +517,57 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     }
 
 
-    // A null `filter` means no ON-clause predicates. The filter drives the `found` decision, so LEFT
-    // rows whose matches are all rejected by it stay null-padded.
-    EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx, auto consume, auto isFull,
+    EFetchResult MatchRows(TComputationContext& ctx, auto consume, auto isFull,
                            TPackedTuplePairFilter* filter = nullptr) {
-        auto pairAccepted = [&](const TSides<TSingleTuple>& pair) { return !filter || (*filter)(pair); };
+        return filter ? MatchRowsImpl<true>(ctx, consume, isFull, filter)
+                      : MatchRowsImpl<false>(ctx, consume, isFull, nullptr);
+    }
+
+    template <bool HasFilter>
+    EFetchResult MatchRowsImpl([[maybe_unused]] TComputationContext& ctx, auto consume, auto isFull,
+                               [[maybe_unused]] TPackedTuplePairFilter* filter) {
         auto notEnoughMemory = [hasSpiller = !!Spiller_] {
             return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
         };
-        auto lookupToTable = [&](TTable& table, TSingleTuple tuple) {
+        auto lookupToTable = [&](TTable& table, TSingleTuple probeRow) {
+            if constexpr (HasFilter) {
+                filter->StartProbeRow(probeRow);
+            }
+            auto pairPasses = [&](TSingleTuple buildRow) {
+                if constexpr (HasFilter) {
+                    return filter->PairPasses(buildRow);
+                } else {
+                    return true;
+                }
+            };
             bool found = false;
             if constexpr (Kind == EJoinKind::Left) {
-                table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                    const TSides<TSingleTuple> pair{.Build = tableMatch, .Probe = tuple};
-                    if (pairAccepted(pair)) {
+                table.Lookup(probeRow, [&](TSingleTuple tableMatch) {
+                    if (pairPasses(tableMatch)) {
                         found = true;
-                        consume(pair);
+                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = probeRow});
                     }
                 });
-                // When Build is the preserved side, its unmatched rows are emitted later via
-                // used-tracking instead.
                 if (!found && !Settings_.LeftIsBuild()) {
-                    consume(tuple);
+                    consume(probeRow);
                 }
             } else {
-                table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                    const TSides<TSingleTuple> pair{.Build = tableMatch, .Probe = tuple};
-                    if (pairAccepted(pair)) {
+                table.Lookup(probeRow, [&](TSingleTuple tableMatch) {
+                    if (pairPasses(tableMatch)) {
                         found = true;
                         if constexpr (Kind == EJoinKind::Inner) {
-                            consume(pair);
+                            consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = probeRow});
                         }
                     }
                 });
                 if constexpr (Kind == EJoinKind::LeftOnly) {
                     if (!found) {
-                        consume(tuple);
+                        consume(probeRow);
                     }
                 }
                 if constexpr(Kind == EJoinKind::LeftSemi) {
                     if (found) {
-                        consume(tuple);
+                        consume(probeRow);
                     }
                 }
             }
@@ -877,15 +887,6 @@ inline TDqRenames<ESide> BuildImplRenames(const TDqUserRenames& userRenames) {
         renames.push_back({.Index = rename.Index, .Side = side});
     }
     return renames;
-}
-
-template <typename TKeyColumns>
-TVector<NPackedTuple::EColumnRole> MakeColumnRoles(size_t width, const TKeyColumns& keyColumns) {
-    TVector<NPackedTuple::EColumnRole> roles(width, NPackedTuple::EColumnRole::Payload);
-    for (auto column : keyColumns) {
-        roles[column] = NPackedTuple::EColumnRole::Key;
-    }
-    return roles;
 }
 
 template <template <EJoinKind> class Wrapper, typename TResult, typename... Args>

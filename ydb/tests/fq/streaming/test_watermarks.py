@@ -385,13 +385,21 @@ class TestWatermarksInYdb(StreamingTestBase):
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
-            self._write_topic(ydb_client, [self._event(0, "fst-0")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(0, "snd-0")], partition_id=1)
-            self._write_topic(ydb_client, [self._event(10, "fst-10")], partition_id=0)
+            query_path = f"/Root/{query_name}"
+
+            # Both initial events share window [0,1). Use _write_topic_and_wait so
+            # each event is buffered in the aggregation state before the next write
+            # delivers a write_time watermark that would close that window (see
+            # _write_topic_and_wait docstring for the full mechanism).
+            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(0, "fst-0"), partition_id=0)
+            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(0, "snd-0"), partition_id=1)
+            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(10, "fst-10"), partition_id=0)
 
             # Keep the second partition below idle timeout.
             time.sleep(self.idle_timeout_seconds - 1)
-            self._write_topic(ydb_client, [self._event(10, "snd-10")], partition_id=1)
+            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(10, "snd-10"), partition_id=1)
+
+            # Events at ts=20 are not expected in output (window not yet closed).
             self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
             self._write_topic(ydb_client, [self._event(20, "snd-20")], partition_id=1)
 
@@ -419,19 +427,25 @@ class TestWatermarksInYdb(StreamingTestBase):
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
-            self._write_topic(ydb_client, [self._event(0, "fst-0")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(0, "snd-0")], partition_id=1)
+            query_path = f"/Root/{query_name}"
 
-            # Start the idle timeout after both partitions consume the initial events.
-            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            # Both initial events share window [0,1). Use _write_topic_and_wait so
+            # each event is buffered in the aggregation state before the next write
+            # delivers a write_time watermark that would close that window (see
+            # _write_topic_and_wait docstring for the full mechanism).
+            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(0, "fst-0"), partition_id=0)
+            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(0, "snd-0"), partition_id=1)
 
             # Let both partitions become idle and trigger state cleanup.
             time.sleep(idle_timeout_seconds + 1)
-            self._write_topic(ydb_client, [self._event(10, "fst-10")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(10, "snd-10")], partition_id=1)
 
-            # Persist cleanup before sending the next events.
-            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            # Events fst-10 (p0) and snd-10 (p1) share window [10,11). Both must be
+            # delivered to the HoppingWindow aggregation state BEFORE the write_time-
+            # based watermark from the next source batch closes that window.
+            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(10, "fst-10"), partition_id=0)
+            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(10, "snd-10"), partition_id=1)
+
+            # Events at ts=20 are expected to be dropped (after idle cleanup).
             self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
             self._write_topic(ydb_client, [self._event(20, "snd-20")], partition_id=1)
 

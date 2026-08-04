@@ -443,15 +443,26 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         }
 
         void Feed(TString&& portion, bool last) override {
+            if (FeedError) {
+                return;
+            }
             if (!portion.empty() || last) {
                 NewData = true;
             }
             Last = last;
             FeedUnprocessedBytes += portion.size();
-            Deserializer.AddData(TBuffer(portion.data(), portion.size()), last);
+            try {
+                Deserializer.AddData(TBuffer(portion.data(), portion.size()), last);
+            } catch (const std::exception& ex) {
+                FeedError = ex.what();
+            }
         }
 
         IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
+            if (FeedError) {
+                error = *FeedError;
+                return IReadController::ERROR;
+            }
             if (BytesFedToChild) {
                 auto status = TryGetDataFromChildController(data, error);
                 if (status != IReadController::NOT_ENOUGH_DATA || !NewData) {
@@ -506,10 +517,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         }
 
         void Confirm(NKikimrBackup::TS3DownloadState& state) override {
-            state.SetEncryptedDeserializerState(Deserializer.GetState());
             if (ui64 readyBytes = ReadyBytes()) {
+                ConfirmedDeserializerState = Deserializer.GetState();
                 FeedUnprocessedBytes -= readyBytes;
                 ReadyInputBytes = 0;
+            }
+            if (ConfirmedDeserializerState) {
+                state.SetEncryptedDeserializerState(ConfirmedDeserializerState);
             }
             DataController->Confirm(state);
         }
@@ -535,8 +549,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             if (const TString& deserializerState = state.GetEncryptedDeserializerState()) {
                 try {
                     Deserializer = NBackup::TEncryptedFileDeserializer::RestoreFromState(deserializerState);
+                    Deserializer.ResumeStream();
+                    ConfirmedDeserializerState = deserializerState;
                     FeedUnprocessedBytes = 0;
                     ReadyInputBytes = 0;
+                    BytesFedToChild = 0;
+                    NewData = false;
+                    Last = false;
+                    FeedError.Clear();
                 } catch (const std::exception& ex) {
                     error = ex.what();
                     return false;
@@ -551,6 +571,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         ui64 ReadyInputBytes = 0;
         bool NewData = false;
         ui64 BytesFedToChild = 0;
+        TString ConfirmedDeserializerState;
+        TMaybe<TString> FeedError;
         NBackup::TEncryptedFileDeserializer Deserializer;
         THolder<IReadController> DataController;
         const ui64 ReadBatchSize;

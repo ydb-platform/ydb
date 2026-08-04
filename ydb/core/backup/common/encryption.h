@@ -231,6 +231,9 @@ public:
     // State includes secret key
     static TEncryptedFileDeserializer RestoreFromState(const TString& state);
 
+    // Prepares a state restored deserializer to accept input data again.
+    void ResumeStream();
+
     // Get file IV.
     // Must be called after data added enough for the file header.
     TEncryptionIV GetIV() const;

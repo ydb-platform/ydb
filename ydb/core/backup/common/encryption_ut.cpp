@@ -310,6 +310,32 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(restored.AddData(TBuffer("data", 4), true), yexception, "Stream finished");
     }
 
+    Y_UNIT_TEST(ResumeStreamAfterRestoreFromState) {
+        TEncryptionIV iv = TEncryptionIV::Generate();
+        TEncryptedFileSerializer serializer("Chacha20-Poly1305", Key32, iv);
+        TBuffer firstPortion = serializer.AddBlock("Come crawling faster", false);
+        TBuffer lastPortion = serializer.AddBlock("Obey your master", true);
+
+        TEncryptedFileDeserializer deserializer(Key32);
+        deserializer.AddData(TBuffer(firstPortion.Data(), firstPortion.Size()), false);
+        {
+            TMaybe<TBuffer> block = deserializer.GetNextBlock();
+            UNIT_ASSERT(block);
+            UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(block->Data(), block->Size()), "Come crawling faster");
+        }
+
+        // The tail arrives and is marked as the last one, but is not decrypted yet.
+        deserializer.AddData(TBuffer(lastPortion.Data(), lastPortion.Size()), true);
+        const TString state = deserializer.GetState();
+
+        TEncryptedFileDeserializer restored = TEncryptedFileDeserializer::RestoreFromState(state);
+        restored.ResumeStream();
+        restored.AddData(TBuffer(lastPortion.Data(), lastPortion.Size()), true);
+        TMaybe<TBuffer> block = restored.GetNextBlock();
+        UNIT_ASSERT(block);
+        UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(block->Data(), block->Size()), "Obey your master");
+    }
+
     Y_UNIT_TEST(IVSerialization) {
         TEncryptionIV iv = TEncryptionIV::Generate();
         UNIT_ASSERT_STRINGS_EQUAL(TEncryptionIV::FromHexString(iv.GetHexString()).GetHexString(), iv.GetHexString());

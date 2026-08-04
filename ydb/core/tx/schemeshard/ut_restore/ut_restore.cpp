@@ -3048,7 +3048,7 @@ value {
     // - downloaded blocks size
     // - decrypted blocks size
     // - compression blocks size
-    void ImportBigEncryptedFile(size_t encryptedBlockSize, size_t resultFileSize, size_t readBatchSize, bool compressed, bool enableDataShardDirectPartImport) {
+    void ImportBigEncryptedFile(size_t encryptedBlockSize, size_t resultFileSize, size_t readBatchSize, bool compressed, bool enableDataShardDirectPartImport, bool rebootAfterLastPortion = false) {
         TString key = "Cool very very secret rand key!!";
         NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
 
@@ -3081,6 +3081,24 @@ value {
         const auto desc = DescribePath(runtime, "/MyRoot/TestTable", true, true);
         UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
 
+        bool wholeFileRead = false;
+        bool readyToReboot = false;
+        if (rebootAfterLastPortion) {
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                switch (ev->GetTypeRewrite()) {
+                case NWrappers::NExternalStorage::EvGetObjectResponse:
+                    if (ev->Get<NWrappers::NExternalStorage::TEvGetObjectResponse>()->Body.size() < readBatchSize) {
+                        wholeFileRead = true;
+                    }
+                    break;
+                case TEvDataShard::EvS3UploadRowsResponse:
+                    readyToReboot = wholeFileRead;
+                    break;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+        }
+
         NKikimrScheme::EStatus status = (NKikimrScheme::EStatus)TestRestore(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableName: "TestTable"
             TableDescription {
@@ -3104,10 +3122,29 @@ value {
             }
         )", GenerateTableDescription(desc).data(), s3Port, readBatchSize, PrintInProtoText(iv).c_str(), key.c_str()));
         UNIT_ASSERT_EQUAL(status, NKikimrScheme::StatusAccepted);
+
+        if (rebootAfterLastPortion) {
+            if (!readyToReboot) {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&readyToReboot](IEventHandle&) -> bool {
+                    return readyToReboot;
+                });
+                runtime.DispatchEvents(opts);
+            }
+            UNIT_ASSERT(readyToReboot);
+            runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+            RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
+        }
+
         env.TestWaitNotification(runtime, txId);
 
         const ui64 rows = CountRows(runtime, "/MyRoot/TestTable");
         UNIT_ASSERT_VALUES_EQUAL(rows, lines);
+    }
+
+    Y_UNIT_TEST(ImportBigEncryptedFileWithRebootAfterLastPortion) {
+        ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false, false, true);
+        ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true, false, true);
     }
 
     Y_UNIT_TEST_FLAG(ImportBigEncryptedFile, EnableDataShardDirectPartImport) {

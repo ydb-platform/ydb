@@ -3460,13 +3460,17 @@ Y_UNIT_TEST_F(KafkaTxnRenameThenMidCmdReadKeepsParentOffsets, TPQTabletFixture) 
 
     const auto readResult = CmdReadCapture(readSettings);
 
-    UNIT_ASSERT_C(readResult.ResultSize() > 0, "CmdRead returned no rows from mid-blob offset");
-    for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
-        const ui64 expected = midReadOffset + i;
+    constexpr ui32 expectedCount = txCount - midK;
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), expectedCount);
+    for (ui32 i = 0; i < expectedCount; ++i) {
+        const ui64 expectedOffset = midReadOffset + i;
         UNIT_ASSERT_VALUES_EQUAL_C(
-            readResult.GetResult(i).GetOffset(), expected,
+            readResult.GetResult(i).GetOffset(), expectedOffset,
             "result index=" << i
                 << " (supportive leak would be near " << midK + i << " / header space)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult.GetResult(i).GetData(),
+            TStringBuilder() << "tx-" << (midK + i));
     }
 }
 
@@ -3505,12 +3509,16 @@ Y_UNIT_TEST_F(TopicTxRenameThenMidCmdReadKeepsParentOffsets, TPQTabletFixture) {
     readSettings.User = "user1";
     const auto readResult = CmdReadCapture(readSettings);
 
-    UNIT_ASSERT_C(readResult.ResultSize() > 0, "CmdRead returned no rows from mid-blob offset");
-    for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+    constexpr ui32 expectedCount = txCount - midK;
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), expectedCount);
+    for (ui32 i = 0; i < expectedCount; ++i) {
         UNIT_ASSERT_VALUES_EQUAL_C(
             readResult.GetResult(i).GetOffset(), midReadOffset + i,
             "result index=" << i
                 << " (supportive leak would be near " << midK + i << " / header space)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult.GetResult(i).GetData(),
+            TStringBuilder() << "topic-tx-" << (midK + i));
     }
 }
 
@@ -3548,12 +3556,16 @@ Y_UNIT_TEST_F(DeferredPublicationRenameThenMidCmdReadKeepsParentOffsets, TPQTabl
     readSettings.User = "user1";
     const auto readResult = CmdReadCapture(readSettings);
 
-    UNIT_ASSERT_C(readResult.ResultSize() > 0, "CmdRead returned no rows from mid-blob offset");
-    for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+    constexpr ui32 expectedCount = txCount - midK;
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), expectedCount);
+    for (ui32 i = 0; i < expectedCount; ++i) {
         UNIT_ASSERT_VALUES_EQUAL_C(
             readResult.GetResult(i).GetOffset(), midReadOffset + i,
             "result index=" << i
                 << " (supportive leak would be near " << midK + i << " / header space)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult.GetResult(i).GetData(),
+            TStringBuilder() << "deferred-tx-" << (midK + i));
     }
 }
 

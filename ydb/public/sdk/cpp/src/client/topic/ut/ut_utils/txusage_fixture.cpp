@@ -2612,8 +2612,10 @@ void TFixture::TestTxWriteSmallMaxMemoryMidBatchReconnectAssertsParentOffsets()
     }
 
     UNIT_ASSERT_VALUES_EQUAL(offsets.size(), txCount);
-    // Prefer mid-batch delivery across multiple GetEvents when memory limit bites.
-    UNIT_ASSERT_C(dataEventBatches >= 1, "expected at least one data batch");
+    // ~200KB × 8 with MaxMemoryUsageBytes=1MB should split across GetEvents.
+    UNIT_ASSERT_C(dataEventBatches >= 2,
+        "expected MaxMemoryUsageBytes to split delivery across multiple data batches, got "
+            << dataEventBatches);
     for (size_t i = 0; i < offsets.size(); ++i) {
         UNIT_ASSERT_VALUES_EQUAL(offsets[i], parentKeyOffset + i);
     }

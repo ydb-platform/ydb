@@ -58,6 +58,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsExclusiveSta
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsTimestamp
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsToken
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.MissingAction
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.PutRecordsWithIncorrectHashKey
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.PutRecordsWithLongExplicitHashKey
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestConsumersEmptyNames
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestCounters
@@ -430,8 +431,10 @@ ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.IndexesActualization-QueryService
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.MinMaxIndexAppliedToDataAfterCompaction-QueryService-SchemeObjectEnabled
+ydb/core/kqp/ut/opt KqpConcurrentResults.ConcurrentStreamNamedExprRandomConsistency+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
+ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelAuto
@@ -518,6 +521,8 @@ ydb/core/persqueue/public/describer/ut unittest.sole chunk
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.CapacitySmokeKeepOrder
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.UnlockMultiPartition
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.ConsumerNotExists
+ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.DescribeTest
+ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.UnauthorizedDescriber
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.ReceiveAttemptIdPartitionRouting
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.Deduplicated_Reboot
@@ -543,6 +548,7 @@ ydb/core/tx/columnshard/data_accessor/ut unittest.sole chunk
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranuleStrKey_PKUtf8
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKDatetime
 ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
+ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.BuildToBuildWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.EmptyEmbeddingSkipped
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BadRequest
@@ -1070,7 +1076,9 @@ ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_drop_table_du
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_rename_table_during_export
 ydb/tests/olap/s3_import test_tpch_import.py.TestS3TpchImport.test_import_and_export
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
+ydb/tests/stress/kafka/tests py3test.sole chunk
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test_batched_source
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/min_max_workload/tests test_workload.py.TestMinMaxWorkload.test
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test

@@ -929,8 +929,8 @@ private:
                 SpilledBuckets.resize(SpilledBucketCount);
                 auto spiller = Ctx.SpillerFactory->CreateSpiller();
                 for (auto& b : SpilledBuckets) {
-                    b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
-                    b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
+                    b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB, Ctx.RuntimeSettings.DatumValidation.Get());
+                    b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB, Ctx.RuntimeSettings.DatumValidation.Get());
                     b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth,
                                                                          KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal, Logger, LogComponent, false);
                 }

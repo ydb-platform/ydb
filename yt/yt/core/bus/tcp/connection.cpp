@@ -4,6 +4,8 @@
 #include "local_bypass.h"
 #include "dispatcher_impl.h"
 
+#include <yt/yt/core/bus/message_handler.h>
+
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/proc.h>
@@ -126,10 +128,9 @@ TConnection::TConnection(
     , UnixDomainSocketPath_(unixDomainSocketPath)
     , Handler_(std::move(handler))
     , Poller_(std::move(poller))
-    , LoggingTag_(Format("ConnectionId: %v, Endpoint: %v",
-        Id_,
-        EndpointDescription_))
-    , Logger(BusLogger().WithRawTag(LoggingTag_))
+    , Logger(BusLogger()
+        .WithTag("ConnectionId", Id_)
+        .WithTag("Endpoint", EndpointDescription_))
     , GenerateChecksums_(Config_->GenerateChecksums)
     , Socket_(socket)
     , MultiplexingBand_(multiplexingBand)
@@ -297,9 +298,9 @@ void TConnection::RunPeriodicCheck()
     }
 }
 
-const std::string& TConnection::GetLoggingTag() const
+const NLogging::TLoggingTagList& TConnection::GetLoggingTags() const
 {
-    return LoggingTag_;
+    return Logger.GetTags();
 }
 
 void TConnection::TryEnqueueHandshake()
@@ -684,8 +685,10 @@ void TConnection::FlushQueuedMessagesToLocalBypass()
         /*reverse*/ true,
         [&] (auto& queuedMessage) {
             // Log first to avoid producing weird traces.
-            YT_LOG_DEBUG("Queued message sent via local bypass (PacketId: %v)", queuedMessage.PacketId);
-            LocalBypassHandler_->HandleMessage(std::move(queuedMessage.Message), LocalBypassReplyBus_);
+            YT_LOG_DEBUG("Queued message sent via local bypass (PacketId: %v, RequestId: %v)",
+                queuedMessage.PacketId,
+                queuedMessage.RequestId);
+            LocalBypassHandler_->HandleMessage(std::move(queuedMessage.Message), LocalBypassReplyBus_, nullptr, queuedMessage.PacketId);
 
             if (queuedMessage.Promise) {
                 queuedMessage.Promise.TrySet();
@@ -1287,7 +1290,7 @@ bool TConnection::OnMessagePacketReceived()
     }
 
     auto message = Decoder_->GrabMessage();
-    Handler_->HandleMessage(std::move(message), this);
+    Handler_->HandleMessage(std::move(message), this, nullptr, Decoder_->GetPacketId());
 
     return true;
 }
@@ -1379,8 +1382,9 @@ TFuture<void> TConnection::SendViaSocket(TSharedRefArray message, const TSendOpt
     auto pendingOutPayloadBytes = PendingOutPayloadBytes_.fetch_add(queuedMessage.PayloadSize);
 
     // Log first to avoid producing weird traces.
-    YT_LOG_DEBUG("Outcoming message enqueued (PacketId: %v, PendingOutPayloadBytes: %v)",
+    YT_LOG_DEBUG("Outcoming message enqueued (PacketId: %v, RequestId: %v, PendingOutPayloadBytes: %v)",
         queuedMessage.PacketId,
+        queuedMessage.RequestId,
         pendingOutPayloadBytes);
 
     if (LastIncompleteWriteTime_ == std::numeric_limits<NProfiling::TCpuInstant>::max()) {
@@ -1412,10 +1416,11 @@ TFuture<void> TConnection::SendViaSocket(TSharedRefArray message, const TSendOpt
     return promise;
 }
 
-TFuture<void> TConnection::SendViaLocalBypass(TSharedRefArray message, const TSendOptions& /*options*/)
+TFuture<void> TConnection::SendViaLocalBypass(TSharedRefArray message, const TSendOptions& options)
 {
-    // Log first to avoid producing weird traces.
-    YT_LOG_DEBUG("Outcoming message sent via local bypass");
+    // No real TCP packet in local bypass, so PacketId is empty.
+    YT_LOG_DEBUG("Outcoming message sent via local bypass (RequestId: %v)",
+        options.RequestId);
 
     LocalBypassHandler_->HandleMessage(std::move(message), LocalBypassReplyBus_);
 
@@ -1827,8 +1832,9 @@ void TConnection::ProcessQueuedMessages()
                 packet->EnableCancel(MakeStrong(this));
             }
 
-            YT_LOG_DEBUG("Outcoming message dequeued (PacketId: %v, PacketSize: %v, Flags: %v)",
+            YT_LOG_DEBUG("Outcoming message dequeued (PacketId: %v, RequestId: %v, PacketSize: %v, Flags: %v)",
                 packetId,
+                queuedMessage.RequestId,
                 packet->PacketSize,
                 flags);
 
@@ -1846,8 +1852,9 @@ void TConnection::DiscardOutcomingMessages()
     guard.Release();
 
     for (const auto& queuedMessage : queuedMessages) {
-        YT_LOG_DEBUG("Outcoming message discarded (PacketId: %v)",
-            queuedMessage.PacketId);
+        YT_LOG_DEBUG("Outcoming message discarded (PacketId: %v, RequestId: %v)",
+            queuedMessage.PacketId,
+            queuedMessage.RequestId);
         if (queuedMessage.Promise) {
             queuedMessage.Promise.TrySet(error);
         }

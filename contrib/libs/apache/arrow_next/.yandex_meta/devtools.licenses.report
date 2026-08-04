@@ -450,6 +450,17 @@ BELONGS ya.make
     Files with this license:
         LICENSE.txt [585:586]
 
+KEEP     Apache-2.0           327a879c72965f0504efdae0df7297e3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 97.48
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        cpp/src/arrow/flight/protocol_internal.h [2:16]
+
 KEEP     BSD-3-Clause         34da0bbaf1e8782be668a9fbba945ef8
 BELONGS ya.make
     License text:
@@ -1489,6 +1500,33 @@ BELONGS ya.make
         cpp/src/arrow/filesystem/type_fwd.h [2:17]
         cpp/src/arrow/filesystem/util_internal.cc [1:16]
         cpp/src/arrow/filesystem/util_internal.h [2:17]
+        cpp/src/arrow/flight/api.h [2:17]
+        cpp/src/arrow/flight/client.h [2:17]
+        cpp/src/arrow/flight/client_auth.h [2:17]
+        cpp/src/arrow/flight/client_cookie_middleware.h [2:17]
+        cpp/src/arrow/flight/client_middleware.h [2:17]
+        cpp/src/arrow/flight/client_tracing_middleware.h [2:17]
+        cpp/src/arrow/flight/cookie_internal.h [2:17]
+        cpp/src/arrow/flight/middleware.h [2:17]
+        cpp/src/arrow/flight/otel_logging.h [2:17]
+        cpp/src/arrow/flight/otel_logging_internal.h [2:17]
+        cpp/src/arrow/flight/pch.h [2:17]
+        cpp/src/arrow/flight/platform.h [2:17]
+        cpp/src/arrow/flight/serialization_internal.h [2:17]
+        cpp/src/arrow/flight/server.h [2:17]
+        cpp/src/arrow/flight/server_auth.h [2:17]
+        cpp/src/arrow/flight/server_middleware.h [2:17]
+        cpp/src/arrow/flight/server_tracing_middleware.h [2:17]
+        cpp/src/arrow/flight/test_auth_handlers.h [2:17]
+        cpp/src/arrow/flight/test_definitions.h [2:17]
+        cpp/src/arrow/flight/test_flight_server.h [2:17]
+        cpp/src/arrow/flight/test_util.h [2:17]
+        cpp/src/arrow/flight/transport.h [2:17]
+        cpp/src/arrow/flight/transport_server.h [2:17]
+        cpp/src/arrow/flight/type_fwd.h [2:17]
+        cpp/src/arrow/flight/types.h [2:17]
+        cpp/src/arrow/flight/types_async.h [2:17]
+        cpp/src/arrow/flight/visibility.h [2:17]
         cpp/src/arrow/io/api.h [2:17]
         cpp/src/arrow/io/buffered.cc [1:16]
         cpp/src/arrow/io/buffered.h [2:17]
@@ -1593,6 +1631,7 @@ BELONGS ya.make
         cpp/src/arrow/util/base64.h [2:17]
         cpp/src/arrow/util/basic_decimal.cc [1:16]
         cpp/src/arrow/util/basic_decimal.h [2:17]
+        cpp/src/arrow/util/benchmark_util.h [2:17]
         cpp/src/arrow/util/binary_view_util.h [2:17]
         cpp/src/arrow/util/bit_block_counter.cc [1:16]
         cpp/src/arrow/util/bit_block_counter.h [2:17]
@@ -1615,10 +1654,16 @@ BELONGS ya.make
         cpp/src/arrow/util/bpacking.cc [1:16]
         cpp/src/arrow/util/bpacking.h [2:17]
         cpp/src/arrow/util/bpacking64_default.h [2:17]
+        cpp/src/arrow/util/bpacking_avx2.h [2:17]
+        cpp/src/arrow/util/bpacking_avx512.h [2:17]
         cpp/src/arrow/util/bpacking_default.h [2:17]
+        cpp/src/arrow/util/bpacking_neon.h [2:17]
+        cpp/src/arrow/util/bpacking_simd128_generated_internal.h [2:17]
+        cpp/src/arrow/util/bpacking_simd_internal.h [2:17]
         cpp/src/arrow/util/byte_size.cc [1:16]
         cpp/src/arrow/util/byte_size.h [2:17]
         cpp/src/arrow/util/byte_stream_split_internal.h [2:17]
+        cpp/src/arrow/util/cache_internal.h [2:17]
         cpp/src/arrow/util/cancel.cc [1:16]
         cpp/src/arrow/util/cancel.h [2:17]
         cpp/src/arrow/util/checked_cast.h [2:17]
@@ -1631,6 +1676,8 @@ BELONGS ya.make
         cpp/src/arrow/util/compression_snappy.cc [1:16]
         cpp/src/arrow/util/compression_zlib.cc [1:16]
         cpp/src/arrow/util/compression_zstd.cc [1:16]
+        cpp/src/arrow/util/concurrent_map.h [2:17]
+        cpp/src/arrow/util/converter.h [2:17]
         cpp/src/arrow/util/counting_semaphore.cc [1:16]
         cpp/src/arrow/util/counting_semaphore.h [2:17]
         cpp/src/arrow/util/cpu_info.cc [1:16]
@@ -1678,6 +1725,7 @@ BELONGS ya.make
         cpp/src/arrow/util/logging.cc [1:16]
         cpp/src/arrow/util/logging.h [2:17]
         cpp/src/arrow/util/macros.h [2:17]
+        cpp/src/arrow/util/map.h [2:17]
         cpp/src/arrow/util/math_constants.h [2:17]
         cpp/src/arrow/util/math_internal.cc [1:16]
         cpp/src/arrow/util/math_internal.h [2:17]
@@ -1687,18 +1735,22 @@ BELONGS ya.make
         cpp/src/arrow/util/mutex.h [2:17]
         cpp/src/arrow/util/parallel.h [2:17]
         cpp/src/arrow/util/pcg_random.h [2:17]
+        cpp/src/arrow/util/prefetch.h [2:17]
         cpp/src/arrow/util/queue.h [2:17]
         cpp/src/arrow/util/range.h [2:17]
         cpp/src/arrow/util/ree_util.cc [1:16]
         cpp/src/arrow/util/ree_util.h [2:17]
         cpp/src/arrow/util/reflection_internal.h [2:17]
+        cpp/src/arrow/util/regex.h [2:17]
         cpp/src/arrow/util/rle_encoding_internal.h [2:17]
+        cpp/src/arrow/util/rows_to_batches.h [2:17]
         cpp/src/arrow/util/simd.h [2:17]
         cpp/src/arrow/util/slice_util_internal.h [2:17]
         cpp/src/arrow/util/small_vector.h [2:17]
         cpp/src/arrow/util/sort.h [2:17]
         cpp/src/arrow/util/spaced.h [2:17]
         cpp/src/arrow/util/span.h [2:17]
+        cpp/src/arrow/util/stopwatch.h [2:17]
         cpp/src/arrow/util/string.cc [1:16]
         cpp/src/arrow/util/string.h [2:17]
         cpp/src/arrow/util/string_builder.cc [1:16]
@@ -1706,6 +1758,7 @@ BELONGS ya.make
         cpp/src/arrow/util/task_group.h [2:17]
         cpp/src/arrow/util/tdigest.cc [1:16]
         cpp/src/arrow/util/tdigest.h [2:17]
+        cpp/src/arrow/util/test_common.h [2:17]
         cpp/src/arrow/util/thread_pool.cc [1:16]
         cpp/src/arrow/util/thread_pool.h [2:17]
         cpp/src/arrow/util/time.cc [1:16]
@@ -1780,14 +1833,31 @@ BELONGS ya.make
         cpp/src/parquet/decoder.cc [1:16]
         cpp/src/parquet/encoder.cc [1:16]
         cpp/src/parquet/encoding.h [2:17]
+        cpp/src/parquet/encryption/crypto_factory.h [2:17]
         cpp/src/parquet/encryption/encryption.cc [1:16]
         cpp/src/parquet/encryption/encryption.h [2:17]
         cpp/src/parquet/encryption/encryption_internal.h [2:17]
         cpp/src/parquet/encryption/encryption_internal_nossl.cc [1:16]
+        cpp/src/parquet/encryption/file_key_material_store.h [2:17]
+        cpp/src/parquet/encryption/file_key_unwrapper.h [2:17]
+        cpp/src/parquet/encryption/file_key_wrapper.h [2:17]
+        cpp/src/parquet/encryption/file_system_key_material_store.h [2:17]
         cpp/src/parquet/encryption/internal_file_decryptor.cc [1:16]
         cpp/src/parquet/encryption/internal_file_decryptor.h [2:17]
         cpp/src/parquet/encryption/internal_file_encryptor.cc [1:16]
         cpp/src/parquet/encryption/internal_file_encryptor.h [2:17]
+        cpp/src/parquet/encryption/key_encryption_key.h [2:17]
+        cpp/src/parquet/encryption/key_material.h [2:17]
+        cpp/src/parquet/encryption/key_metadata.h [2:17]
+        cpp/src/parquet/encryption/key_toolkit.h [2:17]
+        cpp/src/parquet/encryption/key_toolkit_internal.h [2:17]
+        cpp/src/parquet/encryption/kms_client.h [2:17]
+        cpp/src/parquet/encryption/kms_client_factory.h [2:17]
+        cpp/src/parquet/encryption/local_wrap_kms_client.h [2:17]
+        cpp/src/parquet/encryption/openssl_internal.h [2:17]
+        cpp/src/parquet/encryption/test_encryption_util.h [2:17]
+        cpp/src/parquet/encryption/test_in_memory_kms.h [2:17]
+        cpp/src/parquet/encryption/two_level_cache_with_expiration.h [2:17]
         cpp/src/parquet/encryption/type_fwd.h [2:17]
         cpp/src/parquet/exception.cc [1:16]
         cpp/src/parquet/exception.h [2:17]
@@ -2029,6 +2099,7 @@ BELONGS ya.make
         cpp/README.md [2:17]
         cpp/src/arrow/array/README.md [2:17]
         cpp/src/arrow/compute/README.md [2:17]
+        cpp/src/arrow/flight/README.md [2:17]
 
 KEEP     BSD-2-Clause         a3557d3eaf184200803bddedb1e9aa2a
 BELONGS ya.make
@@ -2491,6 +2562,18 @@ BELONGS ya.make
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
     Files with this license:
         cpp/src/arrow/util/crc32.cc [75:76]
+
+KEEP     Apache-2.0           f6a19ce05c091daa8d759be8e4cbd568
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        cpp/src/arrow/util/bpacking_simd256_generated_internal.h [2:17]
+        cpp/src/arrow/util/bpacking_simd512_generated_internal.h [2:17]
 
 KEEP     CC0-1.0              f7aeb23ff2cf210670fa11a29f27ae48
 BELONGS ya.make

@@ -24,6 +24,9 @@ PEERDIR(
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/table
+    ydb/library/actors/core
+    ydb/library/actors/http
+    library/cpp/http/fetch
 )
 
 SRCS(
@@ -34,6 +37,8 @@ SRCS(
     helpers_flags_n.h
     ls_checks.cpp
     ls_checks.h
+    mon_helpers.cpp
+    mon_helpers.h
     olap_helpers.cpp
     olap_helpers.h
     schemeshard_counters.cpp

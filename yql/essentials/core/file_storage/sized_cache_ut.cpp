@@ -37,15 +37,15 @@ Y_UNIT_TEST(Count) {
     TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ULL);
 
     UNIT_ASSERT_VALUES_EQUAL(cache.GetCount(), 0);
-    cache.Put(o1, false);
+    cache.Put(o1, /*lock=*/false);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetCount(), 1);
-    cache.Put(o2, false);
+    cache.Put(o2, /*lock=*/false);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetCount(), 2);
-    cache.Put(o3, false);
+    cache.Put(o3, /*lock=*/false);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetCount(), 3);
-    cache.Put(o1, false); // Equal object
+    cache.Put(o1, /*lock=*/false); // Equal object
     UNIT_ASSERT_VALUES_EQUAL(cache.GetCount(), 3);
-    cache.Put(o3, false); // Equal object
+    cache.Put(o3, /*lock=*/false); // Equal object
     UNIT_ASSERT_VALUES_EQUAL(cache.GetCount(), 3);
 }
 
@@ -56,15 +56,15 @@ Y_UNIT_TEST(GetOccupiedSize) {
     TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ULL);
 
     UNIT_ASSERT_VALUES_EQUAL(cache.GetOccupiedSize(), 0);
-    cache.Put(o1, false);
+    cache.Put(o1, /*lock=*/false);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetOccupiedSize(), 10);
-    cache.Put(o2, false);
+    cache.Put(o2, /*lock=*/false);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetOccupiedSize(), 30);
-    cache.Put(o3, false);
+    cache.Put(o3, /*lock=*/false);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetOccupiedSize(), 45);
-    cache.Put(o2, false); // Equla object
+    cache.Put(o2, /*lock=*/false); // Equla object
     UNIT_ASSERT_VALUES_EQUAL(cache.GetOccupiedSize(), 45);
-    cache.Put(o3, false); // Equla object
+    cache.Put(o3, /*lock=*/false); // Equla object
     UNIT_ASSERT_VALUES_EQUAL(cache.GetOccupiedSize(), 45);
 }
 
@@ -74,9 +74,9 @@ Y_UNIT_TEST(DisplaceByCount) {
     TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ULL);
     TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ULL);
 
-    cache.Put(o1, false);
-    cache.Put(o2, false);
-    cache.Put(o3, false);
+    cache.Put(o1, /*lock=*/false);
+    cache.Put(o2, /*lock=*/false);
+    cache.Put(o3, /*lock=*/false);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetCount(), 2);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetOccupiedSize(), 35);
     UNIT_ASSERT(o1->Dismissed);
@@ -90,9 +90,9 @@ Y_UNIT_TEST(DisplaceBySize) {
     TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ULL);
     TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ULL);
 
-    cache.Put(o1, false);
-    cache.Put(o2, false);
-    cache.Put(o3, false);
+    cache.Put(o1, /*lock=*/false);
+    cache.Put(o2, /*lock=*/false);
+    cache.Put(o3, /*lock=*/false);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetCount(), 2);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetOccupiedSize(), 35);
     UNIT_ASSERT(o1->Dismissed);
@@ -107,10 +107,10 @@ Y_UNIT_TEST(Lock) {
     TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ULL);
 
     UNIT_ASSERT(cache.GetLocks("o1").Empty());
-    cache.Put(o1, true);
+    cache.Put(o1, /*lock=*/true);
     UNIT_ASSERT_VALUES_EQUAL(*cache.GetLocks("o1"), 1);
-    cache.Put(o2, true);
-    cache.Put(o3, true);
+    cache.Put(o2, /*lock=*/true);
+    cache.Put(o3, /*lock=*/true);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetCount(), 3);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetOccupiedSize(), 45);
     UNIT_ASSERT(!o1->Dismissed);
@@ -130,14 +130,14 @@ Y_UNIT_TEST(MultiLock) {
     TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ULL);
     TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ULL);
 
-    cache.Put(o1, true);
+    cache.Put(o1, /*lock=*/true);
     UNIT_ASSERT_VALUES_EQUAL(*cache.GetLocks("o1"), 1);
-    cache.Put(o1, true);
+    cache.Put(o1, /*lock=*/true);
     UNIT_ASSERT_VALUES_EQUAL(*cache.GetLocks("o1"), 2);
-    cache.Put(o1, true);
+    cache.Put(o1, /*lock=*/true);
     UNIT_ASSERT_VALUES_EQUAL(*cache.GetLocks("o1"), 3);
-    cache.Put(o2, true);
-    cache.Put(o3, true);
+    cache.Put(o2, /*lock=*/true);
+    cache.Put(o3, /*lock=*/true);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetCount(), 3);
     UNIT_ASSERT_VALUES_EQUAL(cache.GetOccupiedSize(), 45);
     UNIT_ASSERT(!o1->Dismissed);

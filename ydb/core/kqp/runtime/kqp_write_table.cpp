@@ -1149,10 +1149,9 @@ public:
             sortedTokens.push_back(token);
         }
         std::sort(sortedTokens.begin(), sortedTokens.end());
-        // Fixed column order: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
+        // Fixed column order: __ydb_token, __ydb_generation, __ydb_max_id, __ydb_added, __ydb_segment
         TVector<TCell> cells(5);
-        cells[1] = TCell::Make((TDocId)0);
-        cells[2] = TCell::Make((NTableIndex::NFulltext::TGen)0);
+        // cells[1] = gen — set per token below
         cells[3] = TCell::Make(Added);
         // indexImplDictTable columns: __ydb_token, __ydb_freq
         TVector<TCell> dictCells(2);
@@ -1179,6 +1178,8 @@ public:
                 }
             }
             cells[0] = TCell(token);
+            cells[1] = TCell::Make(Gen);
+            cells[2] = TCell::Make((TDocId)wr.GetMaxId());
             cells[4] = TCell(TConstArrayRef<const char>((const char*)wr.GetBuf().data(), wr.GetBuf().size()));
             RowBatcher.AddRow(cells);
             if (WithFreq) {
@@ -1219,7 +1220,12 @@ public:
         return result;
     }
 
+    void SetGen(NTableIndex::NFulltext::TGen gen) override {
+        Gen = gen;
+    }
+
 private:
+    NTableIndex::NFulltext::TGen Gen = 0;
     NScheme::TTypeId TextTypeId = 0;
     ui64 TotalDocLength = 0;
     ui64 DocCount = 0;
@@ -1341,11 +1347,11 @@ IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
     AFL_ENSURE(false)("Unsupported primary key type", columnTypes[1].GetTypeId());
 }
 
-std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch) {
+std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch, const size_t offset) {
     auto* data = dynamic_cast<TRowBatch*>(batch.Get());
     AFL_ENSURE(data);
     const auto& batchRows = data->GetRows();
-    return std::vector<TConstArrayRef<TCell>>(batchRows.begin(), batchRows.end());
+    return std::vector<TConstArrayRef<TCell>>(batchRows.begin() + offset, batchRows.end());
 }
 
 std::vector<TConstArrayRef<TCell>> CutColumns(

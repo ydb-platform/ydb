@@ -1,5 +1,0 @@
-<tmp_path>/program.sql:<main>: Error: Optimization
-
-    <tmp_path>/program.sql:<main>:5:34: Error: downsampling.grid_interval must be positive number, but has ABC
-    	  `downsampling.grid_interval` = "ABC"
-	                                 ^

@@ -2,9 +2,10 @@
   "version":"2.0",
   "metadata":{
     "apiVersion":"2022-02-17",
+    "auth":["aws.auth#sigv4"],
     "endpointPrefix":"cleanrooms",
-    "jsonVersion":"1.1",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceFullName":"AWS Clean Rooms Service",
     "serviceId":"CleanRooms",
     "signatureVersion":"v4",
@@ -156,6 +157,7 @@
       "output":{"shape":"CreateConfiguredTableAnalysisRuleOutput"},
       "errors":[
         {"shape":"ConflictException"},
+        {"shape":"ServiceQuotaExceededException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
         {"shape":"ValidationException"},
@@ -184,6 +186,66 @@
         {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Creates a configured table association. A configured table association links a configured table with a collaboration.</p>"
+    },
+    "CreateConfiguredTableAssociationAnalysisRule":{
+      "name":"CreateConfiguredTableAssociationAnalysisRule",
+      "http":{
+        "method":"POST",
+        "requestUri":"/memberships/{membershipIdentifier}/configuredTableAssociations/{configuredTableAssociationIdentifier}/analysisRule",
+        "responseCode":200
+      },
+      "input":{"shape":"CreateConfiguredTableAssociationAnalysisRuleInput"},
+      "output":{"shape":"CreateConfiguredTableAssociationAnalysisRuleOutput"},
+      "errors":[
+        {"shape":"ConflictException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p> Creates a new analysis rule for an associated configured table.</p>",
+      "idempotent":true
+    },
+    "CreateIdMappingTable":{
+      "name":"CreateIdMappingTable",
+      "http":{
+        "method":"POST",
+        "requestUri":"/memberships/{membershipIdentifier}/idmappingtables",
+        "responseCode":200
+      },
+      "input":{"shape":"CreateIdMappingTableInput"},
+      "output":{"shape":"CreateIdMappingTableOutput"},
+      "errors":[
+        {"shape":"ConflictException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Creates an ID mapping table.</p>"
+    },
+    "CreateIdNamespaceAssociation":{
+      "name":"CreateIdNamespaceAssociation",
+      "http":{
+        "method":"POST",
+        "requestUri":"/memberships/{membershipIdentifier}/idnamespaceassociations",
+        "responseCode":200
+      },
+      "input":{"shape":"CreateIdNamespaceAssociationInput"},
+      "output":{"shape":"CreateIdNamespaceAssociationOutput"},
+      "errors":[
+        {"shape":"ConflictException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Creates an ID namespace association.</p>"
     },
     "CreateMembership":{
       "name":"CreateMembership",
@@ -340,6 +402,64 @@
       "documentation":"<p>Deletes a configured table association.</p>",
       "idempotent":true
     },
+    "DeleteConfiguredTableAssociationAnalysisRule":{
+      "name":"DeleteConfiguredTableAssociationAnalysisRule",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/memberships/{membershipIdentifier}/configuredTableAssociations/{configuredTableAssociationIdentifier}/analysisRule/{analysisRuleType}",
+        "responseCode":204
+      },
+      "input":{"shape":"DeleteConfiguredTableAssociationAnalysisRuleInput"},
+      "output":{"shape":"DeleteConfiguredTableAssociationAnalysisRuleOutput"},
+      "errors":[
+        {"shape":"ConflictException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Deletes an analysis rule for a configured table association.</p>",
+      "idempotent":true
+    },
+    "DeleteIdMappingTable":{
+      "name":"DeleteIdMappingTable",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/memberships/{membershipIdentifier}/idmappingtables/{idMappingTableIdentifier}",
+        "responseCode":204
+      },
+      "input":{"shape":"DeleteIdMappingTableInput"},
+      "output":{"shape":"DeleteIdMappingTableOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Deletes an ID mapping table.</p>",
+      "idempotent":true
+    },
+    "DeleteIdNamespaceAssociation":{
+      "name":"DeleteIdNamespaceAssociation",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/memberships/{membershipIdentifier}/idnamespaceassociations/{idNamespaceAssociationIdentifier}",
+        "responseCode":204
+      },
+      "input":{"shape":"DeleteIdNamespaceAssociationInput"},
+      "output":{"shape":"DeleteIdNamespaceAssociationOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Deletes an ID namespace association.</p>",
+      "idempotent":true
+    },
     "DeleteMember":{
       "name":"DeleteMember",
       "http":{
@@ -470,6 +590,24 @@
       ],
       "documentation":"<p>Retrieves a configured audience model association within a collaboration.</p>"
     },
+    "GetCollaborationIdNamespaceAssociation":{
+      "name":"GetCollaborationIdNamespaceAssociation",
+      "http":{
+        "method":"GET",
+        "requestUri":"/collaborations/{collaborationIdentifier}/idnamespaceassociations/{idNamespaceAssociationIdentifier}",
+        "responseCode":200
+      },
+      "input":{"shape":"GetCollaborationIdNamespaceAssociationInput"},
+      "output":{"shape":"GetCollaborationIdNamespaceAssociationOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Retrieves an ID namespace association from a specific collaboration.</p>"
+    },
     "GetCollaborationPrivacyBudgetTemplate":{
       "name":"GetCollaborationPrivacyBudgetTemplate",
       "http":{
@@ -560,6 +698,60 @@
       ],
       "documentation":"<p>Retrieves a configured table association.</p>"
     },
+    "GetConfiguredTableAssociationAnalysisRule":{
+      "name":"GetConfiguredTableAssociationAnalysisRule",
+      "http":{
+        "method":"GET",
+        "requestUri":"/memberships/{membershipIdentifier}/configuredTableAssociations/{configuredTableAssociationIdentifier}/analysisRule/{analysisRuleType}",
+        "responseCode":200
+      },
+      "input":{"shape":"GetConfiguredTableAssociationAnalysisRuleInput"},
+      "output":{"shape":"GetConfiguredTableAssociationAnalysisRuleOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p> Retrieves the analysis rule for a configured table association.</p>"
+    },
+    "GetIdMappingTable":{
+      "name":"GetIdMappingTable",
+      "http":{
+        "method":"GET",
+        "requestUri":"/memberships/{membershipIdentifier}/idmappingtables/{idMappingTableIdentifier}",
+        "responseCode":200
+      },
+      "input":{"shape":"GetIdMappingTableInput"},
+      "output":{"shape":"GetIdMappingTableOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Retrieves an ID mapping table.</p>"
+    },
+    "GetIdNamespaceAssociation":{
+      "name":"GetIdNamespaceAssociation",
+      "http":{
+        "method":"GET",
+        "requestUri":"/memberships/{membershipIdentifier}/idnamespaceassociations/{idNamespaceAssociationIdentifier}",
+        "responseCode":200
+      },
+      "input":{"shape":"GetIdNamespaceAssociationInput"},
+      "output":{"shape":"GetIdNamespaceAssociationOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Retrieves an ID namespace association.</p>"
+    },
     "GetMembership":{
       "name":"GetMembership",
       "http":{
@@ -595,6 +787,24 @@
         {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Returns details for a specified privacy budget template.</p>"
+    },
+    "GetProtectedJob":{
+      "name":"GetProtectedJob",
+      "http":{
+        "method":"GET",
+        "requestUri":"/memberships/{membershipIdentifier}/protectedJobs/{protectedJobIdentifier}",
+        "responseCode":200
+      },
+      "input":{"shape":"GetProtectedJobInput"},
+      "output":{"shape":"GetProtectedJobOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Returns job processing metadata.</p>"
     },
     "GetProtectedQuery":{
       "name":"GetProtectedQuery",
@@ -704,6 +914,24 @@
       ],
       "documentation":"<p>Lists configured audience model associations within a collaboration.</p>"
     },
+    "ListCollaborationIdNamespaceAssociations":{
+      "name":"ListCollaborationIdNamespaceAssociations",
+      "http":{
+        "method":"GET",
+        "requestUri":"/collaborations/{collaborationIdentifier}/idnamespaceassociations",
+        "responseCode":200
+      },
+      "input":{"shape":"ListCollaborationIdNamespaceAssociationsInput"},
+      "output":{"shape":"ListCollaborationIdNamespaceAssociationsOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Returns a list of the ID namespace associations in a collaboration.</p>"
+    },
     "ListCollaborationPrivacyBudgetTemplates":{
       "name":"ListCollaborationPrivacyBudgetTemplates",
       "http":{
@@ -810,6 +1038,42 @@
       ],
       "documentation":"<p>Lists configured tables.</p>"
     },
+    "ListIdMappingTables":{
+      "name":"ListIdMappingTables",
+      "http":{
+        "method":"GET",
+        "requestUri":"/memberships/{membershipIdentifier}/idmappingtables",
+        "responseCode":200
+      },
+      "input":{"shape":"ListIdMappingTablesInput"},
+      "output":{"shape":"ListIdMappingTablesOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Returns a list of ID mapping tables.</p>"
+    },
+    "ListIdNamespaceAssociations":{
+      "name":"ListIdNamespaceAssociations",
+      "http":{
+        "method":"GET",
+        "requestUri":"/memberships/{membershipIdentifier}/idnamespaceassociations",
+        "responseCode":200
+      },
+      "input":{"shape":"ListIdNamespaceAssociationsInput"},
+      "output":{"shape":"ListIdNamespaceAssociationsOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Returns a list of ID namespace associations.</p>"
+    },
     "ListMembers":{
       "name":"ListMembers",
       "http":{
@@ -881,6 +1145,24 @@
       ],
       "documentation":"<p>Returns detailed information about the privacy budgets in a specified membership.</p>"
     },
+    "ListProtectedJobs":{
+      "name":"ListProtectedJobs",
+      "http":{
+        "method":"GET",
+        "requestUri":"/memberships/{membershipIdentifier}/protectedJobs",
+        "responseCode":200
+      },
+      "input":{"shape":"ListProtectedJobsInput"},
+      "output":{"shape":"ListProtectedJobsOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Lists protected jobs, sorted by most recent job.</p>"
+    },
     "ListProtectedQueries":{
       "name":"ListProtectedQueries",
       "http":{
@@ -932,6 +1214,26 @@
       ],
       "documentation":"<p>Lists all of the tags that have been added to a resource.</p>"
     },
+    "PopulateIdMappingTable":{
+      "name":"PopulateIdMappingTable",
+      "http":{
+        "method":"POST",
+        "requestUri":"/memberships/{membershipIdentifier}/idmappingtables/{idMappingTableIdentifier}/populate",
+        "responseCode":200
+      },
+      "input":{"shape":"PopulateIdMappingTableInput"},
+      "output":{"shape":"PopulateIdMappingTableOutput"},
+      "errors":[
+        {"shape":"ConflictException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Defines the information that's necessary to populate an ID mapping table.</p>"
+    },
     "PreviewPrivacyImpact":{
       "name":"PreviewPrivacyImpact",
       "http":{
@@ -949,6 +1251,25 @@
         {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>An estimate of the number of aggregation functions that the member who can query can run given epsilon and noise parameters.</p>"
+    },
+    "StartProtectedJob":{
+      "name":"StartProtectedJob",
+      "http":{
+        "method":"POST",
+        "requestUri":"/memberships/{membershipIdentifier}/protectedJobs",
+        "responseCode":200
+      },
+      "input":{"shape":"StartProtectedJobInput"},
+      "output":{"shape":"StartProtectedJobOutput"},
+      "errors":[
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Creates a protected job that is started by Clean Rooms.</p>"
     },
     "StartProtectedQuery":{
       "name":"StartProtectedQuery",
@@ -1109,6 +1430,61 @@
       ],
       "documentation":"<p>Updates a configured table association.</p>"
     },
+    "UpdateConfiguredTableAssociationAnalysisRule":{
+      "name":"UpdateConfiguredTableAssociationAnalysisRule",
+      "http":{
+        "method":"PATCH",
+        "requestUri":"/memberships/{membershipIdentifier}/configuredTableAssociations/{configuredTableAssociationIdentifier}/analysisRule/{analysisRuleType}",
+        "responseCode":200
+      },
+      "input":{"shape":"UpdateConfiguredTableAssociationAnalysisRuleInput"},
+      "output":{"shape":"UpdateConfiguredTableAssociationAnalysisRuleOutput"},
+      "errors":[
+        {"shape":"ConflictException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p> Updates the analysis rule for a configured table association.</p>"
+    },
+    "UpdateIdMappingTable":{
+      "name":"UpdateIdMappingTable",
+      "http":{
+        "method":"PATCH",
+        "requestUri":"/memberships/{membershipIdentifier}/idmappingtables/{idMappingTableIdentifier}",
+        "responseCode":200
+      },
+      "input":{"shape":"UpdateIdMappingTableInput"},
+      "output":{"shape":"UpdateIdMappingTableOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Provides the details that are necessary to update an ID mapping table.</p>"
+    },
+    "UpdateIdNamespaceAssociation":{
+      "name":"UpdateIdNamespaceAssociation",
+      "http":{
+        "method":"PATCH",
+        "requestUri":"/memberships/{membershipIdentifier}/idnamespaceassociations/{idNamespaceAssociationIdentifier}",
+        "responseCode":200
+      },
+      "input":{"shape":"UpdateIdNamespaceAssociationInput"},
+      "output":{"shape":"UpdateIdNamespaceAssociationOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Provides the details that are necessary to update an ID namespace association.</p>"
+    },
     "UpdateMembership":{
       "name":"UpdateMembership",
       "http":{
@@ -1146,6 +1522,26 @@
         {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Updates the privacy budget template for the specified membership.</p>"
+    },
+    "UpdateProtectedJob":{
+      "name":"UpdateProtectedJob",
+      "http":{
+        "method":"PATCH",
+        "requestUri":"/memberships/{membershipIdentifier}/protectedJobs/{protectedJobIdentifier}",
+        "responseCode":200
+      },
+      "input":{"shape":"UpdateProtectedJobInput"},
+      "output":{"shape":"UpdateProtectedJobOutput"},
+      "errors":[
+        {"shape":"ConflictException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Updates the processing of a currently running job.</p>",
+      "idempotent":true
     },
     "UpdateProtectedQuery":{
       "name":"UpdateProtectedQuery",
@@ -1194,6 +1590,20 @@
       "max":12,
       "min":12,
       "pattern":"\\d+"
+    },
+    "AdditionalAnalyses":{
+      "type":"string",
+      "enum":[
+        "ALLOWED",
+        "REQUIRED",
+        "NOT_ALLOWED"
+      ]
+    },
+    "AdditionalAnalysesResourceArn":{
+      "type":"string",
+      "max":256,
+      "min":0,
+      "pattern":"arn:aws:cleanrooms:[\\w]{2}-[\\w]{4,9}-[\\d]:([\\d]{12}|\\*):membership\\/[\\*\\d\\w-]+\\/configuredaudiencemodelassociation\\/[\\*\\d\\w-]+$|^arn:aws[-a-z]*:cleanrooms-ml:[-a-z0-9]+:([0-9]{12}|\\*):membership\\/[\\*\\d\\w-]+\\/configured-model-algorithm-association\\/([-a-zA-Z0-9_\\/.]+|\\*)"
     },
     "AggregateColumn":{
       "type":"structure",
@@ -1266,19 +1676,35 @@
       "type":"string",
       "enum":["COUNT_DISTINCT"]
     },
+    "AllowedAdditionalAnalyses":{
+      "type":"list",
+      "member":{"shape":"AdditionalAnalysesResourceArn"},
+      "max":25,
+      "min":0
+    },
     "AllowedColumnList":{
       "type":"list",
       "member":{"shape":"ColumnName"},
-      "max":225,
       "min":1
+    },
+    "AllowedResultReceivers":{
+      "type":"list",
+      "member":{"shape":"AccountId"}
     },
     "AnalysisFormat":{
       "type":"string",
-      "enum":["SQL"]
+      "enum":[
+        "SQL",
+        "PYSPARK_1_0"
+      ]
     },
     "AnalysisMethod":{
       "type":"string",
-      "enum":["DIRECT_QUERY"]
+      "enum":[
+        "DIRECT_QUERY",
+        "DIRECT_JOB",
+        "MULTIPLE"
+      ]
     },
     "AnalysisParameter":{
       "type":"structure",
@@ -1343,6 +1769,11 @@
         "policy":{
           "shape":"AnalysisRulePolicy",
           "documentation":"<p>A policy that describes the associated data usage limitations.</p>"
+        },
+        "collaborationPolicy":{"shape":"ConfiguredTableAssociationAnalysisRulePolicy"},
+        "consolidatedPolicy":{
+          "shape":"ConsolidatedPolicy",
+          "documentation":"<p> The consolidated policy for the analysis rule.</p>"
         }
       },
       "documentation":"<p>A specification about how data from the configured table can be used in a query.</p>"
@@ -1384,6 +1815,10 @@
         "outputConstraints":{
           "shape":"AggregationConstraints",
           "documentation":"<p>Columns that must meet a specific threshold value (after an aggregation function is applied to it) for each output row to be returned.</p>"
+        },
+        "additionalAnalyses":{
+          "shape":"AdditionalAnalyses",
+          "documentation":"<p> An indicator as to whether additional analyses (such as Clean Rooms ML) can be applied to the output of the direct query. </p> <p>The <code>additionalAnalyses</code> parameter is currently supported for the list analysis rule (<code>AnalysisRuleList</code>) and the custom analysis rule (<code>AnalysisRuleCustom</code>).</p>"
         }
       },
       "documentation":"<p>A type of analysis rule that enables query structure and specified queries that produce aggregate statistics.</p>"
@@ -1415,6 +1850,14 @@
           "shape":"AnalysisRuleCustomAllowedAnalysisProvidersList",
           "documentation":"<p>The IDs of the Amazon Web Services accounts that are allowed to query by the custom analysis rule. Required when <code>allowedAnalyses</code> is <code>ANY_QUERY</code>.</p>"
         },
+        "additionalAnalyses":{
+          "shape":"AdditionalAnalyses",
+          "documentation":"<p> An indicator as to whether additional analyses (such as Clean Rooms ML) can be applied to the output of the direct query.</p>"
+        },
+        "disallowedOutputColumns":{
+          "shape":"AnalysisRuleColumnList",
+          "documentation":"<p> A list of columns that aren't allowed to be shown in the query output.</p>"
+        },
         "differentialPrivacy":{
           "shape":"DifferentialPrivacyConfiguration",
           "documentation":"<p>The differential privacy configuration.</p>"
@@ -1431,6 +1874,34 @@
       "type":"list",
       "member":{"shape":"AccountId"},
       "min":0
+    },
+    "AnalysisRuleIdMappingTable":{
+      "type":"structure",
+      "required":[
+        "joinColumns",
+        "queryConstraints"
+      ],
+      "members":{
+        "joinColumns":{
+          "shape":"AnalysisRuleIdMappingTableJoinColumnsList",
+          "documentation":"<p>The columns that query runners are allowed to use in an INNER JOIN statement.</p>"
+        },
+        "queryConstraints":{
+          "shape":"QueryConstraintList",
+          "documentation":"<p>The query constraints of the analysis rule ID mapping table.</p>"
+        },
+        "dimensionColumns":{
+          "shape":"AnalysisRuleColumnList",
+          "documentation":"<p>The columns that query runners are allowed to select, group by, or filter by.</p>"
+        }
+      },
+      "documentation":"<p>Defines details for the analysis rule ID mapping table.</p>"
+    },
+    "AnalysisRuleIdMappingTableJoinColumnsList":{
+      "type":"list",
+      "member":{"shape":"AnalysisRuleColumnName"},
+      "max":2,
+      "min":2
     },
     "AnalysisRuleList":{
       "type":"structure",
@@ -1450,6 +1921,10 @@
         "listColumns":{
           "shape":"AnalysisRuleColumnList",
           "documentation":"<p>Columns that can be listed in the output.</p>"
+        },
+        "additionalAnalyses":{
+          "shape":"AdditionalAnalyses",
+          "documentation":"<p> An indicator as to whether additional analyses (such as Clean Rooms ML) can be applied to the output of the direct query.</p>"
         }
       },
       "documentation":"<p>A type of analysis rule that enables row-level analysis.</p>"
@@ -1484,6 +1959,10 @@
         "custom":{
           "shape":"AnalysisRuleCustom",
           "documentation":"<p>Analysis rule type that enables custom SQL queries on a configured table.</p>"
+        },
+        "idMappingTable":{
+          "shape":"AnalysisRuleIdMappingTable",
+          "documentation":"<p>The ID mapping table.</p>"
         }
       },
       "documentation":"<p>Controls on the query specifications that can be run on configured table.</p>",
@@ -1494,7 +1973,8 @@
       "enum":[
         "AGGREGATION",
         "LIST",
-        "CUSTOM"
+        "CUSTOM",
+        "ID_MAPPING_TABLE"
       ]
     },
     "AnalysisRuleTypeList":{
@@ -1517,10 +1997,24 @@
         "text":{
           "shape":"AnalysisTemplateText",
           "documentation":"<p>The query text.</p>"
+        },
+        "artifacts":{
+          "shape":"AnalysisTemplateArtifacts",
+          "documentation":"<p> The artifacts of the analysis source.</p>"
         }
       },
       "documentation":"<p>The structure that defines the body of the analysis template.</p>",
-      "sensitive":true,
+      "union":true
+    },
+    "AnalysisSourceMetadata":{
+      "type":"structure",
+      "members":{
+        "artifacts":{
+          "shape":"AnalysisTemplateArtifactMetadata",
+          "documentation":"<p> The artifacts of the analysis source metadata.</p>"
+        }
+      },
+      "documentation":"<p>The analysis source metadata.</p>",
       "union":true
     },
     "AnalysisTemplate":{
@@ -1592,6 +2086,10 @@
           "shape":"AnalysisSource",
           "documentation":"<p>The source of the analysis template.</p>"
         },
+        "sourceMetadata":{
+          "shape":"AnalysisSourceMetadata",
+          "documentation":"<p> The source metadata for the analysis template.</p>"
+        },
         "analysisParameters":{
           "shape":"AnalysisParameterList",
           "documentation":"<p>The parameters of the analysis template.</p>"
@@ -1619,7 +2117,61 @@
       "type":"string",
       "max":200,
       "min":0,
-      "pattern":"(ANY_QUERY|arn:aws:cleanrooms:[\\w]{2}-[\\w]{4,9}-[\\d]:[\\d]{12}:membership/[\\d\\w-]+/analysistemplate/[\\d\\w-]+)"
+      "pattern":"(ANY_QUERY|ANY_JOB|arn:aws:cleanrooms:[\\w]{2}-[\\w]{4,9}-[\\d]:[\\d]{12}:membership/[\\d\\w-]+/analysistemplate/[\\d\\w-]+)"
+    },
+    "AnalysisTemplateArtifact":{
+      "type":"structure",
+      "required":["location"],
+      "members":{
+        "location":{
+          "shape":"S3Location",
+          "documentation":"<p> The artifact location.</p>"
+        }
+      },
+      "documentation":"<p>The analysis template artifact.</p>"
+    },
+    "AnalysisTemplateArtifactList":{
+      "type":"list",
+      "member":{"shape":"AnalysisTemplateArtifact"},
+      "max":1,
+      "min":1
+    },
+    "AnalysisTemplateArtifactMetadata":{
+      "type":"structure",
+      "required":["entryPointHash"],
+      "members":{
+        "entryPointHash":{
+          "shape":"Hash",
+          "documentation":"<p> The hash of the entry point for the analysis template artifact metadata.</p>"
+        },
+        "additionalArtifactHashes":{
+          "shape":"HashList",
+          "documentation":"<p> Additional artifact hashes for the analysis template.</p>"
+        }
+      },
+      "documentation":"<p>The analysis template artifact metadata.</p>"
+    },
+    "AnalysisTemplateArtifacts":{
+      "type":"structure",
+      "required":[
+        "entryPoint",
+        "roleArn"
+      ],
+      "members":{
+        "entryPoint":{
+          "shape":"AnalysisTemplateArtifact",
+          "documentation":"<p> The entry point for the analysis template artifacts.</p>"
+        },
+        "additionalArtifacts":{
+          "shape":"AnalysisTemplateArtifactList",
+          "documentation":"<p> Additional artifacts for the analysis template.</p>"
+        },
+        "roleArn":{
+          "shape":"RoleArn",
+          "documentation":"<p> The role ARN for the analysis template artifacts.</p>"
+        }
+      },
+      "documentation":"<p>The analysis template artifacts.</p>"
     },
     "AnalysisTemplateIdentifier":{
       "type":"string",
@@ -1691,7 +2243,8 @@
     "AnalysisTemplateText":{
       "type":"string",
       "max":90000,
-      "min":0
+      "min":0,
+      "sensitive":true
     },
     "AnalysisTemplateValidationStatus":{
       "type":"string",
@@ -1745,6 +2298,71 @@
     "AnalysisTemplateValidationType":{
       "type":"string",
       "enum":["DIFFERENTIAL_PRIVACY"]
+    },
+    "AnalysisType":{
+      "type":"string",
+      "enum":[
+        "DIRECT_ANALYSIS",
+        "ADDITIONAL_ANALYSIS"
+      ]
+    },
+    "AnalyticsEngine":{
+      "type":"string",
+      "enum":[
+        "SPARK",
+        "CLEAN_ROOMS_SQL"
+      ]
+    },
+    "AthenaDatabaseName":{
+      "type":"string",
+      "max":128,
+      "min":0,
+      "pattern":"[a-zA-Z0-9_](([a-zA-Z0-9_]+-)*([a-zA-Z0-9_]+))?"
+    },
+    "AthenaOutputLocation":{
+      "type":"string",
+      "max":1024,
+      "min":8,
+      "pattern":"s3://[a-z0-9.-]{3,63}(.*)"
+    },
+    "AthenaTableName":{
+      "type":"string",
+      "max":128,
+      "min":0,
+      "pattern":"[a-zA-Z0-9_](([a-zA-Z0-9_]+)*([a-zA-Z0-9_]+))?"
+    },
+    "AthenaTableReference":{
+      "type":"structure",
+      "required":[
+        "workGroup",
+        "databaseName",
+        "tableName"
+      ],
+      "members":{
+        "workGroup":{
+          "shape":"AthenaWorkGroup",
+          "documentation":"<p> The workgroup of the Athena table reference.</p>"
+        },
+        "outputLocation":{
+          "shape":"AthenaOutputLocation",
+          "documentation":"<p> The output location for the Athena table.</p>"
+        },
+        "databaseName":{
+          "shape":"AthenaDatabaseName",
+          "documentation":"<p> The database name.</p>"
+        },
+        "tableName":{
+          "shape":"AthenaTableName",
+          "documentation":"<p> The table reference.</p>"
+        }
+      },
+      "documentation":"<p> A reference to a table within Athena.</p>"
+    },
+    "AthenaWorkGroup":{
+      "type":"string",
+      "max":128,
+      "min":1,
+      "pattern":"([a-zA-Z0-9._-])*"
     },
     "BatchGetCollaborationAnalysisTemplateError":{
       "type":"structure",
@@ -1946,6 +2564,28 @@
         }
       }
     },
+    "BilledJobResourceUtilization":{
+      "type":"structure",
+      "required":["units"],
+      "members":{
+        "units":{
+          "shape":"Double",
+          "documentation":"<p> The number of Clean Rooms Processing Unit (CRPU) hours that have been billed.</p>"
+        }
+      },
+      "documentation":"<p> Information related to the utilization of resources that have been billed or charged for in a given context, such as a protected job.</p>"
+    },
+    "BilledResourceUtilization":{
+      "type":"structure",
+      "required":["units"],
+      "members":{
+        "units":{
+          "shape":"Double",
+          "documentation":"<p> The number of Clean Rooms Processing Unit (CRPU) hours that have been billed.</p>"
+        }
+      },
+      "documentation":"<p> Information related to the utilization of resources that have been billed or charged for in a given context, such as a protected query.</p>"
+    },
     "Boolean":{
       "type":"boolean",
       "box":true
@@ -2020,7 +2660,15 @@
         },
         "queryLogStatus":{
           "shape":"CollaborationQueryLogStatus",
-          "documentation":"<p>An indicator as to whether query logging has been enabled or disabled for the collaboration.</p>"
+          "documentation":"<p>An indicator as to whether query logging has been enabled or disabled for the collaboration.</p> <p>When <code>ENABLED</code>, Clean Rooms logs details about queries run within this collaboration and those logs can be viewed in Amazon CloudWatch Logs. The default value is <code>DISABLED</code>.</p>"
+        },
+        "jobLogStatus":{
+          "shape":"CollaborationJobLogStatus",
+          "documentation":"<p>An indicator as to whether job logging has been enabled or disabled for the collaboration. </p> <p>When <code>ENABLED</code>, Clean Rooms logs details about jobs run within this collaboration and those logs can be viewed in Amazon CloudWatch Logs. The default value is <code>DISABLED</code>.</p>"
+        },
+        "analyticsEngine":{
+          "shape":"AnalyticsEngine",
+          "documentation":"<p> The analytics engine for the collaboration.</p>"
         }
       },
       "documentation":"<p>The multi-party data share environment. The collaboration contains metadata about its purpose and participants.</p>"
@@ -2037,8 +2685,7 @@
         "createTime",
         "updateTime",
         "schema",
-        "format",
-        "source"
+        "format"
       ],
       "members":{
         "id":{
@@ -2088,6 +2735,10 @@
         "source":{
           "shape":"AnalysisSource",
           "documentation":"<p>The source of the analysis template within a collaboration.</p>"
+        },
+        "sourceMetadata":{
+          "shape":"AnalysisSourceMetadata",
+          "documentation":"<p> The source metadata for the collaboration analysis template.</p>"
         },
         "analysisParameters":{
           "shape":"AnalysisParameterList",
@@ -2212,7 +2863,7 @@
         },
         "creatorAccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The identifier used to reference members of the collaboration. Only supports AWS account ID.</p>"
+          "documentation":"<p>The identifier used to reference members of the collaboration. Only supports Amazon Web Services account ID.</p>"
         },
         "createTime":{
           "shape":"Timestamp",
@@ -2268,7 +2919,7 @@
         },
         "creatorAccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The identifier used to reference members of the collaboration. Only supports AWS account ID.</p>"
+          "documentation":"<p>The identifier used to reference members of the collaboration. Only supports Amazon Web Services account ID.</p>"
         },
         "description":{
           "shape":"ResourceDescription",
@@ -2287,11 +2938,147 @@
       "min":1,
       "pattern":"(?!\\s*$)[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDBFF-\\uDC00\\uDFFF\\t\\r\\n]*"
     },
+    "CollaborationIdNamespaceAssociation":{
+      "type":"structure",
+      "required":[
+        "id",
+        "arn",
+        "collaborationId",
+        "collaborationArn",
+        "name",
+        "creatorAccountId",
+        "createTime",
+        "updateTime",
+        "inputReferenceConfig",
+        "inputReferenceProperties"
+      ],
+      "members":{
+        "id":{
+          "shape":"IdNamespaceAssociationIdentifier",
+          "documentation":"<p>The unique identifier of the collaboration ID namespace association.</p>"
+        },
+        "arn":{
+          "shape":"IdNamespaceAssociationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the collaboration ID namespace association.</p>"
+        },
+        "collaborationId":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the collaboration that contains the collaboration ID namespace association.</p>"
+        },
+        "collaborationArn":{
+          "shape":"CollaborationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the collaboration that contains the collaboration ID namespace association.</p>"
+        },
+        "name":{
+          "shape":"GenericResourceName",
+          "documentation":"<p>The name of the collaboration ID namespace association.</p>"
+        },
+        "description":{
+          "shape":"ResourceDescription",
+          "documentation":"<p>The description of the collaboration ID namespace association.</p>"
+        },
+        "creatorAccountId":{
+          "shape":"AccountId",
+          "documentation":"<p>The unique identifier of the Amazon Web Services account that created the collaboration ID namespace association.</p>"
+        },
+        "createTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time at which the collaboration ID namespace association was created.</p>"
+        },
+        "updateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The most recent time at which the collaboration ID namespace was updated.</p>"
+        },
+        "inputReferenceConfig":{
+          "shape":"IdNamespaceAssociationInputReferenceConfig",
+          "documentation":"<p>The input reference configuration that's necessary to create the collaboration ID namespace association.</p>"
+        },
+        "inputReferenceProperties":{
+          "shape":"IdNamespaceAssociationInputReferenceProperties",
+          "documentation":"<p>The input reference properties that are needed to create the collaboration ID namespace association.</p>"
+        },
+        "idMappingConfig":{"shape":"IdMappingConfig"}
+      },
+      "documentation":"<p>Defines details for the collaboration ID namespace association.</p>"
+    },
+    "CollaborationIdNamespaceAssociationSummary":{
+      "type":"structure",
+      "required":[
+        "arn",
+        "createTime",
+        "id",
+        "updateTime",
+        "collaborationArn",
+        "collaborationId",
+        "creatorAccountId",
+        "inputReferenceConfig",
+        "name",
+        "inputReferenceProperties"
+      ],
+      "members":{
+        "arn":{
+          "shape":"IdNamespaceAssociationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the collaboration ID namespace association.</p>"
+        },
+        "createTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time at which the collaboration ID namespace association was created.</p>"
+        },
+        "id":{
+          "shape":"IdNamespaceAssociationIdentifier",
+          "documentation":"<p>The unique identifier of the collaboration ID namespace association.</p>"
+        },
+        "updateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The most recent time at which the collaboration ID namespace association was updated.</p>"
+        },
+        "collaborationArn":{
+          "shape":"CollaborationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the collaboration that contains this collaboration ID namespace association.</p>"
+        },
+        "collaborationId":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the collaboration that contains this collaboration ID namespace association.</p>"
+        },
+        "creatorAccountId":{
+          "shape":"AccountId",
+          "documentation":"<p>The Amazon Web Services account that created this collaboration ID namespace association.</p>"
+        },
+        "inputReferenceConfig":{
+          "shape":"IdNamespaceAssociationInputReferenceConfig",
+          "documentation":"<p>The input reference configuration that's used to create the collaboration ID namespace association.</p>"
+        },
+        "name":{
+          "shape":"GenericResourceName",
+          "documentation":"<p>The name of the collaboration ID namespace association.</p>"
+        },
+        "description":{
+          "shape":"ResourceDescription",
+          "documentation":"<p>The description of the collaboration ID namepsace association.</p>"
+        },
+        "inputReferenceProperties":{
+          "shape":"IdNamespaceAssociationInputReferencePropertiesSummary",
+          "documentation":"<p>The input reference properties that are used to create the collaboration ID namespace association.</p>"
+        }
+      },
+      "documentation":"<p>Provides summary information about the collaboration ID namespace association.</p>"
+    },
+    "CollaborationIdNamespaceAssociationSummaryList":{
+      "type":"list",
+      "member":{"shape":"CollaborationIdNamespaceAssociationSummary"}
+    },
     "CollaborationIdentifier":{
       "type":"string",
       "max":36,
       "min":36,
       "pattern":"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    },
+    "CollaborationJobLogStatus":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
     },
     "CollaborationName":{
       "type":"string",
@@ -2530,6 +3317,10 @@
         "membershipArn":{
           "shape":"MembershipArn",
           "documentation":"<p>The ARN of a member in a collaboration.</p>"
+        },
+        "analyticsEngine":{
+          "shape":"AnalyticsEngine",
+          "documentation":"<p> The analytics engine.</p>"
         }
       },
       "documentation":"<p>The metadata of the collaboration.</p>"
@@ -2554,7 +3345,7 @@
           "documentation":"<p>The type of the column.</p>"
         }
       },
-      "documentation":"<p>A column within a schema relation, derived from the underlying Glue table.</p>"
+      "documentation":"<p>A column within a schema relation, derived from the underlying table.</p>"
     },
     "ColumnList":{
       "type":"list",
@@ -2571,6 +3362,28 @@
       "max":255,
       "min":0,
       "pattern":"[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDBFF-\\uDC00\\uDFFF\\t]*"
+    },
+    "ComputeConfiguration":{
+      "type":"structure",
+      "members":{
+        "worker":{
+          "shape":"WorkerComputeConfiguration",
+          "documentation":"<p> The worker configuration for the compute environment.</p>"
+        }
+      },
+      "documentation":"<p> The configuration of the compute resources for an analysis with the Spark analytics engine.</p>",
+      "union":true
+    },
+    "ConfigurationDetails":{
+      "type":"structure",
+      "members":{
+        "directAnalysisConfigurationDetails":{
+          "shape":"DirectAnalysisConfigurationDetails",
+          "documentation":"<p> The direct analysis configuration details.</p>"
+        }
+      },
+      "documentation":"<p> The configuration details.</p>",
+      "union":true
     },
     "ConfiguredAudienceModelArn":{
       "type":"string",
@@ -2761,7 +3574,7 @@
         },
         "tableReference":{
           "shape":"TableReference",
-          "documentation":"<p>The Glue table that this configured table represents.</p>"
+          "documentation":"<p>The table that this configured table represents.</p>"
         },
         "createTime":{
           "shape":"Timestamp",
@@ -2777,11 +3590,15 @@
         },
         "analysisMethod":{
           "shape":"AnalysisMethod",
-          "documentation":"<p>The analysis method for the configured table. The only valid value is currently `DIRECT_QUERY`.</p>"
+          "documentation":"<p>The analysis method for the configured table.</p> <p> <code>DIRECT_QUERY</code> allows SQL queries to be run directly on this table.</p> <p> <code>DIRECT_JOB</code> allows PySpark jobs to be run directly on this table.</p> <p> <code>MULTIPLE</code> allows both SQL queries and PySpark jobs to be run directly on this table.</p>"
         },
         "allowedColumns":{
           "shape":"AllowedColumnList",
           "documentation":"<p>The columns within the underlying Glue table that can be utilized within collaborations.</p>"
+        },
+        "selectedAnalysisMethods":{
+          "shape":"SelectedAnalysisMethods",
+          "documentation":"<p> The selected analysis methods for the configured table.</p>"
         }
       },
       "documentation":"<p>A table that has been configured for use in a collaboration.</p>"
@@ -2920,6 +3737,10 @@
           "shape":"TableDescription",
           "documentation":"<p>A description of the configured table association.</p>"
         },
+        "analysisRuleTypes":{
+          "shape":"ConfiguredTableAssociationAnalysisRuleTypeList",
+          "documentation":"<p> The analysis rule types for the configured table association.</p>"
+        },
         "createTime":{
           "shape":"Timestamp",
           "documentation":"<p>The time the configured table association was created.</p>"
@@ -2930,6 +3751,133 @@
         }
       },
       "documentation":"<p>A configured table association links a configured table to a collaboration.</p>"
+    },
+    "ConfiguredTableAssociationAnalysisRule":{
+      "type":"structure",
+      "required":[
+        "membershipIdentifier",
+        "configuredTableAssociationId",
+        "configuredTableAssociationArn",
+        "policy",
+        "type",
+        "createTime",
+        "updateTime"
+      ],
+      "members":{
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p> The membership identifier for the configured table association analysis rule.</p>"
+        },
+        "configuredTableAssociationId":{
+          "shape":"ConfiguredTableAssociationIdentifier",
+          "documentation":"<p> The unique identifier for the configured table association.</p>"
+        },
+        "configuredTableAssociationArn":{
+          "shape":"ConfiguredTableAssociationArn",
+          "documentation":"<p> The Amazon Resource Name (ARN) of the configured table association.</p>"
+        },
+        "policy":{
+          "shape":"ConfiguredTableAssociationAnalysisRulePolicy",
+          "documentation":"<p> The policy of the configured table association analysis rule.</p>"
+        },
+        "type":{
+          "shape":"ConfiguredTableAssociationAnalysisRuleType",
+          "documentation":"<p> The type of the configured table association analysis rule.</p>"
+        },
+        "createTime":{
+          "shape":"Timestamp",
+          "documentation":"<p> The creation time of the configured table association analysis rule.</p>"
+        },
+        "updateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p> The update time of the configured table association analysis rule.</p>"
+        }
+      },
+      "documentation":"<p>An analysis rule for a configured table association. This analysis rule specifies how data from the table can be used within its associated collaboration. In the console, the <code>ConfiguredTableAssociationAnalysisRule</code> is referred to as the <i>collaboration analysis rule</i>.</p>"
+    },
+    "ConfiguredTableAssociationAnalysisRuleAggregation":{
+      "type":"structure",
+      "members":{
+        "allowedResultReceivers":{
+          "shape":"AllowedResultReceivers",
+          "documentation":"<p> The list of collaboration members who are allowed to receive results of queries run with this configured table.</p>"
+        },
+        "allowedAdditionalAnalyses":{
+          "shape":"AllowedAdditionalAnalyses",
+          "documentation":"<p> The list of resources or wildcards (ARNs) that are allowed to perform additional analysis on query output.</p> <p>The <code>allowedAdditionalAnalyses</code> parameter is currently supported for the list analysis rule (<code>AnalysisRuleList</code>) and the custom analysis rule (<code>AnalysisRuleCustom</code>).</p>"
+        }
+      },
+      "documentation":"<p> The configured table association analysis rule applied to a configured table with the aggregation analysis rule.</p>"
+    },
+    "ConfiguredTableAssociationAnalysisRuleCustom":{
+      "type":"structure",
+      "members":{
+        "allowedResultReceivers":{
+          "shape":"AllowedResultReceivers",
+          "documentation":"<p> The list of collaboration members who are allowed to receive results of queries run with this configured table.</p>"
+        },
+        "allowedAdditionalAnalyses":{
+          "shape":"AllowedAdditionalAnalyses",
+          "documentation":"<p> The list of resources or wildcards (ARNs) that are allowed to perform additional analysis on query output.</p>"
+        }
+      },
+      "documentation":"<p> The configured table association analysis rule applied to a configured table with the custom analysis rule.</p>"
+    },
+    "ConfiguredTableAssociationAnalysisRuleList":{
+      "type":"structure",
+      "members":{
+        "allowedResultReceivers":{
+          "shape":"AllowedResultReceivers",
+          "documentation":"<p> The list of collaboration members who are allowed to receive results of queries run with this configured table.</p>"
+        },
+        "allowedAdditionalAnalyses":{
+          "shape":"AllowedAdditionalAnalyses",
+          "documentation":"<p> The list of resources or wildcards (ARNs) that are allowed to perform additional analysis on query output.</p>"
+        }
+      },
+      "documentation":"<p> The configured table association analysis rule applied to a configured table with the list analysis rule.</p>"
+    },
+    "ConfiguredTableAssociationAnalysisRulePolicy":{
+      "type":"structure",
+      "members":{
+        "v1":{
+          "shape":"ConfiguredTableAssociationAnalysisRulePolicyV1",
+          "documentation":"<p> The policy for the configured table association analysis rule.</p>"
+        }
+      },
+      "documentation":"<p> Controls on the query specifications that can be run on an associated configured table.</p>",
+      "union":true
+    },
+    "ConfiguredTableAssociationAnalysisRulePolicyV1":{
+      "type":"structure",
+      "members":{
+        "list":{
+          "shape":"ConfiguredTableAssociationAnalysisRuleList",
+          "documentation":"<p> Analysis rule type that enables only list queries on a configured table.</p>"
+        },
+        "aggregation":{
+          "shape":"ConfiguredTableAssociationAnalysisRuleAggregation",
+          "documentation":"<p> Analysis rule type that enables only aggregation queries on a configured table.</p>"
+        },
+        "custom":{
+          "shape":"ConfiguredTableAssociationAnalysisRuleCustom",
+          "documentation":"<p> Analysis rule type that enables the table owner to approve custom SQL queries on their configured tables. It supports differential privacy.</p>"
+        }
+      },
+      "documentation":"<p> Controls on the query specifications that can be run on an associated configured table.</p>",
+      "union":true
+    },
+    "ConfiguredTableAssociationAnalysisRuleType":{
+      "type":"string",
+      "enum":[
+        "AGGREGATION",
+        "LIST",
+        "CUSTOM"
+      ]
+    },
+    "ConfiguredTableAssociationAnalysisRuleTypeList":{
+      "type":"list",
+      "member":{"shape":"ConfiguredTableAssociationAnalysisRuleType"}
     },
     "ConfiguredTableAssociationArn":{
       "type":"string",
@@ -2987,6 +3935,10 @@
         "arn":{
           "shape":"ConfiguredTableAssociationArn",
           "documentation":"<p>The unique ARN for the configured table association.</p>"
+        },
+        "analysisRuleTypes":{
+          "shape":"ConfiguredTableAssociationAnalysisRuleTypeList",
+          "documentation":"<p>The analysis rule types that are associated with the configured table associations in this summary. </p>"
         }
       },
       "documentation":"<p>The configured table association summary for the objects listed by the request.</p>"
@@ -3039,7 +3991,11 @@
         },
         "analysisMethod":{
           "shape":"AnalysisMethod",
-          "documentation":"<p>The analysis method for the configured tables. The only valid value is currently `DIRECT_QUERY`.</p>"
+          "documentation":"<p>The analysis method for the configured tables. </p> <p> <code>DIRECT_QUERY</code> allows SQL queries to be run directly on this table.</p> <p> <code>DIRECT_JOB</code> allows PySpark jobs to be run directly on this table.</p> <p> <code>MULTIPLE</code> allows both SQL queries and PySpark jobs to be run directly on this table.</p>"
+        },
+        "selectedAnalysisMethods":{
+          "shape":"SelectedAnalysisMethods",
+          "documentation":"<p> The selected analysis methods for the configured table summary.</p>"
         }
       },
       "documentation":"<p>The configured table summary for the objects listed by the request.</p>"
@@ -3083,6 +4039,175 @@
         "INVALID_STATE"
       ]
     },
+    "ConsolidatedPolicy":{
+      "type":"structure",
+      "members":{
+        "v1":{
+          "shape":"ConsolidatedPolicyV1",
+          "documentation":"<p> The consolidated policy version 1.</p>"
+        }
+      },
+      "documentation":"<p>Controls on the analysis specifications that can be run on a configured table.</p>",
+      "union":true
+    },
+    "ConsolidatedPolicyAggregation":{
+      "type":"structure",
+      "required":[
+        "aggregateColumns",
+        "joinColumns",
+        "dimensionColumns",
+        "scalarFunctions",
+        "outputConstraints"
+      ],
+      "members":{
+        "aggregateColumns":{
+          "shape":"ConsolidatedPolicyAggregationAggregateColumnsList",
+          "documentation":"<p> Aggregate columns in consolidated policy aggregation.</p>"
+        },
+        "joinColumns":{
+          "shape":"AnalysisRuleColumnList",
+          "documentation":"<p> The columns to join on.</p>"
+        },
+        "joinRequired":{
+          "shape":"JoinRequiredOption",
+          "documentation":"<p> Join required</p>"
+        },
+        "allowedJoinOperators":{
+          "shape":"JoinOperatorsList",
+          "documentation":"<p> The allowed join operators.</p>"
+        },
+        "dimensionColumns":{
+          "shape":"AnalysisRuleColumnList",
+          "documentation":"<p> The dimension columns of the consolidated policy aggregation.</p>"
+        },
+        "scalarFunctions":{
+          "shape":"ScalarFunctionsList",
+          "documentation":"<p> The scalar functions.</p>"
+        },
+        "outputConstraints":{
+          "shape":"AggregationConstraints",
+          "documentation":"<p> The output constraints of the consolidated policy aggregation.</p>"
+        },
+        "additionalAnalyses":{
+          "shape":"AdditionalAnalyses",
+          "documentation":"<p> Additional analyses for the consolidated policy aggregation.</p>"
+        },
+        "allowedResultReceivers":{
+          "shape":"AllowedResultReceivers",
+          "documentation":"<p> The allowed result receivers.</p>"
+        },
+        "allowedAdditionalAnalyses":{
+          "shape":"AllowedAdditionalAnalyses",
+          "documentation":"<p> The additional analyses allowed by the consolidated policy aggregation.</p>"
+        }
+      },
+      "documentation":"<p> Controls on the analysis specifications that can be run on a configured table.</p>"
+    },
+    "ConsolidatedPolicyAggregationAggregateColumnsList":{
+      "type":"list",
+      "member":{"shape":"AggregateColumn"},
+      "min":1
+    },
+    "ConsolidatedPolicyCustom":{
+      "type":"structure",
+      "required":["allowedAnalyses"],
+      "members":{
+        "allowedAnalyses":{
+          "shape":"ConsolidatedPolicyCustomAllowedAnalysesList",
+          "documentation":"<p> The allowed analyses.</p>"
+        },
+        "allowedAnalysisProviders":{
+          "shape":"ConsolidatedPolicyCustomAllowedAnalysisProvidersList",
+          "documentation":"<p> The allowed analysis providers.</p>"
+        },
+        "additionalAnalyses":{
+          "shape":"AdditionalAnalyses",
+          "documentation":"<p> Additional analyses for the consolidated policy.</p>"
+        },
+        "disallowedOutputColumns":{
+          "shape":"AnalysisRuleColumnList",
+          "documentation":"<p> Disallowed output columns</p>"
+        },
+        "differentialPrivacy":{"shape":"DifferentialPrivacyConfiguration"},
+        "allowedResultReceivers":{
+          "shape":"AllowedResultReceivers",
+          "documentation":"<p> The allowed result receivers.</p>"
+        },
+        "allowedAdditionalAnalyses":{
+          "shape":"AllowedAdditionalAnalyses",
+          "documentation":"<p> The additional analyses allowed by the consolidated policy.</p>"
+        }
+      },
+      "documentation":"<p>Controls on the analysis specifications that can be run on a configured table.</p>"
+    },
+    "ConsolidatedPolicyCustomAllowedAnalysesList":{
+      "type":"list",
+      "member":{"shape":"AnalysisTemplateArnOrQueryWildcard"},
+      "min":0
+    },
+    "ConsolidatedPolicyCustomAllowedAnalysisProvidersList":{
+      "type":"list",
+      "member":{"shape":"AccountId"},
+      "min":0
+    },
+    "ConsolidatedPolicyList":{
+      "type":"structure",
+      "required":[
+        "joinColumns",
+        "listColumns"
+      ],
+      "members":{
+        "joinColumns":{
+          "shape":"ConsolidatedPolicyListJoinColumnsList",
+          "documentation":"<p> The columns to join on.</p>"
+        },
+        "allowedJoinOperators":{
+          "shape":"JoinOperatorsList",
+          "documentation":"<p> The allowed join operators in the consolidated policy list.</p>"
+        },
+        "listColumns":{
+          "shape":"AnalysisRuleColumnList",
+          "documentation":"<p> The columns in the consolidated policy list.</p>"
+        },
+        "additionalAnalyses":{
+          "shape":"AdditionalAnalyses",
+          "documentation":"<p> Additional analyses for the consolidated policy list.</p>"
+        },
+        "allowedResultReceivers":{
+          "shape":"AllowedResultReceivers",
+          "documentation":"<p> The allowed result receivers.</p>"
+        },
+        "allowedAdditionalAnalyses":{
+          "shape":"AllowedAdditionalAnalyses",
+          "documentation":"<p> The additional analyses allowed by the consolidated policy list.</p>"
+        }
+      },
+      "documentation":"<p>Controls on the analysis specifications that can be run on a configured table.</p>"
+    },
+    "ConsolidatedPolicyListJoinColumnsList":{
+      "type":"list",
+      "member":{"shape":"AnalysisRuleColumnName"},
+      "min":1
+    },
+    "ConsolidatedPolicyV1":{
+      "type":"structure",
+      "members":{
+        "list":{
+          "shape":"ConsolidatedPolicyList",
+          "documentation":"<p> The list of consolidated policies.</p>"
+        },
+        "aggregation":{
+          "shape":"ConsolidatedPolicyAggregation",
+          "documentation":"<p> The aggregation setting for the consolidated policy.</p>"
+        },
+        "custom":{
+          "shape":"ConsolidatedPolicyCustom",
+          "documentation":"<p> Custom policy</p>"
+        }
+      },
+      "documentation":"<p>Controls on the analysis specifications that can be run on a configured table.</p>",
+      "union":true
+    },
     "CreateAnalysisTemplateInput":{
       "type":"structure",
       "required":[
@@ -3121,7 +4246,8 @@
         "analysisParameters":{
           "shape":"AnalysisParameterList",
           "documentation":"<p>The parameters of the analysis template.</p>"
-        }
+        },
+        "schema":{"shape":"AnalysisSchema"}
       }
     },
     "CreateAnalysisTemplateOutput":{
@@ -3161,6 +4287,10 @@
           "shape":"MemberAbilities",
           "documentation":"<p>The abilities granted to the collaboration creator.</p>"
         },
+        "creatorMLMemberAbilities":{
+          "shape":"MLMemberAbilities",
+          "documentation":"<p>The ML abilities granted to the collaboration creator.</p>"
+        },
         "creatorDisplayName":{
           "shape":"DisplayName",
           "documentation":"<p>The display name of the collaboration creator.</p>"
@@ -3171,7 +4301,11 @@
         },
         "queryLogStatus":{
           "shape":"CollaborationQueryLogStatus",
-          "documentation":"<p>An indicator as to whether query logging has been enabled or disabled for the collaboration.</p>"
+          "documentation":"<p>An indicator as to whether query logging has been enabled or disabled for the collaboration.</p> <p>When <code>ENABLED</code>, Clean Rooms logs details about queries run within this collaboration and those logs can be viewed in Amazon CloudWatch Logs. The default value is <code>DISABLED</code>.</p>"
+        },
+        "jobLogStatus":{
+          "shape":"CollaborationJobLogStatus",
+          "documentation":"<p>Specifies whether job logs are enabled for this collaboration. </p> <p>When <code>ENABLED</code>, Clean Rooms logs details about jobs run within this collaboration; those logs can be viewed in Amazon CloudWatch Logs. The default value is <code>DISABLED</code>.</p>"
         },
         "tags":{
           "shape":"TagMap",
@@ -3180,6 +4314,10 @@
         "creatorPaymentConfiguration":{
           "shape":"PaymentConfiguration",
           "documentation":"<p>The collaboration creator's payment responsibilities set by the collaboration creator. </p> <p>If the collaboration creator hasn't specified anyone as the member paying for query compute costs, then the member who can query is the default payer.</p>"
+        },
+        "analyticsEngine":{
+          "shape":"AnalyticsEngine",
+          "documentation":"<p> The analytics engine.</p>"
         }
       }
     },
@@ -3189,7 +4327,7 @@
       "members":{
         "collaboration":{
           "shape":"Collaboration",
-          "documentation":"<p>The entire created collaboration object.</p>"
+          "documentation":"<p>The collaboration.</p>"
         }
       }
     },
@@ -3260,7 +4398,7 @@
         },
         "analysisRulePolicy":{
           "shape":"ConfiguredTableAnalysisRulePolicy",
-          "documentation":"<p>The entire created configured table analysis rule object.</p>"
+          "documentation":"<p>The analysis rule policy that was created for the configured table.</p>"
         }
       }
     },
@@ -3270,7 +4408,48 @@
       "members":{
         "analysisRule":{
           "shape":"ConfiguredTableAnalysisRule",
-          "documentation":"<p>The entire created analysis rule.</p>"
+          "documentation":"<p>The analysis rule that was created for the configured table.</p>"
+        }
+      }
+    },
+    "CreateConfiguredTableAssociationAnalysisRuleInput":{
+      "type":"structure",
+      "required":[
+        "membershipIdentifier",
+        "configuredTableAssociationIdentifier",
+        "analysisRuleType",
+        "analysisRulePolicy"
+      ],
+      "members":{
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p> A unique identifier for the membership that the configured table association belongs to. Currently accepts the membership ID.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "configuredTableAssociationIdentifier":{
+          "shape":"ConfiguredTableAssociationIdentifier",
+          "documentation":"<p> The unique ID for the configured table association. Currently accepts the configured table association ID.</p>",
+          "location":"uri",
+          "locationName":"configuredTableAssociationIdentifier"
+        },
+        "analysisRuleType":{
+          "shape":"ConfiguredTableAssociationAnalysisRuleType",
+          "documentation":"<p> The type of analysis rule.</p>"
+        },
+        "analysisRulePolicy":{
+          "shape":"ConfiguredTableAssociationAnalysisRulePolicy",
+          "documentation":"<p>The analysis rule policy that was created for the configured table association.</p>"
+        }
+      }
+    },
+    "CreateConfiguredTableAssociationAnalysisRuleOutput":{
+      "type":"structure",
+      "required":["analysisRule"],
+      "members":{
+        "analysisRule":{
+          "shape":"ConfiguredTableAssociationAnalysisRule",
+          "documentation":"<p>The analysis rule for the conﬁgured table association. In the console, the <code>ConfiguredTableAssociationAnalysisRule</code> is referred to as the <i>collaboration analysis rule</i>.</p>"
         }
       }
     },
@@ -3317,7 +4496,7 @@
       "members":{
         "configuredTableAssociation":{
           "shape":"ConfiguredTableAssociation",
-          "documentation":"<p>The entire configured table association object.</p>"
+          "documentation":"<p>The configured table association.</p>"
         }
       }
     },
@@ -3340,7 +4519,7 @@
         },
         "tableReference":{
           "shape":"TableReference",
-          "documentation":"<p>A reference to the Glue table being configured.</p>"
+          "documentation":"<p>A reference to the table being configured.</p>"
         },
         "allowedColumns":{
           "shape":"AllowedColumnList",
@@ -3348,7 +4527,11 @@
         },
         "analysisMethod":{
           "shape":"AnalysisMethod",
-          "documentation":"<p>The analysis method for the configured tables. The only valid value is currently `DIRECT_QUERY`.</p>"
+          "documentation":"<p>The analysis method allowed for the configured tables.</p> <p> <code>DIRECT_QUERY</code> allows SQL queries to be run directly on this table.</p> <p> <code>DIRECT_JOB</code> allows PySpark jobs to be run directly on this table.</p> <p> <code>MULTIPLE</code> allows both SQL queries and PySpark jobs to be run directly on this table.</p>"
+        },
+        "selectedAnalysisMethods":{
+          "shape":"SelectedAnalysisMethods",
+          "documentation":"<p> The analysis methods to enable for the configured table. When configured, you must specify at least two analysis methods.</p>"
         },
         "tags":{
           "shape":"TagMap",
@@ -3366,6 +4549,98 @@
         }
       }
     },
+    "CreateIdMappingTableInput":{
+      "type":"structure",
+      "required":[
+        "membershipIdentifier",
+        "name",
+        "inputReferenceConfig"
+      ],
+      "members":{
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership that contains the ID mapping table.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "name":{
+          "shape":"ResourceAlias",
+          "documentation":"<p>A name for the ID mapping table.</p>"
+        },
+        "description":{
+          "shape":"ResourceDescription",
+          "documentation":"<p>A description of the ID mapping table.</p>"
+        },
+        "inputReferenceConfig":{
+          "shape":"IdMappingTableInputReferenceConfig",
+          "documentation":"<p>The input reference configuration needed to create the ID mapping table.</p>"
+        },
+        "tags":{
+          "shape":"TagMap",
+          "documentation":"<p>An optional label that you can assign to a resource when you create it. Each tag consists of a key and an optional value, both of which you define. When you use tagging, you can also use tag-based access control in IAM policies to control access to this resource.</p>"
+        },
+        "kmsKeyArn":{
+          "shape":"KMSKeyArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Web Services KMS key. This value is used to encrypt the mapping table data that is stored by Clean Rooms.</p>"
+        }
+      }
+    },
+    "CreateIdMappingTableOutput":{
+      "type":"structure",
+      "required":["idMappingTable"],
+      "members":{
+        "idMappingTable":{
+          "shape":"IdMappingTable",
+          "documentation":"<p>The ID mapping table that was created.</p>"
+        }
+      }
+    },
+    "CreateIdNamespaceAssociationInput":{
+      "type":"structure",
+      "required":[
+        "membershipIdentifier",
+        "inputReferenceConfig",
+        "name"
+      ],
+      "members":{
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership that contains the ID namespace association.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "inputReferenceConfig":{
+          "shape":"IdNamespaceAssociationInputReferenceConfig",
+          "documentation":"<p>The input reference configuration needed to create the ID namespace association.</p>"
+        },
+        "tags":{
+          "shape":"TagMap",
+          "documentation":"<p>An optional label that you can assign to a resource when you create it. Each tag consists of a key and an optional value, both of which you define. When you use tagging, you can also use tag-based access control in IAM policies to control access to this resource.</p>"
+        },
+        "name":{
+          "shape":"GenericResourceName",
+          "documentation":"<p>The name for the ID namespace association.</p>"
+        },
+        "description":{
+          "shape":"ResourceDescription",
+          "documentation":"<p>The description of the ID namespace association.</p>"
+        },
+        "idMappingConfig":{
+          "shape":"IdMappingConfig",
+          "documentation":"<p>The configuration settings for the ID mapping table.</p>"
+        }
+      }
+    },
+    "CreateIdNamespaceAssociationOutput":{
+      "type":"structure",
+      "required":["idNamespaceAssociation"],
+      "members":{
+        "idNamespaceAssociation":{
+          "shape":"IdNamespaceAssociation",
+          "documentation":"<p>The ID namespace association that was created.</p>"
+        }
+      }
+    },
     "CreateMembershipInput":{
       "type":"structure",
       "required":[
@@ -3379,7 +4654,11 @@
         },
         "queryLogStatus":{
           "shape":"MembershipQueryLogStatus",
-          "documentation":"<p>An indicator as to whether query logging has been enabled or disabled for the membership.</p>"
+          "documentation":"<p>An indicator as to whether query logging has been enabled or disabled for the membership.</p> <p>When <code>ENABLED</code>, Clean Rooms logs details about queries run within this collaboration and those logs can be viewed in Amazon CloudWatch Logs. The default value is <code>DISABLED</code>.</p>"
+        },
+        "jobLogStatus":{
+          "shape":"MembershipJobLogStatus",
+          "documentation":"<p>An indicator as to whether job logging has been enabled or disabled for the collaboration. </p> <p>When <code>ENABLED</code>, Clean Rooms logs details about jobs run within this collaboration and those logs can be viewed in Amazon CloudWatch Logs. The default value is <code>DISABLED</code>.</p>"
         },
         "tags":{
           "shape":"TagMap",
@@ -3388,6 +4667,10 @@
         "defaultResultConfiguration":{
           "shape":"MembershipProtectedQueryResultConfiguration",
           "documentation":"<p>The default protected query result configuration as specified by the member who can receive results.</p>"
+        },
+        "defaultJobResultConfiguration":{
+          "shape":"MembershipProtectedJobResultConfiguration",
+          "documentation":"<p>The default job result configuration that determines how job results are protected and managed within this membership. This configuration applies to all jobs.</p>"
         },
         "paymentConfiguration":{
           "shape":"MembershipPaymentConfiguration",
@@ -3447,6 +4730,18 @@
           "documentation":"<p>A summary of the elements in the privacy budget template.</p>"
         }
       }
+    },
+    "CustomMLMemberAbilities":{
+      "type":"list",
+      "member":{"shape":"CustomMLMemberAbility"},
+      "min":1
+    },
+    "CustomMLMemberAbility":{
+      "type":"string",
+      "enum":[
+        "CAN_RECEIVE_MODEL_OUTPUT",
+        "CAN_RECEIVE_INFERENCE_OUTPUT"
+      ]
     },
     "DataEncryptionMetadata":{
       "type":"structure",
@@ -3572,6 +4867,39 @@
       },
       "documentation":"<p>An empty response that indicates a successful delete.</p>"
     },
+    "DeleteConfiguredTableAssociationAnalysisRuleInput":{
+      "type":"structure",
+      "required":[
+        "membershipIdentifier",
+        "configuredTableAssociationIdentifier",
+        "analysisRuleType"
+      ],
+      "members":{
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p> A unique identifier for the membership that the configured table association belongs to. Currently accepts the membership ID.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "configuredTableAssociationIdentifier":{
+          "shape":"ConfiguredTableAssociationIdentifier",
+          "documentation":"<p>The identiﬁer for the conﬁgured table association that's related to the analysis rule that you want to delete.</p>",
+          "location":"uri",
+          "locationName":"configuredTableAssociationIdentifier"
+        },
+        "analysisRuleType":{
+          "shape":"ConfiguredTableAssociationAnalysisRuleType",
+          "documentation":"<p>The type of the analysis rule that you want to delete.</p>",
+          "location":"uri",
+          "locationName":"analysisRuleType"
+        }
+      }
+    },
+    "DeleteConfiguredTableAssociationAnalysisRuleOutput":{
+      "type":"structure",
+      "members":{
+      }
+    },
     "DeleteConfiguredTableAssociationInput":{
       "type":"structure",
       "required":[
@@ -3615,6 +4943,58 @@
       "members":{
       },
       "documentation":"<p>The empty output for a successful deletion.</p>"
+    },
+    "DeleteIdMappingTableInput":{
+      "type":"structure",
+      "required":[
+        "idMappingTableIdentifier",
+        "membershipIdentifier"
+      ],
+      "members":{
+        "idMappingTableIdentifier":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the ID mapping table that you want to delete.</p>",
+          "location":"uri",
+          "locationName":"idMappingTableIdentifier"
+        },
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership that contains the ID mapping table that you want to delete.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        }
+      }
+    },
+    "DeleteIdMappingTableOutput":{
+      "type":"structure",
+      "members":{
+      }
+    },
+    "DeleteIdNamespaceAssociationInput":{
+      "type":"structure",
+      "required":[
+        "idNamespaceAssociationIdentifier",
+        "membershipIdentifier"
+      ],
+      "members":{
+        "idNamespaceAssociationIdentifier":{
+          "shape":"IdNamespaceAssociationIdentifier",
+          "documentation":"<p>The unique identifier of the ID namespace association that you want to delete.</p>",
+          "location":"uri",
+          "locationName":"idNamespaceAssociationIdentifier"
+        },
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership that contains the ID namespace association that you want to delete.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        }
+      }
+    },
+    "DeleteIdNamespaceAssociationOutput":{
+      "type":"structure",
+      "members":{
+      }
     },
     "DeleteMemberInput":{
       "type":"structure",
@@ -3939,11 +5319,27 @@
       },
       "documentation":"<p>The epsilon and noise parameter values that you want to update in the differential privacy template.</p>"
     },
+    "DirectAnalysisConfigurationDetails":{
+      "type":"structure",
+      "members":{
+        "receiverAccountIds":{
+          "shape":"ReceiverAccountIds",
+          "documentation":"<p> The account IDs for the member who received the results of a protected query.</p>"
+        }
+      },
+      "documentation":"<p> The direct analysis configuration details.</p>"
+    },
     "DisplayName":{
       "type":"string",
       "max":100,
       "min":1,
       "pattern":"(?!\\s*$)[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDBFF-\\uDC00\\uDFFF\\t]*"
+    },
+    "Document":{
+      "type":"structure",
+      "members":{
+      },
+      "document":true
     },
     "Double":{
       "type":"double",
@@ -3965,6 +5361,12 @@
     "Float":{
       "type":"float",
       "box":true
+    },
+    "GenericResourceName":{
+      "type":"string",
+      "max":100,
+      "min":1,
+      "pattern":"(?!\\s*$)[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDBFF-\\uDC00\\uDFFF\\t]*"
     },
     "GetAnalysisTemplateInput":{
       "type":"structure",
@@ -4056,6 +5458,37 @@
         "collaborationConfiguredAudienceModelAssociation":{
           "shape":"CollaborationConfiguredAudienceModelAssociation",
           "documentation":"<p>The metadata of the configured audience model association.</p>"
+        }
+      }
+    },
+    "GetCollaborationIdNamespaceAssociationInput":{
+      "type":"structure",
+      "required":[
+        "collaborationIdentifier",
+        "idNamespaceAssociationIdentifier"
+      ],
+      "members":{
+        "collaborationIdentifier":{
+          "shape":"CollaborationIdentifier",
+          "documentation":"<p>The unique identifier of the collaboration that contains the ID namespace association that you want to retrieve.</p>",
+          "location":"uri",
+          "locationName":"collaborationIdentifier"
+        },
+        "idNamespaceAssociationIdentifier":{
+          "shape":"IdNamespaceAssociationIdentifier",
+          "documentation":"<p>The unique identifier of the ID namespace association that you want to retrieve.</p>",
+          "location":"uri",
+          "locationName":"idNamespaceAssociationIdentifier"
+        }
+      }
+    },
+    "GetCollaborationIdNamespaceAssociationOutput":{
+      "type":"structure",
+      "required":["collaborationIdNamespaceAssociation"],
+      "members":{
+        "collaborationIdNamespaceAssociation":{
+          "shape":"CollaborationIdNamespaceAssociation",
+          "documentation":"<p>The ID namespace association that you requested.</p>"
         }
       }
     },
@@ -4174,6 +5607,44 @@
         }
       }
     },
+    "GetConfiguredTableAssociationAnalysisRuleInput":{
+      "type":"structure",
+      "required":[
+        "membershipIdentifier",
+        "configuredTableAssociationIdentifier",
+        "analysisRuleType"
+      ],
+      "members":{
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p> A unique identifier for the membership that the configured table association belongs to. Currently accepts the membership ID.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "configuredTableAssociationIdentifier":{
+          "shape":"ConfiguredTableAssociationIdentifier",
+          "documentation":"<p> The identiﬁer for the conﬁgured table association that's related to the analysis rule.</p>",
+          "location":"uri",
+          "locationName":"configuredTableAssociationIdentifier"
+        },
+        "analysisRuleType":{
+          "shape":"ConfiguredTableAssociationAnalysisRuleType",
+          "documentation":"<p> The type of analysis rule that you want to retrieve.</p>",
+          "location":"uri",
+          "locationName":"analysisRuleType"
+        }
+      }
+    },
+    "GetConfiguredTableAssociationAnalysisRuleOutput":{
+      "type":"structure",
+      "required":["analysisRule"],
+      "members":{
+        "analysisRule":{
+          "shape":"ConfiguredTableAssociationAnalysisRule",
+          "documentation":"<p>The analysis rule for the conﬁgured table association. In the console, the <code>ConfiguredTableAssociationAnalysisRule</code> is referred to as the <i>collaboration analysis rule</i>.</p>"
+        }
+      }
+    },
     "GetConfiguredTableAssociationInput":{
       "type":"structure",
       "required":[
@@ -4227,6 +5698,68 @@
         }
       }
     },
+    "GetIdMappingTableInput":{
+      "type":"structure",
+      "required":[
+        "idMappingTableIdentifier",
+        "membershipIdentifier"
+      ],
+      "members":{
+        "idMappingTableIdentifier":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the ID mapping table identifier that you want to retrieve.</p>",
+          "location":"uri",
+          "locationName":"idMappingTableIdentifier"
+        },
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership that contains the ID mapping table that you want to retrieve.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        }
+      }
+    },
+    "GetIdMappingTableOutput":{
+      "type":"structure",
+      "required":["idMappingTable"],
+      "members":{
+        "idMappingTable":{
+          "shape":"IdMappingTable",
+          "documentation":"<p>The ID mapping table that you requested.</p>"
+        }
+      }
+    },
+    "GetIdNamespaceAssociationInput":{
+      "type":"structure",
+      "required":[
+        "idNamespaceAssociationIdentifier",
+        "membershipIdentifier"
+      ],
+      "members":{
+        "idNamespaceAssociationIdentifier":{
+          "shape":"IdNamespaceAssociationIdentifier",
+          "documentation":"<p>The unique identifier of the ID namespace association that you want to retrieve.</p>",
+          "location":"uri",
+          "locationName":"idNamespaceAssociationIdentifier"
+        },
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership that contains the ID namespace association that you want to retrieve.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        }
+      }
+    },
+    "GetIdNamespaceAssociationOutput":{
+      "type":"structure",
+      "required":["idNamespaceAssociation"],
+      "members":{
+        "idNamespaceAssociation":{
+          "shape":"IdNamespaceAssociation",
+          "documentation":"<p>The ID namespace association that you requested.</p>"
+        }
+      }
+    },
     "GetMembershipInput":{
       "type":"structure",
       "required":["membershipIdentifier"],
@@ -4277,6 +5810,37 @@
         "privacyBudgetTemplate":{
           "shape":"PrivacyBudgetTemplate",
           "documentation":"<p>Returns the details of the privacy budget template that you requested.</p>"
+        }
+      }
+    },
+    "GetProtectedJobInput":{
+      "type":"structure",
+      "required":[
+        "membershipIdentifier",
+        "protectedJobIdentifier"
+      ],
+      "members":{
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p> The identifier for a membership in a protected job instance.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "protectedJobIdentifier":{
+          "shape":"ProtectedJobIdentifier",
+          "documentation":"<p> The identifier for the protected job instance.</p>",
+          "location":"uri",
+          "locationName":"protectedJobIdentifier"
+        }
+      }
+    },
+    "GetProtectedJobOutput":{
+      "type":"structure",
+      "required":["protectedJob"],
+      "members":{
+        "protectedJob":{
+          "shape":"ProtectedJob",
+          "documentation":"<p> The protected job metadata.</p>"
         }
       }
     },
@@ -4410,6 +5974,462 @@
       },
       "documentation":"<p>A reference to a table within an Glue data catalog.</p>"
     },
+    "Hash":{
+      "type":"structure",
+      "members":{
+        "sha256":{
+          "shape":"String",
+          "documentation":"<p> The SHA-256 hash value.</p>"
+        }
+      },
+      "documentation":"<p> Hash</p>"
+    },
+    "HashList":{
+      "type":"list",
+      "member":{"shape":"Hash"}
+    },
+    "IdMappingConfig":{
+      "type":"structure",
+      "required":["allowUseAsDimensionColumn"],
+      "members":{
+        "allowUseAsDimensionColumn":{
+          "shape":"Boolean",
+          "documentation":"<p>An indicator as to whether you can use your column as a dimension column in the ID mapping table (<code>TRUE</code>) or not (<code>FALSE</code>).</p> <p>Default is <code>FALSE</code>.</p>"
+        }
+      },
+      "documentation":"<p>The configuration settings for the ID mapping table.</p>"
+    },
+    "IdMappingTable":{
+      "type":"structure",
+      "required":[
+        "id",
+        "arn",
+        "inputReferenceConfig",
+        "membershipId",
+        "membershipArn",
+        "collaborationId",
+        "collaborationArn",
+        "name",
+        "createTime",
+        "updateTime",
+        "inputReferenceProperties"
+      ],
+      "members":{
+        "id":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the ID mapping table.</p>"
+        },
+        "arn":{
+          "shape":"IdMappingTableArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the ID mapping table.</p>"
+        },
+        "inputReferenceConfig":{
+          "shape":"IdMappingTableInputReferenceConfig",
+          "documentation":"<p>The input reference configuration for the ID mapping table.</p>"
+        },
+        "membershipId":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the membership resource for the ID mapping table.</p>"
+        },
+        "membershipArn":{
+          "shape":"MembershipArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the membership resource for the ID mapping table.</p>"
+        },
+        "collaborationId":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the collaboration that contains this ID mapping table.</p>"
+        },
+        "collaborationArn":{
+          "shape":"CollaborationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the collaboration that contains this ID mapping table.</p>"
+        },
+        "description":{
+          "shape":"ResourceDescription",
+          "documentation":"<p>The description of the ID mapping table.</p>"
+        },
+        "name":{
+          "shape":"ResourceAlias",
+          "documentation":"<p>The name of the ID mapping table.</p>"
+        },
+        "createTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time at which the ID mapping table was created.</p>"
+        },
+        "updateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The most recent time at which the ID mapping table was updated.</p>"
+        },
+        "inputReferenceProperties":{
+          "shape":"IdMappingTableInputReferenceProperties",
+          "documentation":"<p>The input reference properties for the ID mapping table.</p>"
+        },
+        "kmsKeyArn":{
+          "shape":"KMSKeyArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Web Services KMS key.</p>"
+        }
+      },
+      "documentation":"<p>Describes information about the ID mapping table.</p>"
+    },
+    "IdMappingTableArn":{
+      "type":"string",
+      "max":200,
+      "min":0,
+      "pattern":"arn:aws:cleanrooms:[\\w]{2}-[\\w]{4,9}-[\\d]:[\\d]{12}:membership/[\\d\\w-]+/idmappingtable/[\\d\\w-]+"
+    },
+    "IdMappingTableInputReferenceArn":{
+      "type":"string",
+      "max":2048,
+      "min":20,
+      "pattern":"arn:(aws|aws-us-gov|aws-cn):entityresolution:.*:[0-9]+:(idmappingworkflow/.*)"
+    },
+    "IdMappingTableInputReferenceConfig":{
+      "type":"structure",
+      "required":[
+        "inputReferenceArn",
+        "manageResourcePolicies"
+      ],
+      "members":{
+        "inputReferenceArn":{
+          "shape":"IdMappingTableInputReferenceArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the referenced resource in Entity Resolution. Valid values are ID mapping workflow ARNs.</p>"
+        },
+        "manageResourcePolicies":{
+          "shape":"Boolean",
+          "documentation":"<p>When <code>TRUE</code>, Clean Rooms manages permissions for the ID mapping table resource. </p> <p>When <code>FALSE</code>, the resource owner manages permissions for the ID mapping table resource.</p>"
+        }
+      },
+      "documentation":"<p>Provides the input reference configuration for the ID mapping table.</p>"
+    },
+    "IdMappingTableInputReferenceProperties":{
+      "type":"structure",
+      "required":["idMappingTableInputSource"],
+      "members":{
+        "idMappingTableInputSource":{
+          "shape":"IdMappingTableInputSourceList",
+          "documentation":"<p>The input source of the ID mapping table.</p>"
+        }
+      },
+      "documentation":"<p>The input reference properties for the ID mapping table.</p>"
+    },
+    "IdMappingTableInputSource":{
+      "type":"structure",
+      "required":[
+        "idNamespaceAssociationId",
+        "type"
+      ],
+      "members":{
+        "idNamespaceAssociationId":{
+          "shape":"String",
+          "documentation":"<p>The unique identifier of the ID namespace association.</p>"
+        },
+        "type":{
+          "shape":"IdNamespaceType",
+          "documentation":"<p>The type of the input source of the ID mapping table.</p>"
+        }
+      },
+      "documentation":"<p>The input source of the ID mapping table.</p>"
+    },
+    "IdMappingTableInputSourceList":{
+      "type":"list",
+      "member":{"shape":"IdMappingTableInputSource"},
+      "max":2,
+      "min":2
+    },
+    "IdMappingTableSchemaTypeProperties":{
+      "type":"structure",
+      "required":["idMappingTableInputSource"],
+      "members":{
+        "idMappingTableInputSource":{
+          "shape":"IdMappingTableInputSourceList",
+          "documentation":"<p>Defines which ID namespace associations are used to create the ID mapping table.</p>"
+        }
+      },
+      "documentation":"<p>Additional properties that are specific to the type of the associated schema.</p>"
+    },
+    "IdMappingTableSummary":{
+      "type":"structure",
+      "required":[
+        "collaborationArn",
+        "collaborationId",
+        "membershipId",
+        "membershipArn",
+        "createTime",
+        "updateTime",
+        "id",
+        "arn",
+        "inputReferenceConfig",
+        "name"
+      ],
+      "members":{
+        "collaborationArn":{
+          "shape":"CollaborationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the collaboration that contains this ID mapping table.</p>"
+        },
+        "collaborationId":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the collaboration that contains this ID mapping table.</p>"
+        },
+        "membershipId":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership resource for this ID mapping table.</p>"
+        },
+        "membershipArn":{
+          "shape":"MembershipArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the membership resource for this ID mapping table.</p>"
+        },
+        "createTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time at which this ID mapping table was created.</p>"
+        },
+        "updateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The most recent time at which this ID mapping table was updated.</p>"
+        },
+        "id":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of this ID mapping table.</p>"
+        },
+        "arn":{
+          "shape":"IdMappingTableArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of this ID mapping table.</p>"
+        },
+        "description":{
+          "shape":"ResourceDescription",
+          "documentation":"<p>The description of this ID mapping table.</p>"
+        },
+        "inputReferenceConfig":{
+          "shape":"IdMappingTableInputReferenceConfig",
+          "documentation":"<p>The input reference configuration for the ID mapping table.</p>"
+        },
+        "name":{
+          "shape":"ResourceAlias",
+          "documentation":"<p>The name of this ID mapping table.</p>"
+        }
+      },
+      "documentation":"<p>Detailed information about the ID mapping table.</p>"
+    },
+    "IdMappingTableSummaryList":{
+      "type":"list",
+      "member":{"shape":"IdMappingTableSummary"}
+    },
+    "IdMappingWorkflowsSupported":{
+      "type":"list",
+      "member":{"shape":"Document"}
+    },
+    "IdNamespaceAssociation":{
+      "type":"structure",
+      "required":[
+        "id",
+        "arn",
+        "membershipId",
+        "membershipArn",
+        "collaborationId",
+        "collaborationArn",
+        "name",
+        "createTime",
+        "updateTime",
+        "inputReferenceConfig",
+        "inputReferenceProperties"
+      ],
+      "members":{
+        "id":{
+          "shape":"IdNamespaceAssociationIdentifier",
+          "documentation":"<p>The unique identifier for this ID namespace association.</p>"
+        },
+        "arn":{
+          "shape":"IdNamespaceAssociationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the ID namespace association.</p>"
+        },
+        "membershipId":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the membership resource for this ID namespace association.</p>"
+        },
+        "membershipArn":{
+          "shape":"MembershipArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the membership resource for this ID namespace association.</p>"
+        },
+        "collaborationId":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the collaboration that contains this ID namespace association.</p>"
+        },
+        "collaborationArn":{
+          "shape":"CollaborationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the collaboration that contains this ID namespace association.</p>"
+        },
+        "name":{
+          "shape":"GenericResourceName",
+          "documentation":"<p>The name of this ID namespace association.</p>"
+        },
+        "description":{
+          "shape":"ResourceDescription",
+          "documentation":"<p>The description of the ID namespace association.</p>"
+        },
+        "createTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time at which the ID namespace association was created.</p>"
+        },
+        "updateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The most recent time at which the ID namespace association was updated.</p>"
+        },
+        "inputReferenceConfig":{
+          "shape":"IdNamespaceAssociationInputReferenceConfig",
+          "documentation":"<p>The input reference configuration for the ID namespace association.</p>"
+        },
+        "inputReferenceProperties":{
+          "shape":"IdNamespaceAssociationInputReferenceProperties",
+          "documentation":"<p>The input reference properties for the ID namespace association.</p>"
+        },
+        "idMappingConfig":{
+          "shape":"IdMappingConfig",
+          "documentation":"<p>The configuration settings for the ID mapping table.</p>"
+        }
+      },
+      "documentation":"<p>Provides information to create the ID namespace association.</p>"
+    },
+    "IdNamespaceAssociationArn":{
+      "type":"string",
+      "max":256,
+      "min":0,
+      "pattern":"arn:aws:cleanrooms:[\\w]{2}-[\\w]{4,9}-[\\d]:[\\d]{12}:membership/[\\d\\w-]+/idnamespaceassociation/[\\d\\w-]+"
+    },
+    "IdNamespaceAssociationIdentifier":{
+      "type":"string",
+      "max":36,
+      "min":36,
+      "pattern":"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    },
+    "IdNamespaceAssociationInputReferenceArn":{
+      "type":"string",
+      "max":256,
+      "min":0,
+      "pattern":"arn:aws:entityresolution:[\\w]{2}-[\\w]{4,9}-[\\d]:[\\d]{12}:idnamespace/[\\d\\w-]+"
+    },
+    "IdNamespaceAssociationInputReferenceConfig":{
+      "type":"structure",
+      "required":[
+        "inputReferenceArn",
+        "manageResourcePolicies"
+      ],
+      "members":{
+        "inputReferenceArn":{
+          "shape":"IdNamespaceAssociationInputReferenceArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Entity Resolution resource that is being associated to the collaboration. Valid resource ARNs are from the ID namespaces that you own.</p>"
+        },
+        "manageResourcePolicies":{
+          "shape":"Boolean",
+          "documentation":"<p>When <code>TRUE</code>, Clean Rooms manages permissions for the ID namespace association resource.</p> <p>When <code>FALSE</code>, the resource owner manages permissions for the ID namespace association resource.</p>"
+        }
+      },
+      "documentation":"<p>Provides the information for the ID namespace association input reference configuration.</p>"
+    },
+    "IdNamespaceAssociationInputReferenceProperties":{
+      "type":"structure",
+      "required":[
+        "idNamespaceType",
+        "idMappingWorkflowsSupported"
+      ],
+      "members":{
+        "idNamespaceType":{
+          "shape":"IdNamespaceType",
+          "documentation":"<p>The ID namespace type for this ID namespace association.</p>"
+        },
+        "idMappingWorkflowsSupported":{
+          "shape":"IdMappingWorkflowsSupported",
+          "documentation":"<p>Defines how ID mapping workflows are supported for this ID namespace association.</p>"
+        }
+      },
+      "documentation":"<p>Provides the information for the ID namespace association input reference properties.</p>"
+    },
+    "IdNamespaceAssociationInputReferencePropertiesSummary":{
+      "type":"structure",
+      "required":["idNamespaceType"],
+      "members":{
+        "idNamespaceType":{
+          "shape":"IdNamespaceType",
+          "documentation":"<p>The ID namespace type for this ID namespace association.</p>"
+        }
+      },
+      "documentation":"<p>Detailed information about the ID namespace association input reference properties.</p>"
+    },
+    "IdNamespaceAssociationSummary":{
+      "type":"structure",
+      "required":[
+        "membershipId",
+        "membershipArn",
+        "collaborationArn",
+        "collaborationId",
+        "createTime",
+        "updateTime",
+        "id",
+        "arn",
+        "inputReferenceConfig",
+        "name",
+        "inputReferenceProperties"
+      ],
+      "members":{
+        "membershipId":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership resource for this ID namespace association.</p>"
+        },
+        "membershipArn":{
+          "shape":"MembershipArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the membership resource for this ID namespace association.</p>"
+        },
+        "collaborationArn":{
+          "shape":"CollaborationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the collaboration that contains this ID namespace association.</p>"
+        },
+        "collaborationId":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the collaboration that contains this ID namespace association.</p>"
+        },
+        "createTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time at which this ID namespace association was created.</p>"
+        },
+        "updateTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The most recent time at which this ID namespace association has been updated.</p>"
+        },
+        "id":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of this ID namespace association.</p>"
+        },
+        "arn":{
+          "shape":"IdNamespaceAssociationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of this ID namespace association.</p>"
+        },
+        "inputReferenceConfig":{
+          "shape":"IdNamespaceAssociationInputReferenceConfig",
+          "documentation":"<p>The input reference configuration details for this ID namespace association.</p>"
+        },
+        "name":{
+          "shape":"GenericResourceName",
+          "documentation":"<p>The name of the ID namespace association.</p>"
+        },
+        "description":{
+          "shape":"ResourceDescription",
+          "documentation":"<p>The description of the ID namespace association.</p>"
+        },
+        "inputReferenceProperties":{
+          "shape":"IdNamespaceAssociationInputReferencePropertiesSummary",
+          "documentation":"<p>The input reference properties for this ID namespace association.</p>"
+        }
+      },
+      "documentation":"<p>Detailed information about the ID namespace association.</p>"
+    },
+    "IdNamespaceAssociationSummaryList":{
+      "type":"list",
+      "member":{"shape":"IdNamespaceAssociationSummary"}
+    },
+    "IdNamespaceType":{
+      "type":"string",
+      "enum":[
+        "SOURCE",
+        "TARGET"
+      ]
+    },
     "InternalServerException":{
       "type":"structure",
       "members":{
@@ -4419,6 +6439,17 @@
       "error":{"httpStatusCode":500},
       "exception":true,
       "fault":true
+    },
+    "JobComputePaymentConfig":{
+      "type":"structure",
+      "required":["isResponsible"],
+      "members":{
+        "isResponsible":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the collaboration creator has configured the collaboration member to pay for query and job compute costs (<code>TRUE</code>) or has not configured the collaboration member to pay for query and job compute costs (<code>FALSE</code>).</p> <p>Exactly one member can be configured to pay for query and job compute costs. An error is returned if the collaboration creator sets a <code>TRUE</code> value for more than one member in the collaboration. </p> <p>An error is returned if the collaboration creator sets a <code>FALSE</code> value for the member who can run queries and jobs.</p>"
+        }
+      },
+      "documentation":"<p>An object representing the collaboration member's payment responsibilities set by the collaboration creator for query and job compute costs.</p>"
     },
     "JoinOperator":{
       "type":"string",
@@ -4436,6 +6467,12 @@
     "JoinRequiredOption":{
       "type":"string",
       "enum":["QUERY_RUNNER"]
+    },
+    "KMSKeyArn":{
+      "type":"string",
+      "max":2048,
+      "min":20,
+      "pattern":"arn:aws:kms:[\\w]{2}-[\\w]{4,9}-[\\d]:[\\d]{12}:key/[a-zA-Z0-9-]+"
     },
     "KeyPrefix":{
       "type":"string",
@@ -4455,13 +6492,13 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         }
@@ -4473,7 +6510,7 @@
       "members":{
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
         },
         "analysisTemplateSummaries":{
           "shape":"AnalysisTemplateSummaryList",
@@ -4493,13 +6530,13 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         }
@@ -4511,7 +6548,7 @@
       "members":{
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
         },
         "collaborationAnalysisTemplateSummaries":{
           "shape":"CollaborationAnalysisTemplateSummaryList",
@@ -4531,13 +6568,13 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         }
@@ -4553,7 +6590,45 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
+        }
+      }
+    },
+    "ListCollaborationIdNamespaceAssociationsInput":{
+      "type":"structure",
+      "required":["collaborationIdentifier"],
+      "members":{
+        "collaborationIdentifier":{
+          "shape":"CollaborationIdentifier",
+          "documentation":"<p>The unique identifier of the collaboration that contains the ID namespace associations that you want to retrieve.</p>",
+          "location":"uri",
+          "locationName":"collaborationIdentifier"
+        },
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        },
+        "maxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum size of the results that is returned per call. Service chooses a default if it has not been set. Service may return a nextToken even if the maximum results has not been met.&gt;</p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        }
+      }
+    },
+    "ListCollaborationIdNamespaceAssociationsOutput":{
+      "type":"structure",
+      "required":["collaborationIdNamespaceAssociationSummaries"],
+      "members":{
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The token value provided to access the next page of results.</p>"
+        },
+        "collaborationIdNamespaceAssociationSummaries":{
+          "shape":"CollaborationIdNamespaceAssociationSummaryList",
+          "documentation":"<p>The summary information of the collaboration ID namespace associations that you requested.</p>"
         }
       }
     },
@@ -4569,13 +6644,13 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call. Service chooses a default if it has not been set. Service may return a nextToken even if the maximum results has not been met.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         }
@@ -4587,7 +6662,7 @@
       "members":{
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
         },
         "collaborationPrivacyBudgetTemplateSummaries":{
           "shape":"CollaborationPrivacyBudgetTemplateSummaryList",
@@ -4616,13 +6691,13 @@
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call. Service chooses a default if it has not been set. Service may return a nextToken even if the maximum results has not been met.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         }
@@ -4638,7 +6713,7 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
         }
       }
     },
@@ -4647,13 +6722,13 @@
       "members":{
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call. Service chooses a default if it has not been set. Service may return a nextToken even if the maximum results has not been met.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         },
@@ -4671,7 +6746,7 @@
       "members":{
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
         },
         "collaborationList":{
           "shape":"CollaborationSummaryList",
@@ -4691,13 +6766,13 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call. Service chooses a default if it has not been set. Service may return a nextToken even if the maximum results has not been met.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         }
@@ -4729,13 +6804,13 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         }
@@ -4751,7 +6826,7 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
         }
       }
     },
@@ -4760,13 +6835,13 @@
       "members":{
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         }
@@ -4782,7 +6857,83 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
+        }
+      }
+    },
+    "ListIdMappingTablesInput":{
+      "type":"structure",
+      "required":["membershipIdentifier"],
+      "members":{
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership that contains the ID mapping tables that you want to view.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        },
+        "maxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum size of the results that is returned per call. Service chooses a default if it has not been set. Service may return a nextToken even if the maximum results has not been met.</p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        }
+      }
+    },
+    "ListIdMappingTablesOutput":{
+      "type":"structure",
+      "required":["idMappingTableSummaries"],
+      "members":{
+        "idMappingTableSummaries":{
+          "shape":"IdMappingTableSummaryList",
+          "documentation":"<p>The summary information of the ID mapping tables that you requested.</p>"
+        },
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The token value provided to access the next page of results.</p>"
+        }
+      }
+    },
+    "ListIdNamespaceAssociationsInput":{
+      "type":"structure",
+      "required":["membershipIdentifier"],
+      "members":{
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership that contains the ID namespace association that you want to view.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        },
+        "maxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum size of the results that is returned per call. Service chooses a default if it has not been set. Service may return a nextToken even if the maximum results has not been met.</p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        }
+      }
+    },
+    "ListIdNamespaceAssociationsOutput":{
+      "type":"structure",
+      "required":["idNamespaceAssociationSummaries"],
+      "members":{
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The token value provided to access the next page of results.</p>"
+        },
+        "idNamespaceAssociationSummaries":{
+          "shape":"IdNamespaceAssociationSummaryList",
+          "documentation":"<p>The summary information of the ID namespace associations that you requested.</p>"
         }
       }
     },
@@ -4798,13 +6949,13 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         }
@@ -4816,7 +6967,7 @@
       "members":{
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
         },
         "memberSummaries":{
           "shape":"MemberSummaryList",
@@ -4829,13 +6980,13 @@
       "members":{
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         },
@@ -4853,7 +7004,7 @@
       "members":{
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
         },
         "membershipSummaries":{
           "shape":"MembershipSummaryList",
@@ -4873,13 +7024,13 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call. Service chooses a default if it has not been set. Service may return a nextToken even if the maximum results has not been met.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         }
@@ -4891,7 +7042,7 @@
       "members":{
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
         },
         "privacyBudgetTemplateSummaries":{
           "shape":"PrivacyBudgetTemplateSummaryList",
@@ -4920,13 +7071,13 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call. Service chooses a default if it has not been set. Service may return a nextToken even if the maximum results has not been met.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         }
@@ -4942,7 +7093,51 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
+        }
+      }
+    },
+    "ListProtectedJobsInput":{
+      "type":"structure",
+      "required":["membershipIdentifier"],
+      "members":{
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The identifier for the membership in the collaboration.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "status":{
+          "shape":"ProtectedJobStatus",
+          "documentation":"<p>A filter on the status of the protected job.</p>",
+          "location":"querystring",
+          "locationName":"status"
+        },
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        },
+        "maxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met. </p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        }
+      }
+    },
+    "ListProtectedJobsOutput":{
+      "type":"structure",
+      "required":["protectedJobs"],
+      "members":{
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
+        },
+        "protectedJobs":{
+          "shape":"ProtectedJobSummaryList",
+          "documentation":"<p>A list of protected job summaries.</p>"
         }
       }
     },
@@ -4964,13 +7159,13 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call. Service chooses a default if it has not been set. Service can return a nextToken even if the maximum results has not been met. </p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met. </p>",
           "location":"querystring",
           "locationName":"maxResults"
         }
@@ -4982,7 +7177,7 @@
       "members":{
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
         },
         "protectedQueries":{
           "shape":"ProtectedQuerySummaryList",
@@ -5002,19 +7197,19 @@
         },
         "schemaType":{
           "shape":"SchemaType",
-          "documentation":"<p>If present, filter schemas by schema type. The only valid schema type is currently `TABLE`.</p>",
+          "documentation":"<p>If present, filter schemas by schema type.</p>",
           "location":"querystring",
           "locationName":"schemaType"
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>",
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
         "maxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum size of the results that is returned per call.</p>",
+          "documentation":"<p>The maximum number of results that are returned for an API request call. The service chooses a default number if you don't set one. The service might return a `nextToken` even if the `maxResults` value has not been met.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         }
@@ -5030,7 +7225,7 @@
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token value retrieved from a previous call to access the next page of results.</p>"
+          "documentation":"<p>The pagination token that's used to fetch the next set of results.</p>"
         }
       }
     },
@@ -5060,6 +7255,31 @@
       "type":"long",
       "box":true
     },
+    "MLMemberAbilities":{
+      "type":"structure",
+      "required":["customMLMemberAbilities"],
+      "members":{
+        "customMLMemberAbilities":{
+          "shape":"CustomMLMemberAbilities",
+          "documentation":"<p>The custom ML member abilities for a collaboration member. </p>"
+        }
+      },
+      "documentation":"<p>The ML member abilities for a collaboration member.</p>"
+    },
+    "MLPaymentConfig":{
+      "type":"structure",
+      "members":{
+        "modelTraining":{
+          "shape":"ModelTrainingPaymentConfig",
+          "documentation":"<p>The payment responsibilities accepted by the member for model training.</p>"
+        },
+        "modelInference":{
+          "shape":"ModelInferencePaymentConfig",
+          "documentation":"<p>The payment responsibilities accepted by the member for model inference.</p>"
+        }
+      },
+      "documentation":"<p>An object representing the collaboration member's machine learning payment responsibilities set by the collaboration creator.</p>"
+    },
     "MaxResults":{
       "type":"integer",
       "box":true,
@@ -5074,7 +7294,8 @@
       "type":"string",
       "enum":[
         "CAN_QUERY",
-        "CAN_RECEIVE_RESULTS"
+        "CAN_RECEIVE_RESULTS",
+        "CAN_RUN_JOB"
       ]
     },
     "MemberList":{
@@ -5098,6 +7319,10 @@
         "memberAbilities":{
           "shape":"MemberAbilities",
           "documentation":"<p>The abilities granted to the collaboration member.</p>"
+        },
+        "mlMemberAbilities":{
+          "shape":"MLMemberAbilities",
+          "documentation":"<p>The ML abilities granted to the collaboration member.</p>"
         },
         "displayName":{
           "shape":"DisplayName",
@@ -5146,6 +7371,10 @@
         "abilities":{
           "shape":"MemberAbilities",
           "documentation":"<p>The abilities granted to the collaboration member.</p>"
+        },
+        "mlAbilities":{
+          "shape":"MLMemberAbilities",
+          "documentation":"<p>Provides a summary of the ML abilities for the collaboration member.</p>"
         },
         "createTime":{
           "shape":"Timestamp",
@@ -5236,13 +7465,25 @@
           "shape":"MemberAbilities",
           "documentation":"<p>The abilities granted to the collaboration member.</p>"
         },
+        "mlMemberAbilities":{
+          "shape":"MLMemberAbilities",
+          "documentation":"<p>Specifies the ML member abilities that are granted to a collaboration member.</p>"
+        },
         "queryLogStatus":{
           "shape":"MembershipQueryLogStatus",
-          "documentation":"<p>An indicator as to whether query logging has been enabled or disabled for the membership.</p>"
+          "documentation":"<p>An indicator as to whether query logging has been enabled or disabled for the membership.</p> <p>When <code>ENABLED</code>, Clean Rooms logs details about queries run within this collaboration and those logs can be viewed in Amazon CloudWatch Logs. The default value is <code>DISABLED</code>.</p>"
+        },
+        "jobLogStatus":{
+          "shape":"MembershipJobLogStatus",
+          "documentation":"<p>An indicator as to whether job logging has been enabled or disabled for the collaboration. </p> <p>When <code>ENABLED</code>, Clean Rooms logs details about jobs run within this collaboration and those logs can be viewed in Amazon CloudWatch Logs. The default value is <code>DISABLED</code>.</p>"
         },
         "defaultResultConfiguration":{
           "shape":"MembershipProtectedQueryResultConfiguration",
           "documentation":"<p>The default protected query result configuration as specified by the member who can receive results.</p>"
+        },
+        "defaultJobResultConfiguration":{
+          "shape":"MembershipProtectedJobResultConfiguration",
+          "documentation":"<p> The default job result configuration for the membership.</p>"
         },
         "paymentConfiguration":{
           "shape":"MembershipPaymentConfiguration",
@@ -5263,6 +7504,60 @@
       "min":36,
       "pattern":"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
     },
+    "MembershipJobComputePaymentConfig":{
+      "type":"structure",
+      "required":["isResponsible"],
+      "members":{
+        "isResponsible":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the collaboration member has accepted to pay for job compute costs (<code>TRUE</code>) or has not accepted to pay for query and job compute costs (<code>FALSE</code>).</p> <p>There is only one member who pays for queries and jobs. </p> <p>An error message is returned for the following reasons: </p> <ul> <li> <p>If you set the value to <code>FALSE</code> but you are responsible to pay for query and job compute costs. </p> </li> <li> <p>If you set the value to <code>TRUE</code> but you are not responsible to pay for query and job compute costs. </p> </li> </ul>"
+        }
+      },
+      "documentation":"<p>An object representing the payment responsibilities accepted by the collaboration member for query and job compute costs.</p>"
+    },
+    "MembershipJobLogStatus":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
+    "MembershipMLPaymentConfig":{
+      "type":"structure",
+      "members":{
+        "modelTraining":{
+          "shape":"MembershipModelTrainingPaymentConfig",
+          "documentation":"<p>The payment responsibilities accepted by the member for model training.</p>"
+        },
+        "modelInference":{
+          "shape":"MembershipModelInferencePaymentConfig",
+          "documentation":"<p>The payment responsibilities accepted by the member for model inference.</p>"
+        }
+      },
+      "documentation":"<p>An object representing the collaboration member's machine learning payment responsibilities set by the collaboration creator.</p>"
+    },
+    "MembershipModelInferencePaymentConfig":{
+      "type":"structure",
+      "required":["isResponsible"],
+      "members":{
+        "isResponsible":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the collaboration member has accepted to pay for model inference costs (<code>TRUE</code>) or has not accepted to pay for model inference costs (<code>FALSE</code>).</p> <p>If the collaboration creator has not specified anyone to pay for model inference costs, then the member who can query is the default payer. </p> <p>An error message is returned for the following reasons: </p> <ul> <li> <p>If you set the value to <code>FALSE</code> but you are responsible to pay for model inference costs. </p> </li> <li> <p>If you set the value to <code>TRUE</code> but you are not responsible to pay for model inference costs. </p> </li> </ul>"
+        }
+      },
+      "documentation":"<p>An object representing the collaboration member's model inference payment responsibilities set by the collaboration creator.</p>"
+    },
+    "MembershipModelTrainingPaymentConfig":{
+      "type":"structure",
+      "required":["isResponsible"],
+      "members":{
+        "isResponsible":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the collaboration member has accepted to pay for model training costs (<code>TRUE</code>) or has not accepted to pay for model training costs (<code>FALSE</code>).</p> <p>If the collaboration creator has not specified anyone to pay for model training costs, then the member who can query is the default payer. </p> <p>An error message is returned for the following reasons: </p> <ul> <li> <p>If you set the value to <code>FALSE</code> but you are responsible to pay for model training costs. </p> </li> <li> <p>If you set the value to <code>TRUE</code> but you are not responsible to pay for model training costs. </p> </li> </ul>"
+        }
+      },
+      "documentation":"<p>An object representing the collaboration member's model training payment responsibilities set by the collaboration creator.</p>"
+    },
     "MembershipPaymentConfiguration":{
       "type":"structure",
       "required":["queryCompute"],
@@ -5270,9 +7565,46 @@
         "queryCompute":{
           "shape":"MembershipQueryComputePaymentConfig",
           "documentation":"<p>The payment responsibilities accepted by the collaboration member for query compute costs.</p>"
+        },
+        "machineLearning":{
+          "shape":"MembershipMLPaymentConfig",
+          "documentation":"<p>The payment responsibilities accepted by the collaboration member for machine learning costs.</p>"
+        },
+        "jobCompute":{
+          "shape":"MembershipJobComputePaymentConfig",
+          "documentation":"<p>The payment responsibilities accepted by the collaboration member for job compute costs.</p>"
         }
       },
       "documentation":"<p>An object representing the payment responsibilities accepted by the collaboration member.</p>"
+    },
+    "MembershipProtectedJobOutputConfiguration":{
+      "type":"structure",
+      "members":{
+        "s3":{
+          "shape":"ProtectedJobS3OutputConfigurationInput",
+          "documentation":"<p>Contains the configuration to write the job results to S3.</p>"
+        }
+      },
+      "documentation":"<p>Contains configurations for protected job results.</p>",
+      "union":true
+    },
+    "MembershipProtectedJobResultConfiguration":{
+      "type":"structure",
+      "required":[
+        "outputConfiguration",
+        "roleArn"
+      ],
+      "members":{
+        "outputConfiguration":{
+          "shape":"MembershipProtectedJobOutputConfiguration",
+          "documentation":"<p> The output configuration for a protected job result.</p>"
+        },
+        "roleArn":{
+          "shape":"RoleArn",
+          "documentation":"<p>The unique ARN for an IAM role that is used by Clean Rooms to write protected job results to the result location, given by the member who can receive results.</p>"
+        }
+      },
+      "documentation":"<p>Contains configurations for protected job results.</p>"
     },
     "MembershipProtectedQueryOutputConfiguration":{
       "type":"structure",
@@ -5384,6 +7716,10 @@
           "shape":"MemberAbilities",
           "documentation":"<p>The abilities granted to the collaboration member.</p>"
         },
+        "mlMemberAbilities":{
+          "shape":"MLMemberAbilities",
+          "documentation":"<p>Provides a summary of the ML abilities for the collaboration member.</p>"
+        },
         "paymentConfiguration":{
           "shape":"MembershipPaymentConfiguration",
           "documentation":"<p>The payment responsibilities accepted by the collaboration member.</p>"
@@ -5394,6 +7730,28 @@
     "MembershipSummaryList":{
       "type":"list",
       "member":{"shape":"MembershipSummary"}
+    },
+    "ModelInferencePaymentConfig":{
+      "type":"structure",
+      "required":["isResponsible"],
+      "members":{
+        "isResponsible":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the collaboration creator has configured the collaboration member to pay for model inference costs (<code>TRUE</code>) or has not configured the collaboration member to pay for model inference costs (<code>FALSE</code>).</p> <p>Exactly one member can be configured to pay for model inference costs. An error is returned if the collaboration creator sets a <code>TRUE</code> value for more than one member in the collaboration. </p> <p>If the collaboration creator hasn't specified anyone as the member paying for model inference costs, then the member who can query is the default payer. An error is returned if the collaboration creator sets a <code>FALSE</code> value for the member who can query.</p>"
+        }
+      },
+      "documentation":"<p>An object representing the collaboration member's model inference payment responsibilities set by the collaboration creator.</p>"
+    },
+    "ModelTrainingPaymentConfig":{
+      "type":"structure",
+      "required":["isResponsible"],
+      "members":{
+        "isResponsible":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the collaboration creator has configured the collaboration member to pay for model training costs (<code>TRUE</code>) or has not configured the collaboration member to pay for model training costs (<code>FALSE</code>).</p> <p>Exactly one member can be configured to pay for model training costs. An error is returned if the collaboration creator sets a <code>TRUE</code> value for more than one member in the collaboration. </p> <p>If the collaboration creator hasn't specified anyone as the member paying for model training costs, then the member who can query is the default payer. An error is returned if the collaboration creator sets a <code>FALSE</code> value for the member who can query.</p>"
+        }
+      },
+      "documentation":"<p>An object representing the collaboration member's model training payment responsibilities set by the collaboration creator.</p>"
     },
     "PaginationToken":{
       "type":"string",
@@ -5428,7 +7786,20 @@
         "TIMESTAMPTZ",
         "TIME",
         "TIMETZ",
-        "VARBYTE"
+        "VARBYTE",
+        "BINARY",
+        "BYTE",
+        "CHARACTER",
+        "DOUBLE",
+        "FLOAT",
+        "INT",
+        "LONG",
+        "NUMERIC",
+        "SHORT",
+        "STRING",
+        "TIMESTAMP_LTZ",
+        "TIMESTAMP_NTZ",
+        "TINYINT"
       ]
     },
     "ParameterValue":{
@@ -5443,9 +7814,48 @@
         "queryCompute":{
           "shape":"QueryComputePaymentConfig",
           "documentation":"<p>The collaboration member's payment responsibilities set by the collaboration creator for query compute costs.</p>"
+        },
+        "machineLearning":{
+          "shape":"MLPaymentConfig",
+          "documentation":"<p>An object representing the collaboration member's machine learning payment responsibilities set by the collaboration creator.</p>"
+        },
+        "jobCompute":{
+          "shape":"JobComputePaymentConfig",
+          "documentation":"<p> The compute configuration for the job.</p>"
         }
       },
       "documentation":"<p>An object representing the collaboration member's payment responsibilities set by the collaboration creator.</p>"
+    },
+    "PopulateIdMappingTableInput":{
+      "type":"structure",
+      "required":[
+        "idMappingTableIdentifier",
+        "membershipIdentifier"
+      ],
+      "members":{
+        "idMappingTableIdentifier":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the ID mapping table that you want to populate.</p>",
+          "location":"uri",
+          "locationName":"idMappingTableIdentifier"
+        },
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership that contains the ID mapping table that you want to populate.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        }
+      }
+    },
+    "PopulateIdMappingTableOutput":{
+      "type":"structure",
+      "required":["idMappingJobId"],
+      "members":{
+        "idMappingJobId":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the mapping job that will populate the ID mapping table.</p>"
+        }
+      }
     },
     "PreviewPrivacyImpactInput":{
       "type":"structure",
@@ -5623,7 +8033,7 @@
         },
         "parameters":{
           "shape":"PrivacyBudgetTemplateParametersOutput",
-          "documentation":"<p>Specifies the epislon and noise parameters for the privacy budget template.</p>"
+          "documentation":"<p>Specifies the epsilon and noise parameters for the privacy budget template.</p>"
         }
       },
       "documentation":"<p>An object that defines the privacy budget template.</p>"
@@ -5752,6 +8162,376 @@
       "documentation":"<p>Provides an estimate of the number of aggregation functions that the member who can query can run given the epsilon and noise parameters.</p>",
       "union":true
     },
+    "ProtectedJob":{
+      "type":"structure",
+      "required":[
+        "id",
+        "membershipId",
+        "membershipArn",
+        "createTime",
+        "status"
+      ],
+      "members":{
+        "id":{
+          "shape":"ProtectedJobIdentifier",
+          "documentation":"<p>The identifier for a protected job instance.</p>"
+        },
+        "membershipId":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>he identifier for the membership.</p>"
+        },
+        "membershipArn":{
+          "shape":"MembershipArn",
+          "documentation":"<p>The ARN of the membership.</p>"
+        },
+        "createTime":{
+          "shape":"Timestamp",
+          "documentation":"<p> The creation time of the protected job.</p>"
+        },
+        "jobParameters":{
+          "shape":"ProtectedJobParameters",
+          "documentation":"<p> The job parameters for the protected job.</p>"
+        },
+        "status":{
+          "shape":"ProtectedJobStatus",
+          "documentation":"<p> The status of the protected job.</p>"
+        },
+        "resultConfiguration":{
+          "shape":"ProtectedJobResultConfigurationOutput",
+          "documentation":"<p>Contains any details needed to write the job results.</p>"
+        },
+        "statistics":{
+          "shape":"ProtectedJobStatistics",
+          "documentation":"<p> The statistics of the protected job.</p>"
+        },
+        "result":{
+          "shape":"ProtectedJobResult",
+          "documentation":"<p> The result of the protected job.</p>"
+        },
+        "error":{
+          "shape":"ProtectedJobError",
+          "documentation":"<p> The error from the protected job.</p>"
+        }
+      },
+      "documentation":"<p>The parameters for an Clean Rooms protected job.</p>"
+    },
+    "ProtectedJobAnalysisType":{
+      "type":"string",
+      "enum":["DIRECT_ANALYSIS"]
+    },
+    "ProtectedJobConfigurationDetails":{
+      "type":"structure",
+      "members":{
+        "directAnalysisConfigurationDetails":{
+          "shape":"ProtectedJobDirectAnalysisConfigurationDetails",
+          "documentation":"<p>The details needed to configure the direct analysis.</p>"
+        }
+      },
+      "documentation":"<p>The protected job configuration details.</p>",
+      "union":true
+    },
+    "ProtectedJobDirectAnalysisConfigurationDetails":{
+      "type":"structure",
+      "members":{
+        "receiverAccountIds":{
+          "shape":"ProtectedJobReceiverAccountIds",
+          "documentation":"<p> The receiver account IDs.</p>"
+        }
+      },
+      "documentation":"<p>The protected job direct analysis configuration details.</p>"
+    },
+    "ProtectedJobError":{
+      "type":"structure",
+      "required":[
+        "message",
+        "code"
+      ],
+      "members":{
+        "message":{
+          "shape":"String",
+          "documentation":"<p> The message for the protected job error.</p>"
+        },
+        "code":{
+          "shape":"String",
+          "documentation":"<p> The error code for the protected job.</p>"
+        }
+      },
+      "documentation":"<p>The protected job error.</p>"
+    },
+    "ProtectedJobIdentifier":{
+      "type":"string",
+      "max":36,
+      "min":36,
+      "pattern":"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    },
+    "ProtectedJobMemberOutputConfigurationInput":{
+      "type":"structure",
+      "required":["accountId"],
+      "members":{
+        "accountId":{
+          "shape":"AccountId",
+          "documentation":"<p> The account ID.</p>"
+        }
+      },
+      "documentation":"<p> The protected job member output configuration input.</p>"
+    },
+    "ProtectedJobMemberOutputConfigurationOutput":{
+      "type":"structure",
+      "required":["accountId"],
+      "members":{
+        "accountId":{
+          "shape":"AccountId",
+          "documentation":"<p> The account ID.</p>"
+        }
+      },
+      "documentation":"<p> The protected job member output configuration output.</p>"
+    },
+    "ProtectedJobMemberOutputList":{
+      "type":"list",
+      "member":{"shape":"ProtectedJobSingleMemberOutput"}
+    },
+    "ProtectedJobOutput":{
+      "type":"structure",
+      "members":{
+        "s3":{
+          "shape":"ProtectedJobS3Output",
+          "documentation":"<p>If present, the output for a protected job with an `S3` output type.</p>"
+        },
+        "memberList":{
+          "shape":"ProtectedJobMemberOutputList",
+          "documentation":"<p>The list of member Amazon Web Services account(s) that received the results of the job. </p>"
+        }
+      },
+      "documentation":"<p>Contains details about the protected job output.</p>",
+      "union":true
+    },
+    "ProtectedJobOutputConfigurationInput":{
+      "type":"structure",
+      "members":{
+        "member":{
+          "shape":"ProtectedJobMemberOutputConfigurationInput",
+          "documentation":"<p> The member of the protected job output configuration input.</p>"
+        }
+      },
+      "documentation":"<p> The protected job output configuration input.</p>",
+      "union":true
+    },
+    "ProtectedJobOutputConfigurationOutput":{
+      "type":"structure",
+      "members":{
+        "s3":{
+          "shape":"ProtectedJobS3OutputConfigurationOutput",
+          "documentation":"<p>If present, the output for a protected job with an `S3` output type.</p>"
+        },
+        "member":{
+          "shape":"ProtectedJobMemberOutputConfigurationOutput",
+          "documentation":"<p> The member output configuration for a protected job.</p>"
+        }
+      },
+      "documentation":"<p> The protected job output configuration output.</p>",
+      "union":true
+    },
+    "ProtectedJobParameters":{
+      "type":"structure",
+      "members":{
+        "analysisTemplateArn":{
+          "shape":"AnalysisTemplateArn",
+          "documentation":"<p> The ARN of the analysis template.</p>"
+        }
+      },
+      "documentation":"<p>The parameters for the protected job.</p>"
+    },
+    "ProtectedJobReceiverAccountIds":{
+      "type":"list",
+      "member":{"shape":"AccountId"}
+    },
+    "ProtectedJobReceiverConfiguration":{
+      "type":"structure",
+      "required":["analysisType"],
+      "members":{
+        "analysisType":{
+          "shape":"ProtectedJobAnalysisType",
+          "documentation":"<p> The analysis type for the protected job receiver configuration.</p>"
+        },
+        "configurationDetails":{
+          "shape":"ProtectedJobConfigurationDetails",
+          "documentation":"<p> The configuration details for the protected job receiver.</p>"
+        }
+      },
+      "documentation":"<p>The protected job receiver configuration.</p>"
+    },
+    "ProtectedJobReceiverConfigurations":{
+      "type":"list",
+      "member":{"shape":"ProtectedJobReceiverConfiguration"}
+    },
+    "ProtectedJobResult":{
+      "type":"structure",
+      "required":["output"],
+      "members":{
+        "output":{
+          "shape":"ProtectedJobOutput",
+          "documentation":"<p> The output of the protected job.</p>"
+        }
+      },
+      "documentation":"<p>Details about the job results.</p>"
+    },
+    "ProtectedJobResultConfigurationInput":{
+      "type":"structure",
+      "required":["outputConfiguration"],
+      "members":{
+        "outputConfiguration":{
+          "shape":"ProtectedJobOutputConfigurationInput",
+          "documentation":"<p> The output configuration for a protected job result.</p>"
+        }
+      },
+      "documentation":"<p>The protected job result configuration input.</p>"
+    },
+    "ProtectedJobResultConfigurationOutput":{
+      "type":"structure",
+      "required":["outputConfiguration"],
+      "members":{
+        "outputConfiguration":{
+          "shape":"ProtectedJobOutputConfigurationOutput",
+          "documentation":"<p>The output configuration.</p>"
+        }
+      },
+      "documentation":"<p>The output configuration for a protected job result.</p>"
+    },
+    "ProtectedJobS3Output":{
+      "type":"structure",
+      "required":["location"],
+      "members":{
+        "location":{
+          "shape":"String",
+          "documentation":"<p> The S3 location for the protected job output.</p>"
+        }
+      },
+      "documentation":"<p>Contains output information for protected jobs with an S3 output type.</p>"
+    },
+    "ProtectedJobS3OutputConfigurationInput":{
+      "type":"structure",
+      "required":["bucket"],
+      "members":{
+        "bucket":{
+          "shape":"ProtectedJobS3OutputConfigurationInputBucketString",
+          "documentation":"<p> The S3 bucket for job output.</p>"
+        },
+        "keyPrefix":{
+          "shape":"KeyPrefix",
+          "documentation":"<p>The S3 prefix to unload the protected job results.</p>"
+        }
+      },
+      "documentation":"<p>Contains input information for protected jobs with an S3 output type.</p>"
+    },
+    "ProtectedJobS3OutputConfigurationInputBucketString":{
+      "type":"string",
+      "max":63,
+      "min":3,
+      "pattern":".*(?!^(\\d+\\.)+\\d+$)(^(([a-z0-9]|[a-z0-9][a-z0-9\\-]*[a-z0-9])\\.)*([a-z0-9]|[a-z0-9][a-z0-9\\-]*[a-z0-9])$).*"
+    },
+    "ProtectedJobS3OutputConfigurationOutput":{
+      "type":"structure",
+      "required":["bucket"],
+      "members":{
+        "bucket":{
+          "shape":"ProtectedJobS3OutputConfigurationOutputBucketString",
+          "documentation":"<p> The S3 bucket for job output.</p>"
+        },
+        "keyPrefix":{
+          "shape":"KeyPrefix",
+          "documentation":"<p>The S3 prefix to unload the protected job results.</p>"
+        }
+      },
+      "documentation":"<p> The output configuration for a protected job's S3 output.</p>"
+    },
+    "ProtectedJobS3OutputConfigurationOutputBucketString":{
+      "type":"string",
+      "max":63,
+      "min":3,
+      "pattern":".*(?!^(\\d+\\.)+\\d+$)(^(([a-z0-9]|[a-z0-9][a-z0-9\\-]*[a-z0-9])\\.)*([a-z0-9]|[a-z0-9][a-z0-9\\-]*[a-z0-9])$).*"
+    },
+    "ProtectedJobSingleMemberOutput":{
+      "type":"structure",
+      "required":["accountId"],
+      "members":{
+        "accountId":{
+          "shape":"AccountId",
+          "documentation":"<p>The Amazon Web Services account ID of the member in the collaboration who can receive results from analyses.</p>"
+        }
+      },
+      "documentation":"<p>Details about the member who received the job result.</p>"
+    },
+    "ProtectedJobStatistics":{
+      "type":"structure",
+      "members":{
+        "totalDurationInMillis":{
+          "shape":"Long",
+          "documentation":"<p>The duration of the protected job, from creation until job completion, in milliseconds.</p>"
+        },
+        "billedResourceUtilization":{
+          "shape":"BilledJobResourceUtilization",
+          "documentation":"<p> The billed resource utilization for the protected job.</p>"
+        }
+      },
+      "documentation":"<p>Contains statistics about the execution of the protected job.</p>"
+    },
+    "ProtectedJobStatus":{
+      "type":"string",
+      "enum":[
+        "SUBMITTED",
+        "STARTED",
+        "CANCELLED",
+        "CANCELLING",
+        "FAILED",
+        "SUCCESS"
+      ]
+    },
+    "ProtectedJobSummary":{
+      "type":"structure",
+      "required":[
+        "id",
+        "membershipId",
+        "membershipArn",
+        "createTime",
+        "status",
+        "receiverConfigurations"
+      ],
+      "members":{
+        "id":{
+          "shape":"UUID",
+          "documentation":"<p> The ID of the protected job.</p>"
+        },
+        "membershipId":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique ID for the membership that initiated the protected job.</p>"
+        },
+        "membershipArn":{
+          "shape":"MembershipArn",
+          "documentation":"<p>The unique ARN for the membership that initiated the protected job.</p>"
+        },
+        "createTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time the protected job was created.</p>"
+        },
+        "status":{
+          "shape":"ProtectedJobStatus",
+          "documentation":"<p>The status of the protected job.</p>"
+        },
+        "receiverConfigurations":{
+          "shape":"ProtectedJobReceiverConfigurations",
+          "documentation":"<p> The receiver configurations for the protected job.</p>"
+        }
+      },
+      "documentation":"<p>The protected job summary for the objects listed by the request.</p>"
+    },
+    "ProtectedJobSummaryList":{
+      "type":"list",
+      "member":{"shape":"ProtectedJobSummary"}
+    },
+    "ProtectedJobType":{
+      "type":"string",
+      "enum":["PYSPARK"]
+    },
     "ProtectedQuery":{
       "type":"structure",
       "required":[
@@ -5805,9 +8585,49 @@
         "differentialPrivacy":{
           "shape":"DifferentialPrivacyParameters",
           "documentation":"<p>The sensitivity parameters of the differential privacy results of the protected query.</p>"
+        },
+        "computeConfiguration":{
+          "shape":"ComputeConfiguration",
+          "documentation":"<p> The compute configuration for the protected query.</p>"
         }
       },
       "documentation":"<p>The parameters for an Clean Rooms protected query.</p>"
+    },
+    "ProtectedQueryDistributeOutput":{
+      "type":"structure",
+      "members":{
+        "s3":{"shape":"ProtectedQueryS3Output"},
+        "memberList":{
+          "shape":"ProtectedQueryMemberOutputList",
+          "documentation":"<p> Contains the output results for each member location specified in the distribute output configuration. Each entry provides details about the result distribution to a specific collaboration member. </p>"
+        }
+      },
+      "documentation":"<p> Contains the output information for a protected query with a distribute output configuration.</p> <p> This output type allows query results to be distributed to multiple receivers, including S3 and collaboration members. It is only available for queries using the Spark analytics engine.</p>"
+    },
+    "ProtectedQueryDistributeOutputConfiguration":{
+      "type":"structure",
+      "required":["locations"],
+      "members":{
+        "locations":{
+          "shape":"ProtectedQueryDistributeOutputConfigurationLocationsList",
+          "documentation":"<p> A list of locations where you want to distribute the protected query results. Each location must specify either an S3 destination or a collaboration member destination.</p> <important> <p>You can't specify more than one S3 location.</p> <p>You can't specify the query runner's account as a member location.</p> <p>You must include either an S3 or member output configuration for each location, but not both.</p> </important>"
+        }
+      },
+      "documentation":"<p> Specifies the configuration for distributing protected query results to multiple receivers, including S3 and collaboration members.</p>"
+    },
+    "ProtectedQueryDistributeOutputConfigurationLocation":{
+      "type":"structure",
+      "members":{
+        "s3":{"shape":"ProtectedQueryS3OutputConfiguration"},
+        "member":{"shape":"ProtectedQueryMemberOutputConfiguration"}
+      },
+      "documentation":"<p> Specifies where you'll distribute the results of your protected query. You must configure either an S3 destination or a collaboration member destination.</p>",
+      "union":true
+    },
+    "ProtectedQueryDistributeOutputConfigurationLocationsList":{
+      "type":"list",
+      "member":{"shape":"ProtectedQueryDistributeOutputConfigurationLocation"},
+      "min":1
     },
     "ProtectedQueryError":{
       "type":"structure",
@@ -5833,6 +8653,17 @@
       "min":36,
       "pattern":"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
     },
+    "ProtectedQueryMemberOutputConfiguration":{
+      "type":"structure",
+      "required":["accountId"],
+      "members":{
+        "accountId":{
+          "shape":"AccountId",
+          "documentation":"<p>The unique identifier for the account.</p>"
+        }
+      },
+      "documentation":"<p> Contains configuration details for the protected query member output.</p>"
+    },
     "ProtectedQueryMemberOutputList":{
       "type":"list",
       "member":{"shape":"ProtectedQuerySingleMemberOutput"}
@@ -5842,11 +8673,15 @@
       "members":{
         "s3":{
           "shape":"ProtectedQueryS3Output",
-          "documentation":"<p>If present, the output for a protected query with an `S3` output type.</p>"
+          "documentation":"<p>If present, the output for a protected query with an <code>S3</code> output type.</p>"
         },
         "memberList":{
           "shape":"ProtectedQueryMemberOutputList",
           "documentation":"<p>The list of member Amazon Web Services account(s) that received the results of the query. </p>"
+        },
+        "distribute":{
+          "shape":"ProtectedQueryDistributeOutput",
+          "documentation":"<p>Contains output information for protected queries that use a <code>distribute</code> output type. This output type lets you send query results to multiple locations - either to S3 or to collaboration members. </p> <note> <p> You can only use the <code>distribute</code> output type with the Spark analytics engine. </p> </note>"
         }
       },
       "documentation":"<p>Contains details about the protected query output.</p>",
@@ -5857,7 +8692,15 @@
       "members":{
         "s3":{
           "shape":"ProtectedQueryS3OutputConfiguration",
-          "documentation":"<p>Required configuration for a protected query with an `S3` output type.</p>"
+          "documentation":"<p>Required configuration for a protected query with an <code>s3</code> output type.</p>"
+        },
+        "member":{
+          "shape":"ProtectedQueryMemberOutputConfiguration",
+          "documentation":"<p> Required configuration for a protected query with a <code>member</code> output type.</p>"
+        },
+        "distribute":{
+          "shape":"ProtectedQueryDistributeOutputConfiguration",
+          "documentation":"<p> Required configuration for a protected query with a <code>distribute</code> output type.</p>"
         }
       },
       "documentation":"<p>Contains configuration details for protected query output.</p>",
@@ -5914,6 +8757,10 @@
         "keyPrefix":{
           "shape":"KeyPrefix",
           "documentation":"<p>The S3 prefix to unload the protected query results.</p>"
+        },
+        "singleFileOutput":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether files should be output as a single file (<code>TRUE</code>) or output as multiple files (<code>FALSE</code>). This parameter is only supported for analyses with the Spark analytics engine.</p>"
         }
       },
       "documentation":"<p>Contains the configuration to write the query results to S3.</p>"
@@ -5945,7 +8792,7 @@
     },
     "ProtectedQuerySQLParametersQueryStringString":{
       "type":"string",
-      "max":90000,
+      "max":500000,
       "min":0
     },
     "ProtectedQuerySingleMemberOutput":{
@@ -5964,7 +8811,11 @@
       "members":{
         "totalDurationInMillis":{
           "shape":"Long",
-          "documentation":"<p>The duration of the Protected Query, from creation until query completion.</p>"
+          "documentation":"<p>The duration of the protected query, from creation until query completion, in milliseconds.</p>"
+        },
+        "billedResourceUtilization":{
+          "shape":"BilledResourceUtilization",
+          "documentation":"<p> The billed resource utilization.</p>"
         }
       },
       "documentation":"<p>Contains statistics about the execution of the protected query.</p>"
@@ -5988,7 +8839,8 @@
         "membershipId",
         "membershipArn",
         "createTime",
-        "status"
+        "status",
+        "receiverConfigurations"
       ],
       "members":{
         "id":{
@@ -6009,7 +8861,11 @@
         },
         "status":{
           "shape":"ProtectedQueryStatus",
-          "documentation":"<p>The status of the protected query. Value values are `SUBMITTED`, `STARTED`, `CANCELLED`, `CANCELLING`, `FAILED`, `SUCCESS`, `TIMED_OUT`.</p>"
+          "documentation":"<p>The status of the protected query.</p>"
+        },
+        "receiverConfigurations":{
+          "shape":"ReceiverConfigurationsList",
+          "documentation":"<p> The receiver configuration.</p>"
         }
       },
       "documentation":"<p>The protected query summary for the objects listed by the request.</p>"
@@ -6033,9 +8889,59 @@
       },
       "documentation":"<p>An object representing the collaboration member's payment responsibilities set by the collaboration creator for query compute costs.</p>"
     },
+    "QueryConstraint":{
+      "type":"structure",
+      "members":{
+        "requireOverlap":{
+          "shape":"QueryConstraintRequireOverlap",
+          "documentation":"<p>An array of column names that specifies which columns are required in the JOIN statement.</p>"
+        }
+      },
+      "documentation":"<p>Provides any necessary query constraint information.</p>",
+      "union":true
+    },
+    "QueryConstraintList":{
+      "type":"list",
+      "member":{"shape":"QueryConstraint"},
+      "max":1,
+      "min":0
+    },
+    "QueryConstraintRequireOverlap":{
+      "type":"structure",
+      "members":{
+        "columns":{
+          "shape":"AnalysisRuleColumnList",
+          "documentation":"<p>The columns that are required to overlap.</p>"
+        }
+      },
+      "documentation":"<p>Provides the name of the columns that are required to overlap.</p>"
+    },
     "QueryTables":{
       "type":"list",
       "member":{"shape":"TableAlias"}
+    },
+    "ReceiverAccountIds":{
+      "type":"list",
+      "member":{"shape":"AccountId"}
+    },
+    "ReceiverConfiguration":{
+      "type":"structure",
+      "required":["analysisType"],
+      "members":{
+        "analysisType":{
+          "shape":"AnalysisType",
+          "documentation":"<p> The type of analysis for the protected query. The results of the query can be analyzed directly (<code>DIRECT_ANALYSIS</code>) or used as input into additional analyses (<code>ADDITIONAL_ANALYSIS</code>), such as a query that is a seed for a lookalike ML model.</p>"
+        },
+        "configurationDetails":{
+          "shape":"ConfigurationDetails",
+          "documentation":"<p> The configuration details of the receiver configuration.</p>"
+        }
+      },
+      "documentation":"<p> The receiver configuration for a protected query.</p>"
+    },
+    "ReceiverConfigurationsList":{
+      "type":"list",
+      "member":{"shape":"ReceiverConfiguration"}
     },
     "ResourceAlias":{
       "type":"string",
@@ -6096,6 +9002,34 @@
       "min":32,
       "pattern":"arn:aws:iam::[\\w]+:role/[\\w+=./@-]+"
     },
+    "S3Location":{
+      "type":"structure",
+      "required":[
+        "bucket",
+        "key"
+      ],
+      "members":{
+        "bucket":{
+          "shape":"S3LocationBucketString",
+          "documentation":"<p> The bucket name.</p>"
+        },
+        "key":{
+          "shape":"S3LocationKeyString",
+          "documentation":"<p> The object key.</p>"
+        }
+      },
+      "documentation":"<p>The S3 location.</p>"
+    },
+    "S3LocationBucketString":{
+      "type":"string",
+      "max":63,
+      "min":3,
+      "pattern":".*(?!^(\\d+\\.)+\\d+$)(^(([a-z0-9]|[a-z0-9][a-z0-9\\-]*[a-z0-9])\\.)*([a-z0-9]|[a-z0-9][a-z0-9\\-]*[a-z0-9])$).*"
+    },
+    "S3LocationKeyString":{
+      "type":"string",
+      "pattern":"[a-zA-Z0-9!_.*'()-/]+"
+    },
     "ScalarFunctions":{
       "type":"string",
       "enum":[
@@ -6148,7 +9082,7 @@
       "members":{
         "columns":{
           "shape":"ColumnList",
-          "documentation":"<p>The columns for the relation this schema represents.</p>"
+          "documentation":"<p>The columns for the relation that this schema represents.</p>"
         },
         "partitionKeys":{
           "shape":"ColumnList",
@@ -6156,11 +9090,15 @@
         },
         "analysisRuleTypes":{
           "shape":"AnalysisRuleTypeList",
-          "documentation":"<p>The analysis rule types associated with the schema. Currently, only one entry is present.</p>"
+          "documentation":"<p>The analysis rule types that are associated with the schema. Currently, only one entry is present.</p>"
         },
         "analysisMethod":{
           "shape":"AnalysisMethod",
-          "documentation":"<p>The analysis method for the schema. The only valid value is currently DIRECT_QUERY.</p>"
+          "documentation":"<p>The analysis method for the schema. </p> <p> <code>DIRECT_QUERY</code> allows SQL queries to be run directly on this table.</p> <p> <code>DIRECT_JOB</code> allows PySpark jobs to be run directly on this table.</p> <p> <code>MULTIPLE</code> allows both SQL queries and PySpark jobs to be run directly on this table.</p>"
+        },
+        "selectedAnalysisMethods":{
+          "shape":"SelectedAnalysisMethods",
+          "documentation":"<p> The selected analysis methods for the schema.</p>"
         },
         "creatorAccountId":{
           "shape":"AccountId",
@@ -6176,7 +9114,7 @@
         },
         "collaborationArn":{
           "shape":"CollaborationArn",
-          "documentation":"<p>The unique ARN for the collaboration that the schema belongs to.</p>"
+          "documentation":"<p>The unique Amazon Resource Name (ARN) for the collaboration that the schema belongs to.</p>"
         },
         "description":{
           "shape":"TableDescription",
@@ -6184,19 +9122,23 @@
         },
         "createTime":{
           "shape":"Timestamp",
-          "documentation":"<p>The time the schema was created.</p>"
+          "documentation":"<p>The time at which the schema was created.</p>"
         },
         "updateTime":{
           "shape":"Timestamp",
-          "documentation":"<p>The time the schema was last updated.</p>"
+          "documentation":"<p>The most recent time at which the schema was updated.</p>"
         },
         "type":{
           "shape":"SchemaType",
-          "documentation":"<p>The type of schema. The only valid value is currently `TABLE`.</p>"
+          "documentation":"<p>The type of schema.</p>"
         },
         "schemaStatusDetails":{
           "shape":"SchemaStatusDetailList",
           "documentation":"<p>Details about the status of the schema. Currently, only one entry is present.</p>"
+        },
+        "schemaTypeProperties":{
+          "shape":"SchemaTypeProperties",
+          "documentation":"<p>The schema type properties.</p>"
         }
       },
       "documentation":"<p>A schema is a relation within a collaboration.</p>"
@@ -6254,11 +9196,14 @@
     },
     "SchemaStatusDetail":{
       "type":"structure",
-      "required":["status"],
+      "required":[
+        "status",
+        "analysisType"
+      ],
       "members":{
         "status":{
           "shape":"SchemaStatus",
-          "documentation":"<p>The status of the schema.</p>"
+          "documentation":"<p>The status of the schema, indicating if it is ready to query.</p>"
         },
         "reasons":{
           "shape":"SchemaStatusReasonList",
@@ -6271,6 +9216,10 @@
         "configurations":{
           "shape":"SchemaConfigurationList",
           "documentation":"<p>The configuration details of the schema analysis rule for the given type.</p>"
+        },
+        "analysisType":{
+          "shape":"AnalysisType",
+          "documentation":"<p>The type of analysis that can be performed on the schema.</p> <p>A schema can have an <code>analysisType</code> of <code>DIRECT_ANALYSIS</code>, <code>ADDITIONAL_ANALYSIS_FOR_AUDIENCE_GENERATION</code>, or both.</p>"
         }
       },
       "documentation":"<p>Information about the schema status.</p> <p>A status of <code>READY</code> means that based on the schema analysis rule, queries of the given analysis rule type are properly configured to run queries on this schema.</p>"
@@ -6303,7 +9252,14 @@
         "ANALYSIS_RULE_MISSING",
         "ANALYSIS_TEMPLATES_NOT_CONFIGURED",
         "ANALYSIS_PROVIDERS_NOT_CONFIGURED",
-        "DIFFERENTIAL_PRIVACY_POLICY_NOT_CONFIGURED"
+        "DIFFERENTIAL_PRIVACY_POLICY_NOT_CONFIGURED",
+        "ID_MAPPING_TABLE_NOT_POPULATED",
+        "COLLABORATION_ANALYSIS_RULE_NOT_CONFIGURED",
+        "ADDITIONAL_ANALYSES_NOT_CONFIGURED",
+        "RESULT_RECEIVERS_NOT_CONFIGURED",
+        "ADDITIONAL_ANALYSES_NOT_ALLOWED",
+        "RESULT_RECEIVERS_NOT_ALLOWED",
+        "ANALYSIS_RULE_TYPES_NOT_COMPATIBLE"
       ]
     },
     "SchemaStatusReasonList":{
@@ -6329,7 +9285,7 @@
         },
         "type":{
           "shape":"SchemaType",
-          "documentation":"<p>The type of schema object. The only valid schema type is currently `TABLE`.</p>"
+          "documentation":"<p>The type of schema object.</p>"
         },
         "creatorAccountId":{
           "shape":"AccountId",
@@ -6357,7 +9313,11 @@
         },
         "analysisMethod":{
           "shape":"AnalysisMethod",
-          "documentation":"<p>The analysis method for the associated schema. The only valid value is currently `DIRECT_QUERY`.</p>"
+          "documentation":"<p>The analysis method for the associated schema.</p> <p> <code>DIRECT_QUERY</code> allows SQL queries to be run directly on this table.</p> <p> <code>DIRECT_JOB</code> allows PySpark jobs to be run directly on this table.</p> <p> <code>MULTIPLE</code> allows both SQL queries and PySpark jobs to be run directly on this table.</p>"
+        },
+        "selectedAnalysisMethods":{
+          "shape":"SelectedAnalysisMethods",
+          "documentation":"<p> The selected analysis methods for the schema.</p>"
         }
       },
       "documentation":"<p>The schema summary for the objects listed by the request.</p>"
@@ -6368,7 +9328,38 @@
     },
     "SchemaType":{
       "type":"string",
-      "enum":["TABLE"]
+      "enum":[
+        "TABLE",
+        "ID_MAPPING_TABLE"
+      ]
+    },
+    "SchemaTypeProperties":{
+      "type":"structure",
+      "members":{
+        "idMappingTable":{
+          "shape":"IdMappingTableSchemaTypeProperties",
+          "documentation":"<p>The ID mapping table for the schema type properties.</p>"
+        }
+      },
+      "documentation":"<p>Information about the schema type properties.</p>",
+      "union":true
+    },
+    "SecretsManagerArn":{
+      "type":"string",
+      "max":256,
+      "min":0,
+      "pattern":"arn:aws:secretsmanager:[a-z]{2}-[a-z]+-[0-9]:\\d{12}:secret:.*"
+    },
+    "SelectedAnalysisMethod":{
+      "type":"string",
+      "enum":[
+        "DIRECT_QUERY",
+        "DIRECT_JOB"
+      ]
+    },
+    "SelectedAnalysisMethods":{
+      "type":"list",
+      "member":{"shape":"SelectedAnalysisMethod"}
     },
     "ServiceQuotaExceededException":{
       "type":"structure",
@@ -6395,6 +9386,141 @@
       },
       "exception":true
     },
+    "SnowflakeAccountIdentifier":{
+      "type":"string",
+      "max":256,
+      "min":3,
+      "pattern":"[\\p{L}\\p{M}\\p{N}\\p{Pc}\\p{Pd}\\p{Zs}.]+"
+    },
+    "SnowflakeDatabaseName":{
+      "type":"string",
+      "max":256,
+      "min":1,
+      "pattern":"[\\p{L}\\p{M}\\p{N}\\p{Pc}\\p{Pd}\\p{Zs}]+"
+    },
+    "SnowflakeSchemaName":{
+      "type":"string",
+      "max":256,
+      "min":1,
+      "pattern":"[\\p{L}\\p{M}\\p{N}\\p{Pc}\\p{Pd}\\p{Zs}]+"
+    },
+    "SnowflakeTableName":{
+      "type":"string",
+      "max":256,
+      "min":1,
+      "pattern":"[\\p{L}\\p{M}\\p{N}\\p{Pc}\\p{Pd}\\p{Zs}]+"
+    },
+    "SnowflakeTableReference":{
+      "type":"structure",
+      "required":[
+        "secretArn",
+        "accountIdentifier",
+        "databaseName",
+        "tableName",
+        "schemaName",
+        "tableSchema"
+      ],
+      "members":{
+        "secretArn":{
+          "shape":"SecretsManagerArn",
+          "documentation":"<p> The secret ARN of the Snowflake table reference.</p>"
+        },
+        "accountIdentifier":{
+          "shape":"SnowflakeAccountIdentifier",
+          "documentation":"<p> The account identifier for the Snowflake table reference.</p>"
+        },
+        "databaseName":{
+          "shape":"SnowflakeDatabaseName",
+          "documentation":"<p> The name of the database the Snowflake table belongs to.</p>"
+        },
+        "tableName":{
+          "shape":"SnowflakeTableName",
+          "documentation":"<p> The name of the Snowflake table.</p>"
+        },
+        "schemaName":{
+          "shape":"SnowflakeSchemaName",
+          "documentation":"<p> The schema name of the Snowflake table reference.</p>"
+        },
+        "tableSchema":{
+          "shape":"SnowflakeTableSchema",
+          "documentation":"<p> The schema of the Snowflake table.</p>"
+        }
+      },
+      "documentation":"<p> A reference to a table within Snowflake.</p>"
+    },
+    "SnowflakeTableSchema":{
+      "type":"structure",
+      "members":{
+        "v1":{
+          "shape":"SnowflakeTableSchemaList",
+          "documentation":"<p> The schema of a Snowflake table.</p>"
+        }
+      },
+      "documentation":"<p> The schema of a Snowflake table.</p>",
+      "union":true
+    },
+    "SnowflakeTableSchemaList":{
+      "type":"list",
+      "member":{"shape":"SnowflakeTableSchemaV1"},
+      "max":250,
+      "min":1
+    },
+    "SnowflakeTableSchemaV1":{
+      "type":"structure",
+      "required":[
+        "columnName",
+        "columnType"
+      ],
+      "members":{
+        "columnName":{
+          "shape":"ColumnName",
+          "documentation":"<p> The column name.</p>"
+        },
+        "columnType":{
+          "shape":"ColumnTypeString",
+          "documentation":"<p> The column's data type. Supported data types: <code>ARRAY</code>, <code>BIGINT</code>, <code>BOOLEAN</code>, <code>CHAR</code>, <code>DATE</code>, <code>DECIMAL</code>, <code>DOUBLE</code>, <code>DOUBLE PRECISION</code>, <code>FLOAT</code>, <code>FLOAT4</code>, <code>INT</code>, <code>INTEGER</code>, <code>MAP</code>, <code>NUMERIC</code>, <code>NUMBER</code>, <code>REAL</code>, <code>SMALLINT</code>, <code>STRING</code>, <code>TIMESTAMP</code>, <code>TIMESTAMP_LTZ</code>, <code>TIMESTAMP_NTZ</code>, <code>DATETIME</code>, <code>TINYINT</code>, <code>VARCHAR</code>, <code>TEXT</code>, <code>CHARACTER</code>.</p>"
+        }
+      },
+      "documentation":"<p> The Snowflake table schema.</p>"
+    },
+    "StartProtectedJobInput":{
+      "type":"structure",
+      "required":[
+        "type",
+        "membershipIdentifier",
+        "jobParameters"
+      ],
+      "members":{
+        "type":{
+          "shape":"ProtectedJobType",
+          "documentation":"<p> The type of protected job to start.</p>"
+        },
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>A unique identifier for the membership to run this job against. Currently accepts a membership ID.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "jobParameters":{
+          "shape":"ProtectedJobParameters",
+          "documentation":"<p> The job parameters.</p>"
+        },
+        "resultConfiguration":{
+          "shape":"ProtectedJobResultConfigurationInput",
+          "documentation":"<p>The details needed to write the job results.</p>"
+        }
+      }
+    },
+    "StartProtectedJobOutput":{
+      "type":"structure",
+      "required":["protectedJob"],
+      "members":{
+        "protectedJob":{
+          "shape":"ProtectedJob",
+          "documentation":"<p> The protected job.</p>"
+        }
+      }
+    },
     "StartProtectedQueryInput":{
       "type":"structure",
       "required":[
@@ -6420,6 +9546,10 @@
         "resultConfiguration":{
           "shape":"ProtectedQueryResultConfiguration",
           "documentation":"<p>The details needed to write the query results.</p>"
+        },
+        "computeConfiguration":{
+          "shape":"ComputeConfiguration",
+          "documentation":"<p> The compute configuration for the protected query.</p>"
         }
       }
     },
@@ -6458,9 +9588,17 @@
         "glue":{
           "shape":"GlueTableReference",
           "documentation":"<p>If present, a reference to the Glue table referred to by this table reference.</p>"
+        },
+        "snowflake":{
+          "shape":"SnowflakeTableReference",
+          "documentation":"<p> If present, a reference to the Snowflake table referred to by this table reference.</p>"
+        },
+        "athena":{
+          "shape":"AthenaTableReference",
+          "documentation":"<p> If present, a reference to the Athena table referred to by this table reference.</p>"
         }
       },
-      "documentation":"<p>A pointer to the dataset that underlies this table. Currently, this can only be an Glue table.</p>",
+      "documentation":"<p>A pointer to the dataset that underlies this table.</p>",
       "union":true
     },
     "TagKey":{
@@ -6508,6 +9646,10 @@
       "type":"string",
       "max":256,
       "min":0
+    },
+    "TargetProtectedJobStatus":{
+      "type":"string",
+      "enum":["CANCELLED"]
     },
     "TargetProtectedQueryStatus":{
       "type":"string",
@@ -6610,6 +9752,10 @@
         "description":{
           "shape":"CollaborationDescription",
           "documentation":"<p>A description of the collaboration.</p>"
+        },
+        "analyticsEngine":{
+          "shape":"AnalyticsEngine",
+          "documentation":"<p>The analytics engine.</p>"
         }
       }
     },
@@ -6698,6 +9844,49 @@
         }
       }
     },
+    "UpdateConfiguredTableAssociationAnalysisRuleInput":{
+      "type":"structure",
+      "required":[
+        "membershipIdentifier",
+        "configuredTableAssociationIdentifier",
+        "analysisRuleType",
+        "analysisRulePolicy"
+      ],
+      "members":{
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p> A unique identifier for the membership that the configured table association belongs to. Currently accepts the membership ID.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "configuredTableAssociationIdentifier":{
+          "shape":"ConfiguredTableAssociationIdentifier",
+          "documentation":"<p> The identifier for the configured table association to update.</p>",
+          "location":"uri",
+          "locationName":"configuredTableAssociationIdentifier"
+        },
+        "analysisRuleType":{
+          "shape":"ConfiguredTableAssociationAnalysisRuleType",
+          "documentation":"<p> The analysis rule type that you want to update.</p>",
+          "location":"uri",
+          "locationName":"analysisRuleType"
+        },
+        "analysisRulePolicy":{
+          "shape":"ConfiguredTableAssociationAnalysisRulePolicy",
+          "documentation":"<p> The updated analysis rule policy for the conﬁgured table association.</p>"
+        }
+      }
+    },
+    "UpdateConfiguredTableAssociationAnalysisRuleOutput":{
+      "type":"structure",
+      "required":["analysisRule"],
+      "members":{
+        "analysisRule":{
+          "shape":"ConfiguredTableAssociationAnalysisRule",
+          "documentation":"<p> The updated analysis rule for the conﬁgured table association. In the console, the <code>ConfiguredTableAssociationAnalysisRule</code> is referred to as the <i>collaboration analysis rule</i>.</p>"
+        }
+      }
+    },
     "UpdateConfiguredTableAssociationInput":{
       "type":"structure",
       "required":[
@@ -6754,6 +9943,14 @@
         "description":{
           "shape":"TableDescription",
           "documentation":"<p>A new description for the configured table.</p>"
+        },
+        "analysisMethod":{
+          "shape":"AnalysisMethod",
+          "documentation":"<p> The analysis method for the configured table.</p> <p> <code>DIRECT_QUERY</code> allows SQL queries to be run directly on this table.</p> <p> <code>DIRECT_JOB</code> allows PySpark jobs to be run directly on this table.</p> <p> <code>MULTIPLE</code> allows both SQL queries and PySpark jobs to be run directly on this table.</p>"
+        },
+        "selectedAnalysisMethods":{
+          "shape":"SelectedAnalysisMethods",
+          "documentation":"<p> The selected analysis methods for the table configuration update.</p>"
         }
       }
     },
@@ -6764,6 +9961,88 @@
         "configuredTable":{
           "shape":"ConfiguredTable",
           "documentation":"<p>The updated configured table.</p>"
+        }
+      }
+    },
+    "UpdateIdMappingTableInput":{
+      "type":"structure",
+      "required":[
+        "idMappingTableIdentifier",
+        "membershipIdentifier"
+      ],
+      "members":{
+        "idMappingTableIdentifier":{
+          "shape":"UUID",
+          "documentation":"<p>The unique identifier of the ID mapping table that you want to update.</p>",
+          "location":"uri",
+          "locationName":"idMappingTableIdentifier"
+        },
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership that contains the ID mapping table that you want to update.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "description":{
+          "shape":"ResourceDescription",
+          "documentation":"<p>A new description for the ID mapping table.</p>"
+        },
+        "kmsKeyArn":{
+          "shape":"KMSKeyArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Web Services KMS key.</p>"
+        }
+      }
+    },
+    "UpdateIdMappingTableOutput":{
+      "type":"structure",
+      "required":["idMappingTable"],
+      "members":{
+        "idMappingTable":{
+          "shape":"IdMappingTable",
+          "documentation":"<p>The updated ID mapping table.</p>"
+        }
+      }
+    },
+    "UpdateIdNamespaceAssociationInput":{
+      "type":"structure",
+      "required":[
+        "idNamespaceAssociationIdentifier",
+        "membershipIdentifier"
+      ],
+      "members":{
+        "idNamespaceAssociationIdentifier":{
+          "shape":"IdNamespaceAssociationIdentifier",
+          "documentation":"<p>The unique identifier of the ID namespace association that you want to update.</p>",
+          "location":"uri",
+          "locationName":"idNamespaceAssociationIdentifier"
+        },
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The unique identifier of the membership that contains the ID namespace association that you want to update.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "name":{
+          "shape":"GenericResourceName",
+          "documentation":"<p>A new name for the ID namespace association.</p>"
+        },
+        "description":{
+          "shape":"ResourceDescription",
+          "documentation":"<p>A new description for the ID namespace association.</p>"
+        },
+        "idMappingConfig":{
+          "shape":"IdMappingConfig",
+          "documentation":"<p>The configuration settings for the ID mapping table.</p>"
+        }
+      }
+    },
+    "UpdateIdNamespaceAssociationOutput":{
+      "type":"structure",
+      "required":["idNamespaceAssociation"],
+      "members":{
+        "idNamespaceAssociation":{
+          "shape":"IdNamespaceAssociation",
+          "documentation":"<p>The updated ID namespace association.</p>"
         }
       }
     },
@@ -6779,11 +10058,19 @@
         },
         "queryLogStatus":{
           "shape":"MembershipQueryLogStatus",
-          "documentation":"<p>An indicator as to whether query logging has been enabled or disabled for the membership.</p>"
+          "documentation":"<p>An indicator as to whether query logging has been enabled or disabled for the membership.</p> <p>When <code>ENABLED</code>, Clean Rooms logs details about queries run within this collaboration and those logs can be viewed in Amazon CloudWatch Logs. The default value is <code>DISABLED</code>.</p>"
+        },
+        "jobLogStatus":{
+          "shape":"MembershipJobLogStatus",
+          "documentation":"<p>An indicator as to whether job logging has been enabled or disabled for the collaboration. </p> <p>When <code>ENABLED</code>, Clean Rooms logs details about jobs run within this collaboration and those logs can be viewed in Amazon CloudWatch Logs. The default value is <code>DISABLED</code>.</p>"
         },
         "defaultResultConfiguration":{
           "shape":"MembershipProtectedQueryResultConfiguration",
           "documentation":"<p>The default protected query result configuration as specified by the member who can receive results.</p>"
+        },
+        "defaultJobResultConfiguration":{
+          "shape":"MembershipProtectedJobResultConfiguration",
+          "documentation":"<p> The default job result configuration.</p>"
         }
       }
     },
@@ -6831,6 +10118,42 @@
         "privacyBudgetTemplate":{
           "shape":"PrivacyBudgetTemplate",
           "documentation":"<p>Summary of the privacy budget template.</p>"
+        }
+      }
+    },
+    "UpdateProtectedJobInput":{
+      "type":"structure",
+      "required":[
+        "membershipIdentifier",
+        "protectedJobIdentifier",
+        "targetStatus"
+      ],
+      "members":{
+        "membershipIdentifier":{
+          "shape":"MembershipIdentifier",
+          "documentation":"<p>The identifier for a member of a protected job instance.</p>",
+          "location":"uri",
+          "locationName":"membershipIdentifier"
+        },
+        "protectedJobIdentifier":{
+          "shape":"ProtectedJobIdentifier",
+          "documentation":"<p> The identifier of the protected job to update.</p>",
+          "location":"uri",
+          "locationName":"protectedJobIdentifier"
+        },
+        "targetStatus":{
+          "shape":"TargetProtectedJobStatus",
+          "documentation":"<p>The target status of a protected job. Used to update the execution status of a currently running job.</p>"
+        }
+      }
+    },
+    "UpdateProtectedJobOutput":{
+      "type":"structure",
+      "required":["protectedJob"],
+      "members":{
+        "protectedJob":{
+          "shape":"ProtectedJob",
+          "documentation":"<p>The protected job output.</p>"
         }
       }
     },
@@ -6926,7 +10249,34 @@
         "INVALID_QUERY",
         "IAM_SYNCHRONIZATION_DELAY"
       ]
+    },
+    "WorkerComputeConfiguration":{
+      "type":"structure",
+      "members":{
+        "type":{
+          "shape":"WorkerComputeType",
+          "documentation":"<p> The worker compute configuration type.</p>"
+        },
+        "number":{
+          "shape":"WorkerComputeConfigurationNumberInteger",
+          "documentation":"<p> The number of workers.</p>"
+        }
+      },
+      "documentation":"<p> The configuration of the compute resources for workers running an analysis with the Clean Rooms SQL analytics engine.</p>"
+    },
+    "WorkerComputeConfigurationNumberInteger":{
+      "type":"integer",
+      "box":true,
+      "max":400,
+      "min":2
+    },
+    "WorkerComputeType":{
+      "type":"string",
+      "enum":[
+        "CR.1X",
+        "CR.4X"
+      ]
     }
   },
-  "documentation":"<p>Welcome to the <i>Clean Rooms API Reference</i>.</p> <p>Clean Rooms is an Amazon Web Services service that helps multiple parties to join their data together in a secure collaboration workspace. In the collaboration, members who can query and receive results can get insights into the collective datasets without either party getting access to the other party's raw data.</p> <p>To learn more about Clean Rooms concepts, procedures, and best practices, see the <a href=\"https://docs.aws.amazon.com/clean-rooms/latest/userguide/what-is.html\">Clean Rooms User Guide</a>.</p> <p>To learn more about SQL commands, functions, and conditions supported in Clean Rooms, see the <a href=\"https://docs.aws.amazon.com/clean-rooms/latest/sql-reference/sql-reference.html\">Clean Rooms SQL Reference</a>.</p>"
+  "documentation":"<p>Welcome to the <i>Clean Rooms API Reference</i>.</p> <p>Clean Rooms is an Amazon Web Services service that helps multiple parties to join their data together in a secure collaboration workspace. In the collaboration, members who can run queries and jobs and receive results can get insights into the collective datasets without either party getting access to the other party's raw data.</p> <p>To learn more about Clean Rooms concepts, procedures, and best practices, see the <a href=\"https://docs.aws.amazon.com/clean-rooms/latest/userguide/what-is.html\">Clean Rooms User Guide</a>.</p> <p>To learn more about SQL commands, functions, and conditions supported in Clean Rooms, see the <a href=\"https://docs.aws.amazon.com/clean-rooms/latest/sql-reference/sql-reference.html\">Clean Rooms SQL Reference</a>.</p>"
 }

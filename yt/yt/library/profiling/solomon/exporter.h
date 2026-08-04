@@ -53,6 +53,8 @@ public:
     void Start();
     void Stop();
 
+    void Reconfigure(const TSolomonExporterDynamicConfigPtr& dynamicConfig);
+
     NYTree::IYPathServicePtr GetSensorService();
 
     const TSolomonRegistryPtr& GetRegistry() const;

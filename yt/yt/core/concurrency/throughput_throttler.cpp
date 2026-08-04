@@ -570,7 +570,7 @@ IReconfigurableThroughputThrottlerPtr CreateNamedReconfigurableThroughputThrottl
 {
     return CreateReconfigurableThroughputThrottler(
         std::move(config),
-        logger.WithTag("Throttler: %v", name),
+        logger.WithTag("Throttler", name),
         profiler.WithPrefix("/" + CamelCaseToUnderscoreCase(name)));
 }
 

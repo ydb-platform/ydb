@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.1.1)
+VERSION(1.5.0)
 
 LICENSE(Apache-2.0)
 
@@ -34,6 +34,7 @@ PY_SRCS(
     clickhouse_connect/cc_sqlalchemy/alembic/__init__.py
     clickhouse_connect/cc_sqlalchemy/alembic/adapter.py
     clickhouse_connect/cc_sqlalchemy/alembic/impl.py
+    clickhouse_connect/cc_sqlalchemy/alembic/operations.py
     clickhouse_connect/cc_sqlalchemy/alembic/utils.py
     clickhouse_connect/cc_sqlalchemy/datatypes/__init__.py
     clickhouse_connect/cc_sqlalchemy/datatypes/base.py
@@ -119,6 +120,7 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
+    clickhouse_connect/py.typed
 )
 
 END()

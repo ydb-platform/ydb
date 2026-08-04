@@ -6,6 +6,11 @@ namespace NKqp {
 // Pull up correlated filter inside a subplan
 // We match the parent of the filter, currently we support only Map and Aggregate
 
+bool TPullUpCorrelatedFilterRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return (input->Kind == EOperator::Map || input->Kind == EOperator::Aggregate) &&
+        input->Children.front()->Kind == EOperator::Filter;
+}
+
 bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
@@ -66,6 +71,13 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
 
     if (input->Kind == EOperator::Map) {
         auto map = CastOperator<TOpMap>(input);
+        const auto newMapInputIUs = remainingFilter->GetOutputIUs();
+
+        for (const auto& mapEl : map->MapElements) {
+            if (!mapEl.DependsOnlyOn(newMapInputIUs)) {
+                return false;
+            }
+        }
 
         // Stop if we compute something from one of the dependent columns, except for Just
         for (const auto & mapEl : map->MapElements) {
@@ -90,7 +102,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
 
         if (!addToMap.empty()) {
             for (const auto & add : addToMap) {
-                map->MapElements.push_back(TMapElement(add, add, map->Pos, &ctx.ExprCtx, &props, false));
+                map->MapElements.push_back(TMapElement(add, add, map->Pos, &ctx.ExprCtx, &props));
             }
         }
 

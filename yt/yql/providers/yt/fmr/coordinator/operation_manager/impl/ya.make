@@ -17,6 +17,8 @@ PEERDIR(
     yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sort
     yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/pull
     yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/fill
+    yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/map_reduce
+    yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/touch
     yql/essentials/utils
 )
 

@@ -148,7 +148,7 @@ void SetSignalHandlers(const TSignalHandlerDesc* handlerDescs)
         }
     }
 
-    if (SigProcMask(SIG_BLOCK, &interestedSignals, nullptr) == -1) {
+    if (SigProcMask(SIG_BLOCK, &interestedSignals, /*oset=*/nullptr) == -1) {
         ythrow TSystemError() << "Cannot set sigprocmask";
     }
 
@@ -268,7 +268,7 @@ void AllowAnySignals()
     sigset_t blockMask;
     SigEmptySet(&blockMask);
 
-    if (SigProcMask(SIG_SETMASK, &blockMask, nullptr) == -1) {
+    if (SigProcMask(SIG_SETMASK, &blockMask, /*oset=*/nullptr) == -1) {
         ythrow TSystemError() << "Cannot set sigprocmask";
     }
 }

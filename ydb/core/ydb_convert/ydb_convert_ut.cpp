@@ -1051,7 +1051,7 @@ Y_UNIT_TEST(SimpleConvertGood) {
     using namespace NACLib;
     auto aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.database.connect");
     UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights::ConnectDatabase);
-    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritNone);
+    UNIT_ASSERT_EQUAL(aclAttr.InheritanceType, EInheritanceType::InheritObject | EInheritanceType::InheritContainer);
 
     aclAttr = ConvertYdbPermissionNameToACLAttrs("ydb.tables.modify");
     UNIT_ASSERT_EQUAL(aclAttr.AccessMask, EAccessRights(UpdateRow | EraseRow));

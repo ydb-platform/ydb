@@ -66,8 +66,8 @@
                                                                     "x"
                                                                 ],
                                                                 "E-Cost": "0",
-                                                                "E-Rows": "0",
-                                                                "E-Size": "0",
+                                                                "E-Rows": "1000",
+                                                                "E-Size": "100000",
                                                                 "LookupKeyColumns": [
                                                                     "x"
                                                                 ],
@@ -104,8 +104,8 @@
                                                                                                     "x"
                                                                                                 ],
                                                                                                 "E-Cost": "0",
-                                                                                                "E-Rows": "0",
-                                                                                                "E-Size": "0",
+                                                                                                "E-Rows": "1000",
+                                                                                                "E-Size": "100000",
                                                                                                 "LookupKeyColumns": [
                                                                                                     "x"
                                                                                                 ],

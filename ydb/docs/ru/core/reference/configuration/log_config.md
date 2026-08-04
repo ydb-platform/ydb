@@ -137,7 +137,7 @@ log_config:
   backend_file_name: "/var/log/ydb/ydb.log"
 ```
 
-### Включение диагностики инвалидации блокировок транзакций ([TLI](../../concepts/glossary.md#tli))
+### Включение диагностики инвалидации блокировок транзакций ([TLI](../../concepts/glossary.md#tli)) {#tli-diagnostics}
 
 Для диагностики ошибок `transaction locks invalidated` включите логирование компонента `TLI`:
 

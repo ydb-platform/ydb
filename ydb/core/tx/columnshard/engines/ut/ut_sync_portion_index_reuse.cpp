@@ -100,7 +100,7 @@ std::shared_ptr<NChunks::TChunkPreparation> BuildColumnChunkFromArray(
     auto arrToWrite = accessorConstructor->Construct(accessor, loadContext);
     UNIT_ASSERT(arrToWrite.IsSuccess());
     return std::make_shared<NChunks::TChunkPreparation>(
-        accessorConstructor->SerializeToString(*arrToWrite, loadContext), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures);
+        accessorConstructor->SerializeToBlobAndMeta(*arrToWrite, loadContext).Blob, *arrToWrite, TChunkAddress(columnId, 0), columnFeatures);
 }
 
 THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> BuildColumnChunks(
@@ -142,7 +142,7 @@ TWritePortionInfoWithBlobsResult BuildTestPortion(const ISnapshotSchema::TPtr& s
     UNIT_ASSERT(slice.GroupBlobs(blobs, groups));
 
     auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::move(blobs), inplaceChunks, TInternalPathId::FromRawValue(1),
-        schema->GetVersion(), schema->GetSnapshot(), storages, EPortionType::Written);
+        schema->GetVersion(), schema->GetSnapshot(), storages, EPortionType::Written, schema->GetIndexInfo());
 
     NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(schema->GetIndexInfo().GetReplaceKey()));
     auto& portionCtor = constructor.GetPortionConstructor().MutablePortionConstructor();

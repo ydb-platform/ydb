@@ -44,6 +44,60 @@
 
 {% list tabs %}
 
+- C++
+
+  Подключите заголовок метрик OpenTelemetry из {{ ydb-short-name }} C++ SDK и зарегистрируйте `MetricRegistry` в `TDriverConfig`:
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+  #include <ydb-cpp-sdk/open_telemetry/metrics.h>
+
+  #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h>
+  #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h>
+  #include <opentelemetry/sdk/metrics/meter_provider.h>
+  #include <opentelemetry/sdk/metrics/view/view_registry.h>
+  #include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h>
+  #include <opentelemetry/sdk/resource/resource.h>
+  #include <opentelemetry/metrics/provider.h>
+
+  namespace sdkmetrics = opentelemetry::sdk::metrics;
+  namespace otlp      = opentelemetry::exporter::otlp;
+  namespace resource  = opentelemetry::sdk::resource;
+  using namespace NYdb;
+
+  // 1. Инициализируем провайдер метрик OTel
+  otlp::OtlpHttpMetricExporterOptions opts;
+  opts.url = "http://localhost:4318/v1/metrics";
+
+  auto exporter = otlp::OtlpHttpMetricExporterFactory::Create(opts);
+
+  sdkmetrics::PeriodicExportingMetricReaderOptions readerOpts;
+  readerOpts.export_interval_millis = std::chrono::milliseconds(5000);
+  auto reader = sdkmetrics::PeriodicExportingMetricReaderFactory::Create(
+      std::move(exporter), readerOpts);
+
+  auto res = resource::Resource::Create({{"service.name", "my-service"}});
+  auto rawProvider = std::make_shared<sdkmetrics::MeterProvider>(
+      std::unique_ptr<sdkmetrics::ViewRegistry>(new sdkmetrics::ViewRegistry()), res);
+  rawProvider->AddMetricReader(std::move(reader));
+
+  std::shared_ptr<opentelemetry::metrics::MeterProvider> meterProvider = rawProvider;
+  opentelemetry::metrics::Provider::SetMeterProvider(meterProvider);
+
+  // 2. Оборачиваем в регистратор метрик YDB
+  auto ydbMetricRegistry = NMetrics::CreateOtelMetricRegistry(meterProvider);
+
+  // 3. Создаём драйвер YDB с включёнными метриками
+  auto driverConfig = TDriverConfig()
+      .SetEndpoint("localhost:2136")
+      .SetDatabase("/local")
+      .SetMetricRegistry(ydbMetricRegistry);
+
+  TDriver driver(driverConfig);
+  ```
+
+  Метрики и трассировку можно подключить вместе, зарегистрировав в `TDriverConfig` одновременно `MetricRegistry` и `TraceProvider`.
+
 - Go
 
   Установите адаптер OpenTelemetry для {{ ydb-short-name }} Go SDK:
@@ -106,39 +160,6 @@
   }
   ```
 
-- Python
-
-  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
-
-- C#
-
-  Добавьте NuGet-пакет:
-
-  ```bash
-  dotnet add package Ydb.Sdk.OpenTelemetry
-  ```
-
-  Зарегистрируйте инструментацию {{ ydb-short-name }} в конвейере OpenTelemetry-метрик:
-
-  ```csharp
-  services.AddOpenTelemetry()
-      .WithMetrics(builder => builder
-          .AddYdb()
-          .AddOtlpExporter());
-  ```
-
-  Или с использованием standalone `MeterProvider`:
-
-  ```csharp
-  using var meterProvider = Sdk.CreateMeterProviderBuilder()
-      .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("my-service"))
-      .AddYdb()
-      .AddOtlpExporter()
-      .Build();
-  ```
-
-  Имя пула сессий задаётся параметром `PoolName=` в строке подключения `YdbDataSource`. Полный пример с нагрузкой и Grafana — в репозитории SDK ([Ydb.Sdk.AdoNet.OpenTelemetry/Metrics](https://github.com/ydb-platform/ydb-dotnet-sdk/blob/main/examples/Ydb.Sdk.AdoNet.OpenTelemetry/Metrics/Program.cs)).
-
 - Java
 
   {% note info %}
@@ -184,59 +205,38 @@
 
   Если уже настроен глобальный `GlobalOpenTelemetry`, можно использовать `OpenTelemetryMeter.createGlobal()`. `TableClient` также поддерживает `withMeter(...)`.
 
-- C++
+- Python
 
-  Подключите заголовок метрик OpenTelemetry из {{ ydb-short-name }} C++ SDK и зарегистрируйте `MetricRegistry` в `TDriverConfig`:
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-  #include <ydb-cpp-sdk/open_telemetry/metrics.h>
+- C#
 
-  #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h>
-  #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h>
-  #include <opentelemetry/sdk/metrics/meter_provider.h>
-  #include <opentelemetry/sdk/metrics/view/view_registry.h>
-  #include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h>
-  #include <opentelemetry/sdk/resource/resource.h>
-  #include <opentelemetry/metrics/provider.h>
+  Добавьте NuGet-пакет:
 
-  namespace sdkmetrics = opentelemetry::sdk::metrics;
-  namespace otlp      = opentelemetry::exporter::otlp;
-  namespace resource  = opentelemetry::sdk::resource;
-  using namespace NYdb;
-
-  // 1. Инициализируем провайдер метрик OTel
-  otlp::OtlpHttpMetricExporterOptions opts;
-  opts.url = "http://localhost:4318/v1/metrics";
-
-  auto exporter = otlp::OtlpHttpMetricExporterFactory::Create(opts);
-
-  sdkmetrics::PeriodicExportingMetricReaderOptions readerOpts;
-  readerOpts.export_interval_millis = std::chrono::milliseconds(5000);
-  auto reader = sdkmetrics::PeriodicExportingMetricReaderFactory::Create(
-      std::move(exporter), readerOpts);
-
-  auto res = resource::Resource::Create({{"service.name", "my-service"}});
-  auto rawProvider = std::make_shared<sdkmetrics::MeterProvider>(
-      std::unique_ptr<sdkmetrics::ViewRegistry>(new sdkmetrics::ViewRegistry()), res);
-  rawProvider->AddMetricReader(std::move(reader));
-
-  std::shared_ptr<opentelemetry::metrics::MeterProvider> meterProvider = rawProvider;
-  opentelemetry::metrics::Provider::SetMeterProvider(meterProvider);
-
-  // 2. Оборачиваем в регистратор метрик YDB
-  auto ydbMetricRegistry = NMetrics::CreateOtelMetricRegistry(meterProvider);
-
-  // 3. Создаём драйвер YDB с включёнными метриками
-  auto driverConfig = TDriverConfig()
-      .SetEndpoint("localhost:2136")
-      .SetDatabase("/local")
-      .SetMetricRegistry(ydbMetricRegistry);
-
-  TDriver driver(driverConfig);
+  ```bash
+  dotnet add package Ydb.Sdk.OpenTelemetry
   ```
 
-  Метрики и трассировку можно подключить вместе, зарегистрировав в `TDriverConfig` одновременно `MetricRegistry` и `TraceProvider`.
+  Зарегистрируйте инструментацию {{ ydb-short-name }} в конвейере OpenTelemetry-метрик:
+
+  ```csharp
+  services.AddOpenTelemetry()
+      .WithMetrics(builder => builder
+          .AddYdb()
+          .AddOtlpExporter());
+  ```
+
+  Или с использованием standalone `MeterProvider`:
+
+  ```csharp
+  using var meterProvider = Sdk.CreateMeterProviderBuilder()
+      .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("my-service"))
+      .AddYdb()
+      .AddOtlpExporter()
+      .Build();
+  ```
+
+  Имя пула сессий задаётся параметром `PoolName=` в строке подключения `YdbDataSource`. Полный пример с нагрузкой и Grafana — в репозитории SDK ([Ydb.Sdk.AdoNet.OpenTelemetry/Metrics](https://github.com/ydb-platform/ydb-dotnet-sdk/blob/main/examples/Ydb.Sdk.AdoNet.OpenTelemetry/Metrics/Program.cs)).
 
 - JavaScript
 
@@ -293,6 +293,8 @@
 - Rust
 
   {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)
 
 - PHP
 

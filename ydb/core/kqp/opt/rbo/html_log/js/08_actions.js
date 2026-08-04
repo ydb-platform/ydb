@@ -63,12 +63,25 @@ function createTraceActions(actionContext) {
         preserveTraceViewportAnchor(function() {
             changed = refreshLayoutTransition(mutator());
         });
-        if (changed) updateCycleButtonLabel();
+        if (changed) {
+            markCollapsedSearchIndicatorsDirty();
+            refreshSearchStateForCurrentLayout();
+            updateCycleButtonLabel();
+        }
         return changed;
     }
 
-    function toggleStage(si) {
-        runLayoutTransition(function() {
+    function runLocalLayoutTransition(reason, ev, mutator) {
+        if (ev && typeof withTraceHorizontalScrollLock === 'function') {
+            return withTraceHorizontalScrollLock(reason, function() {
+                return runLayoutTransition(mutator);
+            });
+        }
+        return runLayoutTransition(mutator);
+    }
+
+    function toggleStage(si, ev) {
+        runLocalLayoutTransition('toggle-stage', ev, function() {
             return TraceState.toggleStage(uiState(), traceGroups(), si);
         });
     }
@@ -77,7 +90,7 @@ function createTraceActions(actionContext) {
         stopEvent(ev);
         if (!stageHasRules(si)) return;
 
-        runLayoutTransition(function() {
+        runLocalLayoutTransition('toggle-stage-rules', ev, function() {
             return TraceState.toggleStageRules(uiState(), traceGroups(), si);
         });
     }
@@ -87,7 +100,7 @@ function createTraceActions(actionContext) {
         var count = groupRuleCount(si, gi);
         if (count <= 1) return;
 
-        runLayoutTransition(function() {
+        runLocalLayoutTransition('toggle-group', ev, function() {
             return TraceState.toggleGroup(uiState(), traceGroups(), si, gi);
         });
     }
@@ -97,7 +110,7 @@ function createTraceActions(actionContext) {
         var count = groupRuleCount(si, gi);
         if (count <= 1 || !groupState(si, gi).open) return;
 
-        runLayoutTransition(function() {
+        runLocalLayoutTransition('toggle-group-rules', ev, function() {
             return TraceState.toggleGroupRules(uiState(), traceGroups(), si, gi);
         });
     }
@@ -110,8 +123,6 @@ function createTraceActions(actionContext) {
             return;
         }
         var wasOpen = !!ruleState(si, gi, ri).open;
-        var lockTraceHorizontalScroll = !!ev && !wasOpen &&
-            typeof withTraceHorizontalScrollLock === 'function';
         if (wasOpen &&
                 typeof captureMountedRulePaneScroll === 'function') {
             captureMountedRulePaneScroll(si, gi, ri);
@@ -119,13 +130,7 @@ function createTraceActions(actionContext) {
         var transition = function() {
             return TraceState.toggleRule(uiState(), traceGroups(), si, gi, ri);
         };
-        if (lockTraceHorizontalScroll) {
-            withTraceHorizontalScrollLock('click-expand-rule', function() {
-                runLayoutTransition(transition);
-            });
-        } else {
-            runLayoutTransition(transition);
-        }
+        runLocalLayoutTransition(wasOpen ? 'toggle-rule-collapse' : 'toggle-rule-expand', ev, transition);
     }
 
     function onCollapsedRuleClick(si, gi, ri, ev) {
@@ -135,7 +140,7 @@ function createTraceActions(actionContext) {
 
     function onCollapsedGroupClick(si, gi, ev) {
         stopEvent(ev);
-        if (!groupState(si, gi).open) toggleGroup(si, gi, null);
+        if (!groupState(si, gi).open) toggleGroup(si, gi, ev);
     }
 
     function setAllRuleFeatureAction(feature, visible, ev) {
@@ -182,14 +187,14 @@ function createTraceActions(actionContext) {
         updateBulkDetailControls();
     }
 
-    function nodeColumnFeedbackAction(ev) {
+    function pinnedFieldFeedbackAction(ev) {
         var target = ev && ev.target && ev.target.closest
             ? ev.target.closest('[data-trace-action]')
             : null;
         return target && target.getAttribute ? target.getAttribute('data-trace-action') : '';
     }
 
-    function parseNodeColumnFeedbackRuleKey(ruleKeyValue) {
+    function parsePinnedFieldFeedbackRuleKey(ruleKeyValue) {
         ruleKeyValue = String(ruleKeyValue || '');
         if (ruleKeyValue.indexOf('fs-') === 0) ruleKeyValue = ruleKeyValue.substring(3);
         var parts = ruleKeyValue.split('-');
@@ -205,30 +210,30 @@ function createTraceActions(actionContext) {
         return ruleRefValidForCurrentTrace(ref) ? ref : null;
     }
 
-    function nodeColumnFeedbackRuleRef(ev) {
+    function pinnedFieldFeedbackRuleRef(ev) {
         var target = ev && ev.target && ev.target.closest ? ev.target : null;
         if (!target) return null;
 
         var header = target.closest('.tree-pinned-header[id^="pinhdr-"]');
         if (header && header.id) {
-            return parseNodeColumnFeedbackRuleKey(header.id.substring('pinhdr-'.length));
+            return parsePinnedFieldFeedbackRuleKey(header.id.substring('pinhdr-'.length));
         }
 
         var root = target.closest('[id^="treeroot-"]');
         if (root && root.id) {
-            return parseNodeColumnFeedbackRuleKey(root.id.substring('treeroot-'.length));
+            return parsePinnedFieldFeedbackRuleKey(root.id.substring('treeroot-'.length));
         }
         return null;
     }
 
-    function nodeColumnFeedbackFeature(visible, ev) {
-        var action = nodeColumnFeedbackAction(ev);
-        if (visible && action === 'pin-node-column') return 'pinned';
-        if (!visible && action === 'unpin-node-column') return 'fields';
+    function pinnedFieldFeedbackFeature(visible, ev) {
+        var action = pinnedFieldFeedbackAction(ev);
+        if (visible && action === 'pin-field') return 'pinned';
+        if (!visible && action === 'unpin-field') return 'fields';
         return '';
     }
 
-    function setRuleFeatureVisibleForNodeColumnFeedback(ref, feature) {
+    function setRuleFeatureVisibleForPinnedFieldFeedback(ref, feature) {
         if (!ref || !feature || !ruleHasFeature(ref.si, ref.gi, ref.ri, feature)) return false;
         var change = TraceState.setRuleFeature(uiState(), ref.si, ref.gi, ref.ri, feature, true);
         if (!change.changed) return false;
@@ -236,7 +241,7 @@ function createTraceActions(actionContext) {
         return true;
     }
 
-    function renderNodeColumnFeedbackFeatureChange(ref, feature) {
+    function renderPinnedFieldFeedbackFeatureChange(ref, feature) {
         if (!ref || !feature) return;
         renderRuleFeatureChange(feature, ref.si, ref.gi, ref.ri);
         markCollapsedSearchIndicatorsDirty();
@@ -244,7 +249,7 @@ function createTraceActions(actionContext) {
         updateBulkDetailControls();
     }
 
-    function applyNodeColumnProjectionRefresh() {
+    function applyPinnedFieldProjectionRefresh() {
         var query = currentSearchQuery();
         var scope = currentSearchScope();
 
@@ -272,14 +277,14 @@ function createTraceActions(actionContext) {
         scheduleDiffMoveArrows();
     }
 
-    function refreshNodeColumnProjection() {
-        withViewportAnchors('node-column-projection', applyNodeColumnProjectionRefresh);
+    function refreshPinnedFieldProjection() {
+        withViewportAnchors('pinned-field-projection', applyPinnedFieldProjectionRefresh);
     }
 
-    function runNodeColumnProjectionMutation(reason, mutation, unchanged) {
-        withViewportAnchors(reason || 'node-column-projection-mutation', function() {
+    function runPinnedFieldProjectionMutation(reason, mutation, unchanged) {
+        withViewportAnchors(reason || 'pinned-field-projection-mutation', function() {
             if (mutation()) {
-                applyNodeColumnProjectionRefresh();
+                applyPinnedFieldProjectionRefresh();
             } else if (unchanged) {
                 unchanged();
             } else {
@@ -288,45 +293,45 @@ function createTraceActions(actionContext) {
         });
     }
 
-    function setNodeColumnVisibleAction(key, visible, ev) {
+    function setPinnedFieldVisibleAction(key, visible, ev) {
         consumeEvent(ev);
-        runNodeColumnProjectionMutation('node-column-visible', function() {
-            var feedbackFeature = nodeColumnFeedbackFeature(visible, ev);
-            var feedbackRef = feedbackFeature ? nodeColumnFeedbackRuleRef(ev) : null;
-            var columnChanged = setNodeColumnVisible(key, visible);
-            var featureChanged = setRuleFeatureVisibleForNodeColumnFeedback(feedbackRef, feedbackFeature);
-            if (!columnChanged && featureChanged) {
-                renderNodeColumnFeedbackFeatureChange(feedbackRef, feedbackFeature);
+        runPinnedFieldProjectionMutation('pinned-field-visible', function() {
+            var feedbackFeature = pinnedFieldFeedbackFeature(visible, ev);
+            var feedbackRef = feedbackFeature ? pinnedFieldFeedbackRuleRef(ev) : null;
+            var pinnedFieldChanged = setPinnedFieldVisible(key, visible);
+            var featureChanged = setRuleFeatureVisibleForPinnedFieldFeedback(feedbackRef, feedbackFeature);
+            if (!pinnedFieldChanged && featureChanged) {
+                renderPinnedFieldFeedbackFeatureChange(feedbackRef, feedbackFeature);
             }
-            return columnChanged;
+            return pinnedFieldChanged;
         });
     }
 
-    function soloNodeColumnAction(key, ev) {
+    function soloPinnedFieldAction(key, ev) {
         consumeEvent(ev);
-        runNodeColumnProjectionMutation('node-column-solo', function() {
-            return soloNodeColumn(key);
+        runPinnedFieldProjectionMutation('pinned-field-solo', function() {
+            return soloPinnedField(key);
         });
     }
 
-    function setAllNodeColumnsAction(visible, ev) {
+    function setAllPinnedFieldsAction(visible, ev) {
         consumeEvent(ev);
-        runNodeColumnProjectionMutation('node-column-set-all', function() {
-            return setAllNodeColumnsVisible(visible);
+        runPinnedFieldProjectionMutation('pinned-field-set-all', function() {
+            return setAllPinnedFieldsVisible(visible);
         });
     }
 
-    function applyNodeColumnPresetAction(index, ev) {
+    function applyPinnedFieldPresetAction(index, ev) {
         consumeEvent(ev);
-        runNodeColumnProjectionMutation('node-column-preset', function() {
-            return setNodeColumnPreset(index);
+        runPinnedFieldProjectionMutation('pinned-field-preset', function() {
+            return setPinnedFieldPreset(index);
         });
     }
 
-    function resetNodeColumnsAction(ev) {
+    function resetPinnedFieldsAction(ev) {
         consumeEvent(ev);
-        runNodeColumnProjectionMutation('node-column-reset', function() {
-            return resetNodeColumnsToDefault();
+        runPinnedFieldProjectionMutation('pinned-field-reset', function() {
+            return resetPinnedFieldsToDefault();
         });
     }
 
@@ -380,17 +385,26 @@ function createTraceActions(actionContext) {
         }
     }
 
-    function setNodeColumnWidthAction(key, width, ev) {
+    function applyDiffFieldPresetAction(index, ev) {
         consumeEvent(ev);
-        runNodeColumnProjectionMutation('node-column-width', function() {
-            return setNodeColumnWidth(key, width);
+        if (setDiffFieldPreset(index)) {
+            refreshDiffFieldProjection();
+        } else {
+            updateBulkDetailControls();
+        }
+    }
+
+    function setPinnedFieldWidthAction(key, width, ev) {
+        consumeEvent(ev);
+        runPinnedFieldProjectionMutation('pinned-field-width', function() {
+            return setPinnedFieldWidth(key, width);
         }, function() {});
     }
 
-    function reorderNodeColumnAction(key, dropIndex, ev) {
+    function reorderPinnedFieldAction(key, dropIndex, ev) {
         consumeEvent(ev);
-        runNodeColumnProjectionMutation('node-column-reorder', function() {
-            return reorderNodeColumn(key, dropIndex);
+        runPinnedFieldProjectionMutation('pinned-field-reorder', function() {
+            return reorderPinnedField(key, dropIndex);
         });
     }
 
@@ -528,7 +542,7 @@ function createTraceActions(actionContext) {
             var change = TraceState.toggleRuleFeature(uiState(), si, gi, ri, feature);
             if (!change.changed) return;
             var state = ruleState(si, gi, ri);
-            var disablesPeer = feature === 'fields' || feature === 'info';
+            var disablesPeer = feature === 'fields';
             var disabledOther = disablesPeer && state[feature]
                 ? disableOtherFullscreenDiffFeature(si, gi, ri, feature)
                 : null;
@@ -578,8 +592,41 @@ function createTraceActions(actionContext) {
         toggleRuleFeatureAction(si, gi, ri, 'pinned', ev);
     }
 
+    function openRulePathForInfoToggle(si, gi, ri) {
+        var change = null;
+        if (typeof openActiveSearchExpandOverlayRule === 'function') {
+            change = mergeLayoutChange(change, openActiveSearchExpandOverlayRule(si, gi, ri));
+        }
+        return mergeLayoutChange(change, openRulePath(si, gi, ri));
+    }
+
     function toggleRuleInfoAction(si, gi, ri, ev) {
-        toggleRuleFeatureAction(si, gi, ri, 'info', ev);
+        stopEvent(ev);
+        if (!ruleHasFeature(si, gi, ri, 'info')) {
+            updateBulkDetailControls();
+            return;
+        }
+
+        var wasOpen = effectiveRuleOpen(si, gi, ri);
+        var nextVisible = wasOpen
+            ? !ruleFeatureButtonActive('info', si, gi, ri)
+            : true;
+
+        withRuleLocalViewportStability('toggle-rule-info', function() {
+            var layoutChange = wasOpen ? null : openRulePathForInfoToggle(si, gi, ri);
+            var change = TraceState.setRuleFeature(uiState(), si, gi, ri, 'info', nextVisible);
+
+            if (layoutChange && layoutChange.changed) {
+                refreshLayoutTransitionDisplays(layoutChange);
+            }
+
+            if (change.changed || layoutChange && layoutChange.changed) {
+                renderRuleFeatureChange('info', si, gi, ri);
+                markCollapsedSearchIndicatorsDirty();
+                refreshSearchStateForCurrentLayout();
+            }
+            updateBulkDetailControls();
+        });
     }
 
     function setRuleInfoTabAction(si, gi, ri, tabId, ev) {
@@ -1669,29 +1716,69 @@ function createTraceActions(actionContext) {
         });
     }
 
-    function setActiveTraceAction(index) {
+    function sameTraceSelection(left, right) {
+        left = normalizeTraceSelection(left);
+        right = normalizeTraceSelection(right);
+        if (left.length !== right.length) return false;
+        for (var i = 0; i < left.length; i++) {
+            if (left[i] !== right[i]) return false;
+        }
+        return true;
+    }
+
+    function setActiveTraceSelectionAction(selection) {
         var traces = traceDataTraces();
         if (!traces.length) return;
-        index = Math.max(0, Math.min(traces.length - 1, Number(index) || 0));
-        saveActiveTraceIndexToSession(index);
-        if (index === traceState().activeTraceIndex && traceState().activeTraceLoaded) {
+        selection = normalizeTraceSelection(selection, traces);
+        var index = selection[0] || 0;
+        saveActiveTraceSelectionToSession(selection);
+        if (sameTraceSelection(selection, activeTraceSelection()) && traceState().activeTraceLoaded) {
             syncTracePicker();
             return;
         }
 
         return withTraceSwitchVisualTransition('trace-switch', {
             fromTraceIndex: traceState().activeTraceIndex,
-            toTraceIndex: index
+            toTraceIndex: index,
+            traceSelection: selection.slice()
         }, function() {
             saveActiveTraceSession();
-            resetTraceSwitchRuntime(index);
-            loadTraceData(index);
-            var session = traceSessionForIndex(index);
+            resetTraceSwitchRuntime(selection);
+            loadTraceData(selection);
+            var session = traceSessionForSelection(selection);
             restoreTraceSessionBeforeRender(session);
             renderLoadedTrace({ resetScroll: !traceSessionHasViewport(session) });
             restoreTraceSessionAfterRender(session);
             return true;
         });
+    }
+
+    function setActiveTraceAction(index) {
+        return setActiveTraceSelectionAction([index]);
+    }
+
+    function setActiveTraceOnlyAction(index, ev) {
+        consumeEvent(ev);
+        closeTracePickerMenuAction();
+        return setActiveTraceSelectionAction([index]);
+    }
+
+    function toggleTraceSelectionAction(index, ev) {
+        consumeEvent(ev);
+        var traces = traceDataTraces();
+        if (!traces.length) return;
+        index = Math.max(0, Math.min(traces.length - 1, Number(index) || 0));
+        var selection = activeTraceSelection();
+        var at = selection.indexOf(index);
+        if (at < 0) {
+            selection.push(index);
+        } else if (selection.length > 1) {
+            selection.splice(at, 1);
+        } else {
+            syncTracePicker();
+            return;
+        }
+        return setActiveTraceSelectionAction(selection);
     }
 
     function setThemeAction(theme, ev) {
@@ -1719,8 +1806,9 @@ function createTraceActions(actionContext) {
     function closeSettingsPopoverAction() {
         var popover = byId('settings-popover');
         var btn = byId('settings-button');
-        closeNodeColumnsMenuAction();
+        closePinnedFieldsMenuAction();
         closeDiffFieldsMenuAction();
+        closeTracePickerMenuAction();
         if (popover && !popover.hidden) {
             var focusInPopover = popover.contains && popover.contains(document.activeElement);
             popover.hidden = true;
@@ -1729,9 +1817,9 @@ function createTraceActions(actionContext) {
         if (btn) btn.classList.remove('active');
     }
 
-    function closeNodeColumnsMenuAction() {
-        var menu = byId('node-columns-menu');
-        var btn = byId('node-columns-button');
+    function closePinnedFieldsMenuAction() {
+        var menu = byId('pinned-fields-menu');
+        var btn = byId('pinned-fields-button');
         if (menu) menu.hidden = true;
         if (btn) {
             if (btn.classList && btn.classList.remove) btn.classList.remove('active');
@@ -1749,15 +1837,26 @@ function createTraceActions(actionContext) {
         }
     }
 
-    function toggleNodeColumnsMenuAction(ev) {
+    function closeTracePickerMenuAction() {
+        var menu = byId('trace-picker-menu');
+        var btn = byId('trace-picker-button');
+        if (menu) menu.hidden = true;
+        if (btn) {
+            if (btn.classList && btn.classList.remove) btn.classList.remove('active');
+            if (btn.setAttribute) btn.setAttribute('aria-expanded', 'false');
+        }
+    }
+
+    function togglePinnedFieldsMenuAction(ev) {
         consumeEvent(ev);
 
-        var menu = byId('node-columns-menu');
-        var btn = byId('node-columns-button');
+        var menu = byId('pinned-fields-menu');
+        var btn = byId('pinned-fields-button');
         if (!menu) return;
 
         var open = menu.hidden;
         if (open) closeDiffFieldsMenuAction();
+        if (open) closeTracePickerMenuAction();
         menu.hidden = !open;
         if (btn) {
             if (btn.classList && btn.classList.toggle) btn.classList.toggle('active', open);
@@ -1774,7 +1873,8 @@ function createTraceActions(actionContext) {
         if (!menu) return;
 
         var open = menu.hidden;
-        if (open) closeNodeColumnsMenuAction();
+        if (open) closePinnedFieldsMenuAction();
+        if (open) closeTracePickerMenuAction();
         menu.hidden = !open;
         if (btn) {
             if (btn.classList && btn.classList.toggle) btn.classList.toggle('active', open);
@@ -1790,8 +1890,9 @@ function createTraceActions(actionContext) {
         var btn = byId('settings-button');
         if (!popover) return;
         var open = popover.hidden;
-        closeNodeColumnsMenuAction();
+        closePinnedFieldsMenuAction();
         closeDiffFieldsMenuAction();
+        closeTracePickerMenuAction();
         popover.hidden = !open;
         if (open) updateBulkDetailControls();
         if (btn) btn.classList.toggle('active', open);
@@ -1800,10 +1901,28 @@ function createTraceActions(actionContext) {
 
     function closeTopBarPopoversAction(ev) {
         if (ev && ev.target.closest &&
-            (ev.target.closest('.search-wrap') || ev.target.closest('.settings-wrap'))) {
+            (ev.target.closest('.search-wrap') ||
+             ev.target.closest('.settings-wrap') ||
+             ev.target.closest('.trace-picker-wrap'))) {
             return;
         }
+        closeTracePickerMenuAction();
         closeSettingsPopoverAction();
+    }
+
+    function toggleTracePickerMenuAction(ev) {
+        consumeEvent(ev);
+        var menu = byId('trace-picker-menu');
+        var btn = byId('trace-picker-button');
+        if (!menu) return;
+        var open = menu.hidden;
+        closeSettingsPopoverAction();
+        menu.hidden = !open;
+        if (btn) {
+            if (btn.classList && btn.classList.toggle) btn.classList.toggle('active', open);
+            if (btn.setAttribute) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+        if (open) focusFirstIn(menu);
     }
 
     function treeToggleAction(nodeId, ev) {
@@ -1858,21 +1977,22 @@ function createTraceActions(actionContext) {
     };
 
     var detailActions = {
-        applyNodeColumnPreset: applyNodeColumnPresetAction,
+        applyDiffFieldPreset: applyDiffFieldPresetAction,
+        applyPinnedFieldPreset: applyPinnedFieldPresetAction,
         closeInfoFieldDetails: closeInfoFieldDetailsAction,
         openFieldDetails: openFieldDetailsAction,
         pinInfoFieldDetails: pinInfoFieldDetailsAction,
         resetDiffFields: resetDiffFieldsAction,
-        reorderNodeColumn: reorderNodeColumnAction,
-        resetNodeColumns: resetNodeColumnsAction,
+        reorderPinnedField: reorderPinnedFieldAction,
+        resetPinnedFields: resetPinnedFieldsAction,
         setAllDiffFields: setAllDiffFieldsAction,
-        setAllNodeColumns: setAllNodeColumnsAction,
+        setAllPinnedFields: setAllPinnedFieldsAction,
         setDiffFieldVisible: setDiffFieldVisibleAction,
         setAllRuleFeature: setAllRuleFeatureAction,
-        setNodeColumnWidth: setNodeColumnWidthAction,
-        setNodeColumnVisible: setNodeColumnVisibleAction,
+        setPinnedFieldWidth: setPinnedFieldWidthAction,
+        setPinnedFieldVisible: setPinnedFieldVisibleAction,
         soloDiffField: soloDiffFieldAction,
-        soloNodeColumn: soloNodeColumnAction,
+        soloPinnedField: soloPinnedFieldAction,
         setRuleInfoTab: setRuleInfoTabAction,
         setRuleInfoSwitcher: setRuleInfoSwitcherAction,
         toggleRuleInfo: toggleRuleInfoAction,
@@ -1929,7 +2049,11 @@ function createTraceActions(actionContext) {
     };
 
     var traceActions = {
-        setActiveTrace: setActiveTraceAction
+        setActiveTrace: setActiveTraceAction,
+        setActiveTraceOnly: setActiveTraceOnlyAction,
+        setActiveTraceSelection: setActiveTraceSelectionAction,
+        toggleTracePickerMenu: toggleTracePickerMenuAction,
+        toggleTraceSelection: toggleTraceSelectionAction
     };
 
     var themeActions = {
@@ -1942,7 +2066,7 @@ function createTraceActions(actionContext) {
         closeTopBarPopovers: closeTopBarPopoversAction,
         setEmptyStagesVisible: setEmptyStagesVisibleAction,
         toggleDiffFieldsMenu: toggleDiffFieldsMenuAction,
-        toggleNodeColumnsMenu: toggleNodeColumnsMenuAction,
+        togglePinnedFieldsMenu: togglePinnedFieldsMenuAction,
         toggleSettingsPopover: toggleSettingsPopoverAction
     };
 

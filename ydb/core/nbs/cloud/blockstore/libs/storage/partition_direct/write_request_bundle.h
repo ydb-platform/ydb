@@ -52,6 +52,7 @@ public:
 
     NThreading::TFuture<TWriteBlocksLocalResponse> GetFuture();
     NWilson::TSpan& GetSpan();
+    TBlockRange64 GetRange() const;
     TBlockRange64 GetVChunkRange() const;
     void SetLsn(ui64 lsn);
     ui64 GetLsn() const;
@@ -60,6 +61,7 @@ public:
 private:
     IWriteClientWeakPtr WriteClient;
     std::shared_ptr<TWriteBlocksLocalRequest> Request;
+    TGuardedSgList SgList;
     NWilson::TSpan Span;
     TCallContextPtr CallContext;
     TBlockRange64 VChunkRange;

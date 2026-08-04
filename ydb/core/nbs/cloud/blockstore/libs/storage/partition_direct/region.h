@@ -4,6 +4,8 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
@@ -16,12 +18,14 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRegion
+class TRegion: public std::enable_shared_from_this<TRegion>
 {
 public:
     TRegion(
         NActors::TActorSystem* actorSystem,
+        ITraceService* traceService,
         IPartitionDirectService* partitionDirectService,
+        const TDiskDescription& diskDescription,
         ui32 regionIndex,
         const TVector<IDirectBlockGroupPtr>& directBlockGroups,
         const TVChunkConfigByIndex& vChunkConfigs,
@@ -30,7 +34,10 @@ public:
         NMonitoring::TDynamicCounterPtr counters);
 
     void Run();
-    void Stop();
+
+    NThreading::TFuture<void> Stop();
+
+    [[nodiscard]] TVChunkPtr GetVChunk(size_t vChunkIndex) const;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -43,7 +50,11 @@ public:
         const NWilson::TTraceId& traceId);
 
 private:
+    void OnVChunksStopped();
+
     NActors::TActorSystem* const ActorSystem;
+    const TDiskDescription DiskDescription;
+
     TVector<TVChunkPtr> VChunks;
 };
 

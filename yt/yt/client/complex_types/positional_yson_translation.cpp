@@ -352,7 +352,7 @@ TTranslationSpec WrapTranslationSpecs(
 }
 
 // Overload for dynamically-sized list of translation specs (as seen in tuple, struct, etc).
-template <CInvocable<TYsonCursorConverter(std::vector<TYsonCursorConverter>)> TConvertersWrapper>
+template <NMpl::CInvocable<TYsonCursorConverter(std::vector<TYsonCursorConverter>)> TConvertersWrapper>
 TTranslationSpec WrapTranslationSpecs(
     TConvertersWrapper&& convertersWrapper,
     std::vector<TTranslationSpec>&& translationSpecs)

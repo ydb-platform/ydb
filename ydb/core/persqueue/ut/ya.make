@@ -23,11 +23,12 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/persqueue/ut/common
+    ydb/core/persqueue/writer
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/library/kafka
+    ydb/public/sdk/cpp/src/library/kafka
 )
 
 YQL_LAST_ABI_VERSION()
@@ -51,6 +52,8 @@ SRCS(
     partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
     events_ut.cpp
+    write_id_ut.cpp
+    pqdata_transaction_compat_ut.cpp
 )
 
 RESOURCE(
@@ -58,6 +61,7 @@ RESOURCE(
     ydb/core/persqueue/ut/resources/counters_pqproxy_firstclass.html counters_pqproxy_firstclass.html
     ydb/core/persqueue/ut/resources/counters_topics.html counters_topics.html
     ydb/core/persqueue/ut/resources/counters_topics_extended.html counters_topics_extended.html
+    ydb/core/persqueue/ut/resources/counters_topics_read.html counters_topics_read.html
 
     ydb/core/persqueue/ut/resources/partition_counters/federation/after_write.html federation_after_write.html
     ydb/core/persqueue/ut/resources/partition_counters/federation/after_read.html federation_after_read.html

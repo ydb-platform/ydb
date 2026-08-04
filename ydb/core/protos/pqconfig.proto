@@ -289,9 +289,13 @@ message TPartitionConfig {
     optional uint64 WriteMessageDeduplicationIdPerSecond = 17 [default = 100000];
 
     message TReadQuota {
+        // Consumer name the quota is applied to. The special value CLIENTID_WITHOUT_CONSUMER
+        // ("$without_consumer") stores the quota for reading a partition without a consumer.
         optional string ClientId = 1;
         optional uint64 SpeedInBytesPerSecond = 2;
         optional uint64 BurstSize = 3;
+        optional uint64 SpeedInMessagesPerSecond = 4;
+        optional uint64 BurstSizeInMessages = 5;
     }
 
     repeated TReadQuota ReadQuota = 11;
@@ -308,6 +312,15 @@ message TPartitionConfig {
 
     optional uint64 WriteSpeedInMessagesPerSecond = 18 [default = 1048576]; // 1024 * 1024
     optional uint64 BurstSizeInMessages = 19 [default = 1048576];           // 1024 * 1024
+
+    // Total read speed for a single partition (across all consumers), in bytes per second.
+    optional uint64 ReadSpeedInBytesPerSecond = 20;
+    // Total burst size for read from a single partition (across all consumers), in bytes.
+    optional uint64 ReadBurstBytes = 21;
+    // Total read speed for a single partition (across all consumers), in messages per second.
+    optional uint64 ReadSpeedInMessagesPerSecond = 22;
+    // Total burst size for read from a single partition (across all consumers), in messages.
+    optional uint64 ReadBurstMessages = 23;
 };
 
 message TPartitionKeyRange {
@@ -419,6 +432,10 @@ message TPQTabletConfig {
         optional string DeadLetterQueue = 17; // For MLP consumers
         optional uint32 DefaultDelayMessageTimeMs = 18 [default = 0]; // For MLP consumers
         optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
+        // For MLP (shared/SQS) consumers. The window during which a repeated read with the same
+        // receive-request-attempt-id replays the same messages. Default 5 minutes.
+        // Passed via the _sqs_read_request_attempt_id_period_ms consumer attribute.
+        optional uint32 ReadRequestAttemptIdPeriodMs = 20 [default = 300000];
 
         optional uint32 MetricsLevel = 21;
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
@@ -503,6 +520,13 @@ message TPQTabletConfig {
     optional string TimestampType = 42;
 
     optional bool ContentBasedDeduplication = 43 [default = false];
+
+    // SQS/YMQ migration: queue metadata for exporting queue metrics from PQRB.
+    optional string SqsQueueName = 44 [default = ""];
+    optional string SqsAccountName = 45 [default = ""];
+    optional string SqsCloudId = 46 [default = ""];
+    optional string SqsFolderId = 47 [default = ""];
+    optional bool SqsExportMetrics = 48 [default = false];
 }
 
 message THeartbeat {

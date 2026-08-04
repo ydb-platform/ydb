@@ -46,7 +46,8 @@ void TCommandMakeDirectory::ExtractParams(TConfig& config) {
 }
 
 int TCommandMakeDirectory::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.MakeDirectory(
             Path,
@@ -82,7 +83,7 @@ void TCommandRemoveDirectory::ExtractParams(TConfig& config) {
 }
 
 int TCommandRemoveDirectory::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NScheme::TSchemeClient schemeClient(driver);
     const auto settings = FillSettings(NScheme::TRemoveDirectorySettings());
 
@@ -141,7 +142,7 @@ void TCommandDescribe::ExtractParams(TConfig& config) {
 }
 
 int TCommandDescribe::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     TDescribeOptions options;
     options.ShowPermissions = ShowPermissions;
     options.ShowKeyShardBoundaries = ShowKeyShardBoundaries;
@@ -188,7 +189,7 @@ void TCommandList::ExtractParams(TConfig& config) {
 }
 
 int TCommandList::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     ISchemePrinter::TSettings settings = {
         Path,
         Recursive,
@@ -267,7 +268,8 @@ void TCommandPermissionGrant::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionGrant::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -314,7 +316,8 @@ void TCommandPermissionRevoke::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionRevoke::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -361,7 +364,8 @@ void TCommandPermissionSet::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionSet::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -401,7 +405,8 @@ void TCommandChangeOwner::ExtractParams(TConfig& config) {
 }
 
 int TCommandChangeOwner::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -432,7 +437,8 @@ void TCommandPermissionClear::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionClear::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -463,7 +469,8 @@ void TCommandPermissionSetInheritance::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionSetInheritance::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -494,7 +501,8 @@ void TCommandPermissionClearInheritance::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionClearInheritance::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -525,7 +533,7 @@ void TCommandPermissionList::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionList::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NScheme::TSchemeClient client(driver);
     NScheme::TDescribePathResult result = client.DescribePath(
         Path,

@@ -80,7 +80,7 @@ constexpr auto SimpleGraceJoinWithSpillingQuery = R"(
 constexpr auto SimpleWideSortWithSpillingQuery = R"(
         --!syntax_v1
         PRAGMA ydb.EnableSpillingNodes="WideSort";
-        PRAGMA ydb.OptUseSortForPartitionsByKeys = "true";
+        PRAGMA ydb.WindowFunctionsV2 = "true";
         SELECT Key, Value,
             ROW_NUMBER() OVER (PARTITION BY Key ORDER BY Value) as rn
         FROM `/Root/KeyValue`

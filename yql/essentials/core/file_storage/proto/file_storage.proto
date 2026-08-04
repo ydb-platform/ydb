@@ -9,4 +9,5 @@ message TFileStorageConfig {
     optional uint32 RetryDelayMs = 7 [default = 1000]; // Delay in ms between attempts to download file
 
     map<string, string> DownloaderConfig = 14;
+    optional string StripBandwidthLimit = 15;
 }

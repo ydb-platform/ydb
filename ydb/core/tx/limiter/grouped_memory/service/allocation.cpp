@@ -2,6 +2,8 @@
 
 #include <ydb/library/accessor/validator.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GROUPED_MEMORY_LIMITER
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId, const ui64 allocationExternalGroupId,
@@ -14,17 +16,26 @@ TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId, const
     , Stage(stage) {
     AFL_VERIFY(Stage);
     AFL_VERIFY(Allocation);
-    AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "add")("id", Allocation->GetIdentifier())("stage", Stage->GetName());
+    YDB_LOG_INFO("",
+        {"event", "add"},
+        {"id", Allocation->GetIdentifier()},
+        {"stage", Stage->GetName()});
     AllocatedVolume = Allocation->GetMemory();
     if (allocation->IsAllocated()) {
-        AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated_on_add")("allocation_id", Identifier)("stage", Stage->GetName());
+        YDB_LOG_INFO("",
+            {"event", "allocated_on_add"},
+            {"allocationId", Identifier},
+            {"stage", Stage->GetName()});
         Allocation = nullptr;
     }
     Stage->Add(AllocatedVolume, GetAllocationStatus() == EAllocationStatus::Allocated);
 }
 
 bool TAllocationInfo::Allocate(const NActors::TActorId& ownerId) {
-    AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier)("stage", Stage->GetName());
+    YDB_LOG_TRACE("",
+        {"event", "allocated"},
+        {"allocationId", Identifier},
+        {"stage", Stage->GetName()});
     AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName());
     auto allocationResult = Stage->Allocate(AllocatedVolume);
     if (allocationResult.IsFail()) {
@@ -59,7 +70,10 @@ TAllocationInfo::~TAllocationInfo() {
         Stage->Free(AllocatedVolume, false);
     }
 
-    AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "destroy")("allocation_id", Identifier)("stage", Stage->GetName());
+    YDB_LOG_TRACE("",
+        {"event", "destroy"},
+        {"allocationId", Identifier},
+        {"stage", Stage->GetName()});
 }
 
 TString TAllocationInfo::DebugString() const {

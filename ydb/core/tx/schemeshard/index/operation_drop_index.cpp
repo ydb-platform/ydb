@@ -459,7 +459,7 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
 
     // A fulltext index built on a table with a custom (non single-integer) primary key uses a
     // synthetic __ydb_row_id column as its doc_id and resolves it back to the primary key through a
-    // single-column GlobalUnique secondary index over __ydb_row_id (auto-named uniq__ydb_row_id).
+    // single-column GlobalUnique secondary index over __ydb_row_id (auto-named __ydb_unique_row_id).
     // Dropping that unique index while such a fulltext index still exists would orphan every fulltext
     // posting entry, so forbid it unless another Ready unique index over __ydb_row_id remains to take
     // over the resolution. Detection mirrors the runtime's own index selection (signature, not name),

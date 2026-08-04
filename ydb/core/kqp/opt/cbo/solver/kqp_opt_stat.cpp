@@ -16,7 +16,7 @@ namespace {
      * All other callables will not be evaluated
      */
     THashSet<TString> ConstantFoldingWhiteList = {
-        "Concat", "Just", "Optional", "SafeCast", "AsList", "Size",
+        "Concat", "Just", "Optional", "SafeCast", "AsList", "Size", "IfPresent",
         "+", "-", "*", "/", "%", ">", "<", ">=", "<=", "=="};
 
     THashSet<TString> PgConstantFoldingWhiteList = {
@@ -87,12 +87,12 @@ namespace {
     bool IsSuitableToFoldFlatMap(const TExprNode::TPtr& input);
 
     bool IsConstantUdf(const TExprNode::TPtr& input, bool withParams) {
+        Y_UNUSED(withParams);
+
         if (!TCoApply::Match(input.Get())) {
             return false;
         }
-        if (input->ChildrenSize() != 2) {
-            return false;
-        }
+
         if (input->Child(0)->IsCallable("Udf")) {
             auto udf = TCoUdf(input->Child(0));
             auto udfName = udf.MethodName().StringValue();
@@ -101,11 +101,17 @@ namespace {
                     return false;
                 }
             }
-            if (withParams) {
-                return IsConstantExprWithParams(input->Child(1));
-            } else {
-                return IsConstantExpr(input->Child(1));
+
+            for (size_t i=1; i<input->ChildrenSize(); i++) {
+                auto callableInput = input->Child(i);
+                if (TCoApply::Match(callableInput) && !IsConstantUdf(callableInput)) {
+                    return false;
+                }
+                else if (callableInput->GetTypeAnn()->GetKind() != NYql::ETypeAnnotationKind::Type && !IsConstantExpr(callableInput)) {
+                    return false;
+                }
             }
+            return true;
         }
         return false;
     }
@@ -135,14 +141,19 @@ namespace {
     }
 
     bool IsSuitableToFoldFlatMap(const TExprNode::TPtr& input) {
-        if (!TCoFlatMap::Match(input.Get())) {
+        if (!TCoFlatMap::Match(input.Get()) && !TCoMap::Match(input.Get())) {
             return false;
         }
-        if (auto maybeApply = TMaybeNode<TCoApply>(input->Child(0))) {
-            auto apply = maybeApply.Cast();
-            return IsConstantUdf(apply.Callable().Ptr());
+
+        if (!IsPureIsolatedLambda(*input->Child(1))) {
+            return false;
         }
-        return false;
+
+        if (!IsConstantExpr(input->Child(0))) {
+            return false;
+        }
+
+        return true;
     }
 
     TString RemoveAliases(TString attributeName) {
@@ -801,8 +812,16 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStor
     }
 
     double selectivity = AggregateSelectivity(aggStats, strKeys);
-    aggStats->Nrows = aggStats->Nrows * selectivity;
-    aggStats->ByteSize = aggStats->ByteSize * selectivity;
+    if (strKeys.empty()) {
+        double rowBytes = aggStats->Nrows > 0.0 ? aggStats->ByteSize / aggStats->Nrows : aggStats->ByteSize;
+        aggStats->Nrows = 1.0;
+        aggStats->ByteSize = rowBytes;
+        aggStats->Selectivity = 1.0;
+        aggStats->Type = EStatisticsType::Constant;
+    } else {
+        aggStats->Nrows = aggStats->Nrows * selectivity;
+        aggStats->ByteSize = aggStats->ByteSize * selectivity;
+    }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for AggregateBase with keys: " << JoinSeq(", ", strKeys) << ", with stats: " << aggStats->ToString();
     kqpStats->SetStats(input.Get(), std::move(aggStats));
@@ -832,8 +851,15 @@ void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TKqp
     }
 
     double selectivity = AggregateSelectivity(aggStats, strKeys);
-    aggStats->Nrows = aggStats->Nrows * selectivity;
-    aggStats->ByteSize = aggStats->ByteSize * selectivity;
+    if (strKeys.empty()) {
+        double rowBytes = aggStats->Nrows > 0.0 ? aggStats->ByteSize / aggStats->Nrows : aggStats->ByteSize;
+        aggStats->Nrows = 1.0;
+        aggStats->ByteSize = rowBytes;
+        aggStats->Type = EStatisticsType::Constant;
+    } else {
+        aggStats->Nrows = aggStats->Nrows * selectivity;
+        aggStats->ByteSize = aggStats->ByteSize * selectivity;
+    }
 
     kqpStats->SetStats( input.Get(), aggStats );
 }
@@ -923,6 +949,13 @@ void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TKqpStats
         // So we need to propagate corresponding arguments
 
         if (callableInput->IsList()){
+            // Only propagate when the lambda takes exactly one argument per list element (the shape this
+            // mapping assumes). Some callables pair a list child0 with a lambda of a different arity -- e.g.
+            // HybridRank, whose child0 is the positional scoring tuple but whose Fuse lambda takes a single
+            // rank-vector argument -- and indexing Arg(j) past the lambda's args would be out of range.
+            if (lambda.Args().Size() != callableInput->ChildrenSize()) {
+                continue;
+            }
             for(size_t j=0; j<callableInput->ChildrenSize(); j++){
                 auto inputStats = kqpStats->GetStats(callableInput->Child(j) );
                 if (inputStats){
@@ -1339,6 +1372,12 @@ bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
     if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
         return IsConstantExprPg(input);
     }
+    if (foldUdfs && (input->IsCallable("Map") || input->IsCallable("FlatMap"))) {
+        return IsSuitableToFoldFlatMap(input);
+    }
+    if (foldUdfs && (input->IsCallable("Apply"))) {
+        return IsConstantUdf(input);
+    }
     if (!NYql::IsDataOrOptionalOfData(input->GetTypeAnn())) {
         return false;
     }
@@ -1351,8 +1390,6 @@ bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
                 return false;
             }
         }
-        return true;
-    } else if (foldUdfs && ((TCoApply::Match(input.Get()) && IsConstantUdf(input)) || IsSuitableToFoldFlatMap(input))) {
         return true;
     }
     return false;

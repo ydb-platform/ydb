@@ -42,8 +42,11 @@ public:
 
     // IClientResponseHandler implementation.
     void HandleAcknowledgement() override;
-    void HandleResponse(TSharedRefArray message, const std::string& address) override;
-    void HandleError(TError error) override;
+    void HandleResponse(
+        TSharedRefArray message,
+        const std::string& address,
+        NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer) override;
+    void HandleError(TError error, const std::string& address) override;
     void HandleStreamingPayload(const TStreamingPayload& /*payload*/) override;
     void HandleStreamingFeedback(const TStreamingFeedback& /*feedback*/) override;
 
@@ -110,7 +113,11 @@ public:
         responseHandler->HandleAcknowledgement();
     }
 
-    void HandleResponse(TSharedRefArray message, const std::string& address, bool backup)
+    void HandleResponse(
+        TSharedRefArray message,
+        const std::string& address,
+        NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer,
+        bool backup)
     {
         IClientResponseHandlerPtr responseHandler;
         {
@@ -133,7 +140,8 @@ public:
                     NRpc::EErrorCode::ProtocolError,
                     "Error parsing response header from backup")
                     << TErrorAttribute(BackupFailedKey, Request_->GetRequestId())
-                    << TErrorAttribute("request_id", Request_->GetRequestId()));
+                    << TErrorAttribute("request_id", Request_->GetRequestId()),
+                    address);
                 return;
             }
 
@@ -142,10 +150,10 @@ public:
             message = SetResponseHeader(std::move(message), header);
         }
 
-        responseHandler->HandleResponse(std::move(message), address);
+        responseHandler->HandleResponse(std::move(message), address, std::move(attachmentsTransfer));
     }
 
-    void HandleError(TError error, bool backup)
+    void HandleError(TError error, const std::string& address, bool backup)
     {
         IClientResponseHandlerPtr responseHandler;
         {
@@ -167,7 +175,7 @@ public:
         if (backup) {
             error <<= TErrorAttribute(BackupFailedKey, true);
         }
-        responseHandler->HandleError(std::move(error));
+        responseHandler->HandleError(std::move(error), address);
     }
 
     // IClientRequestControl implementation.
@@ -290,14 +298,17 @@ void THedgingResponseHandler::HandleAcknowledgement()
     Session_->HandleAcknowledgement(Backup_);
 }
 
-void THedgingResponseHandler::HandleError(TError error)
+void THedgingResponseHandler::HandleError(TError error, const std::string& address)
 {
-    Session_->HandleError(std::move(error), Backup_);
+    Session_->HandleError(std::move(error), address, Backup_);
 }
 
-void THedgingResponseHandler::HandleResponse(TSharedRefArray message, const std::string& address)
+void THedgingResponseHandler::HandleResponse(
+    TSharedRefArray message,
+    const std::string& address,
+    NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer)
 {
-    Session_->HandleResponse(std::move(message), address, Backup_);
+    Session_->HandleResponse(std::move(message), address, std::move(attachmentsTransfer), Backup_);
 }
 
 void THedgingResponseHandler::HandleStreamingPayload(const TStreamingPayload& /*payload*/)

@@ -40,7 +40,48 @@ public:
     }
 };
 
-IActor* CreateMockAccessServiceWithCache() {
+class TAccessServiceMockV2
+    : public NActors::TActor<TAccessServiceMockV2> {
+    using TThis = TAccessServiceMockV2;
+    using TBase = NActors::TActor<TAccessServiceMockV2>;
+
+public:
+    TAccessServiceMockV2()
+        : TBase(&TThis::StateWork) {
+    }
+
+    void Handle(TEvAccessService::TEvAuthenticateRequestV2::TPtr& ev) {
+        auto result = std::make_unique<TEvAccessService::TEvAuthenticateResponseV2>();
+        result->Response.mutable_subject()->mutable_user_account()->set_federation_id("mock");
+        Send(ev->Sender, result.release());
+    }
+
+    void Handle(TEvAccessService::TEvAuthorizeRequestV2::TPtr& ev) {
+        auto result = std::make_unique<TEvAccessService::TEvAuthorizeResponseV2>();
+        result->Status = NYdbGrpc::TGrpcStatus("Unimplemented", 1, true);
+        Send(ev->Sender, result.release());
+    }
+
+    void Handle(TEvAccessService::TEvBulkAuthorizeRequestV2::TPtr& ev) {
+        auto result = std::make_unique<TEvAccessService::TEvBulkAuthorizeResponseV2>();
+        result->Status = NYdbGrpc::TGrpcStatus("Unimplemented", 1, true);
+        Send(ev->Sender, result.release());
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvAccessService::TEvAuthenticateRequestV2, Handle)
+            hFunc(TEvAccessService::TEvAuthorizeRequestV2, Handle)
+            hFunc(TEvAccessService::TEvBulkAuthorizeRequestV2, Handle)
+            cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway)
+        }
+    }
+};
+
+IActor* CreateMockAccessServiceWithCache(bool enableV2Interface) {
+    if (enableV2Interface) {
+        return new TAccessServiceMockV2();
+    }
     return new TAccessServiceMock();
 }
 

@@ -14,6 +14,7 @@
 
 #include <yql/essentials/core/yql_user_data.h>
 #include <yql/essentials/core/file_storage/file_storage.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -74,9 +75,14 @@ protected:
     void FillRichPathForInput(NYT::TRichYPath& path, const TYtPathInfo& pathInfo, const TString& newPath, bool localChainTest) override;
     bool IsLocalChainTest() const override;
 
-    NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& op, const TMaybe<ui32>& publicId) const {
+    NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& op, const TMaybe<ui32>& publicId) {
         if (const auto& opTracker = Session_->OpTracker_) {
-            return opTracker->MakeOperationWaiter(op, publicId, YtServer_, Cluster_, Session_->ProgressWriter_, Session_->StatWriter_);
+            return opTracker->MakeOperationWaiter(op, publicId, YtServer_, Cluster_, Session_->ProgressWriter_, Session_->StatWriter_,
+                [self = TIntrusivePtr<TExecContextBase>(this)] (NYT::TOperationId opId) {
+                    if (self->QueryCacheItem) {
+                        self->QueryCacheItem->SetOperationId(opId);
+                    }
+                }, false);
         }
         return NThreading::MakeErrorFuture<void>(std::make_exception_ptr(yexception() << "Cannot run operations in session without operation tracker"));
     }
@@ -311,6 +317,21 @@ public:
     }
 
     TOptions Options_;
+
+protected:
+    void SetCache(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
+        const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& outputHash
+    ) override {
+        TExecContextBase::SetCache(outTablePaths, outTableSpecs, tmpFolder, settings, opHash, outputHash);
+        const bool testRun = Config_->GetLocalChainTest();
+        if (!testRun && !Hidden && settings->QueryCacheReportProgress.Get().GetOrElse(false)) {
+            if constexpr (NPrivate::THasPublicId<TOptions>::value) {
+                if (auto publicId = Options_.PublicId()) {
+                    QueryCacheItem->SetProgressData(Session_->OpTracker_, publicId, Session_->ProgressWriter_, Session_->StatWriter_);
+                }
+            }
+        }
+    }
 
 private:
     void ExecPrepareSecureTmpFolder() {

@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 select
     count(key) as keyCount,
     count(sub) as subCount,

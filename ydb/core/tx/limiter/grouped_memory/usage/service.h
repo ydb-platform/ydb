@@ -43,18 +43,14 @@ public:
         }
     }
 
-    static std::shared_ptr<TProcessGuard> BuildProcessGuard(const std::vector<std::shared_ptr<TStageFeatures>>& stages)
-        requires(!TMemoryLimiterPolicy::ExternalProcessIdAllocation)
-    {
+    static std::shared_ptr<TProcessGuard> BuildProcessGuard(const std::vector<std::shared_ptr<TStageFeatures>>& stages) {
         ui64 processId = Singleton<TSelf>()->LastProcessId.Inc();
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
         return std::make_shared<TProcessGuard>(MakeServiceId(selfId.NodeId()), processId, stages);
     }
 
-    static std::shared_ptr<TProcessGuard> BuildProcessGuard(const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages)
-        requires(TMemoryLimiterPolicy::ExternalProcessIdAllocation)
-    {
+    static std::shared_ptr<TProcessGuard> BuildProcessGuard(const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages) {
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
         return std::make_shared<TProcessGuard>(MakeServiceId(selfId.NodeId()), processId, stages);
@@ -98,7 +94,6 @@ class TScanMemoryLimiterPolicy {
 public:
     static const inline TString Name = "Scan";
     static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ColumnTablesScanGroupedMemory;
-    static constexpr bool ExternalProcessIdAllocation = true;
     static constexpr ui64 HardLimitMultiplier = 1;
 };
 
@@ -108,7 +103,6 @@ class TCompMemoryLimiterPolicy {
 public:
     static const inline TString Name = "Comp";
     static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ColumnTablesCompGroupedMemory;
-    static constexpr bool ExternalProcessIdAllocation = false;
     static constexpr ui64 HardLimitMultiplier = 4;
 };
 
@@ -118,7 +112,6 @@ class TDeduplicationMemoryLimiterPolicy {
 public:
     static const inline TString Name = "Dedu";
     static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory;
-    static constexpr bool ExternalProcessIdAllocation = false;
     static constexpr ui64 HardLimitMultiplier = 1;
 };
 

@@ -140,99 +140,29 @@ TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const TKikimrTableDescription
         .Done();
 }
 
-TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx) {
     if (!node.Maybe<TKqlUpdateRows>()) {
         return node;
     }
     auto update = node.Cast<TKqlUpdateRows>();
 
-    const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, update.Table().Path());
-
-    const bool isSink = NeedSinks(table, kqpCtx);
-    const bool needPrecompute = !isSink;
-
-    if (needPrecompute) {
-        auto payloadSelector = MakeRowsPayloadSelector(update.Columns(), table, update.Pos(), ctx);
-        auto condenseResult = CondenseInputToDictByPk(update.Input(), table, payloadSelector, ctx);
-        if (!condenseResult) {
-            return node;
-        }
-
-        auto inputDictAndKeys = PrecomputeDictAndKeys(*condenseResult, update.Pos(), ctx);
-
-        auto prepareUpdateStage = Build<TDqStage>(ctx, update.Pos())
-            .Inputs()
-                .Add(BuildStreamLookupOverPrecompute(table, inputDictAndKeys.KeysPrecompute, update.Input(), update.Table(), update.Pos(), ctx))
-                .Add(inputDictAndKeys.DictPrecompute)
-                .Build()
-            .Program()
-                .Args({"keys_list", "dict"})
-                .Body<TCoFlatMap>()
-                    .Input("keys_list")
-                    .Lambda()
-                        .Args({"existingKey"})
-                        .Body<TCoJust>()
-                            .Input<TCoFlattenMembers>()
-                                .Add()
-                                    .Name().Build("")
-                                    .Value<TCoUnwrap>() // Key should always exist in the dict
-                                        .Optional<TCoLookup>()
-                                            .Collection("dict")
-                                            .Lookup("existingKey")
-                                            .Build()
-                                        .Build()
-                                    .Build()
-                                .Add()
-                                    .Name().Build("")
-                                    .Value("existingKey")
-                                    .Build()
-                                .Build()
-                            .Build()
-                        .Build()
-                    .Build()
-                .Build()
-            .Settings().Build()
-            .Done();
-
-        auto prepareUpdate = Build<TDqCnUnionAll>(ctx, update.Pos())
-            .Output()
-                .Stage(prepareUpdateStage)
-                .Index().Build("0")
-                .Build()
-            .Done();
-
-        return Build<TKqlUpsertRows>(ctx, node.Pos())
-            .Table(update.Table())
-            .Input(prepareUpdate)
-            .Columns(update.Columns())
-            .ReturningColumns(update.ReturningColumns())
-            .IsBatch(ctx.NewAtom(update.Pos(), "false"))
-            .DefaultColumns<TCoAtomList>().Build()
-            .Settings()
-                .Add()
-                    .Name().Build("IsUpdate")
-                .Build()
+    return Build<TKqlUpsertRows>(ctx, update.Pos())
+        .Table(update.Table())
+        .Input(update.Input())
+        .Columns(update.Columns())
+        .ReturningColumns(update.ReturningColumns())
+        .IsBatch(ctx.NewAtom(update.Pos(), "false"))
+        .DefaultColumns<TCoAtomList>().Build()
+        .Settings()
+            .Add()
+                .Name().Build("Mode")
+                .Value<TCoAtom>().Build("update")
             .Build()
-            .Done();
-    } else {
-        return Build<TKqlUpsertRows>(ctx, update.Pos())
-            .Table(update.Table())
-            .Input(update.Input())
-            .Columns(update.Columns())
-            .ReturningColumns(update.ReturningColumns())
-            .IsBatch(ctx.NewAtom(update.Pos(), "false"))
-            .DefaultColumns<TCoAtomList>().Build()
-            .Settings()
-                .Add()
-                    .Name().Build("Mode")
-                    .Value<TCoAtom>().Build("update")
-                .Build()
-                .Add()
-                    .Name().Build("IsUpdate")
-                .Build()
+            .Add()
+                .Name().Build("IsUpdate")
             .Build()
-            .Done();
-    }
+        .Build()
+        .Done();
 }
 
 TDqStageBase ReadInputToStage(const TExprBase& expr, TExprContext& ctx) {

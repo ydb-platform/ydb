@@ -223,12 +223,6 @@ public:
         TSharedRange<TRowModification> modifications,
         const TModifyRowsOptions& options) override;
 
-    void FutureModifyRows(
-        const NYPath::TYPath& path,
-        NTableClient::TNameTablePtr nameTable,
-        TSharedRange<NFuture::TRowModification> modifications,
-        const TModifyRowsOptions& options) override;
-
     // Queues
     void AdvanceConsumer(
         const NYPath::TRichYPath& consumerPath,

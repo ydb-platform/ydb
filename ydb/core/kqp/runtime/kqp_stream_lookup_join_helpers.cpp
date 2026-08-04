@@ -5,11 +5,17 @@ namespace {
 
 constexpr ui64 FirstRowMask = static_cast<ui64>(1) << 0;
 constexpr ui64 LastRowMask = static_cast<ui64>(1) << 1;
-constexpr ui64 ReservedSpace = 20;
+
+ui64 ReservedBits(ui32 version) {
+    return version == StreamLookupJoinCookieVersionLegacy
+        ? StreamLookupJoinCookieV0ReservedBits
+        : StreamLookupJoinCookieV1ReservedBits;
 }
 
-ui64 TStreamLookupJoinRowCookie::Encode() const {
-    ui64 result = (RowSeqNo << ReservedSpace);
+}
+
+ui64 TStreamLookupJoinRowCookie::Encode(ui32 version) const {
+    ui64 result = (RowSeqNo << ReservedBits(version));
 
     if (FirstRow) {
         result |= FirstRowMask;
@@ -22,9 +28,9 @@ ui64 TStreamLookupJoinRowCookie::Encode() const {
     return result;
 }
 
-TStreamLookupJoinRowCookie TStreamLookupJoinRowCookie::Decode(ui64 encoded) {
+TStreamLookupJoinRowCookie TStreamLookupJoinRowCookie::Decode(ui64 encoded, ui32 version) {
     return TStreamLookupJoinRowCookie{
-        .RowSeqNo = (encoded >> ReservedSpace),
+        .RowSeqNo = (encoded >> ReservedBits(version)),
         .LastRow = bool(encoded & LastRowMask),
         .FirstRow = bool(encoded & FirstRowMask)
     };

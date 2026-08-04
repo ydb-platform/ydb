@@ -1,4 +1,3 @@
-/* postgres can not */
 /* custom error: Error: Implicit decimal cast would lose precision */
 $lambda = ($small_dec) -> {
     RETURN $small_dec;

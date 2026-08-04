@@ -5,11 +5,13 @@
     "endpointPrefix":"athena",
     "jsonVersion":"1.1",
     "protocol":"json",
+    "protocols":["json"],
     "serviceFullName":"Amazon Athena",
     "serviceId":"Athena",
     "signatureVersion":"v4",
     "targetPrefix":"AmazonAthena",
-    "uid":"athena-2017-05-18"
+    "uid":"athena-2017-05-18",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "BatchGetNamedQuery":{
@@ -96,7 +98,7 @@
         {"shape":"InternalServerException"},
         {"shape":"InvalidRequestException"}
       ],
-      "documentation":"<p>Creates (registers) a data catalog with the specified name and properties. Catalogs created are visible to all users of the same Amazon Web Services account.</p>"
+      "documentation":"<p>Creates (registers) a data catalog with the specified name and properties. Catalogs created are visible to all users of the same Amazon Web Services account.</p> <p>For a <code>FEDERATED</code> catalog, this API operation creates the following resources.</p> <ul> <li> <p>CFN Stack Name with a maximum length of 128 characters and prefix <code>athenafederatedcatalog-CATALOG_NAME_SANITIZED</code> with length 23 characters.</p> </li> <li> <p>Lambda Function Name with a maximum length of 64 characters and prefix <code>athenafederatedcatalog_CATALOG_NAME_SANITIZED</code> with length 23 characters.</p> </li> <li> <p>Glue Connection Name with a maximum length of 255 characters and a prefix <code>athenafederatedcatalog_CATALOG_NAME_SANITIZED</code> with length 23 characters. </p> </li> </ul>"
     },
     "CreateNamedQuery":{
       "name":"CreateNamedQuery",
@@ -462,7 +464,7 @@
         {"shape":"InternalServerException"},
         {"shape":"InvalidRequestException"}
       ],
-      "documentation":"<p>Returns query execution runtime statistics related to a single execution of a query if you have access to the workgroup in which the query ran. Query execution runtime statistics are returned only when <a>QueryExecutionStatus$State</a> is in a SUCCEEDED or FAILED state. Stage-level input and output row count and data size statistics are not shown when a query has row-level filters defined in Lake Formation.</p>"
+      "documentation":"<p>Returns query execution runtime statistics related to a single execution of a query if you have access to the workgroup in which the query ran. Statistics from the <code>Timeline</code> section of the response object are available as soon as <a>QueryExecutionStatus$State</a> is in a SUCCEEDED or FAILED state. The remaining non-timeline statistics in the response (like stage-level input and output row count and data size) are updated asynchronously and may not be available immediately after a query completes. The non-timeline statistics are also not included when a query has row-level filters defined in Lake Formation.</p>"
     },
     "GetSession":{
       "name":"GetSession",
@@ -1019,10 +1021,10 @@
       "members":{
         "S3AclOption":{
           "shape":"S3AclOption",
-          "documentation":"<p>The Amazon S3 canned ACL that Athena should specify when storing query results. Currently the only supported canned ACL is <code>BUCKET_OWNER_FULL_CONTROL</code>. If a query runs in a workgroup and the workgroup overrides client-side settings, then the Amazon S3 canned ACL specified in the workgroup's settings is used for all queries that run in the workgroup. For more information about Amazon S3 canned ACLs, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/acl-overview.html#canned-acl\">Canned ACL</a> in the <i>Amazon S3 User Guide</i>.</p>"
+          "documentation":"<p>The Amazon S3 canned ACL that Athena should specify when storing query results, including data files inserted by Athena as the result of statements like CTAS or INSERT INTO. Currently the only supported canned ACL is <code>BUCKET_OWNER_FULL_CONTROL</code>. If a query runs in a workgroup and the workgroup overrides client-side settings, then the Amazon S3 canned ACL specified in the workgroup's settings is used for all queries that run in the workgroup. For more information about Amazon S3 canned ACLs, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/acl-overview.html#canned-acl\">Canned ACL</a> in the <i>Amazon S3 User Guide</i>.</p>"
         }
       },
-      "documentation":"<p>Indicates that an Amazon S3 canned ACL should be set to control ownership of stored query results. When Athena stores query results in Amazon S3, the canned ACL is set with the <code>x-amz-acl</code> request header. For more information about S3 Object Ownership, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html#object-ownership-overview\">Object Ownership settings</a> in the <i>Amazon S3 User Guide</i>.</p>"
+      "documentation":"<p>Indicates that an Amazon S3 canned ACL should be set to control ownership of stored query results, including data files inserted by Athena as the result of statements like CTAS or INSERT INTO. When Athena stores query results in Amazon S3, the canned ACL is set with the <code>x-amz-acl</code> request header. For more information about S3 Object Ownership, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html#object-ownership-overview\">Object Ownership settings</a> in the <i>Amazon S3 User Guide</i>.</p>"
     },
     "Age":{
       "type":"integer",
@@ -1305,8 +1307,7 @@
     },
     "CancelCapacityReservationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CapacityAllocation":{
       "type":"structure",
@@ -1536,6 +1537,31 @@
       "min":0,
       "pattern":"[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDC00-\\uDBFF\\uDFFF\\t]*"
     },
+    "ConnectionType":{
+      "type":"string",
+      "enum":[
+        "DYNAMODB",
+        "MYSQL",
+        "POSTGRESQL",
+        "REDSHIFT",
+        "ORACLE",
+        "SYNAPSE",
+        "SQLSERVER",
+        "DB2",
+        "OPENSEARCH",
+        "BIGQUERY",
+        "GOOGLECLOUDSTORAGE",
+        "HBASE",
+        "DOCUMENTDB",
+        "CMDB",
+        "TPCDS",
+        "TIMESTREAM",
+        "SAPHANA",
+        "SNOWFLAKE",
+        "DATALAKEGEN2",
+        "DB2AS400"
+      ]
+    },
     "CoordinatorDpuSize":{
       "type":"integer",
       "box":true,
@@ -1565,8 +1591,7 @@
     },
     "CreateCapacityReservationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CreateDataCatalogInput":{
       "type":"structure",
@@ -1577,11 +1602,11 @@
       "members":{
         "Name":{
           "shape":"CatalogNameString",
-          "documentation":"<p>The name of the data catalog to create. The catalog name must be unique for the Amazon Web Services account and can use a maximum of 127 alphanumeric, underscore, at sign, or hyphen characters. The remainder of the length constraint of 256 is reserved for use by Athena.</p>"
+          "documentation":"<p>The name of the data catalog to create. The catalog name must be unique for the Amazon Web Services account and can use a maximum of 127 alphanumeric, underscore, at sign, or hyphen characters. The remainder of the length constraint of 256 is reserved for use by Athena.</p> <p>For <code>FEDERATED</code> type the catalog name has following considerations and limits:</p> <ul> <li> <p>The catalog name allows special characters such as <code>_ , @ , \\ , - </code>. These characters are replaced with a hyphen (-) when creating the CFN Stack Name and with an underscore (_) when creating the Lambda Function and Glue Connection Name.</p> </li> <li> <p>The catalog name has a theoretical limit of 128 characters. However, since we use it to create other resources that allow less characters and we prepend a prefix to it, the actual catalog name limit for <code>FEDERATED</code> catalog is 64 - 23 = 41 characters.</p> </li> </ul>"
         },
         "Type":{
           "shape":"DataCatalogType",
-          "documentation":"<p>The type of data catalog to create: <code>LAMBDA</code> for a federated catalog, <code>HIVE</code> for an external hive metastore, or <code>GLUE</code> for an Glue Data Catalog.</p>"
+          "documentation":"<p>The type of data catalog to create: <code>LAMBDA</code> for a federated catalog, <code>GLUE</code> for an Glue Data Catalog, and <code>HIVE</code> for an external Apache Hive metastore. <code>FEDERATED</code> is a federated catalog for which Athena creates the connection and the Lambda function for you based on the parameters that you pass.</p> <p>For <code>FEDERATED</code> type, we do not support IAM identity center.</p>"
         },
         "Description":{
           "shape":"DescriptionString",
@@ -1589,17 +1614,18 @@
         },
         "Parameters":{
           "shape":"ParametersMap",
-          "documentation":"<p>Specifies the Lambda function or functions to use for creating the data catalog. This is a mapping whose values depend on the catalog type. </p> <ul> <li> <p>For the <code>HIVE</code> data catalog type, use the following syntax. The <code>metadata-function</code> parameter is required. <code>The sdk-version</code> parameter is optional and defaults to the currently supported version.</p> <p> <code>metadata-function=<i>lambda_arn</i>, sdk-version=<i>version_number</i> </code> </p> </li> <li> <p>For the <code>LAMBDA</code> data catalog type, use one of the following sets of required parameters, but not both.</p> <ul> <li> <p>If you have one Lambda function that processes metadata and another for reading the actual data, use the following syntax. Both parameters are required.</p> <p> <code>metadata-function=<i>lambda_arn</i>, record-function=<i>lambda_arn</i> </code> </p> </li> <li> <p> If you have a composite Lambda function that processes both metadata and data, use the following syntax to specify your Lambda function.</p> <p> <code>function=<i>lambda_arn</i> </code> </p> </li> </ul> </li> <li> <p>The <code>GLUE</code> type takes a catalog ID parameter and is required. The <code> <i>catalog_id</i> </code> is the account ID of the Amazon Web Services account to which the Glue Data Catalog belongs.</p> <p> <code>catalog-id=<i>catalog_id</i> </code> </p> <ul> <li> <p>The <code>GLUE</code> data catalog type also applies to the default <code>AwsDataCatalog</code> that already exists in your account, of which you can have only one and cannot modify.</p> </li> </ul> </li> </ul>"
+          "documentation":"<p>Specifies the Lambda function or functions to use for creating the data catalog. This is a mapping whose values depend on the catalog type. </p> <ul> <li> <p>For the <code>HIVE</code> data catalog type, use the following syntax. The <code>metadata-function</code> parameter is required. <code>The sdk-version</code> parameter is optional and defaults to the currently supported version.</p> <p> <code>metadata-function=<i>lambda_arn</i>, sdk-version=<i>version_number</i> </code> </p> </li> <li> <p>For the <code>LAMBDA</code> data catalog type, use one of the following sets of required parameters, but not both.</p> <ul> <li> <p>If you have one Lambda function that processes metadata and another for reading the actual data, use the following syntax. Both parameters are required.</p> <p> <code>metadata-function=<i>lambda_arn</i>, record-function=<i>lambda_arn</i> </code> </p> </li> <li> <p> If you have a composite Lambda function that processes both metadata and data, use the following syntax to specify your Lambda function.</p> <p> <code>function=<i>lambda_arn</i> </code> </p> </li> </ul> </li> <li> <p>The <code>GLUE</code> type takes a catalog ID parameter and is required. The <code> <i>catalog_id</i> </code> is the account ID of the Amazon Web Services account to which the Glue Data Catalog belongs.</p> <p> <code>catalog-id=<i>catalog_id</i> </code> </p> <ul> <li> <p>The <code>GLUE</code> data catalog type also applies to the default <code>AwsDataCatalog</code> that already exists in your account, of which you can have only one and cannot modify.</p> </li> </ul> </li> <li> <p>The <code>FEDERATED</code> data catalog type uses one of the following parameters, but not both. Use <code>connection-arn</code> for an existing Glue connection. Use <code>connection-type</code> and <code>connection-properties</code> to specify the configuration setting for a new connection.</p> <ul> <li> <p> <code>connection-arn:<i>&lt;glue_connection_arn_to_reuse&gt;</i> </code> </p> </li> <li> <p> <code>lambda-role-arn</code> (optional): The execution role to use for the Lambda function. If not provided, one is created.</p> </li> <li> <p> <code>connection-type:MYSQL|REDSHIFT|...., connection-properties:\"<i>&lt;json_string&gt;</i>\"</code> </p> <p>For <i> <code>&lt;json_string&gt;</code> </i>, use escaped JSON text, as in the following example.</p> <p> <code>\"{\\\"spill_bucket\\\":\\\"my_spill\\\",\\\"spill_prefix\\\":\\\"athena-spill\\\",\\\"host\\\":\\\"abc12345.snowflakecomputing.com\\\",\\\"port\\\":\\\"1234\\\",\\\"warehouse\\\":\\\"DEV_WH\\\",\\\"database\\\":\\\"TEST\\\",\\\"schema\\\":\\\"PUBLIC\\\",\\\"SecretArn\\\":\\\"arn:aws:secretsmanager:ap-south-1:111122223333:secret:snowflake-XHb67j\\\"}\"</code> </p> </li> </ul> </li> </ul>"
         },
         "Tags":{
           "shape":"TagList",
-          "documentation":"<p>A list of comma separated tags to add to the data catalog that is created.</p>"
+          "documentation":"<p>A list of comma separated tags to add to the data catalog that is created. All the resources that are created by the <code>CreateDataCatalog</code> API operation with <code>FEDERATED</code> type will have the tag <code>federated_athena_datacatalog=\"true\"</code>. This includes the CFN Stack, Glue Connection, Athena DataCatalog, and all the resources created as part of the CFN Stack (Lambda Function, IAM policies/roles).</p>"
         }
       }
     },
     "CreateDataCatalogOutput":{
       "type":"structure",
       "members":{
+        "DataCatalog":{"shape":"DataCatalog"}
       }
     },
     "CreateNamedQueryInput":{
@@ -1704,8 +1730,7 @@
     },
     "CreatePreparedStatementOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CreatePresignedNotebookUrlRequest":{
       "type":"structure",
@@ -1763,8 +1788,7 @@
     },
     "CreateWorkGroupOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CustomerContentEncryptionConfiguration":{
       "type":"structure",
@@ -1794,14 +1818,40 @@
         },
         "Type":{
           "shape":"DataCatalogType",
-          "documentation":"<p>The type of data catalog to create: <code>LAMBDA</code> for a federated catalog, <code>HIVE</code> for an external hive metastore, or <code>GLUE</code> for an Glue Data Catalog.</p>"
+          "documentation":"<p>The type of data catalog to create: <code>LAMBDA</code> for a federated catalog, <code>GLUE</code> for an Glue Data Catalog, and <code>HIVE</code> for an external Apache Hive metastore. <code>FEDERATED</code> is a federated catalog for which Athena creates the connection and the Lambda function for you based on the parameters that you pass.</p>"
         },
         "Parameters":{
           "shape":"ParametersMap",
-          "documentation":"<p>Specifies the Lambda function or functions to use for the data catalog. This is a mapping whose values depend on the catalog type. </p> <ul> <li> <p>For the <code>HIVE</code> data catalog type, use the following syntax. The <code>metadata-function</code> parameter is required. <code>The sdk-version</code> parameter is optional and defaults to the currently supported version.</p> <p> <code>metadata-function=<i>lambda_arn</i>, sdk-version=<i>version_number</i> </code> </p> </li> <li> <p>For the <code>LAMBDA</code> data catalog type, use one of the following sets of required parameters, but not both.</p> <ul> <li> <p>If you have one Lambda function that processes metadata and another for reading the actual data, use the following syntax. Both parameters are required.</p> <p> <code>metadata-function=<i>lambda_arn</i>, record-function=<i>lambda_arn</i> </code> </p> </li> <li> <p> If you have a composite Lambda function that processes both metadata and data, use the following syntax to specify your Lambda function.</p> <p> <code>function=<i>lambda_arn</i> </code> </p> </li> </ul> </li> <li> <p>The <code>GLUE</code> type takes a catalog ID parameter and is required. The <code> <i>catalog_id</i> </code> is the account ID of the Amazon Web Services account to which the Glue catalog belongs.</p> <p> <code>catalog-id=<i>catalog_id</i> </code> </p> <ul> <li> <p>The <code>GLUE</code> data catalog type also applies to the default <code>AwsDataCatalog</code> that already exists in your account, of which you can have only one and cannot modify.</p> </li> </ul> </li> </ul>"
+          "documentation":"<p>Specifies the Lambda function or functions to use for the data catalog. This is a mapping whose values depend on the catalog type. </p> <ul> <li> <p>For the <code>HIVE</code> data catalog type, use the following syntax. The <code>metadata-function</code> parameter is required. <code>The sdk-version</code> parameter is optional and defaults to the currently supported version.</p> <p> <code>metadata-function=<i>lambda_arn</i>, sdk-version=<i>version_number</i> </code> </p> </li> <li> <p>For the <code>LAMBDA</code> data catalog type, use one of the following sets of required parameters, but not both.</p> <ul> <li> <p>If you have one Lambda function that processes metadata and another for reading the actual data, use the following syntax. Both parameters are required.</p> <p> <code>metadata-function=<i>lambda_arn</i>, record-function=<i>lambda_arn</i> </code> </p> </li> <li> <p> If you have a composite Lambda function that processes both metadata and data, use the following syntax to specify your Lambda function.</p> <p> <code>function=<i>lambda_arn</i> </code> </p> </li> </ul> </li> <li> <p>The <code>GLUE</code> type takes a catalog ID parameter and is required. The <code> <i>catalog_id</i> </code> is the account ID of the Amazon Web Services account to which the Glue catalog belongs.</p> <p> <code>catalog-id=<i>catalog_id</i> </code> </p> <ul> <li> <p>The <code>GLUE</code> data catalog type also applies to the default <code>AwsDataCatalog</code> that already exists in your account, of which you can have only one and cannot modify.</p> </li> </ul> </li> <li> <p>The <code>FEDERATED</code> data catalog type uses one of the following parameters, but not both. Use <code>connection-arn</code> for an existing Glue connection. Use <code>connection-type</code> and <code>connection-properties</code> to specify the configuration setting for a new connection.</p> <ul> <li> <p> <code>connection-arn:<i>&lt;glue_connection_arn_to_reuse&gt;</i> </code> </p> </li> <li> <p> <code>connection-type:MYSQL|REDSHIFT|...., connection-properties:\"<i>&lt;json_string&gt;</i>\"</code> </p> <p>For <i> <code>&lt;json_string&gt;</code> </i>, use escaped JSON text, as in the following example.</p> <p> <code>\"{\\\"spill_bucket\\\":\\\"my_spill\\\",\\\"spill_prefix\\\":\\\"athena-spill\\\",\\\"host\\\":\\\"abc12345.snowflakecomputing.com\\\",\\\"port\\\":\\\"1234\\\",\\\"warehouse\\\":\\\"DEV_WH\\\",\\\"database\\\":\\\"TEST\\\",\\\"schema\\\":\\\"PUBLIC\\\",\\\"SecretArn\\\":\\\"arn:aws:secretsmanager:ap-south-1:111122223333:secret:snowflake-XHb67j\\\"}\"</code> </p> </li> </ul> </li> </ul>"
+        },
+        "Status":{
+          "shape":"DataCatalogStatus",
+          "documentation":"<p>The status of the creation or deletion of the data catalog.</p> <ul> <li> <p>The <code>LAMBDA</code>, <code>GLUE</code>, and <code>HIVE</code> data catalog types are created synchronously. Their status is either <code>CREATE_COMPLETE</code> or <code>CREATE_FAILED</code>.</p> </li> <li> <p>The <code>FEDERATED</code> data catalog type is created asynchronously.</p> </li> </ul> <p>Data catalog creation status:</p> <ul> <li> <p> <code>CREATE_IN_PROGRESS</code>: Federated data catalog creation in progress.</p> </li> <li> <p> <code>CREATE_COMPLETE</code>: Data catalog creation complete.</p> </li> <li> <p> <code>CREATE_FAILED</code>: Data catalog could not be created.</p> </li> <li> <p> <code>CREATE_FAILED_CLEANUP_IN_PROGRESS</code>: Federated data catalog creation failed and is being removed.</p> </li> <li> <p> <code>CREATE_FAILED_CLEANUP_COMPLETE</code>: Federated data catalog creation failed and was removed.</p> </li> <li> <p> <code>CREATE_FAILED_CLEANUP_FAILED</code>: Federated data catalog creation failed but could not be removed.</p> </li> </ul> <p>Data catalog deletion status:</p> <ul> <li> <p> <code>DELETE_IN_PROGRESS</code>: Federated data catalog deletion in progress.</p> </li> <li> <p> <code>DELETE_COMPLETE</code>: Federated data catalog deleted.</p> </li> <li> <p> <code>DELETE_FAILED</code>: Federated data catalog could not be deleted.</p> </li> </ul>"
+        },
+        "ConnectionType":{
+          "shape":"ConnectionType",
+          "documentation":"<p>The type of connection for a <code>FEDERATED</code> data catalog (for example, <code>REDSHIFT</code>, <code>MYSQL</code>, or <code>SQLSERVER</code>). For information about individual connectors, see <a href=\"https://docs.aws.amazon.com/athena/latest/ug/connectors-available.html\">Available data source connectors</a>.</p>"
+        },
+        "Error":{
+          "shape":"ErrorMessage",
+          "documentation":"<p>Text of the error that occurred during data catalog creation or deletion.</p>"
         }
       },
       "documentation":"<p>Contains information about a data catalog in an Amazon Web Services account.</p> <note> <p>In the Athena console, data catalogs are listed as \"data sources\" on the <b>Data sources</b> page under the <b>Data source name</b> column.</p> </note>"
+    },
+    "DataCatalogStatus":{
+      "type":"string",
+      "enum":[
+        "CREATE_IN_PROGRESS",
+        "CREATE_COMPLETE",
+        "CREATE_FAILED",
+        "CREATE_FAILED_CLEANUP_IN_PROGRESS",
+        "CREATE_FAILED_CLEANUP_COMPLETE",
+        "CREATE_FAILED_CLEANUP_FAILED",
+        "DELETE_IN_PROGRESS",
+        "DELETE_COMPLETE",
+        "DELETE_FAILED"
+      ]
     },
     "DataCatalogSummary":{
       "type":"structure",
@@ -1813,6 +1863,18 @@
         "Type":{
           "shape":"DataCatalogType",
           "documentation":"<p>The data catalog type.</p>"
+        },
+        "Status":{
+          "shape":"DataCatalogStatus",
+          "documentation":"<p>The status of the creation or deletion of the data catalog.</p> <ul> <li> <p>The <code>LAMBDA</code>, <code>GLUE</code>, and <code>HIVE</code> data catalog types are created synchronously. Their status is either <code>CREATE_COMPLETE</code> or <code>CREATE_FAILED</code>.</p> </li> <li> <p>The <code>FEDERATED</code> data catalog type is created asynchronously.</p> </li> </ul> <p>Data catalog creation status:</p> <ul> <li> <p> <code>CREATE_IN_PROGRESS</code>: Federated data catalog creation in progress.</p> </li> <li> <p> <code>CREATE_COMPLETE</code>: Data catalog creation complete.</p> </li> <li> <p> <code>CREATE_FAILED</code>: Data catalog could not be created.</p> </li> <li> <p> <code>CREATE_FAILED_CLEANUP_IN_PROGRESS</code>: Federated data catalog creation failed and is being removed.</p> </li> <li> <p> <code>CREATE_FAILED_CLEANUP_COMPLETE</code>: Federated data catalog creation failed and was removed.</p> </li> <li> <p> <code>CREATE_FAILED_CLEANUP_FAILED</code>: Federated data catalog creation failed but could not be removed.</p> </li> </ul> <p>Data catalog deletion status:</p> <ul> <li> <p> <code>DELETE_IN_PROGRESS</code>: Federated data catalog deletion in progress.</p> </li> <li> <p> <code>DELETE_COMPLETE</code>: Federated data catalog deleted.</p> </li> <li> <p> <code>DELETE_FAILED</code>: Federated data catalog could not be deleted.</p> </li> </ul>"
+        },
+        "ConnectionType":{
+          "shape":"ConnectionType",
+          "documentation":"<p>The type of connection for a <code>FEDERATED</code> data catalog (for example, <code>REDSHIFT</code>, <code>MYSQL</code>, or <code>SQLSERVER</code>). For information about individual connectors, see <a href=\"https://docs.aws.amazon.com/athena/latest/ug/connectors-available.html\">Available data source connectors</a>.</p>"
+        },
+        "Error":{
+          "shape":"ErrorMessage",
+          "documentation":"<p>Text of the error that occurred during data catalog creation or deletion.</p>"
         }
       },
       "documentation":"<p>The summary information for the data catalog, which includes its name and type.</p>"
@@ -1826,7 +1888,8 @@
       "enum":[
         "LAMBDA",
         "GLUE",
-        "HIVE"
+        "HIVE",
+        "FEDERATED"
       ]
     },
     "Database":{
@@ -1886,8 +1949,7 @@
     },
     "DeleteCapacityReservationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteDataCatalogInput":{
       "type":"structure",
@@ -1896,12 +1958,17 @@
         "Name":{
           "shape":"CatalogNameString",
           "documentation":"<p>The name of the data catalog to delete.</p>"
+        },
+        "DeleteCatalogOnly":{
+          "shape":"Boolean",
+          "documentation":"<p>Deletes the Athena Data Catalog. You can only use this with the <code>FEDERATED</code> catalogs. You usually perform this before registering the connector with Glue Data Catalog. After deletion, you will have to manage the Glue Connection and Lambda function. </p>"
         }
       }
     },
     "DeleteDataCatalogOutput":{
       "type":"structure",
       "members":{
+        "DataCatalog":{"shape":"DataCatalog"}
       }
     },
     "DeleteNamedQueryInput":{
@@ -1917,8 +1984,7 @@
     },
     "DeleteNamedQueryOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteNotebookInput":{
       "type":"structure",
@@ -1932,8 +1998,7 @@
     },
     "DeleteNotebookOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeletePreparedStatementInput":{
       "type":"structure",
@@ -1954,8 +2019,7 @@
     },
     "DeletePreparedStatementOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWorkGroupInput":{
       "type":"structure",
@@ -1973,8 +2037,7 @@
     },
     "DeleteWorkGroupOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DescriptionString":{
       "type":"string",
@@ -2453,6 +2516,10 @@
         "MaxResults":{
           "shape":"MaxQueryResults",
           "documentation":"<p>The maximum number of results (rows) to return in this request.</p>"
+        },
+        "QueryResultType":{
+          "shape":"QueryResultType",
+          "documentation":"<p> When you set this to <code>DATA_ROWS</code> or empty, <code>GetQueryResults</code> returns the query results in rows. If set to <code>DATA_MANIFEST</code>, it returns the manifest file in rows. Only the query types <code>CREATE TABLE AS SELECT</code>, <code>UNLOAD</code>, and <code>INSERT</code> can generate a manifest file. If you use <code>DATA_MANIFEST</code> for other query types, the query will fail. </p>"
         }
       }
     },
@@ -2461,7 +2528,7 @@
       "members":{
         "UpdateCount":{
           "shape":"Long",
-          "documentation":"<p>The number of rows inserted with a <code>CREATE TABLE AS SELECT</code> statement. </p>"
+          "documentation":"<p>The number of rows inserted with a <code>CREATE TABLE AS SELECT</code>, <code>INSERT INTO</code>, or <code>UPDATE</code> statement. </p>"
         },
         "ResultSet":{
           "shape":"ResultSet",
@@ -3241,6 +3308,50 @@
       }
     },
     "Long":{"type":"long"},
+    "ManagedQueryResultsConfiguration":{
+      "type":"structure",
+      "required":["Enabled"],
+      "members":{
+        "Enabled":{
+          "shape":"Boolean",
+          "documentation":"<p>If set to true, allows you to store query results in Athena owned storage. If set to false, workgroup member stores query results in location specified under <code>ResultConfiguration$OutputLocation</code>. The default is false. A workgroup cannot have the <code>ResultConfiguration$OutputLocation</code> parameter when you set this field to true. </p>"
+        },
+        "EncryptionConfiguration":{
+          "shape":"ManagedQueryResultsEncryptionConfiguration",
+          "documentation":"<p>If you encrypt query and calculation results in Athena owned storage, this field indicates the encryption option (for example, SSE_KMS or CSE_KMS) and key information.</p>"
+        }
+      },
+      "documentation":"<p> The configuration for storing results in Athena owned storage, which includes whether this feature is enabled; whether encryption configuration, if any, is used for encrypting query results. </p>"
+    },
+    "ManagedQueryResultsConfigurationUpdates":{
+      "type":"structure",
+      "members":{
+        "Enabled":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>If set to true, specifies that Athena manages query results in Athena owned storage.</p>"
+        },
+        "EncryptionConfiguration":{
+          "shape":"ManagedQueryResultsEncryptionConfiguration",
+          "documentation":"<p>If you encrypt query and calculation results in Athena owned storage, this field indicates the encryption option (for example, SSE_KMS or CSE_KMS) and key information.</p>"
+        },
+        "RemoveEncryptionConfiguration":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>If set to true, it removes workgroup from Athena owned storage. The existing query results are cleaned up after 24hrs. You must provide query results in location specified under <code>ResultConfiguration$OutputLocation</code>.</p>"
+        }
+      },
+      "documentation":"<p>Updates the configuration for managed query results.</p>"
+    },
+    "ManagedQueryResultsEncryptionConfiguration":{
+      "type":"structure",
+      "required":["KmsKey"],
+      "members":{
+        "KmsKey":{
+          "shape":"KmsKey",
+          "documentation":"<p>The ARN of an KMS key for encrypting managed query results.</p>"
+        }
+      },
+      "documentation":"<p>If you encrypt query and calculation results in Athena owned storage, this field indicates the encryption option (for example, SSE_KMS or CSE_KMS) and key information.</p>"
+    },
     "MaxApplicationDPUSizesCount":{
       "type":"integer",
       "max":100,
@@ -3453,7 +3564,7 @@
       "type":"string",
       "max":255,
       "min":1,
-      "pattern":"[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDC00-\\uDBFF\\uDFFF\\t]+"
+      "pattern":"(?!.*[/:\\\\])[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDC00-\\uDBFF\\uDFFF\\t]+"
     },
     "NotebookSessionSummary":{
       "type":"structure",
@@ -3567,8 +3678,7 @@
     },
     "PutCapacityAssignmentConfigurationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "QueryExecution":{
       "type":"structure",
@@ -3584,6 +3694,10 @@
         "StatementType":{
           "shape":"StatementType",
           "documentation":"<p>The type of query statement that was run. <code>DDL</code> indicates DDL query statements. <code>DML</code> indicates DML (Data Manipulation Language) query statements, such as <code>CREATE TABLE AS SELECT</code>. <code>UTILITY</code> indicates query statements other than DDL and DML, such as <code>SHOW CREATE TABLE</code>, or <code>DESCRIBE TABLE</code>.</p>"
+        },
+        "ManagedQueryResultsConfiguration":{
+          "shape":"ManagedQueryResultsConfiguration",
+          "documentation":"<p> The configuration for storing results in Athena owned storage, which includes whether this feature is enabled; whether encryption configuration, if any, is used for encrypting query results. </p>"
         },
         "ResultConfiguration":{
           "shape":"ResultConfiguration",
@@ -3735,6 +3849,13 @@
         }
       },
       "documentation":"<p>The completion date, current state, submission time, and state change reason (if applicable) for the query execution.</p>"
+    },
+    "QueryResultType":{
+      "type":"string",
+      "enum":[
+        "DATA_MANIFEST",
+        "DATA_ROWS"
+      ]
     },
     "QueryResultsS3AccessGrantsConfiguration":{
       "type":"structure",
@@ -3916,7 +4037,7 @@
       "members":{
         "OutputLocation":{
           "shape":"ResultOutputLocation",
-          "documentation":"<p>The location in Amazon S3 where your query and calculation results are stored, such as <code>s3://path/to/query/bucket/</code>. To run the query, you must specify the query results location using one of the ways: either for individual queries using either this setting (client-side), or in the workgroup, using <a>WorkGroupConfiguration</a>. If none of them is set, Athena issues an error that no output location is provided. For more information, see <a href=\"https://docs.aws.amazon.com/athena/latest/ug/querying.html\">Working with query results, recent queries, and output files</a>. If workgroup settings override client-side settings, then the query uses the settings specified for the workgroup. See <a>WorkGroupConfiguration$EnforceWorkGroupConfiguration</a>.</p>"
+          "documentation":"<p>The location in Amazon S3 where your query and calculation results are stored, such as <code>s3://path/to/query/bucket/</code>. To run the query, you must specify the query results location using one of the ways: either for individual queries using either this setting (client-side), or in the workgroup, using <a>WorkGroupConfiguration</a>. If none of them is set, Athena issues an error that no output location is provided. If workgroup settings override client-side settings, then the query uses the settings specified for the workgroup. See <a>WorkGroupConfiguration$EnforceWorkGroupConfiguration</a>.</p>"
         },
         "EncryptionConfiguration":{
           "shape":"EncryptionConfiguration",
@@ -3938,7 +4059,7 @@
       "members":{
         "OutputLocation":{
           "shape":"ResultOutputLocation",
-          "documentation":"<p>The location in Amazon S3 where your query and calculation results are stored, such as <code>s3://path/to/query/bucket/</code>. For more information, see <a href=\"https://docs.aws.amazon.com/athena/latest/ug/querying.html\">Working with query results, recent queries, and output files</a>. If workgroup settings override client-side settings, then the query uses the location for the query results and the encryption configuration that are specified for the workgroup. The \"workgroup settings override\" is specified in <code>EnforceWorkGroupConfiguration</code> (true/false) in the <code>WorkGroupConfiguration</code>. See <a>WorkGroupConfiguration$EnforceWorkGroupConfiguration</a>.</p>"
+          "documentation":"<p>The location in Amazon S3 where your query and calculation results are stored, such as <code>s3://path/to/query/bucket/</code>. If workgroup settings override client-side settings, then the query uses the location for the query results and the encryption configuration that are specified for the workgroup. The \"workgroup settings override\" is specified in <code>EnforceWorkGroupConfiguration</code> (true/false) in the <code>WorkGroupConfiguration</code>. See <a>WorkGroupConfiguration$EnforceWorkGroupConfiguration</a>.</p>"
         },
         "RemoveOutputLocation":{
           "shape":"BoxedBoolean",
@@ -4204,7 +4325,7 @@
           "shape":"CalculationConfiguration",
           "documentation":"<p>Contains configuration information for the calculation.</p>",
           "deprecated":true,
-          "deprecatedMessage":"Kepler Post GA Tasks : https://sim.amazon.com/issues/ATHENA-39828"
+          "deprecatedMessage":"Structure is deprecated."
         },
         "CodeBlock":{
           "shape":"CodeBlock",
@@ -4365,8 +4486,7 @@
     },
     "StopQueryExecutionOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "String":{"type":"string"},
     "StringList":{
@@ -4466,8 +4586,7 @@
     },
     "TagResourceOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -4609,8 +4728,7 @@
     },
     "UntagResourceOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateCapacityReservationInput":{
       "type":"structure",
@@ -4631,8 +4749,7 @@
     },
     "UpdateCapacityReservationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateDataCatalogInput":{
       "type":"structure",
@@ -4661,8 +4778,7 @@
     },
     "UpdateDataCatalogOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateNamedQueryInput":{
       "type":"structure",
@@ -4692,8 +4808,7 @@
     },
     "UpdateNamedQueryOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateNotebookInput":{
       "type":"structure",
@@ -4748,13 +4863,11 @@
     },
     "UpdateNotebookMetadataOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateNotebookOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdatePreparedStatementInput":{
       "type":"structure",
@@ -4784,8 +4897,7 @@
     },
     "UpdatePreparedStatementOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateWorkGroupInput":{
       "type":"structure",
@@ -4811,8 +4923,7 @@
     },
     "UpdateWorkGroupOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "WorkGroup":{
       "type":"structure",
@@ -4850,7 +4961,11 @@
       "members":{
         "ResultConfiguration":{
           "shape":"ResultConfiguration",
-          "documentation":"<p>The configuration for the workgroup, which includes the location in Amazon S3 where query and calculation results are stored and the encryption option, if any, used for query and calculation results. To run the query, you must specify the query results location using one of the ways: either in the workgroup using this setting, or for individual queries (client-side), using <a>ResultConfiguration$OutputLocation</a>. If none of them is set, Athena issues an error that no output location is provided. For more information, see <a href=\"https://docs.aws.amazon.com/athena/latest/ug/querying.html\">Working with query results, recent queries, and output files</a>.</p>"
+          "documentation":"<p>The configuration for the workgroup, which includes the location in Amazon S3 where query and calculation results are stored and the encryption option, if any, used for query and calculation results. To run the query, you must specify the query results location using one of the ways: either in the workgroup using this setting, or for individual queries (client-side), using <a>ResultConfiguration$OutputLocation</a>. If none of them is set, Athena issues an error that no output location is provided.</p>"
+        },
+        "ManagedQueryResultsConfiguration":{
+          "shape":"ManagedQueryResultsConfiguration",
+          "documentation":"<p> The configuration for storing results in Athena owned storage, which includes whether this feature is enabled; whether encryption configuration, if any, is used for encrypting query results. </p>"
         },
         "EnforceWorkGroupConfiguration":{
           "shape":"BoxedBoolean",
@@ -4909,6 +5024,10 @@
         "ResultConfigurationUpdates":{
           "shape":"ResultConfigurationUpdates",
           "documentation":"<p>The result configuration information about the queries in this workgroup that will be updated. Includes the updated results location and an updated option for encrypting query results.</p>"
+        },
+        "ManagedQueryResultsConfigurationUpdates":{
+          "shape":"ManagedQueryResultsConfigurationUpdates",
+          "documentation":"<p>Updates configuration information for managed query results in the workgroup.</p>"
         },
         "PublishCloudWatchMetricsEnabled":{
           "shape":"BoxedBoolean",

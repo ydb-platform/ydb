@@ -13,6 +13,8 @@
 
 #include <cerrno>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_DDISK
+
 namespace NKikimr::NDDisk {
 
 static constexpr size_t MaxRwCount = 0x7ffff000ULL; // INT_MAX & PAGE_MASK on 4K pages, ~ 2 GiB
@@ -110,7 +112,7 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
             << " chunkIdx=" << ChunkIdx
             << " chunkOffset=" << ChunkOffsetInBytes
             << " DDiskId=" << DDiskId;
-        LOG_ERROR_S(*actorSystem, NKikimrServices::BS_DDISK, reason);
+        YDB_LOG_ERROR_CTX(*actorSystem, reason);
         Reply(actorSystem, UringErrorToStatus(result, opType), std::move(reason));
         Y_UNUSED(guard.release());
         SelfRecycle();

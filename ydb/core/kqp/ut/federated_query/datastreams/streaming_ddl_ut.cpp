@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
@@ -17,6 +18,7 @@ using namespace NYdb::NQuery;
 using namespace fmt::literals;
 using namespace NYql::NConnector::NTest;
 using namespace NTestUtils;
+using namespace NFederatedQueryTest;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
@@ -807,7 +809,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
-                PRAGMA ydb.HashJoinMode = "map";
                 $s3_lookup = SELECT * FROM `{s3_source}`.`path/` WITH (
                     FORMAT = "json_each_row",
                     SCHEMA (
@@ -922,7 +923,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
-                PRAGMA ydb.HashJoinMode = "map";
                 $ydb_lookup = SELECT * FROM `{ydb_source}`.`{ydb_table}`;
 
                 $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
@@ -1058,6 +1058,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             // legal, but nothing to check
             return;
         }
+        NeedsStatsCollectors = true;
         constexpr ui32 combinations = WithFeatureFlag && !WithFullscanFlag ? 2 : 1;
         {
             auto& setupAppConfig = SetupAppConfig();
@@ -1187,6 +1188,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         readSession->AddDataReceivedEvent(sampleMessages);
         writeSession->ExpectMessages({"A-P4", "B-P6", "A-P4"});
 
+        auto actorsAlive = GetCounters("utils")->GetSubgroup("execpool", "User")->GetSubgroup("sensor", "ActorsAliveByActivity")->GetNamedCounter("activity", "NYql::NDq::(anonymous namespace)::TInputTransformStreamLookupBase");
+        WaitFor(TDuration::Seconds(10), "ActorsAlive", [&](TString& error) {
+            auto val = actorsAlive->Val();
+            error = TStringBuilder() << "InputTransform actors count is " << val << ", expected 1";
+            return val == 1;
+        });
+
         CheckScriptExecutionsCount(1, 1);
         const auto results = ExecQuery(
             "SELECT ast_compressed FROM `.metadata/script_executions`;"
@@ -1196,6 +1204,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             const auto& ast = result.ColumnParser(0).GetOptionalString();
             UNIT_ASSERT(ast);
             UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
+        });
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(1, 0);
+
+        WaitFor(TDuration::Seconds(10), "ActorsAlive", [&](TString& error) {
+            auto val = actorsAlive->Val();
+            error = TStringBuilder() << "InputTransform actors count is " << val << ", expected 0";
+            return val == 0;
         });
 
         if (!WithFullscanFlag) {
@@ -1231,7 +1254,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             EStatus::GENERIC_ERROR,
             "EnableDqSourceStreamLookupJoinFullscan disabled, but FullscanLimit is 123");
 
-            CheckScriptExecutionsCount(2, 1);
+            CheckScriptExecutionsCount(2, 0);
         }
     }
 
@@ -1287,7 +1310,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
-                PRAGMA ydb.HashJoinMode = "map";
                 PRAGMA ydb.DqChannelVersion = "2";
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
@@ -1340,11 +1362,196 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName, "oltp_slj2-oltp2-olap2", disposition);
     }
 
+    Y_UNIT_TEST_F(StreamingQueryJoinRecalculationOnRetry, TStreamingTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopicName[] = "streamingQueryJoinRecalculationOnRetryInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryJoinRecalculationOnRetryOutputTopic";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+        CreatePqSource(pqSourceName);
+
+        constexpr char oltpTableName[] = "oltpTable";
+        constexpr char olapTableName[] = "olapTable";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{oltp_table}` (
+                Key Int32 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `{olap_table}` (
+                Key Int32 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            ) WITH (
+                STORE = COLUMN
+            );)",
+            "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName
+        ));
+
+        ExecQuery(fmt::format(R"(
+            UPSERT INTO `{oltp_table}`(Key, Value)
+            VALUES (1, "oltp-1");
+
+            INSERT INTO `{olap_table}`(Key, Value)
+            VALUES (1, "olap-1");)",
+            "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName
+        ));
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT
+                    Unwrap(oltp.Value || "-" || olap.Value)
+                FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        Key Int32 NOT NULL
+                    )
+                ) AS topic
+                LEFT JOIN `{oltp_table}` AS oltp ON topic.Key = oltp.Key
+                LEFT JOIN `{olap_table}` AS olap ON topic.Key = olap.Key
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName,
+            "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        const auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        readSession->AddDataReceivedEvent(0, R"({"Key": 1})");
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessage("oltp-1-olap-1");
+
+        ExecQuery(fmt::format(R"(
+            UPSERT INTO `{oltp_table}`(Key, Value)
+            VALUES (1, "oltp-2");
+
+            UPSERT INTO `{olap_table}`(Key, Value)
+            VALUES (1, "olap-2");)",
+            "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName
+        ));
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, R"({"Key": 1})");
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessage("oltp-2-olap-2");
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryJoinRecalculationOnManualRestart, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "streamingQueryJoinRecalculationOnManualRestartInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryJoinRecalculationOnManualRestartOutputTopic";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+        CreatePqSource(pqSourceName);
+
+        constexpr char oltpTableName[] = "oltpTable";
+        constexpr char olapTableName[] = "olapTable";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{oltp_table}` (
+                Key Int32 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `{olap_table}` (
+                Key Int32 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            ) WITH (
+                STORE = COLUMN
+            );)",
+            "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName
+        ));
+
+        ExecQuery(fmt::format(R"(
+            UPSERT INTO `{oltp_table}`(Key, Value)
+            VALUES (1, "oltp-1");
+
+            INSERT INTO `{olap_table}`(Key, Value)
+            VALUES (1, "olap-1");)",
+            "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName
+        ));
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT
+                    Unwrap(oltp.Value || "-" || olap.Value)
+                FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        Key Int32 NOT NULL
+                    )
+                ) AS topic
+                LEFT JOIN `{oltp_table}` AS oltp ON topic.Key = oltp.Key
+                LEFT JOIN `{olap_table}` AS olap ON topic.Key = olap.Key
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName,
+            "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"Key": 1})");
+        ReadTopicMessage(outputTopicName, "oltp-1-olap-1");
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+
+        ExecQuery(fmt::format(R"(
+            UPSERT INTO `{oltp_table}`(Key, Value)
+            VALUES (1, "oltp-2");
+
+            UPSERT INTO `{olap_table}`(Key, Value)
+            VALUES (1, "olap-2");)",
+            "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName
+        ));
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        WriteTopicMessage(inputTopicName, R"({"Key": 1})");
+        const auto disposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        ReadTopicMessage(outputTopicName, "oltp-2-olap-2", disposition);
+    }
+
     Y_UNIT_TEST_F(StreamingQueryWithPrecompute, TStreamingTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
         constexpr char inputTopicName[] = "streamingQueryWithPrecomputeInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithPrecomputeOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
+        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
         CreateTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
@@ -1390,6 +1597,25 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName, "message-1-value-1");
         Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
+        const auto& result = ExecQuery("SELECT Plan, Ast FROM `.sys/streaming_queries`");
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
+            AstChecker(2, 3)(resultSet.ColumnParser("Ast").GetOptionalUtf8().value_or(""));
+
+            const auto planJson = resultSet.ColumnParser("Plan").GetOptionalUtf8().value_or("");
+            Cerr << "Plan: " << planJson << Endl;
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(planJson, &plan));
+
+            const auto& stagePlan = plan["Plan"]["Plans"][0]["Plans"][0];
+            UNIT_ASSERT_VALUES_EQUAL(stagePlan["Node Type"].GetStringSafe(), "Stage");
+            UNIT_ASSERT_VALUES_EQUAL(stagePlan["Stats"]["Tasks"].GetIntegerSafe(), 2);
+
+            const auto& sourceOp = stagePlan["Plans"][0]["Operators"].GetArraySafe()[0];
+            UNIT_ASSERT_VALUES_EQUAL(sourceOp["ExternalDataSource"].GetStringSafe(), pqSourceName);
+            UNIT_ASSERT_VALUES_EQUAL(sourceOp["SourceType"].GetStringSafe(), "pq");
+        });
+
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
@@ -1418,6 +1644,167 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(2, 1);
 
         ReadTopicMessage(outputTopicName, "message-2-value-2", disposition);
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryPrecomputeRecalculationOnRetry, TStreamingTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopicName[] = "streamingQueryPrecomputeRecalculationOnRetryInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryPrecomputeRecalculationOnRetryOutputTopic";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+        CreatePqSource(pqSourceName);
+
+        constexpr char tableName[] = "oltpTable";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{table_name}` (
+                Key Int32 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            );)",
+            "table_name"_a = tableName
+        ));
+
+        ExecQuery(fmt::format(R"(
+            UPSERT INTO `{table_name}`
+                (Key, Value)
+            VALUES
+                (1, "value-1");)",
+            "table_name"_a = tableName
+        ));
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $r = SELECT Value FROM `{table_name}`;
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT
+                    Unwrap(Data || "-" || $r)
+                FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName,
+            "table_name"_a = tableName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        const auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        readSession->AddDataReceivedEvent(0, "message-1");
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessage("message-1-value-1");
+
+        ExecQuery(fmt::format(R"(
+            UPSERT INTO `{table_name}`
+                (Key, Value)
+            VALUES
+                (1, "value-2");)",
+            "table_name"_a = tableName
+        ));
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, "message-2");
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessage("message-2-value-2");
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryWithDifferentPrecomputeTypes, TStreamingTestFixture) {
+        constexpr char oltpTableName[] = "oltpTable";
+        constexpr char olapTableName[] = "olapTable";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{oltp_table_name}` (
+                Key Int32 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `{olap_table_name}` (
+                Key Int32 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            ) WITH (
+                STORE = COLUMN
+            );)",
+            "oltp_table_name"_a = oltpTableName,
+            "olap_table_name"_a = olapTableName
+        ));
+
+        ExecQuery(fmt::format(R"(
+            UPSERT INTO `{oltp_table_name}`
+                (Key, Value)
+            VALUES
+                (1, "value-1"),
+                (2, "value-1");
+            UPSERT INTO `{olap_table_name}`
+                (Key, Value)
+            VALUES
+                (1, "value-1"),
+                (2, "value-1");)",
+            "oltp_table_name"_a = oltpTableName,
+            "olap_table_name"_a = olapTableName
+        ));
+
+        constexpr char sourceBucket[] = "test_streaming_query_with_s3_join";
+        constexpr char objectContent[] = R"(
+{"Key": 1, "Value": "value-1"}
+{"Key": 2, "Value": "value-1"})";
+        CreateBucketWithObject(sourceBucket, "path/test_object.json", objectContent);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        constexpr char s3SourceName[] = "s3Source";
+        CreatePqSource(pqSourceName);
+        CreateS3Source(sourceBucket, s3SourceName);
+
+        constexpr char externalTableName[] = "externalTable";
+        ExecQuery(fmt::format(R"(
+            CREATE EXTERNAL TABLE `{external_table}` (
+                Key Int32 NOT NULL,
+                Value String NOT NULL
+            ) WITH (
+                DATA_SOURCE = "{external_source}",
+                LOCATION = "path/test_object.json",
+                FORMAT = "json_each_row"
+            );)",
+            "external_table"_a = externalTableName,
+            "external_source"_a = s3SourceName
+        ));
+
+        constexpr char inputTopicName[] = "streamingQueryWithDifferentPrecomputeTypesInputTopicName";
+        constexpr char outputTopicName[] = "streamingQueryWithDifferentPrecomputeTypesOutputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        for (const auto& sourceName : {oltpTableName, olapTableName, externalTableName}) {
+            constexpr char queryName[] = "streamingQuery";
+
+            ExecQuery(fmt::format(R"(
+                CREATE OR REPLACE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    $precompute_agg = SELECT CAST(MAX(Key) AS String) FROM `{precompute_source}`;
+                    $precompute_limit = SELECT Value FROM `{precompute_source}` LIMIT 1;
+                    $empty_precompute = SELECT Value FROM `{precompute_source}` WHERE Key = 3;
+
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT
+                        Unwrap(Data || $precompute_agg || $precompute_limit || ($empty_precompute ?? "<null>"))
+                    FROM `{pq_source}`.`{input_topic}`;
+                END DO;)",
+                "query_name"_a = queryName,
+                "pq_source"_a = pqSourceName,
+                "precompute_source"_a = sourceName,
+                "input_topic"_a = inputTopicName,
+                "output_topic"_a = outputTopicName
+            ));
+
+            Sleep(TDuration::Seconds(1));
+
+            const auto disposition = TInstant::Now();
+            auto message = TStringBuilder() << "test_message" << sourceName;
+            WriteTopicMessage(inputTopicName, message);
+            ReadTopicMessage(outputTopicName, message << "2value-1<null>", disposition);
+        }
     }
 
     Y_UNIT_TEST_F(StreamingQueryUnderSecureScriptExecutions, TStreamingTestFixture) {
@@ -1643,7 +2030,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
-                PRAGMA ydb.HashJoinMode = "map";
                 $s3_lookup = SELECT * FROM `{s3_source}`.`path/` WITH (
                     FORMAT = "json_each_row",
                     SCHEMA (
@@ -2704,8 +3090,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
-                PRAGMA ydb.OptValidateStreamingConstraints = "false"; -- Unsupported multi-output with switch due to S3 sink
-
                 $rows = SELECT * FROM `{pq_source}`.`{input_topic}`;
 
                 INSERT INTO `{pq_source}`.`{output_topic1}` SELECT Data || "-A" AS X FROM $rows;
@@ -2748,6 +3132,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopic1, "test-A");
         ReadTopicMessage(outputTopic2, "test-B");
 
+        Sleep(TDuration::Seconds(1));
         const auto& results = ExecQuery(fmt::format(R"(
             SELECT * FROM `{row_table}`;
             SELECT * FROM `{column_table}`;)",
@@ -2783,6 +3168,293 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
   }
 ])";
         UNIT_ASSERT_STRINGS_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
+    }
+
+    void CreateMultiOutputQuery(TStreamingTestFixture& self, const std::string& queryName, const std::string& pqSource,
+        const std::string& inputTopic, const std::string& outputTopic1, const std::string& outputTopic2,
+        const std::string& rowTable, const std::string& columnTable)
+    {
+        self.ExecQuery(fmt::format(R"(
+            CREATE TABLE `{row_table}` (
+                Key String NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `{column_table}` (
+                Key String NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            ) WITH (
+                STORE = COLUMN
+            );)",
+            "row_table"_a = rowTable,
+            "column_table"_a = columnTable
+        ));
+
+        self.ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT Key, Value FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        Key String NOT NULL,
+                        Value String NOT NULL
+                    )
+                );
+
+                INSERT INTO `{pq_source}`.`{output_topic1}` SELECT Unwrap(Value || "-t1") AS Data FROM $in;
+                INSERT INTO `{pq_source}`.`{output_topic2}` SELECT Unwrap(Value || "-t2") AS Data FROM $in;
+                UPSERT INTO `{row_table}` SELECT Key, Unwrap(Value || "-r") AS Value FROM $in;
+                UPSERT INTO `{column_table}` SELECT Key, Unwrap(Value || "-c") AS Value FROM $in;
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSource,
+            "input_topic"_a = inputTopic,
+            "output_topic1"_a = outputTopic1,
+            "output_topic2"_a = outputTopic2,
+            "row_table"_a = rowTable,
+            "column_table"_a = columnTable
+        ));
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryMultiOutputRestart, TStreamingTestFixture) {
+        constexpr char inputTopic[] = "streamingQueryMultiOutputRestartInputTopic";
+        constexpr char outputTopic1[] = "streamingQueryMultiOutputRestartOutputTopic1";
+        constexpr char outputTopic2[] = "streamingQueryMultiOutputRestartOutputTopic2";
+        constexpr char pqSource[] = "pqSourceName";
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic1);
+        CreateTopic(outputTopic2);
+        CreatePqSource(pqSource);
+
+        constexpr char rowTable[] = "rowSink";
+        constexpr char columnTable[] = "columnSink";
+        constexpr char queryName[] = "streamingQuery";
+        CreateMultiOutputQuery(*this, queryName, pqSource, inputTopic, outputTopic1, outputTopic2, rowTable, columnTable);
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopic, R"({"Key": "k1", "Value": "m1"})");
+        ReadTopicMessage(outputTopic1, "m1-t1");
+        ReadTopicMessage(outputTopic2, "m1-t2");
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        CheckTable(*this, rowTable, {{"k1", "m1-r"}});
+        CheckTable(*this, columnTable, {{"k1", "m1-c"}});
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        const auto disposition = TInstant::Now();
+        WriteTopicMessage(inputTopic, R"({"Key": "k2", "Value": "m2"})");
+        ReadTopicMessage(outputTopic1, "m2-t1", disposition);
+        ReadTopicMessage(outputTopic2, "m2-t2", disposition);
+        Sleep(TDuration::Seconds(1));
+        CheckTable(*this, rowTable, {{"k1", "m1-r"}, {"k2", "m2-r"}});
+        CheckTable(*this, columnTable, {{"k1", "m1-c"}, {"k2", "m2-c"}});
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryMultiOutputCheckpointRecovery, TStreamingTestFixture) {
+        constexpr char inputTopic[] = "streamingQueryMultiOutputCheckpointRecoveryInputTopic";
+        constexpr char outputTopic1[] = "streamingQueryMultiOutputCheckpointRecoveryOutputTopic1";
+        constexpr char outputTopic2[] = "streamingQueryMultiOutputCheckpointRecoveryOutputTopic2";
+        constexpr char pqSource[] = "pqSourceName";
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic1);
+        CreateTopic(outputTopic2);
+        CreatePqSource(pqSource);
+
+        constexpr char rowTable[] = "rowSink";
+        constexpr char columnTable[] = "columnSink";
+        constexpr char queryName[] = "streamingQuery";
+        CreateMultiOutputQuery(*this, queryName, pqSource, inputTopic, outputTopic1, outputTopic2, rowTable, columnTable);
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopic, R"({"Key": "k1", "Value": "m1"})");
+        ReadTopicMessage(outputTopic1, "m1-t1");
+        ReadTopicMessage(outputTopic2, "m1-t2");
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        CheckTable(*this, rowTable, {{"k1", "m1-r"}});
+        CheckTable(*this, columnTable, {{"k1", "m1-c"}});
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopic, R"({"Key": "k2", "Value": "m2"})");
+        const auto disposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        // Every output receives exactly the message added after the checkpoint (offset recovery, no loss / no duplicates)
+        ReadTopicMessage(outputTopic1, "m2-t1", disposition);
+        ReadTopicMessage(outputTopic2, "m2-t2", disposition);
+        Sleep(TDuration::Seconds(1));
+        CheckTable(*this, rowTable, {{"k1", "m1-r"}, {"k2", "m2-r"}});
+        CheckTable(*this, columnTable, {{"k1", "m1-c"}, {"k2", "m2-c"}});
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryMultiOutputConsistencyOnRestart, TStreamingTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopic[] = "streamingQueryMultiOutputConsistencyInputTopic";
+        constexpr char outputTopic1[] = "streamingQueryMultiOutputConsistencyOutputTopic1";
+        constexpr char outputTopic2[] = "streamingQueryMultiOutputConsistencyOutputTopic2";
+        constexpr char pqSource[] = "pqSourceName";
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic1);
+        CreateTopic(outputTopic2);
+        CreatePqSource(pqSource);
+
+        constexpr char rowTable[] = "rowSink";
+        constexpr char columnTable[] = "columnSink";
+        constexpr char queryName[] = "streamingQuery";
+        CreateMultiOutputQuery(*this, queryName, pqSource, inputTopic, outputTopic1, outputTopic2, rowTable, columnTable);
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        const auto readSession = pqGateway->WaitReadSession(inputTopic);
+        readSession->AddDataReceivedEvent(0, R"({"Key": "k1", "Value": "m1"})");
+        pqGateway->WaitWriteSession(outputTopic1)->ExpectMessage("m1-t1");
+        pqGateway->WaitWriteSession(outputTopic2)->ExpectMessage("m1-t2");
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        CheckTable(*this, rowTable, {{"k1", "m1-r"}});
+        CheckTable(*this, columnTable, {{"k1", "m1-c"}});
+
+        // Automatic restart via read session failure
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        pqGateway->WaitReadSession(inputTopic)->AddDataReceivedEvent(1, R"({"Key": "k2", "Value": "m2"})");
+
+        // All outputs stay consistent after restart: exactly the second message, no re-delivery of the first
+        pqGateway->WaitWriteSession(outputTopic1)->ExpectMessage("m2-t1");
+        pqGateway->WaitWriteSession(outputTopic2)->ExpectMessage("m2-t2");
+        Sleep(TDuration::Seconds(1));
+        CheckTable(*this, rowTable, {{"k1", "m1-r"}, {"k2", "m2-r"}});
+        CheckTable(*this, columnTable, {{"k1", "m1-c"}, {"k2", "m2-c"}});
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryMultiOutputInvalidConfigurations, TStreamingTestFixture) {
+        constexpr char inputTopic[] = "streamingQueryMultiOutputInvalidInputTopic";
+        constexpr char outputTopic[] = "streamingQueryMultiOutputInvalidOutputTopic";
+        constexpr char pqSource[] = "pqSourceName";
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic);
+        CreatePqSource(pqSource);
+
+        constexpr char rowTable[] = "rowSink";
+        constexpr char columnTable[] = "columnSink";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{row_table}` (
+                Value String NOT NULL,
+                PRIMARY KEY (Value)
+            );
+            CREATE TABLE `{column_table}` (
+                Value String NOT NULL,
+                PRIMARY KEY (Value)
+            ) WITH (
+                STORE = COLUMN 
+            );)",
+            "row_table"_a = rowTable,
+            "column_table"_a = columnTable
+        ));
+
+        for (const auto& sink : {
+            TStringBuilder() << "nonExistentSource`.`" << outputTopic,
+            TStringBuilder() << rowTable << "Unk"
+        }) {
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `streamingQuery` AS
+                DO BEGIN
+                    INSERT INTO `{sink}`
+                    SELECT Data FROM `{pq_source}`.`{input_topic}`
+                END DO;)",
+                "pq_source"_a = pqSource,
+                "input_topic"_a = inputTopic,
+                "sink"_a = sink
+            ), EStatus::SCHEME_ERROR, "does not exist");
+        }
+
+        for (const auto& mode : {"UPSERT", "REPLACE"}) {
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `streamingQuery` AS
+                DO BEGIN
+                    {mode} INTO `{pq_source}`.`{output_topic}`
+                    SELECT Data FROM `{pq_source}`.`{input_topic}`
+                END DO;)",
+                "mode"_a = mode,
+                "pq_source"_a = pqSource,
+                "input_topic"_a = inputTopic,
+                "output_topic"_a = outputTopic
+            ), EStatus::GENERIC_ERROR, TStringBuilder() << "Write mode '" << to_lower(TString(mode)) << "' is not supported for external entities");
+        }
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `streamingQuery` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}`;
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}`;
+            END DO;)",
+            "pq_source"_a = pqSource,
+            "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic
+        ), EStatus::UNSUPPORTED, "Save state of query is not supported for queries with intermediate writes");
+
+        for (const auto& table : {rowTable, columnTable}) {
+            for (const auto& mode : {"INSERT", "REPLACE"}) {
+                ExecQuery(fmt::format(R"(
+                    CREATE STREAMING QUERY `streamingQuery` AS
+                    DO BEGIN
+                        {mode} INTO `{table}`
+                        SELECT Unwrap(Value) AS Value FROM `{pq_source}`.`{input_topic}` WITH (
+                            FORMAT = json_each_row,
+                            SCHEMA (
+                                Value String NOT NULL
+                            )
+                        )
+                    END DO;)",
+                    "mode"_a = mode,
+                    "table"_a = table,
+                    "pq_source"_a = pqSource,
+                    "input_topic"_a = inputTopic
+                ), EStatus::GENERIC_ERROR, "Only UPSERT writing mode is supported for YDB writes inside streaming queries");
+            }
+        }
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `streamingQuery` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT Data FROM `{pq_source}`.`{input_topic}`;
+                SELECT * FROM `{pq_source}`.`{input_topic}`;
+            END DO;)",
+            "pq_source"_a = pqSource,
+            "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic
+        ), EStatus::GENERIC_ERROR, "Results is not allowed for streaming queries, please use INSERT to record the query result");
     }
 
     Y_UNIT_TEST_F(DropStreamingQueryDuringRetries, TStreamingWithSchemaSecretsTestFixture) {
@@ -2848,7 +3520,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
             CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "FAILED");
+                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "STOPPED");
             });
         }
 
@@ -3516,6 +4188,100 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         )sql", "t"_a = tableName));
 
         ReadTopicMessage(outputTopic, R"({"id":"X","val":42})", TInstant::Now() - TDuration::Seconds(100), UseLocalTopics);
+    }
+
+    Y_UNIT_TEST_F(ReadTopicSchemaWithYdbPrefixIsProhibited, TStreamingTestFixture) {
+        const std::string sourceName = "schema_with_ydb_prefix_source";
+        CreatePqSource(sourceName);
+
+        const std::string topicName = "schema_with_ydb_prefix_topic";
+        CreateTopic(topicName);
+
+        // Schema column name starting with __ydb_ should be rejected
+        ExecQuery(fmt::format(R"(
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    __ydb_my_field String NOT NULL,
+                    value String NOT NULL
+                )
+            )
+            LIMIT 1;)",
+            "source"_a = sourceName,
+            "topic"_a = topicName
+        ),
+        EStatus::GENERIC_ERROR,
+        "names starting with '__ydb_' are reserved for system columns");
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryInvalidationAfterCreation, TStreamingTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char inputTopicName[] = "streamingQueryInvalidationAfterCreationInputTopic1";
+        constexpr char outputTopicName[] = "streamingQueryInvalidationAfterCreationOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(
+            R"sql(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT * FROM `{pq_source}`.`{input_topic}`;
+                END DO;
+            )sql",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "test_message");
+        ReadTopicMessage(outputTopicName, "test_message");
+
+        constexpr ui64 changesCount = 10;
+        for (ui64 i = 0; i < changesCount; ++i) {
+            ExecQuery(fmt::format(
+                R"sql(
+                    ALTER STREAMING QUERY `{query_name}` SET (FORCE = TRUE) AS
+                    DO BEGIN
+                        PRAGMA ydb.OverridePlanner = "invalid";
+                        INSERT INTO `{pq_source}`.`{output_topic}`
+                        SELECT * FROM `{pq_source}`.`{input_topic}`;
+                    END DO;
+                )sql",
+                "query_name"_a = queryName,
+                "pq_source"_a = pqSourceName,
+                "input_topic"_a = inputTopicName,
+                "output_topic"_a = outputTopicName
+            ), EStatus::GENERIC_ERROR, "Invalid override planner settings");
+        }
+
+        {
+            const auto& result = ExecQuery("SELECT Status, Issues FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_STRING_CONTAINS(resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or(""), "Invalid override planner settings");
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Status").GetOptionalUtf8().value_or(""), "FAILED");
+            });
+        }
+
+        {
+            const auto& result = ExecQuery("SELECT COUNT(*) AS count FROM `.metadata/script_executions`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("count").GetUint64(), std::min(changesCount, static_cast<ui64>(4)));
+            });
+        }
     }
 }
 

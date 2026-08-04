@@ -16,6 +16,8 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::MSGBUS_PROXY
+
 namespace NKikimr {
 namespace NMsgBusProxy {
 
@@ -164,7 +166,7 @@ void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatDescribeRequest::TPtr& e
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvDbOperation::TPtr& ev, const TActorContext& ctx); // see msgbus_server_db.cpp
 
 void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::MSGBUS_PROXY, "TMessageBusServerProxy::Bootstrap");
+    YDB_LOG_TRACE_CTX(ctx, "TMessageBusServerProxy::Bootstrap");
 
     SelfID = ctx.SelfID;
 

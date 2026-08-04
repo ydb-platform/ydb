@@ -43,9 +43,13 @@ public:
     NThreading::TFuture<TResponse> GetFuture() const;
 
 private:
+    void DoRun();
     void SendFlushRequest(THostIndex host);
     void OnFlushResponse(const TDBGFlushResponse& response);
     void Reply(TVector<ui64> flushOk, TVector<ui64> flushFailed);
+
+    void ScheduleRequestTimeout();
+    void OnRequestTimeout();
 
     NActors::TActorSystem const* ActorSystem;
     const TChildLogTitle LogTitle;
@@ -54,6 +58,8 @@ private:
     const NWilson::TSpan Span;
     const THostRoute Route;
     const TFlushHint Hint;
+    const TDuration Cooldown;
+    const TDuration RequestTimeout;
 
     NThreading::TPromise<TResponse> Promise =
         NThreading::NewPromise<TResponse>();

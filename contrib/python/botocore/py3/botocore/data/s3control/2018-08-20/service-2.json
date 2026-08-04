@@ -4,11 +4,13 @@
     "apiVersion":"2018-08-20",
     "endpointPrefix":"s3-control",
     "protocol":"rest-xml",
+    "protocols":["rest-xml"],
     "serviceFullName":"AWS S3 Control",
     "serviceId":"S3 Control",
     "signatureVersion":"s3v4",
     "signingName":"s3",
-    "uid":"s3control-2018-08-20"
+    "uid":"s3control-2018-08-20",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "AssociateAccessGrantsIdentityCenter":{
@@ -106,7 +108,7 @@
         "xmlNamespace":{"uri":"http://awss3control.amazonaws.com/doc/2018-08-20/"}
       },
       "output":{"shape":"CreateAccessPointResult"},
-      "documentation":"<note> <p>This operation is not supported by directory buckets.</p> </note> <p>Creates an access point and associates it with the specified bucket. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html\">Managing Data Access with Amazon S3 Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p/> <note> <p>S3 on Outposts only supports VPC-style access points. </p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html\"> Accessing Amazon S3 on Outposts using virtual private cloud (VPC) only access points</a> in the <i>Amazon S3 User Guide</i>.</p> </note> <p>All Amazon S3 on Outposts REST API requests for this action require an additional parameter of <code>x-amz-outpost-id</code> to be passed with the request. In addition, you must use an S3 on Outposts endpoint hostname prefix instead of <code>s3-control</code>. For an example of the request syntax for Amazon S3 on Outposts that uses the S3 on Outposts endpoint hostname prefix and the <code>x-amz-outpost-id</code> derived by using the access point ARN, see the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_CreateAccessPoint.html#API_control_CreateAccessPoint_Examples\">Examples</a> section.</p> <p/> <p>The following actions are related to <code>CreateAccessPoint</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPoint.html\">GetAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPoint.html\">DeleteAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_ListAccessPoints.html\">ListAccessPoints</a> </p> </li> </ul>",
+      "documentation":"<p>Creates an access point and associates it to a specified bucket. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html\">Managing access to shared datasets with access points</a> or <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-directory-buckets.html\">Managing access to shared datasets in directory buckets with access points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>To create an access point and attach it to a volume on an Amazon FSx file system, see <a href=\"https://docs.aws.amazon.com/fsx/latest/APIReference/API_CreateAndAttachS3AccessPoint.html\">CreateAndAttachS3AccessPoint</a> in the <i>Amazon FSx API Reference</i>.</p> <p/> <note> <p>S3 on Outposts only supports VPC-style access points. </p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html\"> Accessing Amazon S3 on Outposts using virtual private cloud (VPC) only access points</a> in the <i>Amazon S3 User Guide</i>.</p> </note> <p>All Amazon S3 on Outposts REST API requests for this action require an additional parameter of <code>x-amz-outpost-id</code> to be passed with the request. In addition, you must use an S3 on Outposts endpoint hostname prefix instead of <code>s3-control</code>. For an example of the request syntax for Amazon S3 on Outposts that uses the S3 on Outposts endpoint hostname prefix and the <code>x-amz-outpost-id</code> derived by using the access point ARN, see the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_CreateAccessPoint.html#API_control_CreateAccessPoint_Examples\">Examples</a> section.</p> <p/> <p>The following actions are related to <code>CreateAccessPoint</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPoint.html\">GetAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPoint.html\">DeleteAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_ListAccessPoints.html\">ListAccessPoints</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_ListAccessPointsForDirectoryBuckets.html\">ListAccessPointsForDirectoryBuckets</a> </p> </li> </ul>",
       "endpoint":{
         "hostPrefix":"{AccountId}."
       },
@@ -287,7 +289,7 @@
         "requestUri":"/v20180820/accesspoint/{name}"
       },
       "input":{"shape":"DeleteAccessPointRequest"},
-      "documentation":"<note> <p>This operation is not supported by directory buckets.</p> </note> <p>Deletes the specified access point.</p> <p>All Amazon S3 on Outposts REST API requests for this action require an additional parameter of <code>x-amz-outpost-id</code> to be passed with the request. In addition, you must use an S3 on Outposts endpoint hostname prefix instead of <code>s3-control</code>. For an example of the request syntax for Amazon S3 on Outposts that uses the S3 on Outposts endpoint hostname prefix and the <code>x-amz-outpost-id</code> derived by using the access point ARN, see the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPoint.html#API_control_DeleteAccessPoint_Examples\">Examples</a> section.</p> <p>The following actions are related to <code>DeleteAccessPoint</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_CreateAccessPoint.html\">CreateAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPoint.html\">GetAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_ListAccessPoints.html\">ListAccessPoints</a> </p> </li> </ul>",
+      "documentation":"<p>Deletes the specified access point.</p> <p>All Amazon S3 on Outposts REST API requests for this action require an additional parameter of <code>x-amz-outpost-id</code> to be passed with the request. In addition, you must use an S3 on Outposts endpoint hostname prefix instead of <code>s3-control</code>. For an example of the request syntax for Amazon S3 on Outposts that uses the S3 on Outposts endpoint hostname prefix and the <code>x-amz-outpost-id</code> derived by using the access point ARN, see the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPoint.html#API_control_DeleteAccessPoint_Examples\">Examples</a> section.</p> <p>The following actions are related to <code>DeleteAccessPoint</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_CreateAccessPoint.html\">CreateAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPoint.html\">GetAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_ListAccessPoints.html\">ListAccessPoints</a> </p> </li> </ul>",
       "endpoint":{
         "hostPrefix":"{AccountId}."
       },
@@ -317,7 +319,7 @@
         "requestUri":"/v20180820/accesspoint/{name}/policy"
       },
       "input":{"shape":"DeleteAccessPointPolicyRequest"},
-      "documentation":"<note> <p>This operation is not supported by directory buckets.</p> </note> <p>Deletes the access point policy for the specified access point.</p> <p/> <p>All Amazon S3 on Outposts REST API requests for this action require an additional parameter of <code>x-amz-outpost-id</code> to be passed with the request. In addition, you must use an S3 on Outposts endpoint hostname prefix instead of <code>s3-control</code>. For an example of the request syntax for Amazon S3 on Outposts that uses the S3 on Outposts endpoint hostname prefix and the <code>x-amz-outpost-id</code> derived by using the access point ARN, see the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPointPolicy.html#API_control_DeleteAccessPointPolicy_Examples\">Examples</a> section.</p> <p>The following actions are related to <code>DeleteAccessPointPolicy</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_PutAccessPointPolicy.html\">PutAccessPointPolicy</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPointPolicy.html\">GetAccessPointPolicy</a> </p> </li> </ul>",
+      "documentation":"<p>Deletes the access point policy for the specified access point.</p> <p/> <p>All Amazon S3 on Outposts REST API requests for this action require an additional parameter of <code>x-amz-outpost-id</code> to be passed with the request. In addition, you must use an S3 on Outposts endpoint hostname prefix instead of <code>s3-control</code>. For an example of the request syntax for Amazon S3 on Outposts that uses the S3 on Outposts endpoint hostname prefix and the <code>x-amz-outpost-id</code> derived by using the access point ARN, see the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPointPolicy.html#API_control_DeleteAccessPointPolicy_Examples\">Examples</a> section.</p> <p>The following actions are related to <code>DeleteAccessPointPolicy</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_PutAccessPointPolicy.html\">PutAccessPointPolicy</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPointPolicy.html\">GetAccessPointPolicy</a> </p> </li> </ul>",
       "endpoint":{
         "hostPrefix":"{AccountId}."
       },
@@ -338,6 +340,19 @@
       },
       "staticContextParams":{
         "RequiresAccountId":{"value":true}
+      }
+    },
+    "DeleteAccessPointScope":{
+      "name":"DeleteAccessPointScope",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/v20180820/accesspoint/{name}/scope"
+      },
+      "input":{"shape":"DeleteAccessPointScopeRequest"},
+      "documentation":"<p> Deletes an existing access point scope for a directory bucket.</p> <note> <p>When you delete the scope of an access point, all prefixes and permissions are deleted.</p> </note> <p>To use this operation, you must have the permission to perform the <code>s3express:DeleteAccessPointScope</code> action.</p> <p>For information about REST API errors, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#RESTErrorResponses\">REST error responses</a>.</p>",
+      "staticContextParams":{
+        "RequiresAccountId":{"value":true},
+        "UseS3ExpressControlEndpoint":{"value":true}
       }
     },
     "DeleteBucket":{
@@ -600,7 +615,7 @@
       },
       "input":{"shape":"GetAccessGrantsInstanceRequest"},
       "output":{"shape":"GetAccessGrantsInstanceResult"},
-      "documentation":"<p>Retrieves the S3 Access Grants instance for a Region in your account. </p> <dl> <dt>Permissions</dt> <dd> <p>You must have the <code>s3:GetAccessGrantsInstance</code> permission to use this operation. </p> </dd> </dl>",
+      "documentation":"<p>Retrieves the S3 Access Grants instance for a Region in your account. </p> <dl> <dt>Permissions</dt> <dd> <p>You must have the <code>s3:GetAccessGrantsInstance</code> permission to use this operation. </p> </dd> </dl> <note> <p> <code>GetAccessGrantsInstance</code> is not supported for cross-account access. You can only call the API from the account that owns the S3 Access Grants instance.</p> </note>",
       "endpoint":{
         "hostPrefix":"{AccountId}."
       },
@@ -668,7 +683,7 @@
       },
       "input":{"shape":"GetAccessPointRequest"},
       "output":{"shape":"GetAccessPointResult"},
-      "documentation":"<note> <p>This operation is not supported by directory buckets.</p> </note> <p>Returns configuration information about the specified access point.</p> <p/> <p>All Amazon S3 on Outposts REST API requests for this action require an additional parameter of <code>x-amz-outpost-id</code> to be passed with the request. In addition, you must use an S3 on Outposts endpoint hostname prefix instead of <code>s3-control</code>. For an example of the request syntax for Amazon S3 on Outposts that uses the S3 on Outposts endpoint hostname prefix and the <code>x-amz-outpost-id</code> derived by using the access point ARN, see the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPoint.html#API_control_GetAccessPoint_Examples\">Examples</a> section.</p> <p>The following actions are related to <code>GetAccessPoint</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_CreateAccessPoint.html\">CreateAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPoint.html\">DeleteAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_ListAccessPoints.html\">ListAccessPoints</a> </p> </li> </ul>",
+      "documentation":"<p>Returns configuration information about the specified access point.</p> <p/> <p>All Amazon S3 on Outposts REST API requests for this action require an additional parameter of <code>x-amz-outpost-id</code> to be passed with the request. In addition, you must use an S3 on Outposts endpoint hostname prefix instead of <code>s3-control</code>. For an example of the request syntax for Amazon S3 on Outposts that uses the S3 on Outposts endpoint hostname prefix and the <code>x-amz-outpost-id</code> derived by using the access point ARN, see the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPoint.html#API_control_GetAccessPoint_Examples\">Examples</a> section.</p> <p>The following actions are related to <code>GetAccessPoint</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_CreateAccessPoint.html\">CreateAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPoint.html\">DeleteAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_ListAccessPoints.html\">ListAccessPoints</a> </p> </li> </ul>",
       "endpoint":{
         "hostPrefix":"{AccountId}."
       },
@@ -716,7 +731,7 @@
       },
       "input":{"shape":"GetAccessPointPolicyRequest"},
       "output":{"shape":"GetAccessPointPolicyResult"},
-      "documentation":"<note> <p>This operation is not supported by directory buckets.</p> </note> <p>Returns the access point policy associated with the specified access point.</p> <p>The following actions are related to <code>GetAccessPointPolicy</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_PutAccessPointPolicy.html\">PutAccessPointPolicy</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPointPolicy.html\">DeleteAccessPointPolicy</a> </p> </li> </ul>",
+      "documentation":"<p>Returns the access point policy associated with the specified access point.</p> <p>The following actions are related to <code>GetAccessPointPolicy</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_PutAccessPointPolicy.html\">PutAccessPointPolicy</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPointPolicy.html\">DeleteAccessPointPolicy</a> </p> </li> </ul>",
       "endpoint":{
         "hostPrefix":"{AccountId}."
       },
@@ -770,6 +785,20 @@
       },
       "staticContextParams":{
         "RequiresAccountId":{"value":true}
+      }
+    },
+    "GetAccessPointScope":{
+      "name":"GetAccessPointScope",
+      "http":{
+        "method":"GET",
+        "requestUri":"/v20180820/accesspoint/{name}/scope"
+      },
+      "input":{"shape":"GetAccessPointScopeRequest"},
+      "output":{"shape":"GetAccessPointScopeResult"},
+      "documentation":"<p> Returns the access point scope for a directory bucket.</p> <p>To use this operation, you must have the permission to perform the <code>s3express:GetAccessPointScope</code> action.</p> <p>For information about REST API errors, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#RESTErrorResponses\">REST error responses</a>.</p>",
+      "staticContextParams":{
+        "RequiresAccountId":{"value":true},
+        "UseS3ExpressControlEndpoint":{"value":true}
       }
     },
     "GetBucket":{
@@ -1100,12 +1129,26 @@
       },
       "input":{"shape":"ListAccessPointsRequest"},
       "output":{"shape":"ListAccessPointsResult"},
-      "documentation":"<note> <p>This operation is not supported by directory buckets.</p> </note> <p>Returns a list of the access points that are owned by the current account that's associated with the specified bucket. You can retrieve up to 1000 access points per call. If the specified bucket has more than 1,000 access points (or the number specified in <code>maxResults</code>, whichever is less), the response will include a continuation token that you can use to list the additional access points.</p> <p/> <p>All Amazon S3 on Outposts REST API requests for this action require an additional parameter of <code>x-amz-outpost-id</code> to be passed with the request. In addition, you must use an S3 on Outposts endpoint hostname prefix instead of <code>s3-control</code>. For an example of the request syntax for Amazon S3 on Outposts that uses the S3 on Outposts endpoint hostname prefix and the <code>x-amz-outpost-id</code> derived by using the access point ARN, see the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPoint.html#API_control_GetAccessPoint_Examples\">Examples</a> section.</p> <p>The following actions are related to <code>ListAccessPoints</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_CreateAccessPoint.html\">CreateAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPoint.html\">DeleteAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPoint.html\">GetAccessPoint</a> </p> </li> </ul>",
+      "documentation":"<note> <p>This operation is not supported by directory buckets.</p> </note> <p>Returns a list of the access points. You can retrieve up to 1,000 access points per call. If the call returns more than 1,000 access points (or the number specified in <code>maxResults</code>, whichever is less), the response will include a continuation token that you can use to list the additional access points.</p> <p>Returns only access points attached to S3 buckets by default. To return all access points specify <code>DataSourceType</code> as <code>ALL</code>.</p> <p/> <p>All Amazon S3 on Outposts REST API requests for this action require an additional parameter of <code>x-amz-outpost-id</code> to be passed with the request. In addition, you must use an S3 on Outposts endpoint hostname prefix instead of <code>s3-control</code>. For an example of the request syntax for Amazon S3 on Outposts that uses the S3 on Outposts endpoint hostname prefix and the <code>x-amz-outpost-id</code> derived by using the access point ARN, see the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPoint.html#API_control_GetAccessPoint_Examples\">Examples</a> section.</p> <p>The following actions are related to <code>ListAccessPoints</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_CreateAccessPoint.html\">CreateAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPoint.html\">DeleteAccessPoint</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPoint.html\">GetAccessPoint</a> </p> </li> </ul>",
       "endpoint":{
         "hostPrefix":"{AccountId}."
       },
       "staticContextParams":{
         "RequiresAccountId":{"value":true}
+      }
+    },
+    "ListAccessPointsForDirectoryBuckets":{
+      "name":"ListAccessPointsForDirectoryBuckets",
+      "http":{
+        "method":"GET",
+        "requestUri":"/v20180820/accesspointfordirectory"
+      },
+      "input":{"shape":"ListAccessPointsForDirectoryBucketsRequest"},
+      "output":{"shape":"ListAccessPointsForDirectoryBucketsResult"},
+      "documentation":"<p>Returns a list of the access points that are owned by the Amazon Web Services account and that are associated with the specified directory bucket.</p> <p>To list access points for general purpose buckets, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_ListAccessPoints.html\">ListAccesspoints</a>.</p> <p>To use this operation, you must have the permission to perform the <code>s3express:ListAccessPointsForDirectoryBuckets</code> action.</p> <p>For information about REST API errors, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#RESTErrorResponses\">REST error responses</a>.</p>",
+      "staticContextParams":{
+        "RequiresAccountId":{"value":true},
+        "UseS3ExpressControlEndpoint":{"value":true}
       }
     },
     "ListAccessPointsForObjectLambda":{
@@ -1120,6 +1163,23 @@
       "endpoint":{
         "hostPrefix":"{AccountId}."
       },
+      "staticContextParams":{
+        "RequiresAccountId":{"value":true}
+      }
+    },
+    "ListCallerAccessGrants":{
+      "name":"ListCallerAccessGrants",
+      "http":{
+        "method":"GET",
+        "requestUri":"/v20180820/accessgrantsinstance/caller/grants"
+      },
+      "input":{"shape":"ListCallerAccessGrantsRequest"},
+      "output":{"shape":"ListCallerAccessGrantsResult"},
+      "documentation":"<p>Use this API to list the access grants that grant the caller access to Amazon S3 data through S3 Access Grants. The caller (grantee) can be an Identity and Access Management (IAM) identity or Amazon Web Services Identity Center corporate directory identity. You must pass the Amazon Web Services account of the S3 data owner (grantor) in the request. You can, optionally, narrow the results by <code>GrantScope</code>, using a fragment of the data's S3 path, and S3 Access Grants will return only the grants with a path that contains the path fragment. You can also pass the <code>AllowedByApplication</code> filter in the request, which returns only the grants authorized for applications, whether the application is the caller's Identity Center application or any other application (<code>ALL</code>). For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-grants-list-grants.html\">List the caller's access grants</a> in the <i>Amazon S3 User Guide</i>.</p> <dl> <dt>Permissions</dt> <dd> <p>You must have the <code>s3:ListCallerAccessGrants</code> permission to use this operation. </p> </dd> </dl>",
+      "endpoint":{
+        "hostPrefix":"{AccountId}."
+      },
+      "httpChecksumRequired":true,
       "staticContextParams":{
         "RequiresAccountId":{"value":true}
       }
@@ -1277,7 +1337,7 @@
         "locationName":"PutAccessPointPolicyRequest",
         "xmlNamespace":{"uri":"http://awss3control.amazonaws.com/doc/2018-08-20/"}
       },
-      "documentation":"<note> <p>This operation is not supported by directory buckets.</p> </note> <p>Associates an access policy with the specified access point. Each access point can have only one policy, so a request made to this API replaces any existing policy associated with the specified access point.</p> <p/> <p>All Amazon S3 on Outposts REST API requests for this action require an additional parameter of <code>x-amz-outpost-id</code> to be passed with the request. In addition, you must use an S3 on Outposts endpoint hostname prefix instead of <code>s3-control</code>. For an example of the request syntax for Amazon S3 on Outposts that uses the S3 on Outposts endpoint hostname prefix and the <code>x-amz-outpost-id</code> derived by using the access point ARN, see the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_PutAccessPointPolicy.html#API_control_PutAccessPointPolicy_Examples\">Examples</a> section.</p> <p>The following actions are related to <code>PutAccessPointPolicy</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPointPolicy.html\">GetAccessPointPolicy</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPointPolicy.html\">DeleteAccessPointPolicy</a> </p> </li> </ul>",
+      "documentation":"<p>Associates an access policy with the specified access point. Each access point can have only one policy, so a request made to this API replaces any existing policy associated with the specified access point.</p> <p/> <p>All Amazon S3 on Outposts REST API requests for this action require an additional parameter of <code>x-amz-outpost-id</code> to be passed with the request. In addition, you must use an S3 on Outposts endpoint hostname prefix instead of <code>s3-control</code>. For an example of the request syntax for Amazon S3 on Outposts that uses the S3 on Outposts endpoint hostname prefix and the <code>x-amz-outpost-id</code> derived by using the access point ARN, see the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_PutAccessPointPolicy.html#API_control_PutAccessPointPolicy_Examples\">Examples</a> section.</p> <p>The following actions are related to <code>PutAccessPointPolicy</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_GetAccessPointPolicy.html\">GetAccessPointPolicy</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_DeleteAccessPointPolicy.html\">DeleteAccessPointPolicy</a> </p> </li> </ul>",
       "endpoint":{
         "hostPrefix":"{AccountId}."
       },
@@ -1302,6 +1362,23 @@
       },
       "staticContextParams":{
         "RequiresAccountId":{"value":true}
+      }
+    },
+    "PutAccessPointScope":{
+      "name":"PutAccessPointScope",
+      "http":{
+        "method":"PUT",
+        "requestUri":"/v20180820/accesspoint/{name}/scope"
+      },
+      "input":{
+        "shape":"PutAccessPointScopeRequest",
+        "locationName":"PutAccessPointScopeRequest",
+        "xmlNamespace":{"uri":"http://awss3control.amazonaws.com/doc/2018-08-20/"}
+      },
+      "documentation":"<p>Creates or replaces the access point scope for a directory bucket. You can use the access point scope to restrict access to specific prefixes, API operations, or a combination of both.</p> <note> <p>You can specify any amount of prefixes, but the total length of characters of all prefixes must be less than 256 bytes in size.</p> </note> <p>To use this operation, you must have the permission to perform the <code>s3express:PutAccessPointScope</code> action.</p> <p>For information about REST API errors, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#RESTErrorResponses\">REST error responses</a>.</p>",
+      "staticContextParams":{
+        "RequiresAccountId":{"value":true},
+        "UseS3ExpressControlEndpoint":{"value":true}
       }
     },
     "PutBucketLifecycleConfiguration":{
@@ -1746,10 +1823,10 @@
         },
         "VpcConfiguration":{
           "shape":"VpcConfiguration",
-          "documentation":"<p>The virtual private cloud (VPC) configuration for this access point, if one exists.</p> <note> <p>This element is empty if this access point is an Amazon S3 on Outposts access point that is used by other Amazon Web Services.</p> </note>"
+          "documentation":"<p>The virtual private cloud (VPC) configuration for this access point, if one exists.</p> <note> <p>This element is empty if this access point is an Amazon S3 on Outposts access point that is used by other Amazon Web Services services.</p> </note>"
         },
         "Bucket":{
-          "shape":"BucketName",
+          "shape":"AccessPointBucketName",
           "documentation":"<p>The name of the bucket associated with this access point.</p>"
         },
         "AccessPointArn":{
@@ -1763,9 +1840,21 @@
         "BucketAccountId":{
           "shape":"AccountId",
           "documentation":"<p>The Amazon Web Services account ID associated with the S3 bucket associated with this access point.</p>"
+        },
+        "DataSourceId":{
+          "shape":"DataSourceId",
+          "documentation":"<p>A unique identifier for the data source of the access point.</p>"
+        },
+        "DataSourceType":{
+          "shape":"DataSourceType",
+          "documentation":"<p>The type of the data source that the access point is attached to.</p>"
         }
       },
       "documentation":"<p>An access point used to access a bucket.</p>"
+    },
+    "AccessPointBucketName":{
+      "type":"string",
+      "max":255
     },
     "AccessPointList":{
       "type":"list",
@@ -1859,7 +1948,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -2004,15 +2093,13 @@
     "Boolean":{"type":"boolean"},
     "BucketAlreadyExists":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The requested Outposts bucket name is not available. The bucket namespace is shared by all users of the Outposts in this Region. Select a different name and try again.</p>",
       "exception":true
     },
     "BucketAlreadyOwnedByYou":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The Outposts bucket you tried to create already exists, and you own it. </p>",
       "exception":true
     },
@@ -2087,6 +2174,13 @@
         "locationName":"Arn"
       }
     },
+    "CallerAccessGrantsList":{
+      "type":"list",
+      "member":{
+        "shape":"ListCallerAccessGrantsEntry",
+        "locationName":"AccessGrant"
+      }
+    },
     "CloudWatchMetrics":{
       "type":"structure",
       "required":["IsEnabled"],
@@ -2118,7 +2212,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -2201,7 +2295,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -2230,11 +2324,21 @@
         },
         "AccessGrantsInstanceArn":{
           "shape":"AccessGrantsInstanceArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the S3 Access Grants instance. </p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Web Services IAM Identity Center instance that you are associating with your S3 Access Grants instance. An IAM Identity Center instance is your corporate identity directory that you added to the IAM Identity Center. You can use the <a href=\"https://docs.aws.amazon.com/singlesignon/latest/APIReference/API_ListInstances.html\">ListInstances</a> API operation to retrieve a list of your Identity Center instances and their ARNs.</p>"
         },
         "IdentityCenterArn":{
           "shape":"IdentityCenterArn",
-          "documentation":"<p>If you associated your S3 Access Grants instance with an Amazon Web Services IAM Identity Center instance, this field returns the Amazon Resource Name (ARN) of the IAM Identity Center instance application; a subresource of the original Identity Center instance passed in the request. S3 Access Grants creates this Identity Center application for this specific S3 Access Grants instance. </p>"
+          "documentation":"<p>If you associated your S3 Access Grants instance with an Amazon Web Services IAM Identity Center instance, this field returns the Amazon Resource Name (ARN) of the IAM Identity Center instance application; a subresource of the original Identity Center instance. S3 Access Grants creates this Identity Center application for the specific S3 Access Grants instance. </p>",
+          "deprecated":true,
+          "deprecatedMessage":"IdentityCenterArn has been deprecated. Use IdentityCenterInstanceArn or IdentityCenterApplicationArn."
+        },
+        "IdentityCenterInstanceArn":{
+          "shape":"IdentityCenterArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Web Services IAM Identity Center instance that you are associating with your S3 Access Grants instance. An IAM Identity Center instance is your corporate identity directory that you added to the IAM Identity Center. You can use the <a href=\"https://docs.aws.amazon.com/singlesignon/latest/APIReference/API_ListInstances.html\">ListInstances</a> API operation to retrieve a list of your Identity Center instances and their ARNs.</p>"
+        },
+        "IdentityCenterApplicationArn":{
+          "shape":"IdentityCenterApplicationArn",
+          "documentation":"<p>If you associated your S3 Access Grants instance with an Amazon Web Services IAM Identity Center instance, this field returns the Amazon Resource Name (ARN) of the IAM Identity Center instance application; a subresource of the original Identity Center instance. S3 Access Grants creates this Identity Center application for the specific S3 Access Grants instance. </p>"
         }
       }
     },
@@ -2248,7 +2352,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -2352,7 +2456,8 @@
         },
         "Name":{
           "shape":"AccessPointName",
-          "documentation":"<p>The name you want to assign to this access point.</p>",
+          "documentation":"<p>The name you want to assign to this access point.</p> <p>For directory buckets, the access point name must consist of a base name that you provide and suffix that includes the <code>ZoneID</code> (Amazon Web Services Availability Zone or Local Zone) of your bucket location, followed by <code>--xa-s3</code>. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-directory-buckets.html\">Managing access to shared datasets in directory buckets with access points</a> in the <i>Amazon S3 User Guide</i>.</p>",
+          "contextParam":{"name":"AccessPointName"},
           "location":"uri",
           "locationName":"name"
         },
@@ -2372,6 +2477,10 @@
         "BucketAccountId":{
           "shape":"AccountId",
           "documentation":"<p>The Amazon Web Services account ID associated with the S3 bucket associated with this access point.</p> <p>For same account access point when your bucket and access point belong to the same account owner, the <code>BucketAccountId</code> is not required. For cross-account access point when your bucket and access point are not in the same account, the <code>BucketAccountId</code> is required. </p>"
+        },
+        "Scope":{
+          "shape":"Scope",
+          "documentation":"<p>For directory buckets, you can filter access control to specific prefixes, API operations, or a combination of both. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-directory-buckets.html\">Managing access to shared datasets in directory buckets with access points</a> in the <i>Amazon S3 User Guide</i>.</p> <note> <p>Scope is only supported for access points attached to directory buckets.</p> </note>"
         }
       }
     },
@@ -2508,7 +2617,7 @@
         },
         "Operation":{
           "shape":"JobOperation",
-          "documentation":"<p>The action that you want this job to perform on every object listed in the manifest. For more information about the available actions, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/dev/batch-ops-actions.html\">Operations</a> in the <i>Amazon S3 User Guide</i>.</p>"
+          "documentation":"<p>The action that you want this job to perform on every object listed in the manifest. For more information about the available actions, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/dev/batch-ops-operations.html\">Operations</a> in the <i>Amazon S3 User Guide</i>.</p>"
         },
         "Report":{
           "shape":"JobReport",
@@ -2660,6 +2769,11 @@
       "documentation":"<p>The Amazon Web Services Security Token Service temporary credential that S3 Access Grants vends to grantees and client applications. </p>",
       "sensitive":true
     },
+    "DataSourceId":{
+      "type":"string",
+      "max":191
+    },
+    "DataSourceType":{"type":"string"},
     "Date":{"type":"timestamp"},
     "Days":{"type":"integer"},
     "DaysAfterInitiation":{"type":"integer"},
@@ -2672,7 +2786,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -2692,7 +2806,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -2706,7 +2820,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -2723,7 +2837,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -2825,6 +2939,30 @@
         "Name":{
           "shape":"AccessPointName",
           "documentation":"<p>The name of the access point you want to delete.</p> <p>For using this parameter with Amazon S3 on Outposts with the REST API, you must specify the name and the x-amz-outpost-id as well.</p> <p>For using this parameter with S3 on Outposts with the Amazon Web Services SDK and CLI, you must specify the ARN of the access point accessed in the format <code>arn:aws:s3-outposts:&lt;Region&gt;:&lt;account-id&gt;:outpost/&lt;outpost-id&gt;/accesspoint/&lt;my-accesspoint-name&gt;</code>. For example, to access the access point <code>reports-ap</code> through Outpost <code>my-outpost</code> owned by account <code>123456789012</code> in Region <code>us-west-2</code>, use the URL encoding of <code>arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/accesspoint/reports-ap</code>. The value must be URL encoded. </p>",
+          "contextParam":{"name":"AccessPointName"},
+          "location":"uri",
+          "locationName":"name"
+        }
+      }
+    },
+    "DeleteAccessPointScopeRequest":{
+      "type":"structure",
+      "required":[
+        "AccountId",
+        "Name"
+      ],
+      "members":{
+        "AccountId":{
+          "shape":"AccountId",
+          "documentation":"<p> The Amazon Web Services account ID that owns the access point with the scope that you want to delete. </p>",
+          "contextParam":{"name":"AccountId"},
+          "hostLabel":true,
+          "location":"header",
+          "locationName":"x-amz-account-id"
+        },
+        "Name":{
+          "shape":"AccessPointName",
+          "documentation":"<p> The name of the access point with the scope that you want to delete. </p>",
           "contextParam":{"name":"AccessPointName"},
           "location":"uri",
           "locationName":"name"
@@ -2976,8 +3114,7 @@
     },
     "DeleteJobTaggingResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteMarkerReplication":{
       "type":"structure",
@@ -3106,8 +3243,7 @@
     },
     "DeleteStorageLensConfigurationTaggingResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteStorageLensGroupRequest":{
       "type":"structure",
@@ -3247,7 +3383,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -3270,7 +3406,7 @@
           "box":true
         }
       },
-      "documentation":"<p>Specifies encryption-related information for an Amazon S3 bucket that is a destination for replicated objects.</p> <note> <p>This is not supported by Amazon S3 on Outposts buckets.</p> </note>"
+      "documentation":"<p>Specifies encryption-related information for an Amazon S3 bucket that is a destination for replicated objects. If you're specifying a customer managed KMS key, we recommend using a fully qualified KMS key ARN. If you use a KMS key alias instead, then KMS resolves the key within the requester’s account. This behavior can result in data that's encrypted with a KMS key that belongs to the requester, and not the bucket owner.</p> <note> <p>This is not supported by Amazon S3 on Outposts buckets.</p> </note>"
     },
     "Endpoints":{
       "type":"map",
@@ -3344,7 +3480,7 @@
       "type":"string",
       "max":1024,
       "min":1,
-      "pattern":"(arn:(aws[a-zA-Z-]*)?:lambda:)?([a-z]{2}((-gov)|(-iso(b?)))?-[a-z]+-\\d{1}:)?(\\d{12}:)?(function:)?([a-zA-Z0-9-_]+)(:(\\$LATEST|[a-zA-Z0-9-_]+))?"
+      "pattern":"(arn:(aws[a-zA-Z-]*)?:lambda:)?([a-z]{2}((-gov)|(-iso([a-z]?)))?-[a-z]+-\\d{1}:)?(\\d{12}:)?(function:)?([a-zA-Z0-9-_]+)(:(\\$LATEST|[a-zA-Z0-9-_]+))?"
     },
     "GeneratedManifestEncryption":{
       "type":"structure",
@@ -3375,7 +3511,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -3472,7 +3608,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -3486,7 +3622,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -3524,7 +3660,17 @@
         },
         "IdentityCenterArn":{
           "shape":"IdentityCenterArn",
-          "documentation":"<p>If you associated your S3 Access Grants instance with an Amazon Web Services IAM Identity Center instance, this field returns the Amazon Resource Name (ARN) of the Amazon Web Services IAM Identity Center instance application; a subresource of the original Identity Center instance. S3 Access Grants creates this Identity Center application for the specific S3 Access Grants instance. </p>"
+          "documentation":"<p>If you associated your S3 Access Grants instance with an Amazon Web Services IAM Identity Center instance, this field returns the Amazon Resource Name (ARN) of the IAM Identity Center instance application; a subresource of the original Identity Center instance. S3 Access Grants creates this Identity Center application for the specific S3 Access Grants instance. </p>",
+          "deprecated":true,
+          "deprecatedMessage":"IdentityCenterArn has been deprecated. Use IdentityCenterInstanceArn or IdentityCenterApplicationArn."
+        },
+        "IdentityCenterInstanceArn":{
+          "shape":"IdentityCenterArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Web Services IAM Identity Center instance that you are associating with your S3 Access Grants instance. An IAM Identity Center instance is your corporate identity directory that you added to the IAM Identity Center. You can use the <a href=\"https://docs.aws.amazon.com/singlesignon/latest/APIReference/API_ListInstances.html\">ListInstances</a> API operation to retrieve a list of your Identity Center instances and their ARNs.</p>"
+        },
+        "IdentityCenterApplicationArn":{
+          "shape":"IdentityCenterApplicationArn",
+          "documentation":"<p>If you associated your S3 Access Grants instance with an Amazon Web Services IAM Identity Center instance, this field returns the Amazon Resource Name (ARN) of the IAM Identity Center instance application; a subresource of the original Identity Center instance. S3 Access Grants creates this Identity Center application for the specific S3 Access Grants instance. </p>"
         },
         "CreatedAt":{
           "shape":"CreationTimestamp",
@@ -3541,7 +3687,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -3815,7 +3961,7 @@
           "documentation":"<p>The name of the specified access point.</p>"
         },
         "Bucket":{
-          "shape":"BucketName",
+          "shape":"AccessPointBucketName",
           "documentation":"<p>The name of the bucket associated with the specified access point.</p>"
         },
         "NetworkOrigin":{
@@ -3824,7 +3970,7 @@
         },
         "VpcConfiguration":{
           "shape":"VpcConfiguration",
-          "documentation":"<p>Contains the virtual private cloud (VPC) configuration for the specified access point.</p> <note> <p>This element is empty if this access point is an Amazon S3 on Outposts access point that is used by other Amazon Web Services.</p> </note>"
+          "documentation":"<p>Contains the virtual private cloud (VPC) configuration for the specified access point.</p> <note> <p>This element is empty if this access point is an Amazon S3 on Outposts access point that is used by other Amazon Web Services services.</p> </note>"
         },
         "PublicAccessBlockConfiguration":{"shape":"PublicAccessBlockConfiguration"},
         "CreationDate":{
@@ -3846,6 +3992,47 @@
         "BucketAccountId":{
           "shape":"AccountId",
           "documentation":"<p>The Amazon Web Services account ID associated with the S3 bucket associated with this access point.</p>"
+        },
+        "DataSourceId":{
+          "shape":"DataSourceId",
+          "documentation":"<p>The unique identifier for the data source of the access point.</p>"
+        },
+        "DataSourceType":{
+          "shape":"DataSourceType",
+          "documentation":"<p>The type of the data source that the access point is attached to.</p>"
+        }
+      }
+    },
+    "GetAccessPointScopeRequest":{
+      "type":"structure",
+      "required":[
+        "AccountId",
+        "Name"
+      ],
+      "members":{
+        "AccountId":{
+          "shape":"AccountId",
+          "documentation":"<p> The Amazon Web Services account ID that owns the access point with the scope that you want to retrieve. </p>",
+          "contextParam":{"name":"AccountId"},
+          "hostLabel":true,
+          "location":"header",
+          "locationName":"x-amz-account-id"
+        },
+        "Name":{
+          "shape":"AccessPointName",
+          "documentation":"<p>The name of the access point with the scope you want to retrieve.</p>",
+          "contextParam":{"name":"AccessPointName"},
+          "location":"uri",
+          "locationName":"name"
+        }
+      }
+    },
+    "GetAccessPointScopeResult":{
+      "type":"structure",
+      "members":{
+        "Scope":{
+          "shape":"Scope",
+          "documentation":"<p>The contents of the access point scope.</p>"
         }
       }
     },
@@ -4071,7 +4258,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -4119,6 +4306,10 @@
         "MatchedGrantTarget":{
           "shape":"S3Prefix",
           "documentation":"<p>The S3 URI path of the data to which you are being granted temporary access credentials. </p>"
+        },
+        "Grantee":{
+          "shape":"Grantee",
+          "documentation":"<p>The user, group, or role that was granted access to the S3 location scope. For directory identities, this API also returns the grants of the IAM role used for the identity-aware request. For more information on identity-aware sessions, see <a href=\"https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_control-access_sts-setcontext.html\">Granting permissions to use identity-aware console sessions</a>. </p>"
         }
       }
     },
@@ -4452,7 +4643,7 @@
       "type":"string",
       "max":1224,
       "min":10,
-      "pattern":"arn:[^:]+:sso:.*$"
+      "pattern":"arn:[^:]+:sso::\\d{12}:application/.*$"
     },
     "IdentityCenterArn":{
       "type":"string",
@@ -4997,15 +5188,15 @@
       "members":{
         "MatchAnyPrefix":{
           "shape":"NonEmptyMaxLength1024StringList",
-          "documentation":"<p>If provided, the generated manifest includes objects where the specified string appears at the start of the object key string.</p>"
+          "documentation":"<p>If provided, the generated manifest includes objects where the specified string appears at the start of the object key string. Each KeyNameConstraint filter accepts an array of strings with a length of 1 string.</p>"
         },
         "MatchAnySuffix":{
           "shape":"NonEmptyMaxLength1024StringList",
-          "documentation":"<p>If provided, the generated manifest includes objects where the specified string appears at the end of the object key string.</p>"
+          "documentation":"<p>If provided, the generated manifest includes objects where the specified string appears at the end of the object key string. Each KeyNameConstraint filter accepts an array of strings with a length of 1 string.</p>"
         },
         "MatchAnySubstring":{
           "shape":"NonEmptyMaxLength1024StringList",
-          "documentation":"<p>If provided, the generated manifest includes objects where the specified string appears anywhere within the object key string.</p>"
+          "documentation":"<p>If provided, the generated manifest includes objects where the specified string appears anywhere within the object key string. Each KeyNameConstraint filter accepts an array of strings with a length of 1 string.</p>"
         }
       },
       "documentation":"<p>If provided, the generated manifest includes only source bucket objects whose object keys match the string constraints specified for <code>MatchAnyPrefix</code>, <code>MatchAnySuffix</code>, and <code>MatchAnySubstring</code>.</p>"
@@ -5056,7 +5247,7 @@
         },
         "ExpiredObjectDeleteMarker":{
           "shape":"ExpiredObjectDeleteMarker",
-          "documentation":"<p>Indicates whether Amazon S3 will remove a delete marker with no noncurrent versions. If set to true, the delete marker will be expired. If set to false, the policy takes no action. This cannot be specified with Days or Date in a Lifecycle Expiration Policy.</p>"
+          "documentation":"<p>Indicates whether Amazon S3 will remove a delete marker with no noncurrent versions. If set to true, the delete marker will be expired. If set to false, the policy takes no action. This cannot be specified with Days or Date in a Lifecycle Expiration Policy. To learn more about delete markers, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/DeleteMarker.html\">Working with delete markers</a>.</p>"
         }
       },
       "documentation":"<p>The container of the Outposts bucket lifecycle expiration.</p>"
@@ -5215,6 +5406,16 @@
         },
         "IdentityCenterArn":{
           "shape":"IdentityCenterArn",
+          "documentation":"<p>If you associated your S3 Access Grants instance with an Amazon Web Services IAM Identity Center instance, this field returns the Amazon Resource Name (ARN) of the IAM Identity Center instance application; a subresource of the original Identity Center instance. S3 Access Grants creates this Identity Center application for the specific S3 Access Grants instance. </p>",
+          "deprecated":true,
+          "deprecatedMessage":"IdentityCenterArn has been deprecated. Use IdentityCenterInstanceArn or IdentityCenterApplicationArn."
+        },
+        "IdentityCenterInstanceArn":{
+          "shape":"IdentityCenterArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Web Services IAM Identity Center instance that you are associating with your S3 Access Grants instance. An IAM Identity Center instance is your corporate identity directory that you added to the IAM Identity Center. You can use the <a href=\"https://docs.aws.amazon.com/singlesignon/latest/APIReference/API_ListInstances.html\">ListInstances</a> API operation to retrieve a list of your Identity Center instances and their ARNs.</p>"
+        },
+        "IdentityCenterApplicationArn":{
+          "shape":"IdentityCenterApplicationArn",
           "documentation":"<p>If you associated your S3 Access Grants instance with an Amazon Web Services IAM Identity Center instance, this field returns the Amazon Resource Name (ARN) of the IAM Identity Center instance application; a subresource of the original Identity Center instance. S3 Access Grants creates this Identity Center application for the specific S3 Access Grants instance. </p>"
         }
       },
@@ -5226,7 +5427,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -5291,7 +5492,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -5336,7 +5537,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -5396,6 +5597,51 @@
         "AccessGrantsList":{
           "shape":"AccessGrantsList",
           "documentation":"<p>A container for a list of grants in an S3 Access Grants instance.</p>"
+        }
+      }
+    },
+    "ListAccessPointsForDirectoryBucketsRequest":{
+      "type":"structure",
+      "required":["AccountId"],
+      "members":{
+        "AccountId":{
+          "shape":"AccountId",
+          "documentation":"<p>The Amazon Web Services account ID that owns the access points.</p>",
+          "contextParam":{"name":"AccountId"},
+          "hostLabel":true,
+          "location":"header",
+          "locationName":"x-amz-account-id"
+        },
+        "DirectoryBucket":{
+          "shape":"BucketName",
+          "documentation":"<p>The name of the directory bucket associated with the access points you want to list.</p>",
+          "location":"querystring",
+          "locationName":"directoryBucket"
+        },
+        "NextToken":{
+          "shape":"NonEmptyMaxLength1024String",
+          "documentation":"<p> If <code>NextToken</code> is returned, there are more access points available than requested in the <code>maxResults</code> value. The value of <code>NextToken</code> is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 24 hours. </p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        },
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of access points that you would like returned in the <code>ListAccessPointsForDirectoryBuckets</code> response. If the directory bucket is associated with more than this number of access points, the results include the pagination token <code>NextToken</code>. Make another call using the <code>NextToken</code> to retrieve more results.</p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        }
+      }
+    },
+    "ListAccessPointsForDirectoryBucketsResult":{
+      "type":"structure",
+      "members":{
+        "AccessPointList":{
+          "shape":"AccessPointList",
+          "documentation":"<p>Contains identification and configuration information for one or more access points associated with the directory bucket.</p>"
+        },
+        "NextToken":{
+          "shape":"NonEmptyMaxLength1024String",
+          "documentation":"<p> If <code>NextToken</code> is returned, there are more access points available than requested in the <code>maxResults</code> value. The value of <code>NextToken</code> is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 24 hours. </p>"
         }
       }
     },
@@ -5468,6 +5714,18 @@
           "documentation":"<p>The maximum number of access points that you want to include in the list. If the specified bucket has more than this number of access points, then the response will include a continuation token in the <code>NextToken</code> field that you can use to retrieve the next page of access points.</p>",
           "location":"querystring",
           "locationName":"maxResults"
+        },
+        "DataSourceId":{
+          "shape":"DataSourceId",
+          "documentation":"<p>The unique identifier for the data source of the access point.</p>",
+          "location":"querystring",
+          "locationName":"dataSourceId"
+        },
+        "DataSourceType":{
+          "shape":"DataSourceType",
+          "documentation":"<p>The type of the data source that the access point is attached to. Returns only access points attached to S3 buckets by default. To return all access points specify <code>DataSourceType</code> as <code>ALL</code>.</p>",
+          "location":"querystring",
+          "locationName":"dataSourceType"
         }
       }
     },
@@ -5481,6 +5739,75 @@
         "NextToken":{
           "shape":"NonEmptyMaxLength1024String",
           "documentation":"<p>If the specified bucket has more access points than can be returned in one call to this API, this field contains a continuation token that you can provide in subsequent calls to this API to retrieve additional access points.</p>"
+        }
+      }
+    },
+    "ListCallerAccessGrantsEntry":{
+      "type":"structure",
+      "members":{
+        "Permission":{
+          "shape":"Permission",
+          "documentation":"<p>The type of permission granted, which can be one of the following values:</p> <ul> <li> <p> <code>READ</code> - Grants read-only access to the S3 data.</p> </li> <li> <p> <code>WRITE</code> - Grants write-only access to the S3 data.</p> </li> <li> <p> <code>READWRITE</code> - Grants both read and write access to the S3 data.</p> </li> </ul>"
+        },
+        "GrantScope":{
+          "shape":"S3Prefix",
+          "documentation":"<p>The S3 path of the data to which you have been granted access. </p>"
+        },
+        "ApplicationArn":{
+          "shape":"IdentityCenterApplicationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of an Amazon Web Services IAM Identity Center application associated with your Identity Center instance. If the grant includes an application ARN, the grantee can only access the S3 data through this application. </p>"
+        }
+      },
+      "documentation":"<p>Part of <code>ListCallerAccessGrantsResult</code>. Each entry includes the permission level (READ, WRITE, or READWRITE) and the grant scope of the access grant. If the grant also includes an application ARN, the grantee can only access the S3 data through this application.</p>"
+    },
+    "ListCallerAccessGrantsRequest":{
+      "type":"structure",
+      "required":["AccountId"],
+      "members":{
+        "AccountId":{
+          "shape":"AccountId",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
+          "contextParam":{"name":"AccountId"},
+          "hostLabel":true,
+          "location":"header",
+          "locationName":"x-amz-account-id"
+        },
+        "GrantScope":{
+          "shape":"S3Prefix",
+          "documentation":"<p>The S3 path of the data that you would like to access. Must start with <code>s3://</code>. You can optionally pass only the beginning characters of a path, and S3 Access Grants will search for all applicable grants for the path fragment. </p>",
+          "location":"querystring",
+          "locationName":"grantscope"
+        },
+        "NextToken":{
+          "shape":"ContinuationToken",
+          "documentation":"<p>A pagination token to request the next page of results. Pass this value into a subsequent <code>List Caller Access Grants</code> request in order to retrieve the next page of results.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        },
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of access grants that you would like returned in the <code>List Caller Access Grants</code> response. If the results include the pagination token <code>NextToken</code>, make another call using the <code>NextToken</code> to determine if there are more results.</p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        },
+        "AllowedByApplication":{
+          "shape":"Boolean",
+          "documentation":"<p>If this optional parameter is passed in the request, a filter is applied to the results. The results will include only the access grants for the caller's Identity Center application or for any other applications (<code>ALL</code>).</p>",
+          "location":"querystring",
+          "locationName":"allowedByApplication"
+        }
+      }
+    },
+    "ListCallerAccessGrantsResult":{
+      "type":"structure",
+      "members":{
+        "NextToken":{
+          "shape":"ContinuationToken",
+          "documentation":"<p>A pagination token that you can use to request the next page of results. Pass this value into a subsequent <code>List Caller Access Grants</code> request in order to retrieve the next page of results.</p>"
+        },
+        "CallerAccessGrantsList":{
+          "shape":"CallerAccessGrantsList",
+          "documentation":"<p>A list of the caller's access grants that were created using S3 Access Grants and that grant the caller access to the S3 data of the Amazon Web Services account ID that was specified in the request. </p>"
         }
       }
     },
@@ -5671,9 +5998,11 @@
         },
         "StorageLensConfigurationList":{
           "shape":"StorageLensConfigurationList",
-          "documentation":"<p>A list of S3 Storage Lens configurations.</p>"
+          "documentation":"<p>A list of S3 Storage Lens configurations.</p>",
+          "locationName":"StorageLensConfiguration"
         }
-      }
+      },
+      "locationName":"ListStorageLensConfigurationResult"
     },
     "ListStorageLensGroupEntry":{
       "type":"structure",
@@ -5727,7 +6056,8 @@
         },
         "StorageLensGroupList":{
           "shape":"StorageLensGroupList",
-          "documentation":"<p> The list of Storage Lens groups that exist in the specified home Region. </p>"
+          "documentation":"<p> The list of Storage Lens groups that exist in the specified home Region. </p>",
+          "locationName":"StorageLensGroup"
         }
       }
     },
@@ -6335,6 +6665,13 @@
       },
       "documentation":"<p>A container for the prefix-level storage metrics for S3 Storage Lens.</p>"
     },
+    "PrefixesList":{
+      "type":"list",
+      "member":{
+        "shape":"Prefix",
+        "locationName":"Prefix"
+      }
+    },
     "Priority":{"type":"integer"},
     "Privilege":{
       "type":"string",
@@ -6373,7 +6710,7 @@
         },
         "RestrictPublicBuckets":{
           "shape":"Setting",
-          "documentation":"<p>Specifies whether Amazon S3 should restrict public bucket policies for buckets in this account. Setting this element to <code>TRUE</code> restricts access to buckets with public policies to only Amazon Web Service principals and authorized users within this account.</p> <p>Enabling this setting doesn't affect previously stored bucket policies, except that public and cross-account access within any public bucket policy, including non-public delegation to specific accounts, is blocked.</p> <p>This property is not supported for Amazon S3 on Outposts.</p>",
+          "documentation":"<p>Specifies whether Amazon S3 should restrict public bucket policies for buckets in this account. Setting this element to <code>TRUE</code> restricts access to buckets with public policies to only Amazon Web Services service principals and authorized users within this account.</p> <p>Enabling this setting doesn't affect previously stored bucket policies, except that public and cross-account access within any public bucket policy, including non-public delegation to specific accounts, is blocked.</p> <p>This property is not supported for Amazon S3 on Outposts.</p>",
           "locationName":"RestrictPublicBuckets"
         }
       },
@@ -6389,7 +6726,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",
@@ -6503,7 +6840,36 @@
         },
         "Policy":{
           "shape":"Policy",
-          "documentation":"<p>The policy that you want to apply to the specified access point. For more information about access point policies, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html\">Managing data access with Amazon S3 access points</a> in the <i>Amazon S3 User Guide</i>.</p>"
+          "documentation":"<p>The policy that you want to apply to the specified access point. For more information about access point policies, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html\">Managing data access with Amazon S3 access points</a> or <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-directory-buckets.html\">Managing access to shared datasets in directory buckets with access points</a> in the <i>Amazon S3 User Guide</i>.</p>"
+        }
+      }
+    },
+    "PutAccessPointScopeRequest":{
+      "type":"structure",
+      "required":[
+        "AccountId",
+        "Name",
+        "Scope"
+      ],
+      "members":{
+        "AccountId":{
+          "shape":"AccountId",
+          "documentation":"<p> The Amazon Web Services account ID that owns the access point with scope that you want to create or replace. </p>",
+          "contextParam":{"name":"AccountId"},
+          "hostLabel":true,
+          "location":"header",
+          "locationName":"x-amz-account-id"
+        },
+        "Name":{
+          "shape":"AccessPointName",
+          "documentation":"<p>The name of the access point with the scope that you want to create or replace.</p>",
+          "contextParam":{"name":"AccessPointName"},
+          "location":"uri",
+          "locationName":"name"
+        },
+        "Scope":{
+          "shape":"Scope",
+          "documentation":"<p>Object prefixes, API operations, or a combination of both.</p>"
         }
       }
     },
@@ -6705,8 +7071,7 @@
     },
     "PutJobTaggingResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "PutMultiRegionAccessPointPolicyInput":{
       "type":"structure",
@@ -6848,8 +7213,7 @@
     },
     "PutStorageLensConfigurationTaggingResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "Region":{
       "type":"structure",
@@ -7267,7 +7631,8 @@
         "CRC32",
         "CRC32C",
         "SHA1",
-        "SHA256"
+        "SHA256",
+        "CRC64NVME"
       ]
     },
     "S3ContentLength":{
@@ -7279,7 +7644,7 @@
       "members":{
         "TargetResource":{
           "shape":"S3RegionalOrS3ExpressBucketArnString",
-          "documentation":"<p>Specifies the destination bucket Amazon Resource Name (ARN) for the batch copy operation.</p> <ul> <li> <p> <b>General purpose buckets</b> - For example, to copy objects to a general purpose bucket named <code>destinationBucket</code>, set the <code>TargetResource</code> property to <code>arn:aws:s3:::destinationBucket</code>.</p> </li> <li> <p> <b>Directory buckets</b> - For example, to copy objects to a directory bucket named <code>destinationBucket</code> in the Availability Zone; identified by the AZ ID <code>usw2-az1</code>, set the <code>TargetResource</code> property to <code>arn:aws:s3express:<i>region</i>:<i>account_id</i>:/bucket/<i>destination_bucket_base_name</i>--<i>usw2-az1</i>--x-s3</code>.</p> </li> </ul>"
+          "documentation":"<p>Specifies the destination bucket Amazon Resource Name (ARN) for the batch copy operation.</p> <ul> <li> <p> <b>General purpose buckets</b> - For example, to copy objects to a general purpose bucket named <code>destinationBucket</code>, set the <code>TargetResource</code> property to <code>arn:aws:s3:::destinationBucket</code>.</p> </li> <li> <p> <b>Directory buckets</b> - For example, to copy objects to a directory bucket named <code>destinationBucket</code> in the Availability Zone identified by the AZ ID <code>usw2-az1</code>, set the <code>TargetResource</code> property to <code>arn:aws:s3express:<i>region</i>:<i>account_id</i>:/bucket/<i>destination_bucket_base_name</i>--<i>usw2-az1</i>--x-s3</code>. A directory bucket as a destination bucket can be in Availability Zone or Local Zone. </p> <note> <p>Copying objects across different Amazon Web Services Regions isn't supported when the source or destination bucket is in Amazon Web Services Local Zones. The source and destination buckets must have the same parent Amazon Web Services Region. Otherwise, you get an HTTP <code>400 Bad Request</code> error with the error code <code>InvalidRequest</code>.</p> </note> </li> </ul>"
         },
         "CannedAccessControlList":{
           "shape":"S3CannedAccessControlList",
@@ -7325,7 +7690,7 @@
         },
         "SSEAwsKmsKeyId":{
           "shape":"KmsKeyArnString",
-          "documentation":"<p/> <note> <p>This functionality is not supported by directory buckets.</p> </note>"
+          "documentation":"<p>Specifies the KMS key ID (Key ID, Key ARN, or Key Alias) to use for object encryption. If the KMS key doesn't exist in the same account that's issuing the command, you must use the full Key ARN not the Key ID.</p> <note> <p> <b>Directory buckets</b> - If you specify <code>SSEAlgorithm</code> with <code>KMS</code>, you must specify the <code> SSEAwsKmsKeyId</code> parameter with the ID (Key ID or Key ARN) of the KMS symmetric encryption customer managed key to use. Otherwise, you get an HTTP <code>400 Bad Request</code> error. The key alias format of the KMS key isn't supported. To encrypt new object copies in a directory bucket with SSE-KMS, you must specify SSE-KMS as the directory bucket's default encryption configuration with a KMS key (specifically, a <a href=\"https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk\">customer managed key</a>). The <a href=\"https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#aws-managed-cmk\">Amazon Web Services managed key</a> (<code>aws/s3</code>) isn't supported. Your SSE-KMS configuration can only support 1 <a href=\"https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk\">customer managed key</a> per directory bucket for the lifetime of the bucket. After you specify a customer managed key for SSE-KMS as the bucket default encryption, you can't override the customer managed key for the bucket's SSE-KMS configuration. Then, when you specify server-side encryption settings for new object copies with SSE-KMS, you must make sure the encryption key is the same customer managed key that you specified for the directory bucket's default encryption configuration. </p> </note>"
         },
         "TargetKeyPrefix":{
           "shape":"NonEmptyMaxLength1024String",
@@ -7345,7 +7710,7 @@
         },
         "BucketKeyEnabled":{
           "shape":"Boolean",
-          "documentation":"<p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using Amazon Web Services KMS (SSE-KMS). Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS.</p> <p>Specifying this header with an <i>object</i> action doesn’t affect <i>bucket-level</i> settings for S3 Bucket Key.</p> <note> <p>This functionality is not supported by directory buckets.</p> </note>"
+          "documentation":"<p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using Amazon Web Services KMS (SSE-KMS). Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS.</p> <p>Specifying this header with an <i>Copy</i> action doesn’t affect <i>bucket-level</i> settings for S3 Bucket Key.</p> <note> <p> <b>Directory buckets</b> - S3 Bucket Keys aren't supported, when you copy SSE-KMS encrypted objects from general purpose buckets to directory buckets, from directory buckets to general purpose buckets, or between directory buckets, through <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-buckets-objects-Batch-Ops\">the Copy operation in Batch Operations</a>. In this case, Amazon S3 makes a call to KMS every time a copy request is made for a KMS-encrypted object.</p> </note>"
         },
         "ChecksumAlgorithm":{
           "shape":"S3ChecksumAlgorithm",
@@ -7356,8 +7721,7 @@
     },
     "S3DeleteObjectTaggingOperation":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Contains no configuration parameters because the DELETE Object tagging (<code>DeleteObjectTagging</code>) API operation accepts only the bucket name and key name as parameters, which are defined in the job's manifest.</p>"
     },
     "S3ExpirationInDays":{
@@ -7455,7 +7819,7 @@
         },
         "SourceBucket":{
           "shape":"S3BucketArnString",
-          "documentation":"<p>The source bucket used by the ManifestGenerator.</p> <note> <p> <b>Directory buckets</b> - Directory buckets aren't supported as the source buckets used by <code>S3JobManifestGenerator</code> to generate the job manifest.</p> </note>"
+          "documentation":"<p>The ARN of the source bucket used by the ManifestGenerator.</p> <note> <p> <b>Directory buckets</b> - Directory buckets aren't supported as the source buckets used by <code>S3JobManifestGenerator</code> to generate the job manifest.</p> </note>"
         },
         "ManifestOutputLocation":{
           "shape":"S3ManifestOutputLocation",
@@ -7593,7 +7957,7 @@
         },
         "SSEAlgorithm":{
           "shape":"S3SSEAlgorithm",
-          "documentation":"<p/> <note> <p>For directory buckets, only the server-side encryption with Amazon S3 managed keys (SSE-S3) (<code>AES256</code>) is supported.</p> </note>"
+          "documentation":"<p>The server-side encryption algorithm used when storing objects in Amazon S3.</p> <p> <b>Directory buckets </b> - For directory buckets, there are only two supported options for server-side encryption: server-side encryption with Amazon S3 managed keys (SSE-S3) (<code>AES256</code>) and server-side encryption with KMS keys (SSE-KMS) (<code>KMS</code>). For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-express-serv-side-encryption.html\">Protecting data with server-side encryption</a> in the <i>Amazon S3 User Guide</i>. For <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-buckets-objects-Batch-Ops\">the Copy operation in Batch Operations</a>, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_S3CopyObjectOperation.html\">S3CopyObjectOperation</a>.</p>"
         }
       },
       "documentation":"<p/>"
@@ -7650,8 +8014,7 @@
     },
     "S3ReplicateObjectOperation":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Directs the specified job to invoke <code>ReplicateObject</code> on every object in the job's manifest.</p>"
     },
     "S3ResourceArn":{
@@ -7794,17 +8157,51 @@
     "SSEKMSKeyId":{"type":"string"},
     "SSES3":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p/>",
       "locationName":"SSE-S3"
     },
     "SSES3Encryption":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Configuration for the use of SSE-S3 to encrypt generated manifest objects.</p>",
       "locationName":"SSE-S3"
+    },
+    "Scope":{
+      "type":"structure",
+      "members":{
+        "Prefixes":{
+          "shape":"PrefixesList",
+          "documentation":"<p>You can specify any amount of prefixes, but the total length of characters of all prefixes must be less than 256 bytes in size.</p>",
+          "locationName":"Prefixes"
+        },
+        "Permissions":{
+          "shape":"ScopePermissionList",
+          "documentation":"<p>You can include one or more API operations as permissions.</p>",
+          "locationName":"Permissions"
+        }
+      },
+      "documentation":"<p>You can use the access point scope to restrict access to specific prefixes, API operations, or a combination of both.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-directory-buckets-manage-scope.html\">Manage the scope of your access points for directory buckets</a>.</p>"
+    },
+    "ScopePermission":{
+      "type":"string",
+      "enum":[
+        "GetObject",
+        "GetObjectAttributes",
+        "ListMultipartUploadParts",
+        "ListBucket",
+        "ListBucketMultipartUploads",
+        "PutObject",
+        "DeleteObject",
+        "AbortMultipartUpload"
+      ]
+    },
+    "ScopePermissionList":{
+      "type":"list",
+      "member":{
+        "shape":"ScopePermission",
+        "locationName":"Permission"
+      }
     },
     "SecretAccessKey":{
       "type":"string",
@@ -8203,8 +8600,7 @@
     },
     "SubmitMultiRegionAccessPointRoutesResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "Suffix":{"type":"string"},
     "SuspendedCause":{
@@ -8282,8 +8678,7 @@
     },
     "TagResourceResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValueString":{
       "type":"string",
@@ -8391,8 +8786,7 @@
     },
     "UntagResourceResult":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateAccessGrantsLocationRequest":{
       "type":"structure",
@@ -8404,7 +8798,7 @@
       "members":{
         "AccountId":{
           "shape":"AccountId",
-          "documentation":"<p>The ID of the Amazon Web Services account that is making this request.</p>",
+          "documentation":"<p>The Amazon Web Services account ID of the S3 Access Grants instance.</p>",
           "contextParam":{"name":"AccountId"},
           "hostLabel":true,
           "location":"header",

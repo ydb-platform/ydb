@@ -76,6 +76,14 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 partitionConfig->SetWriteSpeedInBytesPerSecond(parameters.writeSpeed);
                 partitionConfig->SetBurstSize(parameters.writeSpeed);
             }
+            if (parameters.readSpeed > 0) {
+                partitionConfig->SetReadSpeedInBytesPerSecond(parameters.readSpeed);
+                partitionConfig->SetReadBurstBytes(parameters.readSpeed);
+            }
+            if (parameters.readSpeedInMessages > 0) {
+                partitionConfig->SetReadSpeedInMessagesPerSecond(parameters.readSpeedInMessages);
+                partitionConfig->SetReadBurstMessages(parameters.readSpeedInMessages);
+            }
 
             partitionConfig->SetMaxCountInPartition(parameters.maxCountInPartition);
             partitionConfig->SetMaxSizeInPartition(parameters.maxSizeInPartition);
@@ -111,6 +119,14 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 }
                 if (u.MetricsLevel.has_value()) {
                     consumer->SetMetricsLevel(*u.MetricsLevel);
+                }
+                if (u.ReadSpeedInBytesPerSecond.has_value() || u.ReadSpeedInMessagesPerSecond.has_value()) {
+                    auto* readQuota = NPQ::GetOrAddReadQuota(*tabletConfig, u.Name);
+                    readQuota->SetSpeedInBytesPerSecond(u.ReadSpeedInBytesPerSecond.value_or(0));
+                    readQuota->SetBurstSize(u.ReadSpeedInBytesPerSecond.value_or(0));
+
+                    readQuota->SetSpeedInMessagesPerSecond(u.ReadSpeedInMessagesPerSecond.value_or(0));
+                    readQuota->SetBurstSizeInMessages(u.ReadSpeedInMessagesPerSecond.value_or(0));
                 }
             }
 
@@ -716,7 +732,7 @@ void AssertBatchedReadResults(
         if (exp.Offset != Max<ui64>()) {
             UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), exp.Offset);
         }
-        UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), exp.MessageCount >= 1 ? exp.MessageCount : 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetLogicalMessageCount(), exp.MessageCount >= 1 ? exp.MessageCount : 1);
         UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), static_cast<i64>(exp.SeqNo));
         UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), TString(dataSize, exp.Fill));
     }
@@ -769,7 +785,7 @@ void CmdReadAndAssertBatched(
             if (exp.Offset != Max<ui64>()) {
                 UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), exp.Offset);
             }
-            UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), exp.MessageCount >= 1 ? exp.MessageCount : 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetLogicalMessageCount(), exp.MessageCount >= 1 ? exp.MessageCount : 1);
             UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), static_cast<i64>(exp.SeqNo));
             UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), TString(dataSize, exp.Fill));
         }
@@ -813,7 +829,7 @@ void CmdWriteBatched(
             write->SetSeqNo(seqNo);
             write->SetData(data);
             if (totalBatchMessages >= 1) {
-                write->SetMessageCount(static_cast<i64>(totalBatchMessages));
+                write->SetLogicalMessageCount(static_cast<i64>(totalBatchMessages));
             }
             if (maxSeqNo) {
                 write->SetMaxSeqNo(static_cast<i64>(*maxSeqNo));

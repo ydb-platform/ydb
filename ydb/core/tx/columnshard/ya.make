@@ -75,7 +75,7 @@ PEERDIR(
     ydb/core/tx/conveyor_composite/service
     ydb/core/tx/general_cache/usage
     ydb/core/tx/long_tx_service/public
-    ydb/core/tx/priorities/service
+    ydb/core/tx/priorities/usage
     ydb/core/tx/tiering
     ydb/core/tx/time_cast
     ydb/core/tx/tracing
@@ -108,4 +108,5 @@ RECURSE_FOR_TESTS(
     ut_schema
     backup
     data_accessor
+    export
 )

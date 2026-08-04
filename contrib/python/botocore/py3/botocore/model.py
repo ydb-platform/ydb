@@ -11,15 +11,23 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 """Abstractions to interact with service models."""
+
 from collections import defaultdict
 from typing import NamedTuple, Union
 
+from botocore.auth import resolve_auth_type
 from botocore.compat import OrderedDict
 from botocore.exceptions import (
     MissingServiceIdError,
     UndefinedModelAttributeError,
+    UnsupportedServiceProtocolsError,
 )
-from botocore.utils import CachedProperty, hyphenize_service_id, instance_cache
+from botocore.utils import (
+    PRIORITY_ORDERED_SUPPORTED_PROTOCOLS,
+    CachedProperty,
+    hyphenize_service_id,
+    instance_cache,
+)
 
 NOT_SET = object()
 
@@ -421,6 +429,28 @@ class ServiceModel:
         return self._get_metadata_property('protocol')
 
     @CachedProperty
+    def protocols(self):
+        return self._get_metadata_property('protocols')
+
+    @CachedProperty
+    def resolved_protocol(self):
+        # We need to ensure `protocols` exists in the metadata before attempting to
+        # access it directly since referencing service_model.protocols directly will
+        # raise an UndefinedModelAttributeError if protocols is not defined
+        if self.metadata.get('protocols'):
+            for protocol in PRIORITY_ORDERED_SUPPORTED_PROTOCOLS:
+                if protocol in self.protocols:
+                    return protocol
+            raise UnsupportedServiceProtocolsError(
+                botocore_supported_protocols=PRIORITY_ORDERED_SUPPORTED_PROTOCOLS,
+                service_supported_protocols=self.protocols,
+                service=self.service_name,
+            )
+        # If a service does not have a `protocols` trait, fall back to the legacy
+        # `protocol` trait
+        return self.protocol
+
+    @CachedProperty
     def endpoint_prefix(self):
         return self._get_metadata_property('endpointPrefix')
 
@@ -475,6 +505,10 @@ class ServiceModel:
     @signature_version.setter
     def signature_version(self, value):
         self._signature_version = value
+
+    @CachedProperty
+    def is_query_compatible(self):
+        return 'awsQueryCompatible' in self.metadata
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self.service_name})'
@@ -619,12 +653,30 @@ class OperationModel:
         ]
 
     @CachedProperty
+    def operation_context_parameters(self):
+        return self._operation_model.get('operationContextParams', [])
+
+    @CachedProperty
     def request_compression(self):
         return self._operation_model.get('requestcompression')
 
     @CachedProperty
+    def auth(self):
+        return self._operation_model.get('auth')
+
+    @CachedProperty
     def auth_type(self):
         return self._operation_model.get('authtype')
+
+    @CachedProperty
+    def resolved_auth_type(self):
+        if self.auth:
+            return resolve_auth_type(self.auth)
+        return self.auth_type
+
+    @CachedProperty
+    def unsigned_payload(self):
+        return self._operation_model.get('unsignedPayload')
 
     @CachedProperty
     def error_shapes(self):

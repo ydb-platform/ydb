@@ -63,7 +63,7 @@ void TCommandSql::Config(TConfig& config) {
             .Hidden()
             .StoreResult(&ResourcePool);
     }
-    config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
+    config.Opts->AddLongOption("syntax", "Query syntax [yql]")
         .RequiredArgument("[String]")
         .Hidden()
         .GetOpt().Handler1T<TString>("yql", [this](const TString& arg) {
@@ -79,6 +79,7 @@ void TCommandSql::Config(TConfig& config) {
         EDataFormat::Csv,
         EDataFormat::Tsv,
         EDataFormat::Parquet,
+        EDataFormat::Svg,
     });
 
     AddParametersOption(config);
@@ -111,6 +112,9 @@ void TCommandSql::Parse(TConfig& config) {
     if (ExecSettings.ExplainAst && ExecSettings.ExplainAnalyzeMode) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain-AST mode\" (\"--explain-ast\") "
             << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
+    }
+    if (OutputFormat == EDataFormat::Svg && !ExecSettings.ExplainMode && !ExecSettings.ExplainAnalyzeMode && !ExecSettings.ExplainAst) {
+        throw TMisuseException() << "SVG output format is only available with --explain or --explain-analyze options";
     }
     if (ExecSettings.ExplainAnalyzeMode && !CollectStatsMode.empty()) {
         throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain-analyze mode. "
@@ -153,7 +157,7 @@ int TCommandSql::Run(TConfig& config) {
 }
 
 int TCommandSql::RunCommand(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     TExecuteGenericQuery executor(driver);
     SetInterruptHandlers();
 
@@ -212,8 +216,6 @@ void TCommandSql::SetCollectStatsMode(TString&& collectStatsMode) {
 void TCommandSql::SetSyntax(const TString& syntax) {
     if (syntax == "yql") {
         SyntaxType = NYdb::NQuery::ESyntax::YqlV1;
-    } else if (syntax == "pg") {
-        SyntaxType = NYdb::NQuery::ESyntax::Pg;
     } else {
         throw TMisuseException() << "Unknown syntax option \"" << syntax << "\"";
     }

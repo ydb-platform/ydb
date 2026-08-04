@@ -210,6 +210,10 @@ public:
         return result;
     }
 
+    void SetBsIndexBlobBytes(const ui32 value) {
+        PortionInfo->MetaConstructor.BsIndexBlobBytes = value;
+    }
+
     std::vector<ui32> CalcSliceBorderOffsets() const {
         return DoCalcSliceBorderOffsets(Records, Indexes);
     }

@@ -9,6 +9,11 @@
 
 namespace NKikimr {
 
+// Only used below as a pointer in a factory-function declaration; a
+// forward declaration avoids pulling the heavy ydb/core/base/blobstorage.h
+// into this widely-included header.
+class TTabletStorageInfo;
+
 IActor* CreateFlatTxCoordinator(const TActorId &tablet, TTabletStorageInfo *info);
 
 } // namespace NKikimr

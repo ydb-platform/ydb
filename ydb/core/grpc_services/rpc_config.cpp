@@ -55,7 +55,7 @@ bool ConvertGetConfigToFetchConfigResult(
     if (identityCount < configCount) {
         TStringBuilder descr;
         descr << (configCount - identityCount)
-              << " extra 'config' field with no corresponding 'identity' field";
+              << " extra 'config' field(s) with no corresponding 'identity' field(s)";
         error = descr;
         return false;
     }
@@ -122,7 +122,7 @@ bool ConvertGetConfigToFetchConfigResult(
                 // TYPE_NOT_SET is rejected with error by pre-validation above
                 break;
             default:
-                // Any other value comes from a newer Console is skipped with a warning
+                // Any other value that comes from a newer Console is skipped with a warning
                 // so we don't fail on forward-compatible additions
                 ALOG_NOTICE(NKikimrServices::GRPC_SERVER,
                     "Convert Ydb::DynamicConfig::ConfigIdentity to Ydb::Config::FetchConfigResult: "
@@ -227,7 +227,15 @@ void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb
             newDrive->set_shared_with_os(drive.GetSharedWithOs());
             newDrive->set_read_centric(drive.GetReadCentric());
             newDrive->set_kind(drive.GetKind());
-            newDrive->set_expected_slot_count(hostConfig.GetDefaultHostPDiskConfig().GetExpectedSlotCount());
+            const auto& pdiskConfig = drive.HasPDiskConfig()
+                ? drive.GetPDiskConfig()
+                : hostConfig.GetDefaultHostPDiskConfig();
+            if (pdiskConfig.GetExpectedSlotSize()) {
+                newDrive->set_expected_slot_size(pdiskConfig.GetExpectedSlotSize());
+                newDrive->set_max_slots(pdiskConfig.GetMaxSlots());
+            } else {
+                newDrive->set_expected_slot_count(pdiskConfig.GetExpectedSlotCount());
+            }
         }
     }
     auto boxes = boxStatus.GetBox();
@@ -274,11 +282,14 @@ public:
         if (shim.MainConfig) {
             if (NYamlConfig::IsDatabaseConfig(*shim.MainConfig)) {
                 DatabaseConfig = shim.MainConfig;
-                CheckDatabaseAuthorization();
+                if (!ResolveTargetDatabase()) {
+                    return;
+                }
+                CheckDatabaseAuthorization(*TargetDatabase);
                 return;
             }
         }
-        if (!NKikimr::IsAdministrator(AppData(), Request_->GetSerializedToken())) {
+        if (!NKikimr::IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
             self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
                   NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
             return;
@@ -366,45 +377,6 @@ public:
         );
     }
 
-private:
-    std::optional<TString> DatabaseConfig;
-    std::optional<TString> TargetDatabase;
-
-    void CheckDatabaseAuthorization() {
-        const auto& metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
-
-        if (metadata.Database) {
-            TargetDatabase = metadata.Database;
-        }
-        else {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata",
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
-            return;
-        }
-
-        if (*TargetDatabase == ("/" + AppData()->DomainsInfo->Domain->Name) ||
-            *TargetDatabase == AppData()->DomainsInfo->Domain->Name) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Provided database is a domain database.",
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
-            return;
-        }
-        bool isAdministrator = NKikimr::IsAdministrator(AppData(), Request_->GetSerializedToken());
-        if (!isAdministrator) {
-            auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-            request->DatabaseName = *TargetDatabase;
-
-            auto& entry = request->ResultSet.emplace_back();
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-            entry.Path = NKikimr::SplitPath(*TargetDatabase);
-
-            auto* self = Self();
-            self->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
-            self->Become(&TReplaceStorageConfigRequest::StateWaitResolveDatabase);
-            return;
-        }
-        SendRequestToConsole();
-    }
-
     void SendRequestToConsole() {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
@@ -435,39 +407,39 @@ private:
         Self()->Become(&TReplaceStorageConfigRequest::StateConsoleReplaceFunc);
     }
 
-    STFUNC(StateWaitResolveDatabase) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveDatabase);
-            default:
-                return TBase::StateFuncBase(ev);
-        }
-    }
+private:
+    std::optional<TString> DatabaseConfig;
+    std::optional<TString> TargetDatabase;
 
-    void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request.Get();
-        auto *self = Self();
-        if (request.ResultSet.empty() || request.ErrorCount > 0) {
-            self->Reply(Ydb::StatusIds::SCHEME_ERROR, "Error resolving database",
-                  NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, self->ActorContext());
-            return;
+    bool ResolveTargetDatabase() {
+        const auto& metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
+
+        if (metadata.Database) {
+            TargetDatabase = CanonizePath(*metadata.Database);
+        } else {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+            return false;
         }
 
-        const auto& entry = request.ResultSet.front();
-        const auto& databaseOwner = entry.Self->Info.GetOwner();
-
-        NACLibProto::TUserToken tokenPb;
-        if (!tokenPb.ParseFromString(Request_->GetSerializedToken())) {
-            tokenPb = NACLibProto::TUserToken();
+        if (*TargetDatabase == ("/" + AppData()->DomainsInfo->Domain->Name) ||
+            *TargetDatabase == AppData()->DomainsInfo->Domain->Name) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Provided database is a domain database.",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+            return false;
         }
-        const auto& parsedToken = NACLib::TUserToken(tokenPb);
 
-        bool isDatabaseAdmin = NKikimr::IsDatabaseAdministrator(&parsedToken, databaseOwner);
-        if (!isDatabaseAdmin) {
-            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a database administrator.",
-                  NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
-            return;
+        const auto& maybeDatabaseName = Request_->GetDatabaseName();
+        if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
+            if (*TargetDatabase != CanonizePath(maybeDatabaseName.GetRef())) {
+                Reply(Ydb::StatusIds::BAD_REQUEST,
+                    "Database in config metadata does not match the requested database.",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+                return false;
+            }
         }
-        SendRequestToConsole();
+
+        return true;
     }
 
     STFUNC(StateConsoleReplaceFunc) {
@@ -532,10 +504,16 @@ public:
         auto *self = Self();
         self->OnBootstrap();
 
-        if (self->Request_->GetDatabaseName()) {
+        if (const auto& databaseName = self->Request_->GetDatabaseName()) {
             // Database YAML config (Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase)
             // is requested directly from Console (like legacy API)
-            SendRequestToConsole();
+            CheckDatabaseAuthorization(*databaseName);
+            return;
+        }
+
+        if (!NKikimr::IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
+            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
+                  NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
             return;
         }
 
@@ -637,7 +615,6 @@ public:
         return ev;
     }
 
-private:
     void SendRequestToConsole() {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
@@ -658,6 +635,7 @@ private:
         Self()->Become(&TFetchStorageConfigRequest::StateConsoleFetchFunc);
     }
 
+private:
     STFUNC(StateConsoleFetchFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NConsole::TEvConsole::TEvGetAllConfigsResponse, Handle);

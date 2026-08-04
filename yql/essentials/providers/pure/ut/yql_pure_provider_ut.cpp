@@ -24,7 +24,7 @@ TString Run(const TString& query, TSettings settings = {}) {
     auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetPureDataProviderInitializer());
-    TProgramFactory factory(true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
+    TProgramFactory factory(/*useRepeatableRandomAndTimeProviders=*/true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
     TProgramPtr program = factory.Create("-stdin-", query);
     program->ConfigureYsonResultFormat(settings.Pretty ? NYson::EYsonFormat::Pretty : NYson::EYsonFormat::Text);
     bool parseRes;

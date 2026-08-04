@@ -2,8 +2,12 @@
 
 #include <yql/essentials/providers/common/config/yql_setting.h>
 
+#include <util/datetime/base.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
+
+#include <utility>
 
 namespace NYql {
 
@@ -22,8 +26,8 @@ class TRuntimeSetting {
 public:
     using TConfSetting = NYql::NCommon::TConfSetting<TType, NYql::NCommon::EConfSettingType::Static>;
 
-    explicit TRuntimeSetting(const TType& value)
-        : DefaultValue_(value)
+    explicit TRuntimeSetting(TType value)
+        : DefaultValue_(std::move(value))
     {
     }
 
@@ -54,6 +58,12 @@ struct TRuntimeSettings {
     // Noop feature.
     // Used for testing only.
     TRuntimeSetting<bool> TestHostSetting{false};
+    // UDF call profiling (YQL-21019).
+    TRuntimeSetting<bool> UdfProfileEnable{false};
+    TRuntimeSetting<TDuration> UdfProfileMinTimeUs{TDuration::MicroSeconds(1000)};
+    TRuntimeSetting<ui64> UdfProfileGraceCount{10};
+    TRuntimeSetting<THashSet<TString>> UdfProfileExcludeModules{{}};
+    TRuntimeSetting<ui32> UdfProfileHLLPrecision{14};
     // =============================== Host settings end ===========================
     using TUdfSettings = TMap<TString, TString>;
 

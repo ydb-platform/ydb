@@ -48,7 +48,7 @@ struct TRunActorParams { // TODO2 : Change name
         const int64_t previousQueryRevision,
         TVector<FederatedQuery::Connection> connections,
         TVector<FederatedQuery::Binding> bindings,
-        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         THashMap<TString, TString> accountIdSignatures,
         FederatedQuery::QueryContent::QueryType queryType,
         FederatedQuery::QueryContent::QuerySyntax querySyntax,
@@ -114,7 +114,7 @@ struct TRunActorParams { // TODO2 : Change name
     const int64_t PreviousQueryRevision;
     const TVector<FederatedQuery::Connection> Connections;
     const TVector<FederatedQuery::Binding> Bindings;
-    const NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    const NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     const THashMap<TString, TString> AccountIdSignatures;
     const FederatedQuery::QueryContent::QueryType QueryType;
     const FederatedQuery::QueryContent::QuerySyntax QuerySyntax;

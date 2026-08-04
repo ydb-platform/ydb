@@ -47,11 +47,11 @@ struct TDownloadLink {
     TDownloadLink& operator=(const TDownloadLink&) = default;
 
     static TDownloadLink Url(const TString& path, const TString& md5 = "") {
-        return { true, path, md5 };
+        return { /*isUrl=*/true, path, md5 };
     }
 
     static TDownloadLink File(const TString& path, const TString& md5 = "") {
-        return { false, path, md5 };
+        return { /*isUrl=*/false, path, md5 };
     }
 
     bool operator==(const TDownloadLink& other) const {

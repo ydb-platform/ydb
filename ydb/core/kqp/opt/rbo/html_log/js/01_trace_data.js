@@ -108,7 +108,8 @@ function traceLogCloneChainContext(context) {
         traceTitle: traceLogString(context.traceTitle, ''),
         fieldDefinitions: traceLogArray(context.fieldDefinitions).slice(),
         pinnedFields: traceLogArray(context.pinnedFields).slice(),
-        nodeColumnPresets: traceLogArray(context.nodeColumnPresets).slice(),
+        pinnedFieldPresets: traceLogArray(context.pinnedFieldPresets).slice(),
+        diffFieldPresets: traceLogArray(context.diffFieldPresets).slice(),
         stageId: traceLogString(context.stageId, ''),
         stageTitle: traceLogString(context.stageTitle, ''),
         groupId: traceLogString(context.groupId, ''),
@@ -145,7 +146,8 @@ function traceLogFindOrCreateTrace(root, traceMap, record) {
             title: title,
             fieldDefinitions: [],
             pinnedFields: [],
-            nodeColumnPresets: [],
+            pinnedFieldPresets: [],
+            diffFieldPresets: [],
             stages: [],
             _stageMap: {}
         };
@@ -162,8 +164,11 @@ function traceLogFindOrCreateTrace(root, traceMap, record) {
     if (record.pinnedFields !== undefined) {
         trace.pinnedFields = traceLogArray(record.pinnedFields);
     }
-    if (record.nodeColumnPresets !== undefined) {
-        trace.nodeColumnPresets = traceLogArray(record.nodeColumnPresets);
+    if (record.pinnedFieldPresets !== undefined) {
+        trace.pinnedFieldPresets = traceLogArray(record.pinnedFieldPresets);
+    }
+    if (record.diffFieldPresets !== undefined) {
+        trace.diffFieldPresets = traceLogArray(record.diffFieldPresets);
     }
 
     return trace;
@@ -354,7 +359,8 @@ function traceLogExpandChainedRecord(root, record) {
         traceLogApplyNamedContext(context, trace, 'id', 'name', 'title', 'traceId', 'traceTitle');
         traceLogApplyArrayContext(context, trace, 'fieldDefinitions');
         traceLogApplyArrayContext(context, trace, 'pinnedFields');
-        traceLogApplyArrayContext(context, trace, 'nodeColumnPresets');
+        traceLogApplyArrayContext(context, trace, 'pinnedFieldPresets');
+        traceLogApplyArrayContext(context, trace, 'diffFieldPresets');
     } else if (record.trace !== undefined) {
         context.traceTitle = traceLogString(record.trace, context.traceTitle || 'Trace');
         context.traceId = traceLogString(record.traceId, context.traceId || context.traceTitle);
@@ -367,7 +373,8 @@ function traceLogExpandChainedRecord(root, record) {
     }
     traceLogApplyArrayContext(context, record, 'fieldDefinitions');
     traceLogApplyArrayContext(context, record, 'pinnedFields');
-    traceLogApplyArrayContext(context, record, 'nodeColumnPresets');
+    traceLogApplyArrayContext(context, record, 'pinnedFieldPresets');
+    traceLogApplyArrayContext(context, record, 'diffFieldPresets');
 
     var stage = traceLogObject(record.stage);
     if (stage) {
@@ -424,7 +431,8 @@ function traceLogExpandChainedRecord(root, record) {
         traceTitle: context.traceTitle,
         fieldDefinitions: context.fieldDefinitions,
         pinnedFields: context.pinnedFields,
-        nodeColumnPresets: context.nodeColumnPresets,
+        pinnedFieldPresets: context.pinnedFieldPresets,
+        diffFieldPresets: context.diffFieldPresets,
         stageId: context.stageId,
         stageTitle: context.stageTitle,
         groupId: context.groupId,
@@ -1614,7 +1622,7 @@ var TraceSchema = (function() {
         return fields;
     }
 
-    function normalizeNodeColumnKeyList(rawKeys, fields) {
+    function normalizePinnedFieldKeyList(rawKeys, fields) {
         var available = {};
         for (var i = 0; i < fields.length; i++) available[fields[i].key] = true;
 
@@ -1630,11 +1638,11 @@ var TraceSchema = (function() {
         return keys;
     }
 
-    function normalizeNodeColumnKeys(trace, fields) {
-        return normalizeNodeColumnKeyList(trace && trace.pinnedFields, fields);
+    function normalizePinnedFieldKeys(trace, fields) {
+        return normalizePinnedFieldKeyList(trace && trace.pinnedFields, fields);
     }
 
-    function nodeColumnPresetRawKeys(preset) {
+    function fieldPresetRawKeys(preset) {
         if (!preset || typeof preset !== 'object') return [];
         if (Object.prototype.hasOwnProperty.call(preset, 'keys')) return preset.keys;
         if (Object.prototype.hasOwnProperty.call(preset, 'fields')) return preset.fields;
@@ -1643,18 +1651,26 @@ var TraceSchema = (function() {
         return [];
     }
 
-    function normalizeNodeColumnPresets(trace, fields) {
-        var rawPresets = asArray(trace && trace.nodeColumnPresets);
+    function normalizeFieldPresets(rawPresets, fields) {
+        rawPresets = asArray(rawPresets);
         var presets = [];
         for (var i = 0; i < rawPresets.length; i++) {
             var preset = rawPresets[i];
             if (!preset || typeof preset !== 'object') continue;
             var label = stringValue(preset.label || preset.name || preset.title, '');
-            var keys = normalizeNodeColumnKeyList(nodeColumnPresetRawKeys(preset), fields);
+            var keys = normalizePinnedFieldKeyList(fieldPresetRawKeys(preset), fields);
             if (!label || !keys.length) continue;
             presets.push({ label: label, keys: keys });
         }
         return presets;
+    }
+
+    function normalizePinnedFieldPresets(trace, fields) {
+        return normalizeFieldPresets(trace && trace.pinnedFieldPresets, fields);
+    }
+
+    function normalizeDiffFieldPresets(trace, fields) {
+        return normalizeFieldPresets(trace && trace.diffFieldPresets, fields);
     }
 
     function normalizeInfoSwitcherOption(option, index, depth, context, path) {
@@ -2201,8 +2217,9 @@ var TraceSchema = (function() {
     function makeTraceDocument(trace, index, stageNames, groups, ruleNames, planTrees, ruleInfo, ruleTypes, ruleText, sourceBlockIds, tilePayloadRefs, tileFeatures) {
         var availability = normalizeFeatureAvailability(trace.featureAvailability);
         var nodeFields = normalizeNodeFields(trace, planTrees);
-        var nodeColumns = normalizeNodeColumnKeys(trace, nodeFields);
-        var nodeColumnPresets = normalizeNodeColumnPresets(trace, nodeFields);
+        var pinnedFields = normalizePinnedFieldKeys(trace, nodeFields);
+        var pinnedFieldPresets = normalizePinnedFieldPresets(trace, nodeFields);
+        var diffFieldPresets = normalizeDiffFieldPresets(trace, nodeFields);
         index = Number(index);
         if (!Number.isInteger(index) || index < 0) index = 0;
         return {
@@ -2215,13 +2232,14 @@ var TraceSchema = (function() {
             ruleTypes: ruleTypes || [],
             ruleText: ruleText || [],
             nodeFields: nodeFields,
-            nodeColumns: nodeColumns,
-            declaredNodeColumns: asArray(trace && trace.pinnedFields).map(function(key) {
+            pinnedFields: pinnedFields,
+            declaredPinnedFields: asArray(trace && trace.pinnedFields).map(function(key) {
                 return stringValue(key, '');
             }).filter(function(key) {
                 return !!key;
             }),
-            nodeColumnPresets: nodeColumnPresets,
+            pinnedFieldPresets: pinnedFieldPresets,
+            diffFieldPresets: diffFieldPresets,
             traceFeatureAvailability: availability,
             planTrees: planTrees,
             ruleInfo: ruleInfo,
@@ -2718,9 +2736,10 @@ var TraceStore = (function() {
             ruleTypes: [],
             ruleText: [],
             nodeFields: [],
-            nodeColumns: [],
-            declaredNodeColumns: [],
-            nodeColumnPresets: [],
+            pinnedFields: [],
+            declaredPinnedFields: [],
+            pinnedFieldPresets: [],
+            diffFieldPresets: [],
             traceFeatureAvailability: null,
             planTrees: [],
             ruleInfo: [],
@@ -2784,9 +2803,10 @@ var TraceStore = (function() {
             ruleTypes: trace.ruleTypes || [],
             ruleText: trace.ruleText || [],
             nodeFields: trace.nodeFields || [],
-            nodeColumns: trace.nodeColumns || [],
-            declaredNodeColumns: trace.declaredNodeColumns || trace.nodeColumns || [],
-            nodeColumnPresets: trace.nodeColumnPresets || [],
+            pinnedFields: trace.pinnedFields || [],
+            declaredPinnedFields: trace.declaredPinnedFields || trace.pinnedFields || [],
+            pinnedFieldPresets: trace.pinnedFieldPresets || [],
+            diffFieldPresets: trace.diffFieldPresets || [],
             nodeFieldMap: buildNodeFieldMap(trace.nodeFields || []),
             traceFeatureAvailability: trace.traceFeatureAvailability || null,
             planTrees: trace.planTrees || [],
@@ -2978,9 +2998,9 @@ var TraceStore = (function() {
         return features;
     }
 
-    function declaredNodeColumnMap(store) {
+    function declaredPinnedFieldMap(store) {
         var map = {};
-        var keys = Array.isArray(store && store.declaredNodeColumns) ? store.declaredNodeColumns : [];
+        var keys = Array.isArray(store && store.declaredPinnedFields) ? store.declaredPinnedFields : [];
         for (var i = 0; i < keys.length; i++) {
             var key = String(keys[i] || '');
             if (key) map[key] = true;
@@ -2988,18 +3008,18 @@ var TraceStore = (function() {
         return map;
     }
 
-    function nodeColumnContains(store, key) {
-        var columns = Array.isArray(store && store.nodeColumns) ? store.nodeColumns : [];
-        return columns.indexOf(key) >= 0;
+    function pinnedFieldContains(store, key) {
+        var fields = Array.isArray(store && store.pinnedFields) ? store.pinnedFields : [];
+        return fields.indexOf(key) >= 0;
     }
 
-    function discoverNodeFieldsFromTree(store, node, declaredColumns, state) {
+    function discoverNodeFieldsFromTree(store, node, declaredFields, state) {
         if (!store || !node || typeof node !== 'object') return state;
-        declaredColumns = declaredColumns || declaredNodeColumnMap(store);
-        state = state || { fieldsChanged: false, columnsChanged: false };
+        declaredFields = declaredFields || declaredPinnedFieldMap(store);
+        state = state || { fieldsChanged: false, pinnedFieldsChanged: false };
         if (!store.nodeFields) store.nodeFields = [];
         if (!store.nodeFieldMap) store.nodeFieldMap = {};
-        if (!store.nodeColumns) store.nodeColumns = [];
+        if (!store.pinnedFields) store.pinnedFields = [];
 
         var attrs = Array.isArray(node.a) ? node.a : [];
         for (var i = 0; i < attrs.length; i++) {
@@ -3010,15 +3030,15 @@ var TraceStore = (function() {
                 store.nodeFields.push(store.nodeFieldMap[key]);
                 state.fieldsChanged = true;
             }
-            if (declaredColumns[key] && !nodeColumnContains(store, key)) {
-                store.nodeColumns.push(key);
-                state.columnsChanged = true;
+            if (declaredFields[key] && !pinnedFieldContains(store, key)) {
+                store.pinnedFields.push(key);
+                state.pinnedFieldsChanged = true;
             }
         }
 
         var children = Array.isArray(node.c) ? node.c : [];
         for (var c = 0; c < children.length; c++) {
-            discoverNodeFieldsFromTree(store, children[c], declaredColumns, state);
+            discoverNodeFieldsFromTree(store, children[c], declaredFields, state);
         }
         return state;
     }
@@ -3436,12 +3456,16 @@ var TraceStore = (function() {
         return store.nodeFields || [];
     }
 
-    function nodeColumns(store) {
-        return store.nodeColumns || [];
+    function pinnedFields(store) {
+        return store.pinnedFields || [];
     }
 
-    function nodeColumnPresets(store) {
-        return store.nodeColumnPresets || [];
+    function pinnedFieldPresets(store) {
+        return store.pinnedFieldPresets || [];
+    }
+
+    function diffFieldPresets(store) {
+        return store.diffFieldPresets || [];
     }
 
     function nodeFieldLabel(store, key) {
@@ -3460,14 +3484,14 @@ var TraceStore = (function() {
         return '';
     }
 
-    function nodeColumnValue(store, node, key) {
+    function pinnedFieldValue(store, node, key) {
         key = String(key || '');
         return String(nodeAttributeValue(node, key) || '');
     }
 
     /**
      * Field rows listed in excludeKeys are omitted so values already shown as
-     * pinned columns are not repeated in the inline field row block.
+     * pinned fields are not repeated in the inline field row block.
      */
     function nodeFieldRows(store, node, excludeKeys) {
         var rows = [];
@@ -3520,9 +3544,10 @@ var TraceStore = (function() {
         fieldRowHasDetails: TraceSchema.fieldRowHasDetails,
         fieldRowKey: TraceSchema.fieldRowKey,
         fieldRowValue: TraceSchema.fieldRowValue,
-        nodeColumnPresets: nodeColumnPresets,
-        nodeColumnValue: nodeColumnValue,
-        nodeColumns: nodeColumns,
+        diffFieldPresets: diffFieldPresets,
+        pinnedFieldPresets: pinnedFieldPresets,
+        pinnedFieldValue: pinnedFieldValue,
+        pinnedFields: pinnedFields,
         nodeFieldLabel: nodeFieldLabel,
         nodeFields: nodeFields,
         nodeFieldRows: nodeFieldRows,

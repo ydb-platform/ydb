@@ -229,8 +229,8 @@ void CreateFulltextCompactTable(Tests::TServer::TPtr server, TActorId sender, co
     options.AllowSystemColumnNames(true);
     options.Columns({
         {NTableIndex::NFulltext::TokenColumn, "String", true, true},
+        {NTableIndex::NFulltext::GenColumn, "Uint64", true, true},
         {NTableIndex::NFulltext::MaxIdColumn, keyType, true, true},
-        {NTableIndex::NFulltext::GenColumn, "Uint32", true, true},
         {NTableIndex::NFulltext::AddedColumn, "Bool", false, true},
         {NTableIndex::NFulltext::SegmentColumn, "String", false, true},
     });

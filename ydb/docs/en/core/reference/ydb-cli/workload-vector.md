@@ -83,8 +83,8 @@ Example:
 | `--vector-type <type>` | Type of vectors. One of `float`, `int8`, `uint8`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension (size of embedding vectors). | `1024` |
 | `--distance <value>` | Distance or similarity function. One of `inner_product`, `cosine`, `euclidean`, `manhattan`. | `inner_product` |
-| `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. See [kmeans-tree type](../../dev/vector-indexes.md#kmeans-tree-type). | `1` |
-| `--kmeans-tree-clusters <value>` | Number of clusters in kmeans. See [kmeans-tree type](../../dev/vector-indexes.md#kmeans-tree-type). | `10` |
+| `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. If not set, auto-detected by server. See [kmeans-tree type](../../dev/vector-indexes.md#kmeans-tree-type). | Auto-detected |
+| `--kmeans-tree-clusters <value>` | Number of clusters in kmeans. If not set, auto-detected by server. See [kmeans-tree type](../../dev/vector-indexes.md#kmeans-tree-type). | Auto-detected |
 | `--kmeans-tree-covering <value>` | Build a covering index (`1` — enabled, `0` — disabled). | `0` |
 | `--kmeans-tree-prefixed <value>` | Build a prefixed (filtered) index (`1` — enabled, `0` — disabled). The table must have been created with the `--prefixed` option. | `0` |
 
@@ -117,8 +117,8 @@ Generate random vectors and load them into the table. Vector components are samp
 | `--vector-type <type>` | Type of vectors. One of `float`, `int8`, `uint8`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension. | `1024` |
 | `--distance <value>` | Distance or similarity function. | `inner_product` |
-| `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. | `1` |
-| `--kmeans-tree-clusters <value>` | Number of clusters in kmeans. | `10` |
+| `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. If not set, auto-detected by server. | Auto-detected |
+| `--kmeans-tree-clusters <value>` | Number of clusters in kmeans. If not set, auto-detected by server. | Auto-detected |
 | `--kmeans-tree-covering <value>` | Build a covering index. | `0` |
 | `--kmeans-tree-prefixed <value>` | Build a prefixed (filtered) index. | `0` |
 
@@ -147,8 +147,8 @@ If the table was loaded with `--index-type None`, or if you want to build an add
 | `--vector-type <type>` | Type of vectors. One of `float`, `int8`, `uint8`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension. | `1024` |
 | `--distance <value>` | Distance or similarity function. | `inner_product` |
-| `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. | `1` |
-| `--kmeans-tree-clusters <value>` | Number of clusters in kmeans. | `10` |
+| `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. If not set, auto-detected by server. | Auto-detected |
+| `--kmeans-tree-clusters <value>` | Number of clusters in kmeans. If not set, auto-detected by server. | Auto-detected |
 | `--dry-run` | Print the DDL query instead of executing it. | |
 
 {% note info %}

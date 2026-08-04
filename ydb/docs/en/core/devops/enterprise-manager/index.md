@@ -39,6 +39,7 @@ To store its own metadata (cluster configuration, node state), YDB EM uses a {{ 
 
 ### Interaction diagram {#interaction-diagram}
 
+
 ```mermaid
 flowchart LR
     User[User] -- "HTTP/HTTPS" --> Gateway
@@ -75,8 +76,11 @@ flowchart LR
     Agent3 -- "gRPC" --> CP
 ```
 
+
 The user interacts with Gateway through a browser or API. Gateway forwards requests to the Control Plane, which coordinates the work of agents on cluster hosts. Agents manage {{ ydb-short-name }} node processes and report host status.
 
 ## Key topics {#materials}
 
 - [{#T}](initial-deployment.md)
+- [{#T}](s3-backups.md)
+- [{#T}](ai-assistant.md)

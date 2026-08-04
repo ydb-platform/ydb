@@ -34,6 +34,7 @@
 
 #include <library/cpp/yt/misc/cast.h>
 
+#include <library/cpp/yt/string/stream.h>
 #include <library/cpp/yt/string/string.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
@@ -575,6 +576,11 @@ public:
     bool IsPacked() const
     {
         return Underlying_->is_packed() && !IsYsonMap();
+    }
+
+    bool IsPackable() const
+    {
+        return Underlying_->is_packable();
     }
 
     bool IsRequired() const
@@ -1352,14 +1358,12 @@ private:
     std::vector<TNestedMessageEntry> NestedMessages_;
 
     std::string AttributeKey_;
-    // TODO(babenko): migrate to std::string
-    TString AttributeValue_;
-    TStringOutput AttributeValueStream_;
+    std::string AttributeValue_;
+    TStdStringOutput AttributeValueStream_;
     TBufferedBinaryYsonWriter AttributeValueWriter_;
 
-    // TODO(babenko): migrate to std::string
-    TString YsonString_;
-    TStringOutput YsonStringStream_;
+    std::string YsonString_;
+    TStdStringOutput YsonStringStream_;
     TBufferedBinaryYsonWriter YsonStringWriter_;
 
     TProtobufString SerializedMessage_;
@@ -1367,9 +1371,8 @@ private:
     TString BytesString_;
 
     std::string UnknownYsonFieldKey_;
-    // TODO(babenko): migrate to std::string
-    TString UnknownYsonFieldValueString_;
-    TStringOutput UnknownYsonFieldValueStringStream_;
+    std::string UnknownYsonFieldValueString_;
+    TStdStringOutput UnknownYsonFieldValueStringStream_;
     TBufferedBinaryYsonWriter UnknownYsonFieldValueStringWriter_;
     TForwardingUnknownYsonFieldValueWriter ForwardingUnknownYsonFieldValueWriter_;
 
@@ -1706,7 +1709,7 @@ private:
 
                 WriteScalar([this] {
                     BodyCodedStream_.WriteVarint64(YsonString_.length());
-                    BodyCodedStream_.WriteRaw(YsonString_.begin(), static_cast<int>(YsonString_.length()));
+                    BodyCodedStream_.WriteRaw(YsonString_.data(), static_cast<int>(YsonString_.length()));
                 });
             });
         } else {
@@ -2667,7 +2670,15 @@ private:
     template <class T>
     void ParseFixedPacked(ui64 length, const TProtobufField* field, auto&& func)
     {
-        YT_ASSERT(length % sizeof(T) == 0);
+        if (length % sizeof(T) != 0) {
+            THROW_ERROR_EXCEPTION(EErrorCode::InvalidProtobufWireFormat,
+                "Packed field %v has length %v which is not a multiple of the element size %v",
+                YPathStack_.GetHumanReadablePath(),
+                length,
+                sizeof(T))
+                << TErrorAttribute("ypath", YPathStack_.GetPath())
+                << TErrorAttribute("proto_field", field->GetFullName());
+        }
         for (auto index = 0u; index < length / sizeof(T); ++index) {
             T unsignedValue;
             auto readResult = false;
@@ -2697,7 +2708,15 @@ private:
         const void* data = nullptr;
         int size = 0;
         CodedStream_.GetDirectBufferPointer(&data, &size);
-        YT_ASSERT(length <= static_cast<ui64>(size));
+        if (length > static_cast<ui64>(size)) {
+            THROW_ERROR_EXCEPTION(EErrorCode::InvalidProtobufWireFormat,
+                "Packed field %v has length %v exceeding the remaining buffer size %v",
+                YPathStack_.GetHumanReadablePath(),
+                length,
+                size)
+                << TErrorAttribute("ypath", YPathStack_.GetPath())
+                << TErrorAttribute("proto_field", field->GetFullName());
+        }
         ArrayInputStream array(data, length);
         CodedInputStream in(&array);
         size_t index = 0;
@@ -2731,6 +2750,21 @@ private:
         int tag,
         WireFormatLite::WireType wireType)
     {
+        // Reject a wire type incompatible with the field's declared type;
+        // left unchecked it could be misparsed and abort.
+        auto canonicalWireType = WireFormat::WireTypeForFieldType(field->GetType());
+        bool correctlyPacked = field->IsPackable() &&
+            wireType == WireFormatLite::WIRETYPE_LENGTH_DELIMITED;
+        if (wireType != canonicalWireType && !correctlyPacked) {
+            THROW_ERROR_EXCEPTION(EErrorCode::InvalidProtobufWireFormat,
+                "Invalid wire type %v for field %v; expected %v",
+                static_cast<int>(wireType),
+                YPathStack_.GetHumanReadablePath(),
+                static_cast<int>(canonicalWireType))
+                << TErrorAttribute("ypath", YPathStack_.GetPath())
+                << TErrorAttribute("proto_field", field->GetFullName());
+        }
+
         auto storeEnumAsInt = [this, field] (auto value) {
             const auto* enumType = field->GetEnumType();
             if (field->IsEnumValueCheckStrict() && !enumType->FindLiteralByValue(value)) {

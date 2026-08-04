@@ -47,6 +47,9 @@ message TBroadcastPartitionError {
 message TEvMLPGetPartitionRequest {
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
+    // SQS FIFO receive-request-attempt-id. When set, repeated requests with the same
+    // attempt id are routed to the same partition to keep replay semantics stable.
+    optional string ReceiveAttemptId = 3;
 }
 
 // From PQRB
@@ -73,6 +76,9 @@ message TEvMLPReadRequest {
     // The maximum number of messages to return.
     optional uint32 MaxNumberOfMessages = 6;
     repeated string SkipMessageGroup = 7;
+    // SQS FIFO receive-request-attempt-id replay. When set, repeated reads with the
+    // same attempt id within the configured period return the same messages.
+    optional string ReceiveAttemptId = 8;
 }
 
 // From PQTablet
@@ -89,8 +95,16 @@ message TEvMLPCommitRequest {
     repeated uint64 Offset = 4;
 }
 
+enum EMLPOperationResult {
+    Success = 0;
+    NotFound = 1;
+    NotInFlight = 2;
+    Failed = 3;
+}
+
 // From PQTablet
 message TEvMLPCommitResponse {
+    map<uint64, EMLPOperationResult> OffsetResults = 1;
 }
 
 // To PQTablet
@@ -104,6 +118,7 @@ message TEvMLPUnlockRequest {
 
 // From PQTablet
 message TEvMLPUnlockResponse {
+    map<uint64, EMLPOperationResult> OffsetResults = 1;
 }
 
 // To PQTablet
@@ -121,6 +136,7 @@ message TEvMLPChangeMessageDeadlineRequest {
 
 // From PQTablet
 message TEvMLPChangeMessageDeadlineResponse {
+    map<uint64, EMLPOperationResult> OffsetResults = 1;
 }
 
 // To PQTablet
@@ -164,4 +180,53 @@ message TEvMLPUpdateExternalLockedMessageGroupsId {
     optional uint32 PartitionId = 1; /* child partitionId */
     optional string Consumer = 2;
     optional TExternalLockedMessageGroupsId Update = 3;
+}
+
+// To PQRB from YMQ topic-path action actors.
+message TEvTopicSqsActionMetrics {
+    message TTopicSqsProxyActionMetrics {
+        optional uint32 ErrorsCount = 1;
+        optional uint64 DurationMs = 2;
+    }
+
+    message TTopicSqsSendMessageMetrics {
+        optional uint32 ErrorsCount = 1;
+        optional uint64 DurationMs = 2;
+        optional uint64 SendMessageCount = 3;
+        optional uint64 BytesWritten = 4;
+        optional uint64 DeduplicationCount = 5;
+    }
+
+    message TTopicSqsDeleteMessageMetrics {
+        optional uint32 ErrorsCount = 1;
+        optional uint64 DurationMs = 2;
+        optional uint64 DeleteMessageCount = 3;
+    }
+
+    message TTopicSqsReceiveMessageMetrics {
+        optional uint32 ErrorsCount = 1;
+        optional uint64 DurationMs = 2;
+        optional uint64 WorkingDurationMs = 3;
+        optional uint64 ReceiveMessageCount = 4;
+        optional uint64 ReceiveMessageBytesRead = 5;
+        optional uint64 ReceiveMessageEmptyCount = 6;
+    }
+
+    oneof Action {
+        TTopicSqsProxyActionMetrics ChangeMessageVisibility = 1;
+        TTopicSqsProxyActionMetrics ChangeMessageVisibilityBatch = 2;
+        TTopicSqsDeleteMessageMetrics DeleteMessage = 3;
+        TTopicSqsDeleteMessageMetrics DeleteMessageBatch = 4;
+        TTopicSqsProxyActionMetrics GetQueueAttributes = 5;
+        TTopicSqsProxyActionMetrics PurgeQueue = 6;
+        TTopicSqsReceiveMessageMetrics ReceiveMessage = 7;
+        TTopicSqsSendMessageMetrics SendMessage = 8;
+        TTopicSqsSendMessageMetrics SendMessageBatch = 9;
+        TTopicSqsProxyActionMetrics SetQueueAttributes = 10;
+        TTopicSqsProxyActionMetrics ListDeadLetterSourceQueues = 11;
+        TTopicSqsProxyActionMetrics ListQueueTags = 12;
+        TTopicSqsProxyActionMetrics TagQueue = 13;
+        TTopicSqsProxyActionMetrics UntagQueue = 14;
+        TTopicSqsProxyActionMetrics GetQueueUrl = 15;
+    }
 }

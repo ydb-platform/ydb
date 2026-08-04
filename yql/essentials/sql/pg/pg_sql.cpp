@@ -40,6 +40,7 @@ extern "C" {
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/utils/log/log_level.h>
@@ -842,7 +843,7 @@ public:
         }
         config.name = (char*)StrVal(name);
         config.args = list_make1((void*)arg1);
-        return ParseVariableSetStmt(&config, true);
+        return ParseVariableSetStmt(&config, /*isSetConfig=*/true);
     }
 
     using TTraverseSelectStack = TStack<std::pair<const SelectStmt*, bool>>;
@@ -949,7 +950,7 @@ public:
                     return nullptr;
                 }
 
-                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), !hasCombiningQueries, true);
+                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), !hasCombiningQueries, /*useProjectionRefs=*/true);
                 if (!sort) {
                     return nullptr;
                 }
@@ -1535,7 +1536,7 @@ public:
                     }
                 } else if (NodeTag(r->val) == T_FuncCall) {
                     auto func = CAST_NODE(FuncCall, r->val);
-                    if (!ExtractFuncName(func, name, nullptr)) {
+                    if (!ExtractFuncName(func, name, /*schemaName=*/nullptr)) {
                         return nullptr;
                     }
                 }
@@ -2130,7 +2131,7 @@ public:
                 break;
         }
 
-        auto [sink, key] = ParseWriteRangeVar(value->relation, true);
+        auto [sink, key] = ParseWriteRangeVar(value->relation, /*isScheme=*/true);
 
         if (!sink || !key) {
             return nullptr;
@@ -2517,7 +2518,7 @@ public:
                 return nullptr;
             }
         } else if (name == "warning") {
-            if (auto langver = NYql::MakeLangVersion(2026, 01);
+            if (auto langver = NYql::NFeature::PgPragmaWarning.MinLangVer;
                 !NYql::IsBackwardCompatibleFeatureAvailable(
                     Settings_.LangVer, langver, Settings_.BackportMode))
             {
@@ -2812,7 +2813,7 @@ public:
             return nullptr;
         }
 
-        const auto [sink, key] = ParseWriteRangeVar(value->relation, true);
+        const auto [sink, key] = ParseWriteRangeVar(value->relation, /*isScheme=*/true);
         if (!sink || !key) {
             return nullptr;
         }
@@ -3016,7 +3017,7 @@ public:
 
         options.push_back(QL(QA("mode"), QA(mode)));
 
-        const auto [sink, key] = ParseWriteRangeVar(value->relation, true);
+        const auto [sink, key] = ParseWriteRangeVar(value->relation, /*isScheme=*/true);
         if (!sink || !key) {
             return nullptr;
         }
@@ -3197,7 +3198,7 @@ public:
         bool noPrefix = (lowerCluster == "pg_catalog" || lowerCluster == "information_schema");
         TString tableName = noPrefix ? to_lower(TString(relname)) : TablePathPrefix_ + relname;
         return L(A("Key"), QL(QA(isScheme ? "tablescheme" : "table"),
-                              L(A("String"), QAX(std::move(tableName)))));
+                              L(A("String"), QAX(tableName))));
     }
 
     TReadWriteKeyExprs ParseQualifiedRelationName(const TStringBuf catalogname,
@@ -3223,7 +3224,7 @@ public:
         bool noPrefix = (objectType == "pgIndex");
         TString name = noPrefix ? TString(objectName) : TablePathPrefix_ + TString(objectName);
         return L(A("Key"), QL(QA("pgObject"),
-                              L(A("String"), QAX(std::move(name))),
+                              L(A("String"), QAX(name)),
                               L(A("String"), QA(objectType))));
     }
 
@@ -3241,7 +3242,7 @@ public:
         }
 
         const auto cluster = ResolveCluster(schemaname, TString(objectName));
-        const auto sinkOrSource = BuildClusterSinkOrSourceExpression(true, cluster);
+        const auto sinkOrSource = BuildClusterSinkOrSourceExpression(/*isSink=*/true, cluster);
         const auto key = BuildPgObjectExpression(objectName, pgObjectType);
         return {.SinkOrSource = sinkOrSource, .Key = key};
     }
@@ -3459,7 +3460,7 @@ public:
         }
 
         bool injectRead = false;
-        auto func = ParseFuncCall(CAST_NODE(FuncCall, node), settings, true, injectRead);
+        auto func = ParseFuncCall(CAST_NODE(FuncCall, node), settings, /*rangeFunction=*/true, injectRead);
         if (!func) {
             return {};
         }
@@ -3725,6 +3726,33 @@ public:
         return result;
     }
 
+    bool ExtractCollationName(const CollateClause* value, TString& name) {
+        auto len = ListLength(value->collname);
+        if (len == 0) {
+            AddError("CollateClause: missing collation name");
+            return false;
+        }
+
+        auto x = ListNodeNth(value->collname, len - 1);
+        if (NodeTag(x) != T_String) {
+            NodeNotImplemented(value, x);
+            return false;
+        }
+
+        name = StrVal(x);
+        return true;
+    }
+
+    TAstNode* ParseCollateClause(const CollateClause* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
+        // Collation propagation through arbitrary expressions (COALESCE, CASE, plain
+        // projections, ...) is not implemented - only ParseFuncCall picks up an explicit
+        // COLLATE that directly wraps one of its arguments (see there). Elsewhere COLLATE
+        // only affects collation-sensitive semantics (comparison, case mapping), not the
+        // expression's runtime value, so we just parse through to the wrapped expression.
+        return ParseExpr(value->arg, settings);
+    }
+
     TAstNode* ParseExpr(const Node* node, const TExprSettings& settings) {
         switch (NodeTag(node)) {
             case T_A_Const: {
@@ -3742,6 +3770,9 @@ public:
             case T_TypeCast: {
                 return ParseTypeCast(CAST_NODE(TypeCast, node), settings);
             }
+            case T_CollateClause: {
+                return ParseCollateClause(CAST_NODE(CollateClause, node), settings);
+            }
             case T_BoolExpr: {
                 return ParseBoolExpr(CAST_NODE(BoolExpr, node), settings);
             }
@@ -3750,7 +3781,7 @@ public:
             }
             case T_FuncCall: {
                 bool injectRead;
-                return ParseFuncCall(CAST_NODE(FuncCall, node), settings, false, injectRead);
+                return ParseFuncCall(CAST_NODE(FuncCall, node), settings, /*rangeFunction=*/false, injectRead);
             }
             case T_A_ArrayExpr: {
                 return ParseAArrayExpr(CAST_NODE(A_ArrayExpr, node), settings);
@@ -4024,7 +4055,7 @@ public:
     }
 
     TAstNode* ParseTableRangeFunction(const TString& name, const TString& schema, List* args) {
-        auto source = BuildClusterSinkOrSourceExpression(false, schema);
+        auto source = BuildClusterSinkOrSourceExpression(/*isSink=*/false, schema);
         if (!source) {
             return nullptr;
         }
@@ -4267,6 +4298,32 @@ public:
             callSettings.push_back(QL(QA("range")));
         }
 
+        if (!value->agg_star) {
+            TMaybe<TString> collation;
+            for (int i = 0; i < ListLength(value->args); ++i) {
+                auto x = ListNodeNth(value->args, i);
+                if (NodeTag(x) != T_CollateClause) {
+                    continue;
+                }
+
+                TString collationName;
+                if (!ExtractCollationName(CAST_NODE(CollateClause, x), collationName)) {
+                    return nullptr;
+                }
+
+                if (collation && *collation != collationName) {
+                    AddError(TStringBuilder() << "FuncCall: conflicting explicit collations: " << *collation << " and " << collationName);
+                    return nullptr;
+                }
+
+                collation = collationName;
+            }
+
+            if (collation) {
+                callSettings.push_back(QL(QA("collation"), QAX(*collation)));
+            }
+        }
+
         args.push_back(QVL(callSettings.data(), callSettings.size()));
         if (value->agg_star) {
             if (name != "count") {
@@ -4507,7 +4564,7 @@ public:
                 return nullptr;
             }
 
-            auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), true, false);
+            auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), /*allowAggregates=*/true, /*useProjectionRefs=*/false);
             if (!sort) {
                 return nullptr;
             }
@@ -5316,7 +5373,7 @@ private:
         QuerySize_ = query.size();
         RowStarts_.push_back(0);
         TPosition position(0, 1);
-        TTextWalker walker(position, true);
+        TTextWalker walker(position, /*utf8Aware=*/true);
         auto prevRow = position.Row;
         for (ui32 i = 0; i < query.size(); ++i) {
             walker.Advance(query[i]);
@@ -5370,7 +5427,7 @@ const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
 NYql::TAstParseResult PGToYql(const NYql::TPGParseResult& parseResult, const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo, NYql::TWarningRules* warningRules) {
     TVector<NYql::TAstParseResult> results;
     TVector<TStmtParseInfo> stmtParseInfos;
-    TConverter converter(results, settings, query, &stmtParseInfos, false, Nothing());
+    TConverter converter(results, settings, query, &stmtParseInfos, /*perStatementResult=*/false, Nothing());
     parseResult.Visit(converter);
     if (stmtParseInfo) {
         Y_ENSURE(!stmtParseInfos.empty());
@@ -5393,7 +5450,7 @@ NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTran
 
 TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<TStmtParseInfo>* stmtParseInfo, NYql::TWarningRules* warningRules) {
     TVector<NYql::TAstParseResult> results;
-    TConverter converter(results, settings, query, stmtParseInfo, true, Nothing());
+    TConverter converter(results, settings, query, stmtParseInfo, /*perStatementResult=*/true, Nothing());
     NYql::PGParse(query, converter);
     if (warningRules) {
         *warningRules = converter.GetWarningRules();
@@ -6351,7 +6408,7 @@ public:
     [[nodiscard]]
     bool ParseCreateFunctionStmt(const CreateFunctionStmt* value) {
         NYql::NPg::TProcDesc desc;
-        if (!ParseCreateFunctionStmtImpl(value, 0, nullptr, desc)) {
+        if (!ParseCreateFunctionStmtImpl(value, 0, /*builder=*/nullptr, desc)) {
             return false;
         }
 
@@ -6396,7 +6453,7 @@ public:
         TVector<NYql::TAstParseResult> results(1);
         results[0].Pool = std::make_unique<TMemoryPool>(4096);
         TVector<TStmtParseInfo> stmtParseInfos(1);
-        TConverter converter(results, Settings_, "", &stmtParseInfos, false, proc.ArgTypes.size());
+        TConverter converter(results, Settings_, "", &stmtParseInfos, /*perStatementResult=*/false, proc.ArgTypes.size());
         converter.PrepareStatements();
         TAstNode* root = nullptr;
         switch (NodeTag(stmt)) {
@@ -6429,7 +6486,7 @@ public:
         auto program = converter.L(converter.L(converter.A("return"), root));
         TExprNode::TPtr graph;
         Ctx_.IssueManager.Reset();
-        if (!CompileExpr(*program, graph, Ctx_, nullptr, nullptr, false, Max<ui32>(), 1)) {
+        if (!CompileExpr(*program, graph, Ctx_, /*resolver=*/nullptr, /*urlListerManager=*/nullptr, /*hasAnnotations=*/false, Max<ui32>(), 1)) {
             Cerr << "Can't compile  SQL for function: " << proc.Name << ", " << Ctx_.IssueManager.GetIssues().ToString();
             return;
         }

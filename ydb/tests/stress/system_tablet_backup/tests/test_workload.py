@@ -16,6 +16,7 @@ class TestSystemTabletBackup(StressFixture):
 
         yield from self.setup_cluster(
             erasure=Erasure.MIRROR_3_DC,
+            extra_feature_flags=['enable_configured_bootstrapper'],
             additional_log_configs={
                 "LOCAL_DB_BACKUP": LogLevels.TRACE,
                 "NODE_BROKER": LogLevels.TRACE,

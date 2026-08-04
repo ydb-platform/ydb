@@ -4,6 +4,8 @@
 
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GROUPED_MEMORY_LIMITER
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 TString TStageFeatures::DebugString() const {
@@ -52,8 +54,12 @@ TConclusionStatus TStageFeatures::Allocate(const ui64 volume) {
                 if (current->Counters) {
                     current->Counters->OnCannotAllocate();
                 }
-                AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", current->Name)("event", "cannot_allocate")(
-                    "limit", *current->HardLimit)("usage", current->Usage.Val())("delta", volume);
+                YDB_LOG_DEBUG("",
+                    {"name", current->Name},
+                    {"event", "cannot_allocate"},
+                    {"limit", *current->HardLimit},
+                    {"usage", current->Usage.Val()},
+                    {"delta", volume});
             }
             current = current->Owner.get();
         }
@@ -66,8 +72,11 @@ TConclusionStatus TStageFeatures::Allocate(const ui64 volume) {
         while (current) {
             current->Usage.Add(volume);
             UpdateConsumption(current);
-            AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", current->Name)("event", "allocate")("usage", current->Usage.Val())(
-                "delta", volume);
+            YDB_LOG_DEBUG("",
+                {"name", current->Name},
+                {"event", "allocate"},
+                {"usage", current->Usage.Val()},
+                {"delta", volume});
             if (current->Counters) {
                 current->Counters->Add(volume, true);
             }
@@ -89,8 +98,11 @@ void TStageFeatures::Free(const ui64 volume, const bool allocated) {
             current->Waiting.Sub(volume);
         }
         UpdateConsumption(current);
-        AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", current->Name)("event", "free")("usage", current->Usage.Val())(
-            "delta", volume);
+        YDB_LOG_DEBUG("",
+            {"name", current->Name},
+            {"event", "free"},
+            {"usage", current->Usage.Val()},
+            {"delta", volume});
         current = current->Owner.get();
     }
 }
@@ -100,8 +112,14 @@ void TStageFeatures::UpdateVolume(const ui64 from, const ui64 to, const bool all
         Counters->Sub(from, allocated);
         Counters->Add(to, allocated);
     }
-    AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", Name)("event", "update")("usage", Usage.Val())("waiting", Waiting.Val())(
-        "allocated", allocated)("from", from)("to", to);
+    YDB_LOG_DEBUG("",
+        {"name", Name},
+        {"event", "update"},
+        {"usage", Usage.Val()},
+        {"waiting", Waiting.Val()},
+        {"allocated", allocated},
+        {"from", from},
+        {"to", to});
     if (allocated) {
         Usage.Sub(from);
         Usage.Add(to);

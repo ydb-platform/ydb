@@ -12,6 +12,7 @@
 #include <yt/yt/client/tablet_client/table_mount_cache.h>
 
 #include <yt/yt/client/transaction_client/helpers.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/iterator/zip.h>
 
@@ -29,6 +30,7 @@ using namespace NYTree;
 using namespace NYPath;
 using namespace NYson;
 using namespace NQueueClient;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,9 +64,9 @@ TTransaction::TTransaction(
     , PingPeriod_(pingPeriod)
     , StickyProxyAddress_(stickyParameters ? std::optional(stickyParameters->ProxyAddress) : std::nullopt)
     , SequenceNumberSourceId_(sequenceNumberSourceId)
-    , Logger(RpcProxyClientLogger().WithTag("TransactionId: %v, %v",
-        Id_,
-        Connection_->GetLoggingTag()))
+    , Logger(RpcProxyClientLogger()
+        .WithTag("TransactionId", Id_)
+        .WithTags(Connection_->GetLoggingTags()))
     , Proxy_(Channel_)
 {
     const auto& config = Connection_->GetConfig();
@@ -167,7 +169,7 @@ void TTransaction::RegisterAlienTransaction(const ITransactionPtr& transaction)
     }
 
     YT_LOG_DEBUG("Alien transaction registered (AlienConnection: {%v})",
-        transaction->GetConnection()->GetLoggingTag());
+        transaction->GetConnection()->GetLoggingTags());
 }
 
 TFuture<void> TTransaction::Ping(const NApi::TPrerequisitePingOptions& /*options*/)
@@ -194,6 +196,20 @@ void TTransaction::Detach()
     SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
     // Fire-and-forget.
     YT_UNUSED_FUTURE(req->Invoke());
+}
+
+void TTransaction::Abandon(TGuard<NThreading::TSpinLock>* /*guard*/)
+{
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
+
+    if (State_ == ETransactionState::Abandoned) {
+        return;
+    }
+
+    // Like Detach, but sends no request: the server tx is left to expire on its own.
+    State_ = ETransactionState::Abandoned;
+
+    YT_LOG_DEBUG("Transaction abandoned");
 }
 
 void TTransaction::SubscribeCommitted(const TCommittedHandler& handler)
@@ -316,7 +332,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
 
                     YT_LOG_DEBUG("Alien transaction flushed (ParticipantCellIds: %v, AlienConnection: {%v})",
                         result.ParticipantCellIds,
-                        transaction->GetConnection()->GetLoggingTag());
+                        transaction->GetConnection()->GetLoggingTags());
 
                     for (auto [cellId, signature] : Zip(result.ParticipantCellIds, result.ExpectedPrepareSignatures)) {
                         EmplaceOrCrash(AdditionalParticipantCellIds_, cellId, signature);
@@ -335,7 +351,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                 }
                 ToProto(req->mutable_prerequisite_options(), options);
                 ToProto(req->mutable_mutating_options(), options);
-                req->set_max_allowed_commit_timestamp(options.MaxAllowedCommitTimestamp);
+                req->set_max_allowed_commit_timestamp(ToProto(options.MaxAllowedCommitTimestamp));
                 SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
                 return req->Invoke();
             }))
@@ -346,7 +362,15 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                     if (rspOrError.IsOK() && State_ == ETransactionState::Committing) {
                         State_ = ETransactionState::Committed;
                     } else if (!rspOrError.IsOK()) {
-                        YT_UNUSED_FUTURE(DoAbort(&guard));
+                        if (Type_ == ETransactionType::Master &&
+                            Client_->GetOptions().AbandonMasterTransactionsOnFailedCommit)
+                        {
+                            // Keep the (possibly transient/ambiguous) failed commit's
+                            // transaction alive for a retrier instead of aborting it.
+                            Abandon(&guard);
+                        } else {
+                            YT_UNUSED_FUTURE(DoAbort(&guard));
+                        }
                         THROW_ERROR_EXCEPTION("Error committing transaction %v",
                             GetId())
                             << rspOrError;
@@ -359,7 +383,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
 
                 const auto& rsp = rspOrError.Value();
                 TTransactionCommitResult result{
-                    .PrimaryCommitTimestamp = rsp->primary_commit_timestamp(),
+                    .PrimaryCommitTimestamp = FromProto<NTransactionClient::TTimestamp>(rsp->primary_commit_timestamp()),
                     .CommitTimestamps = FromProto<NHiveClient::TTimestampMap>(rsp->commit_timestamps())
                 };
 
@@ -387,10 +411,10 @@ TFuture<void> TTransaction::Abort(const TTransactionAbortOptions& options)
     return DoAbort(&guard, options);
 }
 
-void TTransaction::FutureModifyRows(
+void TTransaction::ModifyRows(
     const TYPath& path,
     TNameTablePtr nameTable,
-    TSharedRange<NFuture::TRowModification> modifications,
+    TSharedRange<TRowModification> modifications,
     const TModifyRowsOptions& options)
 {
     ValidateTabletTransactionId(GetId());
@@ -398,10 +422,10 @@ void TTransaction::FutureModifyRows(
     for (const auto& modification : modifications) {
         // TODO(sandello): handle versioned rows
         Visit(modification,
-            [] (const NFuture::NRowModifications::TWriteRow&) { },
-            [] (const NFuture::NRowModifications::TDeleteRow&) { },
-            [] (const NFuture::NRowModifications::TWriteAndLockRow&) { },
-            [] (const NFuture::NRowModifications::TVersionedWriteRow&) {
+            [] (const NRowModifications::TWriteRow&) { },
+            [] (const NRowModifications::TDeleteRow&) { },
+            [] (const NRowModifications::TWriteAndLockRow&) { },
+            [] (const NRowModifications::TVersionedWriteRow&) {
                 YT_ABORT();
             });
     }
@@ -423,14 +447,19 @@ void TTransaction::FutureModifyRows(
     std::vector<TUnversionedRow> rows;
     rows.reserve(modifications.Size());
 
+    const auto& config = Connection_->GetConfig();
+
+    bool usedAnyLocks = false;
     bool usedStrongLocks = false;
     bool usedWideLocks = false;
     for (const auto& modification : modifications) {
-        if (!std::holds_alternative<NFuture::NRowModifications::TWriteAndLockRow>(modification)) {
+        if (!std::holds_alternative<NRowModifications::TWriteAndLockRow>(modification)) {
             continue;
         }
 
-        auto mask = std::get<NFuture::NRowModifications::TWriteAndLockRow>(modification).Locks;
+        usedAnyLocks = true;
+
+        auto mask = std::get<NRowModifications::TWriteAndLockRow>(modification).Locks;
         usedWideLocks |= mask.GetSize() > TLegacyLockMask::MaxCount;
         if (usedWideLocks) {
             break;
@@ -439,15 +468,15 @@ void TTransaction::FutureModifyRows(
         for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
             usedWideLocks |= mask.Get(index) > MaxOldLockType;
             usedStrongLocks |= mask.Get(index) == ELockType::SharedStrong;
+
+            // Pure locks do not set usedStrongLocks by themselves. That causes row_legacy_read_locks to be used.
+            // And with row_legacy_read_locks used rpc proxy reconstructs exclusive locks using row values from attachments.
+            // With DoNotDropPureExclusiveLocks at least row_legacy_locks will be used.
+            if (config->DoNotDropPureExclusiveLocks) {
+                usedStrongLocks |= mask.Get(index) == ELockType::Exclusive;
+            }
         }
     }
-
-    const auto& config = Connection_->GetConfig();
-
-    // Pure locks do not set usedStrongLocks by themselves. That causes row_legacy_read_locks to be used.
-    // And with row_legacy_read_locks used rpc proxy reconstructs exclusive locks using row values from attachments.
-    // With DoNotDropPureExclusiveLocks at least row_legacy_locks will be used.
-    usedStrongLocks |= config->DoNotDropPureExclusiveLocks;
 
     if (usedStrongLocks) {
         req->Header().set_protocol_version_minor(YTRpcModifyRowsStrongLocksVersion);
@@ -458,13 +487,13 @@ void TTransaction::FutureModifyRows(
     }
 
     // NB: Should be called for every modification to keep index correspondence.
-    auto fillCorrespondingLock = [&req, usedWideLocks, usedStrongLocks] (const TLockMask& locks) {
+    auto fillCorrespondingLock = [&req, usedWideLocks, usedStrongLocks, usedAnyLocks] (const TLockMask& locks) {
         if (usedWideLocks) {
             ToProto(req->add_row_locks(), locks);
         } else if (usedStrongLocks) {
             YT_VERIFY(!locks.HasNewLocks());
             req->add_row_legacy_locks(locks.ToLegacyMask().GetBitmap());
-        } else {
+        } else if (usedAnyLocks) {
             TLegacyLockBitmap bitmap = 0;
             for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
                 if (locks.Get(index) == ELockType::SharedWeak) {
@@ -477,22 +506,22 @@ void TTransaction::FutureModifyRows(
 
     for (const auto& modification : modifications) {
         Visit(modification,
-            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TWriteRow& modification) {
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TWriteRow& modification) {
                 rows.emplace_back(modification.Row);
                 req->add_row_modification_types(NProto::ERowModificationType::RMT_WRITE);
                 fillCorrespondingLock(TLockMask{});
             },
-            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TDeleteRow& modification) {
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TDeleteRow& modification) {
                 rows.emplace_back(modification.Key);
                 req->add_row_modification_types(NProto::ERowModificationType::RMT_DELETE);
                 fillCorrespondingLock(TLockMask{});
             },
-            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TWriteAndLockRow& writeAndLockModification) {
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TWriteAndLockRow& writeAndLockModification) {
                 rows.emplace_back(writeAndLockModification.Row);
                 req->add_row_modification_types(NProto::ERowModificationType::RMT_MODIFY);
                 fillCorrespondingLock(writeAndLockModification.Locks);
             },
-            [] (const NFuture::NRowModifications::TVersionedWriteRow&) {
+            [] (const NRowModifications::TVersionedWriteRow&) {
                 // NB: Checked above.
                 YT_ABORT();
             });
@@ -500,7 +529,8 @@ void TTransaction::FutureModifyRows(
 
     YT_VERIFY(modifications.size() == static_cast<size_t>(req->row_legacy_read_locks_size()) ||
         modifications.size() == static_cast<size_t>(req->row_legacy_locks_size()) ||
-        modifications.size() == static_cast<size_t>(req->row_locks_size()));
+        modifications.size() == static_cast<size_t>(req->row_locks_size()) ||
+        (req->row_legacy_read_locks_size() == 0 && req->row_legacy_locks_size() == 0 && req->row_locks_size() == 0));
 
     req->Attachments() = SerializeRowset(
         nameTable,
@@ -646,7 +676,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
     ToProto(req->mutable_queue_path(), queuePath);
 
     ToProto(req->mutable_session_id(), sessionId);
-    req->set_epoch(epoch.Underlying());
+    req->set_epoch(ToProto(epoch));
 
     if (options.UserMeta) {
         ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
@@ -1184,7 +1214,8 @@ TFuture<void> TTransaction::SendPing()
                         State_ != ETransactionState::Flushed &&
                         State_ != ETransactionState::FlushedModifications &&
                         State_ != ETransactionState::Aborted &&
-                        State_ != ETransactionState::Detached)
+                        State_ != ETransactionState::Detached &&
+                        State_ != ETransactionState::Abandoned)
                     {
                         State_ = ETransactionState::Aborted;
                         fireAborted = true;

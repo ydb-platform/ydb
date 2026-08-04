@@ -9,6 +9,11 @@
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
+#include <library/cpp/yt/logging/public.h>
+
+#include <string>
+#include <vector>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -68,6 +73,7 @@ public:
         const TSourceLocation& location = TSourceLocation());
 
     std::string GetDebugInfo(int sortByColumn = -1) const;
+    void LogDebugInfo(const NLogging::TLogger& logger, NLogging::ELogLevel level) const;
     TRefCountedTrackerStatistics GetStatistics() const;
 
     size_t GetObjectsAllocated(TRefCountedTypeKey typeKey) const;

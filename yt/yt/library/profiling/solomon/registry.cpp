@@ -1,7 +1,15 @@
 #include "registry.h"
 
-#include <yt/yt/library/profiling/percpu.h>
-#include <yt/yt/library/profiling/sensor_impl.h>
+#include "config.h"
+
+#include <yt/yt/library/profiling/per_cpu_sensor_impl.h>
+#include <yt/yt/library/profiling/simple_sensor_impl.h>
+
+#ifdef __linux__
+#include <yt/yt/library/profiling/rseq_sensor_impl.h>
+
+#include <library/cpp/yt/rseq/rseq.h>
+#endif
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
@@ -15,20 +23,77 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// The rseq-backed hot sensors are Linux-only (rseq_sensor_impl.h); off Linux the
+// alias is a dummy (never instantiated -- the rseq branch is compiled out below).
+#ifdef __linux__
+using TPortableRseqCounter = TRseqCounter;
+using TPortableRseqTimeCounter = TRseqTimeCounter;
+using TPortableRseqGauge = TRseqGauge;
+#else
+using TPortableRseqCounter = TPerCpuCounter;
+using TPortableRseqTimeCounter = TPerCpuTimeCounter;
+using TPortableRseqGauge = TPerCpuGauge;
+#endif
+
+////////////////////////////////////////////////////////////////////////////////
+
 TSolomonRegistry::TSolomonRegistry() = default;
+
+void TSolomonRegistry::Configure(const TSolomonRegistryConfigPtr& config)
+{
+    // Use the rseq fast path only when it is both requested and supported in this process: a
+    // runtime probe confirms the cached thread-pointer offset is stable across threads -- not
+    // so when our __rseq_abi lands in a dlopen'd module's dynamically allocated TLS.
+    bool enabled = config->EnableRseq;
+#ifdef __linux__
+    enabled = enabled && NRseq::IsPerCpuFastPathSupported();
+#else
+    enabled = false;
+#endif
+    RseqEnabled_.store(enabled, std::memory_order::relaxed);
+}
+
+bool TSolomonRegistry::IsRseqEnabled() const
+{
+    return RseqEnabled_.load(std::memory_order::relaxed);
+}
 
 template <class TBase, class TSimple, class TPerCpu, class TFn>
 TIntrusivePtr<TBase> SelectImpl(bool hot, const TFn& fn)
 {
-    if (!hot) {
-        auto counter = New<TSimple>();
-        fn(counter);
-        return counter;
-    } else {
-        auto counter = New<TPerCpu>();
-        fn(counter);
-        return counter;
-    }
+    auto sensor = [&] () -> TIntrusivePtr<TBase> {
+        if (!hot) {
+            return New<TSimple>();
+        }
+        return New<TPerCpu>();
+    }();
+    fn(sensor);
+    return sensor;
+}
+
+// Like SelectImpl, but the hot sensor is chosen at construction time between the rseq fast
+// path (when enabled and available) and the atomic sharded fallback. The choice is made
+// once per sensor here, so the hot Increment/Update path carries no dispatch.
+template <class TBase, class TSimple, class TSharded, class TRseq, class TFn>
+TIntrusivePtr<TBase> SelectFastImpl(bool hot, bool rseqEnabled, const TFn& fn)
+{
+    auto sensor = [&] () -> TIntrusivePtr<TBase> {
+        if (!hot) {
+            return New<TSimple>();
+        }
+#ifdef __linux__
+        if (rseqEnabled) {
+            // The rseq sensors fold their per-CPU shard array into the object allocation
+            // (NewWithExtraSpace), so they are built via a factory rather than New.
+            return TRseq::Create();
+        }
+#else
+        Y_UNUSED(rseqEnabled);
+#endif
+        return New<TSharded>();
+    }();
+    fn(sensor);
+    return sensor;
 }
 
 ICounterPtr TSolomonRegistry::RegisterCounter(
@@ -36,7 +101,7 @@ ICounterPtr TSolomonRegistry::RegisterCounter(
     const TTagSet& tags,
     TSensorOptions options)
 {
-    return SelectImpl<ICounter, TSimpleCounter, TPerCpuCounter>(options.Hot, [&, this] (const auto& counter) {
+    return SelectFastImpl<ICounter, TSimpleCounter, TPerCpuCounter, TPortableRseqCounter>(options.Hot, IsRseqEnabled(), [&, this] (const auto& counter) {
         DoRegister([this, name = std::string(name), tags, options = std::move(options), counter] {
             auto reader = [ptr = counter.Get()] {
                 return ptr->GetValue();
@@ -53,8 +118,9 @@ ITimeCounterPtr TSolomonRegistry::RegisterTimeCounter(
     const TTagSet& tags,
     TSensorOptions options)
 {
-    return SelectImpl<ITimeCounter, TSimpleTimeCounter, TPerCpuTimeCounter>(
+    return SelectFastImpl<ITimeCounter, TSimpleTimeCounter, TPerCpuTimeCounter, TPortableRseqTimeCounter>(
         options.Hot,
+        IsRseqEnabled(),
         [&, this] (const auto& counter) {
             DoRegister([this, name = std::string(name), tags, options = std::move(options), counter] {
                 auto set = FindSet(name, options);
@@ -68,7 +134,7 @@ IGaugePtr TSolomonRegistry::RegisterGauge(
     const TTagSet& tags,
     TSensorOptions options)
 {
-    return SelectImpl<IGauge, TSimpleGauge, TPerCpuGauge>(options.Hot, [&, this] (const auto& gauge) {
+    return SelectFastImpl<IGauge, TSimpleGauge, TPerCpuGauge, TPortableRseqGauge>(options.Hot, IsRseqEnabled(), [&, this] (const auto& gauge) {
         if (options.DisableDefault) {
             gauge->Update(std::numeric_limits<double>::quiet_NaN());
         }

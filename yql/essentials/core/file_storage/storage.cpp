@@ -47,7 +47,7 @@ TFsPath ToFilePath(const TString& path)
 {
     if (path.empty()) {
         std::array<char, MAX_PATH> tempDir;
-        if (MakeTempDir(tempDir.data(), nullptr) != 0) {
+        if (MakeTempDir(tempDir.data(), /*prefix=*/nullptr) != 0) {
             ythrow yexception() << "FileStorage: Can't create temporary directory " << tempDir.data();
         }
         return tempDir.data();
@@ -356,7 +356,7 @@ private:
 
         for (const TString& name : names) {
             TFsPath childPath(StorageDir_ / name);
-            TFileStat stat(childPath, true);
+            TFileStat stat(childPath, /*nofollow=*/true);
             if (stat.IsFile()) {
                 ++actualFiles;
                 actualSize += stat.Size;
@@ -417,7 +417,7 @@ private:
 
         for (const TString& name : names) {
             TFsPath childPath(StorageDir_ / name);
-            TFileStat stat(childPath, true);
+            TFileStat stat(childPath, /*nofollow=*/true);
             if (stat.IsFile()) {
                 files.push_back(TFileObject{.Name = name, .MTime = stat.MTime, .Size = stat.Size});
                 ++actualFiles;

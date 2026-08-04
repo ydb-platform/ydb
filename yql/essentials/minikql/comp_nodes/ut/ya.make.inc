@@ -25,6 +25,7 @@ SET(ORIG_SRC_DIR yql/essentials/minikql/comp_nodes/ut)
 SET(ORIG_SOURCES
     mkql_test_factory.cpp
     mkql_bit_utils_ut.cpp
+    mkql_block_agg_ut.cpp
     mkql_block_compress_ut.cpp
     mkql_block_coalesce_ut.cpp
     mkql_block_exists_ut.cpp
@@ -33,11 +34,18 @@ SET(ORIG_SOURCES
     mkql_block_map_join_ut_utils.cpp
     mkql_block_map_join_ut.cpp
     mkql_block_test_helper.cpp
+    mkql_block_serializer_test_utils.cpp
     mkql_block_fuzzer.cpp
     mkql_block_getelem_ut.cpp
+    mkql_block_guess_ut.cpp
+    mkql_block_way_ut.cpp
     mkql_block_just_ut.cpp
     mkql_block_top_sort_ut.cpp
     mkql_block_variant_ut.cpp
+    mkql_block_uuid_ut.cpp
+    mkql_block_dynumber_ut.cpp
+    mkql_block_variant_item_ut.cpp
+    mkql_block_variant_node_ut.cpp
     mkql_blocks_ut.cpp
     mkql_callable_ut.cpp
     mkql_combine_ut.cpp
@@ -55,6 +63,7 @@ SET(ORIG_SOURCES
     mkql_multihopping_ut.cpp
     mkql_multimap_ut.cpp
     mkql_fold_ut.cpp
+    mkql_erased_ut.cpp
     mkql_heap_ut.cpp
     mkql_compare_ut.cpp
     mkql_computation_node_ut.cpp
@@ -76,6 +85,7 @@ SET(ORIG_SOURCES
     mkql_switch_ut.cpp
     mkql_time_order_recover_saveload_ut.cpp
     mkql_todict_ut.cpp
+    mkql_udf_profile_ut.cpp
     mkql_udf_ut.cpp
     mkql_variant_ut.cpp
     mkql_wide_chain_map_ut.cpp
@@ -101,6 +111,7 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/sql/pg
+    yql/essentials/types/dynumber
     yql/essentials/utils/random_data_generator
 )
 

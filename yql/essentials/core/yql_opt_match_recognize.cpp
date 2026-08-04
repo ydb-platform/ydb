@@ -50,7 +50,7 @@ TExprNode::TPtr ExpandMatchRecognizeMeasuresCallables(const TExprNode::TPtr& nod
                     parent.Lambda(MeasuresLambdasStartPos + i, lambda->Pos())
                         .Param("data")
                         .Param("vars")
-                        .Apply(std::move(lambda))
+                        .Apply(lambda)
                             .With(0)
                                 .Callable("FlattenMembers")
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -101,7 +101,7 @@ TExprNode::TPtr ExpandMatchRecognizeMeasuresCallables(const TExprNode::TPtr& nod
                                                             .Seal()
                                                             .List(1).Seal()
                                                             .List(2)
-                                                                .Add(0, std::move(aggregate))
+                                                                .Add(0, aggregate)
                                                             .Seal()
                                                             .List(3).Seal()
                                                         .Seal()
@@ -215,7 +215,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
                     .Lambda()
                         .Param("partition")
                         .Callable("TimeOrderRecover")
-                            .Apply(0, std::move(newInput))
+                            .Apply(0, newInput)
                                 .With(0, "partition")
                             .Seal()
                             .Add(1, sortKey)
@@ -278,7 +278,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
         .Lambda()
             .Param("partition")
             .Callable("MatchRecognizeCore")
-                .Apply(0, std::move(timeOrderRecover))
+                .Apply(0, timeOrderRecover)
                     .With(0, "partition")
                 .Seal()
                 .Add(1, partitionKeySelector)
@@ -309,7 +309,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
     if (isStreaming) {
         TExprNode::TPtr keySelector;
         if (partitionColumns->ChildrenSize() != 0) {
-            keySelector = std::move(partitionKeySelector);
+            keySelector = partitionKeySelector;
         } else {
             // Use pseudo partitioning with constant lambda to wrap TimeOrderRecover into DQ stage
             // TODO(zverevgeny): fixme
@@ -321,18 +321,18 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
         }
 
         return Build<TCoShuffleByKeys>(ctx, pos)
-            .Input(std::move(input))
-            .KeySelectorLambda(std::move(keySelector))
-            .ListHandlerLambda(std::move(lambda))
+            .Input(input)
+            .KeySelectorLambda(keySelector)
+            .ListHandlerLambda(lambda)
         .Done()
         .Ptr();
     } else { // non-streaming
         return Build<TCoPartitionsByKeys>(ctx, pos)
-            .Input(std::move(input))
-            .KeySelectorLambda(std::move(partitionKeySelector))
-            .SortDirections(std::move(sortOrder))
-            .SortKeySelectorLambda(std::move(sortKey))
-            .ListHandlerLambda(std::move(lambda))
+            .Input(input)
+            .KeySelectorLambda(partitionKeySelector)
+            .SortDirections(sortOrder)
+            .SortKeySelectorLambda(sortKey)
+            .ListHandlerLambda(lambda)
         .Done()
         .Ptr();
     }

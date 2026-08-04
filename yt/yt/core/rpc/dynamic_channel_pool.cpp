@@ -4,6 +4,7 @@
 #include "client.h"
 #include "config.h"
 #include "private.h"
+#include "peer_discovery.h"
 #include "peer_priority_provider.h"
 #include "viable_peer_registry.h"
 
@@ -75,11 +76,10 @@ public:
             .EndMap()))
         , ServiceName_(std::move(serviceName))
         , PeerDiscovery_(std::move(peerDiscovery))
-        , Logger(RpcClientLogger().WithTag(
-            "ChannelId: %v, Endpoint: %v, Service: %v",
-            TGuid::Create(),
-            EndpointDescription_,
-            ServiceName_))
+        , Logger(RpcClientLogger()
+            .WithTag("ChannelId", TGuid::Create())
+            .WithTag("Endpoint", EndpointDescription_)
+            .WithTag("Service", ServiceName_))
         , ViablePeerRegistry_(CreateViablePeerRegistry(
             Config_,
             BIND(&TImpl::CreateChannel, Unretained(this)),
@@ -495,7 +495,7 @@ private:
     public:
         TPeerPoller(TImpl* owner, const std::string& peerAddress)
             : Owner_(owner)
-            , Logger(owner->Logger().WithTag("Address: %v", peerAddress))
+            , Logger(owner->Logger().WithTag("Address", peerAddress))
             , PeerAddress_(peerAddress)
         { }
 

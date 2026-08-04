@@ -173,7 +173,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
-        for (const TActorId& actorId : {GroupAssimilatorId, GroupRecommissionerId}) {
+        for (const TActorId& actorId : {GroupAssimilatorId}) {
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }
@@ -269,6 +269,7 @@ namespace NKikimr::NBlobDepot {
                 }
             }
             if (kindv.GroupAccumWeights.empty()) {
+                TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_PICK_CHANNELS_FAILURES] += 1;
                 return false; // no allocation possible
             }
         }

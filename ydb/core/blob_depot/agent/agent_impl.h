@@ -207,8 +207,6 @@ namespace NKikimr::NBlobDepot {
         TActorId PipeServerId;
         bool IsConnected = false;
         ui64 ConnectionInstance = 0;
-        bool Recommissioning;
-        ui32 GroupGeneration;
 
         NMonitoring::TDynamicCounterPtr AgentCounters;
 
@@ -227,10 +225,21 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsError;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsSlowDown;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsInFlightCounter;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsMaxInFlightCounter;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsPendingQueueSizeCounter;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutBytesOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsError;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsSlowDown;
+        NMonitoring::TDynamicCounters::TCounterPtr S3PutsInFlightCounter;
+
+        NMonitoring::TDynamicCounterPtr S3Counters;
+        THashMap<std::pair<TString, int>, NMonitoring::TDynamicCounters::TCounterPtr> S3HttpErrorCounters;
+
+        NMonitoring::TDynamicCounters::TCounterPtr AllocateIdFailures;
+        NMonitoring::TDynamicCounters::TCounterPtr PendingEventQueueOverflows;
+        NMonitoring::TDynamicCounters::TCounterPtr PendingEventQueueTimeouts;
 
         enum class EMode {
             None,
@@ -342,9 +351,6 @@ namespace NKikimr::NBlobDepot {
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ProxyId, {}, nullptr, 0));
                     ProxyId = {};
                 }
-                Y_ABORT_UNLESS(info->Group);
-                Recommissioning = info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING;
-                GroupGeneration = info->GroupGeneration;
             }
             if (ProxyId) {
                 TActivationContext::Send(ev->Forward(ProxyId));
@@ -647,6 +653,7 @@ namespace NKikimr::NBlobDepot {
         ui32 CurrentMaxS3GetsInFlight = MaxS3GetsInFlight;
         ui32 ConsecutiveSuccessfulGetBatches = 0;
         ui32 S3GetsInFlight = 0;
+        ui32 S3PutsInFlight = 0;
         std::deque<TPendingS3Read> PendingS3Reads;
 
         void IssueOrEnqueueS3Read(TPendingS3Read&& read);
@@ -655,6 +662,8 @@ namespace NKikimr::NBlobDepot {
         void OnS3GetCompleted(bool success, ui64 bytes);
         void RunPendingS3ReadsIfPossible();
         void HandleS3GetThrottleWakeup();
+
+        void IncS3HttpErrorCounter(const TString& operation, int httpCode);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Metrics

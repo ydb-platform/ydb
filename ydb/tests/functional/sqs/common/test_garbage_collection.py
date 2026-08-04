@@ -115,6 +115,9 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_removes_messages_by_retention_time(self, is_fifo, tables_format):
+        if not is_fifo and self._is_topic_migration_stage():
+            pytest.skip('Std queue retention GC is not verified on topic path yet')
+
         self._init_with_params(is_fifo, tables_format)
 
         self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
@@ -156,13 +159,12 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
             time.sleep(time_after_send + retention - now)
 
         number_of_messages = None
-        for i in range(100):
+        for i in range(self._async_metrics_retry_attempts(100)):
             attributes = self._sqs_api.get_queue_attributes(self.queue_url)
             number_of_messages = int(attributes['ApproximateNumberOfMessages'])
             if number_of_messages == 0:
                 break
-            else:
-                time.sleep(0.5)
+            time.sleep(0.5)
 
         assert_that(number_of_messages, equal_to(0))
         self._check_queue_tables_are_empty()

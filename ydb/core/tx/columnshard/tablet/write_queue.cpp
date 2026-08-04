@@ -10,8 +10,35 @@ namespace NKikimr::NColumnShard {
 
 LWTRACE_USING(YDB_CS);
 
+namespace {
+TString OverloadReason(const EOverloadStatus status) {
+    switch (status) {
+        case EOverloadStatus::SmallBlobsQuota:
+            return "The small blobs quota has been exhausted. Please wait for compaction to finish or delete unused data.";
+        case EOverloadStatus::OverloadMetadata:
+            return "The index metadata limit has been exceeded. Please wait for compaction to finish or delete unused data.";
+        case EOverloadStatus::OverloadCompaction:
+            return "The compaction queue is overloaded. Please wait for compaction to finish or reduce the database load.";
+        case EOverloadStatus::Disk:
+            return "The disk quota has been exhausted. Please increase the available database disk resources or delete unused data.";
+        case EOverloadStatus::ShardTxInFly:
+            return "The local transaction limit has been exceeded. Please add more resources or reduce the database load.";
+        case EOverloadStatus::ShardWritesInFly:
+            return "The limit on the number of in-flight write requests to a shard has been exceeded. Please add more resources or reduce the "
+                   "database load.";
+        case EOverloadStatus::ShardWritesSizeInFly:
+            return "The limit on the total size of in-flight write requests to the shard has been exceeded. Please add more resources or reduce "
+                   "the database load.";
+        case EOverloadStatus::RejectProbability:
+            return "The local database is overloaded. Please add more resources or reduce the database load.";
+        case EOverloadStatus::None:
+            return {};
+    }
+}
+}   // namespace
+
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
-    owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
+    owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(ctx.Monotonic() - Created);
 
     if (const auto lock = owner->OperationsManager->GetLockOptional(LockId); lock) {
         if (lock->NeedsAborting()) {
@@ -25,13 +52,15 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
     auto writeOperation =
         owner->OperationsManager->CreateWriteOperation(PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
-        "in_flight", NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly())(
-        "size_in_flight", NOverload::TOverloadManagerServiceOperator::GetShardWritesSizeInFly());
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+        {"writingSize", ArrowData->GetSize()},
+        {"operationId", writeOperation->GetIdentifier()},
+        {"inFlight", NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly()},
+        {"sizeInFlight", NOverload::TOverloadManagerServiceOperator::GetShardWritesSizeInFly()});
 
     AFL_VERIFY(writeOperation);
     writeOperation->SetBehaviour(Behaviour);
-    const auto& applyToMvccSnapshot = MvccSnapshot.Valid() ? MvccSnapshot : NOlap::TSnapshot::Max();
+    const auto applyToMvccSnapshot = MvccSnapshot.Valid() ? MvccSnapshot : owner->GetMaxReadVersionForSchema(Schema->GetVersion());
     NOlap::TWritingContext wContext(owner->TabletID(), owner->SelfId(), Schema, owner->StoragesManager,
         owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, applyToMvccSnapshot, LockId,
         LockMode, writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationPortionsWriteActorId,
@@ -60,26 +89,57 @@ void TWriteTask::Abort(
     ctx.Send(SourceId, result.release(), 0, Cookie);
 }
 
+void TWriteTask::FailByOverload(TColumnShard* owner, const EOverloadStatus overloadStatus, const TActorContext& ctx) const {
+    AFL_VERIFY(overloadStatus != EOverloadStatus::None);
+    const TString reason = TStringBuilder{} << "Column shard " << owner->TabletID()
+                                            << " is overloaded. Reason: " << OverloadReason(overloadStatus);
+    LWPROBE(EvWriteResult, owner->TabletID(), SourceId.ToString(), TxId, Cookie, "write_queue", false, reason);
+    auto result =
+        NEvents::TDataEvents::TEvWriteResult::BuildError(owner->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, reason);
+    owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
+    if (OverloadSubscribeSeqNo) {
+        result->Record.SetOverloadSubscribed(*OverloadSubscribeSeqNo);
+        ctx.Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+            std::make_unique<NOverload::TEvOverloadSubscribe>(
+                NOverload::TColumnShardInfo{ .ColumnShardId = owner->SelfId(), .TabletId = owner->TabletID() },
+                NOverload::TPipeServerInfo{
+                    .PipeServerId = RecipientId, .InterconnectSessionId = owner->PipeServersInterconnectSessions[RecipientId] },
+                NOverload::TOverloadSubscriberInfo{
+                    .PipeServerId = RecipientId, .OverloadSubscriberId = SourceId, .SeqNo = *OverloadSubscribeSeqNo }));
+    }
+    owner->OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, PathId, SourceId, {}, TGUID::CreateTimebased().AsGuidString(),
+                                                 owner->Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters()), ArrowData->GetSize(),
+        Cookie, std::move(result), ctx);
+}
+
 bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
     if (onWakeup) {
         WriteTasksOverloadCheckerScheduled = false;
     }
     ui32 countTasks = 0;
-    const TMonotonic now = TMonotonic::Now();
+    const TMonotonic now = ctx.Monotonic();
     std::set<TInternalPathId> overloaded;
     for (auto it = WriteTasks.begin(); it != WriteTasks.end();) {
         if (it->IsDeprecated(now)) {
-            it->Abort(Owner, "timeout", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
+            // Waiting timed out: reply OVERLOADED with the concrete reason (SmallBlobs/Compaction/...) for graphs.
+            const auto overloadStatus = Owner->CheckOverloadedWait(it->GetInternalPathId());
+            if (overloadStatus != EOverloadStatus::None) {
+                it->FailByOverload(Owner, overloadStatus, ctx);
+            } else {
+                it->Abort(Owner, "timeout", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
+            }
             Owner->Counters.GetCSCounters().WritingCounters->TimeoutRate->Inc();
             it = WriteTasks.erase(it);
         } else if (!overloaded.contains(it->GetInternalPathId())) {
-            auto overloadStatus = Owner->CheckOverloadedWait(it->GetInternalPathId());
-            if (overloadStatus != TColumnShard::EOverloadStatus::None) {
+            const auto overloadStatus = Owner->CheckOverloadedWait(it->GetInternalPathId());
+            if (overloadStatus != EOverloadStatus::None) {
                 overloaded.emplace(it->GetInternalPathId());
                 Owner->Counters.GetCSCounters().OnWaitingOverload(overloadStatus);
                 ++countTasks;
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus)(
-                    "path_id", it->GetInternalPathId());
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                    {"event", "wait_overload"},
+                    {"status", overloadStatus},
+                    {"pathId", it->GetInternalPathId()});
                 ++it;
             } else {
                 it->Execute(Owner, ctx);
@@ -93,7 +153,9 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
     if (countTasks && !WriteTasksOverloadCheckerScheduled) {
         Owner->Schedule(TDuration::MilliSeconds(300), new NActors::TEvents::TEvWakeup(1));
         WriteTasksOverloadCheckerScheduled = true;
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "queue_on_write")("size", countTasks);
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "queue_on_write"},
+            {"size", countTasks});
     }
     Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Set(WriteTasks.size());
     return !countTasks;

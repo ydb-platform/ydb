@@ -86,19 +86,23 @@ bool IsValidReplicationProgress(const TReplicationProgress& progress)
     return segments.back().LowerKey < progress.UpperKey;
 }
 
-bool IsOrderedTabletReplicationProgress(const TReplicationProgress& progress)
+bool IsOrderedTableReplicationProgress(const TReplicationProgress& progress, int tabletCount)
 {
     const auto& segments = progress.Segments;
     const auto& upper = progress.UpperKey;
 
-    if (segments.size() != 1) {
+    int segmentCount = std::ssize(segments);
+    if (segmentCount == 0 || segmentCount > tabletCount) {
         return false;
     }
 
-    if (segments[0].LowerKey.GetCount() != 0 &&
-        (segments[0].LowerKey.GetCount() != 1 || segments[0].LowerKey[0].Type != EValueType::Int64))
-    {
-        return false;
+    for (int segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex) {
+        const auto& segment = segments[segmentIndex];
+        if (segment.LowerKey.GetCount() != 0 &&
+            (segment.LowerKey.GetCount() != 1 || segment.LowerKey[0].Type != EValueType::Int64))
+        {
+            return false;
+        }
     }
 
     if (upper.GetCount() != 1 || (upper[0].Type != EValueType::Int64 && upper[0].Type != EValueType::Max)) {
@@ -108,11 +112,25 @@ bool IsOrderedTabletReplicationProgress(const TReplicationProgress& progress)
     return true;
 }
 
+bool IsOrderedTabletReplicationProgress(const TReplicationProgress& progress)
+{
+    return IsOrderedTableReplicationProgress(progress, /*tabletCount*/ 1);
+}
+
 void ValidateOrderedTabletReplicationProgress(const TReplicationProgress& progress)
 {
     if (!IsOrderedTabletReplicationProgress(progress)) {
-        THROW_ERROR_EXCEPTION("Invalid replication progress for ordered table")
+        THROW_ERROR_EXCEPTION("Invalid replication progress for ordered table tablet")
             << TErrorAttribute("replication_progress", progress);
+    }
+}
+
+void ValidateOrderedTableReplicationProgress(const TReplicationProgress& progress, int tabletCount)
+{
+    if (!IsOrderedTableReplicationProgress(progress, tabletCount)) {
+        THROW_ERROR_EXCEPTION("Invalid replication progress for ordered table")
+            << TErrorAttribute("replication_progress", progress)
+            << TErrorAttribute("tablet_count", tabletCount);
     }
 }
 

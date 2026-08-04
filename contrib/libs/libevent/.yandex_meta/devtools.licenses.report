@@ -153,7 +153,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        ChangeLog [935:935]
+        ChangeLog [986:986]
 
 KEEP     BSD-3-Clause         2dc5abaaad0d6b67fcf860d7a06a2cf3
 BELONGS ya.make
@@ -224,7 +224,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        evutil.c [215:215]
+        evutil.c [216:216]
 
 KEEP     BSD-3-Clause         95d34b24745f43bd8af4e1f7b381e433
 BELONGS ya.make

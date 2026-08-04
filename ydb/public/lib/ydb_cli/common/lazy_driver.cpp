@@ -1,24 +1,10 @@
 #include "lazy_driver.h"
 
-#include <ydb/public/lib/ydb_cli/common/log.h>
+#include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NYdb::NConsoleClient {
-
-namespace {
-
-void StopDriver(TDriver& driver, bool wait) noexcept {
-    try {
-        driver.Stop(wait);
-    } catch (const std::exception& ex) {
-        YDB_CLI_LOG(Warning, "TLazyDriver::Stop failed: " << ex.what());
-    } catch (...) {
-        YDB_CLI_LOG(Warning, "TLazyDriver::Stop failed with unknown exception");
-    }
-}
-
-} // anonymous namespace
 
 TLazyDriver::TLazyDriver(TFactory factory, TDuration idleTimeout)
     : Factory_(std::move(factory))

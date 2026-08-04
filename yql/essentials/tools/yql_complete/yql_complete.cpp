@@ -50,6 +50,27 @@ size_t UTF8PositionToBytes(const TStringBuf text, size_t position) {
     return substr.begin() - text.begin();
 }
 
+NSQLComplete::TCompletionInput MakeCompletionInput(TString& text, TMaybe<ui64> pos) {
+    size_t lengthUtf8 = GetNumberOfUTF8Chars(text);
+
+    if (!pos) {
+        if (auto count = Count(text, '#'); 1 < count) {
+            ythrow yexception() << "provided input contains " << count << " '#', expected 0 or 1";
+        }
+
+        return NSQLComplete::SharpedInput(text);
+    }
+
+    if (lengthUtf8 <= *pos) {
+        ythrow yexception() << "provided position " << *pos << " is out of range " << lengthUtf8;
+    }
+
+    return {
+        .Text = text,
+        .CursorPosition = UTF8PositionToBytes(text, *pos),
+    };
+}
+
 int Run(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
@@ -120,16 +141,7 @@ int Run(int argc, char** argv) {
         MakePureLexerSupplier(),
         NSQLComplete::MakeUnionNameService(std::move(services), ranking));
 
-    if (!NYql::IsUtf8(queryString)) {
-        ythrow yexception() << "provided input is not UTF encoded";
-    }
-
-    if (auto count = Count(queryString, '#'); 1 < count) {
-        ythrow yexception() << "provided input contains " << count << " '#', expected 0 or 1";
-    }
-
-    NSQLComplete::TCompletionInput input = NSQLComplete::SharpedInput(queryString);
-
+    auto input = MakeCompletionInput(queryString, pos);
     auto output = engine->CompleteAsync(input).ExtractValueSync();
     for (const auto& c : output.Candidates) {
         Cout << "[" << c.Kind << "] " << c.Content << "\n";

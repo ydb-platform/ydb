@@ -8,6 +8,8 @@
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
     constexpr ui32 defaultReplicasSpecificVolume = 200;
 
@@ -68,13 +70,23 @@ namespace NKikimr::NStorage {
                 RingsInGroupCount = minNodesInGroup < 8 ? minNodesInGroup : 8;
             if (RingsInGroupCount > minNodesInGroup) {
                 RingsInGroupCount = minNodesInGroup;
+                if (OverrideRingsCount > 0) {
+                    EnoughNodesForOverride = false;
+                }
             }
             NToSelect = RingsInGroupCount < 3 ? 1 : (RingsInGroupCount < 5 ? 3 : 5);
             ReplicasInRingCount = OverrideReplicasInRingCount > 0 ? OverrideReplicasInRingCount : (1 + minNodesInGroup / ReplicasSpecificVolume);
         } else {
             if (OverrideRingsCount == 3 || OverrideRingsCount == 9) {
                 RingsInGroupCount = OverrideRingsCount / 3;
+                if (RingsInGroupCount > minNodesInGroup) {
+                    RingsInGroupCount = minNodesInGroup < 3 ? 1 : 3;
+                    EnoughNodesForOverride = false;
+                }
             } else {
+                // any other value (including 0, meaning "no override") is not applicable to the
+                // multi-group (3-DC) topology and is silently ignored - this is not an insufficient
+                // nodes condition, just a non-applicable override
                 RingsInGroupCount = minNodesInGroup < 3 ? 1 : 3;
             }
             NToSelect = RingsInGroupCount < 3 ? 3 : 9;
@@ -85,11 +97,17 @@ namespace NKikimr::NStorage {
             ReplicasInRingCount = OverrideReplicasInRingCount > 0 ? OverrideReplicasInRingCount : (1 + nodesCnt / ReplicasSpecificVolume);
         }
         if (ReplicasInRingCount * RingsInGroupCount > minNodesInGroup) {
+            if (OverrideReplicasInRingCount > 1) {
+                EnoughNodesForOverride = false;
+            }
             ReplicasInRingCount = 1;
         }
     }
 
     bool TStateStoragePerPileGenerator::IsGoodConfig() const {
+         if (!EnoughNodesForOverride) {
+             return false;
+         }
          for (auto &nodes : Rings) {
             for (auto nodeId : nodes) {
                 if (CalcNodeState(nodeId, false) > 1) {
@@ -98,6 +116,10 @@ namespace NKikimr::NStorage {
             }
          }
          return true;
+    }
+
+    bool TStateStoragePerPileGenerator::IsEnoughNodesForOverride() const {
+        return EnoughNodesForOverride;
     }
 
     void TStateStoragePerPileGenerator::AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss) {
@@ -250,7 +272,8 @@ namespace NKikimr::NStorage {
                 return;
             }
         }
-        STLOG(PRI_DEBUG, BS_NODE, NW103, "TStateStoragePerPileGenerator::PickNodesByState without limits");
+        YDB_LOG_DEBUG("TStateStoragePerPileGenerator::PickNodesByState without limits",
+            {"marker", "NW103"});
         Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, NodeStatesSize, true));
     }
 }

@@ -85,6 +85,11 @@ public:
         CSCounters.OnWriteOverloadRejectProbability(size);
     }
 
+    void OnWriteOverloadSmallBlobsQuota(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadSmallBlobsQuota(size);
+    }
+
     void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
         ColumnTablesCounters->GetPathIdCounter(pathId)->FillStats(tableStats);
         BackgroundControllerCounters->FillStats(pathId, tableStats);

@@ -848,8 +848,8 @@ public:
         for (auto month = 1U; month < Months_.size(); ++month) {
             Months_[month] = monthDays;
             LeapMonths_[month] = leapMonthDays;
-            monthDays += GetMonthLength(month, false);
-            leapMonthDays += GetMonthLength(month, true);
+            monthDays += GetMonthLength(month, /*isLeap=*/false);
+            leapMonthDays += GetMonthLength(month, /*isLeap=*/true);
         }
 
         for (ui16 date = 0; date < Days_.size(); ++date) {

@@ -5,8 +5,8 @@
 #include <algorithm>
 #include <optional>
 #include <sstream>
-#include <tuple>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -115,6 +115,7 @@ std::string FormatStatisticsType(EStatisticsType type) {
         case NKikimr::NKqp::BaseTable: return "BaseTable";
         case NKikimr::NKqp::FilteredFactTable: return "FilteredFactTable";
         case NKikimr::NKqp::ManyManyJoin: return "ManyManyJoin";
+        case NKikimr::NKqp::Constant: return "Constant";
         default: return "Unknown";
     }
 }
@@ -357,51 +358,38 @@ std::vector<std::pair<std::string, std::string>> BuildAliasRows(const TPlanAlias
     return rows;
 }
 
-struct TForbiddenOutEntry {
-    std::string Label;
+struct TForbiddenEntry {
     std::vector<std::string> Columns;
+    bool AllExcept = false;
 };
 
-std::vector<TForbiddenOutEntry> BuildForbiddenOutEntries(const IOperator& op, const TPlanProps& props) {
-    std::vector<std::tuple<std::string, IOperator*, ui32>> parents;
-    parents.reserve(op.Parents.size());
-    for (const auto& [parent, childIdx] : op.Parents) {
-        parents.emplace_back(
-            ToStdString(TStringBuilder() << parent->GetExplainName() << " child " << childIdx),
-            parent,
-            childIdx);
-    }
-    std::sort(parents.begin(), parents.end(), [](const auto& lhs, const auto& rhs) {
-        return std::get<0>(lhs) < std::get<0>(rhs);
-    });
-
-    std::vector<TForbiddenOutEntry> entries;
-    for (const auto& [label, parent, childIdx] : parents) {
-        const auto& forbidden = props.NameConstraints.GetForbiddenOut(parent, childIdx, const_cast<IOperator*>(&op));
-        if (forbidden.empty()) {
-            continue;
-        }
-        entries.push_back({label, MakeInfoUnitItems(SortInfoUnitSet(forbidden))});
-    }
-    return entries;
+TForbiddenEntry MakeForbiddenEntry(const TInfoUnitConstraintSet& forbidden) {
+    return {
+        MakeInfoUnitItems(SortInfoUnitSet(forbidden.GetUnits())),
+        forbidden.IsAllExcept()
+    };
 }
 
-std::vector<std::string> BuildForbiddenOutSummaryItems(const std::vector<TForbiddenOutEntry>& entries) {
-    std::vector<std::string> items;
-    items.reserve(entries.size());
-    for (const auto& entry : entries) {
-        items.push_back(entry.Label + ": " + FormatCountedSummary(entry.Columns));
+std::optional<TForbiddenEntry> BuildForbiddenEntry(const IOperator& op) {
+    if (!op.Props.Analysis.NameConstraints) {
+        return std::nullopt;
     }
-    return items;
+
+    const auto& forbidden = op.Props.Analysis.NameConstraints->GetForbidden();
+    if (forbidden.Empty()) {
+        return std::nullopt;
+    }
+    return MakeForbiddenEntry(forbidden);
 }
 
-std::vector<optimizer_trace::Widget> BuildForbiddenOutWidgets(const std::vector<TForbiddenOutEntry>& entries) {
-    std::vector<optimizer_trace::Widget> widgets;
-    widgets.reserve(entries.size());
-    for (const auto& entry : entries) {
-        widgets.push_back(optimizer_trace::Widget::list(entry.Label, entry.Columns).monospaceListText());
-    }
-    return widgets;
+std::string BuildForbiddenSummaryItem(const TForbiddenEntry& entry) {
+    const auto prefix = entry.AllExcept ? "all except " : "";
+    return prefix + FormatCountedSummary(entry.Columns);
+}
+
+optimizer_trace::Widget BuildForbiddenWidget(const TForbiddenEntry& entry) {
+    const auto title = entry.AllExcept ? "Forbidden (all except)" : "Forbidden";
+    return optimizer_trace::Widget::list(title, entry.Columns).monospaceListText();
 }
 
 std::vector<std::string> FindDuplicateOutputColumns(const TVector<TInfoUnit>& outputIUs) {
@@ -478,12 +466,12 @@ std::vector<TStageEdge> CollectStageEdges(const TStageGraph& graph) {
 }
 
 std::string FormatConnectionLabel(const TConnection& connection) {
-    return ToStdString(connection.GetExplainName());
+    return ToStdString(connection.Type) + " connection";
 }
 
 std::string FormatConnectionDetails(const TConnection& connection) {
     std::vector<std::string> details = {
-        "type=" + ToStdString(connection.GetExplainName()),
+        "type=" + ToStdString(connection.Type),
         "outputIndex=" + std::to_string(connection.GetOutputIndex())
     };
 
@@ -541,6 +529,50 @@ void AttachOperatorTarget(TTraceBuildState* state, const IOperator& op, const st
     state->OperatorTargets[&op].push_back(optimizer_trace::Target::subtree(nodeId));
 }
 
+std::string EnsureOverviewNode(TTraceBuildState* state, const IOperator& op) {
+    if (!state) {
+        return {};
+    }
+
+    if (const auto it = state->OverviewNodeIds.find(&op); it != state->OverviewNodeIds.end()) {
+        return it->second;
+    }
+
+    const std::string overviewId = "op-" + std::to_string(state->NextOverviewNodeId++);
+    state->OverviewNodeIds[&op] = overviewId;
+    state->OverviewNodes.push_back({
+        &op,
+        overviewId,
+        ToStdString(op.GetExplainName())
+    });
+    return overviewId;
+}
+
+void AttachOverviewEdge(TTraceBuildState* state, const IOperator& parent, const IOperator& child) {
+    if (!state) {
+        return;
+    }
+
+    const std::string from = EnsureOverviewNode(state, parent);
+    const std::string to = EnsureOverviewNode(state, child);
+    if (from.empty() || to.empty()) {
+        return;
+    }
+
+    const std::string edgeKey = from + "->" + to;
+    if (state->OverviewEdgeIds.contains(edgeKey)) {
+        return;
+    }
+
+    state->OverviewEdgeIds[edgeKey] = true;
+    state->OverviewEdges.push_back({
+        "edge-" + std::to_string(state->NextOverviewEdgeId++),
+        from,
+        to,
+        &child
+    });
+}
+
 std::vector<optimizer_trace::Target> GetOperatorTargets(
     const TTraceBuildState& state,
     const IOperator& op)
@@ -550,6 +582,115 @@ std::vector<optimizer_trace::Target> GetOperatorTargets(
         return {};
     }
     return it->second;
+}
+
+optimizer_trace::Widget BuildPlanOverviewWidget(const TTraceBuildState& state) {
+    optimizer_trace::Graph overview;
+    overview.layout("TB", 48, 30);
+
+    for (const auto& node : state.OverviewNodes) {
+        auto& graphNode = overview.node(node.Id, node.Label);
+        if (node.Op) {
+            std::vector<optimizer_trace::Target> targets;
+            for (const auto& target : GetOperatorTargets(state, *node.Op)) {
+                targets.push_back(optimizer_trace::Target::node(target.nodeId()));
+            }
+            if (!targets.empty()) {
+                graphNode.targets(targets).primaryTarget(targets.front());
+            }
+        }
+    }
+
+    for (const auto& edge : state.OverviewEdges) {
+        auto& graphEdge = overview.edge(edge.From, edge.To)
+            .setId(edge.Id);
+        if (edge.Child) {
+            const auto targets = GetOperatorTargets(state, *edge.Child);
+            if (!targets.empty()) {
+                graphEdge.targets(targets).primaryTarget(targets.front());
+            }
+        }
+    }
+
+    return optimizer_trace::Widget::graph("Plan overview", overview);
+}
+
+std::string FormatReadNameForJoinOrder(const TOpRead& read) {
+    if (read.TableCallable) {
+        const auto path = NYql::NNodes::TKqpTable(read.TableCallable).Path().StringValue();
+        const auto slash = path.rfind('/');
+        return ToStdString((slash == TString::npos) ? path : path.substr(slash + 1));
+    }
+
+    if (!read.Alias.empty()) {
+        return ToStdString(read.Alias);
+    }
+
+    return "TableFullScan";
+}
+
+struct TJoinOrderJson {
+    NJson::TJsonValue Json;
+    bool HasJoin = false;
+};
+
+TJoinOrderJson BuildJoinOrderJson(const TIntrusivePtr<IOperator>& op) {
+    if (!op) {
+        return {NJson::TJsonValue("null"), false};
+    }
+
+    if (op->Kind == EOperator::Source) {
+        return {NJson::TJsonValue(FormatReadNameForJoinOrder(*static_cast<TOpRead*>(op.Get()))), false};
+    }
+
+    if (op->Kind == EOperator::CBOTree) {
+        const auto* cboTree = static_cast<const TOpCBOTree*>(op.Get());
+        return BuildJoinOrderJson(cboTree->TreeRoot);
+    }
+
+    if (op->Kind == EOperator::Join) {
+        NJson::TJsonValue children(NJson::EJsonValueType::JSON_ARRAY);
+        for (const auto& child : op->Children) {
+            children.AppendValue(BuildJoinOrderJson(child).Json);
+        }
+        return {std::move(children), true};
+    }
+
+    if (op->Children.size() == 1) {
+        return BuildJoinOrderJson(op->Children.front());
+    }
+
+    bool hasJoin = false;
+    NJson::TJsonValue children(NJson::EJsonValueType::JSON_ARRAY);
+    for (const auto& child : op->Children) {
+        auto childOrder = BuildJoinOrderJson(child);
+        hasJoin = hasJoin || childOrder.HasJoin;
+        children.AppendValue(std::move(childOrder.Json));
+    }
+
+    if (hasJoin) {
+        NJson::TJsonValue wrapper(NJson::EJsonValueType::JSON_MAP);
+        wrapper[op->GetExplainName()] = std::move(children);
+        return {std::move(wrapper), true};
+    }
+
+    return {NJson::TJsonValue(ToStdString(op->GetExplainName())), false};
+}
+
+std::optional<optimizer_trace::Widget> BuildJoinOrderWidget(const TOpRoot& root) {
+    if (root.Children.empty()) {
+        return std::nullopt;
+    }
+
+    auto joinOrder = BuildJoinOrderJson(root.Children.front());
+    if (!joinOrder.HasJoin) {
+        return std::nullopt;
+    }
+
+    return optimizer_trace::Widget::unwrappedText(
+        "Join order",
+        ToStdString(NJson::WriteJson(joinOrder.Json, true, false, true)),
+        false);
 }
 
 optimizer_trace::Widget BuildStageGraphWidget(const TStageGraph& graph, const TTraceBuildState& state) {
@@ -602,15 +743,24 @@ optimizer_trace::Widget BuildStageGraphSwitcher(const TStageGraph& graph, const 
 }
 
 std::vector<optimizer_trace::Widget> BuildPlanWidgets(const TOpRoot& root, const TTraceBuildState& state) {
+    std::vector<optimizer_trace::Widget> widgets;
     if (root.PlanProps.StageGraph.StageIds.empty()) {
-        return {};
+        return widgets;
     }
-    return {
-        BuildStageGraphSwitcher(root.PlanProps.StageGraph, state)
-    };
+
+    widgets.push_back(BuildStageGraphSwitcher(root.PlanProps.StageGraph, state));
+    return widgets;
 }
 
 void AddPlanWidgets(optimizer_trace::Trace::Tile& tile, const TOpRoot& root, const TTraceBuildState& state) {
+    if (!state.OverviewNodes.empty()) {
+        auto& overview = tile.info().tab("overview", "Overview")
+            .widget(BuildPlanOverviewWidget(state));
+        if (auto joinOrder = BuildJoinOrderWidget(root)) {
+            overview.widget(*joinOrder);
+        }
+    }
+
     auto widgets = BuildPlanWidgets(root, state);
     if (widgets.empty()) {
         return;
@@ -619,6 +769,17 @@ void AddPlanWidgets(optimizer_trace::Trace::Tile& tile, const TOpRoot& root, con
     auto& tab = tile.info().tab("Plan", "Plan");
     for (const auto& widget : widgets) {
         tab.widget(widget);
+    }
+}
+
+void AttachPlanOverview(TTraceBuildState* state, const TIntrusivePtr<IOperator>& op) {
+    if (!state) {
+        return;
+    }
+
+    EnsureOverviewNode(state, *op);
+    for (const auto& child : op->Children) {
+        AttachOverviewEdge(state, *op, *child);
     }
 }
 
@@ -633,6 +794,7 @@ optimizer_trace::Node BuildPlanNode(
     optimizer_trace::Node node(id, ToStdString(op->GetExplainName()), ToStdString(op->ToString(ctx)));
     AttachStageTarget(state, *op, id);
     AttachOperatorTarget(state, *op, id);
+    AttachPlanOverview(state, op);
 
     const auto outputIUs = op->GetOutputIUs();
     AddInfoUnitField(node, "OutputColumns", "Output columns", outputIUs, op.Get());
@@ -711,9 +873,8 @@ optimizer_trace::Node BuildPlanNode(
         }
     }
 
-    const auto liveOutIt = planProps.LiveOut.find(op.get());
-    if (liveOutIt != planProps.LiveOut.end()) {
-        AddInfoUnitField(node, "LiveOut", "Live out", SortInfoUnitSet(liveOutIt->second));
+    if (op->Props.Analysis.LiveOut) {
+        AddInfoUnitField(node, "LiveOut", "Live out", SortInfoUnitSet(*op->Props.Analysis.LiveOut));
     }
 
     const auto usedIUs = SortInfoUnits(UniqueInfoUnits(op->GetUsedIUs(planProps)));
@@ -721,19 +882,18 @@ optimizer_trace::Node BuildPlanNode(
         AddInfoUnitField(node, "UsedIUs", "Used IUs", usedIUs, op.Get());
     }
 
-    const auto aliasIt = planProps.Aliases.AliasesAtOutput.find(op.get());
-    if (aliasIt != planProps.Aliases.AliasesAtOutput.end()) {
-        const auto rows = BuildAliasRows(aliasIt->second);
+    if (op->Props.Analysis.Aliases) {
+        const auto rows = BuildAliasRows(*op->Props.Analysis.Aliases);
         if (!rows.empty()) {
             node.field("Aliases", FormatPairSummary(rows))
                 .detail(BuildColumnTable("Aliases at output", rows));
         }
     }
 
-    const auto forbiddenEntries = BuildForbiddenOutEntries(*op, planProps);
-    if (!forbiddenEntries.empty()) {
-        node.field("ForbiddenOut", FormatCountedSummary(BuildForbiddenOutSummaryItems(forbiddenEntries), 3))
-            .details(BuildForbiddenOutWidgets(forbiddenEntries));
+    const auto forbiddenEntry = BuildForbiddenEntry(*op);
+    if (forbiddenEntry) {
+        node.field("Forbidden", BuildForbiddenSummaryItem(*forbiddenEntry))
+            .detail(BuildForbiddenWidget(*forbiddenEntry));
     }
 
     const auto duplicateOutputColumns = FindDuplicateOutputColumns(outputIUs);
@@ -822,7 +982,7 @@ void DefineHtmlTraceFields(optimizer_trace::Trace& trace) {
         {"LiveOut", "Live out"},
         {"UsedIUs", "Used IUs"},
         {"Aliases", "Aliases"},
-        {"ForbiddenOut", "Forbidden out"},
+        {"Forbidden", "Forbidden"},
         {"OutputConflicts", "Conflicts"},
         {"ERows", "Rows"},
         {"EBytes", "Bytes"},
@@ -831,7 +991,12 @@ void DefineHtmlTraceFields(optimizer_trace::Trace& trace) {
     });
     trace.pinFields({"ERows", "EBytes", "Selectivity", "Cost"});
     trace.definePinnedFieldPresets({
-        {"Stats", {"ERows", "EBytes", "Selectivity", "Cost"}},
+        {"None", {}},
+        {"Stages", {"Stage"}},
+        {"Stats", {"ERows", "EBytes", "Selectivity", "Cost"}}
+    });
+    trace.defineDiffFieldPresets({
+        {"None", {}},
         {"Stages", {"Stage"}}
     });
 }

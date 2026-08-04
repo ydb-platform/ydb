@@ -12,7 +12,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
     }
 
     auto op = node.Cast<TYtTransientOpBase>();
-    if (op.Maybe<TYtCopy>()) {
+    if (op.Maybe<TYtCopy>() || op.Maybe<TYtPersist>()) {
         return node;
     }
 

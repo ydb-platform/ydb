@@ -24,8 +24,10 @@ struct TEvTransportPrivate
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
-        NThreading::TPromise<TResult> Promise =
+        NThreading::TPromise<TResult> ConnectPromise =
             NThreading::NewPromise<TResult>();
+        NThreading::TPromise<ui32> DisconnectPromise =
+            NThreading::NewPromise<ui32>();
 
         TConnect(
             const NActors::TActorId& serviceId,
@@ -112,7 +114,6 @@ struct TEvTransportPrivate
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
-        const TVector<NKikimr::NDDisk::TBlockSelector> Selectors;
         const TVector<ui64> Lsns;
         NWilson::TTraceId TraceId;
         NThreading::TPromise<TResult> Promise =
@@ -121,12 +122,10 @@ struct TEvTransportPrivate
         TBatchEraseFromPBuffer(
             const NActors::TActorId serviceId,
             const NKikimr::NDDisk::TQueryCredentials& credentials,
-            TVector<NKikimr::NDDisk::TBlockSelector> selectors,
             TVector<ui64> lsns,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
-            , Selectors(std::move(selectors))
             , Lsns(std::move(lsns))
             , TraceId(std::move(traceId))
         {}
@@ -290,7 +289,7 @@ struct TEvTransportPrivate
     struct TWriteToManyPBuffers: TDisableCopyMove
     {
         using TResult = TProtoEvWriteToManyPersistentBuffersResult;
-        using TCallback = std::function<void(TResult)>;
+        using TCallback = std::function<void(const TResult&)>;
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
@@ -301,9 +300,10 @@ struct TEvTransportPrivate
         const TDuration ReplyTimeout;
 
         const TGuardedSgList Data;
+        const TCallback Callback;
+
         NWilson::TTraceId TraceId;
-        TCallback Callback;
-        ui32 NumberOfCallbackCalls = 0;
+        size_t CallbackCallCount = 0;
 
         TWriteToManyPBuffers(
             const NActors::TActorId serviceId,
@@ -314,6 +314,7 @@ struct TEvTransportPrivate
             TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
             const TDuration replyTimeout,
             const TGuardedSgList& data,
+            TCallback callback,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
@@ -323,11 +324,15 @@ struct TEvTransportPrivate
             , PersistentBufferIds(std::move(persistentBufferIds))
             , ReplyTimeout(replyTimeout)
             , Data(data)
+            , Callback(std::move(callback))
             , TraceId(std::move(traceId))
-
-        {}
+        {
+            Y_ABORT_UNLESS(Callback);
+        }
 
         ~TWriteToManyPBuffers();
+
+        void Reply(const TResult& result);
     };
 
     enum EEvents

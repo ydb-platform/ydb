@@ -1,7 +1,35 @@
 
 #include "volume_counters.h"
 
+#include <library/cpp/monlib/metrics/histogram_collector.h>
+
 namespace NYdb::NBS::NBlockStore {
+
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+const TVector<double> RequestTimeBoundsMs = {
+    0.01,   // 10th us
+    0.02,
+    0.03,
+    0.04,
+    0.05,
+    0.1,   // 100th us
+    0.25,
+    0.5,
+    0.75,
+    1,   // ms
+    2,
+    4,
+    8,
+    32,
+    128,
+    1'024,   // s
+    65'536   // minutes
+};
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -11,24 +39,39 @@ TVolumeRequestCounters::TVolumeRequestCounters(
     , ReplyOk(parent ? parent->GetCounter("ReplyOk", true) : nullptr)
     , ReplyErr(parent ? parent->GetCounter("ReplyErr", true) : nullptr)
     , Bytes(parent ? parent->GetCounter("Bytes", true) : nullptr)
+    , Inflight(parent ? parent->GetCounter("Inflight", false) : nullptr)
+    , RequestTime(
+          parent ? parent->GetHistogram(
+                       "RequestTimeMs",
+                       NMonitoring::ExplicitHistogram(RequestTimeBoundsMs))
+                 : nullptr)
 {}
 
 void TVolumeRequestCounters::RequestStarted(ui32 bytes)
 {
     if (Requests) {
-        ++*Requests;
+        Requests->Inc();
     }
     if (bytes && Bytes) {
-        *Bytes += bytes;
+        Bytes->Add(bytes);
+    }
+    if (Inflight) {
+        Inflight->Inc();
     }
 }
 
-void TVolumeRequestCounters::RequestFinished(bool ok)
+void TVolumeRequestCounters::RequestFinished(bool ok, TDuration duration)
 {
     if (ok && ReplyOk) {
-        ++*ReplyOk;
+        ReplyOk->Inc();
     } else if (!ok && ReplyErr) {
-        ++*ReplyErr;
+        ReplyErr->Inc();
+    }
+    if (RequestTime && duration != TDuration::Zero()) {
+        RequestTime->Collect(duration.MillisecondsFloat());
+    }
+    if (Inflight) {
+        Inflight->Dec();
     }
 }
 
@@ -48,9 +91,12 @@ void TVolumeCounters::RequestStarted(EBlockStoreRequest requestType, ui32 bytes)
     Get(requestType).RequestStarted(bytes);
 }
 
-void TVolumeCounters::RequestFinished(EBlockStoreRequest requestType, bool ok)
+void TVolumeCounters::RequestFinished(
+    EBlockStoreRequest requestType,
+    bool ok,
+    TDuration duration)
 {
-    Get(requestType).RequestFinished(ok);
+    Get(requestType).RequestFinished(ok, duration);
 }
 
 TVolumeRequestCounters& TVolumeCounters::Get(EBlockStoreRequest requestType)

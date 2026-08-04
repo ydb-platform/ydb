@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/yson/ypath_filtering_consumer.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -34,9 +36,8 @@ public:
     }
 
 private:
-    // TODO(babenko): migrate to std::string
-    TString ValueString_;
-    TStringOutput Output_;
+    std::string ValueString_;
+    TStdStringOutput Output_;
     const std::unique_ptr<IYsonConsumer> Consumer_;
 };
 

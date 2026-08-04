@@ -3,6 +3,8 @@
 #include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
+
 namespace NFq {
 
 NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev) const {
@@ -35,10 +37,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     const auto ttl = TDuration::Seconds(5);
     const auto deadline = startTime + ttl * 3;
 
-    CPS_LOG_T("NodesHealthCheckRequest: {" << request.DebugString() << "}");
+    YDB_LOG_TRACE("NodesHealthCheckRequest",
+        {"request", request.DebugString()});
 
     if (const auto& issues = ValidateRequest(ev)) {
-        CPS_LOG_W("NodesHealthCheckRequest: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
+        YDB_LOG_WARN("NodesHealthCheckRequest: validation",
+            {"request", request.DebugString()},
+            {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvNodesHealthCheckResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(NodesHealthCheckRequest, "", 0, "", "", delta, false);

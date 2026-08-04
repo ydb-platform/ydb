@@ -11,3 +11,15 @@
 +
  #include "arrow/io/interfaces.h"
  #include "arrow/io/memory.h"
+--- contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/api.h	(aa70153420ba8a2bf77c67eeb4e46307591b2560)
++++ contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/api.h	(working tree)
+@@ -26,7 +26,9 @@
+ #ifdef ARROW_GCS
+ #  error #include "arrow/filesystem/gcsfs.h"  // IWYU pragma: export
+ #endif
++#if USE_HDFS
+ #error #include "arrow/filesystem/hdfs.h"     // IWYU pragma: export
++#endif
+ #include "arrow/filesystem/localfs.h"  // IWYU pragma: export
+ #include "arrow/filesystem/mockfs.h"   // IWYU pragma: export
+ #ifdef ARROW_S3

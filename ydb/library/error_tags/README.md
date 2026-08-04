@@ -129,8 +129,8 @@ that ends up in the "wrong" range still works.
 | Code | Component              | Path |
 |------|------------------------|------|
 | `70` | topics / persqueue     | `core/persqueue`, `library/persqueue` |
-| `71` | kafka proxy            | `core/kafka_proxy`, `library/kafka` |
-| `72` | pg wire / proxy        | `core/pgproxy`, `core/local_pgwire` |
+| `71` | kafka proxy            | `core/kafka_proxy`, `public/sdk/cpp/src/library/kafka` |
+| `72` | reserved (legacy pg wire) | removed |
 | `73` | http proxy / ymq (sqs) | `core/http_proxy`, `core/ymq`, `library/http_proxy` |
 | `74` | public http            | `core/public_http` |
 | `75`–`79` | *reserved*        | |

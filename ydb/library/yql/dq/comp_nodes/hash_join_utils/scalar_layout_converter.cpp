@@ -13,6 +13,7 @@
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/generic/guid.h>
 #include <util/generic/vector.h>
 #include <util/stream/str.h>
 #include <util/system/unaligned_mem.h>
@@ -40,6 +41,26 @@ struct IColumnDataExtractor {
 
 // ------------------------------------------------------------
 
+template <typename TLayout>
+void StoreFixedSizeLayout(TLayout& dst, const NYql::NUdf::TUnboxedValue& value) {
+    if constexpr (std::is_same_v<TLayout, TGUID>) {
+        const auto ref = value.AsStringRef();
+        Y_ENSURE(ref.Size() == sizeof(TGUID), "Wrong Uuid size: " << ref.Size());
+        dst = ReadUnaligned<TGUID>(ref.Data());
+    } else {
+        dst = value.Get<TLayout>();
+    }
+}
+
+template <typename TLayout>
+NYql::NUdf::TUnboxedValue CreateFixedSizeValue(const TLayout& data) {
+    if constexpr (std::is_same_v<TLayout, TGUID>) {
+        return MakeString(NYql::NUdf::TStringRef(reinterpret_cast<const char*>(&data), sizeof(TGUID)));
+    } else {
+        return NYql::NUdf::TUnboxedValuePod(data);
+    }
+}
+
 template <typename TLayout, bool Nullable>
 class TFixedSizeColumnDataExtractor : public IColumnDataExtractor {
 public:
@@ -57,11 +78,11 @@ public:
                 std::memset(dataStorage.data(), 0, sizeof(TLayout));
             } else {
                 bitmapStorage[0] = 1; // not null
-                *reinterpret_cast<TLayout*>(dataStorage.data()) = value.Get<TLayout>();
+                StoreFixedSizeLayout(*reinterpret_cast<TLayout*>(dataStorage.data()), value);
             }
         } else {
             bitmapStorage[0] = 1;
-            *reinterpret_cast<TLayout*>(dataStorage.data()) = value.Get<TLayout>();
+            StoreFixedSizeLayout(*reinterpret_cast<TLayout*>(dataStorage.data()), value);
         }
 
         columnsData.push_back(dataStorage.data());
@@ -85,7 +106,7 @@ public:
                     std::memset(&dataPtr[i], 0, sizeof(TLayout));
                 } else {
                     bitmapPtr[i] = 1; // not null
-                    dataPtr[i] = values[i].Get<TLayout>();
+                    StoreFixedSizeLayout(dataPtr[i], values[i]);
                 }
                 columnsData.push_back(reinterpret_cast<const ui8*>(&dataPtr[i]));
                 columnsNullBitmap.push_back(&bitmapPtr[i]);
@@ -93,7 +114,7 @@ public:
         } else {
             for (ui32 i = 0; i < count; ++i) {
                 bitmapPtr[i] = 1;
-                dataPtr[i] = values[i].Get<TLayout>();
+                StoreFixedSizeLayout(dataPtr[i], values[i]);
                 columnsData.push_back(reinterpret_cast<const ui8*>(&dataPtr[i]));
                 columnsNullBitmap.push_back(&bitmapPtr[i]);
             }
@@ -113,8 +134,8 @@ public:
             }
         }
 
-        TLayout* data = reinterpret_cast<TLayout*>(columnsData[0]) + tupleIndex;
-        return NYql::NUdf::TUnboxedValuePod(*data);
+        const TLayout* data = reinterpret_cast<const TLayout*>(columnsData[0]) + tupleIndex;
+        return CreateFixedSizeValue(*data);
     }
 
     ui32 GetElementSize() override {

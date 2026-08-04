@@ -14,11 +14,14 @@
 import base64
 import json
 import logging
+from functools import partial
 from itertools import tee
 
 import jmespath
 
+from botocore.context import with_current_context
 from botocore.exceptions import PaginationError
+from botocore.useragent import register_feature_id
 from botocore.utils import merge_dicts, set_value_from_jmespath
 
 log = logging.getLogger(__name__)
@@ -179,7 +182,7 @@ class PaginatorModel:
             single_paginator_config = self._paginator_config[operation_name]
         except KeyError:
             raise ValueError(
-                "Paginator for operation does not exist: %s" % operation_name
+                f"Paginator for operation does not exist: {operation_name}"
             )
         return single_paginator_config
 
@@ -232,7 +235,7 @@ class PageIterator:
     @resume_token.setter
     def resume_token(self, value):
         if not isinstance(value, dict):
-            raise ValueError("Bad starting token: %s" % value)
+            raise ValueError(f"Bad starting token: {value}")
 
         if 'boto_truncate_amount' in value:
             token_keys = sorted(self._input_token + ['boto_truncate_amount'])
@@ -243,7 +246,7 @@ class PageIterator:
         if token_keys == dict_keys:
             self._resume_token = self._token_encoder.encode(value)
         else:
-            raise ValueError("Bad starting token: %s" % value)
+            raise ValueError(f"Bad starting token: {value}")
 
     @property
     def non_aggregate_part(self):
@@ -321,8 +324,7 @@ class PageIterator:
                     and previous_next_token == next_token
                 ):
                     message = (
-                        f"The same next token was received "
-                        f"twice: {next_token}"
+                        f"The same next token was received twice: {next_token}"
                     )
                     raise PaginationError(message=message)
                 self._inject_token_into_kwargs(current_kwargs, next_token)
@@ -353,6 +355,7 @@ class PageIterator:
                 # Yield result directly if it is not a list.
                 yield results
 
+    @with_current_context(partial(register_feature_id, 'PAGINATOR'))
     def _make_request(self, current_kwargs):
         return self._method(**current_kwargs)
 
@@ -546,7 +549,7 @@ class PageIterator:
         """
         log.debug(
             "Attempting to fall back to old starting token parser. For "
-            "token: %s" % self._starting_token
+            f"token: {self._starting_token}"
         )
         if self._starting_token is None:
             return None
@@ -577,7 +580,7 @@ class PageIterator:
         len_deprecated_token = len(deprecated_token)
         len_input_token = len(self._input_token)
         if len_deprecated_token > len_input_token:
-            raise ValueError("Bad starting token: %s" % self._starting_token)
+            raise ValueError(f"Bad starting token: {self._starting_token}")
         elif len_deprecated_token < len_input_token:
             log.debug(
                 "Old format starting token does not contain all input "

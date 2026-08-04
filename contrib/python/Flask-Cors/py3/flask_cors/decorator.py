@@ -1,14 +1,23 @@
+from __future__ import annotations
+
 import logging
+from collections.abc import Callable
 from functools import update_wrapper
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
-from flask import current_app, make_response, request
+from flask import Response, current_app, make_response, request
 
-from .core import FLASK_CORS_EVALUATED, get_cors_options, set_cors_headers
+from .core import FLASK_CORS_EVALUATED, CrossOriginOptionsInput, get_cors_options, set_cors_headers
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 LOG = logging.getLogger(__name__)
 
+F = TypeVar("F", bound=Callable[..., Any])
 
-def cross_origin(*args, **kwargs):
+
+def cross_origin(*args: Any, **kwargs: Unpack[CrossOriginOptionsInput]) -> Callable[[F], F]:
     """
     This function is the decorator which is used to wrap a Flask route with.
     In the simplest case, simply use the default parameters to allow all
@@ -96,7 +105,7 @@ def cross_origin(*args, **kwargs):
     """
     _options = kwargs
 
-    def decorator(f):
+    def decorator(f: F) -> F:
         LOG.debug("Enabling %s for cross_origin using options:%s", f, _options)
 
         # If True, intercept OPTIONS requests by modifying the view function,
@@ -107,15 +116,20 @@ def cross_origin(*args, **kwargs):
         # decorator (which is actually wraps the function object we return)
         # intercepts OPTIONS handling, and requests will not have CORS headers
         if _options.get("automatic_options", True):
-            f.required_methods = getattr(f, "required_methods", set())
-            f.required_methods.add("OPTIONS")
-            f.provide_automatic_options = False
+            # ``f`` is a plain view function; these attributes are read by
+            # Flask's routing. Use an ``Any`` alias so the dynamic attribute
+            # assignment type-checks.
+            view_func: Any = f
+            required_methods = set(getattr(f, "required_methods", set()))
+            required_methods.add("OPTIONS")
+            view_func.required_methods = required_methods
+            view_func.provide_automatic_options = False
 
-        def wrapped_function(*args, **kwargs):
+        def wrapped_function(*args: Any, **kwargs: Any) -> Response:
             # Handle setting of Flask-Cors parameters
             options = get_cors_options(current_app, _options)
 
-            if options.get("automatic_options") and request.method == "OPTIONS":
+            if options.automatic_options and request.method == "OPTIONS":
                 resp = current_app.make_default_options_response()
             else:
                 resp = make_response(f(*args, **kwargs))
@@ -124,6 +138,6 @@ def cross_origin(*args, **kwargs):
             setattr(resp, FLASK_CORS_EVALUATED, True)
             return resp
 
-        return update_wrapper(wrapped_function, f)
+        return cast(F, update_wrapper(wrapped_function, f))
 
     return decorator

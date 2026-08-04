@@ -64,6 +64,8 @@ TString ConvertToStatisticsTypeString(EStatisticsType type) {
             return "FilteredFactTable";
         case EStatisticsType::ManyManyJoin:
             return "ManyManyJoin";
+        case EStatisticsType::Constant:
+            return "Constant";
     }
 }
 

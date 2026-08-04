@@ -47,6 +47,9 @@ private:
     void OnEraseResponse(const TDBGEraseResponse& response);
     void Reply(TVector<ui64> eraseOk, TVector<ui64> eraseFailed);
 
+    void ScheduleRequestTimeout();
+    void OnRequestTimeout();
+
     NActors::TActorSystem const* ActorSystem;
     const TChildLogTitle LogTitle;
     const TVChunkConfig VChunkConfig;
@@ -54,6 +57,7 @@ private:
     const NWilson::TSpan Span;
     const THostIndex Host;
     const TEraseHint Hint;
+    const TDuration RequestTimeout;
 
     NThreading::TPromise<TResponse> Promise =
         NThreading::NewPromise<TResponse>();

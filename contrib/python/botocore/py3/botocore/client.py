@@ -12,12 +12,17 @@
 # language governing permissions and limitations under the License.
 import logging
 
-from botocore import waiter, xform_name
+from botocore import (
+    UNSIGNED,  # noqa: F401
+    waiter,
+    xform_name,
+)
 from botocore.args import ClientArgsCreator
-from botocore.auth import AUTH_TYPE_MAPS
+from botocore.auth import AUTH_TYPE_MAPS, resolve_auth_type
 from botocore.awsrequest import prepare_request_dict
 from botocore.compress import maybe_compress_request
 from botocore.config import Config
+from botocore.context import with_current_context
 from botocore.credentials import RefreshableCredentials
 from botocore.discovery import (
     EndpointDiscoveryHandler,
@@ -26,6 +31,7 @@ from botocore.discovery import (
 )
 from botocore.docs.docstring import ClientMethodDocstring, PaginatorDocstring
 from botocore.exceptions import (
+    ClientError,  # noqa: F401
     DataNotFoundError,
     InvalidEndpointDiscoveryConfigurationError,
     OperationNotPageableError,
@@ -41,41 +47,21 @@ from botocore.httpchecksum import (
 from botocore.model import ServiceModel
 from botocore.paginate import Paginator
 from botocore.retries import adaptive, standard
-from botocore.useragent import UserAgentString
+from botocore.useragent import UserAgentString, register_feature_id
 from botocore.utils import (
     CachedProperty,
     EventbridgeSignerSetter,
+    S3ArnParamHandler,  # noqa: F401
+    S3ControlArnParamHandler,  # noqa: F401
     S3ControlArnParamHandlerv2,
+    S3ControlEndpointSetter,  # noqa: F401
+    S3EndpointSetter,  # noqa: F401
     S3ExpressIdentityResolver,
+    S3RegionRedirector,  # noqa: F401
     S3RegionRedirectorv2,
     ensure_boolean,
     get_service_module_name,
 )
-
-# Keep these imported.  There's pre-existing code that uses:
-# "from botocore.client import UNSIGNED"
-# "from botocore.client import ClientError"
-# etc.
-from botocore.exceptions import ClientError  # noqa
-from botocore.utils import S3ArnParamHandler  # noqa
-from botocore.utils import S3ControlArnParamHandler  # noqa
-from botocore.utils import S3ControlEndpointSetter  # noqa
-from botocore.utils import S3EndpointSetter  # noqa
-from botocore.utils import S3RegionRedirector  # noqa
-from botocore import UNSIGNED  # noqa
-
-
-_LEGACY_SIGNATURE_VERSIONS = frozenset(
-    (
-        'v2',
-        'v3',
-        'v3https',
-        'v4',
-        's3',
-        's3v4',
-    )
-)
-
 
 logger = logging.getLogger(__name__)
 history_recorder = get_global_history_recorder()
@@ -148,15 +134,19 @@ class ClientCreator:
         region_name, client_config = self._normalize_fips_region(
             region_name, client_config
         )
+        if auth := service_model.metadata.get('auth'):
+            service_signature_version = resolve_auth_type(auth)
+        else:
+            service_signature_version = service_model.metadata.get(
+                'signatureVersion'
+            )
         endpoint_bridge = ClientEndpointBridge(
             self._endpoint_resolver,
             scoped_config,
             client_config,
             service_signing_name=service_model.metadata.get('signingName'),
             config_store=self._config_store,
-            service_signature_version=service_model.metadata.get(
-                'signatureVersion'
-            ),
+            service_signature_version=service_signature_version,
         )
         client_args = self._get_client_args(
             service_model,
@@ -183,6 +173,7 @@ class ClientCreator:
         )
         self._register_s3express_events(client=service_client)
         self._register_s3_control_events(client=service_client)
+        self._register_importexport_events(client=service_client)
         self._register_endpoint_discovery(
             service_client, endpoint_url, client_config
         )
@@ -199,7 +190,7 @@ class ClientCreator:
         bases = [BaseClient]
         service_id = service_model.service_id.hyphenize()
         self._event_emitter.emit(
-            'creating-client-class.%s' % service_id,
+            f'creating-client-class.{service_id}',
             class_attributes=class_attributes,
             base_classes=bases,
         )
@@ -223,10 +214,10 @@ class ClientCreator:
                 else:
                     client_config = config_use_fips_endpoint
                 logger.warning(
-                    'transforming region from %s to %s and setting '
+                    f'transforming region from {region_name} to '
+                    f'{normalized_region_name} and setting '
                     'use_fips_endpoint to true. client should not '
                     'be configured with a fips psuedo region.'
-                    % (region_name, normalized_region_name)
                 )
                 region_name = normalized_region_name
         return region_name, client_config
@@ -252,6 +243,9 @@ class ClientCreator:
             self._register_v2_adaptive_retries(client)
         elif retry_mode == 'legacy':
             self._register_legacy_retries(client)
+        else:
+            return
+        register_feature_id(f'RETRY_MODE_{retry_mode.upper()}')
 
     def _register_v2_standard_retries(self, client):
         max_attempts = client.meta.config.retries.get('total_max_attempts')
@@ -289,7 +283,7 @@ class ClientCreator:
         handler = self._retry_handler_factory.create_retry_handler(
             retry_config, endpoint_prefix
         )
-        unique_id = 'retry-config-%s' % service_event_name
+        unique_id = f'retry-config-{service_event_name}'
         client.meta.events.register(
             f"needs-retry.{service_event_name}", handler, unique_id=unique_id
         )
@@ -487,11 +481,47 @@ class ClientCreator:
             return
 
         if signature_version.startswith('v4-s3express'):
-            return f'{signature_version}'
+            return signature_version
 
         for suffix in ['-query', '-presign-post']:
             if signature_version.endswith(suffix):
                 return f's3{suffix}'
+
+    def _register_importexport_events(
+        self,
+        client,
+        endpoint_bridge=None,
+        endpoint_url=None,
+        client_config=None,
+        scoped_config=None,
+    ):
+        if client.meta.service_model.service_name != 'importexport':
+            return
+        self._set_importexport_signature_version(
+            client.meta, client_config, scoped_config
+        )
+
+    def _set_importexport_signature_version(
+        self, client_meta, client_config, scoped_config
+    ):
+        # This will return the manually configured signature version, or None
+        # if none was manually set. If a customer manually sets the signature
+        # version, we always want to use what they set.
+        configured_signature_version = _get_configured_signature_version(
+            'importexport', client_config, scoped_config
+        )
+        if configured_signature_version is not None:
+            return
+
+        # importexport has a modeled signatureVersion of v2, but we
+        # previously switched to v4 via endpoint.json before endpoint rulesets.
+        # Override the model's signatureVersion for backwards compatability.
+        client_meta.events.register(
+            'choose-signer.importexport', self._default_signer_to_sigv4
+        )
+
+    def _default_signer_to_sigv4(self, signature_version, **kwargs):
+        return 'v4'
 
     def _get_client_args(
         self,
@@ -573,7 +603,7 @@ class ClientCreator:
             method_name=operation_name,
             event_emitter=self._event_emitter,
             method_description=operation_model.documentation,
-            example_prefix='response = client.%s' % py_operation_name,
+            example_prefix=f'response = client.{py_operation_name}',
             include_signature=False,
         )
         _api_call.__doc__ = docstring
@@ -827,27 +857,29 @@ class ClientEndpointBridge:
         if configured_version is not None:
             return configured_version
 
-        potential_versions = resolved.get('signatureVersions', [])
-        if (
-            self.service_signature_version is not None
-            and self.service_signature_version
-            not in _LEGACY_SIGNATURE_VERSIONS
-        ):
-            # Prefer the service model as most specific
-            # source of truth for new signature versions.
-            potential_versions = [self.service_signature_version]
+        # These have since added the "auth" key to the service model
+        # with "aws.auth#sigv4", but preserve existing behavior from
+        # when we preferred endpoints.json over the service models
+        if service_name in ('s3', 's3-control'):
+            return 's3v4'
 
-        # Pick a signature version from the endpoint metadata if present.
-        if 'signatureVersions' in resolved:
-            if service_name == 's3':
-                return 's3v4'
+        if self.service_signature_version is not None:
+            # Prefer the service model
+            potential_versions = [self.service_signature_version]
+        else:
+            # Fall back to endpoints.json to preserve existing behavior, which
+            # may be useful for users who have custom service models
+            potential_versions = resolved.get('signatureVersions', [])
+            # This was added for the V2 -> V4 transition,
+            # for services that added V4 after V2 in endpoints.json
             if 'v4' in potential_versions:
                 return 'v4'
-            # Now just iterate over the signature versions in order until we
-            # find the first one that is known to Botocore.
-            for known in potential_versions:
-                if known in AUTH_TYPE_MAPS:
-                    return known
+        # Now just iterate over the signature versions in order until we
+        # find the first one that is known to Botocore.
+        for known in potential_versions:
+            if known in AUTH_TYPE_MAPS:
+                return known
+
         raise UnknownSignatureVersionError(
             signature_version=potential_versions
         )
@@ -929,11 +961,18 @@ class BaseClient:
         self.meta.events.register(
             f"request-created.{service_id}", self._request_signer.handler
         )
+        # Rebuild user agent string right before request is sent
+        # to ensure all registered features are included.
+        self.meta.events.register_last(
+            f"request-created.{service_id}",
+            self._user_agent_creator.rebuild_and_replace_user_agent_handler,
+        )
 
     @property
     def _service_model(self):
         return self.meta.service_model
 
+    @with_current_context()
     def _make_api_call(self, operation_name, api_params):
         operation_model = self._service_model.operation_model(operation_name)
         service_name = self._service_model.service_name
@@ -953,8 +992,10 @@ class BaseClient:
             'client_region': self.meta.region_name,
             'client_config': self.meta.config,
             'has_streaming_input': operation_model.has_streaming_input,
-            'auth_type': operation_model.auth_type,
+            'auth_type': operation_model.resolved_auth_type,
+            'unsigned_payload': operation_model.unsigned_payload,
         }
+
         api_params = self._emit_api_params(
             api_params=api_params,
             operation_model=operation_model,
@@ -982,9 +1023,7 @@ class BaseClient:
 
         service_id = self._service_model.service_id.hyphenize()
         handler, event_response = self.meta.events.emit_until_response(
-            'before-call.{service_id}.{operation_name}'.format(
-                service_id=service_id, operation_name=operation_name
-            ),
+            f'before-call.{service_id}.{operation_name}',
             model=operation_model,
             params=request_dict,
             request_signer=self._request_signer,
@@ -1003,9 +1042,7 @@ class BaseClient:
             )
 
         self.meta.events.emit(
-            'after-call.{service_id}.{operation_name}'.format(
-                service_id=service_id, operation_name=operation_name
-            ),
+            f'after-call.{service_id}.{operation_name}',
             http_response=http,
             parsed=parsed_response,
             model=operation_model,
@@ -1027,10 +1064,7 @@ class BaseClient:
             return self._endpoint.make_request(operation_model, request_dict)
         except Exception as e:
             self.meta.events.emit(
-                'after-call-error.{service_id}.{operation_name}'.format(
-                    service_id=self._service_model.service_id.hyphenize(),
-                    operation_name=operation_model.name,
-                ),
+                f'after-call-error.{self._service_model.service_id.hyphenize()}.{operation_model.name}',
                 exception=e,
                 context=request_context,
             )
@@ -1259,13 +1293,13 @@ class BaseClient:
         """
         config = self._get_waiter_config()
         if not config:
-            raise ValueError("Waiter does not exist: %s" % waiter_name)
+            raise ValueError(f"Waiter does not exist: {waiter_name}")
         model = waiter.WaiterModel(config)
         mapping = {}
         for name in model.waiter_names:
             mapping[xform_name(name)] = name
         if waiter_name not in mapping:
-            raise ValueError("Waiter does not exist: %s" % waiter_name)
+            raise ValueError(f"Waiter does not exist: {waiter_name}")
 
         return waiter.create_waiter_with_client(
             mapping[waiter_name], model, self

@@ -25,6 +25,7 @@ Y_UNIT_TEST(Test) {
     const ui32 n = 100;
     for (ui32 i = 0; i < n; ++i) {
         auto c = i;
+        // NOLINTNEXTLINE(performance-move-const-arg)
         lists.push_back(TListType(lists.back(), std::move(c)));
     }
 
@@ -57,6 +58,7 @@ Y_UNIT_TEST(Test) {
     rlists.push_back(list1);
     for (ui32 i = 0; i < n; ++i) {
         auto c = i;
+        // NOLINTNEXTLINE(performance-move-const-arg)
         rlists.push_back(TListType(std::move(c), rlists.back()));
     }
 

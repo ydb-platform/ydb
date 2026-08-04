@@ -6,35 +6,8 @@
 #include <ydb/core/fq/libs/config/protos/common.pb.h>
 #include <ydb/core/fq/libs/config/protos/control_plane_storage.pb.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
-#include <ydb/core/fq/libs/actors/logging/log.h>
 
-#define CPS_LOG_N(s) \
-    LOG_YQ_CONTROL_PLANE_STORAGE_NOTICE(s)
-#define CPS_LOG_D(s) \
-    LOG_YQ_CONTROL_PLANE_STORAGE_DEBUG(s)
-#define CPS_LOG_I(s) \
-    LOG_YQ_CONTROL_PLANE_STORAGE_INFO(s)
-#define CPS_LOG_W(s) \
-    LOG_YQ_CONTROL_PLANE_STORAGE_WARN(s)
-#define CPS_LOG_E(s) \
-    LOG_YQ_CONTROL_PLANE_STORAGE_ERROR(s)
-#define CPS_LOG_T(s) \
-    LOG_YQ_CONTROL_PLANE_STORAGE_TRACE(s)
-
-
-#define CPS_LOG_AS_N(a, s) \
-    LOG_YQ_CONTROL_PLANE_STORAGE_AS_NOTICE(a, s)
-#define CPS_LOG_AS_D(a, s) \
-    LOG_YQ_CONTROL_PLANE_STORAGE_AS_DEBUG(a, s)
-#define CPS_LOG_AS_I(a, s) \
-    LOG_YQ_CONTROL_PLANE_STORAGE_AS_INFO(a, s)
-#define CPS_LOG_AS_W(a, s) \
-    LOG_YQ_CONTROL_PLANE_STORAGE_AS_WARN(a, s)
-#define CPS_LOG_AS_E(a, s) \
-    LOG_YQ_CONTROL_PLANE_STORAGE_AS_ERROR(a, s)
-#define CPS_LOG_AS_T(a, s) \
-    LOG_YQ_CONTROL_PLANE_STORAGE_AS_TRACE(a, s)
-
+#include <ydb/library/actors/core/log.h>
 
 namespace NFq {
 

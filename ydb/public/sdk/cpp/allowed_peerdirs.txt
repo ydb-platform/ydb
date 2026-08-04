@@ -1,0 +1,6 @@
+# Mirrors ydb-cpp-sdk/.github/scripts/copy_sources.sh.
+ydb/public/sdk/cpp/
+ydb/public/api/
+library/cpp/
+contrib/
+util/

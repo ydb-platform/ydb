@@ -36,8 +36,9 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -127,7 +128,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 Register(NPQ::NMLP::CreateDescriber(SelfId(), {
                     .DatabasePath = Database,
                     .TopicName = FullTopicPath_,
-                    .Consumer = QueueUrl_->Consumer,
+                    .Consumer = ResolveConsumerNameFromQueueUrl(QueueUrl_->Consumer, ctx),
                 }));
             }
 
@@ -192,7 +193,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
+            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size())("path", FullTopicPath_);
             const auto& response = result->ResultSet.front();
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
@@ -211,10 +212,10 @@ namespace NKikimr::NSqsTopic::V1 {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                                                 TStringBuilder() << "Failed to describe topic: " << response.Status));
             }
-            Y_ABORT_UNLESS(response.PQGroupInfo);
+            AFL_ENSURE(response.PQGroupInfo)("path", FullTopicPath_);
             PQGroup = response.PQGroupInfo->Description;
             SelfInfo = response.Self->Info;
-            ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), QueueUrl_->Consumer);
+            ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), QueueUrl_->Consumer, ActorContext());
             if (!ConsumerConfig && QueueUrl_->Consumer != GetDefaultSqsConsumerName()) {
                 return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer: \"{}\")", QueueUrl_->Consumer.c_str())));
             }

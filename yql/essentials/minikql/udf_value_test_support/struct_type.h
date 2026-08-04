@@ -17,6 +17,11 @@ struct TStructMemberName {
     constexpr TStructMemberName(const char (&str)[N]) {
         std::copy_n(str, N, Data);
     }
+    constexpr explicit TStructMemberName(char fill) {
+        std::fill_n(Data, N - 1, fill);
+        Data[N - 1] = '\0';
+    }
+
     // NOLINTNEXTLINE(google-explicit-constructor)
     constexpr operator std::string_view() const {
         return std::string_view{Data, N - 1};
@@ -30,6 +35,8 @@ struct TStructMemberName {
 
 template <TStructMemberName Name, typename T>
 struct TStructMember {
+    using TValueType = T;
+
     T Value;
     static constexpr TStringBuf MemberName() {
         return Name;
@@ -55,8 +62,18 @@ private:
         return indices;
     }
 
+    static consteval std::array<size_t, sizeof...(TMembers)> GetOriginalIndexMapping() {
+        const auto sorted = GetSortedIndexMapping();
+        std::array<size_t, sizeof...(TMembers)> inverse{};
+        for (size_t sortedIdx = 0; sortedIdx < sorted.size(); ++sortedIdx) {
+            inverse[sorted[sortedIdx]] = sortedIdx;
+        }
+        return inverse;
+    }
+
 public:
     static constexpr auto SortedIndexMapping = GetSortedIndexMapping();
+    static constexpr auto OriginalIndexMapping = GetOriginalIndexMapping();
 
     std::tuple<TMembers...> Members;
 };

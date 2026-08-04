@@ -22,7 +22,7 @@ def _cell_to_str(value):
 def _secret_value_not_leaked_to_sysviews(config, secret_value):
     sys_table = f"`{DATABASE}/.sys/top_queries_by_cpu_time_one_minute`"
     query = f"""
-    SELECT QueryText FROM {sys_table} WHERE String::Contains(QueryText, "ALTER SECRET")
+    SELECT QueryText FROM {sys_table} WHERE String::Contains(QueryText, "SECRET")
     """
     result_sets = run_with_assert(config, query)
     if not result_sets or not result_sets[0].rows:
@@ -37,7 +37,7 @@ def _secret_value_not_leaked_to_sysviews(config, secret_value):
 def _secret_value_not_leaked_to_query_sessions(config, secret_value):
     sys_table = f"`{DATABASE}/.sys/query_sessions`"
     query = f"""
-    SELECT Query FROM {sys_table} WHERE String::Contains(Query, "ALTER SECRET")
+    SELECT Query FROM {sys_table} WHERE String::Contains(Query, "SECRET")
     """
     result_sets = run_with_assert(config, query)
     if not result_sets or not result_sets[0].rows:
@@ -61,12 +61,26 @@ def test_secret_value_not_leaked_to_sysviews(db_fixture):
             db_fixture,
             f"ALTER SECRET `{secret_name}` WITH (value='{secret_value}');",
         )
+    # Exercise the new DDL syntax variants to ensure they don't leak secret values either
+    for _ in range(5):
+        run_with_assert(
+            db_fixture,
+            f"CREATE OR REPLACE SECRET `{secret_name}` WITH (value='{secret_value}');",
+        )
+    run_with_assert(
+        db_fixture,
+        f"CREATE SECRET IF NOT EXISTS `{secret_name}` WITH (value='{secret_value}');",
+    )
+    run_with_assert(
+        db_fixture,
+        f"ALTER SECRET IF EXISTS `{secret_name}` WITH (value='{secret_value}');",
+    )
 
     # We'll check in 'one_minute' sysview, so we need to wait for two minutes.
     time.sleep(120)
 
     assert not _secret_value_not_leaked_to_sysviews(db_fixture, secret_value), (
-        "secret literal must not appear in ALTER SECRET rows in " ".sys/top_queries_by_cpu_time_one_minute"
+        "secret literal must not appear in SECRET DDL rows in " ".sys/top_queries_by_cpu_time_one_minute"
     )
 
     assert not _secret_value_not_leaked_to_query_sessions(

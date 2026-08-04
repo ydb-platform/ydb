@@ -16,6 +16,8 @@
 #include <util/system/tempfile.h>
 #include <util/thread/pool.h>
 #include <util/system/file_lock.h>
+#include <util/datetime/base.h>
+#include <util/system/fs.h>
 
 using namespace NYql;
 using namespace NThreading;
@@ -557,5 +559,41 @@ Y_UNIT_TEST(SocketTimeout) {
 
     auto url = server->GetUrl();
     UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl(url, {}), std::exception, "can not read from socket input stream");
+}
+
+Y_UNIT_TEST(PutFileStrippedWithBandwidthLimit) {
+    TTempFileHandle testFile;
+    NFs::Copy("/proc/self/exe", testFile.GetName());
+    i64 fileSize = GetFileLength(testFile.GetName().c_str());
+    UNIT_ASSERT_GT(fileSize, 0);
+
+    TFileStorageConfig paramsNoLimit;
+    TFileStoragePtr fsNoLimit = CreateFileStorage(paramsNoLimit);
+    TInstant startNoLimit = TInstant::Now();
+    auto linkNoLimit = fsNoLimit->PutFileStripped(testFile.GetName());
+    TDuration timeNoLimit = TInstant::Now() - startNoLimit;
+
+    UNIT_ASSERT(linkNoLimit);
+    UNIT_ASSERT(!linkNoLimit->GetStorageFileName().empty());
+
+    // Calculate current bandwidth and set limit to half of it
+    double currentBandwidthBytesPerMs = static_cast<double>(fileSize) / timeNoLimit.MilliSeconds();
+    double limitedBandwidthBytesPerMs = currentBandwidthBytesPerMs / 2.0;
+    ui64 limitedBandwidthKBps = static_cast<ui64>(limitedBandwidthBytesPerMs * 1000 / 1024);
+    TString bandwidthLimitStr = TStringBuilder() << limitedBandwidthKBps << "K";
+
+    TFileStorageConfig paramsWithLimit;
+    paramsWithLimit.SetStripBandwidthLimit(bandwidthLimitStr);
+    TFileStoragePtr fsWithLimit = CreateFileStorage(paramsWithLimit);
+    TInstant startWithLimit = TInstant::Now();
+    auto linkWithLimit = fsWithLimit->PutFileStripped(testFile.GetName());
+    TDuration timeWithLimit = TInstant::Now() - startWithLimit;
+
+    UNIT_ASSERT(linkWithLimit);
+    UNIT_ASSERT(!linkWithLimit->GetStorageFileName().empty());
+    // Both should produce identical stripped binaries
+    UNIT_ASSERT_EQUAL(linkNoLimit->GetMd5(), linkWithLimit->GetMd5());
+    // Bandwidth-limited operation should take at least 1.5x longer
+    UNIT_ASSERT_GT(timeWithLimit, timeNoLimit * 1.5);
 }
 } // Y_UNIT_TEST_SUITE(TFileStorageTests)

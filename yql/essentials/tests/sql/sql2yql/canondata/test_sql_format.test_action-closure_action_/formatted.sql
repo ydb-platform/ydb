@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 DEFINE ACTION $action($b, $c) AS
     $d = $b + $c;
 

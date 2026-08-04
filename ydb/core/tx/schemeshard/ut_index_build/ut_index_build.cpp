@@ -1084,10 +1084,12 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         MergeIndexTableShardsOnlyWhenReady(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
     }
 
-    void IndexPartitioningIsPersisted(NKikimrSchemeOp::EIndexType indexType) {
+    void IndexPartitioningIsPersisted(NKikimrSchemeOp::EIndexType indexType, bool alwaysSetSystemOwner = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+
+        runtime.GetAppData().AlwaysSetSystemOwner = alwaysSetSystemOwner;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -1142,26 +1144,34 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             NLs::IndexesCount(1)
         });
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index"), {
+        TVector<NLs::TCheckFunc> indexChecks = {
             NLs::PathExist,
             NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)
-        });
-
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable", true, true), {
+        };
+        TVector<NLs::TCheckFunc> indexImplTableChecks = {
             NLs::IsTable,
             NLs::PartitionCount(3),
             NLs::MinPartitionsCountEqual(3),
             NLs::MaxPartitionsCountEqual(3),
             NLs::PartitionKeys({"alice", "bob", ""})
-        });
+        };
+        if (alwaysSetSystemOwner) {
+            // When AlwaysSetSystemOwner is enabled the owner of the index
+            // and its implementation table is the system user.
+            indexChecks.push_back(NLs::HasOwner(BUILTIN_ACL_BASIC_OWNER));
+            indexImplTableChecks.push_back(NLs::HasOwner(BUILTIN_ACL_BASIC_OWNER));
+        }
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index"), indexChecks);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable", true, true), indexImplTableChecks);
     }
 
-    Y_UNIT_TEST(IndexPartitioningIsPersisted) {
-        IndexPartitioningIsPersisted(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
+    Y_UNIT_TEST_FLAG(IndexPartitioningIsPersisted, AlwaysSetSystemOwner) {
+        IndexPartitioningIsPersisted(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal, AlwaysSetSystemOwner);
     }
 
-    Y_UNIT_TEST(IndexPartitioningIsPersistedUniq) {
-        IndexPartitioningIsPersisted(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
+    Y_UNIT_TEST_FLAG(IndexPartitioningIsPersistedUniq, AlwaysSetSystemOwner) {
+        IndexPartitioningIsPersisted(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique, AlwaysSetSystemOwner);
     }
 
     void DropIndex(NKikimrSchemeOp::EIndexType indexType) {
@@ -1786,6 +1796,41 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                 handle->Get()->Record.GetIssues());
             env.TestWaitNotification(runtime, txId);
         }
+    }
+
+    // Check that oldest builds are erased when MaxStoredIndexBuilds limit is exceeded
+    Y_UNIT_TEST(MaxStoredIndexBuilds) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().MaxStoredIndexBuilds(2));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "index" Type: "Uint32" }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        env.TestWaitNotification(runtime, txId);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index2", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        env.TestWaitNotification(runtime, txId);
+
+        auto listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 2);
+
+        // Normal request
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index3", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        env.TestWaitNotification(runtime, txId);
+
+        // Check that the oldest request is forgotten
+        listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 2);
     }
 }
 

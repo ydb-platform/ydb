@@ -45,6 +45,7 @@ function beginSearchTimingRun(query, scope, mode) {
     var search = searchRuntime();
     cancelSearchMatchCollectionJob('new-search');
     pushSearchTimingHistory(search.searchTimingCurrent);
+    search.restoredSearchIndicatorMatches = null;
     markPendingSearchIntent(query, scope, mode);
     search.searchTimingCurrent = {
         epoch: ++search.searchTimingEpoch,
@@ -413,7 +414,8 @@ function searchMatchStableKey(match) {
         searchMatchIdentityPart(target),
         searchMatchIdentityPart(record.field),
         searchMatchIdentityPart(record.path),
-        record.fieldOrdinal !== undefined && record.recordOccurrence !== undefined
+        record.field !== 'name' &&
+            record.fieldOrdinal !== undefined && record.recordOccurrence !== undefined
             ? 'record:' + searchMatchIdentityPart(record.fieldOrdinal) + ':' +
                 searchMatchIdentityPart(record.recordOccurrence)
             : 'occurrence:' + searchMatchIdentityPart(record.occurrence)
@@ -828,6 +830,30 @@ function cloneSearchMatchList(matches) {
     return clones;
 }
 
+function setRestoredSearchIndicatorMatches(query, scope, matches) {
+    query = String(query || '');
+    scope = normalizedSearchCollectionScope(scope || 'tree-rules');
+    searchRuntime().restoredSearchIndicatorMatches = {
+        query: query,
+        scope: scope,
+        traceGeneration: Number(currentTraceStore().traceGeneration) || 0,
+        matches: cloneSearchMatchList(matches)
+    };
+}
+
+function restoredSearchIndicatorMatches(query, scope) {
+    var restored = searchRuntime().restoredSearchIndicatorMatches;
+    query = String(query || '');
+    scope = normalizedSearchCollectionScope(scope || 'tree-rules');
+    if (!restored ||
+            restored.query !== query ||
+            restored.scope !== scope ||
+            Number(restored.traceGeneration) !== (Number(currentTraceStore().traceGeneration) || 0)) {
+        return [];
+    }
+    return cloneSearchMatchList(restored.matches);
+}
+
 function rememberBoundedSearchCache(cache, order, key, value, limit) {
     if (!cache[key]) order.push(key);
     cache[key] = value;
@@ -870,13 +896,17 @@ function rememberSearchResultMatches(query, scope, matches) {
 function mergeUniqueSearchMatches() {
     var merged = [];
     var seen = {};
+    var seenRendered = {};
     for (var a = 0; a < arguments.length; a++) {
         var list = arguments[a] || [];
         for (var i = 0; i < list.length; i++) {
             var match = list[i];
             var key = searchMatchStableKey(match);
             if (seen[key]) continue;
+            var renderedKey = searchMatchRenderedMatchId(match);
+            if (renderedKey && seenRendered[renderedKey]) continue;
             seen[key] = true;
+            if (renderedKey) seenRendered[renderedKey] = true;
             merged.push(match);
         }
     }
@@ -1252,9 +1282,24 @@ function cloneSearchGlobalSummary(summary) {
         query: String(summary.query || ''),
         scope: normalizedSearchCollectionScope(summary.scope || 'tree-rules'),
         totalCount: normalizeSearchCount(summary.totalCount),
+        titleMatches: Array.isArray(summary.titleMatches)
+            ? summary.titleMatches.map(function(match) {
+                match = match || {};
+                return {
+                    type: String(match.type || ''),
+                    si: Math.max(0, Math.floor(Number(match.si)) || 0),
+                    gi: match.gi === undefined || match.gi === null
+                        ? undefined
+                        : Math.max(0, Math.floor(Number(match.gi)) || 0),
+                    count: normalizeSearchCount(match.count),
+                    order: Math.max(0, Math.floor(Number(match.order)) || 0)
+                };
+            })
+            : [],
         ruleOrdinals: Array.isArray(summary.ruleOrdinals) ? summary.ruleOrdinals.slice() : [],
         ruleHandles: Array.isArray(summary.ruleHandles) ? summary.ruleHandles.slice() : [],
         counts: Array.isArray(summary.counts) ? summary.counts.slice() : [],
+        orders: Array.isArray(summary.orders) ? summary.orders.slice() : [],
         masks: Array.isArray(summary.masks) ? summary.masks.slice() : []
     };
 }
@@ -1590,6 +1635,7 @@ function promoteCompletedLazySearchIfCurrent(query, scope) {
     if (!currentSearchIntentMatches(query, scope)) return false;
 
     var mode = currentSearchMode();
+    rebuildTraceLayoutModel();
     var state = collectLazySearchState(query, scope, mode);
     replaceSearchMatches(state.matches, true, { deferStatus: true });
     searchRuntime().searchResultQuery = query;
@@ -2025,6 +2071,16 @@ function ensureSearchIndex(scope) {
     setSearchIndexReadyProgress(search.ruleSearchIndex, currentTraceStore());
 }
 
+function collectTitleSearchMatches(query, scope) {
+    ensureSearchIndex(scope);
+    return filterSearchMatchesForVisibleStages(TraceSearch.collectMatches(
+        currentTraceStore(),
+        searchRuntime().ruleSearchIndex,
+        query,
+        normalizedSearchCollectionScope(scope || 'tree-rules')
+    ) || []);
+}
+
 function currentSearchScope() {
     return 'tree-rules';
 }
@@ -2386,11 +2442,14 @@ function collectVisibleSearchRuleRefs() {
 }
 
 function collectLazySearchState(query, scope, mode) {
-    var allMatches = filterUnavailableSearchMatches(lazySearchKnownMatches(query, scope));
+    var allMatches = filterSearchMatchesForVisibleStages(filterUnavailableSearchMatches(mergeUniqueSearchMatches(
+        lazySearchKnownMatches(query, scope),
+        collectTitleSearchMatches(query, scope)
+    )));
     var filteredMatches = filterSearchMatchesForMode(allMatches, mode || currentSearchMode());
     return {
         matches: filteredMatches,
-        expandableMatchCount: lazySearchKnownCount(query, scope),
+        expandableMatchCount: Math.max(allMatches.length, lazySearchKnownCount(query, scope)),
         collapsedIndicators: measureSearchTiming('collapsed-indicator-collection', function() {
             return collectCollapsedSearchIndicatorsFromMatches(query, allMatches);
         }, { mode: mode || currentSearchMode(), matchCount: allMatches.length, lazyComplete: true })
@@ -2423,8 +2482,11 @@ function collectSearchMatchesFromIndex(query, scope) {
     } else if (bodyScope) {
         var visibleMatches = collectVisibleSearchMatches(query, scope);
         matches = mergeUniqueSearchMatches(
-            visibleMatches,
-            lazySearchKnownMatches(query, scope)
+            mergeUniqueSearchMatches(
+                visibleMatches,
+                lazySearchKnownMatches(query, scope)
+            ),
+            restoredSearchIndicatorMatches(query, scope)
         );
     } else {
         ensureSearchIndex(scope);
@@ -2487,8 +2549,12 @@ function ruleMatchAvailableInCurrentLayout(match) {
 
 function searchMatchAvailableInCurrentLayout(match) {
     if (!match) return false;
-    if (match.type === 'stage') return !!stageTraceInterval(match.si);
-    if (match.type === 'group') return !!groupTraceInterval(match.si, match.gi);
+    if (match.type === 'stage') return stageVisible(match.si);
+    if (match.type === 'group') {
+        return stageVisible(match.si) &&
+            effectiveStageOpen(match.si) &&
+            groupRuleCount(match.si, match.gi) > 1;
+    }
     if (match.type === 'rule') return ruleMatchAvailableInCurrentLayout(match);
     return false;
 }
@@ -2545,10 +2611,13 @@ function collectVisibleSearchPreviewState(query, scope, mode) {
         return collectVisibleSearchMatches(query, scope);
     }, { mode: mode, scope: scope });
     allMatches = mergeUniqueSearchMatches(
-        allMatches,
-        lazySearchKnownMatches(query, scope)
+        mergeUniqueSearchMatches(
+            allMatches,
+            lazySearchKnownMatches(query, scope)
+        ),
+        collectTitleSearchMatches(query, scope)
     );
-    allMatches = filterUnavailableSearchMatches(allMatches);
+    allMatches = filterSearchMatchesForVisibleStages(filterUnavailableSearchMatches(allMatches));
     var filteredMatches = filterSearchMatchesForMode(allMatches, mode);
     var visibleMatches = filteredMatches.filter(function(match) {
         return match && match.type === 'rule' ? true : searchMatchIntersectsTraceViewport(match);
@@ -2569,13 +2638,19 @@ function knownSearchMatchesForCollapsedIndicators(query, scope) {
     var globalSummary = searchScopeUsesBodyPayloads(scope)
         ? peekGlobalSearchSummary(query, scope)
         : null;
-    return filterUnavailableSearchMatches(mergeUniqueSearchMatches(
+    return filterSearchMatchesForVisibleStages(filterUnavailableSearchMatches(mergeUniqueSearchMatches(
         mergeUniqueSearchMatches(
-            committedMatches,
-            lazySearchKnownMatches(query, scope)
+            mergeUniqueSearchMatches(
+                committedMatches,
+                lazySearchKnownMatches(query, scope)
+            ),
+            mergeUniqueSearchMatches(
+                globalSummary ? searchMatchesFromGlobalSummary(globalSummary) : [],
+                restoredSearchIndicatorMatches(query, scope)
+            )
         ),
-        globalSummary ? searchMatchesFromGlobalSummary(globalSummary) : []
-    ));
+        collectTitleSearchMatches(query, scope)
+    )));
 }
 
 function refreshCollapsedSearchIndicatorsForKnownMatches(query, scope) {
@@ -2838,7 +2913,7 @@ function searchSummaryMaskHasBody(mask) {
     return searchSummaryMaskHas(mask, 'tree') || searchSummaryMaskHas(mask, 'text');
 }
 
-function pushSearchMatchFromGlobalSummary(matches, ref, field, mask, count) {
+function pushSearchMatchFromGlobalSummary(matches, ref, field, mask, count, order) {
     matches.push({
         type: 'rule',
         si: ref.si,
@@ -2848,26 +2923,60 @@ function pushSearchMatchFromGlobalSummary(matches, ref, field, mask, count) {
         field: field,
         occurrence: 0,
         summaryMask: mask,
-        summaryCount: count
+        summaryCount: count,
+        summaryOrder: order
     });
 }
 
 function searchMatchesFromGlobalSummary(summary) {
     var matches = [];
     if (!summary || !Array.isArray(summary.counts)) return matches;
+    var titleMatches = Array.isArray(summary.titleMatches) ? summary.titleMatches : [];
+    for (var titleIndex = 0; titleIndex < titleMatches.length; titleIndex++) {
+        var title = titleMatches[titleIndex] || {};
+        var titleCount = normalizeSearchCount(title.count);
+        if (!titleCount) continue;
+        if (title.type === 'stage') {
+            matches.push({
+                type: 'stage',
+                si: Math.max(0, Math.floor(Number(title.si)) || 0),
+                field: 'stage',
+                occurrence: 0,
+                summaryCount: titleCount,
+                summaryOrder: Math.max(0, Math.floor(Number(title.order)) || 0)
+            });
+        } else if (title.type === 'group') {
+            matches.push({
+                type: 'group',
+                si: Math.max(0, Math.floor(Number(title.si)) || 0),
+                gi: Math.max(0, Math.floor(Number(title.gi)) || 0),
+                field: 'group',
+                occurrence: 0,
+                summaryCount: titleCount,
+                summaryOrder: Math.max(0, Math.floor(Number(title.order)) || 0)
+            });
+        }
+    }
     for (var i = 0; i < summary.counts.length; i++) {
         if (!normalizeSearchCount(summary.counts[i])) continue;
         var ref = searchRuleRefForGlobalSummaryRow(summary, i);
         if (!ref) continue;
         var mask = Number(summary.masks && summary.masks[i]) || 0;
         var count = normalizeSearchCount(summary.counts[i]);
+        var order = Math.max(0, Math.floor(Number(summary.orders && summary.orders[i])) || 0);
         if (searchSummaryMaskHas(mask, 'title')) {
-            pushSearchMatchFromGlobalSummary(matches, ref, 'name', mask, count);
+            pushSearchMatchFromGlobalSummary(matches, ref, 'name', mask, count, order);
         }
         if (searchSummaryMaskHasBody(mask)) {
-            pushSearchMatchFromGlobalSummary(matches, ref, 'label', mask, count);
+            pushSearchMatchFromGlobalSummary(matches, ref, 'label', mask, count, order);
         }
     }
+    matches.sort(function(a, b) {
+        var orderA = a && a.summaryOrder !== undefined ? Number(a.summaryOrder) : 0;
+        var orderB = b && b.summaryOrder !== undefined ? Number(b.summaryOrder) : 0;
+        if (orderA !== orderB) return orderA - orderB;
+        return 0;
+    });
     return matches;
 }
 
@@ -4716,6 +4825,7 @@ function searchMatchSetSignature(matches) {
         hash = searchHashUpdate(hash, match.path);
         hash = searchHashUpdate(hash, match.summaryMask);
         hash = searchHashUpdate(hash, match.summaryCount);
+        hash = searchHashUpdate(hash, match.summaryOrder);
     }
     return matches.length + ':' + hash.toString(16);
 }
@@ -4913,6 +5023,53 @@ function markSearchExpandOverlayRule(overlay, match, expandRule, lowerQuery, sco
         groupSummary.openRuleCount++;
         stageSummary.openRuleCount++;
     }
+}
+
+function markSearchExpandOverlayRuleOpen(overlay, si, gi, ri) {
+    if (!overlay) return false;
+    if (!overlay.rules) overlay.rules = {};
+
+    var key = searchExpandOverlayRuleKey(si, gi, ri);
+    var existing = overlay.rules[key];
+    var wasOpen = !!(existing && existing.open);
+
+    markSearchExpandOverlayStage(overlay, si);
+    markSearchExpandOverlayGroup(overlay, si, gi);
+
+    if (existing) {
+        existing.open = true;
+    } else {
+        overlay.rules[key] = {
+            si: si,
+            gi: gi,
+            ri: ri,
+            rawIdx: rawRuleIndex(si, gi, ri),
+            open: true
+        };
+    }
+
+    var groupSummary = ensureSearchExpandOverlayGroupSummary(overlay, si, gi);
+    var stageSummary = ensureSearchExpandOverlayStageSummary(overlay, si);
+    addSearchExpandOverlaySummaryRuleIndex(groupSummary, ri);
+    if (!wasOpen) {
+        groupSummary.openRuleCount++;
+        stageSummary.openRuleCount++;
+    }
+    return !wasOpen;
+}
+
+function openActiveSearchExpandOverlayRule(si, gi, ri) {
+    var overlay = activeSearchExpandOverlay();
+    if (!overlay) return null;
+    if (searchOverlayStageOpen(overlay, si) &&
+            searchOverlayGroupOpen(overlay, si, gi) &&
+            searchOverlayRuleOpen(overlay, si, gi, ri)) {
+        return emptySearchLayoutTransitionSummary();
+    }
+
+    var previous = cloneSearchExpandOverlayForCache(overlay);
+    markSearchExpandOverlayRuleOpen(overlay, si, gi, ri);
+    return searchExpandOverlayTransitionSummary(previous, overlay, { sparse: true });
 }
 
 function addSearchLayoutMatch(match, overlay, lowerQuery, scope) {

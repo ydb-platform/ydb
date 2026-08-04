@@ -6,13 +6,16 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/fq/libs/credentials
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/local_proxy/local_pq_client
     ydb/core/protos
     ydb/library/logger
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/generic/connector/libcpp
+    ydb/library/yql/providers/pq/comp_nodes
     ydb/library/yql/providers/pq/gateway/abstract
+    ydb/library/yql/providers/pq/transform
     ydb/library/yql/providers/pq/gateway/native
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/s3/proto
@@ -34,8 +37,4 @@ END()
 
 RECURSE(
     actors
-)
-
-RECURSE_FOR_TESTS(
-    ut
 )

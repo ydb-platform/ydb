@@ -205,6 +205,11 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             changes |= ChangeTableSetting(table, tableInfo.ColdBorrow, enabled);
         }
 
+        if (delta.HasSpecialTableType()) {
+            ui32 type = delta.GetSpecialTableType();
+            changes |= ChangeTableSetting(table, tableInfo.SpecialTableType, type);
+        }
+
     } else if (action == TAlterRecord::UpdateExecutorInfo) {
         if (delta.HasExecutorCacheSize())
             changes |= SetExecutorCacheSize(delta.GetExecutorCacheSize());

@@ -1,11 +1,16 @@
 #include "replication_card_serialization.h"
 
+#include <yt/yt/client/object_client/helpers.h>
+
 #include <yt/yt/client/table_client/unversioned_row.h>
+#include <yt/yt/client/table_client/schema.h>
 
 #include <yt/yt/client/tablet_client/config.h>
 
-#include <yt/yt/core/misc/protobuf_helpers.h>
+#include <yt/yt/client/api/rpc_proxy/helpers.h>
+
 #include <yt/yt/core/misc/collection_helpers.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/yson/string.h>
 #include <yt/yt/core/yson/protobuf_helpers.h>
@@ -15,14 +20,15 @@
 
 namespace NYT::NChaosClient {
 
+using namespace NObjectClient;
 using namespace NTransactionClient;
 using namespace NTableClient;
 using namespace NTabletClient;
 using namespace NYTree;
 using namespace NYson;
 
-using NYT::ToProto;
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -317,7 +323,19 @@ void Serialize(
         .Item("table_path").Value(replicationCard.TablePath)
         .Item("table_cluster_name").Value(replicationCard.TableClusterName)
         .Item("current_timestamp").Value(replicationCard.CurrentTimestamp)
-        .Item("replication_card_collocation_id").Value(replicationCard.ReplicationCardCollocationId);
+        .Item("replication_card_collocation_id").Value(replicationCard.ReplicationCardCollocationId)
+        .DoIf(!replicationCard.SecondaryIndices.empty(), [&] (TFluentMap fluent) {
+            fluent
+                .Item("secondary_indices")
+                .DoMapFor(
+                    replicationCard.SecondaryIndices,
+                    [&] (TFluentMap fluent, const std::pair<TReplicationCardId, TIndexInfo>& pair) {
+                        fluent
+                            .Item(ToString(pair.first)).Do([&] (TFluentAny fluent) {
+                                Serialize(pair.second, fluent.GetConsumer());
+                            });
+                    });
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -325,13 +343,13 @@ void Serialize(
 void ToProto(NChaosClient::NProto::TReplicationProgress::TSegment* protoSegment, const TReplicationProgress::TSegment& segment)
 {
     ToProto(protoSegment->mutable_lower_key(), segment.LowerKey);
-    protoSegment->set_timestamp(segment.Timestamp);
+    protoSegment->set_timestamp(ToProto(segment.Timestamp));
 }
 
 void FromProto(TReplicationProgress::TSegment* segment, const NChaosClient::NProto::TReplicationProgress::TSegment& protoSegment)
 {
     segment->LowerKey = FromProto<TUnversionedOwningRow>(protoSegment.lower_key());
-    segment->Timestamp = protoSegment.timestamp();
+    segment->Timestamp = FromProto<TTimestamp>(protoSegment.timestamp());
 }
 
 void ToProto(NChaosClient::NProto::TReplicationProgress* protoReplicationProgress, const TReplicationProgress& replicationProgress)
@@ -421,8 +439,12 @@ void ToProto(
     ToProto(protoReplicationCard->mutable_table_id(), replicationCard.TableId);
     protoReplicationCard->set_table_path(replicationCard.TablePath);
     protoReplicationCard->set_table_cluster_name(ToProto(replicationCard.TableClusterName));
-    protoReplicationCard->set_current_timestamp(replicationCard.CurrentTimestamp);
+    protoReplicationCard->set_current_timestamp(ToProto(replicationCard.CurrentTimestamp));
     ToProto(protoReplicationCard->mutable_replication_card_collocation_id(), replicationCard.ReplicationCardCollocationId);
+
+    for (auto it : GetSortedIterators(replicationCard.SecondaryIndices)) {
+        ToProto(protoReplicationCard->add_secondary_indices(), it->second);
+    }
 }
 
 void FromProto(TReplicationCard* replicationCard, const NChaosClient::NProto::TReplicationCard& protoReplicationCard)
@@ -439,13 +461,26 @@ void FromProto(TReplicationCard* replicationCard, const NChaosClient::NProto::TR
     replicationCard->TableId = FromProto<TTableId>(protoReplicationCard.table_id());
     replicationCard->TablePath = protoReplicationCard.table_path();
     replicationCard->TableClusterName = protoReplicationCard.table_cluster_name();
-    replicationCard->CurrentTimestamp = protoReplicationCard.current_timestamp();
+    replicationCard->CurrentTimestamp = FromProto<TTimestamp>(protoReplicationCard.current_timestamp());
     if (protoReplicationCard.has_replicated_table_options()) {
         replicationCard->ReplicatedTableOptions = ConvertTo<TReplicatedTableOptionsPtr>(TYsonString(protoReplicationCard.replicated_table_options()));
     }
 
     if (protoReplicationCard.has_replication_card_collocation_id()) {
         FromProto(&replicationCard->ReplicationCardCollocationId, protoReplicationCard.replication_card_collocation_id());
+    }
+
+    for (const auto& protoSecondaryIndexInfo : protoReplicationCard.secondary_indices()) {
+        auto indexReplicationCardId = FromProto<TReplicationCardId>(
+            protoSecondaryIndexInfo.index_object_id());
+        YT_ASSERT(TypeFromId(indexReplicationCardId) == EObjectType::ReplicationCard);
+
+        TIndexInfo indexInfo;
+        FromProto(&indexInfo, protoSecondaryIndexInfo);
+        EmplaceOrCrash(
+            replicationCard->SecondaryIndices,
+            indexReplicationCardId,
+            std::move(indexInfo));
     }
 }
 

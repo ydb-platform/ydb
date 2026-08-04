@@ -89,9 +89,9 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // template methods implementation
 
-template <bool UseMigrationProtocol>
+template <EProtocol Protocol>
 auto FillWriteResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
-    using ServerMessage = typename std::conditional<UseMigrationProtocol,
+    using ServerMessage = typename std::conditional<Protocol == EProtocol::PQv1,
                                                     PersQueue::V1::StreamingWriteServerMessage,
                                                     Topic::StreamWriteMessage::FromServer>::type;
     ServerMessage res;
@@ -102,15 +102,15 @@ auto FillWriteResponse(const TString& errorReason, const PersQueue::ErrorCode::E
 
 template <typename WriteRequest>
 void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const TActorContext& ctx) {
-    constexpr bool UseMigrationProtocol = std::is_same_v<WriteRequest, NGRpcService::TEvStreamPQWriteRequest>;
+    constexpr EProtocol Protocol = std::is_same_v<WriteRequest, NGRpcService::TEvStreamPQWriteRequest> ? EProtocol::PQv1 : EProtocol::Topic;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection");
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection");
 
     if (TooMuchSessions()) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - too much sessions");
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection failed - too much sessions");
         ev->Get()->Attach(ctx.SelfID);
         ev->Get()->WriteAndFinish(
-            FillWriteResponse<UseMigrationProtocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD),
+            FillWriteResponse<Protocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD),
             Ydb::StatusIds::OVERLOADED); // CANCELLED
         return;
     }
@@ -120,11 +120,11 @@ void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const 
     if (HaveClusters && localCluster.empty()) {
         ev->Get()->Attach(ctx.SelfID);
         if (LocalCluster) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - cluster disabled");
-            ev->Get()->WriteAndFinish(FillWriteResponse<UseMigrationProtocol>("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), Ydb::StatusIds::UNSUPPORTED); //CANCELLED
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection failed - cluster disabled");
+            ev->Get()->WriteAndFinish(FillWriteResponse<Protocol>("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), Ydb::StatusIds::UNSUPPORTED); //CANCELLED
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - initializing");
-            ev->Get()->WriteAndFinish(FillWriteResponse<UseMigrationProtocol>("initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection failed - initializing");
+            ev->Get()->WriteAndFinish(FillWriteResponse<Protocol>("initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
         }
         return;
     } else {
@@ -138,10 +138,11 @@ void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const 
         );
         const ui64 cookie = NextCookie();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new session created cookie " << cookie);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New session created cookie",
+            {"cookie", cookie});
 
         auto ip = ev->Get()->GetPeerName();
-        TActorId worker = ctx.Register(new TWriteSessionActor<UseMigrationProtocol>(
+        TActorId worker = ctx.Register(new TWriteSessionActor<Protocol>(
                 ev->Release().Release(), cookie, SchemeCache, Counters,
                 DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
                 *TopicsHandler

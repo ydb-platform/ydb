@@ -4,6 +4,7 @@ SRCS(
     actors/kafka_api_versions_actor.cpp
     actors/kafka_init_producer_id_actor.cpp
     actors/kafka_metadata_actor.cpp
+    actors/kafka_metadata_service.cpp
     actors/kafka_produce_actor.cpp
     actors/kafka_sasl_auth_actor.cpp
     actors/kafka_sasl_handshake_actor.cpp
@@ -52,11 +53,11 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(actors/actors.h)
 
 PEERDIR(
-    ydb/library/kafka
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/public/sdk/cpp/src/client/params
     ydb/library/actors/core
     ydb/library/actors/protos
-    ydb/library/kafka
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/core/base
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/fetcher

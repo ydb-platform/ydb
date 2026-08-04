@@ -33,6 +33,8 @@
 
 #include <library/cpp/yt/threading/atomic_object.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/length.h>
 
 namespace NYT::NLogging {
@@ -75,7 +77,7 @@ public:
         std::unique_ptr<ILogFormatter> formatter,
         std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
         const TDynamicTableLogWriterConfigPtr& config,
-        const TString& name,
+        const std::string& name,
         IInvokerPtr invoker)
         : TRateLimitingLogWriterBase(
             std::move(systemEventProvider),
@@ -89,10 +91,9 @@ public:
             Invoker_,
             BIND(&TDynamicTableLogWriter::DoFlush, MakeWeak(this)),
             Config_->FlushPeriod))
-        , Logger(SystemLogger().WithTag(
-            "LogWriterName: %v, TablePath: %v",
-            name,
-            Config_->TablePath))
+        , Logger(SystemLogger()
+            .WithTag("LogWriterName", name)
+            .WithTag("TablePath", Config_->TablePath))
         , Profiler_(TProfiler("/dynamic_table_logging")
             .WithSparse()
             .WithTag("writer", name)
@@ -146,7 +147,7 @@ private:
 
     //! Protects the fields below.
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-    TString CurrentBuffer_;
+    std::string CurrentBuffer_;
     i64 CurrentRowCount_ = 0;
     //! This queue should typically contain no more than one element.
     //! We use it to limit the number of rows written within a single transaction.
@@ -204,7 +205,7 @@ private:
             RotateBuffer();
         }
 
-        TStringOutput outputStream(CurrentBuffer_);
+        TStdStringOutput outputStream(CurrentBuffer_);
         TCountingOutput countingOutputStream(&outputStream);
         Formatter_->WriteFormatted(&countingOutputStream, event);
 

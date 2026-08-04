@@ -642,21 +642,15 @@ public:
                 "Database resolve failed with no certain result"));
         }
 
-        { // write wrong requests to monitoring to warn clients
-            const auto isDomain = entry.Path.size() == 1;
-            const auto isSubDomain = entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSubdomain
-                || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain;
+        const auto isDomain = entry.Path.size() == 1;
+        const auto isSubDomain = entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSubdomain
+            || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain;
 
-            if (!isDomain && !isSubDomain) {
-                const TString path = CanonizePath(Database);
-                GetServiceCounters(AppData()->Counters, "ydb")
-                    ->GetSubgroup("subsystem", "discovery")
-                    ->GetSubgroup("path", path)
-                    ->GetCounter("pathIsNotDatabase", true)->Inc();
-
-                YDB_LOG_ERROR_COMP(NKikimrServices::DISCOVERY, "Path is not database",
-                    {"database", path});
-            }
+        if (!isDomain && !isSubDomain) {
+            YDB_LOG_WARN_COMP(NKikimrServices::DISCOVERY, "Path is not database",
+                {"path", CanonizePath(Database)});
+            return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::ACCESS_DENIED,
+                "Requested path is not database name"));
         }
 
         auto info = entry.DomainInfo;
@@ -696,21 +690,6 @@ public:
     void MaybeReply() {
         if (!LookupResponse || !SchemeCacheResponse) {
             return;
-        }
-
-        {
-            // check presence of database (acl should be checked here too)
-            const auto& entry = SchemeCacheResponse->Request->ResultSet.front();
-            const auto isDomain = entry.Path.size() == 1;
-            const auto isSubDomain = entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSubdomain
-                || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain;
-
-            if (!isDomain && !isSubDomain) {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::DISCOVERY, "Path is not database",
-                    {"entry", entry.ToString()});
-                return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::ACCESS_DENIED,
-                    "Requested path is not database name"));
-            }
         }
 
         if (LookupResponse->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
@@ -767,9 +746,7 @@ public:
             {"path", id});
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        if (AppData()->FeatureFlags.GetForbidDiscoveryInnerDbPaths()) {
-            request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
-        }
+        request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;

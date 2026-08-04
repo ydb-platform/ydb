@@ -27,14 +27,31 @@ Y_UNIT_TEST_SUITE(DDisk) {
         int LetterIndex = 0;
         const TString Letters = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-        TDDiskTestContext(ui32 surfaceSize = 64_KB, ui64 inMemCache = 128_MB)
+        TDDiskTestContext(ui32 surfaceSize = 64_KB, ui64 inMemCache = 128_MB,
+                std::optional<ui32> minFreeSectorsReserve = std::nullopt,
+                std::optional<ui32> preallocateFreeSpaceThresholdPercent = std::nullopt,
+                std::optional<ui32> deallocateFreeSpaceThresholdPercent = std::nullopt,
+                std::optional<ui32> deallocateThresholdSeconds = std::nullopt)
             : Env({
                 .NodeCount = 8,
                 .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-                .ConfigPreprocessor = [inMemCache](ui32, TNodeWardenConfig& cfg){
+                .ConfigPreprocessor = [inMemCache, minFreeSectorsReserve, preallocateFreeSpaceThresholdPercent,
+                        deallocateFreeSpaceThresholdPercent, deallocateThresholdSeconds](ui32, TNodeWardenConfig& cfg){
                     NYdb::NBS::NProto::TPBufferConfig pbCfg;
                     pbCfg.SetMaxChunks(10);
                     pbCfg.SetMaxInMemoryCache(inMemCache);
+                    if (minFreeSectorsReserve.has_value()) {
+                        pbCfg.SetMinFreeSectorsReserve(*minFreeSectorsReserve);
+                    }
+                    if (preallocateFreeSpaceThresholdPercent.has_value()) {
+                        pbCfg.SetPreallocateFreeSpaceThresholdPercent(*preallocateFreeSpaceThresholdPercent);
+                    }
+                    if (deallocateFreeSpaceThresholdPercent.has_value()) {
+                        pbCfg.SetDeallocateFreeSpaceThresholdPercent(*deallocateFreeSpaceThresholdPercent);
+                    }
+                    if (deallocateThresholdSeconds.has_value()) {
+                        pbCfg.SetDeallocateThresholdSeconds(*deallocateThresholdSeconds);
+                    }
                     cfg.PBufferConfig = pbCfg;
                 }
             }) {
@@ -81,6 +98,54 @@ Y_UNIT_TEST_SUITE(DDisk) {
             UNIT_ASSERT_VALUES_EQUAL(rr.ResponsesSize(), count);
             auto responses = rr.GetResponses();
             return responses;
+        }
+
+        // Allocate a single direct block group via the new-style DirectBlockGroupOperations
+        // (as opposed to the compat Queries path) so that DDisks/PersistentBuffers can later
+        // be individually manipulated (deleted, reassigned, etc.) by DirectBlockGroupId.
+        NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TDirectBlockGroup
+        DefineDirectBlockGroup(ui64 directBlockGroupId, ui32 numDDisks, ui32 numChunksPerDDisk, ui32 numPersistentBuffers) {
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+            auto& r = ev->Record;
+            r.SetDDiskPoolName("ddisk_pool");
+            r.SetPersistentBufferDDiskPoolName("ddisk_pool");
+            r.SetTabletId(1);
+            auto *op = r.AddDirectBlockGroupOperations();
+            op->SetDirectBlockGroupId(directBlockGroupId);
+            auto *def = op->MutableDefineDirectBlockGroup();
+            def->SetNumDDisks(numDDisks);
+            def->SetNumChunksPerDDisk(numChunksPerDDisk);
+            def->SetNumPersistentBuffers(numPersistentBuffers);
+            // Use a fresh edge actor for every request: WaitForEdgeActorEvent()
+            // consumes/terminates the edge actor on capture by default (termOnCapture=true),
+            // so it can't be safely reused across multiple requests.
+            TActorId edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
+            Env.Runtime->SendToPipe(MakeBSControllerID(), edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+            auto response = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(edge);
+            auto& rr = response->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL_C(rr.GetStatus(), NKikimrProto::OK, rr.GetErrorReason());
+            UNIT_ASSERT_VALUES_EQUAL(rr.DirectBlockGroupsSize(), 1);
+            return rr.GetDirectBlockGroups(0);
+        }
+
+        // Send an arbitrary set of DirectBlockGroupOperation commands for a given
+        // direct block group id and return the whole result record (including status).
+        NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult SendDirectBlockGroupOperation(
+                ui64 directBlockGroupId,
+                std::function<void(NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroup::TDirectBlockGroupOperation*)> fill) {
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+            auto& r = ev->Record;
+            r.SetDDiskPoolName("ddisk_pool");
+            r.SetPersistentBufferDDiskPoolName("ddisk_pool");
+            r.SetTabletId(1);
+            auto *op = r.AddDirectBlockGroupOperations();
+            op->SetDirectBlockGroupId(directBlockGroupId);
+            fill(op);
+            // Fresh edge actor, see comment in DefineDirectBlockGroup() above.
+            TActorId edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
+            Env.Runtime->SendToPipe(MakeBSControllerID(), edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+            auto response = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(edge);
+            return response->Get()->Record;
         }
 
         void GreetDDisks() {
@@ -894,7 +959,9 @@ Y_UNIT_TEST_SUITE(DDisk) {
     }
 
     Y_UNIT_TEST(PersistentBufferEraseBarrierManyTablets) {
-        TDDiskTestContext f(1_MB);
+        // Use MinFreeSectorsReserve=0 so that the guard never fires when the
+        // disk fills up during the large write loop in this test.
+        TDDiskTestContext f(1_MB, 128_MB, 0);
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);
@@ -1240,5 +1307,350 @@ Y_UNIT_TEST_SUITE(DDisk) {
             TStringBuilder() << "Fast erase must free exactly " << expectedFastFreed
                 << " sectors; freeBefore=" << freeSectorsBeforeFastErase
                 << " freeAfter=" << freeSectorsAfterFastErase);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Integration test for TDDiskActor::Handle(TEvPrivate::TEvDeallocatePersistentBufferChunk)
+    //
+    // This test drives the persistent buffer through a real actor system (with a
+    // mock PDisk) to verify that a chunk which is proactively allocated and later
+    // becomes fully free is actually deallocated: the chunk-map log record commits
+    // with the chunk index in DeleteChunks, and PDisk (the mock) releases the
+    // physical chunk back to its free pool, making it available for reuse.
+    //
+    // Strategy:
+    //  1. Configure aggressive proactive allocation (PreallocateFreeSpaceThresholdPercent=99)
+    //     so writing enough records forces growth beyond the initial owned-chunk count.
+    //  2. Configure aggressive proactive deallocation (DeallocateFreeSpaceThresholdPercent=90,
+    //     DeallocateThresholdSeconds=1) so that once all data is erased, the extra chunk(s)
+    //     are quickly detected as fully free and deallocated.
+    //  3. Verify the owned-chunk count (via TEvGetPersistentBufferInfo's FreeSpace
+    //     description, whose size equals TPersistentBufferSpaceAllocator::OwnedChunks.size())
+    //     grows after the writes and shrinks back down after the erases + wait.
+    //  4. Independently verify at the (mock) PDisk level that the physical chunk which
+    //     was written to disappears from the PDisk's set of chunks with data, proving
+    //     the chunk was genuinely returned to PDisk and not just dropped from DDisk's
+    //     own bookkeeping.
+    // ─────────────────────────────────────────────────────────────────────────
+    Y_UNIT_TEST(PersistentBufferChunkDeallocationReturnsChunkToPDisk) {
+        TDDiskTestContext f(1_MB, 128_MB, /*minFreeSectorsReserve=*/std::nullopt,
+            /*preallocateFreeSpaceThresholdPercent=*/99,
+            /*deallocateFreeSpaceThresholdPercent=*/90,
+            /*deallocateThresholdSeconds=*/1);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+        f.MoveBarrier(0, 0);
+
+        auto* pdiskState = f.Env.PDiskMockStates[{f.PersId.GetNodeId(), f.PersId.GetPDiskId()}].Get();
+        UNIT_ASSERT_C(pdiskState, "PDisk mock state must exist for the persistent buffer's PDisk");
+
+        // Baseline: number of chunks owned by the PB space allocator (should be
+        // exactly PersistentBufferInitChunks == 4, matching MaxChunks=10 config).
+        auto describeFreeSpace = [&] {
+            return f.GetPBInfo(true, false)->Get()->FreeSpace.size();
+        };
+        const size_t initialOwnedChunks = describeFreeSpace();
+        UNIT_ASSERT_VALUES_EQUAL(initialOwnedChunks, 4u);
+
+        // Write enough 128-block records to push free space below the 99% threshold
+        // of the currently-owned capacity, forcing proactive allocation of an extra
+        // (5th) chunk. Each write occupies 129 sectors (128 data + 1 header); with
+        // 4 chunks * 32768 sectors = 131072 total, threshold ~= 129761 sectors, so
+        // ~12 writes (1548 sectors) push free space below the threshold.
+        std::vector<ui64> lsns;
+        for (ui32 i = 0; i < 20; ++i) {
+            const ui64 lsn = f.NextLsn;
+            f.WritePB(0, 128);
+            lsns.push_back(lsn);
+        }
+        f.Env.Sim(TDuration::Seconds(5));
+
+        const size_t ownedChunksAfterWrites = describeFreeSpace();
+        UNIT_ASSERT_C(ownedChunksAfterWrites > initialOwnedChunks,
+            TStringBuilder() << "Expected proactive allocation to grow owned chunks, got "
+                << ownedChunksAfterWrites << " (was " << initialOwnedChunks << ")");
+
+        // Capture the set of chunks with actual data at the mock PDisk level: this
+        // must include the extra, proactively-allocated chunk(s) since we wrote
+        // enough data to spill onto them.
+        const std::set<ui32> chunksAfterWrites = pdiskState->GetChunks();
+
+        // Erase every record we wrote: this frees all occupied sectors and, via
+        // ClearPersistentBufferRecords -> ProcessDeallocatePersistentBufferChunk,
+        // triggers the round-robin lock/deallocate cycle implemented in
+        // TDDiskActor::Handle(TEvPrivate::TEvDeallocatePersistentBufferChunk).
+        f.ErasePB(lsns.back(), 0);
+
+        // Give the round-robin deallocation (1 chunk per DeallocateThresholdSeconds)
+        // enough simulated time to walk through every owned chunk and release the
+        // ones that end up fully free.
+        f.Env.Sim(TDuration::Seconds(30));
+
+        const size_t ownedChunksAfterDeallocation = describeFreeSpace();
+        UNIT_ASSERT_VALUES_EQUAL_C(ownedChunksAfterDeallocation, initialOwnedChunks,
+            TStringBuilder() << "Expected owned chunks to shrink back to the initial count "
+                << initialOwnedChunks << " after erasing all data and waiting for deallocation, got "
+                << ownedChunksAfterDeallocation);
+
+        // Verify at the PDisk mock level that at least one chunk which had data
+        // written to it during the growth phase is now gone (i.e. actually
+        // released back to PDisk's free pool), not merely dropped from DDisk's
+        // internal PersistentBufferChunks bookkeeping.
+        const std::set<ui32> chunksAfterDeallocation = pdiskState->GetChunks();
+        UNIT_ASSERT_C(chunksAfterDeallocation.size() < chunksAfterWrites.size(),
+            TStringBuilder() << "Expected fewer chunks with data at the PDisk level after deallocation: before="
+                << chunksAfterWrites.size() << " after=" << chunksAfterDeallocation.size());
+
+        bool foundReleasedChunk = false;
+        for (ui32 chunkIdx : chunksAfterWrites) {
+            if (!chunksAfterDeallocation.contains(chunkIdx)) {
+                foundReleasedChunk = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundReleasedChunk,
+            "At least one chunk that held persistent-buffer data must have been released back to PDisk");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Tests for TDirectBlockGroupOperation::DeletePersistentBuffers and
+    // TDirectBlockGroupOperation::DeleteDDisks (ddisk.cpp handling of
+    // op.GetDeletePersistentBuffers() / op.GetDeleteDDisks()).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    Y_UNIT_TEST(DeletePersistentBufferRemovesEntry) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/2);
+        UNIT_ASSERT_VALUES_EQUAL(group.DDiskIdSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(group.PersistentBufferDDiskIdSize(), 2);
+
+        const auto pbToDelete = group.GetPersistentBufferDDiskId(0);
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            auto *cmd = op->AddDeletePersistentBuffers();
+            cmd->MutablePersistentBufferId()->CopyFrom(pbToDelete);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rr.GetStatus(), NKikimrProto::OK, rr.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL(rr.DirectBlockGroupsSize(), 1);
+
+        const auto& updated = rr.GetDirectBlockGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(updated.PersistentBufferDDiskIdSize(), 1);
+        // the remaining persistent buffer must be the one we did NOT delete
+        UNIT_ASSERT(TDDiskId(updated.GetPersistentBufferDDiskId(0)) == TDDiskId(group.GetPersistentBufferDDiskId(1)));
+        // DDisks themselves are untouched by persistent buffer deletion
+        UNIT_ASSERT_VALUES_EQUAL(updated.DDiskIdSize(), 2);
+    }
+
+    Y_UNIT_TEST(DeletePersistentBufferNotFoundReturnsNotFound) {
+        TDDiskTestContext f;
+        f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            auto *cmd = op->AddDeletePersistentBuffers();
+            // bogus, never-allocated identifier
+            cmd->MutablePersistentBufferId()->SetNodeId(999);
+            cmd->MutablePersistentBufferId()->SetPDiskId(999);
+            cmd->MutablePersistentBufferId()->SetDDiskSlotId(999);
+        });
+        // A missing PersistentBuffer must be reported as NOT_FOUND, not a generic ERROR,
+        // so that callers can distinguish "target doesn't exist" from other failures.
+        UNIT_ASSERT_VALUES_EQUAL(rr.GetStatus(), NKikimrProto::NOT_FOUND);
+        UNIT_ASSERT_STRING_CONTAINS(rr.GetErrorReason(), "PersistentBuffer not found");
+    }
+
+    Y_UNIT_TEST(DeleteDDiskRemovesEntry) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/3,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+        UNIT_ASSERT_VALUES_EQUAL(group.DDiskIdSize(), 3);
+
+        const auto ddiskToDelete = group.GetDDiskId(2); // delete the last one so trimming kicks in
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            auto *cmd = op->AddDeleteDDisks();
+            cmd->MutableDDiskId()->CopyFrom(ddiskToDelete);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rr.GetStatus(), NKikimrProto::OK, rr.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL(rr.DirectBlockGroupsSize(), 1);
+
+        const auto& updated = rr.GetDirectBlockGroups(0);
+        // the trailing empty item gets trimmed away entirely
+        UNIT_ASSERT_VALUES_EQUAL(updated.DDiskIdSize(), 2);
+        for (ui32 i = 0; i < 2; ++i) {
+            UNIT_ASSERT(TDDiskId(updated.GetDDiskId(i)) == TDDiskId(group.GetDDiskId(i)));
+        }
+        // persistent buffers are untouched by DDisk deletion
+        UNIT_ASSERT_VALUES_EQUAL(updated.PersistentBufferDDiskIdSize(), 1);
+    }
+
+    Y_UNIT_TEST(DeleteDDiskNotFoundReturnsNotFound) {
+        TDDiskTestContext f;
+        f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            auto *cmd = op->AddDeleteDDisks();
+            cmd->MutableDDiskId()->SetNodeId(999);
+            cmd->MutableDDiskId()->SetPDiskId(999);
+            cmd->MutableDDiskId()->SetDDiskSlotId(999);
+        });
+        // A missing DDisk must be reported as NOT_FOUND, not a generic ERROR,
+        // so that callers can distinguish "target doesn't exist" from other failures.
+        UNIT_ASSERT_VALUES_EQUAL(rr.GetStatus(), NKikimrProto::NOT_FOUND);
+        UNIT_ASSERT_STRING_CONTAINS(rr.GetErrorReason(), "DDisk not found");
+    }
+
+    Y_UNIT_TEST(DeleteMiddleDDiskRemovesEntry) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/3,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+        UNIT_ASSERT_VALUES_EQUAL(group.DDiskIdSize(), 3);
+
+        const auto ddiskToDelete = group.GetDDiskId(1); // middle one
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            auto *cmd = op->AddDeleteDDisks();
+            cmd->MutableDDiskId()->CopyFrom(ddiskToDelete);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rr.GetStatus(), NKikimrProto::OK, rr.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL(rr.DirectBlockGroupsSize(), 1);
+
+        const auto& updated = rr.GetDirectBlockGroups(0);
+        // the deleted middle entry must be removed from the list entirely --
+        // no hole is left behind, and the remaining entries keep their relative order
+        UNIT_ASSERT_VALUES_EQUAL(updated.DDiskIdSize(), 2);
+        UNIT_ASSERT(TDDiskId(updated.GetDDiskId(0)) == TDDiskId(group.GetDDiskId(0)));
+        UNIT_ASSERT(TDDiskId(updated.GetDDiskId(1)) == TDDiskId(group.GetDDiskId(2)));
+        // persistent buffers are untouched by DDisk deletion
+        UNIT_ASSERT_VALUES_EQUAL(updated.PersistentBufferDDiskIdSize(), 1);
+    }
+
+    Y_UNIT_TEST(DeleteAllPersistentBuffersAndDDisks) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/2);
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            for (const auto& pb : group.GetPersistentBufferDDiskId()) {
+                op->AddDeletePersistentBuffers()->MutablePersistentBufferId()->CopyFrom(pb);
+            }
+            for (const auto& dd : group.GetDDiskId()) {
+                op->AddDeleteDDisks()->MutableDDiskId()->CopyFrom(dd);
+            }
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rr.GetStatus(), NKikimrProto::OK, rr.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL(rr.DirectBlockGroupsSize(), 1);
+
+        const auto& updated = rr.GetDirectBlockGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(updated.PersistentBufferDDiskIdSize(), 0);
+        // both DDisks removed and the last one had zero claim -> full trim
+        UNIT_ASSERT_VALUES_EQUAL(updated.DDiskIdSize(), 0);
+    }
+
+    // Re-deleting a PersistentBuffer that was already removed by a prior operation
+    // must also be reported as NOT_FOUND (not a stale/cached OK, and not a generic
+    // ERROR), confirming the status is derived from actual current state each time.
+    Y_UNIT_TEST(DeletePersistentBufferTwiceReturnsNotFoundOnSecondAttempt) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/1,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+        const auto pb = group.GetPersistentBufferDDiskId(0);
+
+        auto rr1 = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            op->AddDeletePersistentBuffers()->MutablePersistentBufferId()->CopyFrom(pb);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rr1.GetStatus(), NKikimrProto::OK, rr1.GetErrorReason());
+
+        auto rr2 = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            op->AddDeletePersistentBuffers()->MutablePersistentBufferId()->CopyFrom(pb);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(rr2.GetStatus(), NKikimrProto::NOT_FOUND);
+        UNIT_ASSERT_STRING_CONTAINS(rr2.GetErrorReason(), "PersistentBuffer not found");
+    }
+
+    // Same as above, but for DeleteDDisks: deleting an already-deleted DDisk a
+    // second time must be reported as NOT_FOUND.
+    Y_UNIT_TEST(DeleteDDiskTwiceReturnsNotFoundOnSecondAttempt) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+        const auto ddisk = group.GetDDiskId(1);
+
+        auto rr1 = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            op->AddDeleteDDisks()->MutableDDiskId()->CopyFrom(ddisk);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rr1.GetStatus(), NKikimrProto::OK, rr1.GetErrorReason());
+
+        auto rr2 = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            op->AddDeleteDDisks()->MutableDDiskId()->CopyFrom(ddisk);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(rr2.GetStatus(), NKikimrProto::NOT_FOUND);
+        UNIT_ASSERT_STRING_CONTAINS(rr2.GetErrorReason(), "DDisk not found");
+    }
+
+    // A single request mixing a not-found PersistentBuffer delete together with a
+    // valid DDisk delete must still surface NOT_FOUND for the whole operation
+    // (the exception aborts the entire DirectBlockGroupOperations loop for this
+    // transaction, so no partial changes are committed).
+    Y_UNIT_TEST(DeleteWithMixedNotFoundAndValidTargetsReturnsNotFound) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+        const auto validDDisk = group.GetDDiskId(0);
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            // valid delete, would succeed on its own
+            op->AddDeleteDDisks()->MutableDDiskId()->CopyFrom(validDDisk);
+            // bogus, never-allocated PersistentBuffer identifier
+            auto *cmd = op->AddDeletePersistentBuffers();
+            cmd->MutablePersistentBufferId()->SetNodeId(999);
+            cmd->MutablePersistentBufferId()->SetPDiskId(999);
+            cmd->MutablePersistentBufferId()->SetDDiskSlotId(999);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(rr.GetStatus(), NKikimrProto::NOT_FOUND);
+        UNIT_ASSERT_STRING_CONTAINS(rr.GetErrorReason(), "PersistentBuffer not found");
+
+        // Verify nothing was actually committed: querying the group again must
+        // show both DDisks and the PersistentBuffer still present.
+        auto rr2 = f.SendDirectBlockGroupOperation(1, [&](auto*) {});
+        UNIT_ASSERT_VALUES_EQUAL_C(rr2.GetStatus(), NKikimrProto::OK, rr2.GetErrorReason());
+        const auto& unchanged = rr2.GetDirectBlockGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(unchanged.DDiskIdSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(unchanged.PersistentBufferDDiskIdSize(), 1);
+    }
+
+    // Errors that are NOT "not found" (e.g. combining incompatible Queries and
+    // DirectBlockGroupOperations in the same request) must remain plain ERROR,
+    // not be misreported as NOT_FOUND.
+    Y_UNIT_TEST(NonNotFoundErrorStillReturnsError) {
+        TDDiskTestContext f;
+        f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/1,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+        auto& r = ev->Record;
+        r.SetDDiskPoolName("ddisk_pool");
+        r.SetPersistentBufferDDiskPoolName("ddisk_pool");
+        r.SetTabletId(1);
+        // Queries and DirectBlockGroupOperations together are rejected up-front
+        // with a plain ERROR (see Execute() in ddisk.cpp), well before any
+        // not-found checks are reached.
+        auto *q = r.AddQueries();
+        q->SetDirectBlockGroupId(2);
+        q->SetTargetNumVChunks(1);
+        auto *op = r.AddDirectBlockGroupOperations();
+        op->SetDirectBlockGroupId(1);
+        op->AddDeleteDDisks(); // deliberately empty/bogus, shouldn't even be reached
+
+        TActorId edge = f.Env.Runtime->AllocateEdgeActor(f.Env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        f.Env.Runtime->SendToPipe(MakeBSControllerID(), edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+        auto response = f.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(edge);
+        auto& rr = response->Get()->Record;
+
+        UNIT_ASSERT_VALUES_EQUAL(rr.GetStatus(), NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(rr.GetErrorReason(), "can't be provided at the same time");
     }
 }

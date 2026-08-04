@@ -459,7 +459,8 @@ int TCommandImportFromS3::Run(TConfig& config) {
     }
 
     using namespace NImport;
-    TImportClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    TImportClient client(driver);
 
     int returnCode = EXIT_SUCCESS;
     if (ListObjectsInExistingExport) {
@@ -537,7 +538,8 @@ int TCommandImportFromNfs::Run(TConfig& config) {
     }
 
     using namespace NImport;
-    TImportClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    TImportClient client(driver);
 
     auto settings = MakeImportSettings();
     auto response = client.ImportFromFs(std::move(settings)).GetValueSync();
@@ -739,7 +741,8 @@ int TCommandImportFromCsv::Run(TConfig& config) {
         settings.Delimiter(Delimiter);
     }
 
-    TImportFileClient client(CreateDriver(config), config, settings);
+    auto driver = CreateDriver(config);
+    TImportFileClient client(driver, config, settings);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
@@ -769,7 +772,8 @@ int TCommandImportFromJson::Run(TConfig& config) {
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
     settings.Threads(Threads);
 
-    TImportFileClient client(CreateDriver(config), config, settings);
+    auto driver = CreateDriver(config);
+    TImportFileClient client(driver, config, settings);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
@@ -788,7 +792,8 @@ int TCommandImportFromParquet::Run(TConfig& config) {
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
     settings.Threads(Threads);
 
-    TImportFileClient client(CreateDriver(config), config, settings);
+    auto driver = CreateDriver(config);
+    TImportFileClient client(driver, config, settings);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;

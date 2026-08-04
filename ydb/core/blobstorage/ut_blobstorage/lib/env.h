@@ -67,6 +67,7 @@ struct TEnvironmentSetup {
         const ui64 PDiskSize = 10_TB;
         const ui64 PDiskChunkSize = 0;
         const bool TrackSharedQuotaInPDiskMock = false;
+        const bool ReportVDiskMetricsInPDiskMock = false;
         const bool SelfManagementConfig = false;
         const bool EnableDeepScrubbing = false;
         const ui32 NumPiles = 0;
@@ -103,6 +104,7 @@ struct TEnvironmentSetup {
                         : TPDiskMockState::ESpaceColorPolicy::None;
                 state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, Env.Settings.PDiskSize, chunkSize,
                         cfg->ReadOnly, Env.Settings.DiskType, spaceColorPolicy));
+                state->SetReportVDiskMetrics(Env.Settings.ReportVDiskMetricsInPDiskMock);
             }
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
@@ -252,11 +254,11 @@ struct TEnvironmentSetup {
         return TAppData::TimeProvider->Now();
     }
 
-    TString GenerateRandomString(ui32 len) {
+    static TString GenerateRandomString(ui32 len, ui64 seed) {
         TString res = TString::Uninitialized(len);
         char *p = res.Detach();
         char *end = p + len;
-        TReallyFastRng32 rng(RandomNumber<ui64>());
+        TReallyFastRng32 rng(seed);
         for (; p + sizeof(ui32) < end; p += sizeof(ui32)) {
             WriteUnaligned<ui32>(p, rng());
         }
@@ -264,6 +266,10 @@ struct TEnvironmentSetup {
             *p = rng();
         }
         return res;
+    }
+
+    TString GenerateRandomString(ui32 len) {
+        return GenerateRandomString(len, RandomNumber<ui64>());
     }
 
     ui32 GetNumDataCenters() const {
@@ -533,6 +539,7 @@ config:
                 }
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
+                appData->FeatureFlags.MergeFrom(Settings.FeatureFlags);
 
                 auto& icb = *appData->Icb;
 #define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {       \
@@ -568,8 +575,13 @@ config:
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksHDD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxPutTimeoutSeconds, 60, 1, 1'000'000, Settings.MaxPutTimeoutDSProxy.Seconds());
+                ADD_ICB_CONTROL(DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy, false, false, true, false);
 
                 ADD_ICB_CONTROL(BlobDepotControls.MaxLoadedTrashRecords, 1'000'000, 1, 100'000'000, 1'000'000);
+
+                ADD_ICB_CONTROL(RetroTracingControls.EnableStorageGeneration, false, false, true, false);
+                ADD_ICB_CONTROL(RetroTracingControls.EnableStorageCollectionSlowRequests, false, false, true, false);
+                ADD_ICB_CONTROL(DSProxyControls.LongRequestThresholdMs, 50'000, 1, 1'000'000'000, 50'000);
 
                 ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
                 ADD_ICB_CONTROL(VDiskControls.HullCompThrottlerBytesRate, 0, 0, 10737418240, 0);
@@ -587,6 +599,8 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.EnablePersistentPhantomFlagStorage, false, false, true, Settings.EnablePersistentPhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
                 ADD_ICB_CONTROL(VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes, 1'000'000, 1, 10'000'000, Settings.VolatilePhantomFlagStorageBlobSizeLimitBytes);
+                ADD_ICB_CONTROL(VDiskControls.EnableChecksumReadValidationOnVDisk, false, false, true, false);
+                ADD_ICB_CONTROL(VDiskControls.EnableChecksumWriteValidationOnVDisk, false, false, true, false);
                 ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
                 ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
 #undef ADD_ICB_CONTROL
@@ -1107,12 +1121,17 @@ config:
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         TControlWrapper enablePutBatching(true, false, true);
         TControlWrapper enableVPatch(false, false, true);
+        TControlWrapper enableChecksumCalcAndValidationOnDsProxy(false, false, true);
+        if (auto it = IcbControls.find({nodeId, "DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy"}); it != IcbControls.end()) {
+            enableChecksumCalcAndValidationOnDsProxy = it->second;
+        }
         auto info = GetGroupInfo(groupId);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(info), nullptr, true, nodeMon,
             std::move(storagePoolCounters), TBlobStorageProxyParameters{
                     .Controls = TBlobStorageProxyControlWrappers{
                         .EnablePutBatching = enablePutBatching,
                         .EnableVPatch = enableVPatch,
+                        .EnableChecksumCalcAndValidationOnDsProxy = enableChecksumCalcAndValidationOnDsProxy,
                     }
                 }
             );

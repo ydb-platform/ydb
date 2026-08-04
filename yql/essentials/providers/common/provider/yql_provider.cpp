@@ -228,6 +228,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoLambda> update;
     TVector<TCoNameValueTuple> other;
     TVector<TCoIndex> indexes;
+    TVector<TCoStatistics> statistics;
     TVector<TCoChangefeed> changefeeds;
     TMaybeNode<TExprList> columnFamilies;
     TVector<TCoNameValueTuple> tableSettings;
@@ -300,6 +301,22 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                     index.Name(InferIndexName(*columnList, ctx));
                 }
                 indexes.push_back(index.Done());
+            } else if (name == "statistics") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                auto stat = Build<TCoStatistics>(ctx, node.Pos());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    const auto& statItemName = item.Name().Value();
+                    if (statItemName == "statisticsName") {
+                        stat.Name(item.Value().Cast<TCoAtom>());
+                    } else if (statItemName == "statisticsColumns") {
+                        stat.Columns(item.Value().Cast<TCoAtomList>());
+                    } else if (statItemName == "statisticsTypes") {
+                        stat.Types(item.Value().Cast<TCoAtomList>());
+                    } else {
+                        YQL_ENSURE(false, "unknown statistics item " << statItemName);
+                    }
+                }
+                statistics.push_back(stat.Done());
             } else if (name == "changefeed") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
                 auto cf = Build<TCoChangefeed>(ctx, node.Pos());
@@ -357,6 +374,10 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                           .Add(indexes)
                           .Done();
 
+    const auto& stats = Build<TCoStatisticsList>(ctx, node.Pos())
+                            .Add(statistics)
+                            .Done();
+
     const auto& cfs = Build<TCoChangefeedList>(ctx, node.Pos())
                           .Add(changefeeds)
                           .Done();
@@ -385,6 +406,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     ret.Filter = filter;
     ret.Update = update;
     ret.Indexes = idx;
+    ret.Statistics = stats;
     ret.Changefeeds = cfs;
     ret.ColumnFamilies = columnFamilies;
     ret.TableSettings = tableProfileSettings;
@@ -1204,7 +1226,7 @@ bool FillUsedFiles(
         const auto& e = NPg::LookupExtension(extensionIndex);
         needFullPgCatalog = true;
         auto alias = TFsPath(e.LibraryPath).GetName();
-        if (!AddPgFile(true, e.LibraryPath, e.LibraryMD5, alias, files, types, node.Pos(), ctx)) {
+        if (!AddPgFile(/*isPath=*/true, e.LibraryPath, e.LibraryMD5, alias, files, types, node.Pos(), ctx)) {
             return false;
         }
     }
@@ -1215,7 +1237,7 @@ bool FillUsedFiles(
     }
 
     TString content = NPg::ExportExtensions(filter);
-    return AddPgFile(false, content, "", TString(PgCatalogFileName), files, types, node.Pos(), ctx);
+    return AddPgFile(/*isPath=*/false, content, "", TString(PgCatalogFileName), files, types, node.Pos(), ctx);
 }
 
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter, const TUserDataTable& crutches) {
@@ -1301,7 +1323,7 @@ TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes) 
         typeFlags |= TExprAnnotationFlags::Types;
     }
 
-    auto ast = ConvertToAst(expr, ctx, typeFlags, true);
+    auto ast = ConvertToAst(expr, ctx, typeFlags, /*refAtoms=*/true);
     YQL_ENSURE(ast.Root);
     return ast.Root->ToString();
 }

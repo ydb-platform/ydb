@@ -275,13 +275,6 @@ DELEGATE_METHOD(void, ModifyRows, (
     const TModifyRowsOptions& options),
     (path, nameTable, modifications, options))
 
-DELEGATE_METHOD(void, FutureModifyRows, (
-    const NYPath::TYPath& path,
-    NTableClient::TNameTablePtr nameTable,
-    TSharedRange<NFuture::TRowModification> modifications,
-    const TModifyRowsOptions& options),
-    (path, nameTable, modifications, options))
-
 DELEGATE_METHOD(void, AdvanceConsumer, (
     const NYPath::TRichYPath& consumerPath,
     const NYPath::TRichYPath& queuePath,

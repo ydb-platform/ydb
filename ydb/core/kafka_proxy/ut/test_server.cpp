@@ -102,6 +102,9 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     if (!settings.EnableNativeKafkaBalancing) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(false);
     }
+    if (settings.EnableKafkaServerlessTransactions) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaServerlessTransactions(true);
+    }
     KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaTransactions(true);
     KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicCompactificationByKey(true);
 
@@ -196,15 +199,22 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     {
         // Access Server Mock
         grpc::ServerBuilder builder;
-        builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
+        builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials());
+        if (!KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableAccessServiceV2Interface()) {
+            builder.RegisterService(&accessServiceMock);
+        }
+        // We should always register v2 because BulkAuth uses V2 AS even with V1
+        builder.RegisterService(&accessServiceMockV2);
         AccessServer = builder.BuildAndStart();
     }
 }
 
 template <class TKikimr, bool secure>
 TTestServer<TKikimr, secure>::TTestServer(const TString& kafkaApiMode, bool serverless, bool enableNativeKafkaBalancing,
-            bool enableAutoTopicCreation, bool enableAutoConsumerCreation, bool enableQuoting, bool checkACL)
-    : TTestServer(TTestServerSettings{kafkaApiMode, serverless, enableNativeKafkaBalancing, enableAutoTopicCreation, enableAutoConsumerCreation, enableQuoting, checkACL})
+            bool enableAutoTopicCreation, bool enableAutoConsumerCreation, bool enableQuoting, bool checkACL, bool EnableKafkaServerlessTransactions)
+    : TTestServer(TTestServerSettings{kafkaApiMode, serverless, enableNativeKafkaBalancing,
+                enableAutoTopicCreation, enableAutoConsumerCreation,
+                    enableQuoting, checkACL, false, EnableKafkaServerlessTransactions})
 {}
 
 // Explicit template instantiations

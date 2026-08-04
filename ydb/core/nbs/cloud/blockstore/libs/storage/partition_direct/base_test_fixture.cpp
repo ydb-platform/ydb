@@ -204,12 +204,10 @@ void TBaseFixture::Init()
     };
 
     DirectBlockGroup->BatchEraseFromPBufferHandler = [&]   //
-        (ui32 vChunkIndex,
-         THostIndex hostIndex,
-         const TVector<TPBufferSegment>& segments,
+        (THostIndex hostIndex,
+         const TEraseSegments& segments,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(vChunkIndex);
         Y_UNUSED(hostIndex);
         Y_UNUSED(segments);
         Y_UNUSED(traceId);
@@ -297,6 +295,15 @@ void TBaseFixture::SetEraseResult(TDBGEraseResponse response, bool async)
 bool TBaseFixture::WaitEraseRequests(size_t count, TDuration timeout)
 {
     return Wait(ErasePromises, count, timeout);
+}
+
+size_t TBaseFixture::ReplyUpdateRequests()
+{
+    auto requests = std::move(PartitionDirectService->UpdateConfigRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue();
+    }
+    return requests.size();
 }
 
 template <typename T>

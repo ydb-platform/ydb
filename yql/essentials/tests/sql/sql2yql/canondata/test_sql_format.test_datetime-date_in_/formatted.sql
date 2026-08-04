@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     CAST('1970-01-01' AS date),
     CAST(CAST('1970-01-01' AS date) AS string)

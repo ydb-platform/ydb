@@ -3,6 +3,11 @@
 namespace NKikimr {
 namespace NKqp {
 
+bool TPushFilterUnderMapRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter &&
+        input->Children.front()->Kind == EOperator::Map;
+}
+
 TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     Y_UNUSED(ctx);

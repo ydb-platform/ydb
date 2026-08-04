@@ -1,5 +1,13 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.33.0 {#2-33-0}
+
+Released on June 23, 2026. To update to version **2.33.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* The AI assistant in the `{{ ydb-cli }}` [interactive mode](./reference/ydb-cli/interactive-cli.md) can now search the {{ ydb-short-name }} documentation, providing more accurate and context-aware answers.
+
 ## Version 2.32.0 {#2-32-0}
 
 Released on June 22, 2026. To update to version **2.32.0**, select the [Downloads](downloads/ydb-cli.md) section.
@@ -368,7 +376,7 @@ Released on November 26, 2024. To update to version **2.16.0**, select the [Down
 * Added support for [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601)–formatted timestamps in the `{{ ydb-cli }} topic` commands.
 * Added the `--explain-ast` option to the `{{ ydb-cli }} sql` command, which prints the query AST.
 * Added ANSI SQL syntax highlighting in interactive mode.
-* Added support for [PostgreSQL syntax](./postgresql/intro.md) in the `{{ ydb-cli }} workload tpch` and `{{ ydb-cli }} workload tpcds` benchmarks.
+* Added support for PostgreSQL syntax in the `{{ ydb-cli }} workload tpch` and `{{ ydb-cli }} workload tpcds` benchmarks.
 * Introduced the `-c` option for the `{{ ydb-cli }} workload tpcds run` command to compare results with expected values and display differences.
 * Added log events for the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` commands.
 * Enhanced the `{{ ydb-cli }} tools restore` command to display error locations.
@@ -450,7 +458,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 * Fixed an error displaying tables in `pretty` format with [Unicode](https://en.wikipedia.org/wiki/Unicode) characters.
 
-* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](./postgresql/import.md#pg-convert).
+* Fixed an error substituting the wrong primary key in the command `ydb tools pg-convert`.
 
 ## Version 2.7.0 {#2-7-0}
 
@@ -458,7 +466,7 @@ Released on October 23, 2023. To update to version **2.7.0**, select the [Downlo
 
 ### Features
 
-* Added the [ydb tools pg-convert](./postgresql/import.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
+* Added the `ydb tools pg-convert` command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
 * Added the `{{ ydb-cli }} workload query` load testing command, which loads the database with [script execution queries](reference/ydb-cli/yql.md) in multiple threads.
 * Added new `{{ ydb-cli }} scheme permissions list` command to list permissions.
 * In the commands [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md), and [ydb scripting yql](reference/ydb-cli/scripting-yql.md), the `--flame-graph` option has been added, specifying the path to the file in which you need to save the visualization of query execution statistics.

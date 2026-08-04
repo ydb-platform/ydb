@@ -80,6 +80,7 @@ jobs:
     with:
       build-target: ydb/apps/ydb
       binary-name: ydb
+      additional-ya-make-args: "-DUSE_SSE4=no -DYDB_CLI_AI_INCLUDE_DOCS=yes"
       ref: ${{ needs.prepare-release.outputs.branch-name }}
       build-linux-amd: ${{ inputs.build-linux-amd }}
       build-linux-arm: ${{ inputs.build-linux-arm }}

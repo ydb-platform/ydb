@@ -19,6 +19,8 @@
 
 #include <library/cpp/yt/memory/range.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/system/align.h>
 
 namespace NYT::NArrow {
@@ -70,8 +72,8 @@ private:
     const NFormats::TControlAttributesConfigPtr ControlAttributesConfig_;
 
     NFormats::ISchemalessFormatWriterPtr Writer_ = nullptr;
-    TString Data_;
-    TStringOutput OutputStream_;
+    std::string Data_;
+    TStdStringOutput OutputStream_;
     NConcurrency::IFlushableAsyncOutputStreamPtr AsyncOutputStream_;
 };
 

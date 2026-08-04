@@ -11,7 +11,7 @@ def h(hf, msg):
 
 
 def xor(bytes1, bytes2):
-    return bytes(a ^ b for a, b in zip(bytes1, bytes2))
+    return bytes(a ^ b for a, b in zip(bytes1, bytes2, strict=True))
 
 
 def b64enc(binary):
@@ -19,8 +19,19 @@ def b64enc(binary):
 
 
 def b64dec(string):
-    return b64decode(string)
+    return b64decode(string, validate=True)
 
 
 def uenc(string):
     return string.encode("utf-8")
+
+
+class IterationCount(int):
+    def __new__(cls, value, minimum, maximum):
+        if value is None:
+            value = minimum
+        if value < minimum:
+            raise ValueError(f"The value must not be < {minimum}")
+        if value > maximum:
+            raise ValueError(f"The value must not be > {maximum}")
+        return super().__new__(cls, value)

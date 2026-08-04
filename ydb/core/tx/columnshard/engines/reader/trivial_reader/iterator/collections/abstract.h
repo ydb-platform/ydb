@@ -77,6 +77,14 @@ public:
     void OnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
         AFL_VERIFY(source);
         DoOnSourceFinished(source);
+        if (!source->IsInFlightReleased()) {
+            SourcesInFlightCount.Dec();
+        }
+    }
+
+    void ReleaseInFlight(const std::shared_ptr<NCommon::IDataSource>& source) {
+        AFL_VERIFY(source);
+        source->SetInFlightReleased();
         SourcesInFlightCount.Dec();
     }
 

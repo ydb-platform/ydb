@@ -10,8 +10,8 @@ namespace NYdb::NBS::NBlockStore {
 
 enum class EWriteMode: ui32
 {
-    PBufferReplication,
-    DirectPBuffersFilling,
+    IndirectWrite,
+    DirectWrite,
 };
 
 class TStorageConfig;

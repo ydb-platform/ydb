@@ -79,11 +79,12 @@ namespace NYql::NDq {
 
 class TOutputSerializer {
 public:
-    TOutputSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize)
+    TOutputSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, TMaybe<size_t> bufferPageAllocSize)
         : Buffer(buffer)
         , RowType(rowType)
         , TransportVersion(transportVersion)
         , PackerVersion(packerVersion)
+        , DatumValidationMode(datumValidationMode)
         , BufferPageAllocSize(bufferPageAllocSize)
     {}
 
@@ -98,15 +99,17 @@ public:
     NKikimr::NMiniKQL::TType* RowType;
     NDqProto::EDataTransportVersion TransportVersion;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion;
+    NYql::EDatumValidationMode DatumValidationMode;
     TMaybe<size_t> BufferPageAllocSize;
 };
 
 class TInputDeserializer {
 public:
-    TInputDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, const NKikimr::NMiniKQL::THolderFactory& holderFactory)
+    TInputDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, const NKikimr::NMiniKQL::THolderFactory& holderFactory)
         : RowType(rowType)
         , TransportVersion(transportVersion)
         , PackerVersion(packerVersion)
+        , DatumValidationMode(datumValidationMode)
         , HolderFactory(holderFactory) {
     }
 
@@ -116,12 +119,13 @@ public:
     NKikimr::NMiniKQL::TType* RowType;
     NDqProto::EDataTransportVersion TransportVersion;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion;
+    NYql::EDatumValidationMode DatumValidationMode;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
 };
 
 std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer, bool local);
 std::unique_ptr<TOutputSerializer> ConvertToLocalSerializer(std::unique_ptr<TOutputSerializer>&& serializer);
-std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
+std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, TMaybe<size_t> bufferPageAllocSize, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
 class TChannelStub : public IChannelBuffer {
 public:
@@ -243,8 +247,8 @@ public:
     const ui64 MaxInflightBytes; // NoLimit => HardLimit
     const ui64 MinInflightBytes; // HardLimit => NoLimit
     bool FinishPushed = false;
-    TInstant LastOutputNotificationTime;
-    TInstant LastInputNotificationTime;
+    std::atomic<TInstant> LastOutputNotificationTime;
+    std::atomic<TInstant> LastInputNotificationTime;
     TInstant FinishTime;
 
     std::atomic<bool> NeedToNotifyOutput = false;
@@ -435,8 +439,8 @@ public:
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
-    ui64 PeerGenMajor = 0;
-    NActors::TActorId PeerActorId;
+    ui64 OutputNodeGenMajor = 0;
+    NActors::TActorId OutputNodeActorId;
     bool IsBound = false;
     TDqThreadSafeStats PushStats;
     TDqThreadSafeStats PopStats;
@@ -560,6 +564,9 @@ public:
         InputBufferBytes = counters->GetCounter("InputBuffer/Bytes", true);
         InputBufferChunks = counters->GetCounter("InputBuffer/Chunks", true);
         InputBufferInflightBytes = counters->GetCounter("InputBuffer/InflightBytes", false);
+        SessionMessagesSent = counters->GetCounter("Session/MessagesSent", true);
+        SessionMessagesResent = counters->GetCounter("Session/MessagesResent", true);
+        SessionReconciliations = counters->GetCounter("Session/Reconciliations", true);
         auto now = TInstant::Now();
         LastPeerActivity.store(now);
         LastCleanup = now;
@@ -582,13 +589,13 @@ public:
     void TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
     void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor);
     void HandleCleanup();
-    void FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
+    void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor);
     void FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters(ui64 deltaBytes);
-    void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor, ui64 seqNo);
+    void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor);
     virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
     void SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
@@ -598,7 +605,7 @@ public:
     void DoReconciliation(char logSymbol);
     void AddReconciliationLog(char logSymbol);
     TString GetReconciliationLog();
-    void SendDiscovery(NActors::TActorId actorId, ui64 seqNo);
+    void SendDiscovery();
 
     NActors::TActorId NodeActorId;
     TString LogPrefix;
@@ -611,7 +618,6 @@ public:
     mutable std::unordered_map<TChannelInfo, std::shared_ptr<TInputDescriptor>> InputDescriptors;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundInputs;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundOutputs;
-    bool Connected = false;
     std::weak_ptr<TNodeState> Self;
     // Sender
     ui64 GenMajor = 1;
@@ -619,12 +625,12 @@ public:
     ui64 ReconciliationCount = 0;
     ui64 SeqNo = 0;
     std::atomic<ui64> InflightBytes = 0;
+    NActors::TActorId InputNodeActorId;
     // Receiver
-    NActors::TActorId PeerActorId;
-    std::atomic<ui64> PeerGenMajor = 0;
-    std::atomic<ui64> PeerGenMinor = 0;
+    NActors::TActorId OutputNodeActorId;
+    std::atomic<ui64> OutputNodeGenMajor = 0;
+    std::atomic<ui64> OutputNodeGenMinor = 0;
     ui64 ConfirmedSeqNo = 0;
-    TEvDqCompute::TEvChannelDataV2::TPtr OutOfOrderMessage;
     // ...
     const TDqChannelLimits Limits;
     const ui64 MaxInflightMessages = 8192;
@@ -646,6 +652,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionMessagesSent;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionMessagesResent;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionReconciliations;
     const TDuration ReconciliationTimeout = TDuration::MilliSeconds(1000);
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;
@@ -656,6 +665,10 @@ public:
     std::atomic<bool> ResendAsked = false;
     std::deque<char> ReconciliationLog;
     TChannelInfo LastLostInfo = TChannelInfo(0,  NActors::TActorId{}, NActors::TActorId{});
+    std::atomic<ui64> SendCount = 0;
+    std::atomic<ui64> ResendCount = 0;
+    std::atomic<ui64> ReconCount = 0;
+    std::atomic<TInstant> ReconSent;
 };
 
 class TDebugNodeState : public TNodeState {
@@ -919,7 +932,7 @@ public:
         PushStats.SrcStageId = settings.SrcStageId;
         PushStats.Level = settings.Level;
         PopStats.Level = settings.Level;
-        Deserializer = CreateDeserializer(settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.BufferPageAllocSize, *settings.HolderFactory);
+        Deserializer = CreateDeserializer(settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.DatumValidationMode, settings.BufferPageAllocSize, *settings.HolderFactory);
     }
 
     mutable TDqInputStats PopStats;

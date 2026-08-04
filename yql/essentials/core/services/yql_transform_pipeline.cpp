@@ -137,7 +137,7 @@ TTransformationPipeline& TTransformationPipeline::AddTypeAnnotation(EYqlIssueCod
 
 TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool forSubGraph, bool disableConstraintCheck, EYqlIssueCode issueCode) {
     Transformers_.push_back(TTransformStage(
-        CreateConstraintTransformer(*TypeAnnotationContext_, false, forSubGraph, disableConstraintCheck), "Constraints", issueCode));
+        CreateConstraintTransformer(*TypeAnnotationContext_, /*instantOnly=*/false, forSubGraph, disableConstraintCheck), "Constraints", issueCode));
     Transformers_.push_back(TTransformStage(
         CreateFunctorTransformer(
             [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -177,7 +177,7 @@ TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYq
 }
 
 TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(bool enableLineage, bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
-    AddCommonOptimization(false, issueCode);
+    AddCommonOptimization(/*forPeephole=*/false, issueCode);
     if (enableLineage) {
         Transformers_.push_back(TTransformStage(
             CreateChoiceGraphTransformer(
@@ -296,7 +296,7 @@ TTransformationPipeline& TTransformationPipeline::AddProviderOptimization(EYqlIs
 }
 
 TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
-    AddCommonOptimization(false, issueCode);
+    AddCommonOptimization(/*forPeephole=*/false, issueCode);
     AddProviderOptimization(issueCode);
     if (withFinalOptimization) {
         AddFinalCommonOptimization(issueCode);
@@ -306,7 +306,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
 }
 
 TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<TString>& lineageOut, EYqlIssueCode issueCode) {
-    AddCommonOptimization(false, issueCode);
+    AddCommonOptimization(/*forPeephole=*/false, issueCode);
     Transformers_.push_back(TTransformStage(
         CreateSinglePassFunctorTransformer(
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

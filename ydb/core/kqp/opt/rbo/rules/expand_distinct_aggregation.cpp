@@ -74,7 +74,7 @@ const TTypeAnnotationNode* GetAggregationType(const TTypeAnnotationNode* inputTy
         std::vector<const TTypeAnnotationNode*> tupleTypes;
         if (IsDecimalType(inputType)) {
             auto decimalType = inputType->Cast<TDataExprParamsType>();
-            const auto precision = "35"; //TString(decimalType->GetParamOne());
+            const auto precision = "35";
             const auto scale = TString(decimalType->GetParamTwo());
             tupleTypes = {ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, precision, scale), ctx.MakeType<TDataExprType>(EDataSlot::Uint64)};
         } else {
@@ -240,6 +240,10 @@ TIntrusivePtr<IOperator> ExpandMultiDistinct(const TIntrusivePtr<TOpAggregate>& 
 }
 
 } // anonymous namespace
+
+bool TExpandDistinctAggregationRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Aggregate;
+}
 
 TIntrusivePtr<IOperator> TExpandDistinctAggregationRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
     if (!IsSuitableToExpandDistinctAggregation(input)) {

@@ -15,6 +15,8 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
         self.rows_count = 20
         self._use_sql_index_syntax = min(self.versions) >= (26, 1)
 
+        self._describe_shows_olap_indexes = min(self.versions) >= (26, 3)
+
         extra_flags = []
         if self._use_sql_index_syntax:
             extra_flags = ["enable_local_bloom_filter_index", "enable_local_bloom_ngram_filter_index"]
@@ -175,6 +177,8 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
 
     def _assert_describe_indexes(self, table_name, expected):
         if not self._use_sql_index_syntax:
+            return
+        if not self._describe_shows_olap_indexes:
             return
         path = self._table_path(table_name)
 

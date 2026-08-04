@@ -280,9 +280,9 @@ def prepare_request_dict(
         percent_encode_sequence = botocore.utils.percent_encode_sequence
         encoded_query_string = percent_encode_sequence(r['query_string'])
         if '?' not in url:
-            url += '?%s' % encoded_query_string
+            url += f'?{encoded_query_string}'
         else:
-            url += '&%s' % encoded_query_string
+            url += f'&{encoded_query_string}'
     r['url'] = url
     r['context'] = context
     if context is None:

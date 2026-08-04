@@ -22,13 +22,12 @@ ENDIF()
 SRCS(
     kqp_block_hash_join_ut.cpp
     kqp_join_order_ut.cpp
-    kqp_join_topology_generator.cpp
-    kqp_join_topology_ut.cpp
     kqp_benches_ut.cpp
 )
 
 PEERDIR(
     ydb/core/kqp
+    ydb/core/kqp/opt/cbo/bench
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/digest

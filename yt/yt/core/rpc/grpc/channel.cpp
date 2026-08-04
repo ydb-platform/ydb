@@ -180,7 +180,7 @@ public:
         if (!TerminationError_.IsOK()) {
             auto error = TerminationError_;
             guard.Release();
-            responseHandler->HandleError(std::move(error));
+            responseHandler->HandleError(std::move(error), EndpointAddress_);
             return nullptr;
         }
         auto callHandler = New<TCallHandler>(
@@ -725,7 +725,7 @@ private:
                 reason,
                 Request_->GetRequestId());
 
-            responseHandler->HandleError(std::move(detailedError));
+            responseHandler->HandleError(std::move(detailedError), Owner_->GetEndpointAddress());
         }
 
         void NotifyResponse(TSharedRefArray message)
@@ -757,12 +757,21 @@ class TChannelFactory
     : public IChannelFactory
 {
 public:
+    explicit TChannelFactory(TChannelFactoryConfigPtr config)
+        : FactoryConfig_(std::move(config))
+    { }
+
     IChannelPtr CreateChannel(const std::string& address) override
     {
-        auto config = New<TChannelConfig>();
-        config->Address = address;
-        return CreateGrpcChannel(config);
+        auto channelConfig = New<TChannelConfig>();
+        channelConfig->Load(ConvertToNode(FactoryConfig_), /*postprocess*/ false, /*setDefaults*/ false);
+        channelConfig->Address = address;
+        channelConfig->Postprocess();
+        return CreateGrpcChannel(channelConfig);
     }
+
+private:
+    const TChannelFactoryConfigPtr FactoryConfig_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -774,9 +783,14 @@ IGrpcChannelPtr CreateGrpcChannel(TChannelConfigPtr config)
     return New<TChannel>(std::move(config));
 }
 
-IChannelFactoryPtr GetGrpcChannelFactory()
+IChannelFactoryPtr CreateGrpcChannelFactory(TChannelFactoryConfigPtr config)
 {
-    return LeakyRefCountedSingleton<TChannelFactory>();
+    return New<TChannelFactory>(std::move(config));
+}
+
+IChannelFactoryPtr GetDefaultGrpcChannelFactory()
+{
+    return LeakyRefCountedSingleton<TChannelFactory>(New<TChannelFactoryConfig>());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

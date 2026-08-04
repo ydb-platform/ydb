@@ -1,5 +1,7 @@
 #include "tenant_slot_broker_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_SLOT_BROKER
+
 namespace NKikimr {
 namespace NTenantSlotBroker {
 
@@ -12,7 +14,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxInitScheme Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxInitScheme Execute");
 
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
 
@@ -21,7 +23,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxInitScheme Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxInitScheme Complete");
 
         Self->ProcessTx(Self->CreateTxLoadState(), ctx);
         Self->TxCompleted(this, ctx);

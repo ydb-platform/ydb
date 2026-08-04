@@ -21,7 +21,7 @@ public:
         Become(&TRemoveConsumerActor::StateWork);
 
         Register(NPQ::NSchema::CreateRemoveConsumerActor(SelfId(), {
-            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
+            .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
             .Path = GetProtoRequest()->path(),
             .ConsumerName = GetProtoRequest()->consumer_name(),

@@ -1,7 +1,27 @@
 #include "abstract.h"
+#include <ydb/core/base/appdata.h>
 #include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NMetadata::NModifications {
+
+namespace {
+
+IOperationsManager::TYqlConclusionStatus OldSecretCreationDisabledStatus() {
+    return IOperationsManager::TYqlConclusionStatus::Fail(
+        NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+        GetOldSecretCreationDisabledMessage());
+}
+
+bool IsOldSecretType(const TString& typeId) {
+    return to_lower(typeId) == "secret";
+}
+
+} // namespace
+
+const TString& GetOldSecretCreationDisabledMessage() {
+    static const TString message("Old secrets creation syntax is disabled now. Please use the new one");
+    return message;
+}
 
 TTableSchema::TTableSchema(const THashMap<ui32, TSysTables::TTableColumnInfo>& description) {
     std::map<TString, Ydb::Column> columns;
@@ -82,6 +102,9 @@ IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareUpsertObject
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return TYqlConclusionStatus::Fail("metadata provider service is disabled");
     }
+    if (AppData()->FeatureFlags.GetDisableOldSecretCreation() && IsOldSecretType(settings.GetTypeId())) {
+        return OldSecretCreationDisabledStatus();
+    }
     TInternalModificationContext internalContext(context);
     internalContext.SetActivityType(EActivityType::Upsert);
     return DoPrepare(schemeOperation, settings, manager, internalContext);
@@ -92,6 +115,9 @@ IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareCreateObject
     const TExternalModificationContext& context) const {
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return TYqlConclusionStatus::Fail("metadata provider service is disabled");
+    }
+    if (AppData()->FeatureFlags.GetDisableOldSecretCreation() && IsOldSecretType(settings.GetTypeId())) {
+        return OldSecretCreationDisabledStatus();
     }
     TInternalModificationContext internalContext(context);
     internalContext.SetActivityType(EActivityType::Create);

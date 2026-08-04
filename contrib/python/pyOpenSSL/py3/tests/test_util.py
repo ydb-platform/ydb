@@ -3,12 +3,12 @@ import pytest
 from OpenSSL._util import exception_from_error_queue, lib
 
 
-class TestErrors(object):
+class TestErrors:
     """
     Tests for handling of certain OpenSSL error cases.
     """
 
-    def test_exception_from_error_queue_nonexistent_reason(self):
+    def test_exception_from_error_queue_nonexistent_reason(self) -> None:
         """
         :func:`exception_from_error_queue` raises ``ValueError`` when it
         encounters an OpenSSL error code which does not have a reason string.

@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include <ydb/library/kafka/kafka_messages_int.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
+#include <ydb/core/kafka_proxy/kafka_log_impl.h>
 #include "kafka_consumer_protocol.h"
 
 namespace NKafka {

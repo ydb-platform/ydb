@@ -1,5 +1,7 @@
 #include "kqp_rules_include.h"
 
+#include <ydb/core/kqp/opt/rbo/map_renames.h>
+
 namespace NKikimr {
 namespace NKqp {
     
@@ -42,25 +44,17 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         TVector<TExpression> joinFilters;
-        THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> subplanOutputRenames;
+        NMapRenames::TRenameMap subplanOutputRenames;
 
         auto leftIUs = child->GetOutputIUs();
         auto rightIUs = uncorrSubplan->GetOutputIUs();
         THashSet<TInfoUnit, TInfoUnit::THashFunction> usedIUs;
-        usedIUs.insert(leftIUs.begin(), leftIUs.end());
-        usedIUs.insert(rightIUs.begin(), rightIUs.end());
-        auto makeInternalIU = [&]() {
-            for (;;) {
-                auto iu = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), false);
-                if (usedIUs.insert(iu).second) {
-                    return iu;
-                }
-            }
-        };
+        NMapRenames::AddUsedIUs(usedIUs, leftIUs);
+        NMapRenames::AddUsedIUs(usedIUs, rightIUs);
 
         for (const auto& iu : rightIUs) {
             if (ContainsInfoUnit(leftIUs, iu) && !subplanOutputRenames.contains(iu)) {
-                subplanOutputRenames.emplace(iu, makeInternalIU());
+                subplanOutputRenames.emplace(iu, NMapRenames::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs));
             }
         }
 
@@ -87,7 +81,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
                 if (renameIt != subplanOutputRenames.end()) {
                     rightKey = renameIt->second;
                 } else {
-                    auto newKey = makeInternalIU();
+                    auto newKey = NMapRenames::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs);
                     subplanOutputRenames.emplace(rightKey, newKey);
                     rightKey = newKey;
                 }
@@ -96,27 +90,13 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
             joinKeys.push_back(std::make_pair(leftKey, rightKey));
         }
 
-        if (!subplanOutputRenames.empty()) {
-            TVector<TMapElement> renameElements;
-            renameElements.reserve(subplanOutputRenames.size());
-            for (const auto& [from, to] : subplanOutputRenames) {
-                renameElements.emplace_back(to, from, subplan->Pos, &ctx.ExprCtx, &props);
-            }
-            uncorrSubplan = MakeIntrusive<TOpMap>(uncorrSubplan, subplan->Pos, renameElements);
-
-            // Non-equi conjuncts were captured before the output rename; rewrite
-            // them too, otherwise they keep references to hidden right-side IUs.
-            for (auto& joinFilter : joinFilters) {
-                joinFilter = joinFilter.ApplyRenames(subplanOutputRenames);
-            }
-        }
-
         auto joinedSubplanResIU = subplanResIU;
         if (const auto renameIt = subplanOutputRenames.find(joinedSubplanResIU); renameIt != subplanOutputRenames.end()) {
             joinedSubplanResIU = renameIt->second;
         }
 
-        auto leftJoin = MakeIntrusive<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys, joinFilters);
+        auto leftJoin = NMapRenames::MakeJoinWithRightRenames(
+            child, uncorrSubplan, subplan->Pos, "Left", joinKeys, joinFilters, subplanOutputRenames, ctx.ExprCtx, props);
 
         if (input->Kind == EOperator::Filter) {
             auto outerFilter = CastOperator<TOpFilter>(input);

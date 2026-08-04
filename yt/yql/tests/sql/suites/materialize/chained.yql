@@ -1,0 +1,5 @@
+use plato;
+
+MATERIALIZE Input INTO $step1;
+MATERIALIZE $step1 INTO $step2;
+SELECT * FROM $step2 ORDER BY key;

@@ -3,20 +3,27 @@
 #include "nbs_dbg_like_load_defs.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/util/circular_sparse_queue.h>
+
+#include <ydb/public/lib/base/msgbus.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <library/cpp/histogram/hdr/histogram.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/guid.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/utility.h>
+#include <util/generic/vector.h>
 #include <util/system/hp_timer.h>
 #include <util/random/fast.h>
 #include <util/string/builder.h>
@@ -93,6 +100,26 @@ struct TInflightEntry {
     ui32 SizeBytes = 0;
     NHPTimer::STime SentAt = 0;
     bool IsRead = false;
+    NWilson::TSpan Span;
+
+    TInflightEntry() = default;
+
+    TInflightEntry(ui64 address, ui32 sizeBytes, NHPTimer::STime sentAt, bool isRead,
+                   const char* spanName, NActors::TActorSystem* actorSystem)
+        : Address(address)
+        , SizeBytes(sizeBytes)
+        , SentAt(sentAt)
+        , IsRead(isRead)
+        , Span(TWilsonNbs::NbsBasic,
+               NWilson::TTraceId::NewTraceId(TWilsonNbs::NbsBasic, Max<ui32>()),
+               spanName,
+               NWilson::EFlags::NONE,
+               actorSystem)
+    {
+        Span
+            .Attribute("addr", static_cast<i64>(address))
+            .Attribute("size", static_cast<i64>(sizeBytes));
+    }
 };
 
 // Summary info resolved by the proxy (from GetSummary + validation).
@@ -444,21 +471,33 @@ private:
         }
     }
 
+    void EndAllInflightSpans() {
+        for (ui64 idx = Inflight.FrontIndex(); idx < Inflight.NextIndex(); ++idx) {
+            if (auto* e = Inflight.Find(idx)) {
+                if (e->Span) {
+                    e->Span.EndError("abandoned");
+                }
+            }
+        }
+    }
+
     // Returns false if the inflight queue was full (slot occupied by stuck entry).
     bool IssueWrite() {
         const ui32 size = IoSizeBytes;
         const ui64 addr = PickAddress(size);
         NHPTimer::STime sentAt = 0;
         NHPTimer::GetTime(&sentAt);
-        auto res = Inflight.Emplace(addr, size, sentAt, /*IsRead=*/false);
+        auto res = Inflight.Emplace(addr, size, sentAt, /*IsRead=*/false,
+            "NbsDbgLikeLoad.Write", TActivationContext::ActorSystem());
         if (!res) {
             LOG_D("IssueWrite queue full Tag# " << Tag << " " << res.error());
             return false;
         }
-        const ui64 cookie = res.value();
+        const ui64 cookie = res->first;
+        NWilson::TTraceId traceId = res->second->Span.GetTraceId();
         auto ev = std::make_unique<TEvLoad::TEvNbsWrite>(addr, size);
         ev->Payload = TRope(WritePayload);
-        NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie);
+        NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie, std::move(traceId));
         ++WriteInFlight;
         LOG_T("IssueWrite Cookie# " << cookie << " Addr# " << addr << " Size# " << size << " WriteInFlight# " << WriteInFlight);
         ++WritesIssued;
@@ -477,14 +516,16 @@ private:
         const ui64 addr = PickAddress(size);
         NHPTimer::STime sentAt = 0;
         NHPTimer::GetTime(&sentAt);
-        auto res = Inflight.Emplace(addr, size, sentAt, /*IsRead=*/true);
+        auto res = Inflight.Emplace(addr, size, sentAt, /*IsRead=*/true,
+            "NbsDbgLikeLoad.Read", TActivationContext::ActorSystem());
         if (!res) {
             LOG_D("IssueRead queue full Tag# " << Tag << " " << res.error());
             return false;
         }
-        const ui64 cookie = res.value();
+        const ui64 cookie = res->first;
+        NWilson::TTraceId traceId = res->second->Span.GetTraceId();
         auto ev = std::make_unique<TEvLoad::TEvNbsRead>(addr, size);
-        NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie);
+        NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie, std::move(traceId));
         ++ReadInFlight;
         LOG_T("IssueRead Cookie# " << cookie << " Addr# " << addr << " Size# " << size << " ReadInFlight# " << ReadInFlight);
         ++ReadsIssued;
@@ -511,7 +552,9 @@ private:
                 << " Cookie# " << cookie << " expected write but IsRead=true");
             Y_DEBUG_ABORT_UNLESS(false, "cookie type mismatch in HandleWriteResult");
             const ui32 sizeBytes = entry->SizeBytes;
+            NWilson::TSpan span = std::move(entry->Span);
             Inflight.Erase(cookie);
+            span.EndError("cookie type mismatch");
             if (ReadInFlight > 0) {
                 --ReadInFlight;
             }
@@ -521,13 +564,18 @@ private:
             CheckDrainComplete();
             return;
         }
-        const TInflightEntry e = *entry;
+        TInflightEntry e = std::move(*entry);
         Inflight.Erase(cookie);
 
         NHPTimer::STime now = 0;
         NHPTimer::GetTime(&now);
         const ui64 latencyUs = LatencyUsFromHPTimer(now - e.SentAt);
         const bool ok = ev->Get()->Record.GetStatus() == NBSIO_OK;
+        if (ok) {
+            e.Span.EndOk();
+        } else {
+            e.Span.EndError(ev->Get()->Record.GetReason());
+        }
         const bool measure = InMeasurementWindow();
         LOG_T("HandleWriteResult Cookie# " << cookie << " Status# "
             << ENbsIoResultStatus_Name(ev->Get()->Record.GetStatus()) << " LatencyUs# "
@@ -600,7 +648,9 @@ private:
                 << " Cookie# " << cookie << " expected read but IsRead=false");
             Y_DEBUG_ABORT_UNLESS(false, "cookie type mismatch in HandleReadResult");
             const ui32 sizeBytes = entry->SizeBytes;
+            NWilson::TSpan span = std::move(entry->Span);
             Inflight.Erase(cookie);
+            span.EndError("cookie type mismatch");
             if (WriteInFlight > 0) {
                 --WriteInFlight;
             }
@@ -610,13 +660,18 @@ private:
             CheckDrainComplete();
             return;
         }
-        const TInflightEntry e = *entry;
+        TInflightEntry e = std::move(*entry);
         Inflight.Erase(cookie);
 
         NHPTimer::STime now = 0;
         NHPTimer::GetTime(&now);
         const ui64 latencyUs = LatencyUsFromHPTimer(now - e.SentAt);
         const bool ok = ev->Get()->Record.GetStatus() == NBSIO_OK;
+        if (ok) {
+            e.Span.EndOk();
+        } else {
+            e.Span.EndError(ev->Get()->Record.GetReason());
+        }
         const bool measure = InMeasurementWindow();
         LOG_T("HandleReadResult Cookie# " << cookie << " Status# "
             << ENbsIoResultStatus_Name(ev->Get()->Record.GetStatus()) << " LatencyUs# " << latencyUs
@@ -736,6 +791,8 @@ private:
             NTabletPipe::CloseClient(SelfId(), PipeClient);
             PipeClient = TActorId();
         }
+
+        EndAllInflightSpans();
 
         const NActors::TMonotonic now = MonotonicNow();
         const ui64 durationMs = (TestStartTime != NActors::TMonotonic::Zero() && now > TestStartTime)
@@ -1279,6 +1336,428 @@ private:
     TString CombinedError;
 };
 
+// Reconstruct a TNbsDbgLikeFinishStats from the wire stats carried by a remote
+// child's TEvNodeFinishResponse (counters + serialized latency histograms).
+// Note: TNbsDbgLikeNodeStats does not carry full-run totals (WritesOkTotal,
+// WriteBytesTotal, ReadsIssuedTotal, ReadsOkTotal, ReadBytesTotal, RunningMs,
+// WritesIssued), so those fields remain 0 for remote children. This affects
+// only the per-actor diagnostic log and HTML summary, not the user-facing JSON
+// metrics (rps/latency percentiles) which are computed from the measurement-
+// window counters and histograms that are on the wire.
+TNbsDbgLikeFinishStats StatsFromNodeProto(
+    const NKikimr::TEvNodeFinishResponse::TNbsDbgLikeNodeStats& ns)
+{
+    TNbsDbgLikeFinishStats s;
+    s.WritesOk     = ns.GetWritesOk();
+    s.WriteBytes   = ns.GetWriteBytes();
+    s.WritesErr    = ns.GetWritesErr();
+    s.ReadsPbOk    = ns.GetReadsOk();
+    s.ReadsPbBytes = ns.GetReadBytes();
+    s.ReadsErr     = ns.GetReadsErr();
+    s.MeasuredMs   = ns.GetMeasuredMs();
+    s.MaxInFlight  = ns.GetMaxInFlight();
+    if (ns.HasWriteLatencyUs()) {
+        s.WriteE2eUs = DeserializeNbsDbgLikeHistogram(ns.GetWriteLatencyUs());
+    }
+    if (ns.HasReadLatencyUs()) {
+        s.ReadPbUs = DeserializeNbsDbgLikeHistogram(ns.GetReadLatencyUs());
+    }
+    return s;
+}
+
+// Render the per-tablet metrics object used by the front-end (same field names
+// the service actor enrichment produces for a single run).
+NJson::TJsonValue PerTabletJson(
+    ui64 tabletId, ui32 nodeId,
+    const TNbsDbgLikeFinishStats& s, const TString& errorReason)
+{
+    const double sec = s.MeasuredMs > 0 ? s.MeasuredMs / 1000.0 : 1.0;
+    NJson::TJsonValue jr;
+    jr["tablet_id"]     = tabletId;
+    jr["node_id"]       = nodeId;
+    jr["write_rps"]     = s.WritesOk / sec;
+    jr["write_p50"]     = static_cast<double>(s.WriteE2eUs.GetValueAtPercentile(50.0));
+    jr["write_p95"]     = static_cast<double>(s.WriteE2eUs.GetValueAtPercentile(95.0));
+    jr["write_p99"]     = static_cast<double>(s.WriteE2eUs.GetValueAtPercentile(99.0));
+    jr["read_rps"]      = (s.ReadsPbOk + s.ReadsDDiskOk) / sec;
+    jr["read_p50"]      = static_cast<double>(s.ReadPbUs.GetValueAtPercentile(50.0));
+    jr["read_p95"]      = static_cast<double>(s.ReadPbUs.GetValueAtPercentile(95.0));
+    jr["read_p99"]      = static_cast<double>(s.ReadPbUs.GetValueAtPercentile(99.0));
+    jr["max_in_flight"] = static_cast<ui64>(s.MaxInFlight);
+    if (!errorReason.empty()) {
+        jr["error"] = errorReason;
+    }
+    return jr;
+}
+
+// TNbsDbgLikeMultiLoadActor fans a single multi-tablet run out to one
+// single-tablet child run per target tablet, placing each child's load actor on
+// the node that hosts the tablet (Targets[i].NodeId). Children on the local node
+// are registered directly (full in-process stats); remote children are started
+// by sending TEvLoadTestRequest to that node's load service, which replies with
+// TEvNodeFinishResponse carrying serialized latency histograms. Results are
+// merged into an exact combined TNbsDbgLikeFinishStats (so the service actor's
+// existing enrichment fills the combined top-level metrics) plus a per-tablet
+// breakdown emitted as JsonResult["tablets"].
+class TNbsDbgLikeMultiLoadActor : public TActorBootstrapped<TNbsDbgLikeMultiLoadActor> {
+public:
+    static constexpr auto ActorActivityType() {
+        return NKikimrServices::TActivity::BS_LOAD_NBS_DBG_LIKE;
+    }
+
+    TNbsDbgLikeMultiLoadActor(
+        const TEvLoadTestRequest::TNbsDbgLikeLoad& cmd,
+        const TActorId& parent,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+        ui64 tag)
+        : Cmd(cmd)
+        , Parent(parent)
+        , Tag(tag)
+        , Counters(std::move(counters))
+    {}
+
+    void Bootstrap() {
+        if (Cmd.TargetsSize() == 0) {
+            EmitError("multi-tablet run has no targets");
+            return;
+        }
+
+        LOG_I("Multi bootstrap Tag# " << Tag << " Targets# " << Cmd.TargetsSize());
+
+        ui32 maxDurationSeconds = 0;
+        const int targetsCount = static_cast<int>(Cmd.TargetsSize());
+        for (int i = 0; i < targetsCount; ++i) {
+            const auto& target = Cmd.GetTargets(i);
+            TChild child;
+            child.TabletId = target.GetTabletId();
+            child.NodeId = target.GetNodeId();
+
+            auto childCmd = Cmd;
+            childCmd.ClearTargets();
+            childCmd.SetNbsDbgLikeTabletId(child.TabletId);
+            // Use a cluster-unique child tag: encodes this coordinator's node id
+            // so two coordinators on different UI nodes never assign the same tag
+            // to children that end up on the same remote load service.
+            child.ChildTag = MakeChildTag(SelfId().NodeId(), Tag, i);
+            childCmd.SetTag(child.ChildTag);
+            childCmd.MutableWorkloadConfig()->SetTag(child.ChildTag);
+
+            maxDurationSeconds = Max(maxDurationSeconds,
+                childCmd.GetWorkloadConfig().GetDurationSeconds());
+
+            const ui32 selfNode = SelfId().NodeId();
+            if (child.NodeId == 0 || child.NodeId == selfNode) {
+                child.NodeId = selfNode;
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> childCounters = Counters
+                    ? Counters->GetSubgroup("tablet", ToString(i))
+                    : nullptr;
+                child.ActorId = Register(
+                    CreateNbsDbgLikeLoadActor(childCmd, SelfId(), childCounters, child.ChildTag));
+                LOG_D("Multi local child Tag# " << Tag
+                    << " TabletId# " << child.TabletId
+                    << " ChildTag# " << child.ChildTag
+                    << " Actor# " << child.ActorId);
+            } else {
+                child.Uuid = CreateGuidAsString();
+                auto req = std::make_unique<TEvLoad::TEvLoadTestRequest>();
+                auto& rec = req->Record;
+                *rec.MutableNbsDbgLikeLoad() = childCmd;
+                rec.SetTag(child.ChildTag);
+                rec.SetUuid(child.Uuid);
+                rec.SetTimestamp(TInstant::Now().Seconds());
+                rec.SetCookie(child.NodeId);
+                Send(MakeLoadServiceID(child.NodeId), req.release());
+                LOG_D("Multi remote child Tag# " << Tag
+                    << " TabletId# " << child.TabletId
+                    << " NodeId# " << child.NodeId
+                    << " ChildTag# " << child.ChildTag
+                    << " Uuid# " << child.Uuid);
+            }
+
+            Children.push_back(std::move(child));
+        }
+
+        Pending = Children.size();
+
+        // Safety timeout: children stop on DurationSeconds; allow generous slack
+        // (warmup + drain) before forcing a finish with whatever has arrived.
+        const TDuration timeout = TDuration::Seconds(maxDurationSeconds)
+            + kInitTimeout + kDrainTimeout + TDuration::Seconds(60);
+        Schedule(timeout, new TEvents::TEvWakeup(kWakeupDrainTimeoutTag));
+
+        Become(&TNbsDbgLikeMultiLoadActor::StateWork);
+    }
+
+    // Bit-pack coordinator's node id, coordinator tag, and child index into a
+    // cluster-unique child tag so two coordinators on different UI nodes never
+    // send the same child tag to a shared remote load service (which would trip
+    // its duplicate-tag guard and crash the remote node).
+    // Layout: node id (bits 44-63) | coordTag (bits 16-43) | index (bits 0-15).
+    static ui64 MakeChildTag(ui32 nodeId, ui64 coordTag, int i) {
+        return (ui64(nodeId) << 44)
+             | ((coordTag & 0xFFFFFFFULL) << 16)
+             | (ui64(i) & 0xFFFF);
+    }
+
+private:
+    struct TChild {
+        ui64 TabletId = 0;
+        ui32 NodeId = 0;
+        ui64 ChildTag = 0;     // cluster-unique tag assigned to this child
+        TActorId ActorId;      // set for local children
+        TString Uuid;          // set for remote children
+        bool Finished = false;
+        TString ErrorReason;
+        bool HasStats = false;
+        TNbsDbgLikeFinishStats Stats;
+    };
+
+    void HandleLocalFinished(TEvLoad::TEvLoadTestFinished::TPtr& ev) {
+        TChild* child = nullptr;
+        for (auto& c : Children) {
+            if (!c.Finished && c.ActorId && c.ActorId == ev->Sender) {
+                child = &c;
+                break;
+            }
+        }
+        if (!child) {
+            LOG_E("Multi unexpected local finish Tag# " << Tag
+                << " Sender# " << ev->Sender);
+            return;
+        }
+        child->ErrorReason = ev->Get()->ErrorReason;
+        if (auto* s = GetNbsDbgLikeFinishStats(*ev->Get())) {
+            child->Stats = std::move(*s);
+            child->HasStats = true;
+        }
+        FinishChild(*child);
+    }
+
+    void HandleRemoteFinished(TEvLoad::TEvNodeFinishResponse::TPtr& ev) {
+        const auto& rec = ev->Get()->Record;
+        TChild* child = nullptr;
+        for (auto& c : Children) {
+            if (!c.Finished && !c.Uuid.empty() && c.Uuid == rec.GetUuid()) {
+                child = &c;
+                break;
+            }
+        }
+        if (!child) {
+            LOG_E("Multi unexpected remote finish Tag# " << Tag
+                << " Uuid# " << rec.GetUuid());
+            return;
+        }
+        child->ErrorReason = rec.GetErrorReason();
+        if (rec.HasNbsDbgLikeStats()) {
+            child->Stats = StatsFromNodeProto(rec.GetNbsDbgLikeStats());
+            child->HasStats = true;
+        }
+        FinishChild(*child);
+    }
+
+    void HandleLoadTestResponse(TEvLoad::TEvLoadTestResponse::TPtr& ev) {
+        // Ack from a remote load service that it accepted (or rejected) the run.
+        const auto& rec = ev->Get()->Record;
+        if (rec.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+            LOG_E("Multi remote rejected child Tag# " << Tag
+                << " Cookie# " << rec.GetCookie()
+                << " RejectedTag# " << rec.GetTag()
+                << " Reason# " << rec.GetErrorReason());
+            // Match by the echoed child tag (the ack carries back rec.SetTag from
+            // the request). Matching by node id (cookie) would incorrectly mark
+            // only the first unfinished child when multiple tablets share a node.
+            const ui64 rejectedTag = rec.GetTag();
+            for (auto& c : Children) {
+                if (!c.Finished && !c.Uuid.empty() && c.ChildTag == rejectedTag && !c.HasStats) {
+                    c.ErrorReason = rec.HasErrorReason()
+                        ? rec.GetErrorReason()
+                        : TString("remote node rejected run");
+                    FinishChild(c);
+                    break;
+                }
+            }
+        }
+    }
+
+    void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
+        LOG_I("Multi poison Tag# " << Tag << " forwarding to children");
+        for (size_t i = 0; i < Children.size(); ++i) {
+            const TChild& c = Children[i];
+            if (c.Finished) {
+                continue;
+            }
+            if (c.ActorId) {
+                Send(c.ActorId, new TEvents::TEvPoisonPill);
+            } else if (!c.Uuid.empty()) {
+                // Ask the remote node's load service to stop this child run by
+                // its child tag. Remote children also self-terminate on
+                // DurationSeconds, and the safety timeout backstops either way.
+                auto req = std::make_unique<TEvLoad::TEvLoadTestRequest>();
+                auto& rec = req->Record;
+                // Stop.Tag selects the child load actor to kill on the remote
+                // node. The request's own Tag must be distinct from the child
+                // tag (still in the remote's RequestSender map) to pass its
+                // duplicate-tag guard; set the top bit so it never collides
+                // with any MakeChildTag value (which uses at most 64 bits with
+                // top bit clear since node ids fit in 20 bits in practice).
+                rec.MutableStop()->SetTag(c.ChildTag);
+                rec.SetTag(c.ChildTag | (1ULL << 63));
+                rec.SetUuid(CreateGuidAsString());
+                rec.SetTimestamp(TInstant::Now().Seconds());
+                Send(MakeLoadServiceID(c.NodeId), req.release());
+            }
+        }
+        // Children will report their results; EmitCombined fires when all done.
+    }
+
+    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag != kWakeupDrainTimeoutTag) {
+            return;
+        }
+        LOG_E("Multi timeout Tag# " << Tag << " Pending# " << Pending
+            << " — forcing finish");
+        for (auto& c : Children) {
+            if (!c.Finished) {
+                if (c.ErrorReason.empty()) {
+                    c.ErrorReason = "child run timed out";
+                }
+                c.Finished = true;
+                if (Pending > 0) {
+                    --Pending;
+                }
+            }
+        }
+        EmitCombined();
+    }
+
+    void FinishChild(TChild& child) {
+        if (child.Finished) {
+            return;
+        }
+        child.Finished = true;
+        if (Pending > 0) {
+            --Pending;
+        }
+        LOG_I("Multi child finished Tag# " << Tag
+            << " TabletId# " << child.TabletId
+            << " Remaining# " << Pending
+            << " Status# " << (child.ErrorReason.empty() ? "OK" : child.ErrorReason));
+        if (Pending == 0) {
+            EmitCombined();
+        }
+    }
+
+    void MergeStats(const TNbsDbgLikeFinishStats& s) {
+        if (!HasMerged) {
+            HasMerged = true;
+            Merged.WritesIssued     = s.WritesIssued;
+            Merged.WritesOk         = s.WritesOk;
+            Merged.WritesErr        = s.WritesErr;
+            Merged.WriteBytes       = s.WriteBytes;
+            Merged.ReadsPbOk        = s.ReadsPbOk;
+            Merged.ReadsPbBytes     = s.ReadsPbBytes;
+            Merged.ReadsErr         = s.ReadsErr;
+            Merged.ReadsDDiskOk     = s.ReadsDDiskOk;
+            Merged.ReadsDDiskBytes  = s.ReadsDDiskBytes;
+            Merged.WritesOkTotal    = s.WritesOkTotal;
+            Merged.WriteBytesTotal  = s.WriteBytesTotal;
+            Merged.ReadsIssuedTotal = s.ReadsIssuedTotal;
+            Merged.ReadsOkTotal     = s.ReadsOkTotal;
+            Merged.ReadBytesTotal   = s.ReadBytesTotal;
+            Merged.RunningMs        = s.RunningMs;
+            Merged.MeasuredMs       = s.MeasuredMs;
+            Merged.MaxInFlight      = s.MaxInFlight;
+            Merged.WriteE2eUs.Add(s.WriteE2eUs);
+            Merged.ReadPbUs.Add(s.ReadPbUs);
+            return;
+        }
+        Merged.WritesIssued     += s.WritesIssued;
+        Merged.WritesOk         += s.WritesOk;
+        Merged.WritesErr        += s.WritesErr;
+        Merged.WriteBytes       += s.WriteBytes;
+        Merged.ReadsPbOk        += s.ReadsPbOk;
+        Merged.ReadsPbBytes     += s.ReadsPbBytes;
+        Merged.ReadsErr         += s.ReadsErr;
+        Merged.ReadsDDiskOk     += s.ReadsDDiskOk;
+        Merged.ReadsDDiskBytes  += s.ReadsDDiskBytes;
+        Merged.WritesOkTotal    += s.WritesOkTotal;
+        Merged.WriteBytesTotal  += s.WriteBytesTotal;
+        Merged.ReadsIssuedTotal += s.ReadsIssuedTotal;
+        Merged.ReadsOkTotal     += s.ReadsOkTotal;
+        Merged.ReadBytesTotal   += s.ReadBytesTotal;
+        Merged.RunningMs         = Max(Merged.RunningMs, s.RunningMs);
+        Merged.MeasuredMs        = Max(Merged.MeasuredMs, s.MeasuredMs);
+        Merged.MaxInFlight      += s.MaxInFlight;
+        Merged.WriteE2eUs.Add(s.WriteE2eUs);
+        Merged.ReadPbUs.Add(s.ReadPbUs);
+    }
+
+    void EmitCombined() {
+        if (Emitted) {
+            return;
+        }
+        Emitted = true;
+
+        NJson::TJsonValue tablets(NJson::JSON_ARRAY);
+        TString combinedError;
+        const TNbsDbgLikeFinishStats emptyStats;
+        for (auto& c : Children) {
+            if (!c.ErrorReason.empty()) {
+                if (!combinedError.empty()) {
+                    combinedError += "; ";
+                }
+                combinedError += TStringBuilder()
+                    << "tablet " << c.TabletId << ": " << c.ErrorReason;
+            }
+            if (c.HasStats) {
+                MergeStats(c.Stats);
+            }
+            const TNbsDbgLikeFinishStats& statsRef = c.HasStats ? c.Stats : emptyStats;
+            tablets.AppendValue(PerTabletJson(
+                c.TabletId, c.NodeId, statsRef, c.ErrorReason));
+        }
+
+        auto* finishEv = BuildNbsDbgLikeFinishEvent(
+            Tag, /*tabletId=*/0, combinedError, std::move(Merged));
+        finishEv->JsonResult["tablets"] = std::move(tablets);
+        Send(Parent, finishEv);
+        PassAway();
+    }
+
+    void EmitError(TString reason) {
+        if (Emitted) {
+            return;
+        }
+        Emitted = true;
+        LOG_N("Multi error Tag# " << Tag << " " << reason);
+        TNbsDbgLikeFinishStats stats;
+        auto* finishEv = BuildNbsDbgLikeFinishEvent(Tag, /*tabletId=*/0, reason, std::move(stats));
+        finishEv->JsonResult["tablets"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+        Send(Parent, finishEv);
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvLoad::TEvLoadTestFinished, HandleLocalFinished)
+        hFunc(TEvLoad::TEvNodeFinishResponse, HandleRemoteFinished)
+        hFunc(TEvLoad::TEvLoadTestResponse, HandleLoadTestResponse)
+        hFunc(TEvents::TEvPoisonPill, HandlePoison)
+        hFunc(TEvents::TEvWakeup, HandleWakeup)
+    )
+
+private:
+    const TEvLoadTestRequest::TNbsDbgLikeLoad Cmd;
+    const TActorId Parent;
+    const ui64 Tag;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+
+    TVector<TChild> Children;
+    size_t Pending = 0;
+    bool HasMerged = false;
+    bool Emitted = false;
+    TNbsDbgLikeFinishStats Merged;
+};
+
 } // anonymous namespace
 
 NActors::IActor* CreateNbsDbgLikeLoadActor(
@@ -1287,6 +1766,9 @@ NActors::IActor* CreateNbsDbgLikeLoadActor(
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     ui64 tag)
 {
+    if (cmd.TargetsSize() > 0) {
+        return new TNbsDbgLikeMultiLoadActor(cmd, parent, std::move(counters), tag);
+    }
     return new TNbsDbgLikeLoadActorProxy(cmd, parent, std::move(counters), tag);
 }
 

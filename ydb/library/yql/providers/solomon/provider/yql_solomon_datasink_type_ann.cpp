@@ -184,6 +184,8 @@ private:
 
             bool isOptional = false;
             if (!EnsureDataOrOptionalOfData(position, structItem->GetItemType(), isOptional, itemType, ctx)) {
+		ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected data or optional of data, but got: "
+                    << FormatType(structItem)));
                 return false;
             }
 

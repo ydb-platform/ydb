@@ -1,7 +1,6 @@
 #include "column_record.h"
 
 #include <ydb/core/formats/arrow/accessor/common/additional_data.h>
-#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
@@ -20,12 +19,7 @@ TConclusionStatus TChunkMeta::DeserializeFromProto(const NKikimrTxColumnShard::T
     }
     AdditionalAccessorData.reset();
     if (proto.HasAdditionalAccessorData()) {
-        const auto& add = proto.GetAdditionalAccessorData();
-        if (add.Accessor_case() == NKikimrTxColumnShard::TAdditionalAccessorData::kDictionaryAccessorData) {
-            const auto& acc = add.GetDictionaryAccessorData();
-            AdditionalAccessorData =
-                std::make_shared<NArrow::NAccessor::TDictionaryAccessorData>(acc.GetDictionaryBlobSize(), acc.GetPositionsBlobSize());
-        }
+        AdditionalAccessorData = NArrow::NAccessor::BuildAdditionalAccessorData(proto.GetAdditionalAccessorData());
     }
     return TConclusionStatus::Success();
 }
@@ -43,8 +37,10 @@ NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     NKikimrTxColumnShard::TIndexColumnMeta meta;
     meta.SetNumRows(RecordsCount);
     meta.SetRawBytes(RawBytes);
-    if (AdditionalAccessorData && AdditionalAccessorData->HasDataToSerialize()) {
-        AdditionalAccessorData->AddToProto(meta);
+    if (AdditionalAccessorData) {
+        if (auto additional = AdditionalAccessorData->SerializeToProto()) {
+            *meta.MutableAdditionalAccessorData() = std::move(*additional);
+        }
     }
     return meta;
 }

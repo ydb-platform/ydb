@@ -212,6 +212,7 @@ message TEvLockRows {
     // When true, keys that are absent or deleted in the latest version are skipped
     // and not locked. If the skipped key was modified/deleted above the snapshot,
     // its index will NOT appear in the ModifiedKeys result field.
+    // If this transaction already locked a key, it will NOT be skipped.
     optional bool SkipAbsent = 13;
 
     // Destination global table id, must include SchemaVersion to detect schema changes

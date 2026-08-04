@@ -102,7 +102,8 @@ TTopicSdkTestSetup::TReadResult::TReadResult(TDriver& driver)
 TTopicSdkTestSetup::TReadResult::~TReadResult()
 {
     if (Reader) {
-        Reader->Close();
+        StartPartitionSessionEvents.clear();
+        Reader->Close(TDuration::Seconds(5));
         Reader.reset();
     }
 }

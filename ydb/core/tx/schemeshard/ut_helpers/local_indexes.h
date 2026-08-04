@@ -97,4 +97,62 @@ inline void CheckIndexVersionsConsistent(NActors::TTestActorRuntime& runtime,
         << "' present in scheme tree but missing from column table '" << tablePath << "' schema");
 }
 
+// Helper structure to define expected bloom filter index properties
+struct TBloomIndexExpectation {
+    TString Name;
+    std::vector<TString> KeyColumns;
+};
+
+// Asserts that a row table has the expected bloom filter prefixes
+inline void CheckRowTableBloomSchemeObjects(NActors::TTestActorRuntime& runtime,
+        const TString& tablePath,
+        const std::vector<ui32>& expectedPrefixLengths,
+        const std::vector<TBloomIndexExpectation>& expectedIndexes) {
+    auto tableDescr = DescribePath(runtime, tablePath, true);
+    const auto& table = tableDescr.GetPathDescription().GetTable();
+
+    // Check engine prefixes
+    const auto& partitionConfig = table.GetPartitionConfig();
+    UNIT_ASSERT_VALUES_EQUAL_C(partitionConfig.ByKeyFilterPrefixesSize(), expectedPrefixLengths.size(),
+        TStringBuilder() << "Expected " << expectedPrefixLengths.size() << " prefixes, got "
+        << partitionConfig.ByKeyFilterPrefixesSize());
+
+    for (size_t i = 0; i < expectedPrefixLengths.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(partitionConfig.GetByKeyFilterPrefixes(i).GetPrefixLength(),
+            expectedPrefixLengths[i],
+            TStringBuilder() << "Prefix " << i << " length mismatch");
+    }
+
+    // Check scheme objects exist
+    UNIT_ASSERT_VALUES_EQUAL_C(table.TableIndexesSize(), expectedIndexes.size(),
+        TStringBuilder() << "Expected " << expectedIndexes.size() << " indexes, got "
+        << table.TableIndexesSize());
+
+    std::vector<bool> foundIndexes(expectedIndexes.size(), false);
+    for (const auto& idx : table.GetTableIndexes()) {
+        UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+        UNIT_ASSERT_VALUES_EQUAL(idx.GetState(), NKikimrSchemeOp::EIndexStateReady);
+
+        // Find matching expectation
+        for (size_t i = 0; i < expectedIndexes.size(); ++i) {
+            if (idx.GetName() == expectedIndexes[i].Name) {
+                foundIndexes[i] = true;
+                UNIT_ASSERT_VALUES_EQUAL_C(idx.KeyColumnNamesSize(), expectedIndexes[i].KeyColumns.size(),
+                    TStringBuilder() << "Index '" << expectedIndexes[i].Name << "' key column count mismatch");
+
+                for (size_t j = 0; j < expectedIndexes[i].KeyColumns.size(); ++j) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(idx.GetKeyColumnNames(j), expectedIndexes[i].KeyColumns[j],
+                        TStringBuilder() << "Index '" << expectedIndexes[i].Name << "' key column " << j << " mismatch");
+                }
+                break;
+            }
+        }
+    }
+
+    // Verify all expected indexes were found
+    for (size_t i = 0; i < expectedIndexes.size(); ++i) {
+        UNIT_ASSERT_C(foundIndexes[i], TStringBuilder() << "Expected index '" << expectedIndexes[i].Name << "' not found");
+    }
+}
+
 }   // namespace NSchemeShardUT_Private::NLocalIndexes

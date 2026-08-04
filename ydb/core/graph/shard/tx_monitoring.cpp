@@ -3,6 +3,8 @@
 #include <library/cpp/json/json_writer.h>
 #include <ydb/core/base/mon_auth.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRAPH
+
 namespace NKikimr {
 namespace NGraph {
 
@@ -45,7 +47,8 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_MONITORING; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        BLOG_D("TTxMonitoring::Execute");
+        YDB_LOG_DEBUG("TTxMonitoring::Execute",
+            {"logPrefix", GetLogPrefix()});
         return true;
     }
 
@@ -68,7 +71,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("TTxMonitoring::Complete");
+        YDB_LOG_DEBUG("TTxMonitoring::Complete",
+            {"logPrefix", GetLogPrefix()});
         TStringBuilder html;
         html << "<html>";
         html << "<style>";
@@ -160,12 +164,14 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_MONITORING; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        BLOG_D("TTxMonitoringGetSettings::Execute");
+        YDB_LOG_DEBUG("TTxMonitoringGetSettings::Execute",
+            {"logPrefix", GetLogPrefix()});
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("TTxMonitoringGetSettings::Complete");
+        YDB_LOG_DEBUG("TTxMonitoringGetSettings::Complete",
+            {"logPrefix", GetLogPrefix()});
         NJson::TJsonValue json;
         switch (Self->BackendType) {
             case EBackendType::Memory:

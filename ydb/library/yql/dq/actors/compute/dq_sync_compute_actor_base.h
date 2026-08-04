@@ -282,8 +282,11 @@ protected:
             // This code is called from TaskRunner (either directly or from input transform/helper code), which is owned by sync CA, so `*this` must be alive at that point
             this->ScheduleIdlenessCheck();
         });
+        this->WatermarkGeneratorTracker.SetNotifyHandler([this](TInstant checkTime) {
+            this->ScheduleSourceIdlenessCheck(checkTime);
+        });
 
-        TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker);
+        TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker, &this->WatermarkGeneratorTracker);
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);
@@ -376,11 +379,6 @@ protected:
             std::vector<typename TBase::TOutputChannelInfo::TDrainedChannelMessage> channelData = outputChannel.DrainChannel(drainPackSize);
             ui32 idx = 0;
             for (auto&& i : channelData) {
-                if (i.GetCheckpointOptional()) {
-                    CA_LOG_I("Resume inputs by checkpoint");
-                    TBase::ResumeInputsByCheckpoint();
-                }
-
                 this->Channels->SendChannelData(i.BuildChannelData(outputChannel.ChannelId), ++idx == channelData.size());
                 ++sentChunks;
             }

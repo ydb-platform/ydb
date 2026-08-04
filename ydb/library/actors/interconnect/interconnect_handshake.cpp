@@ -1,11 +1,14 @@
 #include "interconnect_handshake.h"
 #include "handshake_broker.h"
 #include "interconnect_tcp_proxy.h"
+#include "uring_context.h" // TUringContext::IsAvailable() gates v2 (io_uring data plane)
 
 #include "rdma/link_manager.h"
 #include "rdma/events.h"
 #include "rdma/mem_pool.h"
 #include "rdma/rdma.h"
+
+#include "rdma_sync_actor.h"
 
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
@@ -24,10 +27,13 @@
 #include <limits>
 #include <variant>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::INTERCONNECT
+
 namespace NActors {
     static constexpr ui32 StackSize = 64 * 1024; // 64k should be enough
 
     static constexpr size_t RdmaHandshakeRegionSize = 4096;
+    static constexpr ui32 RdmaSendReceiveVersion = 1;
 
     namespace {
         class THandshakeActorCreateTimer {
@@ -292,7 +298,7 @@ namespace NActors {
 #if defined(_linux_)
 #if !defined(TCP_KEEPIDLE) || !defined(TCP_KEEPINTVL) || !defined(TCP_KEEPCNT)
                 YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH42 Kernel liveness requested, but TCP keepalive tuning options are unavailable on this platform",
-                    {"LogPrefix", Actor->LogPrefix.data()});
+                    {"logPrefix", Actor->LogPrefix.data()});
                 return false;
 #else
                 auto toSockOptSeconds = [](TDuration value) -> ui64 {
@@ -471,14 +477,14 @@ namespace NActors {
 
             Deadline = TActivationContext::Monotonic() + timeout;
             Schedule(Deadline, new TEvents::TEvWakeup);
-
+            TRdmaPreinitedSessionPtr rdmaPreinitSession;
             try {
-                std::optional<NActorsInterconnect::TRdmaCred> rdmaIncommingRead;
+                std::optional<NActorsInterconnect::TRdmaCred> rdmaIncomingRead;
                 const bool incoming = MainChannel;
                 if (incoming) {
-                    PerformIncomingHandshake(rdmaIncommingRead);
+                    PerformIncomingHandshake(rdmaIncomingRead, rdmaPreinitSession);
                 } else {
-                    PerformOutgoingHandshake();
+                    PerformOutgoingHandshake(rdmaPreinitSession);
                 }
 
                 // establish encrypted channel, or, in case when encryption is disabled, check if it matches settings
@@ -494,10 +500,14 @@ namespace NActors {
                             }
                             // RDMA is part of XDC.
                             // Try to complete rdma handshake by reading remote region via RDMA READ verb
-                            if (rdmaIncommingRead) {
-                                auto ack = TryRdmaRead(rdmaIncommingRead.value());
+                            if (rdmaIncomingRead) {
+                                auto ack = TryRdmaRead(rdmaIncomingRead.value());
                                 SendExBlock(MainChannel, ack, "TRdmaHandshakeReadAck");
-                                Params.UseRdma = true;
+                                if (ack.HasDigest()) {
+                                    Params.UseRdma = true;
+                                } else {
+                                    Rdma.Clear();
+                                }
                             }
                             ExternalDataChannel.GetSocketRef() = std::move(ev->Get()->Socket);
                         } else {
@@ -540,11 +550,11 @@ namespace NActors {
                 ExternalDataChannel.ResetPollerToken();
                 Y_ABORT_UNLESS(!ExternalDataChannel == !Params.UseExternalDataChannel);
                 TEvHandshakeDone::TRdmaResult rdmaResult = (Rdma.Qp && Rdma.Cq)
-                    ? TEvHandshakeDone::TRdmaResult(std::move(Rdma.Qp), std::move(Rdma.Cq))
+                    ? TEvHandshakeDone::TRdmaResult(std::move(Rdma.Qp), std::move(Rdma.Cq), std::move(rdmaPreinitSession))
                     : TEvHandshakeDone::TRdmaResult(TEvHandshakeDone::TRdmaResult::TDisabled(RunDelayedRdmaHandshake));
                 SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(MainChannel.GetSocketRef()), PeerVirtualId, SelfVirtualId,
                     *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef()),
-                    rdmaResult));
+                    std::move(rdmaResult)));
             }
 
             Rdma.Clear();
@@ -871,8 +881,80 @@ namespace NActors {
             return region;
         }
 
-        void PerformOutgoingHandshake() {
-            YDB_LOG_DEBUG_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Starting outgoing handshake",
+        TRdmaPreinitedSessionPtr RunRdmaIncomingHandshakePart() {
+            MainChannel.ResetPollerToken();
+            Register(NInterconnect::NRdma::CreateRdmaIncommingSyncActor(
+                Common, SelfVirtualId, PeerVirtualId, PeerNodeId, MainChannel.GetSocketRef(), Rdma.Qp, Rdma.Cq));
+
+            auto ev = WaitForSpecificEvent<TEvRdmaSyncResult>("TEvRdmaSyncResult");
+            MainChannel.RegisterInPoller();
+
+            if (auto err = ev->Get()->Error()) {
+                YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA send/receive handshake",
+                    {"marker", "ICRDMA"},
+                    {"failed", err->data()});
+                Params.AllowRdmaSendReceive = false;
+                return {};
+            } else {
+                return std::move(ev->Get()->ExtractSession());
+            }
+        }
+
+        TRdmaPreinitedSessionPtr RunRdmaOutgoingHandshakePart(const ::NActorsInterconnect::THandshakeSuccess& success) {
+            const auto& remoteQpPrepared = success.GetQpPrepared();
+            YDB_LOG_TRACE_CTX(this->GetActorContext(), "Peer has prepared",
+                {"marker", "ICRDMA"},
+                {"qp", remoteQpPrepared.GetQpNum()});
+            NInterconnect::NRdma::THandshakeData hd {
+                .QpNum = remoteQpPrepared.GetQpNum(),
+                .SubnetPrefix = remoteQpPrepared.GetSubnetPrefix(),
+                .InterfaceId = remoteQpPrepared.GetInterfaceId(),
+                .MtuIndex = remoteQpPrepared.GetMtuIndex(),
+            };
+            int err = Rdma.Qp->ToRtsState(hd);
+            if (err) {
+                TStringBuilder sb;
+                sb << hd;
+                YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to promote QP to RTS, handshake",
+                    {"marker", "ICRDMA"},
+                    {"err", err},
+                    {"#_strerror(err)", strerror(err)},
+                    {"data", sb.data()});
+                Rdma.HandShakeMemRegion.Reset();
+                Rdma.Clear();
+                return {};
+            } else {
+                Params.ChecksumRdmaEvent = remoteQpPrepared.GetRdmaChecksum();
+                Params.AllowRdmaSendReceive = Common->Settings.EnableRdmaSendReceive
+                    && (remoteQpPrepared.GetSendReceiveVersion() == 1);
+                if (Params.AllowRdmaSendReceive) {
+                    // QP is ready, now we need two things:
+                    // 1. make sure send and receive works
+                    // 2. perform barrier to make sure sessions are ready to handle receive
+                    MainChannel.ResetPollerToken();
+
+                    Register(NInterconnect::NRdma::CreateRdmaOutgoingSyncActor(
+                        Common, SelfVirtualId, PeerVirtualId, PeerNodeId, MainChannel.GetSocketRef(), Rdma.Qp, Rdma.Cq));
+
+                    auto ev = WaitForSpecificEvent<TEvRdmaSyncResult>("TEvRdmaSyncResult");
+                    MainChannel.RegisterInPoller();
+                    if (auto err = ev->Get()->Error()) {
+                        YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA send/receive handshake",
+                            {"marker", "ICRDMA"},
+                            {"failed", err->data()});
+                        Params.AllowRdmaSendReceive = false;
+                        return {};
+                    } else {
+                        return std::move(ev->Get()->ExtractSession());
+                    }
+                } else {
+                    return {};
+                }
+            }
+        }
+
+        void PerformOutgoingHandshake(TRdmaPreinitedSessionPtr& rdmaSession) {
+            YDB_LOG_DEBUG_CTX(this->GetActorContext(), "Starting outgoing handshake",
                 {"marker", "ICH01"});
 
             // perform connection and log its result
@@ -961,6 +1043,13 @@ namespace NActors {
                 request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
                 request.SetRequestXxhash(true);
                 request.SetRequestXdcShuffle(true);
+                request.SetRequestAllowDisablingPayloadChecksums(true);
+                // v2 session is incompatible with encryption and needs the io_uring data plane; only
+                // request it when encryption is disabled locally and io_uring is available (buffer rings
+                // are used when present, with a fallback to ordinary buffers on older kernels)
+                request.SetRequestSessionV2(Common->Settings.V2.Enable &&
+                    Common->Settings.EncryptionMode == EEncryptionMode::DISABLED &&
+                    TUringContext::IsAvailable());
                 request.SetHandshakeId(*HandshakeId);
 
                 ui32 pending = 0;
@@ -994,6 +1083,9 @@ namespace NActors {
                     rdmaHs->SetInterfaceId(hd.InterfaceId);
                     rdmaHs->SetMtuIndex(hd.MtuIndex);
                     rdmaHs->SetRdmaChecksum(Common->Settings.RdmaChecksum);
+                    if (Common->Settings.EnableRdmaSendReceive) {
+                        rdmaHs->SetSendReceiveVersion(RdmaSendReceiveVersion);
+                    }
                     if (auto region = SetupRdmaHandshakeRegion(*rdmaHs)) {
                         Rdma.HandShakeMemRegion = std::move(region);
                     } else {
@@ -1054,6 +1146,8 @@ namespace NActors {
                 Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
                 Params.UseXxhash = success.GetUseXxhash();
                 Params.UseXdcShuffle = success.GetUseXdcShuffle();
+                Params.AllowDisablingPayloadChecksums = success.GetAllowDisablingPayloadChecksums();
+                Params.UseSessionV2 = success.GetUseSessionV2();
                 // Kernel liveness mode is a local transport decision: it depends on whether this side
                 // configured keepalive/user-timeout on its own socket.
                 Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
@@ -1063,30 +1157,7 @@ namespace NActors {
 
                 if (Rdma) {
                     if (success.HasQpPrepared()) {
-                        const auto& remoteQpPrepared = success.GetQpPrepared();
-                        YDB_LOG_TRACE_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Peer has prepared",
-                            {"marker", "ICRDMA"},
-                            {"qp", remoteQpPrepared.GetQpNum()});
-                        NInterconnect::NRdma::THandshakeData hd {
-                            .QpNum = remoteQpPrepared.GetQpNum(),
-                            .SubnetPrefix = remoteQpPrepared.GetSubnetPrefix(),
-                            .InterfaceId = remoteQpPrepared.GetInterfaceId(),
-                            .MtuIndex = remoteQpPrepared.GetMtuIndex(),
-                        };
-                        int err = Rdma.Qp->ToRtsState(hd);
-                        if (err) {
-                            TStringBuilder sb;
-                            sb << hd;
-                            YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Unable to promote QP to RTS, handshake",
-                                {"marker", "ICRDMA"},
-                                {"err", err},
-                                {"strerror", strerror(err)},
-                                {"data", sb.data()});
-                            Rdma.HandShakeMemRegion.Reset();
-                            Rdma.Clear();
-                        } else {
-                            Params.ChecksumRdmaEvent = remoteQpPrepared.GetRdmaChecksum();
-                        }
+                        rdmaSession = std::move(RunRdmaOutgoingHandshakePart(success));
                     } else {
                         YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Non success qp response from remote side",
                             {"marker", "ICRDMA"});
@@ -1171,8 +1242,8 @@ namespace NActors {
                 << " PeerAddr# " << PeerAddr << " AddressList# " << makeList(), true);
         }
 
-        void PerformIncomingHandshake(std::optional<NActorsInterconnect::TRdmaCred>& rdma) {
-            YDB_LOG_DEBUG_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Starting incoming handshake",
+        void PerformIncomingHandshake(std::optional<NActorsInterconnect::TRdmaCred>& rdma, TRdmaPreinitedSessionPtr& rdmaSession) {
+            YDB_LOG_DEBUG_CTX(this->GetActorContext(), "Starting incoming handshake",
                 {"marker", "ICH02"});
 
             // set up incoming socket
@@ -1359,6 +1430,12 @@ namespace NActors {
                 Params.UseXxhash = request.GetRequestXxhash();
                 Params.UseXdcShuffle = request.GetRequestXdcShuffle();
                 Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
+                Params.AllowDisablingPayloadChecksums = request.GetRequestAllowDisablingPayloadChecksums();
+                // v2 session is used only when both peers enabled it, encryption is not in effect, and
+                // this side has the io_uring data plane available
+                Params.UseSessionV2 = request.GetRequestSessionV2() &&
+                    Common->Settings.V2.Enable && !Params.Encryption &&
+                    TUringContext::IsAvailable();
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1383,9 +1460,9 @@ namespace NActors {
                     params.emplace(item.GetKey(), item.GetValue());
                 }
 
-                std::optional<NActorsInterconnect::TRdmaHandshake> rdmaIncommingHandshake;
+                std::optional<NActorsInterconnect::TRdmaHandshake> rdmaIncomingHandshake;
                 if (Rdma && request.HasRdmaHandshake()) {
-                    rdmaIncommingHandshake = request.GetRdmaHandshake();
+                    rdmaIncomingHandshake = request.GetRdmaHandshake();
                 } else {
                     Rdma.Clear();
                 }
@@ -1407,22 +1484,29 @@ namespace NActors {
                         FillInScopeId(*success.MutableServerScopeId());
                     }
 
-                    if (rdmaIncommingHandshake) {
-                        TryRdmaQpExchange(rdmaIncommingHandshake.value(), success);
-                        if (Rdma && rdmaIncommingHandshake->HasRead()) {
-                            rdma = rdmaIncommingHandshake->GetRead();
-                            if (rdmaIncommingHandshake->HasRdmaChecksum() && rdmaIncommingHandshake->GetRdmaChecksum() == true) {
-                                Params.ChecksumRdmaEvent = Common->Settings.RdmaChecksum;
-                                success.MutableQpPrepared()->SetRdmaChecksum(Params.ChecksumRdmaEvent);
-                            } else {
-                                Params.ChecksumRdmaEvent = false;
-                                success.MutableQpPrepared()->SetRdmaChecksum(false);
+                    if (rdmaIncomingHandshake) {
+                        TryRdmaQpExchange(rdmaIncomingHandshake.value(), success);
+                        if (Rdma) {
+                            if (rdmaIncomingHandshake->HasRead()) {
+                                rdma = rdmaIncomingHandshake->GetRead();
+                                if (rdmaIncomingHandshake->HasRdmaChecksum() && rdmaIncomingHandshake->GetRdmaChecksum() == true) {
+                                    Params.ChecksumRdmaEvent = Common->Settings.RdmaChecksum;
+                                    success.MutableQpPrepared()->SetRdmaChecksum(Params.ChecksumRdmaEvent);
+                                } else {
+                                    Params.ChecksumRdmaEvent = false;
+                                    success.MutableQpPrepared()->SetRdmaChecksum(false);
+                                }
+                            }
+                            if (Common->Settings.EnableRdmaSendReceive
+                                    && (rdmaIncomingHandshake->GetSendReceiveVersion() == RdmaSendReceiveVersion)) {
+                                Params.AllowRdmaSendReceive = true;
+                                success.MutableQpPrepared()->SetSendReceiveVersion(RdmaSendReceiveVersion);
                             }
                         } else {
-                            success.SetRdmaErr("Unable to perform qp exchange on the incomming side");
+                            success.SetRdmaErr("Unable to perform qp exchange on the incoming side");
                         }
                     } else {
-                        success.SetRdmaErr("Rdma is not ready on the incomming side");
+                        success.SetRdmaErr("Rdma is not ready on the incoming side");
                     }
 
                     success.SetUseModernFrame(true);
@@ -1431,6 +1515,8 @@ namespace NActors {
                     success.SetUseExternalDataChannel(Params.UseExternalDataChannel);
                     success.SetUseXxhash(Params.UseXxhash);
                     success.SetUseXdcShuffle(Params.UseXdcShuffle);
+                    success.SetAllowDisablingPayloadChecksums(Params.AllowDisablingPayloadChecksums);
+                    success.SetUseSessionV2(Params.UseSessionV2);
 
                     ui32 pending = 0;
                     auto& actors = Common->ConnectionCheckerActorIds;
@@ -1461,6 +1547,9 @@ namespace NActors {
                     // extract sender actor id (self virtual id)
                     const auto& str = success.GetSenderActorId();
                     SelfVirtualId.Parse(str.data(), str.size());
+                    if (Params.AllowRdmaSendReceive) {
+                        rdmaSession = std::move(RunRdmaIncomingHandshakePart());
+                    }
                 } else if (auto ev = reply->CastAsLocal<TEvHandshakeReplyError>()) {
                     // in case of error just send reply to the peer and terminate handshake
                     SendExBlock(MainChannel, ev->Record, "ExReply");
@@ -1599,11 +1688,11 @@ namespace NActors {
                 if (err) {
                     TStringBuilder sb;
                     sb << hd;
-                    success.SetRdmaErr("Unable to promote QP to RTS on the incomming side");
-                    YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Unable to promote QP to RTS, handshake",
+                    success.SetRdmaErr("Unable to promote QP to RTS on the incoming side");
+                    YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to promote QP to RTS, handshake",
                         {"marker", "ICRDMA"},
                         {"err", err},
-                        {"strerror", strerror(err)},
+                        {"#_strerror(err)", strerror(err)},
                         {"data", sb.data()});
                     Rdma.Clear();
                     return;

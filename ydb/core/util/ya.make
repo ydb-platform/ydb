@@ -89,6 +89,7 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
+    actorsys_test
     btree_benchmark
     ut
 )

@@ -692,8 +692,10 @@ public:
                 const ui32 type = ev->GetTypeRewrite();
 
                 THPTimer timer;
+                const ui64 activationStart = GetCycleCountFast();
                 actor->Receive(ev);
                 const TDuration timing = TDuration::Seconds(timer.Passed());
+                const ui64 elapsedCycles = GetCycleCountFast() - activationStart;
 
                 const auto it = ActorName.find(actor);
                 Y_ABORT_UNLESS(it != ActorName.end(), "%p", actor);
@@ -703,6 +705,25 @@ public:
                 stats.TotalTime += timing;
 
                 ++EventsProcessed;
+
+                bool actorPassedAway = false;
+                for (const auto& unregisteredActor : GetNode(CurrentNodeId)->ExecutorThread->GetUnregistered()) {
+                    if (unregisteredActor.Get() == actor) {
+                        actorPassedAway = true;
+                        break;
+                    }
+                }
+                if (!actorPassedAway && NActors::NDetail::TActorSystemFlagAccessor::HasSystemFlag(
+                        *actor, IActor::ESystemFlag::MailboxProcessingFinished)) {
+                    TAutoPtr<IEventHandle> finishedEv = new IEventHandle(
+                        actor->SelfId(),
+                        TActorId(),
+                        new TEvents::TEvMailboxProcessingFinished(
+                            TEvents::TEvMailboxProcessingFinished::EReason::QueueEmpty,
+                            1,
+                            elapsedCycles));
+                    actor->Receive(finishedEv);
+                }
             });
             if (!success) { // can't find the actor
                 event = IEventHandle::ForwardOnNondelivery(std::move(event), TEvents::TEvUndelivered::ReasonActorUnknown);

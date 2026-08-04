@@ -60,17 +60,25 @@ public:
 
         TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy;
         const auto& partitioningSettings = TableDesc.GetPartitioningSettings();
+        const auto& proto = partitioningSettings.GetProto();
         if (const auto partitioningBySize = partitioningSettings.GetPartitioningBySize()) {
             NKikimrSchemeOp::TPartitioningPolicy policy;
             if (*partitioningBySize) {
-                const auto& proto = partitioningSettings.GetProto();
+                // ENABLED: apply partition_size_mb if set, otherwise use 2 GiB default
                 const ui64 sizeToSplit = proto.partition_size_mb()
                     ? static_cast<ui64>(proto.partition_size_mb()) << 20
                     : 2ul << 30; // default 2 GiB
                 policy.SetSizeToSplit(sizeToSplit);
             } else {
+                // DISABLED
                 policy.SetSizeToSplit(0);
             }
+            partitioningPolicy = policy;
+        } else if (proto.partition_size_mb()) {
+            // STATUS_UNSPECIFIED but partition_size_mb is explicitly set:
+            // apply it as-is, matching the behaviour in ydb_convert/table_settings.cpp
+            NKikimrSchemeOp::TPartitioningPolicy policy;
+            policy.SetSizeToSplit(static_cast<ui64>(proto.partition_size_mb()) << 20);
             partitioningPolicy = policy;
         }
 

@@ -28,11 +28,15 @@ struct TEvService
 
         EvGetLoadActorAdapterActorIdRequest,
         EvGetLoadActorAdapterActorIdResponse,
+
+        EvDeleteRequest,
+        EvDeleteResponse,
     };
 
     BLOCKSTORE_DECLARE_PROTO_EVENTS(WriteBlocks)
     BLOCKSTORE_DECLARE_PROTO_EVENTS(ReadBlocks)
     BLOCKSTORE_DECLARE_PROTO_EVENTS(GetLoadActorAdapterActorId)
+    BLOCKSTORE_DECLARE_PROTO_EVENTS(Delete)
 };
 
 }   // namespace NYdb::NBS::NBlockStore

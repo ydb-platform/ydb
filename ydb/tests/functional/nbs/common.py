@@ -116,6 +116,26 @@ class NbsTestBase:
             ],
         )
 
+    def delete_disk(self, disk_id):
+        """
+        Delete a disk by disk id. Returns the deleted disk id.
+        """
+        output = execute_dstool_grpc(
+            self.cluster,
+            "token",
+            [
+                'nbs',
+                'partition',
+                'delete',
+                '--disk-id',
+                disk_id,
+            ],
+        ).decode('utf-8')
+
+        match = re.search(r'DiskId:\s*"?([^"\s]+)"?', output)
+        assert match, f"DeletePartition did not return DiskId, output: {output}"
+        return match.group(1)
+
     def get_load_actor_adapter_actor_id(self, disk_id):
         get_load_actor_res = json.loads(
             execute_dstool_grpc(

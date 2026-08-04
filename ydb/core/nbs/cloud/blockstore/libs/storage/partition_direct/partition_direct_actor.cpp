@@ -711,6 +711,8 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvPoison,
             HandlePoisonByBlockedGeneration);
 
+        HFunc(TEvService::TEvDeleteRequest, HandleDelete);
+
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 LOG_ERROR(

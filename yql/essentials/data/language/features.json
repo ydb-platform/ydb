@@ -29,6 +29,9 @@
         "description": "MATERIALIZE",
         "min_langver": "2026.02"
     },
+    "TypeErasure": {
+        "min_langver": "2026.02"
+    },
     "HybridRankFunction": {
         "min_langver": "2026.02"
     },

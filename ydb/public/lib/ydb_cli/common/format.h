@@ -158,6 +158,7 @@ private:
     void PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table, bool isLast = true, TVector<bool> hasMore = TVector<bool>());
     void PrintJson(const TString& plan);
     void PrintSimplifyJson(const NJson::TJsonValue& plan);
+    void PrintSvg(const TString& plan);
     TString JsonToString(const NJson::TJsonValue& jsonValue);
 
 private:

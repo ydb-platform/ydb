@@ -21,6 +21,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr ReplyOk;
     NMonitoring::TDynamicCounters::TCounterPtr ReplyErr;
     NMonitoring::TDynamicCounters::TCounterPtr Bytes;
+    NMonitoring::TDynamicCounters::TCounterPtr Inflight;
     NMonitoring::THistogramPtr RequestTime;
 
 public:

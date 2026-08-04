@@ -54,9 +54,10 @@ bool HasNeverRetriableErrors(const NProto::TError& error)
 
 template <typename TRequest, typename TResponse>
 class TDurable
-    : public std::enable_shared_from_this<TDurable<TRequest, TResponse>>
 {
 public:
+    using TSelf = TDurable<TRequest, TResponse>;
+
     TDurable(
         TLog log,
         TString requestName,
@@ -69,6 +70,8 @@ public:
         , Scheduler(std::move(scheduler))
         , Log(std::move(log))
     {}
+
+    virtual ~TDurable() = default;
 
     NThreading::TFuture<TResponse> Execute(
         TCallContextPtr callContext,
@@ -87,6 +90,8 @@ public:
         DoExecute(requestId, std::move(callContext), std::move(request));
         return result;
     }
+
+    virtual std::weak_ptr<TSelf> GetWeakPtr(const TSelf& self) = 0;
 
 private:
     struct TInflight
@@ -109,7 +114,7 @@ private:
             std::move(callContext),
             std::move(request))
             .Subscribe(
-                [requestId, weakSelf = this->weak_from_this()]   //
+                [requestId, weakSelf = GetWeakPtr(*this)]   //
                 (const NThreading::TFuture<TResponse>& f)
                 {
                     if (auto self = weakSelf.lock()) {
@@ -129,7 +134,7 @@ private:
         TDuration delay;
         size_t retryCount = 0;
 
-        {
+        {   // Getting necessary data from the shared state under lock.
             auto guard = Guard(Lock);
             auto it = Inflights.find(requestId);
             if (it == Inflights.end()) {
@@ -169,7 +174,7 @@ private:
 
             Scheduler->Schedule(
                 Timer->Now() + delay,
-                [requestId, weakSelf = this->weak_from_this()]()
+                [requestId, weakSelf = GetWeakPtr(*this)]()
                 {
                     if (auto self = weakSelf.lock()) {
                         self->RetryRequest(requestId);
@@ -184,7 +189,7 @@ private:
         std::shared_ptr<TRequest> request;
         size_t retryCount = 0;
 
-        {
+        {   // Getting necessary data from the shared state under lock.
             auto guard = Guard(Lock);
             auto it = Inflights.find(requestId);
             if (it == Inflights.end()) {
@@ -192,6 +197,7 @@ private:
                 return;
             }
             auto& r = it->second;
+
             ++r.RetryCount;
             retryCount = r.RetryCount;
             callContext = r.CallContex;
@@ -229,6 +235,9 @@ using TDurableZero =
 
 class TDurableStorageWrapper final
     : public IStorage
+    , public TDurableRead
+    , public TDurableWrite
+    , public TDurableZero
     , public std::enable_shared_from_this<TDurableStorageWrapper>
 {
 private:
@@ -237,24 +246,9 @@ private:
     const ITimerPtr Timer;
     const ISchedulerPtr Scheduler;
 
-    std::shared_ptr<TDurableRead> DurableReads{std::make_shared<TDurableRead>(
-        Log,
-        "ReadBlocksLocal",
-        Storage,
-        Timer,
-        Scheduler)};
-    std::shared_ptr<TDurableWrite> DurableWrites{std::make_shared<
-        TDurableWrite>(Log, "WriteBlocksLocal", Storage, Timer, Scheduler)};
-    std::shared_ptr<TDurableZero> DurableZeroes{std::make_shared<TDurableZero>(
-        Log,
-        "ZeroBlocksLocal",
-        Storage,
-        Timer,
-        Scheduler)};
-
 public:
     TDurableStorageWrapper(
-        ILoggingServicePtr logging,
+        const TLog& log,
         IStoragePtr storage,
         ITimerPtr timer,
         ISchedulerPtr scheduler);
@@ -274,16 +268,24 @@ public:
         std::shared_ptr<TZeroBlocksLocalRequest> request) override;
 
     void ReportIOError() override;
+
+    // implements TDurable
+    std::weak_ptr<TDurableRead> GetWeakPtr(const TDurableRead& tag) override;
+    std::weak_ptr<TDurableWrite> GetWeakPtr(const TDurableWrite& tag) override;
+    std::weak_ptr<TDurableZero> GetWeakPtr(const TDurableZero& tag) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TDurableStorageWrapper::TDurableStorageWrapper(
-    ILoggingServicePtr logging,
+    const TLog& log,
     IStoragePtr storage,
     ITimerPtr timer,
     ISchedulerPtr scheduler)
-    : Log(logging->CreateLog("BLOCKSTORE_DURABLE"))
+    : TDurableRead(log, "Read", storage, timer, scheduler)
+    , TDurableWrite(log, "Write", storage, timer, scheduler)
+    , TDurableZero(log, "Zero", storage, timer, scheduler)
+    , Log(log)
     , Storage(std::move(storage))
     , Timer(std::move(timer))
     , Scheduler(std::move(scheduler))
@@ -296,7 +298,9 @@ TDurableStorageWrapper::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request)
 {
-    return DurableReads->Execute(std::move(callContext), std::move(request));
+    return static_cast<TDurableRead*>(this)->Execute(
+        std::move(callContext),
+        std::move(request));
 }
 
 NThreading::TFuture<TWriteBlocksLocalResponse>
@@ -304,7 +308,9 @@ TDurableStorageWrapper::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request)
 {
-    return DurableWrites->Execute(std::move(callContext), std::move(request));
+    return static_cast<TDurableWrite*>(this)->Execute(
+        std::move(callContext),
+        std::move(request));
 }
 
 NThreading::TFuture<TZeroBlocksLocalResponse>
@@ -312,12 +318,35 @@ TDurableStorageWrapper::ZeroBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TZeroBlocksLocalRequest> request)
 {
-    return DurableZeroes->Execute(std::move(callContext), std::move(request));
+    return static_cast<TDurableZero*>(this)->Execute(
+        std::move(callContext),
+        std::move(request));
 }
 
 void TDurableStorageWrapper::ReportIOError()
 {
     Storage->ReportIOError();
+}
+
+std::weak_ptr<TDurableRead> TDurableStorageWrapper::GetWeakPtr(
+    const TDurableRead& tag)
+{
+    Y_UNUSED(tag);
+    return weak_from_this();
+}
+
+std::weak_ptr<TDurableWrite> TDurableStorageWrapper::GetWeakPtr(
+    const TDurableWrite& tag)
+{
+    Y_UNUSED(tag);
+    return weak_from_this();
+}
+
+std::weak_ptr<TDurableZero> TDurableStorageWrapper::GetWeakPtr(
+    const TDurableZero& tag)
+{
+    Y_UNUSED(tag);
+    return weak_from_this();
 }
 
 }   // namespace
@@ -331,7 +360,7 @@ IStoragePtr CreateDurableStorageWrapper(
     ISchedulerPtr scheduler)
 {
     return std::make_shared<TDurableStorageWrapper>(
-        std::move(logging),
+        logging->CreateLog("BLOCKSTORE_DURABLE"),
         std::move(storage),
         std::move(timer),
         std::move(scheduler));

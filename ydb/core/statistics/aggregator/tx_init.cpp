@@ -91,6 +91,10 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                             {"tabletId", Self->TabletID()},
                             {"id", value});
                         break;
+                    case 2:  // deprecated SysParam_TraversalStartKey
+                    case 11: // deprecated SysParam_TraversalIsColumnTable
+                    case 12: // deprecated SysParam_GlobalTraversalRound
+                        break;
                     default:
                         YDB_LOG_CRIT("Unexpected SysParam",
                             {"tabletId", Self->TabletID()},

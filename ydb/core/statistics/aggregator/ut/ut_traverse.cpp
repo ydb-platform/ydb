@@ -193,9 +193,8 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
 
         WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
 
-        InsertDataIntoTable(env, "Database", "Table", 500);
-
         TSaveStatisticsObserver observer(runtime, tableInfo.PathId);
+        InsertDataIntoTable(env, "Database", "Table", 500);
 
         runtime.WaitFor("second TEvSaveStatisticsQueryResponse", [&] {
             return observer.GetSaveCount() >= 1;
@@ -213,9 +212,8 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
 
         WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
 
-        InsertDataIntoTable(env, "Database", "Table", 10);
-
         TSaveStatisticsObserver observer(runtime, tableInfo.PathId);
+        InsertDataIntoTable(env, "Database", "Table", 10);
 
         WaitForBackgroundAnalyzeToStabilize(runtime);
 
@@ -231,9 +229,8 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
 
         WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
 
-        InsertDataIntoTable(env, "Database", "Table", 50);
-
         TSaveStatisticsObserver observer(runtime, tableInfo.PathId);
+        InsertDataIntoTable(env, "Database", "Table", 50);
 
         WaitForBackgroundAnalyzeToStabilize(runtime);
 
@@ -249,9 +246,8 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
 
         WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
 
-        InsertDataIntoTable(env, "Database", "Table", 500);
-
         TSaveStatisticsObserver observer(runtime, tableInfo.PathId);
+        InsertDataIntoTable(env, "Database", "Table", 500);
 
         WaitForBackgroundAnalyzeToStabilize(runtime);
 
@@ -267,9 +263,8 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
 
         WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
 
-        InsertDataIntoTable(env, "Database", "Table", 20);
-
         TSaveStatisticsObserver observer(runtime, tableInfo.PathId);
+        InsertDataIntoTable(env, "Database", "Table", 20);
 
         runtime.WaitFor("TEvSaveStatisticsQueryResponse after small change", [&] {
             return observer.GetSaveCount() >= 1;
@@ -401,9 +396,8 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
         auto sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, saTabletId, sender);
 
-        InsertDataIntoTable(env, "Database", "Table", 50);
-
         TSaveStatisticsObserver observer(runtime, tableInfo.PathId);
+        InsertDataIntoTable(env, "Database", "Table", 50);
 
         WaitForBackgroundAnalyzeToStabilize(runtime);
 

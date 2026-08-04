@@ -323,10 +323,10 @@ private:
         };
     };
 
-    // Returns the column table analyzed longest ago whose statistics are stale by
+    // Returns the table analyzed longest ago whose statistics are stale by
     // change ratio, or nullptr if none is stale. Declared after TScheduleTraversal
     // because it returns a pointer into ScheduleTraversals.
-    TScheduleTraversal* FindStaleColumnTable();
+    TScheduleTraversal* FindStaleTable();
 
     static constexpr TDuration AnalyzeDeadline = TDuration::Days(1);
     static constexpr TDuration AnalyzeDeadlinePeriod = TDuration::Seconds(1);

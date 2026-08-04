@@ -543,6 +543,7 @@ void ValidateStatistics(TTestActorRuntime& runtime, const TPathId& pathId, ui64 
     // (N distinct values) -> ndv >= 0.8 * n -> no CMS. Value column (tag 2):
     // low cardinality (10 distinct values, Value = key % 10) -> CMS with probes.
     std::vector<TCountMinSketchProbes> expected = {
+        {.Tag = 1, .Probes = std::nullopt},
         {.Tag = 2, .Probes = {{{"1", N / 10}, {"2", N / 10}, {"10", 0}}}},
     };
     CheckCountMinSketch(runtime, pathId, expected);

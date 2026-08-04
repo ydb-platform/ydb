@@ -777,7 +777,7 @@ void TStatisticsAggregator::ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db,
     if (TInstant::Now() >= oldestTable->LastUpdateTime + ScheduleTraversalPeriod) {
         chosenTable = oldestTable;
     } else {
-        chosenTable = FindStaleColumnTable();
+        chosenTable = FindStaleTable();
     }
 
     if (!chosenTable) {
@@ -1413,7 +1413,7 @@ void TStatisticsAggregator::InvalidateCachedChangeCounters() {
     CachedChangeCountersValid = false;
 }
 
-TStatisticsAggregator::TScheduleTraversal* TStatisticsAggregator::FindStaleColumnTable() {
+TStatisticsAggregator::TScheduleTraversal* TStatisticsAggregator::FindStaleTable() {
     // Statistics staleness (change ratio) is independent of the time-based
     // ordering in ScheduleTraversalsByTime, so we must scan all tables rather than
     // inspecting only the heap top. Among the stale tables pick the one

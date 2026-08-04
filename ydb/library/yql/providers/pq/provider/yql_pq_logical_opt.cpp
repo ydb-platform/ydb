@@ -37,7 +37,7 @@ struct TPushdownSettings: public NPushdown::TSettings {
         Enable(
             // Operator features
             EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
-            EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
+            EFlag::StringTypes | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
             EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | EFlag::DivisionExpressions | EFlag::CastExpression |
             EFlag::ToBytesFromStringExpressions | EFlag::FlatMapOverOptionals | EFlag::PredicateAsExpression |
             EFlag::StructOperators |

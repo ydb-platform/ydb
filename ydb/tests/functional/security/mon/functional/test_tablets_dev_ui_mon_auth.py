@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import hashlib
+import re
 import time
 
 import pytest
@@ -125,8 +127,7 @@ def ydb_cluster_with_enforce_user_token_secure_devui_flag_and_datashard_tablet(
     yield cluster
 
 
-def _prepare_datashard_tablet(cluster):
-    database = '/Root/ds_mon_security'
+def _prepare_datashard_tablet(cluster, database='/Root/ds_mon_security'):
     cluster.create_database(
         database,
         storage_pool_units_count={'hdd': 1},
@@ -265,157 +266,161 @@ def _hive_get_status(cluster, endpoint_path, token=None):
     return response.status_code
 
 
-def _hive_post_status(cluster, endpoint_path, token=None):
+def _hive_post(cluster, endpoint_path, token=None):
     headers = {}
     if token is not None:
         headers['Authorization'] = token
-    response = requests.post(
+    return requests.post(
         f'{_hive_mon_base_url(cluster)}{endpoint_path}',
         headers=headers,
         verify=False,
     )
-    return response.status_code
 
 
-def _hive_readonly_devui_cases(tablet_id, secure_path_mode):
-    q = f'TabletID={tablet_id}'
-    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
-    # Without the flag: monitoring users can access /tablets/app (legacy compatibility).
-    # With the flag: /tablets/app is forbidden for everyone; all Hive DevUI moves to /app/secure.
-    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+def _hive_post_status(cluster, endpoint_path, token=None):
+    return _hive_post(cluster, endpoint_path, token).status_code
+
+
+def _hive_app_path(secure_path_mode):
+    return '/tablets/app/secure' if secure_path_mode else '/tablets/app'
+
+
+def _hive_request(cluster, secure_path_mode, query, method='GET'):
+    url = f'{_hive_mon_base_url(cluster)}{_hive_app_path(secure_path_mode)}?TabletID={cluster.hive_tablet_id}&{query}'
+    response = requests.request(method, url, headers={'Authorization': 'root@builtin'}, verify=False)
+    response.raise_for_status()
+    return response
+
+
+def _hive_alive_node_id(cluster, secure_path_mode):
+    nodes = _hive_request(cluster, secure_path_mode, 'page=MemStateNodes&format=json').json()['Nodes']
+    alive = [node['Id'] for node in nodes if node.get('Alive')]
+    assert alive, f'Hive reports no alive nodes: {nodes}'
+    return alive[0]
+
+
+def _hive_ensure_tenant(cluster):
+    if getattr(cluster, 'hive_tenant_ready', False):
+        return
+    cluster.create_database(
+        '/Root/hive_mon_security',
+        storage_pool_units_count={'hdd': 1},
+        token='root@builtin',
+    )
+    cluster.register_and_start_slots('/Root/hive_mon_security', count=1)
+    cluster.wait_tenant_up('/Root/hive_mon_security', token='root@builtin')
+    cluster.hive_tenant_ready = True
+
+
+def _hive_managed_tablet_ids(cluster, secure_path_mode):
+    _hive_ensure_tenant(cluster)
+    # page=CreateTablet cannot be used here: TCreateTabletActor never fills BindedChannels, which
+    # THive::Handle(TEvCreateTablet) requires, so that handler always answers INVALID_ARGUMENTS.
+    # A tenant DataShard is owned by the tenant Hive, so the tablets are taken from this Hive.
+    page = _hive_request(cluster, secure_path_mode, 'page=MemStateTablets&max=100').text
+    return [int(tablet_id) for tablet_id in re.findall(r'tablets\?TabletID=(\d+)', page)]
+
+
+def _hive_managed_tablet_id(cluster, secure_path_mode):
+    tablet_ids = _hive_managed_tablet_ids(cluster, secure_path_mode)
+    assert tablet_ids, 'Hive manages no tablets'
+    return tablet_ids[0]
+
+
+def _hive_destroy_key(tablet_id):
+    # IsSafeOperation() hashes the concatenation of the tablet, owner and owner_idx cgi values.
+    return hashlib.md5(str(tablet_id).encode()).hexdigest()
+
+
+def _hive_pages(node_id, tablet_id, domain_ss, domain_path):
     return (
-        # Tablets summary page keeps monitoring-level access (different handler).
-        _hive_endpoint_cases([f'/tablets?{q}'], monitoring_allowed)
-        # Read-only /tablets/app?... pages — behavior depends on flag.
-        + _hive_endpoint_cases(
-            [
-                f'/tablets/app?{q}',
-                f'/tablets/app?{q}&page=LandingData',
-                f'/tablets/app?{q}&page=Settings',
-            ],
-            expected_on_app,
-        )
-        # Secure path read-only pages — admin-only in both modes.
-        + _hive_endpoint_cases(
-            [
-                f'/tablets/app/secure?{q}',
-                f'/tablets/app/secure?{q}&page=LandingData',
-                f'/tablets/app/secure?{q}&page=Settings',
-            ],
-            admin_allowed,
-        )
+        ('', 200),
+        ('page=LandingData', 200),
+        ('page=MemStateNodes', 200),
+        ('page=MemStateTablets', 200),
+        ('page=MemStateDomains', 200),
+        ('page=DbState', 200),
+        ('page=Resources', 200),
+        ('page=Groups', 200),
+        ('page=Storage', 200),
+        ('page=Settings', 200),
+        ('page=Subactors', 200),
+        ('page=OperationsLog&max=10', 200),
+        ('page=ManualOperations', 200),
+        ('page=ObjectStats', 200),
+        ('page=QueryMigration', 200),
+        (f'page=TabletInfo&tablet={tablet_id}', 200),
+        (f'page=SetDown&node={node_id}&down=0', 200),
+        (f'page=SetFreeze&node={node_id}&freeze=0', 200),
+        (f'page=KickNode&node={node_id}', 200),
+        (f'page=DrainNode&node={node_id}&wait=0', 200),
+        (f'page=TabletAvailability&node={node_id}&resettype=Dummy', 200),
+        # Always fails: the handler does not fill BindedChannels.
+        (f'page=CreateTablet&owner={tablet_id}&owner_idx=1&type=8', 400),
+        ('page=Rebalance', 200),
+        ('page=RebalanceFromScratch', 200),
+        ('page=StorageRebalance', 200),
+        ('page=ReassignTablet&tablet=all&wait=0', 200),
+        (f'page=MoveTablet&tablet={tablet_id}&node={node_id}', 200),
+        (f'page=StopTablet&tablet={tablet_id}', 200),
+        (f'page=ResumeTablet&tablet={tablet_id}', 200),
+        (f'page=UpdateResources&tablet={tablet_id}&cpu=1', 200),
+        (f'page=StopDomain&ss={domain_ss}&path={domain_path}&stop=1', 200),
+        (f'page=StopDomain&ss={domain_ss}&path={domain_path}&stop=0', 200),
+        ('page=Settings&BootQueueUpdatePeriod=1000', 200),
+        ('page=Subactors&stop=1', 200),
+        ('page=InitMigration', 400),  # cannot migrate to the root hive
+        (f'page=SetDomain&tablet={tablet_id}', 400),  # the tablet already belongs to this domain
+        ('page=NewAction', 200),
     )
 
 
-# Every Hive DevUI `page=` handler that mutates cluster state. The Hive non-admin whitelist is
-# empty by design, so each one of these must be admin-only and reachable only under /app/secure.
-_HIVE_MUTATING_PAGES = (
-    'SetDown&node=1&down=0',
-    'SetFreeze&node=1&freeze=0',
-    'KickNode&node=1',
-    'DrainNode&node=1&wait=0',
-
-    'Rebalance',
-    'RebalanceFromScratch',
-    'StorageRebalance',
-    'ReassignTablet&tablet=all&wait=0',
-
-    'InitMigration',
-    'QueryMigration',
-
-    'MoveTablet',
-    'StopTablet',
-    'ResumeTablet',
-    'CreateTablet',
-    'ResetTablet',
-    'DeleteTablet',
-    'UpdateResources',
-
-    'StopDomain',
-    'SetDomain',
-
-    'ManualOperations',
-    'Settings',
-    'TabletAvailability',
-    'Subactors',
-    'OperationsLog',
-)
-
-# Concrete mutating payload shapes for the handlers that dispatch on parameters rather than
-# on `page=` alone.
-_HIVE_MUTATING_PAGES_WITH_PAYLOAD = (
-    'Settings&BootQueueUpdatePeriod=1000',
-    'TabletAvailability&node=1&changetype=DataShard&maxcount=1',
-    'TabletAvailability&node=1&resettype=DataShard',
-    'Subactors&stop=1',
-)
-
-# Handlers that are safe to actually invoke as an administrator: they only render, or they set
-# state that is already the default. Used to prove the secure path lets an administrator through
-# without performing a destructive operation on the test cluster.
-_HIVE_ADMIN_REACHABLE_PAGES = (
-    'Settings',
-    'Subactors',
-    'OperationsLog&max=10',
-    'ManualOperations',
-    'QueryMigration',
-    'SetDown&node=1&down=0',
-    'SetFreeze&node=1&freeze=0',
-)
+def _hive_expected(matrix, admin_status):
+    return {token: (admin_status if status == 200 else status) for token, status in matrix.items()}
 
 
-def _hive_non_admin_expectations():
-    """Identities that must never reach a Hive DevUI mutating handler on the secure path."""
-    _, _, admin_allowed = tablet_devui_sid_matrix()
-    return {token: status for token, status in admin_allowed.items() if token != 'root@builtin'}
+def _hive_assert_status(response, expected_status, endpoint_path, token):
+    if expected_status is None:
+        assert response.status_code not in (401, 403), (
+            f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
+            f'to pass the access check, got {response.status_code}: {response.text[:300]}'
+        )
+    else:
+        assert response.status_code == expected_status, (
+            f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
+            f'to return {expected_status}, got {response.status_code}: {response.text[:300]}'
+        )
 
 
-def _hive_all_mutating_pages_cases(tablet_id, secure_path_mode):
-    q = f'TabletID={tablet_id}'
-    all_forbidden, monitoring_allowed, _ = tablet_devui_sid_matrix()
-    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
-    non_admins = _hive_non_admin_expectations()
+def _hive_devui_cases(tablet_id, pages, secure_path_mode):
+    q_base = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
+    on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
     cases = []
-    for page in _HIVE_MUTATING_PAGES + _HIVE_MUTATING_PAGES_WITH_PAYLOAD:
-        if secure_path_mode:
-            # With the flag on nothing is reachable on the legacy path, root included.
-            cases += _hive_endpoint_cases([f'/tablets/app?{q}&page={page}'], expected_on_app)
-        cases += _hive_endpoint_cases([f'/tablets/app/secure?{q}&page={page}'], non_admins)
+    for query_suffix, admin_status in pages:
+        q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
+        # The page handler only runs on the path the flag designates. On the other path the
+        # request is either denied outright or not routed into the DevUI at all, in which case
+        # the generic tablet page is rendered with 200 whatever the page parameter says.
+        app_status = admin_status if not secure_path_mode else 200
+        secure_status = admin_status if secure_path_mode else 200
+        cases.extend(_hive_endpoint_cases([f'/tablets/app?{q}'], _hive_expected(on_app, app_status)))
+        cases.extend(_hive_endpoint_cases([f'/tablets/app/secure?{q}'], _hive_expected(admin_allowed, secure_status)))
+    # Tablets summary page is a different handler and keeps monitoring-level access.
+    cases.extend(_hive_endpoint_cases([f'/tablets?{q_base}'], monitoring_allowed))
     return cases
 
 
-def _hive_mutating_devui_cases(tablet_id, secure_path_mode):
-    q = f'TabletID={tablet_id}'
-    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
-    # Without the flag: monitoring users can POST to /tablets/app (legacy compatibility).
-    # With the flag: /tablets/app is forbidden for everyone; all Hive DevUI moves to /app/secure.
-    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
-    return (
-        _hive_endpoint_cases(
-            [
-                # Node management actions
-                f'/tablets/app?{q}&page=SetDown&node=1&down=0',
-                f'/tablets/app?{q}&page=SetFreeze&node=1&freeze=0',
-                f'/tablets/app?{q}&page=KickNode&node=1',
-                f'/tablets/app?{q}&page=DrainNode&node=1&wait=0',
-                # Cluster management actions
-                f'/tablets/app?{q}&page=Rebalance',
-                f'/tablets/app?{q}&page=ReassignTablet&tablet=all&wait=0',
-            ],
-            expected_on_app,
-        )
-        + _hive_endpoint_cases(
-            [
-                f'/tablets/app/secure?{q}&page=SetDown&node=1&down=0',
-                f'/tablets/app/secure?{q}&page=SetFreeze&node=1&freeze=0',
-                f'/tablets/app/secure?{q}&page=KickNode&node=1',
-                f'/tablets/app/secure?{q}&page=DrainNode&node=1&wait=0',
-                f'/tablets/app/secure?{q}&page=Rebalance',
-                f'/tablets/app/secure?{q}&page=ReassignTablet&tablet=all&wait=0',
-            ],
-            admin_allowed,
-        )
-    )
+def _hive_sweep(cluster, secure_path_mode):
+    node_id = _hive_alive_node_id(cluster, secure_path_mode)
+    tablet_id = _hive_managed_tablet_id(cluster, secure_path_mode)
+    domain_ss = _schemeshard_tablet_id_from_viewer(cluster)
+    pages = _hive_pages(node_id, tablet_id, domain_ss, 1)
+    for endpoint_path, token, expected_status in _hive_devui_cases(
+        cluster.hive_tablet_id, pages, secure_path_mode
+    ):
+        response = _hive_post(cluster, endpoint_path, token)
+        _hive_assert_status(response, expected_status, endpoint_path, token)
 
 
 def test_hive_tablet_devui_mon_paths_with_enforce_user_token(
@@ -424,19 +429,7 @@ def test_hive_tablet_devui_mon_paths_with_enforce_user_token(
     cluster = ydb_cluster_with_enforce_user_token_and_hive_tablet
     tid = cluster.hive_tablet_id
 
-    for endpoint_path, token, expected_status in _hive_readonly_devui_cases(tid, secure_path_mode=False):
-        status = _hive_get_status(cluster, endpoint_path, token)
-        assert status == expected_status, (
-            f'Expected GET {endpoint_path} with token={_hive_token_desc(token)} '
-            f'to return {expected_status}, got {status}'
-        )
-
-    for endpoint_path, token, expected_status in _hive_mutating_devui_cases(tid, secure_path_mode=False):
-        status = _hive_post_status(cluster, endpoint_path, token)
-        assert status == expected_status, (
-            f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
-            f'to return {expected_status}, got {status}'
-        )
+    _hive_sweep(cluster, secure_path_mode=False)
 
 
 def test_hive_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
@@ -445,68 +438,43 @@ def test_hive_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mod
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
     tid = cluster.hive_tablet_id
 
-    for endpoint_path, token, expected_status in _hive_readonly_devui_cases(tid, secure_path_mode=True):
-        status = _hive_get_status(cluster, endpoint_path, token)
-        assert status == expected_status, (
-            f'Expected GET {endpoint_path} with token={_hive_token_desc(token)} '
-            f'to return {expected_status}, got {status}'
-        )
-
-    for endpoint_path, token, expected_status in _hive_mutating_devui_cases(tid, secure_path_mode=True):
-        status = _hive_post_status(cluster, endpoint_path, token)
-        assert status == expected_status, (
-            f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
-            f'to return {expected_status}, got {status}'
-        )
+    _hive_sweep(cluster, secure_path_mode=True)
 
 
-def test_hive_all_mutating_devui_pages_are_admin_only(
-    ydb_cluster_with_enforce_user_token_and_hive_tablet,
+def test_hive_destroy_operations_with_secure_path_mode(
+    ydb_cluster_with_secure_devui_flag_and_hive_destroy_operations,
 ):
-    cluster = ydb_cluster_with_enforce_user_token_and_hive_tablet
-    tid = cluster.hive_tablet_id
+    cluster = ydb_cluster_with_secure_devui_flag_and_hive_destroy_operations
+    cluster.hive_tablet_id = DEFAULT_HIVE_ID
+    _, _, admin_allowed = tablet_devui_sid_matrix()
+    non_admins = {token: status for token, status in admin_allowed.items() if token != 'root@builtin'}
 
-    for endpoint_path, token, expected_status in _hive_all_mutating_pages_cases(tid, secure_path_mode=False):
-        status = _hive_post_status(cluster, endpoint_path, token)
-        assert status == expected_status, (
-            f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
-            f'to return {expected_status}, got {status}'
-        )
+    tablet_id = _hive_managed_tablet_id(cluster, True)
+    # Reset first, then delete the same tablet: both are exercised end to end.
+    for page in ('ResetTablet', 'DeleteTablet'):
+        q = f'TabletID={cluster.hive_tablet_id}&page={page}&tablet={tablet_id}&key={_hive_destroy_key(tablet_id)}'
 
+        for token, expected_status in non_admins.items():
+            for endpoint_path in (f'/tablets/app?{q}', f'/tablets/app/secure?{q}'):
+                status = _hive_post_status(cluster, endpoint_path, token)
+                assert status == expected_status, (
+                    f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
+                    f'to return {expected_status}, got {status}'
+                )
 
-def test_hive_all_mutating_devui_pages_are_admin_only_with_secure_path_mode(
-    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
-):
-    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
-    tid = cluster.hive_tablet_id
+        status = _hive_post_status(cluster, f'/tablets/app?{q}', 'root@builtin')
+        assert status == 403, f'Expected POST {page} on the legacy path to be denied, got {status}'
 
-    for endpoint_path, token, expected_status in _hive_all_mutating_pages_cases(tid, secure_path_mode=True):
-        status = _hive_post_status(cluster, endpoint_path, token)
-        assert status == expected_status, (
-            f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
-            f'to return {expected_status}, got {status}'
-        )
-
-
-def test_hive_secure_path_lets_administrator_through(
-    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
-):
-    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
-    tid = cluster.hive_tablet_id
-
-    for page in _HIVE_ADMIN_REACHABLE_PAGES:
-        endpoint_path = f'/tablets/app/secure?TabletID={tid}&page={page}'
-        status = _hive_get_status(cluster, endpoint_path, 'root@builtin')
-        assert status not in (401, 403), (
-            f'Expected GET {endpoint_path} with token=root@builtin to pass the access check, got {status}'
+        response = _hive_post(cluster, f'/tablets/app/secure?{q}', 'root@builtin')
+        assert response.status_code == 200, (
+            f'Expected POST {page} as administrator to succeed, '
+            f'got {response.status_code}: {response.text[:300]}'
         )
 
 
 def test_hive_devui_links_use_secure_path(
     ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
 ):
-    """Hive renders server-side and builds its DevUI links in JS, so the page must publish the
-    resolved app path that hive.js reads."""
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
     tid = cluster.hive_tablet_id
     response = requests.get(

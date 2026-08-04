@@ -131,3 +131,18 @@ def ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag(certif
     cluster.start()
     yield cluster
     cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_secure_devui_flag_and_hive_destroy_operations(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        enable_tablet_dev_ui_secure_path=True,
+    )
+    # ResetTablet and DeleteTablet reject every request unless the Hive allows destroy operations.
+    configurator.yaml_config['hive_config'] = {'enable_destroy_operations': True}
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield cluster
+    cluster.stop()

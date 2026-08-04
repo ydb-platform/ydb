@@ -86,10 +86,8 @@ Y_UNIT_TEST_SUITE(TabletDevUiMonAccess) {
         }
 
         for (const auto type : {
-            TTabletTypes::Hive,
             TTabletTypes::GraphShard,
             TTabletTypes::SchemeShard,
-            TTabletTypes::BSController,
             TTabletTypes::Coordinator,
         }) {
             fixture.SetEnableTabletDevUiSecurePath(false);

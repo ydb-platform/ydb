@@ -628,6 +628,82 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.SetIsOlap(true);
         tester.Execute();
     }
+
+    // A resent uncommitted write is answered twice: with the original result and, once the
+    // shard has seen it, with STATUS_ALREADY_APPLIED. KQP must take only the first one.
+    class TPipelinedUncommittedWriteAnsweredTwice : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        }
+
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] {
+                return client.GetSession().GetValueSync().GetSession(); });
+            auto tx = Kikimr->RunCall([&] {
+                return session.BeginTransaction(TTxSettings::SerializableRW())
+                    .ExtractValueSync().GetTransaction(); });
+
+            size_t answeredTwice = 0;
+            auto answerTwice = [&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                    const auto& record = ev->Get<NEvents::TDataEvents::TEvWriteResult>()->Record;
+                    if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED
+                        && record.GetTxLocks().size() == 1
+                        && record.GetTxLocks(0).WriteSeqNumsSize() == 1)
+                    {
+                        auto again = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
+                        again->Record = record;
+                        again->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED);
+                        runtime.Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
+                            again.release(), 0, ev->Cookie));
+                        ++answeredTwice;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+            auto saveObserver = runtime.SetObserverFunc(answerTwice);
+
+            {
+                auto result = Kikimr->RunCall([&] { return session.ExecuteQuery(R"(
+                    UPSERT INTO `/Root/KV` (Key, Value) VALUES (10u, "Ten");
+                )", TTxControl::Tx(tx)).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // Forces the flush, whose result is then delivered a second time
+            {
+                auto result = Kikimr->RunCall([&] { return session.ExecuteQuery(R"(
+                    SELECT Key, Value FROM `/Root/KV` WHERE Key = 10u;
+                )", TTxControl::Tx(tx)).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            runtime.SetObserverFunc(saveObserver);
+            UNIT_ASSERT_C(answeredTwice > 0, answeredTwice);
+
+            auto commitResult = Kikimr->RunCall([&] { return tx.Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+            {
+                auto result = Kikimr->RunCall([&] { return session.ExecuteQuery(R"(
+                    SELECT Key, Value FROM `/Root/KV` WHERE Key = 10u;
+                )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[10u;["Ten"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(PipelinedUncommittedWriteAnsweredTwice) {
+        TPipelinedUncommittedWriteAnsweredTwice tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

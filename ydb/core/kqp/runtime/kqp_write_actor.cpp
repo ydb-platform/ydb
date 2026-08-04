@@ -919,12 +919,9 @@ public:
             ProcessWritePreparedShard(ev);
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
-            ProcessWriteCompletedShard(ev);
-            return;
-        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+        // A resent uncommitted write, reported with the original result
         case NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED: {
-            // A duplicate uncommitted write; the shard reports the unchanged lock.
             ProcessWriteCompletedShard(ev);
             return;
         }
@@ -1179,6 +1176,24 @@ public:
             {"mode", static_cast<int>(Mode)},
             {"locks", txLocks});
 
+        if (Mode == EMode::COMMIT) {
+            UpdateStats(ev->Get()->Record.GetTxStats());
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0);
+            return;
+        }
+
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
+        const auto result = ShardedWriteController->OnMessageAcknowledged(
+                ev->Get()->Record.GetOrigin(), ev->Cookie);
+        if (!result) {
+            // A resent batch is answered twice, only the first result is taken
+            YDB_LOG_DEBUG("Ignored an already acknowledged result",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", ev->Get()->Record.GetOrigin()},
+                {"cookie", ev->Cookie});
+            return;
+        }
+
         // The batch is applied, so the next one to this shard gets a fresh write seq num
         InFlightWriteSeqNum.erase(ev->Get()->Record.GetOrigin());
 
@@ -1195,21 +1210,11 @@ public:
             }
         }
 
-        if (Mode == EMode::COMMIT) {
-            UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0);
-            return;
-        }
-
-        OnMessageReceived(ev->Get()->Record.GetOrigin());
-        const auto result = ShardedWriteController->OnMessageAcknowledged(
-                ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
-            UpdateStats(ev->Get()->Record.GetTxStats());
+        UpdateStats(ev->Get()->Record.GetTxStats());
+        if (result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
-        } else if (result) {
+        } else {
             AFL_ENSURE(Mode == EMode::WRITE);
-            UpdateStats(ev->Get()->Record.GetTxStats());
             Callbacks->OnMessageAcknowledged(result->DataSize);
         }
     }
@@ -1328,7 +1333,7 @@ public:
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
             if (PipelinedWrites) {
-                // A resend (overload retry) must repeat the same seq num, not allocate a new one.
+                // Any resend of the batch must repeat its seq num, not allocate a new one.
                 auto [it, allocated] = InFlightWriteSeqNum.try_emplace(shardId, 0);
                 if (allocated) {
                     it->second = TxManager->NextWriteSeqNum(WriterIndex, shardId);

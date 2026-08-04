@@ -9,6 +9,7 @@
 #include <util/system/fs.h>
 #include <util/generic/string.h>
 #include <util/folder/path.h>
+#include <util/stream/file.h>
 
 namespace NYql::NDq {
 
@@ -539,6 +540,63 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         }
 
         runtime.DispatchEvents(options);
+    }
+
+    Y_UNIT_TEST(RecoverAfterStartError) {
+        TTestActorRuntime runtime;
+        runtime.SetScheduledEventFilter([](
+                TTestActorRuntimeBase& runtime,
+                TAutoPtr<IEventHandle>& event,
+                TDuration delay,
+                TInstant& deadline)
+        {
+            if (runtime.IsScheduleForActorEnabled(event->GetRecipientRewrite())) {
+                deadline = runtime.GetTimeProvider()->Now() + delay;
+                return false;
+            }
+            return true;
+        });
+        runtime.Initialize();
+
+        const TFsPath root = TFsPath::Cwd() / (runtime.GetSpillingPrefix() + "_recover");
+        root.ForceDelete();
+        {
+            TFileOutput output(root.GetPath());
+        }
+
+        runtime.StartSpillingService(1000, 500, 100, 1000, root);
+        runtime.WaitBootstrap();
+
+        // While the root is unusable, requests are rejected instead of killing the service.
+        {
+            auto tester = runtime.AllocateEdgeActor();
+            runtime.StartSpillingActor(tester);
+            runtime.WaitBootstrap();
+
+            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester, TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL("Spilling service is not started", resp->Get()->Message);
+        }
+
+        // Unblock the root and let the scheduled retry start the service.
+        root.ForceDelete();
+
+        TDispatchOptions retryOptions;
+        retryOptions.CustomFinalCondition = [&root]() { return root.IsDirectory(); };
+        UNIT_ASSERT(runtime.DispatchEvents(retryOptions, TDuration::Seconds(5)));
+
+        {
+            auto tester = runtime.AllocateEdgeActor();
+            auto spillingActor = runtime.StartSpillingActor(tester);
+            runtime.WaitBootstrap();
+
+            runtime.Send(new IEventHandle(
+                spillingActor,
+                tester,
+                new TEvDqSpilling::TEvWrite(1, CreateRope(10, 'a'))));
+
+            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(tester, TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(resp->Get()->BlobId, 1);
+        }
     }
 
     Y_UNIT_TEST(NoSpillingService) {

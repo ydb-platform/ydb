@@ -23,12 +23,34 @@ EXCLUDE_RE = re.compile(COVERAGE_EXCLUDE_REGEXP)
 # ya logs: Executing: ['.../bin/llvm-cov', 'export', ..., '-object', 'path', ...]
 EXECUTING_RE = re.compile(r"Executing:\s*(\[.*bin/llvm-cov',\s*'export'.*\])")
 
+# llvm-cov options that consume the following argv token (not binaries).
+_LLVM_COV_VALUE_FLAGS = frozenset(
+    {
+        "-instr-profile",
+        "-object",
+        "-format",
+        "-ignore-filename-regex",
+        "-name",
+        "-name-regex",
+        "-name-allowlist",
+        "-path-equivalence",
+        "-j",
+        "-num-threads",
+        "-Xdemangler",
+        "-coverage-watermark",
+    }
+)
+
 
 def parse_ya_llvm_cov_cmd(log_text: str) -> tuple[str, list[str]]:
-    """Return (llvm_cov_path, object_paths) from ya coverage report log."""
+    """Return (llvm_cov_path, object_paths) from ya coverage report log.
+
+    Only real instrumented binaries are returned. Values of flags such as
+    -instr-profile / -ignore-filename-regex must not be treated as -object paths
+    (that bug made llvm-cov export fail with exit 1 in CI).
+    """
     match = EXECUTING_RE.search(log_text)
     if not match:
-        # Fallback: multiline / slightly different quoting
         match = re.search(
             r"(\[[^\]]*bin/llvm-cov',\s*'export'[^\]]*\])",
             log_text,
@@ -47,10 +69,12 @@ def parse_ya_llvm_cov_cmd(log_text: str) -> tuple[str, list[str]]:
 
     llvm_cov = cmd[0]
     objects: list[str] = []
-    # First positional after flags is often the main binary; also collect -object=
     i = 1
     while i < len(cmd):
         arg = cmd[i]
+        if arg in ("export", "show", "report"):
+            i += 1
+            continue
         if arg == "-object" and i + 1 < len(cmd):
             objects.append(cmd[i + 1])
             i += 2
@@ -59,15 +83,18 @@ def parse_ya_llvm_cov_cmd(log_text: str) -> tuple[str, list[str]]:
             objects.append(arg.split("=", 1)[1])
             i += 1
             continue
+        if arg in _LLVM_COV_VALUE_FLAGS:
+            i += 2  # skip flag + its value
+            continue
         if arg.startswith("-"):
+            # -flag=value or boolean flag
             i += 1
             continue
-        # positional binary
-        if "instr-profile" not in arg and arg not in ("export", "show"):
+        # Positional binary (legacy llvm-cov style): path, not .profdata
+        if "/" in arg and not arg.endswith((".profdata", ".profraw")):
             objects.append(arg)
         i += 1
 
-    # Deduplicate preserving order
     seen: set[str] = set()
     uniq: list[str] = []
     for o in objects:
@@ -90,7 +117,6 @@ def path_matches_prefixes(path: str, prefixes: list[str]) -> bool:
             or norm.endswith("/" + p)
             or p in norm
         ):
-            # Prefer startswith-style match on repo-relative segment
             idx = norm.find(p)
             if idx != -1 and (idx == 0 or norm[idx - 1] == "/"):
                 return True
@@ -195,7 +221,11 @@ def main() -> int:
         cmd.append(f"-object={obj}")
 
     print("+", " ".join(cmd[:6]), f"... ({len(objects)} objects)", flush=True)
-    proc = subprocess.run(cmd, check=True, text=True, capture_output=True)
+    proc = subprocess.run(cmd, check=False, text=True, capture_output=True)
+    if proc.returncode != 0:
+        print(proc.stderr, file=sys.stderr)
+        raise SystemExit(f"llvm-cov export failed with exit {proc.returncode}")
+
     filtered = filter_lcov(proc.stdout, cfg["lcov_prefixes"])
     if not filtered.strip():
         print("Warning: filtered LCOV is empty", file=sys.stderr)

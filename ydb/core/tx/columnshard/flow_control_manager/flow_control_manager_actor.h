@@ -69,15 +69,14 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     // Rate control is fully closed-loop on observed per-request write outcomes
     // (TEvWriteOutcome from TShardWriter) and contains no wall-clock timers:
     //  * growth: release a "cohort" of ceil(RefillRateR) waiters, then grow by AimdAdd
-    //    only once that many outcomes came back with zero overloads;
+    //    **percent** of the current rate (traffic-related), only once that many outcomes
+    //    came back with zero overloads;
     //  * cut: proportional to the observed overload fraction of a cohort.
-    // LastRefillAt is the only remaining TInstant and is pure token-bucket bookkeeping
-    // (tokens accrue as RefillRateR * dt), not a control-loop timer.
     double Tokens = 0.0;
     double RefillRateR = 10.0;
     double RMin = 0.0;   // 0 => unset => EffectiveRMin() clamps to a tiny floor (no config nail)
     double RMax = 0.0;   // 0 => unset => EffectiveRMax() is +inf (AIMD self-regulates upward)
-    double AimdAdd = 5.0;
+    double AimdAdd = 5.0;   // percent of RefillRateR per clean cohort
     double AimdBeta = 0.5;
     TInstant LastRefillAt;
     bool DrainWakeupScheduled = false;
@@ -89,7 +88,7 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     double RefillRateBytesR = 10'000'000.0;   // bytes/sec
     double RMinBytes = 0.0;   // 0 => unset
     double RMaxBytes = 0.0;   // 0 => unset
-    double AimdAddBytes = 1'000'000.0;
+    double AimdAddBytes = 5.0;   // percent of RefillRateBytesR per clean cohort
     double AimdBetaBytes = 0.5;
     TInstant LastRefillBytesAt;
 

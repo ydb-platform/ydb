@@ -596,17 +596,18 @@ void TFlowControlManager::CloseCohort() {
     }
 
     if (!overloads) {
-        // Clean round: a full rate-worth of writes completed without the shards ever
-        // pushing back, so probe a little higher on BOTH buckets. No clock is consulted.
+        // Clean round: grow BOTH buckets by AimdAdd / AimdAddBytes **percent** of the current
+        // rate (traffic-related). Absolute +N admits/s or +N MB/s nails would under-grow large
+        // clusters and over-grow small ones. No clock is consulted.
         bool grew = false;
-        if (RefillRateR < EffectiveRMax()) {
+        if (RefillRateR < EffectiveRMax() && AimdAdd > 0.0) {
             const double prev = RefillRateR;
-            RefillRateR = Min(EffectiveRMax(), RefillRateR + AimdAdd);
+            RefillRateR = Min(EffectiveRMax(), RefillRateR * (1.0 + AimdAdd / 100.0));
             grew = grew || (RefillRateR > prev);
         }
-        if (RefillRateBytesR < EffectiveRMaxBytes()) {
+        if (RefillRateBytesR < EffectiveRMaxBytes() && AimdAddBytes > 0.0) {
             const double prevBytes = RefillRateBytesR;
-            RefillRateBytesR = Min(EffectiveRMaxBytes(), RefillRateBytesR + AimdAddBytes);
+            RefillRateBytesR = Min(EffectiveRMaxBytes(), RefillRateBytesR * (1.0 + AimdAddBytes / 100.0));
             grew = grew || (RefillRateBytesR > prevBytes);
         }
         if (grew) {

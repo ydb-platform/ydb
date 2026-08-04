@@ -27,14 +27,14 @@ std::atomic<ui32> DelayedRejectTimeoutPercent{ 10 };
 std::atomic<ui64> DrainRMinMilli{ 0 };
 std::atomic<ui64> DrainRMaxMilli{ 0 };
 std::atomic<ui64> DrainRStartMilli{ 50'000 };
-std::atomic<ui64> DrainAimdAddMilli{ 5'000 };
+std::atomic<ui64> DrainAimdAddMilli{ 5'000 };   // 5.0 = +5% of current count rate
 std::atomic<ui64> DrainAimdBetaMilli{ 500 };
 
 // Bytes bucket. Same unset-bound semantics. Encoded in the same milli-rate units.
 std::atomic<ui64> DrainRMinBytesMilli{ 0 };
 std::atomic<ui64> DrainRMaxBytesMilli{ 0 };
 std::atomic<ui64> DrainRStartBytesMilli{ 10'000'000'000 };   // 10 MB/sec
-std::atomic<ui64> DrainAimdAddBytesMilli{ 1'000'000'000 };   // +1 MB/sec
+std::atomic<ui64> DrainAimdAddBytesMilli{ 5'000 };   // 5.0 = +5% of current bytes rate
 std::atomic<ui64> DrainAimdBetaBytesMilli{ 500 };   // 0.5
 
 double MilliToRate(ui64 milli) {
@@ -126,31 +126,48 @@ TInstant TFlowControlManagerServiceOperator::ComputeWaitDeadline(TInstant deadli
 }
 
 TFlowControlManagerServiceOperator::TDrainRateParams TFlowControlManagerServiceOperator::GetDrainRateParams() {
+    // Start from process-wide atomics (0 RMin/RMax = unset). Overlay only fields explicitly
+    // set on ColumnShardConfig.FlowControl (Has*). DrainAimdAdd / DrainAimdBeta are shared
+    // across count and bytes — no separate bytes AIMD config.
     TDrainRateParams params;
-    if (const auto* cfg = FlowControlConfigOrNull()) {
-        // Count-bucket knobs still come from the existing FlowControl config fields.
-        params.RMin = cfg->GetDrainRateMin();
-        params.RMax = cfg->GetDrainRateMax();
-        params.RStart = cfg->GetDrainRateStart();
-        params.AimdAdd = cfg->GetDrainAimdAdd();
-        params.AimdBeta = cfg->GetDrainAimdBeta();
-    } else {
-        params.RMin = MilliToRate(DrainRMinMilli.load());
-        params.RMax = MilliToRate(DrainRMaxMilli.load());
-        params.RStart = MilliToRate(DrainRStartMilli.load());
-        params.AimdAdd = MilliToRate(DrainAimdAddMilli.load());
-        params.AimdBeta = MilliToRate(DrainAimdBetaMilli.load());
-    }
-
-    // Bytes-bucket knobs have no dedicated config fields yet; always take them from the
-    // process-wide atomics (UT/tuning hooks). Defaults keep the bytes bucket generous so
-    // that, combined with BatchSize==0 graceful degradation, behaviour matches count-only
-    // control until the bytes bucket is explicitly tuned.
+    params.RMin = MilliToRate(DrainRMinMilli.load());
+    params.RMax = MilliToRate(DrainRMaxMilli.load());
+    params.RStart = MilliToRate(DrainRStartMilli.load());
+    params.AimdAdd = MilliToRate(DrainAimdAddMilli.load());
+    params.AimdBeta = MilliToRate(DrainAimdBetaMilli.load());
     params.RMinBytes = MilliToRate(DrainRMinBytesMilli.load());
     params.RMaxBytes = MilliToRate(DrainRMaxBytesMilli.load());
     params.RStartBytes = MilliToRate(DrainRStartBytesMilli.load());
-    params.AimdAddBytes = MilliToRate(DrainAimdAddBytesMilli.load());
-    params.AimdBetaBytes = MilliToRate(DrainAimdBetaBytesMilli.load());
+
+    if (const auto* cfg = FlowControlConfigOrNull()) {
+        if (cfg->HasDrainRateMin()) {
+            params.RMin = cfg->GetDrainRateMin();
+        }
+        if (cfg->HasDrainRateMax()) {
+            params.RMax = cfg->GetDrainRateMax();
+        }
+        if (cfg->HasDrainRateStart()) {
+            params.RStart = cfg->GetDrainRateStart();
+        }
+        if (cfg->HasDrainAimdAdd()) {
+            params.AimdAdd = cfg->GetDrainAimdAdd();
+        }
+        if (cfg->HasDrainAimdBeta()) {
+            params.AimdBeta = cfg->GetDrainAimdBeta();
+        }
+        if (cfg->HasDrainRateMinBytes()) {
+            params.RMinBytes = cfg->GetDrainRateMinBytes();
+        }
+        if (cfg->HasDrainRateMaxBytes()) {
+            params.RMaxBytes = cfg->GetDrainRateMaxBytes();
+        }
+        if (cfg->HasDrainRateStartBytes()) {
+            params.RStartBytes = cfg->GetDrainRateStartBytes();
+        }
+    }
+
+    params.AimdAddBytes = params.AimdAdd;
+    params.AimdBetaBytes = params.AimdBeta;
     return params;
 }
 
@@ -190,20 +207,18 @@ void TFlowControlManagerServiceOperator::SetDrainRateParams(const TDrainRatePara
     DrainAimdAddMilli.store(RateToMilli(add));
     DrainAimdBetaMilli.store(RateToMilli(beta));
 
-    // Bytes bucket, same semantics.
+    // Bytes bucket bounds/start. AIMD add/beta are shared with the count bucket.
     const double rMinB = Max(0.0, params.RMinBytes);
     const double rMaxB = params.RMaxBytes > 0.0 ? Max(rMinB, params.RMaxBytes) : 0.0;
     const double rStartBLo = rMinB > 0.0 ? rMinB : 1.0;
     const double rStartBHi = rMaxB > 0.0 ? rMaxB : params.RStartBytes;
     const double rStartB = Min(Max(params.RStartBytes, rStartBLo), Max(rStartBHi, rStartBLo));
-    const double addB = Max(0.0, params.AimdAddBytes);
-    const double betaB = Min(1.0, Max(0.01, params.AimdBetaBytes));
 
     DrainRMinBytesMilli.store(RateToMilli(rMinB));
     DrainRMaxBytesMilli.store(RateToMilli(rMaxB));
     DrainRStartBytesMilli.store(RateToMilli(rStartB));
-    DrainAimdAddBytesMilli.store(RateToMilli(addB));
-    DrainAimdBetaBytesMilli.store(RateToMilli(betaB));
+    DrainAimdAddBytesMilli.store(RateToMilli(add));
+    DrainAimdBetaBytesMilli.store(RateToMilli(beta));
 }
 
 void TFlowControlManagerServiceOperator::ResetDrainRateParamsToDefaults() {

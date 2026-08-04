@@ -23,6 +23,7 @@ public:
         double RMin = 0.0;
         double RMax = 0.0;
         double RStart = 10.0;
+        // Percent of current rate per clean cohort (5 ⇒ +5%). Shared by count and bytes buckets.
         double AimdAdd = 5.0;
         double AimdBeta = 0.5;
 
@@ -30,7 +31,8 @@ public:
         double RMinBytes = 0.0;
         double RMaxBytes = 0.0;
         double RStartBytes = 10'000'000.0;
-        double AimdAddBytes = 1'000'000.0;
+        // Filled from AimdAdd / AimdBeta by GetDrainRateParams (shared AIMD).
+        double AimdAddBytes = 5.0;
         double AimdBetaBytes = 0.5;
     };
 

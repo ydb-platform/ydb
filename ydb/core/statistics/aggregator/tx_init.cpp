@@ -308,14 +308,8 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             YDB_LOG_DEBUG("TTxInit::Complete. Resume traversal with TAnalyzeActor.",
                 {"tabletId", Self->TabletID()},
                 {"traversalPathId", Self->TraversalPathId});
-            auto analyzeActorConfig = TAnalyzeActor::TConfig{
-                .MaxTotalScanActorsInFlight = Self->StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
-                .MaxPerNodeScanActorsInFlight = Self->StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
-            };
-            Self->AnalyzeActorId = ctx.Register(new TAnalyzeActor(
-                Self->SelfId(), Self->ForceTraversalOperationId, Self->TraversalDatabase, Self->TraversalPathId,
-                TVector<ui32>{}, analyzeActorConfig),
-                TMailboxType::HTSwap, AppData()->BatchPoolId);
+            Self->StartAnalyzeActor(ctx, Self->ForceTraversalOperationId,
+                Self->TraversalDatabase, Self->TraversalPathId);
         }
 
         Self->ReportBaseStatisticsCounters();

@@ -733,14 +733,8 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
 
                 // operation.Types field is not used, TAnalyzeActor will determine suitable
                 // statistic types itself.
-                auto analyzeActorConfig = TAnalyzeActor::TConfig{
-                    .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
-                    .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
-                };
-                AnalyzeActorId = ctx.Register(new TAnalyzeActor(
-                    SelfId(), operation.OperationId, operation.DatabaseName, operationTable.PathId,
-                    operationTable.ColumnTags, analyzeActorConfig),
-                    TMailboxType::HTSwap, AppData()->BatchPoolId);
+                StartAnalyzeActor(ctx, operation.OperationId, operation.DatabaseName,
+                    operationTable.PathId, operationTable.ColumnTags);
                 YDB_LOG_DEBUG("ScheduleNextAnalyze. started analyzing table",
                     {"tabletId", TabletID()},
                     {"operationId", operation.OperationId.Quote()},
@@ -804,14 +798,7 @@ void TStatisticsAggregator::ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db,
 
     PersistTraversal(db);
 
-    auto analyzeActorConfig = TAnalyzeActor::TConfig{
-        .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
-        .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
-    };
-    AnalyzeActorId = ctx.Register(new TAnalyzeActor(
-        SelfId(), /*operationId=*/"", TraversalDatabase, pathId,
-        /*columnTags=*/{}, analyzeActorConfig),
-        TMailboxType::HTSwap, AppData()->BatchPoolId);
+    StartAnalyzeActor(ctx, /*operationId=*/"", TraversalDatabase, pathId);
 
     YDB_LOG_DEBUG("ScheduleNextBackgroundTraversal. started analyzing table",
         {"tabletId", TabletID()},
@@ -1145,6 +1132,17 @@ void TStatisticsAggregator::PersistTraversal(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_TraversalTableLocalPathId, ToString(TraversalPathId.LocalPathId));
     PersistSysParam(db, Schema::SysParam_TraversalStartTime, ToString(TraversalStartTime.MicroSeconds()));
     PersistSysParam(db, Schema::SysParam_ForceTraversalOperationId, ForceTraversalOperationId);
+}
+
+void TStatisticsAggregator::StartAnalyzeActor(const TActorContext& ctx, const TString& operationId,
+        const TString& database, const TPathId& pathId, const TVector<ui32>& columnTags) {
+    auto analyzeActorConfig = TAnalyzeActor::TConfig{
+        .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
+        .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
+    };
+    AnalyzeActorId = ctx.Register(new TAnalyzeActor(
+        SelfId(), operationId, database, pathId, columnTags, analyzeActorConfig),
+        TMailboxType::HTSwap, AppData()->BatchPoolId);
 }
 
 void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {

@@ -149,6 +149,9 @@ private:
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
     void PersistTraversal(NIceDb::TNiceDb& db);
 
+    void StartAnalyzeActor(const TActorContext& ctx, const TString& operationId, const TString& database,
+        const TPathId& pathId, const TVector<ui32>& columnTags = {});
+
     void ResetTraversalState(NIceDb::TNiceDb& db);
     void ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActorContext& ctx);
     void ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db, const TActorContext& ctx);

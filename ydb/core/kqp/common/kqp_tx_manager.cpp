@@ -116,6 +116,12 @@ public:
                 auto* existing = FindIfPtr(*lockPtr->Lock.Proto.MutableWriteSeqNums(),
                     [&](const auto& entry) { return entry.GetWriterIndex() == writeSeqNum.GetWriterIndex(); });
                 if (existing) {
+                    // Results of one writer are deduplicated and arrive in order
+                    AFL_ENSURE(existing->GetWriteSeqNum() < writeSeqNum.GetWriteSeqNum())
+                        ("shard", shardId)
+                        ("writer", writeSeqNum.GetWriterIndex())
+                        ("known", existing->GetWriteSeqNum())
+                        ("got", writeSeqNum.GetWriteSeqNum());
                     existing->SetWriteSeqNum(writeSeqNum.GetWriteSeqNum());
                 } else {
                     *lockPtr->Lock.Proto.AddWriteSeqNums() = writeSeqNum;

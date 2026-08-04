@@ -1783,6 +1783,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     if (rec.HasWriteSeqNum()) {
         const ui64 writerIndex = rec.GetWriteSeqNum().GetWriterIndex();
         const ui64 writeSeqNum = rec.GetWriteSeqNum().GetWriteSeqNum();
+        // A write with LockTxId has to be immediate, see TKeyValidator::IsValidKey
         if (writeSeqNum == 0
             || !rec.GetLockTxId()
             || rec.txmode() != NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE

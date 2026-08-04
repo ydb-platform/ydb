@@ -4752,8 +4752,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 22\n");
     }
 
-    // A write that applies no rows still takes a position in the chain, and its duplicate
-    // must report the read-only lock it created.
+    // A write that applies no rows still takes a position in the chain
     Y_UNIT_TEST(PipelinedUncommittedWriteAlreadyAppliedMissingRow) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -5086,10 +5085,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
 
-        // WriteSeqNum with MODE_PREPARE
+        // WriteSeqNum with a prepare mode: an uncommitted write has to be immediate
+        for (auto txMode : {NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                            NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE})
         {
-            auto req = MakeWriteRequestOneKeyValue(1234567890011,
-                NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+            auto req = MakeWriteRequestOneKeyValue(1234567890011, txMode,
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 tableId, columns, 1, 11);
             req->SetLockId(lockTxId, lockNodeId);

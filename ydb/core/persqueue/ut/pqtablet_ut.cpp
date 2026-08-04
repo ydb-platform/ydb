@@ -2880,27 +2880,14 @@ Y_UNIT_TEST_F(Duplicate_ReadSetAck_From_Same_Recipient, TPQTabletFixture)
     sendReadSetAck(tabletB);
     sendReadSetAck(tabletB);
 
-    AssertTransactionInKV(txId);
-
-    // Without dedup, two acks from B satisfy HaveAllRecipientsReceive (2/2) even though C
-    // has not acked. DeleteTx is queued in memory; the next ProposeTransaction persists it.
-    SendProposeTransactionRequest({.TxId=txId + 1,
-                                  .Receivers={tabletB, tabletC},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-    WaitProposeTransactionResponse({.TxId=txId + 1,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    // Without dedup, two acks from B would satisfy HaveAllRecipientsReceive (2/2) even though C
+    // has not acked. DeleteTx must not run yet; give the write cycle a chance to flush if it were queued.
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(300));
     AssertTransactionInKV(txId);
 
     sendReadSetAck(tabletC);
 
-    SendProposeTransactionRequest({.TxId=txId + 2,
-                                  .Receivers={tabletB, tabletC},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-
+    // Delete is persisted by a WRITE_TX cycle without a follow-up ProposeTransaction.
     WaitForTheTransactionToBeDeleted(txId);
 }
 
@@ -2954,15 +2941,8 @@ Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)
 
     WaitProposeTransactionResponse({.TxId=txId, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
-    // We will send a TEvProposeTransaction to delete the previous transaction
-    SendProposeTransactionRequest({.TxId=txId + 1,
-                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-
     // Instead of TEvReadSetAck, the PQ tablet will receive TEvClientConnected with the Dead flag. The transaction
-    // will switch from the WAIT_RS_AKS state to the DELETING state.
+    // will switch from the WAIT_RS_ACKS state to the DELETING state and be deleted without a follow-up propose.
     WaitForTheTransactionToBeDeleted(txId);
 }
 
@@ -3005,6 +2985,216 @@ Y_UNIT_TEST_F(Limit_On_The_Number_Of_Transactons, TPQTabletFixture)
 
     UNIT_ASSERT_EQUAL(preparedCount, 1000);
     UNIT_ASSERT_EQUAL(overloadedCount, 2);
+}
+
+Y_UNIT_TEST_F(DeleteTx_Without_FollowUp_Propose_Complete, TPQTabletFixture)
+{
+    // A1-N1: non-Kafka COMPLETE tx is deleted from KV without a follow-up ProposeTransaction.
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitForTheTransactionToBeDeleted(txId);
+}
+
+Y_UNIT_TEST_F(DeleteTx_Without_FollowUp_Propose_Abort, TPQTabletFixture)
+{
+    // A1-N2: ABORTED tx is deleted from KV without a follow-up ProposeTransaction.
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_ABORT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitForTheTransactionToBeDeleted(txId);
+}
+
+Y_UNIT_TEST_F(DeleteTx_Without_FollowUp_Propose_Frees_Slot_For_New_Propose, TPQTabletFixture)
+{
+    // A1-N3: completed txs leave DELETING without a propose; slots free so a new propose is PREPARED.
+    const ui64 mockTabletId = 22222;
+    const ui64 baseTxId = 67890;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    for (ui64 i = 0; i < 3; ++i) {
+        const ui64 txId = baseTxId + i;
+        const ui64 step = 100 + i;
+
+        SendProposeTransactionRequest({.TxId=txId,
+                                      .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                      .TxOps={
+                                      {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                      }});
+        WaitProposeTransactionResponse({.TxId=txId,
+                                       .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+        SendPlanStep({.Step=step, .TxIds={txId}});
+
+        WaitReadSet(*tablet, {.Step=step, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                              .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+        tablet->SendReadSet(*Ctx->Runtime, {.Step=step, .TxId=txId, .Target=Ctx->TabletId,
+                                            .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+        WaitProposeTransactionResponse({.TxId=txId,
+                                       .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+        tablet->ReadSetAck.Clear();
+        tablet->SendReadSetAck(*Ctx->Runtime, {.Step=step, .TxId=txId, .Source=Ctx->TabletId});
+        WaitForTheTransactionToBeDeleted(txId);
+    }
+
+    const ui64 nextTxId = baseTxId + 3;
+    SendProposeTransactionRequest({.TxId=nextTxId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=nextTxId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+}
+
+Y_UNIT_TEST_F(DeleteTx_Without_FollowUp_Propose_Batch, TPQTabletFixture)
+{
+    // A1-N4: several DeleteTxs flush without a follow-up ProposeTransaction.
+    const ui64 mockTabletId = 22222;
+    const ui64 baseTxId = 67890;
+    constexpr ui64 txCount = 3;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    for (ui64 i = 0; i < txCount; ++i) {
+        const ui64 txId = baseTxId + i;
+        const ui64 step = 100 + i;
+
+        SendProposeTransactionRequest({.TxId=txId,
+                                      .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                      .TxOps={
+                                      {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                      }});
+        WaitProposeTransactionResponse({.TxId=txId,
+                                       .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+        SendPlanStep({.Step=step, .TxIds={txId}});
+
+        WaitReadSet(*tablet, {.Step=step, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                              .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+        tablet->SendReadSet(*Ctx->Runtime, {.Step=step, .TxId=txId, .Target=Ctx->TabletId,
+                                            .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+        WaitProposeTransactionResponse({.TxId=txId,
+                                       .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    }
+
+    for (ui64 i = 0; i < txCount; ++i) {
+        const ui64 txId = baseTxId + i;
+        const ui64 step = 100 + i;
+        tablet->ReadSetAck.Clear();
+        tablet->SendReadSetAck(*Ctx->Runtime, {.Step=step, .TxId=txId, .Source=Ctx->TabletId});
+    }
+
+    for (ui64 i = 0; i < txCount; ++i) {
+        WaitForTheTransactionToBeDeleted(baseTxId + i);
+    }
+}
+
+Y_UNIT_TEST_F(DeleteTx_Without_FollowUp_Propose_Kafka, TPQTabletFixture)
+{
+    // A1-N5: Kafka commit still deletes the tx without a follow-up ProposeTransaction.
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+    CommitKafkaTransaction(producerInstanceId, txId);
+
+    WaitForTheTransactionToBeDeleted(txId);
+}
+
+Y_UNIT_TEST_F(DeleteTx_With_Concurrent_Propose, TPQTabletFixture)
+{
+    // A1-N6: DeleteTxs flush in the same WRITE_TX cycle as a new ProposeTransaction.
+    const ui64 txId = 67890;
+    const ui64 nextTxId = txId + 1;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+
+    SendProposeTransactionRequest({.TxId=nextTxId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=nextTxId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    WaitForTheTransactionToBeDeleted(txId);
 }
 
 Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)
@@ -3218,13 +3408,6 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
                              deleteDoneEvent.Release(),
                              0, 0);
 
-    // We will send a TEvProposeTransaction to delete the previous transaction
-    SendProposeTransactionRequest({.TxId=txId + 1,
-                                  .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-
     WaitForTheTransactionToBeDeleted(txId);
 
     // check that information about a transaction with this WriteId has been renewed on disk
@@ -3282,13 +3465,6 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Deleting_State, TP
                              deleteDoneEvents[i].Release(),
                              0, i);
     }
-
-    // We will send a TEvProposeTransaction to delete the previous transaction
-    SendProposeTransactionRequest({.TxId=txId + 1,
-                                  .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
 
     WaitForTheTransactionToBeDeleted(txId);
 

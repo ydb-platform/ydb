@@ -1,30 +1,40 @@
 # YDB Documentation
-> YDB is an open-source distributed SQL database. This file is the discovery hub for LLM-friendly documentation indexes. Prefer a version that matches the YDB server you are working with.
+> YDB is an open-source distributed SQL database. This file is the discovery hub for LLM-friendly documentation indexes. Prefer a documentation version that matches the YDB server you are working with.
 
-How to use these indexes:
-- Start here, then open one locale/version `llms.txt` for a curated page list, or `llms-full.txt` for a single-file full-text dump (several MB).
-- Links without `?version=` point at the site default documentation version (see `default-branch.txt` in this repository; currently `stable-26-1` → `v26.1`).
-- Use `?version=main` for the latest docs from the `main` branch.
-- Individual pages are also available as Markdown by using the `.md` URL from the index (Diplodoc).
-- English and Russian docs are separate trees. Do not mix locales in one answer unless the user asks.
+How YDB documentation versions work (trunk-based development):
+- **Default** (URLs without `?version=`): the current default **stable** release docs. That stable is selected by `default-branch.txt` in this repository (currently `stable-26-1` → `v26.1`). Default is **not** `main`.
+- **`main`**: the development trunk. Separate from any stable. Use `?version=main` for tip-of-trunk docs.
+- **Stables**: release lines such as `v25.1`, `v25.2`, `v25.3`, `v25.4`, `v26.1`, `v26.2`, `v26.3`, and later `v26.4`, `v27.1`, … Select with `?version=vX.Y`.
+- Open one locale/version `llms.txt` for a page index, or `llms-full.txt` for a single-file full-text dump (several MB).
+- Individual pages are also available as Markdown via the `.md` URLs from those indexes (Diplodoc).
+- English and Russian are separate trees. Do not mix locales unless the user asks.
 
-## Default documentation (no version query)
+## Default stable (no `?version=`)
 
-- [English index](https://ydb.tech/docs/en/llms.txt): Page index for the site default docs version (EN)
-- [Russian index](https://ydb.tech/docs/ru/llms.txt): Page index for the site default docs version (RU)
-- [English full text](https://ydb.tech/docs/en/llms-full.txt): Full Markdown dump for the site default docs version (EN)
-- [Russian full text](https://ydb.tech/docs/ru/llms-full.txt): Full Markdown dump for the site default docs version (RU)
+Same content as `v26.1` while `default-branch.txt` points at `stable-26-1`.
 
-## Latest (main)
+- [English index](https://ydb.tech/docs/en/llms.txt): Default stable page index (EN)
+- [Russian index](https://ydb.tech/docs/ru/llms.txt): Default stable page index (RU)
+- [English full text](https://ydb.tech/docs/en/llms-full.txt): Default stable full Markdown dump (EN)
+- [Russian full text](https://ydb.tech/docs/ru/llms-full.txt): Default stable full Markdown dump (RU)
 
-- [English index (main)](https://ydb.tech/docs/en/llms.txt?version=main): Unreleased / tip-of-main documentation index (EN)
-- [Russian index (main)](https://ydb.tech/docs/ru/llms.txt?version=main): Unreleased / tip-of-main documentation index (RU)
-- [English full text (main)](https://ydb.tech/docs/en/llms-full.txt?version=main): Full Markdown dump for main (EN)
-- [Russian full text (main)](https://ydb.tech/docs/ru/llms-full.txt?version=main): Full Markdown dump for main (RU)
+## Development trunk (`main`)
 
-## Released versions with LLM indexes
+- [English index (main)](https://ydb.tech/docs/en/llms.txt?version=main): Trunk documentation index (EN)
+- [Russian index (main)](https://ydb.tech/docs/ru/llms.txt?version=main): Trunk documentation index (RU)
+- [English full text (main)](https://ydb.tech/docs/en/llms-full.txt?version=main): Trunk full Markdown dump (EN)
+- [Russian full text (main)](https://ydb.tech/docs/ru/llms-full.txt?version=main): Trunk full Markdown dump (RU)
 
-Only versions that currently publish `llms.txt` are listed. After enabling Diplodoc `llms` generation on an older `stable-*` branch, add that version here.
+## Stable release versions
+
+Add new stables here when they are published (`v26.4`, `v27.1`, …). URL pattern: `?version=vX.Y`.
+
+### v26.3
+
+- [English index](https://ydb.tech/docs/en/llms.txt?version=v26.3)
+- [Russian index](https://ydb.tech/docs/ru/llms.txt?version=v26.3)
+- [English full text](https://ydb.tech/docs/en/llms-full.txt?version=v26.3)
+- [Russian full text](https://ydb.tech/docs/ru/llms-full.txt?version=v26.3)
 
 ### v26.2
 
@@ -40,6 +50,13 @@ Only versions that currently publish `llms.txt` are listed. After enabling Diplo
 - [English full text](https://ydb.tech/docs/en/llms-full.txt?version=v26.1)
 - [Russian full text](https://ydb.tech/docs/ru/llms-full.txt?version=v26.1)
 
+### v25.4
+
+- [English index](https://ydb.tech/docs/en/llms.txt?version=v25.4)
+- [Russian index](https://ydb.tech/docs/ru/llms.txt?version=v25.4)
+- [English full text](https://ydb.tech/docs/en/llms-full.txt?version=v25.4)
+- [Russian full text](https://ydb.tech/docs/ru/llms-full.txt?version=v25.4)
+
 ### v25.3
 
 - [English index](https://ydb.tech/docs/en/llms.txt?version=v25.3)
@@ -53,6 +70,13 @@ Only versions that currently publish `llms.txt` are listed. After enabling Diplo
 - [Russian index](https://ydb.tech/docs/ru/llms.txt?version=v25.2)
 - [English full text](https://ydb.tech/docs/en/llms-full.txt?version=v25.2)
 - [Russian full text](https://ydb.tech/docs/ru/llms-full.txt?version=v25.2)
+
+### v25.1
+
+- [English index](https://ydb.tech/docs/en/llms.txt?version=v25.1)
+- [Russian index](https://ydb.tech/docs/ru/llms.txt?version=v25.1)
+- [English full text](https://ydb.tech/docs/en/llms-full.txt?version=v25.1)
+- [Russian full text](https://ydb.tech/docs/ru/llms-full.txt?version=v25.1)
 
 ## Optional
 

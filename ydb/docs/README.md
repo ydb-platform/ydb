@@ -99,7 +99,7 @@ Press `Ctrl+C` to stop the server.
 
 ## LLM indexes (`llms.txt`)
 
-Diplodoc generates per-locale indexes (`/docs/{en|ru}/llms.txt` and `llms-full.txt`, optional `?version=`). The hub [`llms.txt`](./llms.txt) in this directory links agents to those indexes across locales and release versions. Keep the version list in sync with stables that publish LLM indexes.
+Diplodoc generates per-locale indexes (`/docs/{en|ru}/llms.txt` and `llms-full.txt`). The hub [`llms.txt`](./llms.txt) links agents to those indexes for the **default stable** (no `?version=`; currently `v26.1`), the **`main` trunk**, and each **stable** (`?version=vX.Y`). Keep the stable list in the hub up to date when new release lines appear.
 
 ## File Structure
 

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    dbg_counters.cpp
     public.cpp
     trace_helpers.cpp
     vchunk_counters.cpp
@@ -21,3 +22,5 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(ut)

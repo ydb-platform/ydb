@@ -382,6 +382,7 @@ struct TSchemeCacheNavigate {
         THashSet<TString> NotNullColumns;
         THashSet<TString> SetNotNullInProgressColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
+        TVector<NKikimrSchemeOp::TMultiColumnStatisticsDescription> MultiColumnStatistics;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
         ETableKind TableKind = ETableKind::KindUnknown;

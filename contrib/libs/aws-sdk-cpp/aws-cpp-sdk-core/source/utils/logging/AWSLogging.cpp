@@ -13,8 +13,28 @@
 using namespace Aws::Utils;
 using namespace Aws::Utils::Logging;
 
-static std::shared_ptr<LogSystemInterface> AWSLogSystem(nullptr);
-static std::shared_ptr<LogSystemInterface> OldLogger(nullptr);
+namespace {
+
+// AWS clients owned by other globals can be destroyed after this translation
+// unit's statics (static destruction order across translation units is
+// unspecified) and still log through GetLogSystem() while unwinding. The flag
+// is trivially destructible, so it stays readable until the very end of the
+// process; once ~LoggingSet has cleared it, the accessors below behave as
+// if no logger is installed instead of touching the destroyed shared_ptrs.
+bool LoggingSetAlive = true;
+
+struct LoggingSet {
+    std::shared_ptr<LogSystemInterface> AWSLogSystem;
+    std::shared_ptr<LogSystemInterface> OldLogger;
+
+    ~LoggingSet() {
+        LoggingSetAlive = false;
+    }
+};
+
+LoggingSet LogSet;
+
+} // anonymous namespace
 
 namespace Aws
 {
@@ -23,7 +43,9 @@ namespace Utils
 namespace Logging {
 
 void InitializeAWSLogging(const std::shared_ptr<LogSystemInterface> &logSystem) {
-    AWSLogSystem = logSystem;
+    if (LoggingSetAlive) {
+        LogSet.AWSLogSystem = logSystem;
+    }
 }
 
 void ShutdownAWSLogging(void) {
@@ -31,19 +53,25 @@ void ShutdownAWSLogging(void) {
 }
 
 LogSystemInterface *GetLogSystem() {
-    return AWSLogSystem.get();
+    return LoggingSetAlive ? LogSet.AWSLogSystem.get() : nullptr;
 }
 
 void PushLogger(const std::shared_ptr<LogSystemInterface> &logSystem)
 {
-    OldLogger = AWSLogSystem;
-    AWSLogSystem = logSystem;
+    if (!LoggingSetAlive) {
+        return;
+    }
+    LogSet.OldLogger = LogSet.AWSLogSystem;
+    LogSet.AWSLogSystem = logSystem;
 }
 
 void PopLogger()
 {
-    AWSLogSystem = OldLogger;
-    OldLogger = nullptr;
+    if (!LoggingSetAlive) {
+        return;
+    }
+    LogSet.AWSLogSystem = LogSet.OldLogger;
+    LogSet.OldLogger = nullptr;
 }
 
 } // namespace Logging

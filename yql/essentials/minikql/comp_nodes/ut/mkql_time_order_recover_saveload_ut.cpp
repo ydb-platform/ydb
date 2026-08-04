@@ -83,7 +83,7 @@ THolder<IComputationGraph> BuildGraph(TSetup& setup, const TTestData& input) {
     }
 
     const auto list = pgmBuilder.NewList(structType, std::move(items));
-    auto inputFlow = pgmBuilder.ToFlow(list);
+    auto inputFlow = pgmBuilder.ToFlow(list, {});
 
     i64 delay = -10;
     i64 ahead = 30;

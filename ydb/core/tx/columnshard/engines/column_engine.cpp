@@ -8,6 +8,8 @@
 
 #include <util/system/info.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_WRITE
+
 namespace NKikimr::NOlap {
 
 const std::shared_ptr<arrow::Schema>& IColumnEngine::GetReplaceKey() const {
@@ -17,15 +19,17 @@ const std::shared_ptr<arrow::Schema>& IColumnEngine::GetReplaceKey() const {
 ui64 IColumnEngine::GetMetadataLimit() {
     static const ui64 MemoryTotal = NSystemInfo::TotalMemorySize();
     if (!HasAppData()) {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_WRITE)("total", MemoryTotal);
+        YDB_LOG_TRACE("",
+            {"total", MemoryTotal});
         return MemoryTotal * 0.3;
     } else if (AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().HasAbsoluteValue()) {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_WRITE)(
-            "value", AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetAbsoluteValue());
+        YDB_LOG_TRACE("",
+            {"value", AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetAbsoluteValue()});
         return AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetAbsoluteValue();
     } else {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_WRITE)("total", MemoryTotal)(
-            "kff", AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetTotalRatio());
+        YDB_LOG_TRACE("",
+            {"total", MemoryTotal},
+            {"kff", AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetTotalRatio()});
         return MemoryTotal * AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetTotalRatio();
     }
 }

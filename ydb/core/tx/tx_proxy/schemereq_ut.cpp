@@ -25,6 +25,12 @@ namespace NKikimr::NTxProxyUT {
 
 using namespace NYdb;
 
+namespace {
+
+const TString PEER_NAME = "192.168.0.101";
+
+} // namespace
+
 // TTestEnv from proxy_ut_helpers.h does not fit for the tuning we need here.
 class TTestEnv {
 public:
@@ -219,38 +225,6 @@ TString LoginUser(TTestEnv& env, const TString& database, const TString& user, c
     return loginResult.token();
 }
 
-TString LoginUser2(TTestEnv& env, const TString& database, const TString& user, const TString& password) {
-    ui64 schemeshardId = 0;
-    auto runtime = env.GetTestServer().GetRuntime();
-    TActorId sender = runtime->AllocateEdgeActor();
-    {
-        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
-        request->Record.SetPath(database);
-        const ui64 rootSchemeshardId = Tests::ChangeStateStorage(Tests::SchemeRoot, env.GetSettings().Domain);
-        ForwardToTablet(*runtime, rootSchemeshardId, sender, request.Release(), 0);
-
-        TAutoPtr<IEventHandle> handle;
-        runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
-        const auto& record = handle->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
-
-        schemeshardId = record.GetPathDescription().GetDomainDescription().GetProcessingParams().GetSchemeShard();
-    }
-    // schemeshardId could be equal to rootSchemeshardId if database is a root
-    {
-        auto evLogin = new NSchemeShard::TEvSchemeShard::TEvLogin();
-        evLogin->Record.SetUser(user);
-        evLogin->Record.SetPassword(password);
-
-        ForwardToTablet(*runtime, schemeshardId, sender, evLogin);
-
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(handle);
-
-        UNIT_ASSERT_C(event->Record.GetError().empty(), event->Record.GetError());
-        return event->Record.GetToken();
-    }
-}
-
 NYdb::NQuery::TQueryClient CreateQueryClient(const TTestEnv& env, const TString& token, const TString& database) {
     NYdb::NQuery::TClientSettings settings;
     settings.Database(database);
@@ -322,7 +296,7 @@ void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& nam
         runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = token,
             .Database = database,
-            .PeerName = "test",
+            .PeerName = PEER_NAME,
         })), 0);
 
         Cerr << __FUNCTION__ << " call ticket_parser" << Endl;
@@ -370,7 +344,7 @@ void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& na
         runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = token,
             .Database = database,
-            .PeerName = "test",
+            .PeerName = PEER_NAME,
         })), 0);
 
         Cerr << __FUNCTION__ << " call ticket_parser" << Endl;

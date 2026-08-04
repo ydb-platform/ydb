@@ -34,7 +34,7 @@ Y_UNIT_TEST_LLVM(TestDiscard) {
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TStringBuf>{"000", "100", "200", "300"});
 
-    const auto pgmReturn = pb.FromFlow(pb.Discard(pb.ToFlow(list)));
+    const auto pgmReturn = pb.FromFlow(pb.Discard(pb.ToFlow(list, {})));
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto iterator = graph->GetValue();
     NUdf::TUnboxedValue item;
@@ -58,7 +58,7 @@ Y_UNIT_TEST_LLVM(TestSkipAndTake) {
 
     const auto list = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, ui32(100)), NTest::ConvertValueToLiteralNode(pb, ui32(666)), NTest::ConvertValueToLiteralNode(pb, ui32(3)));
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.Take(pb.Skip(pb.ExpandMap(pb.ToFlow(pb.Enumerate(list)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.Take(pb.Skip(pb.ExpandMap(pb.ToFlow(pb.Enumerate(list), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 1U), pb.Nth(item, 0U)}; }),
                                                                    NTest::ConvertValueToLiteralNode(pb, ui64(42))), NTest::ConvertValueToLiteralNode(pb, ui64(4))),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple({items.back(), items.front()}); }));
@@ -95,7 +95,7 @@ Y_UNIT_TEST_LLVM(TestDoNotCalculateSkipped) {
 
     const auto trap = NTest::ConvertValueToLiteralNode(pb, TStringBuf("IT'S A TRAP!"));
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.Skip(pb.WideMap(pb.ExpandMap(pb.ToFlow(pb.Enumerate(list)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.Skip(pb.WideMap(pb.ExpandMap(pb.ToFlow(pb.Enumerate(list), {}),
                                                                                    [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 1U), pb.Nth(item, 0U)}; }),
                                                                       [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.Unwrap(pb.Div(items.front(), items.back()), trap, __FILE__, __LINE__, 0)}; }),
                                                            NTest::ConvertValueToLiteralNode(pb, ui64(3))),

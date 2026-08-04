@@ -401,7 +401,8 @@ private:
         SrcColumns.reserve(entry.Columns.size());
         THashSet<TString> HasInternalConversion;
 
-        bool fillBuildInProgressColumns = AllowWriteToPrivateTable && AllowWriteToIndexImplTable && !IsIndexImplTable;
+        const bool fillBuildInProgressColumns = AllowWriteToPrivateTable && AllowWriteToIndexImplTable && !IsIndexImplTable;
+        const bool isPublicBulkUpsert = !AllowWriteToPrivateTable && !AllowWriteToIndexImplTable;
 
         for (const auto& [_, colInfo] : entry.Columns) {
             ui32 id = colInfo.Id;
@@ -422,6 +423,12 @@ private:
 
             if (colInfo.IsDefaultFromLiteral()) {
                 defaultColumnsLeft.insert(name);
+            }
+
+            if (colInfo.IsDefaultFromExpression() && colInfo.DefaultExpression->Stored && isPublicBulkUpsert) {
+                return TConclusionStatus::Fail(TStringBuilder()
+                    << "Bulk upsert is not supported for tables with STORED generated columns: column "
+                    << name);
             }
         }
 
@@ -491,6 +498,10 @@ private:
                         inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
                 }
                 if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
+                    ColumnsToConvertInplace[name] = ci.PType;
+                }
+
+                if (ci.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
                     ColumnsToConvertInplace[name] = ci.PType;
                 }
             } else if (typeInProto.has_decimal_type()) {
@@ -779,6 +790,16 @@ private:
                     // TUploadRowsRPCPublic::ExtractBatch() - converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                    }
+
+                    if (!ColumnsToConvertInplace.empty()) {
+                        auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                        if (!convertResult.ok()) {
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                                TStringBuilder() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
+                        }
+
+                        Batch = *convertResult;
                     }
                 }
                 break;

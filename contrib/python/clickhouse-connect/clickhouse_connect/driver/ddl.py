@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, Protocol
 
-from clickhouse_connect.datatypes.base import ClickHouseType
 from clickhouse_connect.driver.options import check_arrow
 
 if TYPE_CHECKING:
     import pyarrow
+
+
+class _NamedType(Protocol):
+    """Structural type for anything exposing a ClickHouse type ``name``."""
+
+    @property
+    def name(self) -> str: ...
 
 
 class TableColumnDef(NamedTuple):
@@ -16,9 +22,9 @@ class TableColumnDef(NamedTuple):
     """
 
     name: str
-    ch_type: ClickHouseType
-    expr_type: str = None
-    expr: str = None
+    ch_type: _NamedType
+    expr_type: str | None = None
+    expr: str | None = None
 
     @property
     def col_expr(self):

@@ -82,3 +82,15 @@ message TEvForgetResponse {
     optional Ydb.StatusIds.StatusCode Status = 2;
     repeated Ydb.Issue.IssueMessage Issues = 3;
 }
+
+message TEvCancelRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional uint64 OperationId = 3;
+}
+
+message TEvCancelResponse {
+    optional uint64 TxId = 1;
+    optional Ydb.StatusIds.StatusCode Status = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
+}

@@ -28,7 +28,7 @@ TCommandTools::TCommandTools()
     AddCommand(std::make_unique<TCommandRestore>());
     AddCommand(std::make_unique<TCommandCopy>());
     AddCommand(std::make_unique<TCommandRename>());
-    AddCommand(std::make_unique<TCommandPgConvert>());
+    AddHiddenCommand(std::make_unique<TCommandPgConvert>());
     AddCommand(std::make_unique<TCommandToolsInfer>());
 }
 
@@ -471,6 +471,10 @@ int TCommandRename::Run(TConfig& config) {
     );
     return EXIT_SUCCESS;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+//  PgConvert
+////////////////////////////////////////////////////////////////////////////////
 
 TCommandPgConvert::TCommandPgConvert()
     : TToolsCommand("pg-convert", {}, "Convert pg_dump result SQL file to format readable by YDB postgres layer")

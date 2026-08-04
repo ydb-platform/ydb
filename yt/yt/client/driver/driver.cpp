@@ -66,6 +66,7 @@ static TClientOptions GetRootClientOptions(const TDriverConfigPtr& config)
 {
     auto result = TClientOptions::Root();
     result.MultiproxyTargetCluster = config->MultiproxyTargetCluster;
+    result.AbandonMasterTransactionsOnFailedCommit = config->AbandonMasterTransactionsOnFailedCommit;
     return result;
 }
 
@@ -482,6 +483,7 @@ public:
             ? std::make_optional(New<NAuth::TServiceTicketFixedAuth>(*request.ServiceTicket))
             : std::nullopt;
         options.MultiproxyTargetCluster = Config_->MultiproxyTargetCluster;
+        options.AbandonMasterTransactionsOnFailedCommit = Config_->AbandonMasterTransactionsOnFailedCommit;
 
         auto client = ClientCache_->Get(identity, options);
 
@@ -597,9 +599,7 @@ private:
     {
         const auto& request = context->Request();
 
-        if (request.LoggingTags) {
-            Logger().WithRawTag(*request.LoggingTags);
-        }
+        auto Logger = DriverLogger().WithTags(request.LoggingTags);
 
         NTracing::TChildTraceContextGuard commandSpan(ConcatToString(TStringBuf("Driver:"), request.CommandName));
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {

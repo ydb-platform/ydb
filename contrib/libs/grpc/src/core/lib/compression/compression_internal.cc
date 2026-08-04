@@ -176,9 +176,11 @@ CompressionAlgorithmSet CompressionAlgorithmSet::FromChannelArgs(
   CompressionAlgorithmSet set;
   static const uint32_t kEverything =
       (1u << GRPC_COMPRESS_ALGORITHMS_COUNT) - 1;
+  static const uint32_t kEverythingExceptZstd =
+      kEverything & ~(1u << GRPC_COMPRESS_ZSTD);
   return CompressionAlgorithmSet::FromUint32(
       args.GetInt(GRPC_COMPRESSION_CHANNEL_ENABLED_ALGORITHMS_BITSET)
-          .value_or(kEverything));
+          .value_or(kEverythingExceptZstd));
 }
 
 CompressionAlgorithmSet::CompressionAlgorithmSet() = default;

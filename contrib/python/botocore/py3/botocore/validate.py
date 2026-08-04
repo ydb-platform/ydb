@@ -232,7 +232,7 @@ class ParamValidator:
         elif isinstance(params, list):
             for index, entity in enumerate(params):
                 self._validate_document(
-                    entity, shape, errors, '%s[%d]' % (name, index)
+                    entity, shape, errors, f'{name}[{index}]'
                 )
         elif not isinstance(params, ((str,), int, bool, float)):
             valid_types = (str, int, bool, float, list, dict)

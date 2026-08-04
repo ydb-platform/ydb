@@ -79,7 +79,7 @@ TError::TErrorOr(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... arg
     : TErrorOr(code, NYT::NDetail::FormatErrorMessage(format.Get(), std::forward<TArgs>(args)...), DisableFormat)
 { }
 
-template <CInvocable<bool(const TError&)> TFilter>
+template <NMpl::CInvocable<bool(const TError&)> TFilter>
 std::optional<TError> TError::FindMatching(const TFilter& filter) const
 {
     if (!Impl_) {
@@ -99,7 +99,7 @@ std::optional<TError> TError::FindMatching(const TFilter& filter) const
     return {};
 }
 
-template <CInvocable<bool(TErrorCode)> TFilter>
+template <NMpl::CInvocable<bool(TErrorCode)> TFilter>
 std::optional<TError> TError::FindMatching(const TFilter& filter) const
 {
     return FindMatching([&] (const TError& error) { return filter(error.GetCode()); });
@@ -600,6 +600,26 @@ template <class T>
 void FormatValue(TStringBuilderBase* builder, const TErrorOr<T>& error, TStringBuf spec)
 {
     FormatValue(builder, static_cast<const TError&>(error), spec);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class F, class... As>
+auto RunNoExcept(F&& functor, As&&... args) noexcept -> decltype(functor(std::forward<As>(args)...))
+{
+    return functor(std::forward<As>(args)...);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+inline TStringBuf GetWellKnownLoggingTag(const std::exception&)
+{
+    return "Error"_sb;
+}
+
+inline TStringBuf GetWellKnownLoggingTag(const TError&)
+{
+    return "Error"_sb;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,5 +1,7 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(storage_transport.h)
+
 SRCS(
     ddisk_helpers.cpp
     ic_storage_transport_actor.cpp

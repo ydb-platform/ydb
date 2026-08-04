@@ -1,5 +1,6 @@
 #include "kqp_sink_common.h"
 
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/common_helper.h>
@@ -534,6 +535,77 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         tester.Execute();
     }
 
+    // Verifies that a read-only SELECT via a secondary index under ReadCommittedRW
+    // issues TEvRead requests carrying a non-zero LockTxId and LockMode == PESSIMISTIC_NONE,
+    class TReadCommittedSelectTakesLocks : public TTableDataModificationTester {
+    public:
+        TReadCommittedSelectTakesLocks(TString selectQuery)
+            : SelectQuery(std::move(selectQuery)) {
+        }
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            size_t evReadCounter = 0;
+            size_t evLockCounter = 0;
+            size_t evLockResultCounter = 0;
+            size_t evWriteCounter = 0;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRowsResult::EventType) {
+                    ++evLockResultCounter;
+                } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    ++evReadCounter;
+                    auto* readEv = ev->Get<NKikimr::TEvDataShard::TEvRead>();
+                    UNIT_ASSERT(readEv->Record.GetLockMode() == NKikimrDataEvents::PESSIMISTIC_NONE);
+                    UNIT_ASSERT(readEv->Record.GetLockTxId() != 0);
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    ++evWriteCounter;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            auto future = Kikimr->RunInThreadPool([&] {
+                return session.ExecuteQuery(SelectQuery, TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evReadCounter >= 2; // index table + main table
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+            }
+
+            auto result = runtime.WaitFuture(future);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(evLockCounter, 0);
+            UNIT_ASSERT_VALUES_EQUAL(evLockResultCounter, 0);
+            UNIT_ASSERT_VALUES_EQUAL(evWriteCounter, 0);
+        }
+
+        const TString SelectQuery;
+    };
+
+    Y_UNIT_TEST(TSelectBySecondaryIndexTakesLocks) {
+        // /Root/Test2 (from kqp_sink_common.h) has INDEX idx_comment GLOBAL UNIQUE ON (Comment).
+        // SELECT via VIEW idx_comment forces the secondary-index scan -> stream-lookup plan.
+        TReadCommittedSelectTakesLocks tester(
+            R"(SELECT Group, Name, Amount, Comment FROM `/Root/Test2` VIEW idx_comment WHERE Comment IN ("1", "2"))");
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
     class TpccPaymentReturningConflict : public TTableDataModificationTester {
     protected:
         void Setup(TKikimrSettings& settings) override {
@@ -884,6 +956,163 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         tester.SetFillTables(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
+    }
+
+    Y_UNIT_TEST(StreamLookupLock_InFlightThrottle) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
+        auto* retrySettings = appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings();
+        retrySettings->SetMaxRowsProcessingStreamLookup(1);
+        retrySettings->SetMaxInFlightLocksStreamLookup(1);
+        retrySettings->SetMaxShardRetries(100);
+        retrySettings->SetMaxShardResolves(100);
+        retrySettings->SetMaxTotalRetries(100);
+        retrySettings->SetStartDelayMs(5);
+        retrySettings->SetMaxDelayMs(10);
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(true);
+        settings.AppConfig = appConfig;
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    CREATE TABLE `/Root/LockTest` (
+                        Id Int64 NOT NULL,
+                        Val String,
+                        PRIMARY KEY (Id)
+                    ) WITH (
+                        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+                        AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1,
+                        UNIFORM_PARTITIONS = 1
+                    );
+                )"), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const size_t rowCount = 50;
+        {
+            TStringBuilder dml;
+            dml << "REPLACE INTO `/Root/LockTest` (Id, Val) VALUES ";
+            for (size_t i = 0; i < rowCount; ++i) {
+                if (i) dml << ", ";
+                dml << "(" << i << ", \"v" << i << "\")";
+            }
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(dml), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        auto locksBefore = counters.SentLocks->Val();
+
+        auto result = kikimr.RunCall([&] {
+            return session.ExecuteQuery(Q_(R"(
+                UPDATE `/Root/LockTest` SET Val = "updated";
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto locksAfter = counters.SentLocks->Val();
+        auto evLockCounter = locksAfter - locksBefore;
+ 
+        UNIT_ASSERT_VALUES_EQUAL_C(evLockCounter, 51,
+            TStringBuilder() << "expected 51 lock requests, got " << evLockCounter);
+
+        auto verify = kikimr.RunCall([&] {
+            return session.ExecuteQuery(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/LockTest` WHERE Val == "updated";
+            )"), TTxControl::NoTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+        CompareYson(TStringBuilder() << "[[" << rowCount << "u]]", FormatResultSetYson(verify.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(StreamLookupLock_BytesQuotaExceeded) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
+        auto* retrySettings = appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings();
+        retrySettings->SetMaxRowsProcessingStreamLookup(10000);
+        retrySettings->SetMaxTotalBytesQuotaStreamLookup(100);
+        retrySettings->SetMaxInFlightLocksStreamLookup(10000);
+        retrySettings->SetMaxShardRetries(100);
+        retrySettings->SetMaxShardResolves(100);
+        retrySettings->SetMaxTotalRetries(100);
+        retrySettings->SetStartDelayMs(5);
+        retrySettings->SetMaxDelayMs(10);
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(true);
+        settings.AppConfig = appConfig;
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    CREATE TABLE `/Root/LockTest` (
+                        Id Int64 NOT NULL,
+                        Val String,
+                        PRIMARY KEY (Id)
+                    ) WITH (
+                        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+                        AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1,
+                        UNIFORM_PARTITIONS = 1
+                    );
+                )"), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const size_t rowCount = 20;
+        const TString wideValue(200, 'x');
+        {
+            TStringBuilder dml;
+            dml << "REPLACE INTO `/Root/LockTest` (Id, Val) VALUES ";
+            for (size_t i = 0; i < rowCount; ++i) {
+                if (i) dml << ", ";
+                dml << "(" << i << ", \"" << wideValue << "\")";
+            }
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(dml), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        auto locksBefore = counters.SentLocks->Val();
+        auto quotaExceededBefore = counters.StreamLookupLockTotalQuotaBytesExceeded->Val();
+
+        auto result = kikimr.RunCall([&] {
+            return session.ExecuteQuery(Q_(R"(
+                UPDATE `/Root/LockTest` SET Val = "updated";
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto locksAfter = counters.SentLocks->Val();
+        auto evLockCounter = locksAfter - locksBefore;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(evLockCounter, 2,
+            TStringBuilder() << "expected 2 lock requests, got " << evLockCounter);
+
+        auto quotaExceededAfter = counters.StreamLookupLockTotalQuotaBytesExceeded->Val();
+        UNIT_ASSERT_GT_C(quotaExceededAfter, quotaExceededBefore,
+            TStringBuilder() << "expected StreamLookupLockTotalQuotaBytesExceeded to increase, "
+            << "before=" << quotaExceededBefore << ", after=" << quotaExceededAfter);
+
+        auto verify = kikimr.RunCall([&] {
+            return session.ExecuteQuery(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/LockTest` WHERE Val == "updated";
+            )"), TTxControl::NoTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+        CompareYson(TStringBuilder() << "[[" << rowCount << "u]]", FormatResultSetYson(verify.GetResultSet(0)));
     }
 }
 

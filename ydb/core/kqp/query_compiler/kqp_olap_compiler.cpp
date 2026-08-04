@@ -35,12 +35,13 @@ class TKqpOlapCompileContext {
 public:
     TKqpOlapCompileContext(const TCoArgument& row, const TKikimrTableMetadata& tableMeta,
         NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-        TExprContext &exprCtx)
+        TExprContext &exprCtx, TTypeAnnotationContext& typesCtx)
         : Row(row)
         , MaxColumnId(0)
         , ReadProto(readProto)
         , ResultColNames(resultColNames)
         , ExprContext(exprCtx)
+        , TypesCtx(typesCtx)
         , YqlKernelsFuncRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone())
         , YqlKernelRequestBuilder(nullptr)
     {
@@ -134,7 +135,7 @@ public:
         if (!resultItemType) {
             const auto& leftCleanType = RemoveOptionality(*leftItemType);
             const auto& rightCleanType = RemoveOptionality(*rightItemType);
-            resultItemType = CommonType<true>(pos, &leftCleanType, &rightCleanType, ExprContext);
+            resultItemType = CommonType<true>(pos, &leftCleanType, &rightCleanType, ExprContext, TypesCtx);
         }
         Y_ENSURE(resultItemType, "KqpOlapCompiler: Result type is nullptr.");
 
@@ -287,6 +288,7 @@ private:
     const std::vector<std::string>& ResultColNames;
     std::unordered_map<std::string, ui32> KqpAggColNameToId;
     TExprContext& ExprContext;
+    TTypeAnnotationContext& TypesCtx;
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> YqlKernelsFuncRegistry;
     std::unique_ptr<TKernelRequestBuilder> YqlKernelRequestBuilder;
     THashMap<std::string, ui32> KqpColumnNameToProjectionId;
@@ -1159,11 +1161,11 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
 
 void CompileOlapProgram(const TCoLambda& lambda, const TKikimrTableMetadata& tableMeta,
     NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-    TExprContext &exprCtx)
+    TExprContext &exprCtx, TTypeAnnotationContext& typesCtx)
 {
     YQL_ENSURE(lambda.Args().Size() == 1);
 
-    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx);
+    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx, typesCtx);
 
     CompileOlapProgramImpl(lambda.Body(), ctx);
     CompileFinalProjection(ctx);

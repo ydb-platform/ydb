@@ -18,7 +18,8 @@ from . import base
 from .base import QueryExplainResultFormat
 
 from .. import _apis, issues, _utilities
-from ..opentelemetry.tracing import SpanName, create_ydb_span, set_peer_attributes, span_finish_callback
+from ..observability.tracing import SpanName, create_ydb_span, set_peer_attributes, span_finish_callback
+from ..observability.metrics import SessionMetrics, _NOOP_SESSION_METRICS
 from ..settings import BaseRequestSettings
 from ..connection import _RpcState as RpcState, EndpointKey
 from .._grpc.grpcwrapper import common_utils
@@ -94,6 +95,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
     _peer: Optional[tuple] = None
     _closed: bool = False
     _invalidated: bool = False
+    _session_metrics: SessionMetrics = _NOOP_SESSION_METRICS
 
     def __init__(self, driver: DriverT, settings: Optional[base.QueryClientSettings] = None):
         self._driver = driver
@@ -106,6 +108,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         )
 
         self._last_query_stats = None
+        self._session_metrics = SessionMetrics()
 
     @property
     def _driver_config(self) -> Optional["DriverConfig"]:
@@ -156,9 +159,28 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         if self._closed:
             raise RuntimeError(f"Session is not active, session_id: {self._session_id}, closed: {self._closed}")
 
+    def _attach_stream_wrapper(self, response_pb):
+        """Map attach-stream protobuf frames to ServerStatus and handle session hints."""
+        self._handle_attach_session_state(response_pb)
+        return common_utils.ServerStatus.from_proto(response_pb)
+
+    def _handle_attach_session_state(self, response_pb) -> None:
+        """Retire the session when the server sends a shutdown hint on the attach stream."""
+        if response_pb is None:
+            return
+
+        hint = response_pb.WhichOneof("session_hint")
+        if hint == "node_shutdown":
+            if self._node_id is not None:
+                self._driver._pessimize_node(self._node_id)
+            self._close_session(invalidate=True)
+        elif hint == "session_shutdown":
+            self._close_session(invalidate=True)
+
     def _close_session(self, invalidate: bool = False) -> None:
         if self._closed:
             return
+        self._session_metrics.count_closed()
         if invalidate:
             self._invalidated = True
         self._closed = True
@@ -285,6 +307,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]: ...
 
     @overload
@@ -301,6 +324,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]: ...
 
     def _execute_call(
@@ -316,6 +340,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> Union[
         Iterable[_apis.ydb_query.ExecuteQueryResponsePart],
         Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]],
@@ -339,6 +364,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
             result_set_format=result_set_format,
             arrow_format_settings=arrow_format_settings,
             concurrent_result_sets=concurrent_result_sets,
+            pool_id=pool_id,
         )
 
         return self._driver(
@@ -362,7 +388,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
         self._stream = self._attach_call()
         status_stream = _utilities.SyncResponseIterator(
             self._stream,
-            lambda response: common_utils.ServerStatus.from_proto(response),
+            self._attach_stream_wrapper,
         )
 
         try:
@@ -422,6 +448,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
             self._create_call(settings=settings)
             set_peer_attributes(span, self._peer)
             self._attach()
+            self._session_metrics.count_open()
 
         return self
 
@@ -461,6 +488,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
         schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
         result_set_format: Optional[base.QueryResultSetFormat] = None,
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> base.SyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -482,6 +510,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
          1) QueryResultSetFormat.VALUE, which is default;
          2) QueryResultSetFormat.ARROW.
         :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
+        :param pool_id: Optional resource pool ID for routing the query to a specific compute pool.
 
         :return: Iterator with result sets
         """
@@ -507,6 +536,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
                 arrow_format_settings=arrow_format_settings,
                 concurrent_result_sets=concurrent_result_sets,
                 settings=settings,
+                pool_id=pool_id,
             )
         return base.SyncResponseContextIterator(
             stream_it,

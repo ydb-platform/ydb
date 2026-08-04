@@ -459,13 +459,18 @@ public:
                 TMaybe<TMutex> mutex = TMutex();
                 std::vector<IBlockIterator::TPtr> blockIterators;
 
-                // The full sort columns are [_yql_key_hash, ...reduceBy].
-                // Inner iterators track only the reduce key columns; TKeyHashAddingBlockIterator
-                // computes _yql_key_hash from those columns and inserts it into the binary YSON.
+                // The full sort columns are [_yql_key_hash, ...reduceBy, ...extra tiebreaker
+                // columns] (e.g. "_yql_sort" for joins). Inner iterators track only the reduce key
+                // columns; TKeyHashAddingBlockIterator computes _yql_key_hash from those columns
+                // (not the tiebreaker columns, which vary within a group) and inserts it into the
+                // binary YSON.
                 Y_ENSURE(sortColumns.Columns[0] == TString(YqlKeyHashColumn),
                          "First sort column must be _yql_key_hash in MapReduceMap identity path");
-                std::vector<TString> reduceKeyColumns(sortColumns.Columns.begin() + 1, sortColumns.Columns.end());
-                std::vector<ESortOrder> reduceKeySortOrders(sortColumns.SortOrders.begin() + 1, sortColumns.SortOrders.end());
+                const size_t numReduceKeyColumns = params.ReduceOperationSpec.ReduceBy.Columns.size();
+                Y_ENSURE(numReduceKeyColumns + 1 <= sortColumns.Columns.size(),
+                         "reduceBy columns must fit within the sort columns after _yql_key_hash");
+                std::vector<TString> reduceKeyColumns(sortColumns.Columns.begin() + 1, sortColumns.Columns.begin() + 1 + numReduceKeyColumns);
+                std::vector<ESortOrder> reduceKeySortOrders(sortColumns.SortOrders.begin() + 1, sortColumns.SortOrders.begin() + 1 + numReduceKeyColumns);
 
                 for (const auto& inputRef : params.Input.Inputs) {
                     IBlockIterator::TPtr inner;
@@ -486,7 +491,7 @@ public:
                         );
                     }
                     blockIterators.emplace_back(MakeIntrusive<TKeyHashAddingBlockIterator>(
-                        std::move(inner), sortColumns.Columns, sortColumns.SortOrders
+                        std::move(inner), sortColumns.Columns, sortColumns.SortOrders, numReduceKeyColumns
                     ));
                 }
                 auto& parseRecordSettings = Settings_.ParseRecordSettings;
@@ -520,7 +525,14 @@ public:
                 mapReduceMapJob.SetTableDataServiceDiscovery(Discovery_);
             }
             mapReduceMapJob.SetTaskInputTables(params.Input);
-            mapReduceMapJob.SetTaskFmrOutputTables({params.Output});
+            // Index 0 = intermediate shuffle-bound table, 1..K = direct map-bypass outputs,
+            // matching the mapper's Variant<Tuple<T0..TK>> tag order.
+            std::vector<TFmrTableOutputRef> mapOutputTables{params.Output};
+            mapOutputTables.insert(mapOutputTables.end(), params.DirectOutputs.begin(), params.DirectOutputs.end());
+            mapReduceMapJob.SetTaskFmrOutputTables(mapOutputTables);
+            // Needed so DoFmrJob() can tell reduceBy (hash) columns apart from any trailing
+            // tiebreaker columns in Output.SortingColumns (e.g. "_yql_sort" for joins).
+            mapReduceMapJob.SetReduceOperationSpec(params.ReduceOperationSpec);
             mapReduceMapJob.SetClusterConnections(clusterConnections);
             mapReduceMapJob.SetYtJobService(YtJobService_);
             mapReduceMapJob.SetFmrJobType(EFmrJobType::Map);
@@ -825,7 +837,13 @@ void FillMapReduceMapFmrJob(
     mapReduceMapJob.SetTaskInputTables(params.Input);
     // SortingColumns were chosen by the coordinator (identity → [_yql_key_hash, ...reduceBy],
     // real mapper → [...reduceBy]). Use them as-is; TFmrUserJob picks the right writer.
-    mapReduceMapJob.SetTaskFmrOutputTables({params.Output});
+    // Index 0 = intermediate shuffle-bound table, 1..K = direct map-bypass outputs.
+    std::vector<TFmrTableOutputRef> mapOutputTables{params.Output};
+    mapOutputTables.insert(mapOutputTables.end(), params.DirectOutputs.begin(), params.DirectOutputs.end());
+    mapReduceMapJob.SetTaskFmrOutputTables(mapOutputTables);
+    // Needed so DoFmrJob() can tell reduceBy (hash) columns apart from any trailing
+    // tiebreaker columns in Output.SortingColumns (e.g. "_yql_sort" for joins).
+    mapReduceMapJob.SetReduceOperationSpec(params.ReduceOperationSpec);
     mapReduceMapJob.SetClusterConnections(clusterConnections);
     mapReduceMapJob.SetYtJobService(jobService);
     mapReduceMapJob.SetFmrJobType(EFmrJobType::Map);

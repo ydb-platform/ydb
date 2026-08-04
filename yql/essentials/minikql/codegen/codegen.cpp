@@ -17,6 +17,13 @@ Y_PRAGMA_DIAGNOSTIC_POP
 #include <util/system/platform.h>
 #include <util/datetime/base.h>
 
+#if defined(_asan_enabled_)
+extern "C" void __asan_init();
+extern "C" void __asan_version_mismatch_check_v8();
+extern "C" void __asan_register_elf_globals(uintptr_t* flag, void* start, void* stop);
+extern "C" void __asan_unregister_elf_globals(uintptr_t* flag, void* start, void* stop);
+#endif
+
 #if defined(_msan_enabled_)
 
 extern __thread unsigned long long __msan_param_tls[];
@@ -213,24 +220,6 @@ void FatalErrorHandler(void* user_data, const char* reason, bool gen_crash_diag)
     ythrow yexception() << "LLVM fatal error: " << reason;
 }
 
-#if LLVM_VERSION_MAJOR < 16
-void AddAddressSanitizerPasses(const llvm::PassManagerBuilder& builder, llvm::legacy::PassManagerBase& pm) {
-    Y_UNUSED(builder);
-    pm.add(llvm::createAddressSanitizerFunctionPass());
-    pm.add(llvm::createModuleAddressSanitizerLegacyPassPass());
-}
-
-void AddMemorySanitizerPass(const llvm::PassManagerBuilder& builder, llvm::legacy::PassManagerBase& pm) {
-    Y_UNUSED(builder);
-    pm.add(llvm::createMemorySanitizerLegacyPassPass());
-}
-
-void AddThreadSanitizerPass(const llvm::PassManagerBuilder& builder, llvm::legacy::PassManagerBase& pm) {
-    Y_UNUSED(builder);
-    pm.add(llvm::createThreadSanitizerLegacyPassPass());
-}
-#endif
-
 struct TCodegenInit {
     TCodegenInit() {
         llvm::InitializeNativeTarget();
@@ -245,6 +234,12 @@ bool CompareFuncOffsets(const std::pair<ui64, llvm::Function*>& lhs,
                         const std::pair<ui64, llvm::Function*>& rhs) {
     return lhs.first < rhs.first;
 }
+
+#if defined(_asan_enabled_)
+// LLVM 18 ASan emits ELF boundary symbols even for an empty globals range.
+// RuntimeDyld treats address 0 as "not found", so use a real empty range.
+uintptr_t AsanGlobalsAnchor;
+#endif
 } // namespace
 
 bool ICodegen::IsCodegenAvailable() {
@@ -313,7 +308,6 @@ public:
         auto&& engineBuilder = llvm::EngineBuilder(std::move(module));
         engineBuilder
             .setEngineKind(llvm::EngineKind::JIT)
-            .setOptLevel(llvm::CodeGenOpt::Default)
             .setErrorStr(&what)
             .setTargetOptions(targetOptions);
 
@@ -414,6 +408,14 @@ public:
         AddGlobalMapping("__emutls_v.__msan_va_arg_overflow_size_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::VaArgOverflowSize)));
         AddGlobalMapping("__emutls_v.__msan_origin_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::Origin)));
 #endif
+#if defined(_asan_enabled_)
+        AddGlobalMapping("__asan_init", (const void*)&__asan_init);
+        AddGlobalMapping("__asan_version_mismatch_check_v8", (const void*)&__asan_version_mismatch_check_v8);
+        AddGlobalMapping("__start_asan_globals", (const void*)&AsanGlobalsAnchor);
+        AddGlobalMapping("__stop_asan_globals", (const void*)&AsanGlobalsAnchor);
+        AddGlobalMapping("__asan_register_elf_globals", (const void*)&__asan_register_elf_globals);
+        AddGlobalMapping("__asan_unregister_elf_globals", (const void*)&__asan_unregister_elf_globals);
+#endif
 #if defined(_win_)
         AddGlobalMapping("__security_check_cookie", (const void*)&__security_check_cookie);
         AddGlobalMapping("__security_cookie", (const void*)&__security_cookie);
@@ -440,73 +442,6 @@ public:
             llvm::TimePassesIsEnabled = true;
         }
 
-        if (ExportedSymbols) {
-            std::unique_ptr<llvm::legacy::PassManager> modulePassManager;
-            std::unique_ptr<llvm::legacy::FunctionPassManager> functionPassManager;
-
-            modulePassManager = std::make_unique<llvm::legacy::PassManager>();
-            modulePassManager->add(llvm::createInternalizePass([&](const llvm::GlobalValue& gv) -> bool {
-                auto name = TString(gv.getName().str());
-                return ExportedSymbols->contains(name);
-            }));
-
-            modulePassManager->add(llvm::createGlobalDCEPass());
-            modulePassManager->run(*Module_);
-        }
-
-#if LLVM_VERSION_MAJOR < 16
-        llvm::PassManagerBuilder passManagerBuilder;
-        passManagerBuilder.OptLevel = disableOpt ? 0 : 2;
-        passManagerBuilder.SizeLevel = 0;
-        passManagerBuilder.Inliner = llvm::createFunctionInliningPass();
-
-        if (EffectiveSanitize_ == ESanitize::Asan) {
-            passManagerBuilder.addExtension(llvm::PassManagerBuilder::EP_OptimizerLast,
-                                            AddAddressSanitizerPasses);
-            passManagerBuilder.addExtension(llvm::PassManagerBuilder::EP_EnabledOnOptLevel0,
-                                            AddAddressSanitizerPasses);
-        }
-
-        if (EffectiveSanitize_ == ESanitize::Msan) {
-            passManagerBuilder.addExtension(llvm::PassManagerBuilder::EP_OptimizerLast,
-                                            AddMemorySanitizerPass);
-            passManagerBuilder.addExtension(llvm::PassManagerBuilder::EP_EnabledOnOptLevel0,
-                                            AddMemorySanitizerPass);
-        }
-
-        if (EffectiveSanitize_ == ESanitize::Tsan) {
-            passManagerBuilder.addExtension(llvm::PassManagerBuilder::EP_OptimizerLast,
-                                            AddThreadSanitizerPass);
-            passManagerBuilder.addExtension(llvm::PassManagerBuilder::EP_EnabledOnOptLevel0,
-                                            AddThreadSanitizerPass);
-        }
-
-        auto functionPassManager = std::make_unique<llvm::legacy::FunctionPassManager>(Module_);
-        auto modulePassManager = std::make_unique<llvm::legacy::PassManager>();
-
-        passManagerBuilder.populateModulePassManager(*modulePassManager);
-        passManagerBuilder.populateFunctionPassManager(*functionPassManager);
-
-        auto functionPassStart = Now();
-        functionPassManager->doInitialization();
-        for (auto it = Module_->begin(), jt = Module_->end(); it != jt; ++it) {
-            if (!it->isDeclaration()) {
-                functionPassManager->run(*it);
-            }
-        }
-        functionPassManager->doFinalization();
-
-        if (compileStats) {
-            compileStats->FunctionPassTime = (Now() - functionPassStart).MilliSeconds();
-        }
-
-        auto modulePassStart = Now();
-        modulePassManager->run(*Module_);
-
-        if (compileStats) {
-            compileStats->ModulePassTime = (Now() - modulePassStart).MilliSeconds();
-        }
-#else
         llvm::PassBuilder passBuilder;
 
         llvm::LoopAnalysisManager lam;
@@ -553,16 +488,27 @@ public:
             modulePassManager = passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
         }
 
+        if (ExportedSymbols) {
+            modulePassManager.addPass(llvm::InternalizePass([&](const llvm::GlobalValue& gv) -> bool {
+                auto name = TString(gv.getName().str());
+                return ExportedSymbols->contains(name);
+            }));
+
+            modulePassManager.addPass(llvm::GlobalDCEPass());
+        }
+
         auto modulePassStart = Now();
         modulePassManager.run(*Module_, mam);
 
         if (compileStats) {
             compileStats->ModulePassTime = (Now() - modulePassStart).MilliSeconds();
         }
-#endif
 
         auto finalizeStart = Now();
         Engine_->finalizeObject();
+        if (Engine_->hasError()) {
+            ythrow yexception() << "LLVM JIT finalization error: " << Engine_->getErrorMessage();
+        }
         if (compileStats) {
             compileStats->FinalizeTime = (Now() - finalizeStart).MilliSeconds();
         }

@@ -635,6 +635,14 @@ void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TAnalyz
     PrintOperationsListImpl(operations, format);
 }
 
+void PrintOperation(const NYdb::NTable::TSetNotNullOperation& operation, EDataFormat format) {
+    PrintOperationImpl(operation, format);
+}
+
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TSetNotNullOperation>& operations, EDataFormat format) {
+    PrintOperationsListImpl(operations, format);
+}
+
 /// QueryService
 void PrintOperation(const NYdb::NQuery::TScriptExecutionOperation& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);

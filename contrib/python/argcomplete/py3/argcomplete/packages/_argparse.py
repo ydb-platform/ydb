@@ -19,7 +19,13 @@ from argparse import (
     _SubParsersAction,
 )
 from gettext import gettext
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union, cast
+
+_OptionTuple = Union[
+    Tuple[Optional[Action], str, Optional[str]],
+    Tuple[Optional[Action], str, Optional[str], Optional[str]],
+]
+_OptionTupleEntry = Union[_OptionTuple, List[_OptionTuple]]
 
 _num_consumed_args: Dict[Action, int] = {}
 
@@ -97,7 +103,7 @@ class IntrospectiveArgumentParser(ArgumentParser):
         # find all option indices, and determine the arg_string_pattern
         # which has an 'O' if there is an option at an index,
         # an 'A' if there is an argument, or a '-' if there is a '--'
-        option_string_indices = {}
+        option_string_indices: Dict[int, _OptionTupleEntry] = {}
         arg_string_pattern_parts = []
         arg_strings_iter = iter(arg_strings)
         for i, arg_string in enumerate(arg_strings_iter):
@@ -114,7 +120,7 @@ class IntrospectiveArgumentParser(ArgumentParser):
                 if option_tuple is None:
                     pattern = 'A'
                 else:
-                    option_string_indices[i] = option_tuple
+                    option_string_indices[i] = cast(_OptionTupleEntry, option_tuple)
                     pattern = 'O'
                 arg_string_pattern_parts.append(pattern)
 
@@ -161,9 +167,11 @@ class IntrospectiveArgumentParser(ArgumentParser):
         # function to convert arg_strings into an optional action
         def consume_optional(start_index):
             # get the optional identified at this index
-            option_tuple = option_string_indices[start_index]
-            if isinstance(option_tuple, list):  # Python 3.12.7+
-                option_tuple = option_tuple[0]
+            raw_option_tuple = option_string_indices[start_index]
+            if isinstance(raw_option_tuple, list):  # Python 3.12.7+
+                option_tuple = raw_option_tuple[0]
+            else:
+                option_tuple = raw_option_tuple
             if len(option_tuple) == 3:
                 action, option_string, explicit_arg = option_tuple
             else:  # Python 3.11.9+, 3.12.3+, 3.13+
@@ -241,8 +249,8 @@ class IntrospectiveArgumentParser(ArgumentParser):
             # add the Optional to the list and return the index at which
             # the Optional's string args stopped
             assert action_tuples
-            for action, args, option_string in action_tuples:
-                take_action(action, args, option_string)
+            for optional_action, args, option_string in action_tuples:
+                take_action(optional_action, args, option_string)
             return stop
 
         # the list of Positionals left to be parsed; this is modified

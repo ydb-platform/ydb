@@ -68,7 +68,6 @@ union TBasicKikimrServicesMask {
         bool EnableScanConveyor : 1;
         bool EnableCompConveyor : 1;
         bool EnableInsertConveyor : 1;
-        bool EnableLocalPgWire:1;
         bool EnableKafkaProxy:1;
         bool EnableIcNodeCacheService:1;
         bool EnableMemoryTracker:1;
@@ -86,6 +85,8 @@ union TBasicKikimrServicesMask {
         bool EnableOverloadManager : 1;
         bool EnableCountersInfoProvider : 1;
         bool EnableNBSService : 1;
+        bool EnableUdfStore : 1;
+        bool EnableWorkloadManagerService : 1;
     };
 
     struct {

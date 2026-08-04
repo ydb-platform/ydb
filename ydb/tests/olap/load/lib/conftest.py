@@ -465,7 +465,9 @@ class LoadSuiteBase:
         return node_errors
 
     @classmethod
-    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str, upload: bool, allure_table_strings: Optional[dict[str, Any]] = None):
+    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str, upload: bool,
+                             allure_table_strings: Optional[dict[str, Any]] = None,
+                             node_errors: Optional[list] = None, verify_errors: Optional[dict] = None):
         def _get_duraton(stats, field):
             r = stats.get(field)
             return float(r) / 1e3 if r is not None else None
@@ -527,9 +529,12 @@ class LoadSuiteBase:
         if result.stderr is not None:
             allure.attach(cls.__hide_query_text(result.stderr, query_text), 'Stderr', attachment_type=allure.attachment_type.TEXT)
         end_time = time()
+        if node_errors is None:
+            node_errors = cls.check_nodes(result, end_time)
         allure_test_description(
             cls.suite(), query_name,
-            start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time),
+            start_time=result.start_time, end_time=end_time, node_errors=node_errors,
+            verify_errors=verify_errors,
             workload_result=result, workload_params=None,
             addition_blocks=[
                 cls.__get_key_measurements_block(result, query_name)
@@ -716,7 +721,7 @@ class LoadSuiteBase:
             }
         """
         if cls.__nodes_state is None:
-            return []
+            return {}
         all_hosts = {node.host for node in cls.__nodes_state.values()}
         return cls.__get_verify_fails(all_hosts, start_time, end_time)
 

@@ -52,6 +52,10 @@ struct TClientOptions
      *  Consult your cluster administrators for details.
      */
     std::optional<std::string> MultiproxyTargetCluster;
+
+    //! If set, a master transaction whose commit fails is abandoned (dropped locally, no
+    //! abort) instead of aborted, so a retrier can re-issue the commit. RPC proxy only.
+    bool AbandonMasterTransactionsOnFailedCommit = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

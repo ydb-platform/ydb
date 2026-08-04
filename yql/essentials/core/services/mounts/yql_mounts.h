@@ -25,7 +25,7 @@ TUserDataTable GetYqlModuleResolver(
     IModuleResolver::TPtr& moduleResolver,
     const TVector<NUserData::TUserData>& userData,
     const THashMap<TString, TString>& clusterMapping,
-    const THashSet<TString>& sqlFlags,
+    const NSQLTranslation::TExtendedSqlFlags& sqlFlags,
     bool optimizeLibraries = true,
     TModuleResolver::TModuleChecker moduleChecker = {});
 

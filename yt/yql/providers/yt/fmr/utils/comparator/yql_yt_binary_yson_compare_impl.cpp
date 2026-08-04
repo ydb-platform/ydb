@@ -192,6 +192,14 @@ int CompareYsonCurrentValuesFromReaders(TYsonReader& lhs, TYsonReader& rhs) {
     auto rhsTypeOrder = GetTypeOrder(rhsType);
 
     if (lhsTypeOrder != rhsTypeOrder) {
+        // A nullable column legitimately holds either a scalar or an explicit '#' entity across
+        // different rows of the same key column (e.g. a FULL JOIN's direct-output rows for a NULL
+        // join key vs. matched rows with a real key value). That is not a genuine type mismatch,
+        // so order null before any concrete value instead of throwing - any other type pairing is
+        // a real schema violation and should still fail loudly.
+        if (lhsTypeOrder == ETypeOrder::Null || rhsTypeOrder == ETypeOrder::Null) {
+            return TernaryCompare(static_cast<int>(lhsTypeOrder), static_cast<int>(rhsTypeOrder));
+        }
         ythrow yexception() << "Types mismatch: " << lhsType << " vs " << rhsType;
     }
 
@@ -209,12 +217,14 @@ int CompareKeyRowsAcrossYsonBlocks(
     const TRowIndexMarkup& lhsRow,
     TStringBuf rhsBlock,
     const TRowIndexMarkup& rhsRow,
-    const std::vector<ESortOrder>& sortOrders
+    const std::vector<ESortOrder>& sortOrders,
+    ui64 numColumns
 ) {
     Y_ENSURE(lhsRow.size() == rhsRow.size(), "Row sizes mismatch");
     Y_ENSURE(lhsRow.size() - 1 == sortOrders.size(), "SortOrders mismatch");
 
-    for (ui64 colIdx = 0; colIdx < lhsRow.size() - 1; ++colIdx) {
+    const ui64 columnsToCompare = Min<ui64>(numColumns, lhsRow.size() - 1);
+    for (ui64 colIdx = 0; colIdx < columnsToCompare; ++colIdx) {
         const auto& lhsRange = lhsRow[colIdx];
         const auto& rhsRange = rhsRow[colIdx];
 

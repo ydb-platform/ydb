@@ -373,7 +373,7 @@ TMaybeNode<TYtSection> UpdateSectionWithSettings(TExprBase world, TYtSection sec
 
 TYtSection MakeEmptySection(TYtSection section, NNodes::TYtDSink dataSink, bool keepSortness, const TYtState::TPtr& state, TExprContext& ctx) {
     TYtOutTableInfo outTable(GetSequenceItemType(section, false)->Cast<TStructExprType>(),
-        state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+        GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *state->Configuration));
     if (section.Paths().Size() == 1) {
         auto srcTableInfo = TYtTableBaseInfo::Parse(section.Paths().Item(0).Table());
         if (keepSortness && srcTableInfo->RowSpec && srcTableInfo->RowSpec->IsSorted()) {

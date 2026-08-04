@@ -5,6 +5,8 @@
 
 #include <stdint.h>
 
+#include <atomic>
+#include <mutex>
 #include "opentelemetry/common/key_value_iterable.h"
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/nostd/string_view.h"
@@ -13,6 +15,7 @@
 #include "opentelemetry/sdk/trace/id_generator.h"
 #include "opentelemetry/sdk/trace/processor.h"
 #include "opentelemetry/sdk/trace/sampler.h"
+#include "opentelemetry/sdk/trace/span_limits.h"
 #include "opentelemetry/sdk/trace/tracer_config.h"
 #include "opentelemetry/sdk/trace/tracer_context.h"
 #include "opentelemetry/trace/noop.h"
@@ -81,6 +84,9 @@ public:
   /** Returns the configured span processor. */
   SpanProcessor &GetProcessor() noexcept { return context_->GetProcessor(); }
 
+  /** Returns the configured span limits. */
+  const SpanLimits &GetSpanLimits() const noexcept { return context_->GetSpanLimits(); }
+
   /** Returns the configured Id generator */
   IdGenerator &GetIdGenerator() const noexcept { return context_->GetIdGenerator(); }
 
@@ -102,13 +108,39 @@ public:
   // Note: Test only
   Sampler &GetSampler() { return context_->GetSampler(); }
 
+#if OPENTELEMETRY_ABI_VERSION_NO < 2
+  /** Returns whether the tracer is enabled. ABIv1 only.*/
+  bool Enabled() const noexcept { return is_enabled_.load(std::memory_order_relaxed); }
+
+protected:
+  /** Updates the enabled state of the tracer. ABIv1 only. */
+  void UpdateEnabled(const bool enabled) noexcept
+  {
+    is_enabled_.store(enabled, std::memory_order_relaxed);
+  }
+#endif
+
 private:
+  // TracerProvider needs access to UpdateTracerConfig to propagate configuration updates to
+  // existing tracers.
+  friend class TracerProvider;
+
+  /**
+   * Update this tracer's TracerConfig. Called only by
+   * TracerProvider::UpdateTracerConfigurator when the provider-level
+   * TracerConfigurator is replaced at runtime.
+   */
+  void UpdateTracerConfig(TracerConfig config) noexcept;
+
   // order of declaration is important here - instrumentation scope should destroy after
   // tracer-context.
   std::shared_ptr<InstrumentationScope> instrumentation_scope_;
   std::shared_ptr<TracerContext> context_;
+  mutable std::mutex tracer_config_mutex_;
   TracerConfig tracer_config_;
-  static const std::shared_ptr<opentelemetry::trace::NoopTracer> kNoopTracer;
+#if OPENTELEMETRY_ABI_VERSION_NO < 2
+  std::atomic<bool> is_enabled_{false};
+#endif
 };
 }  // namespace trace
 }  // namespace sdk

@@ -24,15 +24,15 @@
       "input":{"shape":"AssociatePermissionRequest"},
       "output":{"shape":"AssociatePermissionResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
-      "documentation":"<p>Adds or updates a permission policy for a Q Business application, allowing cross-account access for an ISV. This operation creates a new policy statement for the specified Q Business application. The policy statement defines the IAM actions that the ISV is allowed to perform on the Q Business application's resources.</p>"
+      "documentation":"<p>Adds or updates a permission policy for a Amazon Q Business application, allowing cross-account access for an ISV. This operation creates a new policy statement for the specified Amazon Q Business application. The policy statement defines the IAM actions that the ISV is allowed to perform on the Amazon Q Business application's resources.</p>"
     },
     "BatchDeleteDocument":{
       "name":"BatchDeleteDocument",
@@ -44,8 +44,8 @@
       "input":{"shape":"BatchDeleteDocumentRequest"},
       "output":{"shape":"BatchDeleteDocumentResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -63,8 +63,8 @@
       "input":{"shape":"BatchPutDocumentRequest"},
       "output":{"shape":"BatchPutDocumentResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -72,6 +72,25 @@
         {"shape":"ServiceQuotaExceededException"}
       ],
       "documentation":"<p>Adds one or more documents to an Amazon Q Business index.</p> <p>You use this API to:</p> <ul> <li> <p>ingest your structured and unstructured documents and documents stored in an Amazon S3 bucket into an Amazon Q Business index.</p> </li> <li> <p>add custom attributes to documents in an Amazon Q Business index.</p> </li> <li> <p>attach an access control list to the documents added to an Amazon Q Business index.</p> </li> </ul> <p>You can see the progress of the deletion, and any error messages related to the process, by using CloudWatch.</p>"
+    },
+    "CancelSubscription":{
+      "name":"CancelSubscription",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/applications/{applicationId}/subscriptions/{subscriptionId}",
+        "responseCode":200
+      },
+      "input":{"shape":"CancelSubscriptionRequest"},
+      "output":{"shape":"CancelSubscriptionResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Unsubscribes a user or a group from their pricing tier in an Amazon Q Business application. An unsubscribed user or group loses all Amazon Q Business feature access at the start of next month. </p>",
+      "idempotent":true
     },
     "Chat":{
       "name":"Chat",
@@ -83,10 +102,10 @@
       "input":{"shape":"ChatInput"},
       "output":{"shape":"ChatOutput"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
-        {"shape":"LicenseNotFoundException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
+        {"shape":"LicenseNotFoundException"},
         {"shape":"ExternalResourceException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -104,16 +123,53 @@
       "input":{"shape":"ChatSyncInput"},
       "output":{"shape":"ChatSyncOutput"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
-        {"shape":"LicenseNotFoundException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
+        {"shape":"LicenseNotFoundException"},
         {"shape":"ExternalResourceException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Starts or continues a non-streaming Amazon Q Business conversation.</p>"
+    },
+    "CheckDocumentAccess":{
+      "name":"CheckDocumentAccess",
+      "http":{
+        "method":"GET",
+        "requestUri":"/applications/{applicationId}/index/{indexId}/users/{userId}/documents/{documentId}/check-document-access",
+        "responseCode":200
+      },
+      "input":{"shape":"CheckDocumentAccessRequest"},
+      "output":{"shape":"CheckDocumentAccessResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Verifies if a user has access permissions for a specified document and returns the actual ACL attached to the document. Resolves user access on the document via user aliases and groups when verifying user access.</p>"
+    },
+    "CreateAnonymousWebExperienceUrl":{
+      "name":"CreateAnonymousWebExperienceUrl",
+      "http":{
+        "method":"POST",
+        "requestUri":"/applications/{applicationId}/experiences/{webExperienceId}/anonymous-url",
+        "responseCode":200
+      },
+      "input":{"shape":"CreateAnonymousWebExperienceUrlRequest"},
+      "output":{"shape":"CreateAnonymousWebExperienceUrlResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ServiceQuotaExceededException"}
+      ],
+      "documentation":"<p>Creates a unique URL for anonymous Amazon Q Business web experience. This URL can only be used once and must be used within 5 minutes after it's generated.</p>"
     },
     "CreateApplication":{
       "name":"CreateApplication",
@@ -125,8 +181,8 @@
       "input":{"shape":"CreateApplicationRequest"},
       "output":{"shape":"CreateApplicationResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -146,15 +202,15 @@
       "input":{"shape":"CreateDataAccessorRequest"},
       "output":{"shape":"CreateDataAccessorResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
-      "documentation":"<p>Creates a new data accessor for an ISV to access data from a Q Business application. The data accessor is an entity that represents the ISV's access to the Q Business application's data. It includes the IAM role ARN for the ISV, a friendly name, and a set of action configurations that define the specific actions the ISV is allowed to perform and any associated data filters. When the data accessor is created, an AWS IAM Identity Center application is also created to manage the ISV's identity and authentication for accessing the Q Business application.</p>",
+      "documentation":"<p>Creates a new data accessor for an ISV to access data from a Amazon Q Business application. The data accessor is an entity that represents the ISV's access to the Amazon Q Business application's data. It includes the IAM role ARN for the ISV, a friendly name, and a set of action configurations that define the specific actions the ISV is allowed to perform and any associated data filters. When the data accessor is created, an IAM Identity Center application is also created to manage the ISV's identity and authentication for accessing the Amazon Q Business application.</p>",
       "idempotent":true
     },
     "CreateDataSource":{
@@ -167,8 +223,8 @@
       "input":{"shape":"CreateDataSourceRequest"},
       "output":{"shape":"CreateDataSourceResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -188,8 +244,8 @@
       "input":{"shape":"CreateIndexRequest"},
       "output":{"shape":"CreateIndexResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -208,8 +264,8 @@
       "input":{"shape":"CreatePluginRequest"},
       "output":{"shape":"CreatePluginResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -229,8 +285,8 @@
       "input":{"shape":"CreateRetrieverRequest"},
       "output":{"shape":"CreateRetrieverResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -238,6 +294,26 @@
         {"shape":"ServiceQuotaExceededException"}
       ],
       "documentation":"<p>Adds a retriever to your Amazon Q Business application.</p>"
+    },
+    "CreateSubscription":{
+      "name":"CreateSubscription",
+      "http":{
+        "method":"POST",
+        "requestUri":"/applications/{applicationId}/subscriptions",
+        "responseCode":200
+      },
+      "input":{"shape":"CreateSubscriptionRequest"},
+      "output":{"shape":"CreateSubscriptionResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Subscribes an IAM Identity Center user or a group to a pricing tier for an Amazon Q Business application.</p> <p>Amazon Q Business offers two subscription tiers: <code>Q_LITE</code> and <code>Q_BUSINESS</code>. Subscription tier determines feature access for the user. For more information on subscriptions and pricing tiers, see <a href=\"https://aws.amazon.com/q/business/pricing/\">Amazon Q Business pricing</a>.</p>",
+      "idempotent":true
     },
     "CreateUser":{
       "name":"CreateUser",
@@ -249,8 +325,8 @@
       "input":{"shape":"CreateUserRequest"},
       "output":{"shape":"CreateUserResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -270,8 +346,8 @@
       "input":{"shape":"CreateWebExperienceRequest"},
       "output":{"shape":"CreateWebExperienceResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -290,14 +366,34 @@
       "input":{"shape":"DeleteApplicationRequest"},
       "output":{"shape":"DeleteApplicationResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Deletes an Amazon Q Business application.</p>",
+      "idempotent":true
+    },
+    "DeleteAttachment":{
+      "name":"DeleteAttachment",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/applications/{applicationId}/conversations/{conversationId}/attachments/{attachmentId}",
+        "responseCode":200
+      },
+      "input":{"shape":"DeleteAttachmentRequest"},
+      "output":{"shape":"DeleteAttachmentResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"LicenseNotFoundException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Deletes an attachment associated with a specific Amazon Q Business conversation.</p>",
       "idempotent":true
     },
     "DeleteChatControlsConfiguration":{
@@ -310,8 +406,8 @@
       "input":{"shape":"DeleteChatControlsConfigurationRequest"},
       "output":{"shape":"DeleteChatControlsConfigurationResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -329,8 +425,8 @@
       "input":{"shape":"DeleteConversationRequest"},
       "output":{"shape":"DeleteConversationResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"LicenseNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -349,14 +445,14 @@
       "input":{"shape":"DeleteDataAccessorRequest"},
       "output":{"shape":"DeleteDataAccessorResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Deletes a specified data accessor. This operation permanently removes the data accessor and its associated AWS IAM Identity Center application. Any access granted to the ISV through this data accessor will be revoked</p>",
+      "documentation":"<p>Deletes a specified data accessor. This operation permanently removes the data accessor and its associated IAM Identity Center application. Any access granted to the ISV through this data accessor will be revoked.</p>",
       "idempotent":true
     },
     "DeleteDataSource":{
@@ -369,8 +465,8 @@
       "input":{"shape":"DeleteDataSourceRequest"},
       "output":{"shape":"DeleteDataSourceResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -389,8 +485,8 @@
       "input":{"shape":"DeleteGroupRequest"},
       "output":{"shape":"DeleteGroupResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -409,8 +505,8 @@
       "input":{"shape":"DeleteIndexRequest"},
       "output":{"shape":"DeleteIndexResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -429,8 +525,8 @@
       "input":{"shape":"DeletePluginRequest"},
       "output":{"shape":"DeletePluginResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -449,8 +545,8 @@
       "input":{"shape":"DeleteRetrieverRequest"},
       "output":{"shape":"DeleteRetrieverResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -469,8 +565,8 @@
       "input":{"shape":"DeleteUserRequest"},
       "output":{"shape":"DeleteUserResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -489,8 +585,8 @@
       "input":{"shape":"DeleteWebExperienceRequest"},
       "output":{"shape":"DeleteWebExperienceResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -509,14 +605,14 @@
       "input":{"shape":"DisassociatePermissionRequest"},
       "output":{"shape":"DisassociatePermissionResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Removes a permission policy from a Q Business application, revoking the cross-account access that was previously granted to an ISV. This operation deletes the specified policy statement from the application's permission policy.</p>",
+      "documentation":"<p>Removes a permission policy from a Amazon Q Business application, revoking the cross-account access that was previously granted to an ISV. This operation deletes the specified policy statement from the application's permission policy.</p>",
       "idempotent":true
     },
     "GetApplication":{
@@ -529,8 +625,8 @@
       "input":{"shape":"GetApplicationRequest"},
       "output":{"shape":"GetApplicationResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -547,13 +643,13 @@
       "input":{"shape":"GetChatControlsConfigurationRequest"},
       "output":{"shape":"GetChatControlsConfigurationResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Gets information about an chat controls configured for an existing Amazon Q Business application.</p>"
+      "documentation":"<p>Gets information about chat controls configured for an existing Amazon Q Business application.</p>"
     },
     "GetDataAccessor":{
       "name":"GetDataAccessor",
@@ -565,13 +661,13 @@
       "input":{"shape":"GetDataAccessorRequest"},
       "output":{"shape":"GetDataAccessorResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Retrieves information about a specified data accessor. This operation returns details about the data accessor, including its display name, unique identifier, Amazon Resource Name (ARN), the associated Q Business application and AWS IAM Identity Center application, the IAM role for the ISV, the action configurations, and the timestamps for when the data accessor was created and last updated.</p>"
+      "documentation":"<p>Retrieves information about a specified data accessor. This operation returns details about the data accessor, including its display name, unique identifier, Amazon Resource Name (ARN), the associated Amazon Q Business application and IAM Identity Center application, the IAM role for the ISV, the action configurations, and the timestamps for when the data accessor was created and last updated.</p>"
     },
     "GetDataSource":{
       "name":"GetDataSource",
@@ -583,8 +679,8 @@
       "input":{"shape":"GetDataSourceRequest"},
       "output":{"shape":"GetDataSourceResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -601,8 +697,8 @@
       "input":{"shape":"GetGroupRequest"},
       "output":{"shape":"GetGroupResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -620,8 +716,8 @@
       "input":{"shape":"GetIndexRequest"},
       "output":{"shape":"GetIndexResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -638,8 +734,8 @@
       "input":{"shape":"GetMediaRequest"},
       "output":{"shape":"GetMediaResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"LicenseNotFoundException"},
         {"shape":"MediaTooLargeException"},
         {"shape":"ThrottlingException"},
@@ -658,8 +754,8 @@
       "input":{"shape":"GetPluginRequest"},
       "output":{"shape":"GetPluginResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -676,13 +772,13 @@
       "input":{"shape":"GetPolicyRequest"},
       "output":{"shape":"GetPolicyResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Retrieves the current permission policy for a Q Business application. The policy is returned as a JSON-formatted string and defines the IAM actions that are allowed or denied for the application's resources.</p>"
+      "documentation":"<p>Retrieves the current permission policy for a Amazon Q Business application. The policy is returned as a JSON-formatted string and defines the IAM actions that are allowed or denied for the application's resources.</p>"
     },
     "GetRetriever":{
       "name":"GetRetriever",
@@ -694,8 +790,8 @@
       "input":{"shape":"GetRetrieverRequest"},
       "output":{"shape":"GetRetrieverResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -712,8 +808,8 @@
       "input":{"shape":"GetUserRequest"},
       "output":{"shape":"GetUserResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -731,8 +827,8 @@
       "input":{"shape":"GetWebExperienceRequest"},
       "output":{"shape":"GetWebExperienceResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -766,8 +862,8 @@
       "input":{"shape":"ListAttachmentsRequest"},
       "output":{"shape":"ListAttachmentsResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"LicenseNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -785,8 +881,8 @@
       "input":{"shape":"ListConversationsRequest"},
       "output":{"shape":"ListConversationsResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"LicenseNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -804,13 +900,13 @@
       "input":{"shape":"ListDataAccessorsRequest"},
       "output":{"shape":"ListDataAccessorsResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Lists the data accessors for a Q Business application. This operation returns a paginated list of data accessor summaries, including the friendly name, unique identifier, ARN, associated IAM role, and creation/update timestamps for each data accessor.</p>"
+      "documentation":"<p>Lists the data accessors for a Amazon Q Business application. This operation returns a paginated list of data accessor summaries, including the friendly name, unique identifier, ARN, associated IAM role, and creation/update timestamps for each data accessor.</p>"
     },
     "ListDataSourceSyncJobs":{
       "name":"ListDataSourceSyncJobs",
@@ -822,8 +918,8 @@
       "input":{"shape":"ListDataSourceSyncJobsRequest"},
       "output":{"shape":"ListDataSourceSyncJobsResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -841,8 +937,8 @@
       "input":{"shape":"ListDataSourcesRequest"},
       "output":{"shape":"ListDataSourcesResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -859,8 +955,8 @@
       "input":{"shape":"ListDocumentsRequest"},
       "output":{"shape":"ListDocumentsResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -877,8 +973,8 @@
       "input":{"shape":"ListGroupsRequest"},
       "output":{"shape":"ListGroupsResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -896,8 +992,8 @@
       "input":{"shape":"ListIndicesRequest"},
       "output":{"shape":"ListIndicesResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -914,8 +1010,8 @@
       "input":{"shape":"ListMessagesRequest"},
       "output":{"shape":"ListMessagesResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"LicenseNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -933,8 +1029,8 @@
       "input":{"shape":"ListPluginActionsRequest"},
       "output":{"shape":"ListPluginActionsResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -985,8 +1081,8 @@
       "input":{"shape":"ListPluginsRequest"},
       "output":{"shape":"ListPluginsResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -1003,13 +1099,32 @@
       "input":{"shape":"ListRetrieversRequest"},
       "output":{"shape":"ListRetrieversResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Lists the retriever used by an Amazon Q Business application.</p>"
+    },
+    "ListSubscriptions":{
+      "name":"ListSubscriptions",
+      "http":{
+        "method":"GET",
+        "requestUri":"/applications/{applicationId}/subscriptions",
+        "responseCode":200
+      },
+      "input":{"shape":"ListSubscriptionsRequest"},
+      "output":{"shape":"ListSubscriptionsResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p> Lists all subscriptions created in an Amazon Q Business application. </p>"
     },
     "ListTagsForResource":{
       "name":"ListTagsForResource",
@@ -1021,8 +1136,8 @@
       "input":{"shape":"ListTagsForResourceRequest"},
       "output":{"shape":"ListTagsForResourceResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -1039,8 +1154,8 @@
       "input":{"shape":"ListWebExperiencesRequest"},
       "output":{"shape":"ListWebExperiencesResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -1056,8 +1171,8 @@
       },
       "input":{"shape":"PutFeedbackRequest"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -1074,15 +1189,15 @@
       "input":{"shape":"PutGroupRequest"},
       "output":{"shape":"PutGroupResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
-      "documentation":"<p>Create, or updates, a mapping of users—who have access to a document—to groups.</p> <p>You can also map sub groups to groups. For example, the group \"Company Intellectual Property Teams\" includes sub groups \"Research\" and \"Engineering\". These sub groups include their own list of users or people who work in these teams. Only users who work in research and engineering, and therefore belong in the intellectual property group, can see top-secret company documents in their Amazon Q Business chat results.</p>",
+      "documentation":"<p>Create, or updates, a mapping of users—who have access to a document—to groups.</p> <p>You can also map sub groups to groups. For example, the group \"Company Intellectual Property Teams\" includes sub groups \"Research\" and \"Engineering\". These sub groups include their own list of users or people who work in these teams. Only users who work in research and engineering, and therefore belong in the intellectual property group, can see top-secret company documents in their Amazon Q Business chat results.</p> <p>There are two options for creating groups, either passing group members inline or using an S3 file via the S3PathForGroupMembers field. For inline groups, there is a limit of 1000 members per group and for provided S3 files there is a limit of 100 thousand members. When creating a group using an S3 file, you provide both an S3 file and a <code>RoleArn</code> for Amazon Q Buisness to access the file.</p>",
       "idempotent":true
     },
     "SearchRelevantContent":{
@@ -1095,14 +1210,14 @@
       "input":{"shape":"SearchRelevantContentRequest"},
       "output":{"shape":"SearchRelevantContentResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"LicenseNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Searches for relevant content in a Q Business application based on a query. This operation takes a search query text, the Q Business application identifier, and optional filters (such as content source and maximum results) as input. It returns a list of relevant content items, where each item includes the content text, the unique document identifier, the document title, the document URI, any relevant document attributes, and score attributes indicating the confidence level of the relevance.</p>"
+      "documentation":"<p>Searches for relevant content in a Amazon Q Business application based on a query. This operation takes a search query text, the Amazon Q Business application identifier, and optional filters (such as content source and maximum results) as input. It returns a list of relevant content items, where each item includes the content text, the unique document identifier, the document title, the document URI, any relevant document attributes, and score attributes indicating the confidence level of the relevance.</p>"
     },
     "StartDataSourceSyncJob":{
       "name":"StartDataSourceSyncJob",
@@ -1114,8 +1229,8 @@
       "input":{"shape":"StartDataSourceSyncJobRequest"},
       "output":{"shape":"StartDataSourceSyncJobResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -1134,8 +1249,8 @@
       "input":{"shape":"StopDataSourceSyncJobRequest"},
       "output":{"shape":"StopDataSourceSyncJobResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -1153,8 +1268,8 @@
       "input":{"shape":"TagResourceRequest"},
       "output":{"shape":"TagResourceResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -1173,8 +1288,8 @@
       "input":{"shape":"UntagResourceRequest"},
       "output":{"shape":"UntagResourceResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
@@ -1192,8 +1307,8 @@
       "input":{"shape":"UpdateApplicationRequest"},
       "output":{"shape":"UpdateApplicationResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -1212,15 +1327,15 @@
       "input":{"shape":"UpdateChatControlsConfigurationRequest"},
       "output":{"shape":"UpdateChatControlsConfigurationResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
-      "documentation":"<p>Updates an set of chat controls configured for an existing Amazon Q Business application.</p>",
+      "documentation":"<p>Updates a set of chat controls configured for an existing Amazon Q Business application.</p>",
       "idempotent":true
     },
     "UpdateDataAccessor":{
@@ -1233,8 +1348,8 @@
       "input":{"shape":"UpdateDataAccessorRequest"},
       "output":{"shape":"UpdateDataAccessorResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -1253,8 +1368,8 @@
       "input":{"shape":"UpdateDataSourceRequest"},
       "output":{"shape":"UpdateDataSourceResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -1273,8 +1388,8 @@
       "input":{"shape":"UpdateIndexRequest"},
       "output":{"shape":"UpdateIndexResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -1294,8 +1409,8 @@
       "input":{"shape":"UpdatePluginRequest"},
       "output":{"shape":"UpdatePluginResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -1315,8 +1430,8 @@
       "input":{"shape":"UpdateRetrieverRequest"},
       "output":{"shape":"UpdateRetrieverResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -1324,6 +1439,26 @@
         {"shape":"ServiceQuotaExceededException"}
       ],
       "documentation":"<p>Updates the retriever used for your Amazon Q Business application.</p>",
+      "idempotent":true
+    },
+    "UpdateSubscription":{
+      "name":"UpdateSubscription",
+      "http":{
+        "method":"PUT",
+        "requestUri":"/applications/{applicationId}/subscriptions/{subscriptionId}",
+        "responseCode":200
+      },
+      "input":{"shape":"UpdateSubscriptionRequest"},
+      "output":{"shape":"UpdateSubscriptionResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Updates the pricing tier for an Amazon Q Business subscription. Upgrades are instant. Downgrades apply at the start of the next month. Subscription tier determines feature access for the user. For more information on subscriptions and pricing tiers, see <a href=\"https://aws.amazon.com/q/business/pricing/\">Amazon Q Business pricing</a>.</p>",
       "idempotent":true
     },
     "UpdateUser":{
@@ -1336,8 +1471,9 @@
       "input":{"shape":"UpdateUserRequest"},
       "output":{"shape":"UpdateUserResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
@@ -1356,8 +1492,8 @@
       "input":{"shape":"UpdateWebExperienceRequest"},
       "output":{"shape":"UpdateWebExperienceResponse"},
       "errors":[
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"},
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"},
@@ -1440,7 +1576,7 @@
       "members":{
         "action":{
           "shape":"QIamAction",
-          "documentation":"<p>The Q Business action that is allowed.</p>"
+          "documentation":"<p>The Amazon Q Business action that is allowed.</p>"
         },
         "filterConfiguration":{
           "shape":"ActionFilterConfiguration",
@@ -1796,6 +1932,17 @@
       },
       "documentation":"<p>The creator mode specific admin controls configured for an Amazon Q Business application. Determines whether an end user can generate LLM-only responses when they use the web experience.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/guardrails.html\">Admin controls and guardrails</a> and <a href=\"https://docs.aws.amazon.com/amazonq/latest/business-use-dg/using-web-experience.html#chat-source-scope\">Conversation settings</a>.</p>"
     },
+    "AppliedOrchestrationConfiguration":{
+      "type":"structure",
+      "required":["control"],
+      "members":{
+        "control":{
+          "shape":"OrchestrationControl",
+          "documentation":"<p> Information about whether chat orchestration is enabled or disabled for an Amazon Q Business application. </p>"
+        }
+      },
+      "documentation":"<p>The chat orchestration specific admin controls configured for an Amazon Q Business application. Determines whether Amazon Q Business automatically routes chat requests across configured plugins and data sources in your Amazon Q Business application.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/guardrails-global-controls.html#guardrails-global-orchestration\">Chat orchestration settings</a>.</p>"
+    },
     "AssociatePermissionRequest":{
       "type":"structure",
       "required":[
@@ -1807,7 +1954,7 @@
       "members":{
         "applicationId":{
           "shape":"ApplicationId",
-          "documentation":"<p>The unique identifier of the Q Business application.</p>",
+          "documentation":"<p>The unique identifier of the Amazon Q Business application.</p>",
           "location":"uri",
           "locationName":"applicationId"
         },
@@ -1817,11 +1964,15 @@
         },
         "actions":{
           "shape":"QIamActions",
-          "documentation":"<p>The list of Q Business actions that the ISV is allowed to perform.</p>"
+          "documentation":"<p>The list of Amazon Q Business actions that the ISV is allowed to perform.</p>"
+        },
+        "conditions":{
+          "shape":"PermissionConditions",
+          "documentation":"<p>The conditions that restrict when the permission is effective. These conditions can be used to limit the permission based on specific attributes of the request.</p>"
         },
         "principal":{
           "shape":"PrincipalRoleArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role for the ISV that is being granted permission.</p>"
+          "documentation":"<p>The Amazon Resource Name of the IAM role for the ISV that is being granted permission.</p>"
         }
       }
     },
@@ -1833,6 +1984,42 @@
           "documentation":"<p>The JSON representation of the added permission statement.</p>"
         }
       }
+    },
+    "AssociatedGroup":{
+      "type":"structure",
+      "members":{
+        "name":{
+          "shape":"GroupName",
+          "documentation":"<p>The name of the group associated with the user. This is used to identify the group in access control decisions.</p>"
+        },
+        "type":{
+          "shape":"MembershipType",
+          "documentation":"<p>The type of the associated group. This indicates the scope of the group's applicability.</p>"
+        }
+      },
+      "documentation":"<p>Represents a group associated with a given user in the access control system.</p>"
+    },
+    "AssociatedGroups":{
+      "type":"list",
+      "member":{"shape":"AssociatedGroup"}
+    },
+    "AssociatedUser":{
+      "type":"structure",
+      "members":{
+        "id":{
+          "shape":"String",
+          "documentation":"<p>The unique identifier of the associated user. This is used to identify the user in access control decisions.</p>"
+        },
+        "type":{
+          "shape":"MembershipType",
+          "documentation":"<p>The type of the associated user. This indicates the scope of the user's association.</p>"
+        }
+      },
+      "documentation":"<p>Represents an associated user in the access control system.</p>"
+    },
+    "AssociatedUsers":{
+      "type":"list",
+      "member":{"shape":"AssociatedUser"}
     },
     "Attachment":{
       "type":"structure",
@@ -2042,6 +2229,57 @@
     "AttributeValueOperator":{
       "type":"string",
       "enum":["DELETE"]
+    },
+    "AudioExtractionConfiguration":{
+      "type":"structure",
+      "required":["audioExtractionStatus"],
+      "members":{
+        "audioExtractionStatus":{
+          "shape":"AudioExtractionStatus",
+          "documentation":"<p>The status of audio extraction (ENABLED or DISABLED) for processing audio content from files.</p>"
+        }
+      },
+      "documentation":"<p>Configuration settings for audio content extraction and processing.</p>"
+    },
+    "AudioExtractionStatus":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
+    "AudioExtractionType":{
+      "type":"string",
+      "enum":[
+        "TRANSCRIPT",
+        "SUMMARY"
+      ]
+    },
+    "AudioSourceDetails":{
+      "type":"structure",
+      "members":{
+        "mediaId":{
+          "shape":"MediaId",
+          "documentation":"<p>Unique identifier for the audio media file.</p>"
+        },
+        "mediaMimeType":{
+          "shape":"String",
+          "documentation":"<p>The MIME type of the audio file (e.g., audio/mp3, audio/wav).</p>"
+        },
+        "startTimeMilliseconds":{
+          "shape":"Long",
+          "documentation":"<p>The starting timestamp in milliseconds for the relevant audio segment.</p>"
+        },
+        "endTimeMilliseconds":{
+          "shape":"Long",
+          "documentation":"<p>The ending timestamp in milliseconds for the relevant audio segment.</p>"
+        },
+        "audioExtractionType":{
+          "shape":"AudioExtractionType",
+          "documentation":"<p>The type of audio extraction performed on the content.</p>"
+        }
+      },
+      "documentation":"<p>Details about an audio source, including its identifier, format, and time information.</p>"
     },
     "AuthChallengeRequest":{
       "type":"structure",
@@ -2303,6 +2541,44 @@
       "max":2,
       "min":0
     },
+    "CancelSubscriptionRequest":{
+      "type":"structure",
+      "required":[
+        "applicationId",
+        "subscriptionId"
+      ],
+      "members":{
+        "applicationId":{
+          "shape":"ApplicationId",
+          "documentation":"<p>The identifier of the Amazon Q Business application for which the subscription is being cancelled.</p>",
+          "location":"uri",
+          "locationName":"applicationId"
+        },
+        "subscriptionId":{
+          "shape":"SubscriptionId",
+          "documentation":"<p>The identifier of the Amazon Q Business subscription being cancelled.</p>",
+          "location":"uri",
+          "locationName":"subscriptionId"
+        }
+      }
+    },
+    "CancelSubscriptionResponse":{
+      "type":"structure",
+      "members":{
+        "subscriptionArn":{
+          "shape":"SubscriptionArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Q Business subscription being cancelled.</p>"
+        },
+        "currentSubscription":{
+          "shape":"SubscriptionDetails",
+          "documentation":"<p>The type of your current Amazon Q Business subscription.</p>"
+        },
+        "nextSubscription":{
+          "shape":"SubscriptionDetails",
+          "documentation":"<p>The type of the Amazon Q Business subscription for the next month.</p>"
+        }
+      }
+    },
     "ChatInput":{
       "type":"structure",
       "required":["applicationId"],
@@ -2540,6 +2816,68 @@
         }
       }
     },
+    "CheckDocumentAccessRequest":{
+      "type":"structure",
+      "required":[
+        "applicationId",
+        "indexId",
+        "userId",
+        "documentId"
+      ],
+      "members":{
+        "applicationId":{
+          "shape":"ApplicationId",
+          "documentation":"<p>The unique identifier of the application. This is required to identify the specific Amazon Q Business application context for the document access check.</p>",
+          "location":"uri",
+          "locationName":"applicationId"
+        },
+        "indexId":{
+          "shape":"IndexId",
+          "documentation":"<p>The unique identifier of the index. Used to locate the correct index within the application where the document is stored.</p>",
+          "location":"uri",
+          "locationName":"indexId"
+        },
+        "userId":{
+          "shape":"String",
+          "documentation":"<p>The unique identifier of the user. Used to check the access permissions for this specific user against the document's ACL.</p>",
+          "location":"uri",
+          "locationName":"userId"
+        },
+        "documentId":{
+          "shape":"DocumentId",
+          "documentation":"<p>The unique identifier of the document. Specifies which document's access permissions are being checked.</p>",
+          "location":"uri",
+          "locationName":"documentId"
+        },
+        "dataSourceId":{
+          "shape":"DataSourceId",
+          "documentation":"<p>The unique identifier of the data source. Identifies the specific data source from which the document originates. Should not be used when a document is uploaded directly with BatchPutDocument, as no dataSourceId is available or necessary. </p>",
+          "location":"querystring",
+          "locationName":"dataSourceId"
+        }
+      }
+    },
+    "CheckDocumentAccessResponse":{
+      "type":"structure",
+      "members":{
+        "userGroups":{
+          "shape":"AssociatedGroups",
+          "documentation":"<p>An array of groups the user is part of for the specified data source. Each group has a name and type.</p>"
+        },
+        "userAliases":{
+          "shape":"AssociatedUsers",
+          "documentation":"<p>An array of aliases associated with the user. This includes both global and local aliases, each with a name and type.</p>"
+        },
+        "hasAccess":{
+          "shape":"Boolean",
+          "documentation":"<p>A boolean value indicating whether the specified user has access to the document, either direct access or transitive access via groups and aliases attached to the document.</p>"
+        },
+        "documentAcl":{
+          "shape":"DocumentAcl",
+          "documentation":"<p>The Access Control List (ACL) associated with the document. Includes allowlist and denylist conditions that determine user access.</p>"
+        }
+      }
+    },
     "ClientIdForOIDC":{
       "type":"string",
       "max":255,
@@ -2708,6 +3046,40 @@
       "documentation":"<p>The source reference for an existing attachment.</p>",
       "union":true
     },
+    "CreateAnonymousWebExperienceUrlRequest":{
+      "type":"structure",
+      "required":[
+        "applicationId",
+        "webExperienceId"
+      ],
+      "members":{
+        "applicationId":{
+          "shape":"ApplicationId",
+          "documentation":"<p>The identifier of the Amazon Q Business application environment attached to the web experience.</p>",
+          "location":"uri",
+          "locationName":"applicationId"
+        },
+        "webExperienceId":{
+          "shape":"WebExperienceId",
+          "documentation":"<p>The identifier of the web experience.</p>",
+          "location":"uri",
+          "locationName":"webExperienceId"
+        },
+        "sessionDurationInMinutes":{
+          "shape":"SessionDurationInMinutes",
+          "documentation":"<p>The duration of the session associated with the unique URL for the web experience.</p>"
+        }
+      }
+    },
+    "CreateAnonymousWebExperienceUrlResponse":{
+      "type":"structure",
+      "members":{
+        "anonymousUrl":{
+          "shape":"Url",
+          "documentation":"<p>The unique URL for accessing the web experience.</p> <important> <p>This URL can only be used once and must be used within 5 minutes after it's generated.</p> </important>"
+        }
+      }
+    },
     "CreateApplicationRequest":{
       "type":"structure",
       "required":["displayName"],
@@ -2795,7 +3167,7 @@
       "members":{
         "applicationId":{
           "shape":"ApplicationId",
-          "documentation":"<p>The unique identifier of the Q Business application.</p>",
+          "documentation":"<p>The unique identifier of the Amazon Q Business application.</p>",
           "location":"uri",
           "locationName":"applicationId"
         },
@@ -2815,6 +3187,10 @@
         "displayName":{
           "shape":"DataAccessorName",
           "documentation":"<p>A friendly name for the data accessor.</p>"
+        },
+        "authenticationDetail":{
+          "shape":"DataAccessorAuthenticationDetail",
+          "documentation":"<p>The authentication configuration details for the data accessor. This specifies how the ISV will authenticate when accessing data through this data accessor.</p>"
         },
         "tags":{
           "shape":"Tags",
@@ -2836,7 +3212,7 @@
         },
         "idcApplicationArn":{
           "shape":"IdcApplicationArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the AWS IAM Identity Center application created for this data accessor.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM Identity Center application created for this data accessor.</p>"
         },
         "dataAccessorArn":{
           "shape":"DataAccessorArn",
@@ -3083,6 +3459,56 @@
         }
       }
     },
+    "CreateSubscriptionRequest":{
+      "type":"structure",
+      "required":[
+        "applicationId",
+        "principal",
+        "type"
+      ],
+      "members":{
+        "applicationId":{
+          "shape":"ApplicationId",
+          "documentation":"<p>The identifier of the Amazon Q Business application the subscription should be added to.</p>",
+          "location":"uri",
+          "locationName":"applicationId"
+        },
+        "principal":{
+          "shape":"SubscriptionPrincipal",
+          "documentation":"<p>The IAM Identity Center <code>UserId</code> or <code>GroupId</code> of a user or group in the IAM Identity Center instance connected to the Amazon Q Business application.</p>"
+        },
+        "type":{
+          "shape":"SubscriptionType",
+          "documentation":"<p>The type of Amazon Q Business subscription you want to create.</p>"
+        },
+        "clientToken":{
+          "shape":"ClientToken",
+          "documentation":"<p>A token that you provide to identify the request to create a subscription for your Amazon Q Business application.</p>",
+          "idempotencyToken":true
+        }
+      }
+    },
+    "CreateSubscriptionResponse":{
+      "type":"structure",
+      "members":{
+        "subscriptionId":{
+          "shape":"SubscriptionId",
+          "documentation":"<p>The identifier of the Amazon Q Business subscription created.</p>"
+        },
+        "subscriptionArn":{
+          "shape":"SubscriptionArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Q Business subscription created.</p>"
+        },
+        "currentSubscription":{
+          "shape":"SubscriptionDetails",
+          "documentation":"<p>The type of your current Amazon Q Business subscription.</p>"
+        },
+        "nextSubscription":{
+          "shape":"SubscriptionDetails",
+          "documentation":"<p>The type of the Amazon Q Business subscription for the next month.</p>"
+        }
+      }
+    },
     "CreateUserRequest":{
       "type":"structure",
       "required":[
@@ -3150,7 +3576,7 @@
         },
         "origins":{
           "shape":"WebExperienceOrigins",
-          "documentation":"<p>Sets the website domain origins that are allowed to embed the Amazon Q Business web experience. <pre><code> The &lt;i&gt;domain origin&lt;/i&gt; refers to the base URL for accessing a website including the protocol (&lt;code&gt;http/https&lt;/code&gt;), the domain name, and the port number (if specified). &lt;/p&gt; &lt;note&gt; &lt;p&gt;You must only submit a &lt;i&gt;base URL&lt;/i&gt; and not a full path. For example, &lt;code&gt;https://docs.aws.amazon.com&lt;/code&gt;.&lt;/p&gt; &lt;/note&gt; </code></pre>"
+          "documentation":"<p>Sets the website domain origins that are allowed to embed the Amazon Q Business web experience. The <i>domain origin</i> refers to the base URL for accessing a website including the protocol (<code>http/https</code>), the domain name, and the port number (if specified). </p> <note> <p>You must only submit a <i>base URL</i> and not a full path. For example, <code>https://docs.aws.amazon.com</code>.</p> </note>"
         },
         "roleArn":{
           "shape":"RoleArn",
@@ -3278,11 +3704,15 @@
         },
         "idcApplicationArn":{
           "shape":"IdcApplicationArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the associated AWS IAM Identity Center application.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the associated IAM Identity Center application.</p>"
         },
         "principal":{
           "shape":"PrincipalRoleArn",
           "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role for the ISV associated with this data accessor.</p>"
+        },
+        "authenticationDetail":{
+          "shape":"DataAccessorAuthenticationDetail",
+          "documentation":"<p>The authentication configuration details for the data accessor. This specifies how the ISV authenticates when accessing data through this data accessor.</p>"
         },
         "createdAt":{
           "shape":"Timestamp",
@@ -3301,11 +3731,72 @@
       "min":0,
       "pattern":"arn:[a-z0-9-\\.]{1,63}:[a-z0-9-\\.]{0,63}:[a-z0-9-\\.]{0,63}:[a-z0-9-\\.]{0,63}:[^/].{0,1023}"
     },
+    "DataAccessorAuthenticationConfiguration":{
+      "type":"structure",
+      "members":{
+        "idcTrustedTokenIssuerConfiguration":{
+          "shape":"DataAccessorIdcTrustedTokenIssuerConfiguration",
+          "documentation":"<p>Configuration for IAM Identity Center Trusted Token Issuer (TTI) authentication used when the authentication type is <code>AWS_IAM_IDC_TTI</code>.</p>"
+        }
+      },
+      "documentation":"<p>A union type that contains the specific authentication configuration based on the authentication type selected.</p>",
+      "union":true
+    },
+    "DataAccessorAuthenticationDetail":{
+      "type":"structure",
+      "required":["authenticationType"],
+      "members":{
+        "authenticationType":{
+          "shape":"DataAccessorAuthenticationType",
+          "documentation":"<p>The type of authentication to use for the data accessor. This determines how the ISV authenticates when accessing data. You can use one of two authentication types:</p> <ul> <li> <p> <code>AWS_IAM_IDC_TTI</code> - Authentication using IAM Identity Center Trusted Token Issuer (TTI). This authentication type allows the ISV to use a trusted token issuer to generate tokens for accessing the data.</p> </li> <li> <p> <code>AWS_IAM_IDC_AUTH_CODE</code> - Authentication using IAM Identity Center authorization code flow. This authentication type uses the standard OAuth 2.0 authorization code flow for authentication.</p> </li> </ul>"
+        },
+        "authenticationConfiguration":{
+          "shape":"DataAccessorAuthenticationConfiguration",
+          "documentation":"<p>The specific authentication configuration based on the authentication type.</p>"
+        },
+        "externalIds":{
+          "shape":"DataAccessorExternalIds",
+          "documentation":"<p>A list of external identifiers associated with this authentication configuration. These are used to correlate the data accessor with external systems.</p>"
+        }
+      },
+      "documentation":"<p>Contains the authentication configuration details for a data accessor. This structure defines how the ISV authenticates when accessing data through the data accessor.</p>"
+    },
+    "DataAccessorAuthenticationType":{
+      "type":"string",
+      "documentation":"<p>The type of authentication mechanism used by the data accessor.</p>",
+      "enum":[
+        "AWS_IAM_IDC_TTI",
+        "AWS_IAM_IDC_AUTH_CODE"
+      ]
+    },
+    "DataAccessorExternalId":{
+      "type":"string",
+      "max":1000,
+      "min":1,
+      "pattern":"[a-zA-Z0-9][a-zA-Z0-9_-]*"
+    },
+    "DataAccessorExternalIds":{
+      "type":"list",
+      "member":{"shape":"DataAccessorExternalId"},
+      "max":1,
+      "min":1
+    },
     "DataAccessorId":{
       "type":"string",
       "max":36,
       "min":36,
       "pattern":"[a-zA-Z0-9][a-zA-Z0-9-]{35}"
+    },
+    "DataAccessorIdcTrustedTokenIssuerConfiguration":{
+      "type":"structure",
+      "required":["idcTrustedTokenIssuerArn"],
+      "members":{
+        "idcTrustedTokenIssuerArn":{
+          "shape":"IdcTrustedTokenIssuerArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM Identity Center Trusted Token Issuer that will be used for authentication.</p>"
+        }
+      },
+      "documentation":"<p>Configuration details for IAM Identity Center Trusted Token Issuer (TTI) authentication.</p>"
     },
     "DataAccessorName":{
       "type":"string",
@@ -3526,6 +4017,45 @@
       "members":{
       }
     },
+    "DeleteAttachmentRequest":{
+      "type":"structure",
+      "required":[
+        "applicationId",
+        "conversationId",
+        "attachmentId"
+      ],
+      "members":{
+        "applicationId":{
+          "shape":"ApplicationId",
+          "documentation":"<p>The unique identifier for the Amazon Q Business application environment.</p>",
+          "location":"uri",
+          "locationName":"applicationId"
+        },
+        "conversationId":{
+          "shape":"ConversationId",
+          "documentation":"<p>The unique identifier of the conversation.</p>",
+          "location":"uri",
+          "locationName":"conversationId"
+        },
+        "attachmentId":{
+          "shape":"AttachmentId",
+          "documentation":"<p>The unique identifier for the attachment.</p>",
+          "location":"uri",
+          "locationName":"attachmentId"
+        },
+        "userId":{
+          "shape":"UserId",
+          "documentation":"<p>The unique identifier of the user involved in the conversation.</p>",
+          "location":"querystring",
+          "locationName":"userId"
+        }
+      }
+    },
+    "DeleteAttachmentResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
     "DeleteChatControlsConfigurationRequest":{
       "type":"structure",
       "required":["applicationId"],
@@ -3584,7 +4114,7 @@
       "members":{
         "applicationId":{
           "shape":"ApplicationId",
-          "documentation":"<p>The unique identifier of the Q Business application.</p>",
+          "documentation":"<p>The unique identifier of the Amazon Q Business application.</p>",
           "location":"uri",
           "locationName":"applicationId"
         },
@@ -3833,7 +4363,7 @@
       "members":{
         "applicationId":{
           "shape":"ApplicationId",
-          "documentation":"<p>The unique identifier of the Q Business application.</p>",
+          "documentation":"<p>The unique identifier of the Amazon Q Business application.</p>",
           "location":"uri",
           "locationName":"applicationId"
         },
@@ -3888,6 +4418,92 @@
         }
       },
       "documentation":"<p>A document in an Amazon Q Business application.</p>"
+    },
+    "DocumentAcl":{
+      "type":"structure",
+      "members":{
+        "allowlist":{
+          "shape":"DocumentAclMembership",
+          "documentation":"<p>The allowlist conditions for the document. Users or groups matching these conditions are granted access to the document.</p>"
+        },
+        "denyList":{
+          "shape":"DocumentAclMembership",
+          "documentation":"<p>The denylist conditions for the document. Users or groups matching these conditions are denied access to the document, overriding allowlist permissions.</p>"
+        }
+      },
+      "documentation":"<p>Represents the Access Control List (ACL) for a document, containing both allowlist and denylist conditions.</p>"
+    },
+    "DocumentAclCondition":{
+      "type":"structure",
+      "members":{
+        "memberRelation":{
+          "shape":"MemberRelation",
+          "documentation":"<p>The logical relation between members in the condition, determining how multiple user or group conditions are combined.</p>"
+        },
+        "users":{
+          "shape":"DocumentAclUsers",
+          "documentation":"<p>An array of user identifiers that this condition applies to. Users listed here are subject to the access rule defined by this condition.</p>"
+        },
+        "groups":{
+          "shape":"DocumentAclGroups",
+          "documentation":"<p>An array of group identifiers that this condition applies to. Groups listed here are subject to the access rule defined by this condition.</p>"
+        }
+      },
+      "documentation":"<p>Represents a condition in the document's ACL, specifying access rules for users and groups.</p>"
+    },
+    "DocumentAclConditions":{
+      "type":"list",
+      "member":{"shape":"DocumentAclCondition"}
+    },
+    "DocumentAclGroup":{
+      "type":"structure",
+      "members":{
+        "name":{
+          "shape":"GroupName",
+          "documentation":"<p>The name of the group in the document's ACL. This is used to identify the group when applying access rules.</p>"
+        },
+        "type":{
+          "shape":"MembershipType",
+          "documentation":"<p>The type of the group. This indicates the scope of the group's applicability in access control.</p>"
+        }
+      },
+      "documentation":"<p>Represents a group in the document's ACL, used to define access permissions for multiple users collectively.</p>"
+    },
+    "DocumentAclGroups":{
+      "type":"list",
+      "member":{"shape":"DocumentAclGroup"}
+    },
+    "DocumentAclMembership":{
+      "type":"structure",
+      "members":{
+        "memberRelation":{
+          "shape":"MemberRelation",
+          "documentation":"<p>The logical relation between members in the membership rule, determining how multiple conditions are combined.</p>"
+        },
+        "conditions":{
+          "shape":"DocumentAclConditions",
+          "documentation":"<p>An array of conditions that define the membership rules. Each condition specifies criteria for users or groups to be included in this membership.</p>"
+        }
+      },
+      "documentation":"<p>Represents membership rules in the document's ACL, defining how users or groups are associated with access permissions.</p>"
+    },
+    "DocumentAclUser":{
+      "type":"structure",
+      "members":{
+        "id":{
+          "shape":"String",
+          "documentation":"<p>The unique identifier of the user in the document's ACL. This is used to identify the user when applying access rules.</p>"
+        },
+        "type":{
+          "shape":"MembershipType",
+          "documentation":"<p>The type of the user. This indicates the scope of the user's applicability in access control.</p>"
+        }
+      },
+      "documentation":"<p>Represents a user in the document's ACL, used to define access permissions for individual users.</p>"
+    },
+    "DocumentAclUsers":{
+      "type":"list",
+      "member":{"shape":"DocumentAclUser"}
     },
     "DocumentAttribute":{
       "type":"structure",
@@ -4432,6 +5048,10 @@
           "shape":"ResponseScope",
           "documentation":"<p>The response scope configured for a Amazon Q Business application. This determines whether your application uses its retrieval augmented generation (RAG) system to generate answers only from your enterprise data, or also uses the large language models (LLM) knowledge to respons to end user questions in chat.</p>"
         },
+        "orchestrationConfiguration":{
+          "shape":"AppliedOrchestrationConfiguration",
+          "documentation":"<p> The chat response orchestration settings for your application.</p> <note> <p>Chat orchestration is optimized to work for English language content. For more details on language support in Amazon Q Business, see <a href=\"https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/supported-languages.html\">Supported languages</a>.</p> </note>"
+        },
         "blockedPhrases":{
           "shape":"BlockedPhrasesConfiguration",
           "documentation":"<p>The phrases blocked from chat by your chat control configuration.</p>"
@@ -4447,6 +5067,10 @@
         "nextToken":{
           "shape":"NextToken",
           "documentation":"<p>If the <code>maxResults</code> response was incomplete because there is more data to retrieve, Amazon Q Business returns a pagination token in the response. You can use this pagination token to retrieve the next set of Amazon Q Business chat controls configured.</p>"
+        },
+        "hallucinationReductionConfiguration":{
+          "shape":"HallucinationReductionConfiguration",
+          "documentation":"<p> The hallucination reduction settings for your application.</p>"
         }
       }
     },
@@ -4459,7 +5083,7 @@
       "members":{
         "applicationId":{
           "shape":"ApplicationId",
-          "documentation":"<p>The unique identifier of the Q Business application.</p>",
+          "documentation":"<p>The unique identifier of the Amazon Q Business application.</p>",
           "location":"uri",
           "locationName":"applicationId"
         },
@@ -4488,11 +5112,11 @@
         },
         "applicationId":{
           "shape":"ApplicationId",
-          "documentation":"<p>The unique identifier of the Q Business application associated with this data accessor.</p>"
+          "documentation":"<p>The unique identifier of the Amazon Q Business application associated with this data accessor.</p>"
         },
         "idcApplicationArn":{
           "shape":"IdcApplicationArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the AWS IAM Identity Center application associated with this data accessor.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM Identity Center application associated with this data accessor.</p>"
         },
         "principal":{
           "shape":"PrincipalRoleArn",
@@ -4501,6 +5125,10 @@
         "actionConfigurations":{
           "shape":"ActionConfigurationList",
           "documentation":"<p>The list of action configurations specifying the allowed actions and any associated filters.</p>"
+        },
+        "authenticationDetail":{
+          "shape":"DataAccessorAuthenticationDetail",
+          "documentation":"<p>The authentication configuration details for the data accessor. This specifies how the ISV authenticates when accessing data through this data accessor.</p>"
         },
         "createdAt":{
           "shape":"Timestamp",
@@ -4860,7 +5488,7 @@
       "members":{
         "applicationId":{
           "shape":"ApplicationId",
-          "documentation":"<p>The unique identifier of the Q Business application.</p>",
+          "documentation":"<p>The unique identifier of the Amazon Q Business application.</p>",
           "location":"uri",
           "locationName":"applicationId"
         }
@@ -5038,7 +5666,7 @@
         },
         "origins":{
           "shape":"WebExperienceOrigins",
-          "documentation":"<p>Gets the website domain origins that are allowed to embed the Amazon Q Business web experience. <pre><code> The &lt;i&gt;domain origin&lt;/i&gt; refers to the base URL for accessing a website including the protocol (&lt;code&gt;http/https&lt;/code&gt;), the domain name, and the port number (if specified). &lt;/p&gt; </code></pre>"
+          "documentation":"<p>Gets the website domain origins that are allowed to embed the Amazon Q Business web experience. The <i>domain origin</i> refers to the base URL for accessing a website including the protocol (<code>http/https</code>), the domain name, and the port number (if specified). </p>"
         },
         "roleArn":{
           "shape":"RoleArn",
@@ -5067,6 +5695,12 @@
           "documentation":"<p>Gets the custom logo, favicon, font, and color used in the Amazon Q web experience. </p>"
         }
       }
+    },
+    "GroupIdentifier":{
+      "type":"string",
+      "max":47,
+      "min":1,
+      "pattern":"([0-9a-f]{10}-|)[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}"
     },
     "GroupMembers":{
       "type":"structure",
@@ -5135,6 +5769,23 @@
       "type":"list",
       "member":{"shape":"GroupSummary"}
     },
+    "HallucinationReductionConfiguration":{
+      "type":"structure",
+      "members":{
+        "hallucinationReductionControl":{
+          "shape":"HallucinationReductionControl",
+          "documentation":"<p>Controls whether hallucination reduction has been enabled or disabled for your application. The default status is <code>DISABLED</code>. </p>"
+        }
+      },
+      "documentation":"<p>Configuration information required to setup hallucination reduction. For more information, see <a href=\"https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/hallucination-reduction.html\"> hallucination reduction</a>.</p> <note> <p>The hallucination reduction feature won't work if chat orchestration controls are enabled for your application.</p> </note>"
+    },
+    "HallucinationReductionControl":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
     "HookConfiguration":{
       "type":"structure",
       "members":{
@@ -5144,7 +5795,7 @@
         },
         "lambdaArn":{
           "shape":"LambdaArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of a role with permission to run a Lambda function during ingestion. For more information, see <a href=\"https://docs.aws.amazon.com/amazonq/latest/business-use-dg/iam-roles.html#cde-iam-role\">IAM roles for Custom Document Enrichment (CDE)</a>.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Lambda function during ingestion. For more information, see <a href=\"https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/cde-lambda-operations.html\">Using Lambda functions for Amazon Q Business document enrichment</a>.</p>"
         },
         "s3BucketName":{
           "shape":"S3BucketName",
@@ -5187,6 +5838,12 @@
       },
       "documentation":"<p>Information about the IAM Identity Center Application used to configure authentication for a plugin.</p>"
     },
+    "IdcTrustedTokenIssuerArn":{
+      "type":"string",
+      "max":1284,
+      "min":0,
+      "pattern":"arn:aws:sso::[0-9]{12}:trustedTokenIssuer/(sso)?ins-[a-zA-Z0-9-.]{16}/tti-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    },
     "IdentityProviderConfiguration":{
       "type":"structure",
       "members":{
@@ -5202,7 +5859,8 @@
         "AWS_IAM_IDP_SAML",
         "AWS_IAM_IDP_OIDC",
         "AWS_IAM_IDC",
-        "AWS_QUICKSIGHT_IDP"
+        "AWS_QUICKSIGHT_IDP",
+        "ANONYMOUS"
       ]
     },
     "ImageExtractionConfiguration":{
@@ -5222,6 +5880,20 @@
         "ENABLED",
         "DISABLED"
       ]
+    },
+    "ImageSourceDetails":{
+      "type":"structure",
+      "members":{
+        "mediaId":{
+          "shape":"MediaId",
+          "documentation":"<p>Unique identifier for the image file.</p>"
+        },
+        "mediaMimeType":{
+          "shape":"String",
+          "documentation":"<p>The MIME type of the image file.</p>"
+        }
+      },
+      "documentation":"<p>Details about an image source, including its identifier and format.</p>"
     },
     "Index":{
       "type":"structure",
@@ -5532,7 +6204,7 @@
       "members":{
         "applicationId":{
           "shape":"ApplicationId",
-          "documentation":"<p>The unique identifier of the Q Business application.</p>",
+          "documentation":"<p>The unique identifier of the Amazon Q Business application.</p>",
           "location":"uri",
           "locationName":"applicationId"
         },
@@ -6071,6 +6743,43 @@
         }
       }
     },
+    "ListSubscriptionsRequest":{
+      "type":"structure",
+      "required":["applicationId"],
+      "members":{
+        "applicationId":{
+          "shape":"ApplicationId",
+          "documentation":"<p>The identifier of the Amazon Q Business application linked to the subscription.</p>",
+          "location":"uri",
+          "locationName":"applicationId"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>If the <code>maxResults</code> response was incomplete because there is more data to retrieve, Amazon Q Business returns a pagination token in the response. You can use this pagination token to retrieve the next set of Amazon Q Business subscriptions.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        },
+        "maxResults":{
+          "shape":"MaxResultsIntegerForListSubscriptions",
+          "documentation":"<p>The maximum number of Amazon Q Business subscriptions to return.</p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        }
+      }
+    },
+    "ListSubscriptionsResponse":{
+      "type":"structure",
+      "members":{
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>If the response is truncated, Amazon Q Business returns this token. You can use this token in a subsequent request to retrieve the next set of subscriptions.</p>"
+        },
+        "subscriptions":{
+          "shape":"Subscriptions",
+          "documentation":"<p>An array of summary information on the subscriptions configured for an Amazon Q Business application.</p>"
+        }
+      }
+    },
     "ListTagsForResourceRequest":{
       "type":"structure",
       "required":["resourceARN"],
@@ -6239,6 +6948,12 @@
       "max":50,
       "min":1
     },
+    "MaxResultsIntegerForListSubscriptions":{
+      "type":"integer",
+      "box":true,
+      "max":100,
+      "min":1
+    },
     "MaxResultsIntegerForListWebExperiencesRequest":{
       "type":"integer",
       "box":true,
@@ -6251,6 +6966,14 @@
         "imageExtractionConfiguration":{
           "shape":"ImageExtractionConfiguration",
           "documentation":"<p>The configuration for extracting semantic meaning from images in documents. For more information, see <a href=\"https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/extracting-meaning-from-images.html\">Extracting semantic meaning from images and visuals</a>. </p>"
+        },
+        "audioExtractionConfiguration":{
+          "shape":"AudioExtractionConfiguration",
+          "documentation":"<p>Configuration settings for extracting and processing audio content from media files.</p>"
+        },
+        "videoExtractionConfiguration":{
+          "shape":"VideoExtractionConfiguration",
+          "documentation":"<p>Configuration settings for extracting and processing video content from media files.</p>"
         }
       },
       "documentation":"<p>The configuration for extracting information from media in documents.</p>"
@@ -6565,6 +7288,24 @@
       },
       "documentation":"<p>Information about the OIDC-compliant identity provider (IdP) used to authenticate end users of an Amazon Q Business web experience.</p>"
     },
+    "OrchestrationConfiguration":{
+      "type":"structure",
+      "required":["control"],
+      "members":{
+        "control":{
+          "shape":"OrchestrationControl",
+          "documentation":"<p> Status information about whether chat orchestration is activated or deactivated for your Amazon Q Business application.</p>"
+        }
+      },
+      "documentation":"<p>Configuration information required to enable chat orchestration for your Amazon Q Business application.</p> <note> <p>Chat orchestration is optimized to work for English language content. For more details on language support in Amazon Q Business, see <a href=\"https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/supported-languages.html\">Supported languages</a>.</p> </note>"
+    },
+    "OrchestrationControl":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
     "Origin":{
       "type":"string",
       "max":256,
@@ -6574,6 +7315,55 @@
     "Payload":{
       "type":"string",
       "sensitive":true
+    },
+    "PermissionCondition":{
+      "type":"structure",
+      "required":[
+        "conditionOperator",
+        "conditionKey",
+        "conditionValues"
+      ],
+      "members":{
+        "conditionOperator":{
+          "shape":"PermissionConditionOperator",
+          "documentation":"<p>The operator to use for the condition evaluation. This determines how the condition values are compared.</p>"
+        },
+        "conditionKey":{
+          "shape":"PermissionConditionKey",
+          "documentation":"<p>The key for the condition. This identifies the attribute that the condition applies to.</p>"
+        },
+        "conditionValues":{
+          "shape":"PermissionConditionValues",
+          "documentation":"<p>The values to compare against using the specified condition operator.</p>"
+        }
+      },
+      "documentation":"<p>Defines a condition that restricts when a permission is effective. Conditions allow you to control access based on specific attributes of the request.</p>"
+    },
+    "PermissionConditionKey":{
+      "type":"string",
+      "pattern":"aws:PrincipalTag/qbusiness-dataaccessor:[a-zA-Z]+.*"
+    },
+    "PermissionConditionOperator":{
+      "type":"string",
+      "enum":["StringEquals"]
+    },
+    "PermissionConditionValue":{
+      "type":"string",
+      "max":1000,
+      "min":1,
+      "pattern":"[a-zA-Z0-9][a-zA-Z0-9_-]*"
+    },
+    "PermissionConditionValues":{
+      "type":"list",
+      "member":{"shape":"PermissionConditionValue"},
+      "max":1,
+      "min":1
+    },
+    "PermissionConditions":{
+      "type":"list",
+      "member":{"shape":"PermissionCondition"},
+      "max":10,
+      "min":1
     },
     "PersonalizationConfiguration":{
       "type":"structure",
@@ -6903,7 +7693,7 @@
         "groupMembers":{"shape":"GroupMembers"},
         "roleArn":{
           "shape":"RoleArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of an IAM role that has access to the S3 file that contains your list of users that belong to a group.The Amazon Resource Name (ARN) of an IAM role that has access to the S3 file that contains your list of users that belong to a group.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of an IAM role that has access to the S3 file that contains your list of users that belong to a group.</p>"
         }
       }
     },
@@ -7285,7 +8075,7 @@
       "members":{
         "applicationId":{
           "shape":"ApplicationId",
-          "documentation":"<p>The unique identifier of the Q Business application to search.</p>",
+          "documentation":"<p>The unique identifier of the Amazon Q Business application to search.</p>",
           "location":"uri",
           "locationName":"applicationId"
         },
@@ -7367,6 +8157,12 @@
       },
       "exception":true
     },
+    "SessionDurationInMinutes":{
+      "type":"integer",
+      "box":true,
+      "max":60,
+      "min":15
+    },
     "SnippetExcerpt":{
       "type":"structure",
       "members":{
@@ -7417,6 +8213,25 @@
     "SourceAttributions":{
       "type":"list",
       "member":{"shape":"SourceAttribution"}
+    },
+    "SourceDetails":{
+      "type":"structure",
+      "members":{
+        "imageSourceDetails":{
+          "shape":"ImageSourceDetails",
+          "documentation":"<p>Details specific to image content within the source.</p>"
+        },
+        "audioSourceDetails":{
+          "shape":"AudioSourceDetails",
+          "documentation":"<p>Details specific to audio content within the source.</p>"
+        },
+        "videoSourceDetails":{
+          "shape":"VideoSourceDetails",
+          "documentation":"<p>Details specific to video content within the source.</p>"
+        }
+      },
+      "documentation":"<p>Container for details about different types of media sources (image, audio, or video).</p>",
+      "union":true
     },
     "StartDataSourceSyncJobRequest":{
       "type":"structure",
@@ -7558,12 +8373,78 @@
       "type":"list",
       "member":{"shape":"SubnetId"}
     },
+    "Subscription":{
+      "type":"structure",
+      "members":{
+        "subscriptionId":{
+          "shape":"SubscriptionId",
+          "documentation":"<p>The identifier of the Amazon Q Business subscription to be updated.</p>"
+        },
+        "subscriptionArn":{
+          "shape":"SubscriptionArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Q Business subscription that was updated.</p>"
+        },
+        "principal":{
+          "shape":"SubscriptionPrincipal",
+          "documentation":"<p>The IAM Identity Center <code>UserId</code> or <code>GroupId</code> of a user or group in the IAM Identity Center instance connected to the Amazon Q Business application.</p>"
+        },
+        "currentSubscription":{
+          "shape":"SubscriptionDetails",
+          "documentation":"<p>The type of your current Amazon Q Business subscription.</p>"
+        },
+        "nextSubscription":{
+          "shape":"SubscriptionDetails",
+          "documentation":"<p>The type of the Amazon Q Business subscription for the next month.</p>"
+        }
+      },
+      "documentation":"<p>Information about an Amazon Q Business subscription.</p> <p>Subscriptions are used to provide access for an IAM Identity Center user or a group to an Amazon Q Business application.</p> <p>Amazon Q Business offers two subscription tiers: <code>Q_LITE</code> and <code>Q_BUSINESS</code>. Subscription tier determines feature access for the user. For more information on subscriptions and pricing tiers, see <a href=\"https://aws.amazon.com/q/business/pricing/\">Amazon Q Business pricing</a>.</p>"
+    },
+    "SubscriptionArn":{
+      "type":"string",
+      "max":1224,
+      "min":10,
+      "pattern":"arn:[a-z0-9-\\.]{1,63}:[a-z0-9-\\.]{0,63}:[a-z0-9-\\.]{0,63}:[a-z0-9-\\.]{0,63}:[^/].{0,1023}"
+    },
+    "SubscriptionDetails":{
+      "type":"structure",
+      "members":{
+        "type":{
+          "shape":"SubscriptionType",
+          "documentation":"<p> The type of an Amazon Q Business subscription. </p>"
+        }
+      },
+      "documentation":"<p> The details of an Amazon Q Business subscription. </p>"
+    },
+    "SubscriptionId":{
+      "type":"string",
+      "max":1224,
+      "min":0
+    },
+    "SubscriptionPrincipal":{
+      "type":"structure",
+      "members":{
+        "user":{
+          "shape":"UserIdentifier",
+          "documentation":"<p>The identifier of a user in the IAM Identity Center instance connected to the Amazon Q Business application.</p>"
+        },
+        "group":{
+          "shape":"GroupIdentifier",
+          "documentation":"<p>The identifier of a group in the IAM Identity Center instance connected to the Amazon Q Business application.</p>"
+        }
+      },
+      "documentation":"<p>A user or group in the IAM Identity Center instance connected to the Amazon Q Business application.</p>",
+      "union":true
+    },
     "SubscriptionType":{
       "type":"string",
       "enum":[
         "Q_LITE",
         "Q_BUSINESS"
       ]
+    },
+    "Subscriptions":{
+      "type":"list",
+      "member":{"shape":"Subscription"}
     },
     "SyncSchedule":{
       "type":"string",
@@ -7582,6 +8463,13 @@
       "max":350,
       "min":0,
       "pattern":"\\P{C}*"
+    },
+    "SystemMessageType":{
+      "type":"string",
+      "enum":[
+        "RESPONSE",
+        "GROUNDED_RESPONSE"
+      ]
     },
     "Tag":{
       "type":"structure",
@@ -7676,6 +8564,10 @@
     "TextOutputEvent":{
       "type":"structure",
       "members":{
+        "systemMessageType":{
+          "shape":"SystemMessageType",
+          "documentation":"<p>The type of AI-generated message in a <code>TextOutputEvent</code>. Amazon Q Business currently supports two types of messages:</p> <ul> <li> <p> <code>RESPONSE</code> - The Amazon Q Business system response.</p> </li> <li> <p> <code>GROUNDED_RESPONSE</code> - The corrected, hallucination-reduced, response returned by Amazon Q Business. Available only if hallucination reduction is supported and configured for the application and detected in the end user chat query by Amazon Q Business.</p> </li> </ul>"
+        },
         "conversationId":{
           "shape":"ConversationId",
           "documentation":"<p>The identifier of the conversation with which the text output event is associated.</p>"
@@ -7713,11 +8605,21 @@
         },
         "mediaId":{
           "shape":"SourceAttributionMediaId",
-          "documentation":"<p>The identifier of the media object associated with the text segment in the source attribution.</p>"
+          "documentation":"<p>The identifier of the media object associated with the text segment in the source attribution.</p>",
+          "deprecated":true,
+          "deprecatedMessage":"Deprecated in favor of using mediaId within the respective sourceDetails field.",
+          "deprecatedSince":"2025-02-28"
         },
         "mediaMimeType":{
           "shape":"String",
-          "documentation":"<p>The MIME type (image/png) of the media object associated with the text segment in the source attribution.</p>"
+          "documentation":"<p>The MIME type (image/png) of the media object associated with the text segment in the source attribution.</p>",
+          "deprecated":true,
+          "deprecatedMessage":"Deprecated in favor of using mediaMimeType within the respective sourceDetails field.",
+          "deprecatedSince":"2025-02-28"
+        },
+        "sourceDetails":{
+          "shape":"SourceDetails",
+          "documentation":"<p>Source information for a segment of extracted text, including its media type.</p>"
         }
       },
       "documentation":"<p>Provides information about a text extract in a chat response that can be attributed to a source document.</p>"
@@ -7883,6 +8785,10 @@
           "shape":"ResponseScope",
           "documentation":"<p>The response scope configured for your application. This determines whether your application uses its retrieval augmented generation (RAG) system to generate answers only from your enterprise data, or also uses the large language models (LLM) knowledge to respons to end user questions in chat.</p>"
         },
+        "orchestrationConfiguration":{
+          "shape":"OrchestrationConfiguration",
+          "documentation":"<p> The chat response orchestration settings for your application.</p>"
+        },
         "blockedPhrasesConfigurationUpdate":{
           "shape":"BlockedPhrasesConfigurationUpdate",
           "documentation":"<p>The phrases blocked from chat by your chat control configuration.</p>"
@@ -7898,6 +8804,10 @@
         "creatorModeConfiguration":{
           "shape":"CreatorModeConfiguration",
           "documentation":"<p>The configuration details for <code>CREATOR_MODE</code>.</p>"
+        },
+        "hallucinationReductionConfiguration":{
+          "shape":"HallucinationReductionConfiguration",
+          "documentation":"<p> The hallucination reduction settings for your application.</p>"
         }
       }
     },
@@ -7916,7 +8826,7 @@
       "members":{
         "applicationId":{
           "shape":"ApplicationId",
-          "documentation":"<p>The unique identifier of the Q Business application.</p>",
+          "documentation":"<p>The unique identifier of the Amazon Q Business application.</p>",
           "location":"uri",
           "locationName":"applicationId"
         },
@@ -7929,6 +8839,10 @@
         "actionConfigurations":{
           "shape":"ActionConfigurationList",
           "documentation":"<p>The updated list of action configurations specifying the allowed actions and any associated filters.</p>"
+        },
+        "authenticationDetail":{
+          "shape":"DataAccessorAuthenticationDetail",
+          "documentation":"<p>The updated authentication configuration details for the data accessor. This specifies how the ISV will authenticate when accessing data through this data accessor.</p>"
         },
         "displayName":{
           "shape":"DataAccessorName",
@@ -8120,6 +9034,49 @@
       "members":{
       }
     },
+    "UpdateSubscriptionRequest":{
+      "type":"structure",
+      "required":[
+        "applicationId",
+        "subscriptionId",
+        "type"
+      ],
+      "members":{
+        "applicationId":{
+          "shape":"ApplicationId",
+          "documentation":"<p>The identifier of the Amazon Q Business application where the subscription update should take effect.</p>",
+          "location":"uri",
+          "locationName":"applicationId"
+        },
+        "subscriptionId":{
+          "shape":"SubscriptionId",
+          "documentation":"<p>The identifier of the Amazon Q Business subscription to be updated.</p>",
+          "location":"uri",
+          "locationName":"subscriptionId"
+        },
+        "type":{
+          "shape":"SubscriptionType",
+          "documentation":"<p>The type of the Amazon Q Business subscription to be updated.</p>"
+        }
+      }
+    },
+    "UpdateSubscriptionResponse":{
+      "type":"structure",
+      "members":{
+        "subscriptionArn":{
+          "shape":"SubscriptionArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Q Business subscription that was updated.</p>"
+        },
+        "currentSubscription":{
+          "shape":"SubscriptionDetails",
+          "documentation":"<p>The type of your current Amazon Q Business subscription.</p>"
+        },
+        "nextSubscription":{
+          "shape":"SubscriptionDetails",
+          "documentation":"<p>The type of the Amazon Q Business subscription for the next month.</p>"
+        }
+      }
+    },
     "UpdateUserRequest":{
       "type":"structure",
       "required":[
@@ -8217,7 +9174,7 @@
         },
         "origins":{
           "shape":"WebExperienceOrigins",
-          "documentation":"<p>Updates the website domain origins that are allowed to embed the Amazon Q Business web experience. <pre><code> The &lt;i&gt;domain origin&lt;/i&gt; refers to the &lt;i&gt;base URL&lt;/i&gt; for accessing a website including the protocol (&lt;code&gt;http/https&lt;/code&gt;), the domain name, and the port number (if specified).&lt;/p&gt; &lt;note&gt; &lt;ul&gt; &lt;li&gt; &lt;p&gt;Any values except &lt;code&gt;null&lt;/code&gt; submitted as part of this update will replace all previous values.&lt;/p&gt; &lt;/li&gt; &lt;li&gt; &lt;p&gt;You must only submit a &lt;i&gt;base URL&lt;/i&gt; and not a full path. For example, &lt;code&gt;https://docs.aws.amazon.com&lt;/code&gt;.&lt;/p&gt; &lt;/li&gt; &lt;/ul&gt; &lt;/note&gt; </code></pre>"
+          "documentation":"<p>Updates the website domain origins that are allowed to embed the Amazon Q Business web experience. The <i>domain origin</i> refers to the <i>base URL</i> for accessing a website including the protocol (<code>http/https</code>), the domain name, and the port number (if specified).</p> <note> <ul> <li> <p>Any values except <code>null</code> submitted as part of this update will replace all previous values.</p> </li> <li> <p>You must only submit a <i>base URL</i> and not a full path. For example, <code>https://docs.aws.amazon.com</code>.</p> </li> </ul> </note>"
         },
         "browserExtensionConfiguration":{
           "shape":"BrowserExtensionConfiguration",
@@ -8272,6 +9229,12 @@
       "max":1024,
       "min":1,
       "pattern":"\\P{C}*"
+    },
+    "UserIdentifier":{
+      "type":"string",
+      "max":47,
+      "min":1,
+      "pattern":"([0-9a-f]{10}-|)[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}"
     },
     "UserIds":{
       "type":"list",
@@ -8348,6 +9311,57 @@
         "FIELD_VALIDATION_FAILED",
         "UNKNOWN_OPERATION"
       ]
+    },
+    "VideoExtractionConfiguration":{
+      "type":"structure",
+      "required":["videoExtractionStatus"],
+      "members":{
+        "videoExtractionStatus":{
+          "shape":"VideoExtractionStatus",
+          "documentation":"<p>The status of video extraction (ENABLED or DISABLED) for processing video content from files.</p>"
+        }
+      },
+      "documentation":"<p>Configuration settings for video content extraction and processing.</p>"
+    },
+    "VideoExtractionStatus":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
+    "VideoExtractionType":{
+      "type":"string",
+      "enum":[
+        "TRANSCRIPT",
+        "SUMMARY"
+      ]
+    },
+    "VideoSourceDetails":{
+      "type":"structure",
+      "members":{
+        "mediaId":{
+          "shape":"MediaId",
+          "documentation":"<p>Unique identifier for the video media file.</p>"
+        },
+        "mediaMimeType":{
+          "shape":"String",
+          "documentation":"<p>The MIME type of the video file (e.g., video/mp4, video/avi).</p>"
+        },
+        "startTimeMilliseconds":{
+          "shape":"Long",
+          "documentation":"<p>The starting timestamp in milliseconds for the relevant video segment.</p>"
+        },
+        "endTimeMilliseconds":{
+          "shape":"Long",
+          "documentation":"<p>The ending timestamp in milliseconds for the relevant video segment.</p>"
+        },
+        "videoExtractionType":{
+          "shape":"VideoExtractionType",
+          "documentation":"<p>The type of video extraction performed on the content.</p>"
+        }
+      },
+      "documentation":"<p>Details about a video source, including its identifier, format, and time information.</p>"
     },
     "WebExperience":{
       "type":"structure",

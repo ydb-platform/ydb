@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     create_external_data_source_formatter.cpp
+    create_external_table_formatter.cpp
     create_table_formatter.cpp
     create_view_formatter.cpp
     formatters_common.cpp
@@ -9,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/json
     ydb/core/base
     ydb/core/tx/columnshard/engines/storage/indexes/helper
     ydb/core/formats/arrow/serializer
@@ -28,7 +30,7 @@ PEERDIR(
     yql/essentials/ast
     yql/essentials/public/issue
     yql/essentials/sql/settings
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4

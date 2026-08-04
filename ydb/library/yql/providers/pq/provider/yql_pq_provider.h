@@ -53,6 +53,9 @@ public:
     bool EnableTopicsPredicatePushdown = false;
     bool EnablePqConstraintsTransformer = false;
     bool ForbidYqlSysColumnsAndSystemMetadata = false;
+    bool EnableWatermarks = false;
+    bool EnableWatermarksAdvanced = false;
+    bool EnableStreamingPartitionBalancing = false;
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 
@@ -66,6 +69,7 @@ public:
     THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
     NPq::NProto::StreamingDisposition Disposition;
+    TString WatermarkLateEventsPolicy;
     std::vector<std::pair<TString, TString>> TaskSensorLabels;
     std::vector<ui64> NodeIds;
 };

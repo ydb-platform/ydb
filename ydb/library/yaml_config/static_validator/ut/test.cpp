@@ -374,30 +374,32 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
             "BlobStorage",
             "    placement_groups: 2\n"
             "    type: PLACEMENT\n",
-            "  blob_storage_executor:\n"
-            "  - 0\n"))));
+            "  blob_storage_executor: 0\n"))));
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BlobStorage",
+            "    placement_groups: 2\n"
+            "    type: PLACEMENT\n",
+            "  blob_storage_executor: 1\n")).Ok());
 
         UNIT_ASSERT(!validator.Validate(makeConfig(
             "BlobStorage",
             "    placement_groups: 2\n"
             "    type: PLACEMENT\n",
             "  blob_storage_executor:\n"
-            "  - 1\n")).Ok());
-
-        UNIT_ASSERT(!validator.Validate(makeConfig(
-            "BlobStorage",
-            "    placement_groups: 2\n"
-            "    type: PLACEMENT\n",
-            "  blob_storage_executor:\n"
-            "  - 0\n"
             "  - 0\n")).Ok());
 
-        UNIT_ASSERT(!validator.Validate(makeConfig(
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
             "User",
             "    threads: 2\n"
             "    type: BASIC\n",
-            "  blob_storage_executor:\n"
-            "  - 0\n")).Ok());
+            "  blob_storage_executor: 0\n"))));
+
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
+            "IO",
+            "    threads: 1\n"
+            "    type: IO\n",
+            "  blob_storage_executor: 0\n"))));
 
         UNIT_ASSERT(!validator.Validate(makeConfig(
             "Storage",

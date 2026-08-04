@@ -248,10 +248,10 @@ TMapBuilder ActorSystemConfigBuilder() {
         });
       });
     })
-    .Array("blob_storage_executor", [](auto& blobStorageExecutor){
+    .Int64("blob_storage_executor", [](auto& blobStorageExecutor){
       blobStorageExecutor
       .Optional()
-      .Int64Item(nonNegative());
+      .Min(0);
     })
     .Map("scheduler", [](auto& scheduler){
       scheduler
@@ -260,7 +260,7 @@ TMapBuilder ActorSystemConfigBuilder() {
       .Int64("resolution", nonNegative())
       .Int64("spin_threshold", nonNegative());
     })
-    .AddCheck("BlobStorageExecutor entries must reference distinct PLACEMENT executors", [](auto& actorSystemContext){
+    .AddCheck("BlobStorageExecutor must reference an existing executor", [](auto& actorSystemContext){
       auto node = actorSystemContext.Node();
       if (!node["blob_storage_executor"].Exists()) {
         return;
@@ -270,21 +270,10 @@ TMapBuilder ActorSystemConfigBuilder() {
         return;
       }
 
-      auto executorIds = node["blob_storage_executor"].Array();
       auto executors = node["executor"].Array();
-      THashSet<i64> seenExecutorIds;
-      for (int i = 0; i < executorIds.Length(); ++i) {
-        const i64 executorId = executorIds[i].Int64();
-        actorSystemContext.Expect(seenExecutorIds.insert(executorId).second,
-          "blob_storage_executor entries must be unique");
-        if (executorId < 0 || executorId >= executors.Length()) {
-          actorSystemContext.Expect(false, "blob_storage_executor entry is out of executor range");
-          continue;
-        }
-        actorSystemContext.Expect(
-          executors[executorId].Map()["type"].Enum().Value() == "PLACEMENT",
-          "blob_storage_executor entry must reference a PLACEMENT executor");
-      }
+      const i64 executorId = node["blob_storage_executor"].Int64();
+      actorSystemContext.Expect(executorId >= 0 && executorId < executors.Length(),
+        "blob_storage_executor is out of executor range");
     })
     .AddCheck("Must either be auto config or manual config", [](auto& actorSystemContext){
       bool autoConfig = false;

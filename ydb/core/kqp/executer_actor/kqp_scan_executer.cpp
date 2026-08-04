@@ -240,8 +240,7 @@ private:
             {"count", nShardScans},
             {"traceId", TraceId()});
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
-
+        ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ScanExecuterRunTasks, "RunTasks", EUserFacingTracePhase::RunTasks);
         if (!ExecuteScanTx()) {
             return;
         }

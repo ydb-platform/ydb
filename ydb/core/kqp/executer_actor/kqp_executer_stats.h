@@ -1,8 +1,11 @@
 #pragma once
 
 #include <array>
+#include <optional>
 
 #include "kqp_tasks_graph.h"
+
+#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -409,6 +412,8 @@ private:
     std::unordered_map<ui32, TDuration> LongestTaskDurations;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
+    void ExportExecStatsImpl(NYql::NDqProto::TDqExecutionStats& stats,
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode, bool moveComputeStats);
 public:
     THashMap<NYql::NDq::TStageId, TStageExecutionStats> StageStats;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
@@ -447,6 +452,16 @@ public:
     TDuration ResolveWallTime;
 
     bool CollectStatsByLongTasks = false;
+
+    bool CollectUserFacingTaskStats = false;
+    TUserFacingTraceTaskStats UserFacingTaskStats;
+    std::unordered_map<ui32, TUserFacingStageAgg> UserFacingStageAggs;
+
+    // The response export moves compute stats; the trace snapshot must copy them first.
+    void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode = std::nullopt);
+    void CopyExecStats(NYql::NDqProto::TDqExecutionStats& stats,
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode = std::nullopt);
 
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
         NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs)
@@ -493,7 +508,6 @@ public:
     void UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NKikimrQueryStats::TTxStats* txStats,
         NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout);
     void UpdateNodeStats(ui32 nodeId, const NYql::NDqProto::TEvNodeState& state);
-    void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
     ui64 EstimateCollectMem();
     ui64 EstimateFinishMem();

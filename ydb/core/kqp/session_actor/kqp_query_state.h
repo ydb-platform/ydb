@@ -106,6 +106,9 @@ public:
         QueryType = RequestEv->GetType();
 
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
+
+        UserFacingTraceId = RequestEv->GetUserFacingWilsonTraceId();
+
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
             "Session.query." + NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
@@ -191,6 +194,10 @@ public:
 
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
+    NWilson::TTraceId UserFacingTraceId;
+    TString UserFacingRootName;
+    TInstant CompileWallStart;
+    TInstant CompileWallEnd;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx

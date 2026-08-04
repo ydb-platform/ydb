@@ -56,10 +56,23 @@ message TKqpLockStats {
     repeated uint32 DeferredBreakerNodeIds = 6;  // Node IDs matching DeferredBreakerQuerySpanIds
 }
 
+// Per-shard read details retained for sampled user-facing traces.
+message TKqpShardReadStats {
+    uint64 ShardId = 1;
+    uint64 StartTimeMs = 2;  // absolute epoch milliseconds
+    uint64 FinishTimeMs = 3;
+    uint32 Retries = 4;
+    uint64 Rows = 5;
+    uint32 NodeId = 6;
+}
+
 // extra for NYql.NDqProto.TDqTaskStats
 message TKqpTaskExtraStats {
     TKqpScanTaskExtraStats ScanTaskExtraStats = 1;
     TKqpLockStats LockStats = 2;
+    uint32 ReadRetriesCount = 3;
+    repeated TKqpShardReadStats ShardReads = 4;
+    uint32 ShardReadsTruncated = 5;
 }
 
 message TNodeExecutionStats {

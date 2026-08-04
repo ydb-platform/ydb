@@ -308,6 +308,64 @@ class TestToggleAndDrain:
         assert extracted == ["h1"]
         assert guard.snapshot()["impaired_racks"] == ["dc1/r1"]
 
+    def test_failed_extract_is_retried_then_confirmed(self):
+        guard, clock, calls = _guard(), FakeClock(), {"n": 0}
+        rep = StubReporter(clock)
+        probe = RecoveryProbe(guard=guard, hc_source=rep, min_hold_sec=0.0, clock=clock)
+        target, lease = _reserve(guard)
+
+        def flaky_extract():
+            calls["n"] += 1
+            if calls["n"] < 2:
+                raise RuntimeError("agent unreachable")
+
+        probe.track(
+            lease, target, "StopStart",
+            recovered=_node_predicate(target),
+            stuck_timeout_sec=1800.0,
+            recover_action=flaky_extract,
+            extract_after_sec=90.0,
+            confirm_timeout_sec=300.0,
+        )
+        clock.advance(100.0)
+        probe.tick()
+        assert calls["n"] == 1 and probe.pending()[0].extract_ok is False
+        assert probe.pending()[0].phase == PHASE_CONFIRM
+
+        probe.tick()  # retry
+        assert calls["n"] == 2 and probe.pending()[0].extract_ok is True
+
+        rep.publish(_healthy_results())
+        probe.tick()
+        assert guard.snapshot()["impaired_racks"] == [] and probe.pending() == []
+
+        # Drain also retries a failed extract (CONFIRM without extract_ok).
+        guard, clock, calls = _guard(), FakeClock(), {"n": 0}
+        probe = RecoveryProbe(
+            guard=guard, hc_source=StubReporter(clock), min_hold_sec=0.0, clock=clock
+        )
+        target, lease = _reserve(guard)
+
+        def always_fail_then_ok():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("boom")
+
+        probe.track(
+            lease, target, "StopStart",
+            recovered=_node_predicate(target),
+            stuck_timeout_sec=1800.0,
+            recover_action=always_fail_then_ok,
+            extract_after_sec=90.0,
+            confirm_timeout_sec=300.0,
+        )
+        clock.advance(100.0)
+        probe.tick()
+        assert calls["n"] == 1 and probe.pending()[0].extract_ok is False
+        assert probe.drain_extracts() == 1 and calls["n"] == 2
+        assert probe.pending()[0].extract_ok is True
+        assert probe.drain_extracts() == 0
+
     def test_drain_and_untrack(self):
         guard, clock, extracted, seen = _guard(), FakeClock(), [], []
         rep = StubReporter(clock)

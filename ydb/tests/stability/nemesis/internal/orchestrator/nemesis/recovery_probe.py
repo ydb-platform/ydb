@@ -58,6 +58,8 @@ class _Pending:
     confirm_timeout_sec: float | None = None
     phase: str = PHASE_HOLD
     confirm_since: float | None = None
+    extract_ok: bool = False  # True only after recover_action() succeeds
+    extracting: bool = False  # in-flight guard vs concurrent drain/tick
     stuck_reported: bool = False
 
 
@@ -160,6 +162,14 @@ class RecoveryProbe:
                 if held >= (p.extract_after_sec or 0.0):
                     self._dispatch_extract(p, now)
                 continue
+            if p.recover_action is not None and p.phase == PHASE_CONFIRM and not p.extract_ok:
+                # Previous recover_action failed: retry; confirm_timeout still runs from first try.
+                self._dispatch_extract(p, now)
+                if not p.extract_ok:
+                    fault = self._confirm_stuck_if_due(p, held, now)
+                    if fault is not None:
+                        stuck.append(fault)
+                    continue  # no HC release until an extract actually landed
             if not snap.fresh:
                 continue  # blind: no releases, no stuck
             if held < p.min_hold_sec:
@@ -178,12 +188,7 @@ class RecoveryProbe:
                 continue
             fault: StuckFault | None = None
             if p.phase == PHASE_CONFIRM:
-                if (
-                    p.confirm_since is not None
-                    and now - p.confirm_since > (p.confirm_timeout_sec or 0.0)
-                    and not p.stuck_reported
-                ):
-                    fault = self._mark_stuck(p, held, p.confirm_timeout_sec or 0.0)
+                fault = self._confirm_stuck_if_due(p, held, now)
             elif held > p.stuck_timeout_sec and not p.stuck_reported:
                 fault = self._mark_stuck(p, held, p.stuck_timeout_sec)
             if fault is not None:
@@ -197,12 +202,13 @@ class RecoveryProbe:
         return stuck
 
     def drain_extracts(self) -> int:
-        """Extract every toggle still in HOLD (chaos off). Leases move to confirm."""
+        """Extract toggles still needing it (HOLD, or CONFIRM after a failed recover_action)."""
         with self._lock:
             pending = [
                 p
                 for p in self._pending.values()
-                if p.recover_action is not None and p.phase == PHASE_HOLD
+                if p.recover_action is not None
+                and (p.phase == PHASE_HOLD or (p.phase == PHASE_CONFIRM and not p.extract_ok))
             ]
         if not pending:
             return 0
@@ -252,20 +258,38 @@ class RecoveryProbe:
         )
 
     def _dispatch_extract(self, p: _Pending, now: float, reason: str = "hold elapsed") -> None:
-        """Dispatch extract and move HOLD → CONFIRM."""
+        """Dispatch extract; CONFIRM starts on first attempt, extract_ok only after success."""
         with self._lock:
-            if p.phase != PHASE_HOLD:  # CAS vs concurrent drain
+            if p.phase == PHASE_HOLD:
+                p.phase = PHASE_CONFIRM
+                p.confirm_since = now
+            elif p.phase != PHASE_CONFIRM or p.extract_ok or p.extracting:
                 return
-            p.phase = PHASE_CONFIRM
-            p.confirm_since = now
+            p.extracting = True
         try:
             p.recover_action()
         except Exception:
+            # Leave extract_ok False: tick/drain will retry; confirm_timeout → stuck.
             logger.exception("extract action raised for %s", p.target.identity_key())
+            with self._lock:
+                p.extracting = False
+            return
+        with self._lock:
+            p.extract_ok = True
+            p.extracting = False
         logger.info(
             "extract dispatched: %s (%s) after %.0fs hold (%s); awaiting healthcheck confirm",
             p.target.host, p.nemesis_type, now - p.reserved_at, reason,
         )
+
+    def _confirm_stuck_if_due(self, p: _Pending, held: float, now: float) -> StuckFault | None:
+        if (
+            p.confirm_since is not None
+            and now - p.confirm_since > (p.confirm_timeout_sec or 0.0)
+            and not p.stuck_reported
+        ):
+            return self._mark_stuck(p, held, p.confirm_timeout_sec or 0.0)
+        return None
 
     def _mark_stuck(self, p: _Pending, held: float, timeout_sec: float) -> StuckFault | None:
         with self._lock:

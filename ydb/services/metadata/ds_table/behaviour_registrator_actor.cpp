@@ -40,8 +40,7 @@ void TBehaviourRegistrator::Handle(TEvTableDescriptionFailed::TPtr& ev) {
     const TString& initId = Behaviour->GetTypeId();
     Y_ABORT_UNLESS(initId == ev->Get()->GetRequestId());
     YDB_LOG_INFO("Metadata service cannot receive table description",
-        {"initId", initId},
-        {"endl", Endl});
+        {"initId", initId});
     Schedule(TDuration::Seconds(1), new TEvStartRegistration());
 }
 

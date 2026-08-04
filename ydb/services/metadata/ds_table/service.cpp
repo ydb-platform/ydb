@@ -107,8 +107,7 @@ void TService::Handle(TEvResetManagerRegistration::TPtr& ev) {
 
 void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {
     RegistrationData->EventsWaiting = std::make_shared<TEventsCollector>(SelfId());
-    YDB_LOG_INFO("Metadata service started",
-        {"endl", Endl});
+    YDB_LOG_INFO("Metadata service started");
     Become(&TService::StateMain);
     Send(SelfId(), new TEvSubscribeExternal(RegistrationData->GetInitializationFetcher()));
 }

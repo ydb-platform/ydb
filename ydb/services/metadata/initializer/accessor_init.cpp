@@ -52,8 +52,7 @@ TDSAccessorInitialized::TDSAccessorInitialized(const NRequest::TConfig& config,
 TDSAccessorInitialized::~TDSAccessorInitialized() {
     if (!Modifiers.empty()) {
         YDB_LOG_WARN("Try to destroy TDSAccessorInitialized with remaining",
-            {"modifiers", Modifiers.size()},
-            {"endl", Endl});
+            {"modifiers", Modifiers.size()});
     }
 }
 
@@ -92,7 +91,7 @@ void TDSAccessorInitialized::OnPreparationProblem(const TString& errorMessage) c
         {"event", "OnPreparationProblem"},
         {"error", errorMessage});
     NActors::ScheduleInvokeActivity([self = GetSelfPtr()]() {
-        self->InitializationBehaviour->Prepare(self); 
+        self->InitializationBehaviour->Prepare(self);
     }, RETRY_AFTER_DURATION);
 }
 

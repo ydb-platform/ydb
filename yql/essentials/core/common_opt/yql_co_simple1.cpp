@@ -5161,7 +5161,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         if (auto ret = MemberOverRenamingFlatMap(node, ctx); ret != node) {
-            return ret;
+            return KeepWorld(ret, *node, ctx, *optCtx.Types);
         }
 
         if (auto ret = MemberOverFilterSkipNullMembers(node, ctx); ret != node) {

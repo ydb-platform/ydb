@@ -1,0 +1,13 @@
+/* multirun can not */
+
+/*
+ * Counterpart of YQLOVERYT-398: the destination has native YT types and Yson columns,
+ * but all of them are optional (Yson? and List<Yson?>), so the write is allowed.
+ */
+
+USE plato;
+
+PRAGMA yt.UseNativeYtTypes = '0';
+
+INSERT INTO Output
+SELECT * FROM Input;

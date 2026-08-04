@@ -4698,6 +4698,66 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus AsErasedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::TypeErasure.MinLangVer, ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "AsErased function is not available before version 2026.02"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TResourceExprType>(NKikimr::NMiniKQL::ErasedResourceTag));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus PeekErasedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::TypeErasure.MinLangVer, ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "PeekErased function is not available before version 2026.02"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!EnsureResourceType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto* resType = input->Head().GetTypeAnn()->Cast<TResourceExprType>();
+        if (resType->GetTag() != NKikimr::NMiniKQL::ErasedResourceTag) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
+                << "Expected Resource<" << NKikimr::NMiniKQL::ErasedResourceTag << ">, but got: " << *input->Head().GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (auto status = EnsureTypeRewrite(input->ChildRef(1), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        const auto expectedType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(expectedType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus BoolOpt1Wrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -16008,6 +16068,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Last"] = &ToOptionalWrapper;
         Functions["AsTagged"] = &AsTaggedWrapper;
         Functions["Untag"] = &UntagWrapper;
+        ExtFunctions["AsErased"] = &AsErasedWrapper;
+        ExtFunctions["PeekErased"] = &PeekErasedWrapper;
         Functions["And"] = &LogicalWrapper<false>;
         Functions["Or"] = &LogicalWrapper<false>;
         Functions["Xor"] = &LogicalWrapper<true>;

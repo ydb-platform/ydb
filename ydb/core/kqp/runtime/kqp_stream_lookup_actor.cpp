@@ -1,5 +1,7 @@
 #include "kqp_stream_lookup_actor.h"
 
+#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
+
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
@@ -187,13 +189,16 @@ public:
             tableStats->MutableExtra()->PackFrom(tableExtraStats);
 
             // Add lock stats for broken locks from stream lookup operations
-            if (!BrokenLocks.empty()) {
+            if (!BrokenLocks.empty() || TotalRetryAttempts > 0 || !UserFacingShardReads.Empty()) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
                 }
-                extraStats.MutableLockStats()->SetBrokenAsVictim(
-                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                if (!BrokenLocks.empty()) {
+                    extraStats.MutableLockStats()->SetBrokenAsVictim(
+                        extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                }
+                UserFacingShardReads.Export(extraStats, TotalRetryAttempts);
                 stats->MutableExtra()->PackFrom(extraStats);
             }
         }
@@ -664,6 +669,14 @@ private:
 
         auto& read = readIt->second;
         ui64 shardId = read.ShardId;
+
+        if (IngressStats.CollectFull()) {
+            ui32 retryAttempts = 0;
+            if (auto it = Reads.ShardsState.find(shardId); it != Reads.ShardsState.end()) {
+                retryAttempts = it->second.RetryAttempts;
+            }
+            UserFacingShardReads.OnFinish(shardId, record.GetRowCount(), retryAttempts);
+        }
 
         TStringBuilder txLocks;
         for (const auto& lock : record.GetTxLocks()) {
@@ -1190,6 +1203,9 @@ private:
     }
 
     void StartTableRead(ui64 shardId, THolder<TEvDataShard::TEvRead> request) {
+        if (IngressStats.CollectFull()) {
+            UserFacingShardReads.OnStart(shardId);
+        }
         Counters->CreatedIterators->Inc();
         auto& record = request->Record;
 
@@ -1463,6 +1479,7 @@ private:
     std::deque<NUdf::TUnboxedValue> UnmodifiedOutputRows;
     ui64 OperationId = 0;
     size_t TotalRetryAttempts = 0;
+    TUserFacingShardReadCollector UserFacingShardReads;
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;
     NKqpProto::EIsolationLevel IsolationLevel;

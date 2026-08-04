@@ -224,9 +224,12 @@ public:
                 {"bufferActorId", BufferActorId},
                 {"traceId", TraceId()});
 
+            this->BeginUserFacingPhase(EUserFacingTracePhase::Commit);
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
+            event->CollectUserFacingShards = UserFacingTraceData
+                && Request.UserFacingTraceCollectionMode >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
             Send<ESendingType::Tail>(
                 BufferActorId,
                 event.release(),
@@ -263,6 +266,7 @@ public:
                 {"bufferActorId", BufferActorId},
                 {"traceId", TraceId()});
 
+            this->BeginUserFacingPhase(EUserFacingTracePhase::Commit);
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
             Send<ESendingType::Tail>(
@@ -323,6 +327,13 @@ public:
     void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr& ev) {
         if (ev->Get()->Stats && Stats) {
             Stats->AddBufferStats(std::move(*ev->Get()->Stats));
+        }
+        if (UserFacingTraceData) {
+            auto& tl = UserFacingTraceData->Timeline;
+            tl.Phase(EUserFacingTracePhase::CommitPrepareShards) = ev->Get()->CommitPrepareShards;
+            tl.Phase(EUserFacingTracePhase::CommitCoordinator) = ev->Get()->CommitCoordinator;
+            tl.Phase(EUserFacingTracePhase::CommitApplyShards) = ev->Get()->CommitApplyShards;
+            UserFacingTraceData->ShardCommitAcks = std::move(ev->Get()->ShardCommitAcks);
         }
         ResponseEv->CommitTimestamp = std::move(ev->Get()->CommitTimestamp);
         MakeResponseAndPassAway();
@@ -902,8 +913,12 @@ private:
 
     void OnShardsResolve() {
         if (ForceAcquireSnapshot()) {
+            // Start before sending so nested snapshot work inherits the phase trace id.
+            ExecuterStateSpan = this->MakePhaseSpan(TWilsonKqp::DataExecuterAcquireSnapshot, "WaitForSnapshot", EUserFacingTracePhase::Snapshot, NWilson::EFlags::NONE);
+
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot));
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot),
+                0, 0, ExecuterStateSpan.GetTraceId());
 
             YDB_LOG_TRACE("Create temporary mvcc snapshot, become WaitSnapshotState",
                 {"marker", "KQPDATA"},
@@ -912,7 +927,6 @@ private:
                 {"ctx", *GetUserRequestContext()},
                 {"traceId", TraceId()});
             Become(&TKqpDataExecuter::WaitSnapshotState);
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterAcquireSnapshot, ExecuterSpan.GetTraceId(), "WaitForSnapshot");
 
             return;
         }
@@ -979,7 +993,7 @@ private:
             return;
         }
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
+        ExecuterStateSpan = this->MakePhaseSpan(TWilsonKqp::DataExecuterRunTasks, "RunTasks", EUserFacingTracePhase::RunTasks);
         YDB_LOG_DEBUG("Become ExecuteState",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},

@@ -4584,6 +4584,7 @@ public:
     bool Prepare(std::optional<NWilson::TTraceId> traceId) {
         UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
+        UserFacingCommitPrepareShards.Start = OperationStartTime;
 
         YDB_LOG_DEBUG("Start prepare for distributed commit",
             {"logPrefix", this->LogPrefix});
@@ -4636,6 +4637,8 @@ public:
     void DistributedCommit() {
         Counters->BufferActorDistributedCommits->Inc();
         OperationStartTime = TInstant::Now();
+        UserFacingCommitPrepareShards.End = OperationStartTime;
+        UserFacingCommitCoordinator.Start = OperationStartTime;
 
         YDB_LOG_DEBUG("Start distributed commit with",
             {"logPrefix", this->LogPrefix},
@@ -5003,6 +5006,8 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
                 TxProxyMon->ClientTxStatusPlanned->Inc();
                 TxPlanned = true;
+                UserFacingCommitCoordinator.End = TInstant::Now();
+                UserFacingCommitApplyShards.Start = UserFacingCommitCoordinator.End;
                 if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
                     AFL_ENSURE(res->Record.HasStepId());
                     AFL_ENSURE(res->Record.HasTxId());
@@ -5343,6 +5348,7 @@ public:
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
+        CollectUserFacingShards = ev->Get()->CollectUserFacingShards;
         for (auto& [_, writeTask] : WriteTasks) {
             AFL_ENSURE(writeTask.IsClosed());
         }
@@ -5790,6 +5796,11 @@ public:
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
+        if (CollectUserFacingShards && preparedInfo.ShardId) {
+            auto& ack = UserFacingShardAcks[preparedInfo.ShardId];
+            ack.ShardId = preparedInfo.ShardId;
+            ack.PreparedAt = TInstant::Now();
+        }
         if (HandleDeferredLocksBrokenOnPrepare()) return;
         if (!preparedInfo.Coordinator || (TxManager->GetCoordinator() && preparedInfo.Coordinator != TxManager->GetCoordinator())) {
             YDB_LOG_ERROR("Handle TEvWriteResult: unable to select coordinator. Tx canceled, previously selected coordinator selected at propose",
@@ -5827,6 +5838,11 @@ public:
                 ("writeResult", writeResultTimestamp->TxId)
                 ("shardId", shardId);
         }
+        if (CollectUserFacingShards && shardId) {
+            auto& ack = UserFacingShardAcks[shardId];
+            ack.ShardId = shardId;
+            ack.CommittedAt = TInstant::Now();
+        }
         if (PendingCommitShards > 0) {
             --PendingCommitShards;
         }
@@ -5839,10 +5855,18 @@ public:
                 {"logPrefix", this->LogPrefix},
                 {"txId", TxId.value_or(0)});
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
-            Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
-                BuildStats(),
-                std::move(CommitTimestamp)
-            });
+            auto result = std::make_unique<TEvKqpBuffer::TEvResult>(BuildStats(), std::move(CommitTimestamp));
+            UserFacingCommitApplyShards.End = TInstant::Now();
+            result->CommitPrepareShards = UserFacingCommitPrepareShards;
+            result->CommitCoordinator = UserFacingCommitCoordinator;
+            result->CommitApplyShards = UserFacingCommitApplyShards;
+            for (const auto& [shardId, ack] : UserFacingShardAcks) {
+                if (result->ShardCommitAcks.size() >= MaxUserFacingShardReadsPerTask) {
+                    break;
+                }
+                result->ShardCommitAcks.push_back(ack);
+            }
+            Send<ESendingType::Tail>(ExecuterActorId, result.release());
             ExecuterActorId = {};
             AFL_ENSURE(GetTotalMemory() == 0);
             PassAway();
@@ -6242,6 +6266,11 @@ private:
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
     std::optional<TCommitTimestamp> CommitTimestamp;
+    bool CollectUserFacingShards = false;
+    std::unordered_map<ui64, TUserFacingShardCommitAck> UserFacingShardAcks;
+    TUserFacingTraceTimeline::TWindow UserFacingCommitPrepareShards;
+    TUserFacingTraceTimeline::TWindow UserFacingCommitCoordinator;
+    TUserFacingTraceTimeline::TWindow UserFacingCommitApplyShards;
 
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;

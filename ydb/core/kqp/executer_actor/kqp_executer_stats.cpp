@@ -3,6 +3,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
+#include <algorithm>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -1265,19 +1267,44 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     nodeStats.UpdateStats(taskStats, state, stats.GetMemoryUsage(), stats.GetMaxMemoryUsage());
                 }
 
-                /* if (CollectProfileStats(StatsMode)) {
+                auto taskDuration = TDuration::MilliSeconds(
+                    taskStats.GetStartTimeMs() != 0 && taskStats.GetFinishTimeMs() >= taskStats.GetStartTimeMs()
+                    ? taskStats.GetFinishTimeMs() - taskStats.GetStartTimeMs()
+                    : 0);
+                auto& longestTaskDuration = LongestTaskDurations[taskStats.GetStageId()];
+                if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
+                    CollectStatsByLongTasks = true;
+                    longestTaskDuration = taskDuration;
+                    stageStats.ComputeActors.clear();
                     stageStats.ComputeActors[taskId].CopyFrom(stats);
-                } else */ {
-                    auto taskDuration = TDuration::MilliSeconds(
-                        taskStats.GetStartTimeMs() != 0 && taskStats.GetFinishTimeMs() >= taskStats.GetStartTimeMs()
-                        ? taskStats.GetFinishTimeMs() - taskStats.GetStartTimeMs()
-                        : 0);
-                    auto& longestTaskDuration = LongestTaskDurations[taskStats.GetStageId()];
-                    if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
-                        CollectStatsByLongTasks = true;
-                        longestTaskDuration = taskDuration;
-                        stageStats.ComputeActors.clear();
-                        stageStats.ComputeActors[taskId].CopyFrom(stats);
+                }
+                if (CollectUserFacingTaskStats) {
+                    if (state == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
+                        auto& agg = UserFacingStageAggs[taskStats.GetStageId()];
+                        ++agg.TasksByNode[nodeId];
+                        const ui64 durMs = taskDuration.MilliSeconds();
+                        if (durMs < agg.MinDurationMs) {
+                            agg.MinDurationMs = durMs;
+                            agg.MinDurationNode = nodeId;
+                        }
+                        if (durMs >= agg.MaxDurationMs) {
+                            agg.MaxDurationMs = durMs;
+                            agg.MaxDurationNode = nodeId;
+                        }
+                    }
+                    auto& stageTasks = UserFacingTaskStats[taskStats.GetStageId()];
+                    if (auto taskIt = stageTasks.find(taskId); taskIt != stageTasks.end()) {
+                        taskIt->second = MakeUserFacingTaskSnapshot(taskStats);
+                    } else if (stageTasks.size() < MaxUserFacingTraceTasksPerStage) {
+                        stageTasks[taskId] = MakeUserFacingTaskSnapshot(taskStats);
+                    } else if (taskDuration > TDuration::Zero()) {
+                        // Keep the longest tasks rather than the first tasks that reported.
+                        auto minIt = std::min_element(stageTasks.begin(), stageTasks.end(),
+                            [](const auto& a, const auto& b) { return a.second.DurationMs() < b.second.DurationMs(); });
+                        if (minIt != stageTasks.end() && taskDuration.MilliSeconds() > minIt->second.DurationMs()) {
+                            stageTasks.erase(minIt);
+                            stageTasks[taskId] = MakeUserFacingTaskSnapshot(taskStats);
+                        }
                     }
                 }
             }
@@ -1523,8 +1550,20 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     metrics->OutputBytes = outputBytes;
 }
 
-void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) {
-    switch (StatsMode) {
+void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode) {
+    ExportExecStatsImpl(stats, exportMode, true);
+}
+
+void TQueryExecutionStats::CopyExecStats(NYql::NDqProto::TDqExecutionStats& stats,
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode) {
+    ExportExecStatsImpl(stats, exportMode, false);
+}
+
+void TQueryExecutionStats::ExportExecStatsImpl(NYql::NDqProto::TDqExecutionStats& stats,
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode, bool moveComputeStats) {
+    const auto mode = exportMode.value_or(StatsMode);
+    switch (mode) {
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
             [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL: {
@@ -1619,10 +1658,14 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                     ExportAggStats(m, (*stageStats.MutableMkql())[id]);
                 }
                 for (auto& [id, caStats] : stageStat.ComputeActors) {
-                    stageStats.AddComputeActors()->Swap(&caStats);
+                    if (moveComputeStats) {
+                        stageStats.AddComputeActors()->Swap(&caStats);
+                    } else {
+                        stageStats.AddComputeActors()->CopyFrom(caStats);
+                    }
                 }
 
-                if (CollectProfileStats(StatsMode)) {
+                if (CollectProfileStats(mode)) {
                     auto it = ShardsCountByNode.find(stageId.StageId);
                     if (it != ShardsCountByNode.end()) {
                         NKqpProto::TKqpStageExtraStats extraStats;
@@ -1636,7 +1679,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 }
             }
 
-            if (CollectProfileStats(StatsMode)) {
+            if (CollectProfileStats(mode)) {
                 for (auto& [nodeId, nodeStat] : NodeStats) {
                     auto& nodeStats = *stats.AddNodes();
                     nodeStats.SetNodeId(nodeId);

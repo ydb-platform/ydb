@@ -167,6 +167,8 @@ public:
 
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
+        // Collection depth for a sampled trace; response stats still use StatsMode.
+        Ydb::Table::QueryStatsCollection::Mode UserFacingTraceCollectionMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
         TString UserTraceId;
         ui64 QuerySpanId = 0;  // QuerySpanId of the current query being executed
 

@@ -3,6 +3,7 @@
 #include "kqp_worker_common.h"
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
+#include "kqp_user_facing_tracing.h"
 
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
@@ -909,8 +910,23 @@ public:
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
 
+        MarkCompileStart();
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
             QueryState->KqpSessionSpan.GetTraceId());
+    }
+
+    // Ignore later script compilations so the window cannot stretch across executions.
+    // Wilson timestamps use wall clock rather than the simulated runtime clock.
+    void MarkCompileStart() {
+        if (QueryState && !QueryState->CompileWallStart) {
+            QueryState->CompileWallStart = TInstant::Now();
+        }
+    }
+
+    void MarkCompileEnd() {
+        if (QueryState && QueryState->CompileWallStart && QueryState->QueryStats.Executions.empty()) {
+            QueryState->CompileWallEnd = TInstant::Now();
+        }
     }
 
     void CompileSplittedQuery() {
@@ -968,6 +984,7 @@ public:
 
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
+        MarkCompileEnd();
 
         // saving compile response and checking that compilation status
         // is success.
@@ -1042,6 +1059,7 @@ public:
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
 
+        MarkCompileStart();
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), request.release(), 0, QueryState->QueryId,
             QueryState->KqpSessionSpan.GetTraceId());
     }
@@ -1695,6 +1713,14 @@ public:
             }
 
             request.StatsMode = queryState->GetStatsMode();
+            if (queryState->UserFacingTraceId) {
+                // PROFILE adds no data used by the renderer, so sampled traces stop at FULL.
+                const ui8 level = queryState->UserFacingTraceId.GetVerbosity();
+                using TLevels = TComponentTracingLevels::TQueryProcessor;
+                request.UserFacingTraceCollectionMode =
+                      level >= TLevels::Basic ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL
+                     :                           Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+            }
             request.CollectAffectedRows = queryState->GetCollectAffectedRows();
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
             request.QueryType = queryState->GetType();
@@ -2772,6 +2798,10 @@ public:
         if (executerResults.HasStats()) {
             QueryState->QueryStats.Executions.emplace_back();
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
+            auto& userTrace = QueryState->QueryStats.UserFacingTraces.emplace_back();
+            if (ev->UserFacingTraceData) {
+                userTrace = std::move(*ev->UserFacingTraceData);
+            }
         }
 
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
@@ -3467,6 +3497,7 @@ public:
                 if (QueryState->KqpSessionSpan) {
                     QueryState->KqpSessionSpan.EndOk();
                 }
+                FinishUserFacingSpan(*QueryState, /*success*/ true, Ydb::StatusIds::StatusCode_Name(status));
                 LWTRACK(KqpSessionReplySuccess, QueryState->Orbit, record.GetArena() ? record.GetArena()->SpaceUsed() : 0);
             }
         } else {
@@ -3474,6 +3505,10 @@ public:
                 if (QueryState->KqpSessionSpan) {
                     QueryState->KqpSessionSpan.EndError(response.DebugString());
                 }
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
+                FinishUserFacingSpan(*QueryState, /*success*/ false, Ydb::StatusIds::StatusCode_Name(status),
+                    issues.ToOneLineString());
                 LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
             }
         }

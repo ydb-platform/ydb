@@ -622,21 +622,12 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         TControlBoard::RegisterSharedControl(UsePerChannelReadQueues_Base, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
         UsePerChannelReadQueues.ResetControl(UsePerChannelReadQueues_Base);
 
-<<<<<<< HEAD
         ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
         << " Init KeyValue with ICB UsePayload# " << UsePayload.Update(ctx.Now())
         << " ReadRequestsInFlightLimit# " << ReadRequestsInFlightLimit.Update(ctx.Now())
         << " RejectNonExistentStorageChannel# " << RejectNonExistentStorageChannel.Update(ctx.Now())
+        << " UsePerChannelReadQueues# " << UsePerChannelReadQueues.Update(ctx.Now())
         << " Marker# KV92");
-=======
-        YDB_LOG_DEBUG("Init KeyValue with ICB",
-            {"keyValue", TabletId},
-            {"usePayload", UsePayload.Update(ctx.Now())},
-            {"readRequestsInFlightLimit", ReadRequestsInFlightLimit.Update(ctx.Now())},
-            {"rejectNonExistentStorageChannel", RejectNonExistentStorageChannel.Update(ctx.Now())},
-            {"usePerChannelReadQueues", UsePerChannelReadQueues.Update(ctx.Now())},
-            {"marker", "KV92"});
->>>>>>> bedf40bddc8 (Separate read queues for channels in keyvalue tablet (#45783))
     }
 
     // Issue hard barriers
@@ -2065,23 +2056,12 @@ void TKeyValueState::ProcessPostponedChannels(const TVector<ui32> &channels, con
 }
 
 void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 step, const TActorContext &ctx,
-<<<<<<< HEAD
-        const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat) {
+        const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat,
+        const TVector<ui32> &acquiredChannels) {
     ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
         << " OnRequestComplete uid# " << requestUid << " generation# " << generation
         << " step# " << step << " ChannelGeneration# " << StoredState.GetChannelGeneration()
         << " ChannelStep# " << StoredState.GetChannelStep());
-=======
-        const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat,
-        const TVector<ui32> &acquiredChannels) {
-    YDB_LOG_DEBUG("OnRequestComplete",
-        {"keyValue", TabletId},
-        {"uid", requestUid},
-        {"generation", generation},
-        {"step", step},
-        {"channelGeneration", StoredState.GetChannelGeneration()},
-        {"channelStep", StoredState.GetChannelStep()});
->>>>>>> bedf40bddc8 (Separate read queues for channels in keyvalue tablet (#45783))
 
     CountLatencyBsOps(stat);
 
@@ -3497,30 +3477,13 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
             RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             ++RoInlineIntermediatesInFlight;
         } else {
-<<<<<<< HEAD
-            ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
-            if (IntermediatesInFlight < limit) {
-                ++IntermediatesInFlight;
-                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                    << " Create storage read request, InFlight# " << IntermediatesInFlight << "/" << limit << ", Marker# KV54");
-                RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
-            } else {
-                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                    << " Enqueue storage read request " << IntermediatesInFlight << '/' << limit << ", Marker# KV56");
-                PostponeIntermediate<TEvKeyValue::TEvRead>(std::move(intermediate));
-=======
             if (TryStartOrPostponeIntermediate(intermediate, ctx)) {
-                YDB_LOG_DEBUG("Create storage read request, /",
-                    {"keyValue", TabletId},
-                    {"inFlight", IntermediatesInFlight},
-                    {"marker", "KV54"});
+                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " Create storage read request, InFlight# " << IntermediatesInFlight << ", Marker# KV54");
                 RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             } else {
-                YDB_LOG_DEBUG("Enqueue storage read request /",
-                    {"keyValue", TabletId},
-                    {"intermediatesInFlight", IntermediatesInFlight},
-                    {"marker", "KV56"});
->>>>>>> bedf40bddc8 (Separate read queues for channels in keyvalue tablet (#45783))
+                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " Enqueue storage read request " << IntermediatesInFlight << ", Marker# KV56");
             }
         }
         CountRequestTakeOffOrEnqueue(requestType);
@@ -3548,29 +3511,13 @@ void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, c
             RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             ++RoInlineIntermediatesInFlight;
         } else {
-<<<<<<< HEAD
-            ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
-            if (IntermediatesInFlight < limit) {
-                ++IntermediatesInFlight;
+            if (TryStartOrPostponeIntermediate(intermediate, ctx)) {
                 ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                    << " Create storage read range request, InFlight# " << IntermediatesInFlight << "/" << limit << ", Marker# KV66");
+                    << " Create storage read range request, InFlight# " << IntermediatesInFlight << ", Marker# KV66");
                 RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             } else {
                 ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                     << " Enqueue storage read range request, Marker# KV59");
-                PostponeIntermediate<TEvKeyValue::TEvReadRange>(std::move(intermediate));
-=======
-            if (TryStartOrPostponeIntermediate(intermediate, ctx)) {
-                YDB_LOG_DEBUG("Create storage read range request, /",
-                    {"keyValue", TabletId},
-                    {"inFlight", IntermediatesInFlight},
-                    {"marker", "KV66"});
-                RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
-            } else {
-                YDB_LOG_DEBUG("Enqueue storage read range request,",
-                    {"keyValue", TabletId},
-                    {"marker", "KV59"});
->>>>>>> bedf40bddc8 (Separate read queues for channels in keyvalue tablet (#45783))
             }
         }
         CountRequestTakeOffOrEnqueue(requestType);
@@ -3702,29 +3649,13 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
                 RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
                 ++RoInlineIntermediatesInFlight;
             } else {
-<<<<<<< HEAD
-                ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
-                if (IntermediatesInFlight < limit) {
-                    ++IntermediatesInFlight;
+                if (TryStartOrPostponeIntermediate(intermediate, ctx)) {
                     ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                        << " Create storage request for RO/RW, InFlight# " << IntermediatesInFlight << "/" << limit << ", Marker# KV43");
+                        << " Create storage request for RO/RW, InFlight# " << IntermediatesInFlight << ", Marker# KV43");
                     RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
                 } else {
                     ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                         << " Enqueue storage request for RO/RW, Marker# KV44");
-                    PostponeIntermediate<TEvKeyValue::TEvRequest>(std::move(intermediate));
-=======
-                if (TryStartOrPostponeIntermediate(intermediate, ctx)) {
-                    YDB_LOG_DEBUG("Create storage request for RO/RW, /",
-                        {"keyValue", TabletId},
-                        {"inFlight", IntermediatesInFlight},
-                        {"marker", "KV43"});
-                    RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
-                } else {
-                    YDB_LOG_DEBUG("Enqueue storage request for RO/RW,",
-                        {"keyValue", TabletId},
-                        {"marker", "KV44"});
->>>>>>> bedf40bddc8 (Separate read queues for channels in keyvalue tablet (#45783))
                 }
             }
         }

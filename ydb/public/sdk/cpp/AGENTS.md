@@ -21,6 +21,7 @@ Service protobufs and gRPC definitions live under `ydb/public/api`; do not dupli
 ## Development rules
 
 - Use C++20 or earlier and follow the surrounding style: four spaces, no tabs, attached braces, `#pragma once`, and `NYdb::inline Dev`. Use `./ya style <changed-files>` for formatting; avoid unrelated reformatting and include churn.
+- Treat compiler warnings and `.clang-tidy` findings as errors. Fix the cause; do not add broad suppressions or weaken `.clang-tidy` to make a change pass. A narrow suppression requires a comment explaining why the diagnostic is a false positive.
 - Put stable API declarations under `include/ydb-cpp-sdk/` and implementation under the matching `src/client/` or `src/library/` module. Update every affected `ya.make` explicitly.
 - Preserve public source compatibility by default. Do not silently remove or rename public symbols, change defaults or ownership, or reorder enum values. Prefer additive overloads and deprecation.
 - Public headers must compile for consumers without private `src/` headers or transitive-include accidents. 
@@ -37,22 +38,27 @@ Choose the narrowest affected module first. Tests already include compilation.
 
 ```bash
 # Build
-./ya make --build relwithdebinfo <folder>
+./ya make --build relwithdebinfo -DUSER_CXXFLAGS=-Werror <folder>
 
 # Run all tests in a target/subtree
-./ya make --build relwithdebinfo -tA <folder> 2>&1 | tail
+./ya make --build relwithdebinfo -DUSER_CXXFLAGS=-Werror -tA <folder> 2>&1 | tail
 
 # Run one suite/test (quote the glob)
-./ya make --build relwithdebinfo -tA <folder> -F '*test-filter*' 2>&1 | tail
+./ya make --build relwithdebinfo -DUSER_CXXFLAGS=-Werror -tA <folder> -F '*test-filter*' 2>&1 | tail
 
 # Repeat a suspected flake
-./ya make --build relwithdebinfo -tA <folder> -F '*test-filter*' --test-retries N 2>&1 | tail
+./ya make --build relwithdebinfo -DUSER_CXXFLAGS=-Werror -tA <folder> -F '*test-filter*' --test-retries N 2>&1 | tail
+
+# Run clang-tidy with this SDK's configuration
+./ya make --build relwithdebinfo -DUSER_CXXFLAGS=-Werror -tA \
+  -DTIDY=yes -DTIDY_CONFIG=ydb/public/sdk/cpp/.clang-tidy <folder> 2>&1 | tail
 
 # Validate standalone-SDK production dependencies
 python3 ydb/public/sdk/cpp/scripts/check_peerdirs.py
 ```
 
-- Do not pass `-j` and do not force rebuilds.
+- Always pass `-DUSER_CXXFLAGS=-Werror`; `ya make` does not accept a standalone `-werror` option. Do not pass `-j` and do not force rebuilds.
+- Run clang-tidy on every changed C++ module. Start with the narrowest target; broaden to the affected client/subtree for shared headers or common code. The SDK `.clang-tidy` deliberately enables expensive analyzer and bug-finding checks, so do not run it over the entire SDK unless the change is cross-cutting.
 - Unit-test pure mapping, validation, settings, result parsing, retry decisions, and lifecycle behavior. Follow the target's existing GoogleTest or `Y_UNIT_TEST` framework.
 - Use integration tests when correctness depends on a real YDB service, discovery, sessions, transactions, streaming, auth, or topic behavior. Keep recipe resource/timeout declarations in `ya.make` consistent with neighboring tests.
 - For concurrency or shutdown fixes, add a deterministic regression test and use `--test-retries` to probe flakiness. Do not replace synchronization with sleeps.
@@ -67,5 +73,6 @@ Review the behavior, not just compilation:
 - **Async safety:** Can callbacks race with cancellation or destruction, outlive captured references, complete twice, hang a future, deadlock during teardown, or run user code under a lock?
 - **Retries and sessions:** Is retrying safe for this operation? Are idempotency, deadline propagation, backoff, session invalidation, endpoint selection, and streaming end-of-stream behavior correct?
 - **Dependencies:** Does the change respect public/private and core/plugin boundaries, list direct `PEERDIR`s/SRCS, pass `check_peerdirs.py`, and remain exportable to the standalone SDK?
+- **Static analysis:** Was the affected module built with warnings treated as errors (`-DUSER_CXXFLAGS=-Werror`) and checked with the SDK `.clang-tidy`? Were findings fixed rather than hidden by broad suppression?
 - **Tests:** Do tests cover success, transport/server failure, invalid input, boundary values, cancellation/teardown, and the original regression without timing assumptions? Is an integration test needed?
 - **User impact:** Do examples, comments, and `CHANGELOG.md` match the actual behavior, with no credentials, endpoints, generated output, or large artifacts accidentally committed?

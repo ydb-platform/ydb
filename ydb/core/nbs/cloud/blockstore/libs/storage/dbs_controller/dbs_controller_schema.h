@@ -11,21 +11,23 @@ namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 
 struct TDbsControllerSchema: public NKikimr::NIceDb::Schema
 {
-    struct Dummy: public TTableSchema<1>
-    {
-        struct DummyA: public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
-        {
-        };
+    struct DDiskMap : Table<1> {
+        struct TabletId : Column<1, NKikimr::NScheme::NTypeIds::Uint64> {};
 
-        struct DummyB: public Column<2, NKikimr::NScheme::NTypeIds::Uint32>
-        {
-        };
+        // DDiskId.NodeId
+        struct NodeId : Column<1, NKikimr::NScheme::NTypeIds::Uint32> {};
 
-        using TKey = TableKey<DummyA>;
-        using TColumns = TableColumns<DummyA, DummyB>;
+        // DDiskId.PDiskId
+        struct PDiskId : Column<1, NKikimr::NScheme::NTypeIds::Uint32> {};
+
+        // DDiskId.DDiskSlotId
+        struct DDiskSlotId : Column<1, NKikimr::NScheme::NTypeIds::Uint32> {};
+
+        using TKey = TableKey<TabletId, NodeId, PDiskId, DDiskSlotId>;
+        using TColumns = TableColumns<TabletId, NodeId, PDiskId, DDiskSlotId>;
     };
 
-    using TTables = SchemaTables<Dummy>;
+    using TTables = SchemaTables<DDiskMap>;
 
     using TSettings =
         SchemaSettings<ExecutorLogBatching<true>, ExecutorLogFlushPeriod<0>>;

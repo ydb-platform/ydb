@@ -1,4 +1,4 @@
-### Changelog entry <!-- a user-readable short description of the changes that goes to CHANGELOG.md and Release Notes; leave empty if the change should not be mentioned in the changelog -->
+### Changelog entry <!-- a user-readable short description of the changes that goes to CHANGELOG.md and Release Notes -->
 
 ...
 

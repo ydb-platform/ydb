@@ -463,7 +463,6 @@ public:
         Functions_["DynamicVariant"] = &TCallableConstraintTransformer::DynamicVariantWrap;
         Functions_["Guess"] = &TCallableConstraintTransformer::GuessWrap;
         Functions_["Mux"] = &TCallableConstraintTransformer::MuxWrap;
-        Functions_["Demux"] = &TCallableConstraintTransformer::FromFirst<TStreamingConstraintNode>;
         Functions_["Nth"] = &TCallableConstraintTransformer::NthWrap;
         Functions_["EquiJoin"] = &TCallableConstraintTransformer::EquiJoinWrap;
         Functions_["JoinDict"] = &TCallableConstraintTransformer::JoinDictWrap;
@@ -2282,8 +2281,8 @@ private:
 
         const auto inputVarIndex = input->Head().GetConstraint<TVarIndexConstraintNode>();
         const bool emptyInput = input->Head().GetConstraint<TEmptyConstraintNode>();
-        bool hasStreamingOutput = false;
-        if (GetSeqItemType(*input->GetTypeAnn()).GetKind() == ETypeAnnotationKind::Variant) {
+        const bool variantOutput = GetSeqItemType(*input->GetTypeAnn()).GetKind() == ETypeAnnotationKind::Variant;
+        if (variantOutput) {
             ui32 outIndexOffset = 0;
             TMultiConstraintNode::TMapType multiItems;
             TVarIndexConstraintNode::TMapType remapItems;
@@ -2348,9 +2347,6 @@ private:
             }
 
             if (!multiItems.empty()) {
-                hasStreamingOutput = std::any_of(multiItems.begin(), multiItems.end(), [](const auto& item) {
-                    return !!item.second.template GetConstraint<TStreamingConstraintNode>();
-                });
                 input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
             }
             if (emptyOut) {
@@ -2361,7 +2357,7 @@ private:
             input->CopyConstraints(*input->Child(3));
         }
 
-        if ((hasStreamingOutput || inputStreaming) && !input->GetConstraint<TStreamingConstraintNode>()) {
+        if (!variantOutput && inputStreaming && !input->GetConstraint<TStreamingConstraintNode>()) {
             input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
         }
 
@@ -2642,11 +2638,9 @@ private:
                 TMultiConstraintNode::TMapType items;
                 ui32 index = 0;
                 ui32 emptyCount = 0;
-                bool hasStreaming = false;
                 for (auto& child: input->Head().Children()) {
                     if (!child->GetConstraint<TEmptyConstraintNode>()) {
                         items.push_back(std::make_pair(index, child->GetConstraintSet()));
-                        hasStreaming = hasStreaming || !!child->GetConstraint<TStreamingConstraintNode>();
                     } else {
                         ++emptyCount;
                     }
@@ -2657,10 +2651,6 @@ private:
                     input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(items)));
                 } else if (index == emptyCount) {
                     input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
-                }
-
-                if (hasStreaming) {
-                    input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
                 }
             }
         }
@@ -2708,10 +2698,6 @@ private:
                 if (auto c = multi->GetItem(FromString<ui32>(input->Child(1)->Content()))) {
                     input->SetConstraints(*c);
                 }
-            }
-
-            if (const auto c = input->Head().GetConstraint<TStreamingConstraintNode>()) {
-                input->AddConstraint(c);
             }
         }
         return TStatus::Ok;

@@ -23,9 +23,9 @@ namespace NKikimr {
 namespace NDataShard {
 
 // One writer's position in a lock's uncommitted write chain
-struct TLockWriteIndex {
+struct TLockWriteSeqNum {
     ui64 WriterIndex = 0;
-    ui64 WriteIndex = 0;
+    ui64 WriteSeqNum = 0;
 };
 
 class ILocksDb {
@@ -48,7 +48,7 @@ public:
         ui64 CreateTs;
         ui64 Flags;
         ui64 WriterIndex = 0;
-        ui64 WriteIndex = 0;
+        ui64 WriteSeqNum = 0;
         ui64 VictimQuerySpanId = 0;
         ui64 BreakerQuerySpanId = 0;
         ui32 BreakerNodeId = 0;
@@ -77,7 +77,7 @@ public:
     virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
-    virtual void PersistLockWriteIndex(ui64 lockId, ui64 writerIndex, ui64 writeIndex) = 0;
+    virtual void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
 
     // Persist adding/removing info on locked ranges
@@ -456,12 +456,12 @@ public:
     void AddWaitPersistentCallback(ILocksDb* db);
 
     ui64 GetWriterIndex() const { return WriterIndex; }
-    ui64 GetWriteIndex() const { return WriteIndex; }
-    bool SetWriteIndex(ui64 writerIndex, ui64 writeIndex, ILocksDb* db);
+    ui64 GetWriteSeqNum() const { return WriteSeqNum; }
+    bool SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
 
-    // Statistics of the write at WriteIndex, null when the shard doesn't remember them
-    const NKikimrQueryStats::TTxStats* GetWriteIndexStats() const { return WriteIndexStats.get(); }
-    void SetWriteIndexStats(const NKikimrQueryStats::TTxStats& stats);
+    // Statistics of the write at WriteSeqNum, null when the shard doesn't remember them
+    const NKikimrQueryStats::TTxStats* GetWriteSeqNumStats() const { return WriteSeqNumStats.get(); }
+    void SetWriteSeqNumStats(const NKikimrQueryStats::TTxStats& stats);
 
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 
@@ -511,10 +511,10 @@ private:
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
     ui64 WriterIndex = 0;
-    ui64 WriteIndex = 0;
-    // Statistics of the write at WriteIndex. In-memory only and never migrated, so a
+    ui64 WriteSeqNum = 0;
+    // Statistics of the write at WriteSeqNum. In-memory only and never migrated, so a
     // duplicate that arrives after a restart is answered without statistics.
-    std::unique_ptr<NKikimrQueryStats::TTxStats> WriteIndexStats;
+    std::unique_ptr<NKikimrQueryStats::TTxStats> WriteSeqNumStats;
 
 public:
     TAsyncEvent OnBrokenEvent;
@@ -961,7 +961,7 @@ struct TLocksUpdate {
     TLockInfo::TPtr Lock;
 
     // This uncommitted write's position in its writer's chain; ApplyLocks persists it on the lock.
-    std::optional<TLockWriteIndex> SetWriteIndex;
+    std::optional<TLockWriteSeqNum> SetWriteSeqNum;
 
     // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
     // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.

@@ -90,29 +90,29 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
         auto lockKey = MakeLockKey(lockProto);
 
         auto lock = sysLocks.GetLock(lockKey);
-        // The echoed write indexes must exactly match the shard's.
-        bool writeIndexMismatch = false;
-        if (lock.WriteIndexKnown) {
-            if (lockProto.WriteIndexesSize() > 1) {
-                writeIndexMismatch = true;
-            } else if (lockProto.WriteIndexesSize() == 1) {
-                const auto& writeIndex = lockProto.GetWriteIndexes(0);
-                writeIndexMismatch = writeIndex.GetWriterIndex() != lock.WriterIndex
-                                  || writeIndex.GetWriteIndex() != lock.WriteIndex;
+        // The echoed write seq nums must exactly match the shard's.
+        bool writeSeqNumMismatch = false;
+        if (lock.WriteSeqNumKnown) {
+            if (lockProto.WriteSeqNumsSize() > 1) {
+                writeSeqNumMismatch = true;
+            } else if (lockProto.WriteSeqNumsSize() == 1) {
+                const auto& writeSeqNum = lockProto.GetWriteSeqNums(0);
+                writeSeqNumMismatch = writeSeqNum.GetWriterIndex() != lock.WriterIndex
+                                   || writeSeqNum.GetWriteSeqNum() != lock.WriteSeqNum;
             } else {
-                writeIndexMismatch = lock.WriteIndex != 0;
+                writeSeqNumMismatch = lock.WriteSeqNum != 0;
             }
         }
         if (lock.Generation != lockProto.GetGeneration() ||
             lock.Counter != lockProto.GetCounter() ||
-            writeIndexMismatch)
+            writeSeqNumMismatch)
         {
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "ValidateLocks: broken lock "
                 << lockProto.GetLockId()
                 << " expected " << lockProto.GetGeneration() << ":" << lockProto.GetCounter()
-                << " write indexes " << lockProto.GetWriteIndexes().size()
+                << " write seq nums " << lockProto.GetWriteSeqNums().size()
                 << " found " << lock.Generation << ":" << lock.Counter
-                << " write index " << lock.WriterIndex << ":" << lock.WriteIndex);
+                << " write seq num " << lock.WriterIndex << ":" << lock.WriteSeqNum);
             brokenLocks.emplace_back(lockProto);
         }
     }

@@ -112,13 +112,13 @@ public:
                 lockPtr->Lock.Proto.SetHasWrites(true);
             }
             // Merge per writer so an echo from a later write can't drop another writer's entry.
-            for (const auto& writeIndex : lock.Proto.GetWriteIndexes()) {
-                auto* existing = FindIfPtr(*lockPtr->Lock.Proto.MutableWriteIndexes(),
-                    [&](const auto& entry) { return entry.GetWriterIndex() == writeIndex.GetWriterIndex(); });
+            for (const auto& writeSeqNum : lock.Proto.GetWriteSeqNums()) {
+                auto* existing = FindIfPtr(*lockPtr->Lock.Proto.MutableWriteSeqNums(),
+                    [&](const auto& entry) { return entry.GetWriterIndex() == writeSeqNum.GetWriterIndex(); });
                 if (existing) {
-                    existing->SetWriteIndex(writeIndex.GetWriteIndex());
+                    existing->SetWriteSeqNum(writeSeqNum.GetWriteSeqNum());
                 } else {
-                    *lockPtr->Lock.Proto.AddWriteIndexes() = writeIndex;
+                    *lockPtr->Lock.Proto.AddWriteSeqNums() = writeSeqNum;
                 }
             }
 
@@ -174,9 +174,9 @@ public:
         return true;
     }
 
-    ui64 NextWriteIndex(ui64 writerIndex, ui64 shardId) override {
+    ui64 NextWriteSeqNum(ui64 writerIndex, ui64 shardId) override {
         AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
-        return ++ShardsInfo.at(shardId).WriteIndexes[writerIndex];
+        return ++ShardsInfo.at(shardId).WriteSeqNums[writerIndex];
     }
 
     void BreakLock(ui64 shardId) override {
@@ -373,7 +373,7 @@ public:
     }
 
     bool CanUseImmediateCommit() const override {
-        return IsSingleShard() && !HasOlapTable() 
+        return IsSingleShard() && !HasOlapTable()
             && GetTopicOperations().GetSize() <= 1
             && IsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
     }
@@ -703,8 +703,8 @@ private:
         TVector<ui64> BreakerQuerySpanIds;
         THashSet<ui64> BreakerQuerySpanIdsSet;
 
-        // Last uncommitted write index sent to this shard, per writer (absent = none)
-        std::map<ui64, ui64> WriteIndexes;
+        // Last uncommitted write seq num sent to this shard, per writer (absent = none)
+        std::map<ui64, ui64> WriteSeqNums;
     };
 
     static void AddBreakerQuerySpanId(TShardInfo& shardInfo, ui64 querySpanId) {

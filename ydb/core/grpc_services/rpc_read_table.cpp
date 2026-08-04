@@ -250,7 +250,7 @@ private:
                 return ReplyFinishStream(Ydb::StatusIds::TIMEOUT, issueMessage, ctx);
             }
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest: {
-                TStringStream str = "Got WrongRequest response from TxProxy";
+                TString str = "Got WrongRequest response from TxProxy";
                 const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, str);
                 auto tmp = issueMessage.Add();
                 NYql::IssueToMessage(issue, tmp);

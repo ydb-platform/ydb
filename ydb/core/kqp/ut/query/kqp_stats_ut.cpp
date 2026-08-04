@@ -302,7 +302,9 @@ Y_UNIT_TEST(DataQueryMulti) {
 }
 
 Y_UNIT_TEST(TxIdInFullStatsPlan) {
-    auto kikimr = DefaultKikimrRunner();
+    NKikimrConfig::TAppConfig app;
+    app.MutableFeatureFlags()->SetEnableTxIdInStats(true);
+    TKikimrRunner kikimr(app);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -334,8 +336,33 @@ Y_UNIT_TEST(TxIdInFullStatsPlan) {
     UNIT_ASSERT_C(txIdFound, result.GetQueryPlan());
 }
 
-Y_UNIT_TEST(NoTxIdForLiteralOnlyQuery) {
+Y_UNIT_TEST(NoTxIdWhenFeatureFlagDisabled) {
+    // EnableTxIdInStats defaults to false: TxId must not appear in the plan.
     auto kikimr = DefaultKikimrRunner();
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT * FROM `/Root/TwoShard`;
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    AssertSuccessResult(result);
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+
+    for (const auto& phase : plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe()) {
+        UNIT_ASSERT_C(!phase.GetMapSafe().contains("TxId"), result.GetQueryPlan());
+    }
+}
+
+Y_UNIT_TEST(NoTxIdForLiteralOnlyQuery) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableFeatureFlags()->SetEnableTxIdInStats(true);
+    TKikimrRunner kikimr(app);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 

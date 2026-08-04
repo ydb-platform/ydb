@@ -1,5 +1,6 @@
 #include "kqp_executer_stats.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
 namespace NKikimr::NKqp {
@@ -1692,7 +1693,8 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
     ExtraStats.SetAffectedShards(AffectedShards.size());
     // Executer TxId, so that query stats can be matched with LWTrace records.
     // It is 0 for literal-only execution (such phases never reach shards).
-    if (TasksGraph && TasksGraph->GetMeta().TxId) {
+    // Gated by EnableTxIdInStats feature flag.
+    if (AppData()->FeatureFlags.GetEnableTxIdInStats() && TasksGraph && TasksGraph->GetMeta().TxId) {
         ExtraStats.SetTxId(TasksGraph->GetMeta().TxId);
     }
     stats.MutableExtra()->PackFrom(ExtraStats);

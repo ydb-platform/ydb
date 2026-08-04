@@ -33,34 +33,14 @@ The plugin can be installed in two ways:
 ### Installation via P2 repository URL {#installation-url}
 
 1. Open DBeaver. In the top menu, select **Help → Install New Software...**.
-
-   {% cut "Screenshot" %}
-
-   ![](./_assets/dbeaver-plugin-context.png)
-
-   {% endcut %}
 2. Click the **Add...** button to the right of the **Work with:** field.
-
-   {% cut "Screenshot" %}
-
-   ![](./_assets/dbeaver-plugin-add.png)
-
-   {% endcut %}
 3. In the **Add Repository** window that opens, specify a repository name (e.g., `YDB Plugin`) and paste the following URL into the **Location** field:
-
 
    ```text
    https://storage.yandexcloud.net/ydb-dbeaver-plugin
    ```
 
-
    Click **Add**. DBeaver will load the repository metadata.
-
-   {% cut "Screenshot" %}
-
-   ![](./_assets/dbeaver-plugin-add-repository.png)
-
-   {% endcut %}
 
    {% note warning %}
 
@@ -68,19 +48,7 @@ The plugin can be installed in two ways:
 
    {% endnote %}
 4. A category **DBeaver YDB Support** will appear in the component list. Check it and click **Next >**.
-
-   {% cut "Screenshot" %}
-
-   ![](./_assets/dbeaver-plugin-ydb-support.png)
-
-   {% endcut %}
 5. On the **Install Details** screen, make sure both components (`org.jkiss.dbeaver.ext.ydb` and `org.jkiss.dbeaver.ext.ydb.ui`) are in the list, and click **Next >**.
-
-   {% cut "Screenshot" %}
-
-   ![](./_assets/dbeaver-plugin-install-details.png)
-
-   {% endcut %}
 6. DBeaver may show a warning about unsigned content. This is expected behavior — the plugin's JAR files are not signed with a commercial certificate. Click **Install Anyway**.
 
    {% note info %}
@@ -89,12 +57,6 @@ The plugin can be installed in two ways:
 
    {% endnote %}
 7. Review the license (Apache License 2.0), select **I accept the terms of the license agreements**, and click **Finish**.
-
-   {% cut "Screenshot" %}
-
-   ![](./_assets/dbeaver-plugin-license.png)
-
-   {% endcut %}
 8. DBeaver will install the plugin and prompt you to restart. Click **Restart Now**. After restart, the plugin will be active.
 
 ### Installation from a ZIP archive (GitHub Releases) {#installation-zip}

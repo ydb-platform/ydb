@@ -280,44 +280,168 @@
 
 - Java
 
+  Операция [UPSERT INTO](../../yql/reference/syntax/upsert_into.md) вставляет строку или обновляет существующую по первичному ключу без предварительного чтения. Для массовой неатомарной загрузки см. [пакетную вставку](./bulk-upsert.md). Структура таблицы описана в разделе [Таблицы](../../concepts/datamodel/table.md).
+
   {% list tabs %}
 
   - Native SDK
 
-    Используйте `SessionRetryContext` и `TableSession.executeDataQuery` с параметром `$seriesData` типа `List<Struct<...>>`. Значения для `AS_TABLE($seriesData)` собираются так же, как структуры строк в примере [пакетной вставки](./bulk-upsert.md).
-
     ```java
-    SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+    import java.util.ArrayList;
+    import java.util.List;
 
-    String yql = """
-            PRAGMA TablePathPrefix("/local");
-            DECLARE $seriesData AS List<Struct<
-                series_id: Uint64,
-                title: Utf8,
-                series_info: Utf8,
-                comment: Optional<Utf8>
-            >>;
-            UPSERT INTO series
-            SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
-            """;
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
+    import tech.ydb.table.values.ListType;
+    import tech.ydb.table.values.ListValue;
+    import tech.ydb.table.values.OptionalType;
+    import tech.ydb.table.values.PrimitiveType;
+    import tech.ydb.table.values.PrimitiveValue;
+    import tech.ydb.table.values.StructType;
+    import tech.ydb.table.values.Value;
 
-    Params params = Params.of("$seriesData", seriesDataListValue);
+    public class UpsertExample {
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-    retryCtx.supplyResult(session -> session.executeDataQuery(yql, TxControl.serializableRw(), params))
-            .join();
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                // Создаём таблицу, если её ещё нет (DDL — без транзакции)
+                retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("""
+                        CREATE TABLE IF NOT EXISTS series (
+                            series_id Uint64,
+                            title Text,
+                            series_info Text,
+                            comment Text,
+                            PRIMARY KEY (series_id)
+                        );
+                        """, TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                // Подготовка данных для UPSERT через AS_TABLE($seriesData)
+                StructType rowType = StructType.of(
+                        "series_id", PrimitiveType.Uint64,
+                        "title", PrimitiveType.Text,
+                        "series_info", PrimitiveType.Text,
+                        "comment", OptionalType.of(PrimitiveType.Text)
+                );
+
+                List<Value<?>> rows = new ArrayList<>();
+                rows.add(rowType.newValue(
+                        "series_id", PrimitiveValue.newUint64(1),
+                        "title", PrimitiveValue.newText("IT Crowd"),
+                        "series_info", PrimitiveValue.newText(
+                                "The IT Crowd is a British sitcom produced by Channel 4..."),
+                        "comment", OptionalType.of(PrimitiveType.Text).emptyValue()
+                ));
+                rows.add(rowType.newValue(
+                        "series_id", PrimitiveValue.newUint64(2),
+                        "title", PrimitiveValue.newText("Silicon Valley"),
+                        "series_info", PrimitiveValue.newText(
+                                "Silicon Valley is an American comedy television series..."),
+                        "comment", OptionalType.of(PrimitiveType.Text).newValue(
+                                PrimitiveValue.newText("lorem ipsum"))
+                ));
+
+                ListValue seriesData = ListType.of(rowType).newValue(rows);
+                Params params = Params.of("$seriesData", seriesData);
+
+                String upsertQuery = """
+                        DECLARE $seriesData AS List<Struct<
+                            series_id: Uint64,
+                            title: Utf8,
+                            series_info: Utf8,
+                            comment: Optional<Utf8>
+                        >>;
+                        UPSERT INTO series (series_id, title, series_info, comment)
+                        SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
+                        """;
+
+                retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery(upsertQuery, TxMode.SERIALIZABLE_RW, params)
+                )).join().getValue();
+
+                // Проверка: должно быть 2 строки
+                QueryReader countReader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT COUNT(*) AS cnt FROM series", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = countReader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Строк в таблице series: " + rs.getColumn("cnt").getUint64());
+                }
+            }
+        }
+    }
     ```
 
   - JDBC
 
     ```java
-    try (Connection conn = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
-         PreparedStatement ps = conn.prepareStatement(
-                 """
-                 REPLACE INTO series (series_id, title, series_info, comment)
-                 SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
-                 """
-         )) {
-        // Параметр $seriesData задаётся в соответствии с типом запроса (см. документацию JDBC-драйвера)
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class JdbcUpsertExample {
+        public static void main(String[] args) throws SQLException {
+            String url = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection conn = DriverManager.getConnection(url)) {
+                // Создаём таблицу (DDL выполняется в режиме автокоммита)
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("""
+                            CREATE TABLE IF NOT EXISTS series (
+                                series_id Uint64,
+                                title Text,
+                                series_info Text,
+                                comment Text,
+                                PRIMARY KEY (series_id)
+                            );
+                            """);
+                }
+
+                // REPLACE INTO — аналог UPSERT с полной перезаписью строки
+                String replaceSql = """
+                        REPLACE INTO series (series_id, title, series_info, comment)
+                        VALUES (?, ?, ?, ?);
+                        """;
+
+                try (PreparedStatement ps = conn.prepareStatement(replaceSql)) {
+                    ps.setLong(1, 1);
+                    ps.setString(2, "IT Crowd");
+                    ps.setString(3, "The IT Crowd is a British sitcom produced by Channel 4...");
+                    ps.setNull(4, java.sql.Types.VARCHAR);
+                    ps.executeUpdate();
+
+                    ps.setLong(1, 2);
+                    ps.setString(2, "Silicon Valley");
+                    ps.setString(3, "Silicon Valley is an American comedy television series...");
+                    ps.setString(4, "lorem ipsum");
+                    ps.executeUpdate();
+                }
+
+                // Проверка количества строк
+                try (Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery("SELECT COUNT(*) AS cnt FROM series")) {
+                    if (rs.next()) {
+                        System.out.println("Строк в таблице series: " + rs.getLong("cnt"));
+                    }
+                }
+            }
+        }
     }
     ```
 

@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
@@ -497,6 +498,12 @@ inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, TPlanStep p
 
 void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shardId);
 
+ui64 CountLocalDbTableRows(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& rangeSpec, const TString& fieldsSpec);
+
+void VerifyNoBackupOrRestoreArtifacts(
+    TTestBasicRuntime& runtime, const NYDBTest::NColumnShard::TController* csController, ui64 tabletId = TTestTxConfig::TxTablet0);
+
 struct TTestBlobOptions {
     THashSet<TString> NullColumns;
     THashSet<TString> SameValueColumns;
@@ -544,7 +551,8 @@ public:
                 using T = typename TWrap::T;
                 using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
 
-                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("T", typeid(T).name());
+                YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"t", typeid(T).name()});
 
                 auto& typedBuilder = static_cast<TBuilder&>(*builder);
                 if constexpr (std::is_arithmetic<TData>::value) {

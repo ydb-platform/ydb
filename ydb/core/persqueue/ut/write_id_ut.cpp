@@ -26,6 +26,15 @@ NKikimrPQ::TWriteId MakeLegacyKafkaWriteId(i64 id, i32 epoch)
     return writeId;
 }
 
+NKikimrPQ::TWriteId MakeDeferredWriteId(ui64 intPublicationId, const TString& extPublicationId)
+{
+    NKikimrPQ::TWriteId writeId;
+    auto* deferred = writeId.MutableDeferredPublicationApi();
+    deferred->SetIntPublicationId(intPublicationId);
+    deferred->SetExtPublicationId(extPublicationId);
+    return writeId;
+}
+
 Y_UNIT_TEST_SUITE(TWriteIdCompat) {
 
 Y_UNIT_TEST(UpgradeFromLegacyTopic) {
@@ -140,6 +149,51 @@ Y_UNIT_TEST(ProtoSerializeDeserializeRoundTrip) {
     UNIT_ASSERT_VALUES_EQUAL(TWriteId(std::move(parsed)), original);
 }
 
+Y_UNIT_TEST(SetWriteIdDeferredRoundTrip) {
+    const TWriteId original(MakeDeferredWriteId(42, "ext-42"));
+    NKikimrPQ::TDataTransaction tx;
+    SetWriteId(tx, original);
+
+    const TWriteId restored = GetWriteId(tx);
+    UNIT_ASSERT(restored.IsDeferredPublicationApiTransaction());
+    UNIT_ASSERT_VALUES_EQUAL(restored, original);
+
+    const auto& proto = tx.GetWriteId();
+    UNIT_ASSERT(HasCanonical(proto));
+    UNIT_ASSERT(proto.HasDeferredPublicationApi());
+    UNIT_ASSERT_VALUES_EQUAL(proto.GetDeferredPublicationApi().GetIntPublicationId(), 42u);
+    UNIT_ASSERT_VALUES_EQUAL(proto.GetDeferredPublicationApi().GetExtPublicationId(), "ext-42");
+}
+
+Y_UNIT_TEST(DowngradeToLegacyKeepsDeferredCanonical) {
+    auto writeId = MakeDeferredWriteId(7, "ext-7");
+    UNIT_ASSERT(HasCanonical(writeId));
+
+    DowngradeToLegacy(writeId);
+
+    UNIT_ASSERT(HasCanonical(writeId));
+    UNIT_ASSERT_VALUES_EQUAL(writeId.GetDeferredPublicationApi().GetIntPublicationId(), 7u);
+    UNIT_ASSERT_VALUES_EQUAL(writeId.GetDeferredPublicationApi().GetExtPublicationId(), "ext-7");
+}
+
+Y_UNIT_TEST(DowngradeToLegacyDeferredClearsStaleLegacyFields) {
+    auto writeId = MakeDeferredWriteId(7, "ext-7");
+    writeId.SetNodeId(1);
+    writeId.SetKeyId(2);
+    writeId.SetKafkaTransaction(true);
+    writeId.MutableKafkaProducerInstanceId()->SetId(3);
+    writeId.MutableKafkaProducerInstanceId()->SetEpoch(4);
+
+    DowngradeToLegacy(writeId);
+
+    UNIT_ASSERT(HasCanonical(writeId));
+    UNIT_ASSERT(!writeId.HasNodeId());
+    UNIT_ASSERT(!writeId.HasKeyId());
+    UNIT_ASSERT(!writeId.GetKafkaTransaction());
+    UNIT_ASSERT(!writeId.HasKafkaProducerInstanceId());
+    UNIT_ASSERT_VALUES_EQUAL(writeId.GetDeferredPublicationApi().GetIntPublicationId(), 7u);
+}
+
 } // Y_UNIT_TEST_SUITE(TWriteIdCompat)
 
 Y_UNIT_TEST_SUITE(TWriteIdEquality) {
@@ -174,6 +228,25 @@ Y_UNIT_TEST(HashMatchesEquality) {
     UNIT_ASSERT_VALUES_EQUAL(left.GetHash(), right.GetHash());
     UNIT_ASSERT(left != other);
     UNIT_ASSERT_VALUES_UNEQUAL(left.GetHash(), other.GetHash());
+}
+
+Y_UNIT_TEST(DeferredWriteIdsAreDistinct) {
+    const TWriteId first(MakeDeferredWriteId(1, "ext-a"));
+    const TWriteId second(MakeDeferredWriteId(2, "ext-b"));
+
+    UNIT_ASSERT(first != second);
+    UNIT_ASSERT_VALUES_UNEQUAL(first.GetHash(), second.GetHash());
+}
+
+Y_UNIT_TEST(DeferredWriteIdsIgnoreExtPublicationId) {
+    const TWriteId withExt(MakeDeferredWriteId(42, "ext-42"));
+    const TWriteId withoutExt(MakeDeferredWriteId(42, ""));
+    const TWriteId otherExt(MakeDeferredWriteId(42, "other-ext"));
+
+    UNIT_ASSERT_VALUES_EQUAL(withExt, withoutExt);
+    UNIT_ASSERT_VALUES_EQUAL(withExt, otherExt);
+    UNIT_ASSERT_VALUES_EQUAL(withExt.GetHash(), withoutExt.GetHash());
+    UNIT_ASSERT_VALUES_EQUAL(withExt.GetHash(), otherExt.GetHash());
 }
 
 } // Y_UNIT_TEST_SUITE(TWriteIdEquality)

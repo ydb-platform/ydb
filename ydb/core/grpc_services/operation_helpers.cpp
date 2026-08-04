@@ -16,6 +16,7 @@
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/forced_compaction.pb.h>
 #include <ydb/core/protos/analyze_operation.pb.h>
+#include <ydb/core/protos/set_column_constraint.pb.h>
 #include <ydb/core/util/ulid.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -194,6 +195,54 @@ void ToOperation(const NKikimrAnalyzeOp::TAnalyzeOperation& op, Ydb::Operations:
     }
     for (const auto& path : op.GetDonePaths()) {
         metadata.add_done_paths(path);
+    }
+
+    operation->mutable_metadata()->PackFrom(metadata);
+}
+
+Ydb::TOperationId ToOperationId(const NKikimrSetColumnConstraint::TSetColumnConstraint& constraint) {
+    Ydb::TOperationId operationId;
+    operationId.SetKind(Ydb::TOperationId::SET_NOT_NULL);
+    NOperationId::AddOptionalValue(operationId, "id", ToString(constraint.GetId()));
+
+    return operationId;
+}
+
+void ToOperation(const NKikimrSetColumnConstraint::TSetColumnConstraint& constraint, Ydb::Operations::Operation* operation) {
+    operation->set_id(NOperationId::ProtoToString(ToOperationId(constraint)));
+
+    if (constraint.HasStartTime()) {
+        *operation->mutable_create_time() = constraint.GetStartTime();
+    }
+    if (constraint.HasEndTime()) {
+        *operation->mutable_end_time() = constraint.GetEndTime();
+    }
+    if (constraint.HasUserSID()) {
+        operation->set_created_by(constraint.GetUserSID());
+    }
+
+    switch (constraint.GetState()) {
+        case Ydb::Table::SetNotNullState::STATE_DONE:
+            operation->set_ready(true);
+            operation->set_status(Ydb::StatusIds::SUCCESS);
+            break;
+        case Ydb::Table::SetNotNullState::STATE_CANCELLED:
+            operation->set_ready(true);
+            operation->set_status(Ydb::StatusIds::CANCELLED);
+            break;
+        default:
+            operation->set_ready(false);
+            break;
+    }
+
+    Ydb::Table::SetNotNullMetadata metadata;
+    metadata.set_state(constraint.GetState());
+    metadata.set_progress(constraint.GetProgress());
+    if (constraint.HasSettings()) {
+        metadata.set_path(constraint.GetSettings().GetTablePath());
+        for (const auto& column : constraint.GetSettings().GetNotNullColumns()) {
+            metadata.add_columns(column);
+        }
     }
 
     operation->mutable_metadata()->PackFrom(metadata);

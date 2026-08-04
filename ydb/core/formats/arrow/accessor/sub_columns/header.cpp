@@ -18,9 +18,7 @@ TConclusion<TSubColumnsHeader> TSubColumnsHeader::ReadHeader(const TString& orig
     currentIndex += protoSize;
     TDictStats columnStats = [&]() {
         if (proto.GetColumnStatsSize()) {
-            std::shared_ptr<arrow::RecordBatch> rbColumnStats =
-                NArrow::DeserializeBatch(TString(originalData.data() + currentIndex, proto.GetColumnStatsSize()), TDictStats::GetStatsSchema());
-            return TDictStats(rbColumnStats);
+            return TDictStats::DeserializeFromBlob(TString(originalData.data() + currentIndex, proto.GetColumnStatsSize()));
         } else {
             return TDictStats::BuildEmpty();
         }
@@ -28,9 +26,7 @@ TConclusion<TSubColumnsHeader> TSubColumnsHeader::ReadHeader(const TString& orig
     currentIndex += proto.GetColumnStatsSize();
     TDictStats otherStats = [&]() {
         if (proto.GetOtherStatsSize()) {
-            std::shared_ptr<arrow::RecordBatch> rbOtherStats =
-                NArrow::DeserializeBatch(TString(originalData.data() + currentIndex, proto.GetOtherStatsSize()), TDictStats::GetStatsSchema());
-            return TDictStats(rbOtherStats);
+            return TDictStats::DeserializeFromBlob(TString(originalData.data() + currentIndex, proto.GetOtherStatsSize()));
         } else {
             return TDictStats::BuildEmpty();
         }

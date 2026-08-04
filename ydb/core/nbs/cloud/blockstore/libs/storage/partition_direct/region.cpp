@@ -1,6 +1,6 @@
 #include "region.h"
 
-#include "range_translate.h"
+#include "region_geometry.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
@@ -25,7 +25,9 @@ size_t VChunkIndexFromHeaders(const TRequestHeaders& headers)
 
 TRegion::TRegion(
     NActors::TActorSystem* actorSystem,
+    ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
+    const TDiskDescription& diskDescription,
     ui32 regionIndex,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
     const TVChunkConfigByIndex& vChunkConfigs,
@@ -33,9 +35,9 @@ TRegion::TRegion(
     ui64 vChunkSize,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
+    , DiskDescription(diskDescription)
 {
-    Y_ABORT_UNLESS(vChunkSize > 0 && vChunkSize <= RegionSize);
-    const ui64 vChunksPerRegionCount = RegionSize / vChunkSize;
+    const ui64 vChunksPerRegionCount = GetVChunksPerRegion(vChunkSize);
     for (size_t i = 0; i < vChunksPerRegionCount; i++) {
         const size_t vChunkIndex = (regionIndex * vChunksPerRegionCount) + i;
         const size_t dbgIndex = vChunkIndex % directBlockGroups.size();
@@ -55,7 +57,9 @@ TRegion::TRegion(
 
         auto vChunk = std::make_shared<TVChunk>(
             ActorSystem,
+            traceService,
             partitionDirectService,
+            DiskDescription,
             vChunkConfig,
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
@@ -90,6 +94,14 @@ NThreading::TFuture<void> TRegion::Stop()
             }
         });
     return result;
+}
+
+TVChunkPtr TRegion::GetVChunk(size_t vChunkIndex) const
+{
+    if (vChunkIndex >= VChunks.size()) {
+        return nullptr;
+    }
+    return VChunks[vChunkIndex];
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(

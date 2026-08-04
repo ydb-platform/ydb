@@ -23,6 +23,8 @@ namespace NActors {
                 Module = 20,
                 Rack = 30,
                 Unit = 40,
+                // value 50 is used for PDisk domain mapping
+                // DiskScope = 50,
             };
         };
 
@@ -209,11 +211,13 @@ namespace NActors {
 
         struct TEvListNodes: public TEventLocal<TEvListNodes, EvListNodes> {
             const bool SubscribeToStaticNodeChanges = false;
+            const bool OnlyAliveDynamicNodes = true;
 
             TEvListNodes() = default;
 
-            TEvListNodes(bool subscribeToStaticNodeChanges)
+            TEvListNodes(bool subscribeToStaticNodeChanges, bool onlyAliveDynamicNodes = true)
                 : SubscribeToStaticNodeChanges(subscribeToStaticNodeChanges)
+                , OnlyAliveDynamicNodes(onlyAliveDynamicNodes)
             {}
         };
 

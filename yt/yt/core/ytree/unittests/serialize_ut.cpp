@@ -277,8 +277,8 @@ TEST(TSerializationTest, Simple)
 TEST(TSerializationTest, PackRefs)
 {
     std::vector<TSharedRef> refs;
-    refs.push_back(TSharedRef::FromString("abc"));
-    refs.push_back(TSharedRef::FromString("12"));
+    refs.push_back(TSharedRef::FromString(std::string("abc")));
+    refs.push_back(TSharedRef::FromString(std::string("12")));
 
     auto packed = PackRefs(refs);
     auto unpacked = UnpackRefs(packed);
@@ -526,6 +526,35 @@ TEST(TYTreeSerializationTest, ProtobufKeepUnknown)
         auto deserializedYson = ConvertToYsonString(node, NYson::EYsonFormat::Text);
         EXPECT_EQ(RemoveSpaces(canonicalYson.ToString()), deserializedYson.ToString());
     }
+}
+
+using TTestMessageAsString = TProtoSerializedAsString<NProto::TTestMessage>;
+
+TEST(TYTreeSerializationTest, ProtobufAsString)
+{
+    TTestMessageAsString message;
+    message.set_int32_field(1);
+    message.set_string_field("test");
+
+    auto yson = ConvertToYsonString(message);
+    EXPECT_EQ(yson, ConvertToYsonString(message.SerializeAsString()));
+
+    // ConvertTo takes the pull parser for a YSON string, so pass a node to reach the other overload.
+    EXPECT_EQ(ConvertTo<TTestMessageAsString>(ConvertToNode(yson)), message);
+    EXPECT_EQ(PullParserConvert<TTestMessageAsString>(yson), message);
+}
+
+TEST(TYTreeSerializationTest, ProtobufAsStringMalformed)
+{
+    // Field 2, length-delimited, declares 5 bytes of payload but carries only 2.
+    auto yson = BuildYsonStringFluently().Value(TStringBuf("\x12\x05" "ab"));
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        ConvertTo<TTestMessageAsString>(ConvertToNode(yson)),
+        "Error parsing protobuf message from string");
+    EXPECT_THROW_WITH_SUBSTRING(
+        PullParserConvert<TTestMessageAsString>(yson),
+        "Error parsing protobuf message from string");
 }
 
 TEST(TSerializationTest, ProtobufRepeatedField)

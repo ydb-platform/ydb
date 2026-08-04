@@ -16,22 +16,6 @@
 
 #include <util/generic/bitmap.h>
 
-#if defined LOG_T || \
-    defined LOG_D || \
-    defined LOG_I || \
-    defined LOG_N || \
-    defined LOG_W || \
-    defined LOG_W
-#error log macro redefinition
-#endif
-
-#define LOG_T(stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
-#define LOG_D(stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
-#define LOG_I(stream) LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
-#define LOG_N(stream) LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
-#define LOG_W(stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
-#define LOG_E(stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
-
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -49,8 +33,7 @@ public:
     virtual void OnSuccess(const TActorContext &);
     virtual void OnError(const TString &error, const TActorContext &);
 
-    virtual void ConvertToActor(TDynamicNameserver* owner, TIntrusivePtr<TListNodesCache> listNodesCache,
-                                const TActorContext &ctx) = 0;
+    virtual void ConvertToActor(TDynamicNameserver* owner, const TActorContext &ctx) = 0;
 
     struct THeapIndexByDeadline {
         size_t& operator()(TCacheMiss& cacheMiss) const;
@@ -83,9 +66,13 @@ struct TDynamicConfig : public TThrRefBase {
                          const TString &resolveHost,
                          ui16 port,
                          const TNodeLocation &location,
-                         TInstant expire)
+                         TInstant expire,
+                         TInstant expireV2,
+                         ENodeLiveness liveness)
             : TNodeInfo(address, host, resolveHost, port, location)
             , Expire(expire)
+            , ExpireV2(expireV2)
+            , Liveness(liveness)
         {
         }
 
@@ -95,14 +82,16 @@ struct TDynamicConfig : public TThrRefBase {
                                info.GetResolveHost(),
                                (ui16)info.GetPort(),
                                TNodeLocation(info.GetLocation()),
-                               TInstant::MicroSeconds(info.GetExpire()))
+                               TInstant::MicroSeconds(info.GetExpire()),
+                               TInstant::MicroSeconds(info.HasExpireV2() ? info.GetExpireV2() : info.GetExpire()),
+                               static_cast<ENodeLiveness>(info.GetLiveness()))
         {
         }
 
         TDynamicNodeInfo(const TDynamicNodeInfo &other) = default;
         TDynamicNodeInfo &operator=(const TDynamicNodeInfo &other) = default;
 
-        bool EqualExceptExpire(const TDynamicNodeInfo &other) const
+        bool EqualExceptExpireAndLiveness(const TDynamicNodeInfo &other) const
         {
             return Host == other.Host
                 && Address == other.Address
@@ -111,7 +100,13 @@ struct TDynamicConfig : public TThrRefBase {
                 && Location == other.Location;
         }
 
+        TInstant EffectiveExpire(bool enableLongLease) const {
+            return enableLongLease ? ExpireV2 : Expire;
+        }
+
         TInstant Expire;
+        TInstant ExpireV2;
+        ENodeLiveness Liveness = ENodeLiveness::Alive;
     };
 
     THashMap<ui32, TDynamicNodeInfo> DynamicNodes;
@@ -186,7 +181,8 @@ public:
 
     TDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup, ui32 resolvePoolId)
         : StaticConfig(setup)
-        , ListNodesCache(MakeIntrusive<TListNodesCache>())
+        , ListNodesCacheAll(MakeIntrusive<TListNodesCache>())
+        , ListNodesCacheAlive(MakeIntrusive<TListNodesCache>())
         , ResolvePoolId(resolvePoolId)
     {
         Y_ABORT_UNLESS(StaticConfig->IsEntriesUnique());
@@ -251,8 +247,9 @@ private:
                             const TActorContext &ctx);
     void ResolveStaticNode(ui32 nodeId, TActorId sender, TMonotonic deadline, const TActorContext &ctx);
     void ResolveDynamicNode(ui32 nodeId, TAutoPtr<IEventHandle> ev, TMonotonic deadline, const TActorContext &ctx);
-    void SendNodesList(TActorId recipient, const TActorContext &ctx);
+    void SendNodesList(TActorId recipient, bool onlyAliveDynamicNodes, const TActorContext &ctx);
     void SendNodesList(const TActorContext &ctx);
+    void InvalidateListNodesCache();
     void PendingRequestAnswered(ui32 domain, const TActorContext &ctx);
     void UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
                      const TActorContext &ctx);
@@ -288,8 +285,9 @@ private:
 private:
     TIntrusivePtr<TTableNameserverSetup> StaticConfig;
     std::array<TDynamicConfigPtr, DOMAINS_COUNT> DynamicConfigs;
-    TVector<TActorId> ListNodesQueue;
-    TIntrusivePtr<TListNodesCache> ListNodesCache;
+    TVector<std::pair<TActorId, bool>> ListNodesQueue;
+    TIntrusivePtr<TListNodesCache> ListNodesCacheAll;
+    TIntrusivePtr<TListNodesCache> ListNodesCacheAlive;
     TBridgeInfo::TPtr BridgeInfo;
 
     // When ListNodes requests are sent to NodeBroker tablets this
@@ -298,10 +296,14 @@ private:
     // Domain -> Epoch ID.
     THashMap<ui32, ui64> EpochUpdates;
     ui32 ResolvePoolId;
-    THashSet<TActorId> StaticNodeChangeSubscribers;
+    // Subscriber -> its OnlyAliveDynamicNodes preference, so re-notifications
+    // respect the filter the subscriber originally requested.
+    THashMap<TActorId, bool> StaticNodeChangeSubscribers;
     bool SubscribedToConsoleNSConfig = false;
 
+    bool EnableLongLease = false;
     bool EnableDeltaProtocol = false;
+
     EProtocolState ProtocolState = EProtocolState::Connecting;
     bool SyncInProgress = false;
     ui64 SyncCookie = 0;

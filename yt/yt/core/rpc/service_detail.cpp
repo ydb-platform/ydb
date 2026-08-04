@@ -2042,10 +2042,10 @@ void TServiceBase::OnRequestAuthenticated(
     }
 
     const auto& authResult = authResultOrError.Value();
-    auto Logger = RpcServerLogger().WithTag("RequestId: %v, User: %v, Realm: %v",
-        incomingRequest.RequestId,
-        authResult.User,
-        authResult.Realm);
+    auto Logger = RpcServerLogger()
+        .WithTag("RequestId", incomingRequest.RequestId)
+        .WithTag("User", authResult.User)
+        .WithTag("Realm", authResult.Realm);
 
     if (authResult.Warning.IsOK()) {
         YT_LOG_DEBUG("Request authenticated");

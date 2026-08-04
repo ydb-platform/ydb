@@ -148,9 +148,9 @@ def total_seconds(delta):
 # Checks to see if md5 is available on this system. A given system might not
 # have access to it for various reasons, such as FIPS mode being enabled.
 try:
-    hashlib.md5()
+    hashlib.md5(usedforsecurity=False)
     MD5_AVAILABLE = True
-except ValueError:
+except (AttributeError, ValueError):
     MD5_AVAILABLE = False
 
 
@@ -294,6 +294,21 @@ try:
     HAS_CRT = not disabled.lower() == 'true'
 except ImportError:
     HAS_CRT = False
+
+
+def has_minimum_crt_version(minimum_version):
+    """Not intended for use outside botocore."""
+    if not HAS_CRT:
+        return False
+
+    crt_version_str = awscrt.__version__
+    try:
+        crt_version_ints = map(int, crt_version_str.split("."))
+        crt_version_tuple = tuple(crt_version_ints)
+    except (TypeError, ValueError):
+        return False
+
+    return crt_version_tuple >= minimum_version
 
 
 ########################################################

@@ -5161,7 +5161,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         if (auto ret = MemberOverRenamingFlatMap(node, ctx); ret != node) {
-            return ret;
+            return KeepWorld(ret, *node, ctx, *optCtx.Types);
         }
 
         if (auto ret = MemberOverFilterSkipNullMembers(node, ctx); ret != node) {
@@ -5212,7 +5212,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return ctx.ChangeChild(node->Head(), 0U, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx));
         }
 
-        if (node->Head().IsCallable("If") && node->Head().ChildrenSize() == 3) {
+        if (node->Head().IsCallable("If") && node->Head().ChildrenSize() == 3 &&
+            !node->GetTypeAnn()->HasStaticLinear()) {
             TCoIf childIf(node->HeadPtr());
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return Build<TCoIf>(ctx, node->Pos())

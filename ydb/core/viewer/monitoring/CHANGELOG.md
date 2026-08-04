@@ -1,5 +1,63 @@
 # Changelog
 
+## [18.1.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v18.0.1...v18.1.0) (2026-07-10)
+
+
+### Features
+
+* enable navigation v2 by default ([#4098](https://github.com/ydb-platform/ydb-embedded-ui/issues/4098)) ([228b8cf](https://github.com/ydb-platform/ydb-embedded-ui/commit/228b8cf6580a6ed8e29e27901df3d94795950813))
+
+
+### Bug Fixes
+
+* **HeaderBreadcrumbs:** layout ([#4100](https://github.com/ydb-platform/ydb-embedded-ui/issues/4100)) ([0414ef6](https://github.com/ydb-platform/ydb-embedded-ui/commit/0414ef6b06a41f61b3b38d41272d242643d33325))
+* hide link to pDisk for database users ([#4111](https://github.com/ydb-platform/ydb-embedded-ui/issues/4111)) ([584e747](https://github.com/ydb-platform/ydb-embedded-ui/commit/584e7475211d463549efd1bc4e0dc922e98ac59c))
+* remove PostgreSQL query mode ([#4099](https://github.com/ydb-platform/ydb-embedded-ui/issues/4099)) ([38254a6](https://github.com/ydb-platform/ydb-embedded-ui/commit/38254a6220a36879c3d139ca6a8db355c6658229))
+
+## [18.0.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v18.0.0...v18.0.1) (2026-07-10)
+
+
+### Bug Fixes
+
+* **HomePage:** block databases if meta/whoami error ([#4101](https://github.com/ydb-platform/ydb-embedded-ui/issues/4101)) ([2ddb653](https://github.com/ydb-platform/ydb-embedded-ui/commit/2ddb653b1a474770c57b7c77f46066658c53259a))
+
+## [18.0.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v17.2.0...v18.0.0) (2026-07-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* update zod and add configuration ([#4062](https://github.com/ydb-platform/ydb-embedded-ui/issues/4062))
+
+### Features
+
+* add new background operation type ([#4061](https://github.com/ydb-platform/ydb-embedded-ui/issues/4061)) ([762fc43](https://github.com/ydb-platform/ydb-embedded-ui/commit/762fc43e656a9e47bc739c4fb8a21b17a07104e3))
+* add storage expert mode ([#3950](https://github.com/ydb-platform/ydb-embedded-ui/issues/3950)) ([c3795a1](https://github.com/ydb-platform/ydb-embedded-ui/commit/c3795a1d9b58a21a461c786664d7bb6ad8e1452f))
+* implement views with metrics inside pages on DB Info dashboard ([#4077](https://github.com/ydb-platform/ydb-embedded-ui/issues/4077)) ([77a5f28](https://github.com/ydb-platform/ydb-embedded-ui/commit/77a5f28c4cbc3d798b7e3465e86af250bdcabbf5))
+* improve visual affordance of horizontal tabs ([#4065](https://github.com/ydb-platform/ydb-embedded-ui/issues/4065)) ([55b0409](https://github.com/ydb-platform/ydb-embedded-ui/commit/55b04094a01d9cb2e093c1a88fc140b46dd68211))
+* partitioning settings improvements ([#4067](https://github.com/ydb-platform/ydb-embedded-ui/issues/4067)) ([838e82e](https://github.com/ydb-platform/ydb-embedded-ui/commit/838e82e6f28f8e9d9cd6cd85a4d9517556756f0d))
+* update zod and add configuration ([#4062](https://github.com/ydb-platform/ydb-embedded-ui/issues/4062)) ([5103c45](https://github.com/ydb-platform/ydb-embedded-ui/commit/5103c45f0cc3c23175a742e25368f9afa5c06ddf))
+
+
+### Bug Fixes
+
+* hide restricted node tabs ([#4085](https://github.com/ydb-platform/ydb-embedded-ui/issues/4085)) ([2b4b24c](https://github.com/ydb-platform/ydb-embedded-ui/commit/2b4b24ce66bd29db7845d789b3c773ce4342a779))
+* **HomePage:** not block databases if meta/whoami error ([#4083](https://github.com/ydb-platform/ydb-embedded-ui/issues/4083)) ([df12bfd](https://github.com/ydb-platform/ydb-embedded-ui/commit/df12bfdcdd9ac45d4ffbbaff282769f30e9b250e))
+* improve tenant storage progress precision ([#4092](https://github.com/ydb-platform/ydb-embedded-ui/issues/4092)) ([4459309](https://github.com/ydb-platform/ydb-embedded-ui/commit/44593093efd53aa2abb23324b695ebaaa90cd760))
+* route schema object links in nav v2 ([#4094](https://github.com/ydb-platform/ydb-embedded-ui/issues/4094)) ([ade3ecd](https://github.com/ydb-platform/ydb-embedded-ui/commit/ade3ecd88dd9a1973286f7f76b1755450203c87e))
+
+## [17.2.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v17.1.0...v17.2.0) (2026-06-26)
+
+
+### Features
+
+* **PaginatedTable:** support row click ([#4060](https://github.com/ydb-platform/ydb-embedded-ui/issues/4060)) ([69225e2](https://github.com/ydb-platform/ydb-embedded-ui/commit/69225e23147639ded557e1191b0570bf15e9effb))
+
+
+### Bug Fixes
+
+* hide drawer overlay overflow ([#4070](https://github.com/ydb-platform/ydb-embedded-ui/issues/4070)) ([720cd77](https://github.com/ydb-platform/ydb-embedded-ui/commit/720cd77bababdc84b14a46c930c3aee8d4a01597))
+* query temlates with secrets ([#4069](https://github.com/ydb-platform/ydb-embedded-ui/issues/4069)) ([3be4413](https://github.com/ydb-platform/ydb-embedded-ui/commit/3be44137b495d7f01f731a2c06fe3c05cf39c9de))
+
 ## [17.1.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v17.0.1...v17.1.0) (2026-06-26)
 
 

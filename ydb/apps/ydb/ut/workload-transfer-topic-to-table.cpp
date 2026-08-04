@@ -25,12 +25,16 @@ class TFixture : public NUnitTest::TBaseFixture {
 
             try {
                 ExecYdb({
-                    "init", 
-                    "--topic", TopicName, 
+                    "init",
+                    "--topic", TopicName,
                     "--table", TableName,
-                    // we run with 3 partitions cause CI doesn't manage to start 
+                    // we run with 3 partitions cause CI doesn't manage to start
                     // reading default 128 partitions in 10 seconds of DEFAULT_RUN test
-                    "--topic-partitions", "3"
+                    "--topic-partitions", "3",
+                    // keep setup cheap: a single table partition and a tiny read-only
+                    // table seed are enough for these tests (the default seeds 1M rows)
+                    "--table-partitions", "1",
+                    "--initial-rows", "100"
                 });
             } catch (const yexception) {
                 // ignore errors
@@ -132,7 +136,8 @@ class TFixture : public NUnitTest::TBaseFixture {
                              const TVector<TString>& columns1,
                              const TVector<TString>& columns2)
         {
-            ExecYdb({"init"});
+            // The topic and table are already created by SetUp() and the workload
+            // in `args` runs against them, so no extra init/clean is needed here.
             auto output = ExecYdb(args, false);
 
             TVector<TString> lines;
@@ -140,8 +145,6 @@ class TFixture : public NUnitTest::TBaseFixture {
 
             UnitAssertColumnsOrder(lines[0], columns1);
             UnitAssertColumnsOrder(lines[1], columns2);
-
-            ExecYdb({"clean"});
         }
 
         TString GenerateTopicName()
@@ -169,7 +172,18 @@ Y_UNIT_TEST_SUITE_F(YdbWorkloadTransferTopicToTable, TFixture) {
 
 Y_UNIT_TEST(Default_Run)
 {
-    auto output = ExecYdb({"run", "-s", "10", "--topic", TopicName});
+    // --table must match the table created in SetUp(); otherwise the workload runs
+    // against a nonexistent default table.
+    //
+    // Without a rate limit the producer writes as fast as possible, so the reader
+    // accumulates a huge batch of rows and commits it in a single transaction at the
+    // end of the run (the default commit period equals the whole run). That commit
+    // grows super-linearly with the run duration and took minutes. Capping the byte
+    // rate and committing every second keeps the workload bounded and fast.
+    auto output = ExecYdb({"run", "-s", "10", "--warmup", "2",
+                           "--topic", TopicName, "--table", TableName,
+                           "--byte-rate", "100000",
+                           "--tx-commit-interval", "1000"});
 
     ui64 fullTime = GetFullTimeValue(output);
 
@@ -183,7 +197,8 @@ Y_UNIT_TEST(Default_Init_Clean)
     TopicName = GenerateTopicName();;
     TableName = GenerateTableName();
 
-    ExecYdb({"init", "--topic", TopicName, "--table", TableName});
+    ExecYdb({"init", "--topic", TopicName, "--table", TableName,
+             "--topic-partitions", "3", "--table-partitions", "1", "--initial-rows", "100"});
     ExecYdb({"clean", "--topic", TopicName, "--table", TableName});
 }
 
@@ -194,7 +209,7 @@ Y_UNIT_TEST(Specific_Init_Clean)
 
     RunYdbAndAssertTopicAndTableProps({"init",
            "--topic", topic, "--topic-partitions", "3", "--consumers", "5",
-           "--table", table, "--table-partitions", "8"},
+           "--table", table, "--table-partitions", "8", "--initial-rows", "100"},
            topic, 3, 5,
            table, 8);
     RunYdbAndAssertTopicAndTableProps({"clean",

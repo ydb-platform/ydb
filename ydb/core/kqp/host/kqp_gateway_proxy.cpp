@@ -19,6 +19,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
+#include <ydb/services/metadata/manager/abstract.h>
 
 #include <util/generic/overloaded.h>
 
@@ -362,6 +363,16 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
                 cMeta.DefaultFromLiteral);
         }
 
+        if (cMeta.IsDefaultFromExpression()) {
+            auto& generated = *columnDesc.MutableDefaultFromExpression();
+            generated.SetExprText(cMeta.DefaultExpression->ExprText);
+            generated.SetContext(cMeta.DefaultExpression->Context);
+            generated.SetStored(cMeta.DefaultExpression->Stored);
+            for (const auto& dependency : cMeta.DefaultExpression->Dependencies) {
+                generated.AddDependencyColumnNames(dependency);
+            }
+        }
+
         if (NScheme::NTypeIds::IsParametrizedType(columnIt->second.TypeInfo.GetTypeId())) {
             ProtoFromTypeInfo(columnIt->second.TypeInfo, columnIt->second.TypeMod, *columnDesc.MutableTypeInfo());
         }
@@ -379,6 +390,30 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
 
     for (const TString& keyColumn : metadata->KeyColumnNames) {
         tableDesc.AddKeyColumnNames(keyColumn);
+    }
+
+    return true;
+}
+
+template <typename TTableDescProto>
+bool FillMultiColumnStatisticsDesc(TTableDescProto& tableDesc,
+    const TVector<TMultiColumnStatisticsDescription>& statisticsList, Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    for (const auto& statistics : statisticsList) {
+        auto* statisticsDesc = tableDesc.AddMultiColumnStatistics();
+        statisticsDesc->SetName(statistics.Name);
+        for (const auto& column : statistics.Columns) {
+            statisticsDesc->AddColumnNames(column);
+        }
+        for (const auto& type : statistics.Types) {
+            if (type == "COUNT_MIN_SKETCH") {
+                statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+            } else {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown multi-column statistics type: " << type;
+                return false;
+            }
+        }
     }
 
     return true;
@@ -408,6 +443,11 @@ bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp
     if (!NGRpcService::FillCreateTableSettingsDesc(tableDesc, createTableProto, profiles, code, error, warnings)) {
         return false;
     }
+
+    if (!FillMultiColumnStatisticsDesc(tableDesc, metadata->MultiColumnStatistics, code, error)) {
+        return false;
+    }
+
     return true;
 }
 
@@ -525,6 +565,12 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         if (columnIt->second.IsDefaultFromSequence()) {
             code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Default sequences are not supported in column tables";
+            return false;
+        }
+
+        if (columnIt->second.IsDefaultFromExpression()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Generated columns are not supported in column tables";
             return false;
         }
 
@@ -738,6 +784,10 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
     }
 
     if (!FillCreateLocalIndexDesc(tableDesc, metadata->Indexes, code, error)) {
+        return false;
+    }
+
+    if (!FillMultiColumnStatisticsDesc(tableDesc, metadata->MultiColumnStatistics, code, error)) {
         return false;
     }
 
@@ -2269,6 +2319,10 @@ public:
     TFuture<TGenericResult> UpsertObject(const TString& cluster, const TUpsertObjectSettings& settings) override {
         CHECK_PREPARED_DDL(UpsertObject);
 
+        if (const auto rejected = CheckOldSecretCreationDisabled(settings.GetTypeId())) {
+            return MakeFuture(*rejected);
+        }
+
         if (IsPrepare()) {
             return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareUpsertObjectSchemeOperation));
         } else {
@@ -2278,6 +2332,10 @@ public:
 
     TFuture<TGenericResult> CreateObject(const TString& cluster, const TCreateObjectSettings& settings) override {
         CHECK_PREPARED_DDL(CreateObject);
+
+        if (const auto rejected = CheckOldSecretCreationDisabled(settings.GetTypeId())) {
+            return MakeFuture(*rejected);
+        }
 
         if (IsPrepare()) {
             return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareCreateObjectSchemeOperation));
@@ -3583,6 +3641,15 @@ public:
                 tx.SetWorkingDir(pathPair.first);
                 tx.SetOperationType(GetOperationType());
 
+                // Set flags for IF NOT EXISTS / IF EXISTS handling
+                // FailOnExist is read by schemeshard to decide whether to accept existing paths
+                // FailedOnAlreadyExists is read by KQP gateway to translate StatusAlreadyExists to success
+                // SuccessOnNotExist is read by KQP gateway to translate StatusPathDoesNotExist to success
+                tx.SetFailOnExist(!settings.ExistingOk && !settings.ReplaceIfExists);
+                tx.SetFailedOnAlreadyExists(!settings.ExistingOk && !settings.ReplaceIfExists);
+                tx.SetSuccessOnNotExist(settings.MissingOk);
+                tx.SetReplaceIfExists(settings.ReplaceIfExists);
+
                 TSecretSchemaOp& op = GetSecretSchemaOp(tx);
                 op.SetName(pathPair.second);
                 FillSchemaOperation(settings, op);
@@ -3666,7 +3733,9 @@ public:
             } else {
                 op.SetValue(settings.Value);
             }
-            op.SetInheritPermissions(settings.InheritPermissions);
+            if (settings.InheritPermissions.has_value()) {
+                op.SetInheritPermissions(*settings.InheritPermissions);
+            }
         }
 
     private:
@@ -3766,6 +3835,18 @@ public:
     }
 
 private:
+    TMaybe<TGenericResult> CheckOldSecretCreationDisabled(const TString& typeId) const {
+        if (!AppData()->FeatureFlags.GetDisableOldSecretCreation() || to_lower(typeId) != "secret") {
+            return Nothing();
+        }
+        TGenericResult errResult;
+        const auto status = NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        errResult.SetStatus(status);
+        errResult.AddIssue(NYql::TIssue(NMetadata::NModifications::GetOldSecretCreationDisabledMessage())
+            .SetCode(status, NYql::TSeverityIds::S_ERROR));
+        return errResult;
+    }
+
     bool IsPrepare() const {
         if (!SessionCtx) {
             return false;

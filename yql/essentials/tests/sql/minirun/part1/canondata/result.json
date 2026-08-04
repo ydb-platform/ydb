@@ -1318,6 +1318,34 @@
             "uri": "https://{canondata_backend}/1600758/c117864042cf9137d901ec8d7c77a73c67c6c60d/resource.tar.gz#test.test_subselect-where-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[type_erase-mismatch-default.txt-Debug]": [
+        {
+            "checksum": "7a2e08c1c10608100419ca82f4081602",
+            "size": 266,
+            "uri": "https://{canondata_backend}/1936842/4268059fc7c71f03e56a341ead2482c4637dc53a/resource.tar.gz#test.test_type_erase-mismatch-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[type_erase-mismatch-default.txt-Results]": [
+        {
+            "checksum": "e4bfea6643a87de7e3a38d5a205ecb24",
+            "size": 829,
+            "uri": "https://{canondata_backend}/1936842/4268059fc7c71f03e56a341ead2482c4637dc53a/resource.tar.gz#test.test_type_erase-mismatch-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[udf-python_udf_with_settings_extramem--Debug]": [
+        {
+            "checksum": "5c1534d993f82b08475849fe0041fb7c",
+            "size": 1297,
+            "uri": "https://{canondata_backend}/212715/5a134e122ef62531df9548bc0353988c1d471ead/resource.tar.gz#test.test_udf-python_udf_with_settings_extramem--Debug_/opt.yql"
+        }
+    ],
+    "test.test[udf-python_udf_with_settings_extramem--Results]": [
+        {
+            "checksum": "26cfcad90a8a656cffde41bc878d398d",
+            "size": 1867,
+            "uri": "https://{canondata_backend}/212715/5a134e122ef62531df9548bc0353988c1d471ead/resource.tar.gz#test.test_udf-python_udf_with_settings_extramem--Results_/results.txt"
+        }
+    ],
     "test.test[udf-trivial_udf--Debug]": [
         {
             "checksum": "8a826f54ac3877f855e9d5f4039f1957",

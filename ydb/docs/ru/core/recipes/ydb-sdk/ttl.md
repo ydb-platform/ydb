@@ -228,15 +228,46 @@
 
 - Java
 
-  ```java
-  TableDescription description = TableDescription.newBuilder()
-          .addNullableColumn("id", PrimitiveType.Uint64)
-          .addNullableColumn("expire_at", PrimitiveType.Timestamp)
-          .setPrimaryKey("id")
-          .setTtlSettings(TableTtl.dateTimeColumn("expire_at", 0))
-          .build();
+  TTL для таблицы задаётся в `TableDescription` при создании. Проверить настройки можно через `describeTable`.
 
-  session.createTable("mytable", description).join().expectSuccess();
+  ```java
+  import tech.ydb.core.grpc.GrpcTransport;
+  import tech.ydb.table.TableClient;
+  import tech.ydb.table.description.TableDescription;
+  import tech.ydb.table.description.TableTtl;
+  import tech.ydb.table.session.SessionRetryContext;
+  import tech.ydb.table.values.PrimitiveType;
+
+  public class TtlCreateTableExample {
+
+      private static final String TABLE_NAME = "mytable";
+
+      public static void main(String[] args) {
+          String connectionString = System.getenv().getOrDefault(
+                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+               TableClient tableClient = TableClient.newClient(transport).build()) {
+
+              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+              String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
+
+              TableDescription description = TableDescription.newBuilder()
+                      .addNullableColumn("id", PrimitiveType.Uint64)
+                      .addNullableColumn("expire_at", PrimitiveType.Timestamp)
+                      .setPrimaryKey("id")
+                      .setTtlSettings(TableTtl.dateTimeColumn("expire_at", 0))
+                      .build();
+
+              retryCtx.supplyStatus(session -> session.createTable(tablePath, description))
+                      .join().expectSuccess("create table failed");
+
+              TableTtl ttl = retryCtx.supplyResult(session -> session.describeTable(tablePath))
+                      .join().getValue().getTableDescription().getTableTtl();
+              System.out.println("TTL column: " + ttl.getColumnName());
+          }
+      }
+  }
   ```
 
 {% endlist %}
@@ -339,7 +370,31 @@
 - Java
 
   ```java
-  TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
+  import tech.ydb.core.grpc.GrpcTransport;
+  import tech.ydb.table.TableClient;
+  import tech.ydb.table.description.TableTtl;
+  import tech.ydb.table.session.SessionRetryContext;
+
+  public class TtlDescribeExample {
+
+      public static void main(String[] args) {
+          String connectionString = System.getenv().getOrDefault(
+                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+               TableClient tableClient = TableClient.newClient(transport).build()) {
+
+              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+              String tablePath = transport.getDatabase() + "/mytable";
+
+              TableTtl ttl = retryCtx.supplyResult(session -> session.describeTable(tablePath))
+                      .join().getValue().getTableDescription().getTableTtl();
+
+              System.out.println("TTL enabled: " + ttl.isEnabled());
+              System.out.println("TTL column: " + ttl.getColumnName());
+          }
+      }
+  }
   ```
 
 {% endlist %}

@@ -960,6 +960,47 @@
       ],
       "documentation": "Retrieve a JSON array of all available Job engine versions and the date they expire."
     },
+    "Probe": {
+      "name": "Probe",
+      "http": {
+        "method": "POST",
+        "requestUri": "/2017-08-29/probe",
+        "responseCode": 200
+      },
+      "input": {
+        "shape": "ProbeRequest"
+      },
+      "output": {
+        "shape": "ProbeResponse"
+      },
+      "errors": [
+        {
+          "shape": "BadRequestException",
+          "documentation": "The service can't process your request because of a problem in the request. Please check your request form and syntax."
+        },
+        {
+          "shape": "InternalServerErrorException",
+          "documentation": "The service encountered an unexpected condition and can't fulfill your request."
+        },
+        {
+          "shape": "ForbiddenException",
+          "documentation": "You don't have permissions for this action with the credentials you sent."
+        },
+        {
+          "shape": "NotFoundException",
+          "documentation": "The resource you requested doesn't exist."
+        },
+        {
+          "shape": "TooManyRequestsException",
+          "documentation": "Too many requests have been sent in too short of a time. The service limits the rate at which it will accept requests."
+        },
+        {
+          "shape": "ConflictException",
+          "documentation": "The service couldn't complete your request because there is a conflict with the current state of the resource."
+        }
+      ],
+      "documentation": "Use Probe to obtain detailed information about your input media files. Probe returns a JSON that includes container, codec, frame rate, resolution, track count, audio layout, captions, and more. You can use this information to learn more about your media files, or to help make decisions while automating your transcoding workflow."
+    },
     "PutPolicy": {
       "name": "PutPolicy",
       "http": {
@@ -1683,8 +1724,7 @@
     },
     "AssociateCertificateResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "AudioChannelTag": {
       "type": "string",
@@ -1983,6 +2023,42 @@
       },
       "documentation": "Advanced audio normalization settings. Ignore these settings unless you need to comply with a loudness standard."
     },
+    "AudioProperties": {
+      "type": "structure",
+      "members": {
+        "BitDepth": {
+          "shape": "__integer",
+          "locationName": "bitDepth",
+          "documentation": "The bit depth of the audio track."
+        },
+        "BitRate": {
+          "shape": "__long",
+          "locationName": "bitRate",
+          "documentation": "The bit rate of the audio track, in bits per second."
+        },
+        "Channels": {
+          "shape": "__integer",
+          "locationName": "channels",
+          "documentation": "The number of audio channels in the audio track."
+        },
+        "FrameRate": {
+          "shape": "FrameRate",
+          "locationName": "frameRate",
+          "documentation": "The frame rate of the video or audio track."
+        },
+        "LanguageCode": {
+          "shape": "__string",
+          "locationName": "languageCode",
+          "documentation": "The language code of the audio track, in three character ISO 639-3 format."
+        },
+        "SampleRate": {
+          "shape": "__integer",
+          "locationName": "sampleRate",
+          "documentation": "The sample rate of the audio track."
+        }
+      },
+      "documentation": "Details about the media file's audio track."
+    },
     "AudioSelector": {
       "type": "structure",
       "members": {
@@ -2004,7 +2080,7 @@
         "ExternalAudioFileInput": {
           "shape": "__stringPatternS3Https",
           "locationName": "externalAudioFileInput",
-          "documentation": "Specifies audio data from an external file source."
+          "documentation": "Specify the S3, HTTP, or HTTPS URL for your external audio file input."
         },
         "HlsRenditionGroupSettings": {
           "shape": "HlsRenditionGroupSettings",
@@ -2014,12 +2090,12 @@
         "LanguageCode": {
           "shape": "LanguageCode",
           "locationName": "languageCode",
-          "documentation": "Selects a specific language code from within an audio source."
+          "documentation": "Specify the language to select from your audio input. In the MediaConvert console choose from a list of languages. In your JSON job settings choose from an ISO 639-2 three-letter code listed at https://www.loc.gov/standards/iso639-2/php/code_list.php"
         },
         "Offset": {
           "shape": "__integerMinNegative2147483648Max2147483647",
           "locationName": "offset",
-          "documentation": "Specifies a time delta in milliseconds to offset the audio from the input video."
+          "documentation": "Specify a time delta, in milliseconds, to offset the audio from the input video.\nTo specify no offset: Keep the default value, 0.\nTo specify an offset: Enter an integer from -2147483648 to 2147483647"
         },
         "Pids": {
           "shape": "__listOf__integerMin1Max2147483647",
@@ -2039,7 +2115,7 @@
         "SelectorType": {
           "shape": "AudioSelectorType",
           "locationName": "selectorType",
-          "documentation": "Specifies the type of the audio selector."
+          "documentation": "Specify how MediaConvert selects audio content within your input. The default is Track. PID: Select audio by specifying the Packet Identifier (PID) values for MPEG Transport Stream inputs. Use this when you know the exact PID values of your audio streams. Track: Default. Select audio by track number. This is the most common option and works with most input container formats. Language code: Select audio by language using ISO 639-2 or ISO 639-3 three-letter language codes. Use this when your source has embedded language metadata and you want to select tracks based on their language. HLS rendition group: Select audio from an HLS rendition group. Use this when your input is an HLS package with multiple audio renditions and you want to select specific rendition groups. All PCM: Select all uncompressed PCM audio tracks from your input automatically. This is useful when you want to include all PCM audio tracks without specifying individual track numbers."
         },
         "Tracks": {
           "shape": "__listOf__integerMin1Max2147483647",
@@ -2062,12 +2138,13 @@
     },
     "AudioSelectorType": {
       "type": "string",
-      "documentation": "Specifies the type of the audio selector.",
+      "documentation": "Specify how MediaConvert selects audio content within your input. The default is Track. PID: Select audio by specifying the Packet Identifier (PID) values for MPEG Transport Stream inputs. Use this when you know the exact PID values of your audio streams. Track: Default. Select audio by track number. This is the most common option and works with most input container formats. Language code: Select audio by language using ISO 639-2 or ISO 639-3 three-letter language codes. Use this when your source has embedded language metadata and you want to select tracks based on their language. HLS rendition group: Select audio from an HLS rendition group. Use this when your input is an HLS package with multiple audio renditions and you want to select specific rendition groups. All PCM: Select all uncompressed PCM audio tracks from your input automatically. This is useful when you want to include all PCM audio tracks without specifying individual track numbers.",
       "enum": [
         "PID",
         "TRACK",
         "LANGUAGE_CODE",
-        "HLS_RENDITION_GROUP"
+        "HLS_RENDITION_GROUP",
+        "ALL_PCM"
       ]
     },
     "AudioTypeControl": {
@@ -2116,6 +2193,11 @@
           "shape": "__integerMin100000Max100000000",
           "locationName": "maxAbrBitrate",
           "documentation": "Specify the maximum average bitrate for MediaConvert to use in your automated ABR stack. If you don't specify a value, MediaConvert uses 8,000,000 (8 mb/s) by default. The average bitrate of your highest-quality rendition will be equal to or below this value, depending on the quality, complexity, and resolution of your content. Note that the instantaneous maximum bitrate may vary above the value that you specify."
+        },
+        "MaxQualityLevel": {
+          "shape": "__doubleMin1Max10",
+          "locationName": "maxQualityLevel",
+          "documentation": "Optional. Specify the QVBR quality level to use for all renditions in your automated ABR stack. To have MediaConvert automatically determine the quality level: Leave blank. To manually specify a quality level: Enter a value from 1 to 10. MediaConvert will use a quality level up to the value that you specify, depending on your source. For more information about QVBR quality levels, see: https://docs.aws.amazon.com/mediaconvert/latest/ug/qvbr-guidelines.html"
         },
         "MaxRenditions": {
           "shape": "__integerMin3Max15",
@@ -2184,11 +2266,12 @@
     },
     "Av1FramerateConversionAlgorithm": {
       "type": "string",
-      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96.",
+      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates.",
       "enum": [
         "DUPLICATE_DROP",
         "INTERPOLATE",
-        "FRAMEFORMER"
+        "FRAMEFORMER",
+        "MAINTAIN_FRAME_COUNT"
       ]
     },
     "Av1QvbrSettings": {
@@ -2240,7 +2323,7 @@
         "FramerateConversionAlgorithm": {
           "shape": "Av1FramerateConversionAlgorithm",
           "locationName": "framerateConversionAlgorithm",
-          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96."
+          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates."
         },
         "FramerateDenominator": {
           "shape": "__integerMin1Max2147483647",
@@ -2266,6 +2349,11 @@
           "shape": "__integerMin0Max15",
           "locationName": "numberBFramesBetweenReferenceFrames",
           "documentation": "Specify from the number of B-frames, in the range of 0-15. For AV1 encoding, we recommend using 7 or 15. Choose a larger number for a lower bitrate and smaller file size; choose a smaller number for better video quality."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "QvbrSettings": {
           "shape": "Av1QvbrSettings",
@@ -2329,11 +2417,12 @@
     },
     "AvcIntraFramerateConversionAlgorithm": {
       "type": "string",
-      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96.",
+      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates.",
       "enum": [
         "DUPLICATE_DROP",
         "INTERPOLATE",
-        "FRAMEFORMER"
+        "FRAMEFORMER",
+        "MAINTAIN_FRAME_COUNT"
       ]
     },
     "AvcIntraInterlaceMode": {
@@ -2376,7 +2465,7 @@
         "FramerateConversionAlgorithm": {
           "shape": "AvcIntraFramerateConversionAlgorithm",
           "locationName": "framerateConversionAlgorithm",
-          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96."
+          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates."
         },
         "FramerateDenominator": {
           "shape": "__integerMin1Max1001",
@@ -2392,6 +2481,11 @@
           "shape": "AvcIntraInterlaceMode",
           "locationName": "interlaceMode",
           "documentation": "Choose the scan line type for the output. Keep the default value, Progressive to create a progressive output, regardless of the scan type of your input. Use Top field first or Bottom field first to create an output that's interlaced with the same field polarity throughout. Use Follow, default top or Follow, default bottom to produce outputs with the same field polarity as the source. For jobs that have multiple inputs, the output field polarity might change over the course of the output. Follow behavior depends on the input scan type. If the source is interlaced, the output will be interlaced with the same polarity as the source. If the source is progressive, the output will be interlaced with top field bottom field first, depending on which of the Follow options you choose."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "ScanTypeConversionMode": {
           "shape": "AvcIntraScanTypeConversionMode",
@@ -2751,8 +2845,7 @@
     },
     "CancelJobResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "CaptionDescription": {
       "type": "structure",
@@ -3004,6 +3097,14 @@
         "WEBVTT"
       ]
     },
+    "CaptionSourceUpconvertSTLToTeletext": {
+      "type": "string",
+      "documentation": "Specify whether this set of input captions appears in your outputs in both STL and Teletext format. If you choose Upconvert, MediaConvert includes the captions data in two ways: it passes the STL data through using the Teletext compatibility bytes fields of the Teletext wrapper, and it also translates the STL data into Teletext.",
+      "enum": [
+        "UPCONVERT",
+        "DISABLED"
+      ]
+    },
     "ChannelMapping": {
       "type": "structure",
       "members": {
@@ -3014,6 +3115,15 @@
         }
       },
       "documentation": "Channel mapping contains the group of fields that hold the remixing value for each channel, in dB. Specify remix values to indicate how much of the content from your input audio channel you want in your output audio channels. Each instance of the InputChannels or InputChannelsFineTune array specifies these values for one output channel. Use one instance of this array for each output channel. In the console, each array corresponds to a column in the graphical depiction of the mapping matrix. The rows of the graphical matrix correspond to input channels. Valid values are within the range from -60 (mute) through 6. A setting of 0 passes the input channel unchanged to the output channel (no attenuation or amplification). Use InputChannels or InputChannelsFineTune to specify your remix values. Don't use both."
+    },
+    "ChromaPositionMode": {
+      "type": "string",
+      "documentation": "Specify the chroma sample positioning metadata for your H.264 or H.265 output. To have MediaConvert automatically determine chroma positioning: We recommend that you keep the default value, Auto. To specify center positioning: Choose Force center. To specify top left positioning: Choose Force top left.",
+      "enum": [
+        "AUTO",
+        "FORCE_CENTER",
+        "FORCE_TOP_LEFT"
+      ]
     },
     "ClipLimits": {
       "type": "structure",
@@ -3228,7 +3338,7 @@
         "SegmentLengthControl": {
           "shape": "CmafSegmentLengthControl",
           "locationName": "segmentLengthControl",
-          "documentation": "Specify how you want MediaConvert to determine the segment length. Choose Exact to have the encoder use the exact length that you specify with the setting Segment length. This might result in extra I-frames. Choose Multiple of GOP to have the encoder round up the segment lengths to match the next GOP boundary."
+          "documentation": "Specify how you want MediaConvert to determine segment lengths in this output group. To use the exact value that you specify under Segment length: Choose Exact. Note that this might result in additional I-frames in the output GOP. To create segment lengths that are a multiple of the GOP: Choose Multiple of GOP. MediaConvert will round up the segment lengths to match the next GOP boundary. To have MediaConvert automatically determine a segment duration that is a multiple of both the audio packets and the frame rates: Choose Match. When you do, also specify a target segment duration under Segment length. This is useful for some ad-insertion or segment replacement workflows. Note that Match has the following requirements: - Output containers: Include at least one video output and at least one audio output. Audio-only outputs are not supported. - Output frame rate: Follow source is not supported. - Multiple output frame rates: When you specify multiple outputs, we recommend they share a similar frame rate (as in X/3, X/2, X, or 2X). For example: 5, 15, 30 and 60. Or: 25 and 50. (Outputs must share an integer multiple.) - Output audio codec: Specify Advanced Audio Coding (AAC). - Output sample rate: Choose 48kHz."
         },
         "StreamInfResolution": {
           "shape": "CmafStreamInfResolution",
@@ -3383,10 +3493,11 @@
     },
     "CmafSegmentLengthControl": {
       "type": "string",
-      "documentation": "Specify how you want MediaConvert to determine the segment length. Choose Exact to have the encoder use the exact length that you specify with the setting Segment length. This might result in extra I-frames. Choose Multiple of GOP to have the encoder round up the segment lengths to match the next GOP boundary.",
+      "documentation": "Specify how you want MediaConvert to determine segment lengths in this output group. To use the exact value that you specify under Segment length: Choose Exact. Note that this might result in additional I-frames in the output GOP. To create segment lengths that are a multiple of the GOP: Choose Multiple of GOP. MediaConvert will round up the segment lengths to match the next GOP boundary. To have MediaConvert automatically determine a segment duration that is a multiple of both the audio packets and the frame rates: Choose Match. When you do, also specify a target segment duration under Segment length. This is useful for some ad-insertion or segment replacement workflows. Note that Match has the following requirements: - Output containers: Include at least one video output and at least one audio output. Audio-only outputs are not supported. - Output frame rate: Follow source is not supported. - Multiple output frame rates: When you specify multiple outputs, we recommend they share a similar frame rate (as in X/3, X/2, X, or 2X). For example: 5, 15, 30 and 60. Or: 25 and 50. (Outputs must share an integer multiple.) - Output audio codec: Specify Advanced Audio Coding (AAC). - Output sample rate: Choose 48kHz.",
       "enum": [
         "EXACT",
-        "GOP_MULTIPLE"
+        "GOP_MULTIPLE",
+        "MATCH"
       ]
     },
     "CmafStreamInfResolution": {
@@ -3595,6 +3706,33 @@
         "VERSION_1"
       ]
     },
+    "Codec": {
+      "type": "string",
+      "enum": [
+        "UNKNOWN",
+        "AAC",
+        "AC3",
+        "EAC3",
+        "FLAC",
+        "MP3",
+        "OPUS",
+        "PCM",
+        "VORBIS",
+        "AV1",
+        "AVC",
+        "HEVC",
+        "MJPEG",
+        "MP4V",
+        "MPEG2",
+        "PRORES",
+        "THEORA",
+        "VP8",
+        "VP9",
+        "C608",
+        "C708",
+        "WEBVTT"
+      ]
+    },
     "ColorConversion3DLUTSetting": {
       "type": "structure",
       "members": {
@@ -3695,6 +3833,28 @@
         "INSERT"
       ]
     },
+    "ColorPrimaries": {
+      "type": "string",
+      "documentation": "The color space color primaries of the video track.",
+      "enum": [
+        "ITU_709",
+        "UNSPECIFIED",
+        "RESERVED",
+        "ITU_470M",
+        "ITU_470BG",
+        "SMPTE_170M",
+        "SMPTE_240M",
+        "GENERIC_FILM",
+        "ITU_2020",
+        "SMPTE_428_1",
+        "SMPTE_431_2",
+        "SMPTE_EG_432_1",
+        "IPT",
+        "SMPTE_2067XYZ",
+        "EBU_3213_E",
+        "LAST"
+      ]
+    },
     "ColorSpace": {
       "type": "string",
       "documentation": "If your input video has accurate color space metadata, or if you don't know about color space: Keep the default value, Follow. MediaConvert will automatically detect your input color space. If your input video has metadata indicating the wrong color space, or has missing metadata: Specify the accurate color space here. If your input video is HDR 10 and the SMPTE ST 2086 Mastering Display Color Volume static metadata isn't present in your video stream, or if that metadata is present but not accurate: Choose Force HDR 10. Specify correct values in the input HDR 10 metadata settings. For more information about HDR jobs, see https://docs.aws.amazon.com/console/mediaconvert/hdr. When you specify an input color space, MediaConvert uses the following color space metadata, which includes color primaries, transfer characteristics, and matrix coefficients:\n * HDR 10: BT.2020, PQ, BT.2020 non-constant\n * HLG 2020: BT.2020, HLG, BT.2020 non-constant\n * P3DCI (Theater): DCIP3, SMPTE 428M, BT.709\n * P3D65 (SDR): Display P3, sRGB, BT.709\n * P3D65 (HDR): Display P3, PQ, BT.709",
@@ -3752,6 +3912,27 @@
       },
       "documentation": "The service couldn't complete your request because there is a conflict with the current state of the resource."
     },
+    "Container": {
+      "type": "structure",
+      "members": {
+        "Duration": {
+          "shape": "__double",
+          "locationName": "duration",
+          "documentation": "The total duration of your media file, in seconds."
+        },
+        "Format": {
+          "shape": "Format",
+          "locationName": "format",
+          "documentation": "The format of your media file. For example: MP4, QuickTime (MOV), Matroska (MKV), or WebM. Note that this will be blank if your media file has a format that the MediaConvert Probe operation does not recognize."
+        },
+        "Tracks": {
+          "shape": "__listOfTrack",
+          "locationName": "tracks",
+          "documentation": "Details about each track (video, audio, or data) in the media file."
+        }
+      },
+      "documentation": "The container of your media file. This information helps you understand the overall structure and details of your media, including format, duration, and track layout."
+    },
     "ContainerSettings": {
       "type": "structure",
       "members": {
@@ -3808,6 +3989,7 @@
       "documentation": "Container for this output. Some containers require a container settings object. If not specified, the default object will be created.",
       "enum": [
         "F4V",
+        "GIF",
         "ISMV",
         "M2TS",
         "M3U8",
@@ -3841,7 +4023,7 @@
         "BillingTagsSource": {
           "shape": "BillingTagsSource",
           "locationName": "billingTagsSource",
-          "documentation": "Optional. Choose a tag type that AWS Billing and Cost Management will use to sort your AWS Elemental MediaConvert costs on any billing report that you set up. Any transcoding outputs that don't have an associated tag will appear in your billing report unsorted. If you don't choose a valid value for this field, your job outputs will appear on the billing report unsorted."
+          "documentation": "Optionally choose a Billing tags source that AWS Billing and Cost Management will use to display tags for individual output costs on any billing report that you set up. Leave blank to use the default value, Job."
         },
         "ClientRequestToken": {
           "shape": "__string",
@@ -4227,7 +4409,7 @@
         "SegmentLengthControl": {
           "shape": "DashIsoSegmentLengthControl",
           "locationName": "segmentLengthControl",
-          "documentation": "Specify how you want MediaConvert to determine the segment length. Choose Exact to have the encoder use the exact length that you specify with the setting Segment length. This might result in extra I-frames. Choose Multiple of GOP to have the encoder round up the segment lengths to match the next GOP boundary."
+          "documentation": "Specify how you want MediaConvert to determine segment lengths in this output group. To use the exact value that you specify under Segment length: Choose Exact. Note that this might result in additional I-frames in the output GOP. To create segment lengths that are a multiple of the GOP: Choose Multiple of GOP. MediaConvert will round up the segment lengths to match the next GOP boundary. To have MediaConvert automatically determine a segment duration that is a multiple of both the audio packets and the frame rates: Choose Match. When you do, also specify a target segment duration under Segment length. This is useful for some ad-insertion or segment replacement workflows. Note that Match has the following requirements: - Output containers: Include at least one video output and at least one audio output. Audio-only outputs are not supported. - Output frame rate: Follow source is not supported. - Multiple output frame rates: When you specify multiple outputs, we recommend they share a similar frame rate (as in X/3, X/2, X, or 2X). For example: 5, 15, 30 and 60. Or: 25 and 50. (Outputs must share an integer multiple.) - Output audio codec: Specify Advanced Audio Coding (AAC). - Output sample rate: Choose 48kHz."
         },
         "VideoCompositionOffsets": {
           "shape": "DashIsoVideoCompositionOffsets",
@@ -4346,10 +4528,11 @@
     },
     "DashIsoSegmentLengthControl": {
       "type": "string",
-      "documentation": "Specify how you want MediaConvert to determine the segment length. Choose Exact to have the encoder use the exact length that you specify with the setting Segment length. This might result in extra I-frames. Choose Multiple of GOP to have the encoder round up the segment lengths to match the next GOP boundary.",
+      "documentation": "Specify how you want MediaConvert to determine segment lengths in this output group. To use the exact value that you specify under Segment length: Choose Exact. Note that this might result in additional I-frames in the output GOP. To create segment lengths that are a multiple of the GOP: Choose Multiple of GOP. MediaConvert will round up the segment lengths to match the next GOP boundary. To have MediaConvert automatically determine a segment duration that is a multiple of both the audio packets and the frame rates: Choose Match. When you do, also specify a target segment duration under Segment length. This is useful for some ad-insertion or segment replacement workflows. Note that Match has the following requirements: - Output containers: Include at least one video output and at least one audio output. Audio-only outputs are not supported. - Output frame rate: Follow source is not supported. - Multiple output frame rates: When you specify multiple outputs, we recommend they share a similar frame rate (as in X/3, X/2, X, or 2X). For example: 5, 15, 30 and 60. Or: 25 and 50. (Outputs must share an integer multiple.) - Output audio codec: Specify Advanced Audio Coding (AAC). - Output sample rate: Choose 48kHz.",
       "enum": [
         "EXACT",
-        "GOP_MULTIPLE"
+        "GOP_MULTIPLE",
+        "MATCH"
       ]
     },
     "DashIsoVideoCompositionOffsets": {
@@ -4376,6 +4559,17 @@
         "COMPACT",
         "DISTINCT"
       ]
+    },
+    "DataProperties": {
+      "type": "structure",
+      "members": {
+        "LanguageCode": {
+          "shape": "__string",
+          "locationName": "languageCode",
+          "documentation": "The language code of the data track, in three character ISO 639-3 format."
+        }
+      },
+      "documentation": "Details about the media file's data track."
     },
     "DecryptionMode": {
       "type": "string",
@@ -4451,18 +4645,15 @@
     },
     "DeleteJobTemplateResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "DeletePolicyRequest": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "DeletePolicyResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "DeletePresetRequest": {
       "type": "structure",
@@ -4480,8 +4671,7 @@
     },
     "DeletePresetResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "DeleteQueueRequest": {
       "type": "structure",
@@ -4499,8 +4689,7 @@
     },
     "DeleteQueueResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "DescribeEndpointsMode": {
       "type": "string",
@@ -4578,8 +4767,7 @@
     },
     "DisassociateCertificateResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "DolbyVision": {
       "type": "structure",
@@ -4729,7 +4917,7 @@
         "DdsHandling": {
           "shape": "DvbddsHandling",
           "locationName": "ddsHandling",
-          "documentation": "Specify how MediaConvert handles the display definition segment (DDS). To exclude the DDS from this set of captions: Keep the default, None. To include the DDS: Choose Specified. When you do, also specify the offset coordinates of the display window with DDS x-coordinate and DDS y-coordinate. To include the DDS, but not include display window data: Choose No display window. When you do, you can write position metadata to the page composition segment (PCS) with DDS x-coordinate and DDS y-coordinate. For video resolutions with a height of 576 pixels or less, MediaConvert doesn't include the DDS, regardless of the value you choose for DDS handling. All burn-in and DVB-Sub font settings must match."
+          "documentation": "Specify how MediaConvert handles the display definition segment (DDS). To exclude the DDS from this set of captions: Keep the default, None. To include the DDS: Choose Specified. When you do, also specify the offset coordinates of the display window with DDS x-coordinate and DDS y-coordinate. To include the DDS, but not include display window data: Choose No display window. When you do, you can write position metadata to the page composition segment (PCS) with DDS x-coordinate and DDS y-coordinate. For video resolutions with a height of 576 pixels or less, MediaConvert doesn't include the DDS, regardless of the value you choose for DDS handling. All burn-in and DVB-Sub font settings must match. To include the DDS, with optimized subtitle placement and reduced data overhead: We recommend that you choose Specified (optimal). This option provides the same visual positioning as Specified while using less bandwidth. This also supports resolutions higher than 1080p while maintaining full DVB-Sub compatibility. When you do, also specify the offset coordinates of the display window with DDS x-coordinate and DDS y-coordinate."
         },
         "DdsXCoordinate": {
           "shape": "__integerMin0Max2147483647",
@@ -4988,11 +5176,51 @@
     },
     "DvbddsHandling": {
       "type": "string",
-      "documentation": "Specify how MediaConvert handles the display definition segment (DDS). To exclude the DDS from this set of captions: Keep the default, None. To include the DDS: Choose Specified. When you do, also specify the offset coordinates of the display window with DDS x-coordinate and DDS y-coordinate. To include the DDS, but not include display window data: Choose No display window. When you do, you can write position metadata to the page composition segment (PCS) with DDS x-coordinate and DDS y-coordinate. For video resolutions with a height of 576 pixels or less, MediaConvert doesn't include the DDS, regardless of the value you choose for DDS handling. All burn-in and DVB-Sub font settings must match.",
+      "documentation": "Specify how MediaConvert handles the display definition segment (DDS). To exclude the DDS from this set of captions: Keep the default, None. To include the DDS: Choose Specified. When you do, also specify the offset coordinates of the display window with DDS x-coordinate and DDS y-coordinate. To include the DDS, but not include display window data: Choose No display window. When you do, you can write position metadata to the page composition segment (PCS) with DDS x-coordinate and DDS y-coordinate. For video resolutions with a height of 576 pixels or less, MediaConvert doesn't include the DDS, regardless of the value you choose for DDS handling. All burn-in and DVB-Sub font settings must match. To include the DDS, with optimized subtitle placement and reduced data overhead: We recommend that you choose Specified (optimal). This option provides the same visual positioning as Specified while using less bandwidth. This also supports resolutions higher than 1080p while maintaining full DVB-Sub compatibility. When you do, also specify the offset coordinates of the display window with DDS x-coordinate and DDS y-coordinate.",
       "enum": [
         "NONE",
         "SPECIFIED",
-        "NO_DISPLAY_WINDOW"
+        "NO_DISPLAY_WINDOW",
+        "SPECIFIED_OPTIMAL"
+      ]
+    },
+    "DynamicAudioSelector": {
+      "type": "structure",
+      "members": {
+        "AudioDurationCorrection": {
+          "shape": "AudioDurationCorrection",
+          "locationName": "audioDurationCorrection",
+          "documentation": "Apply audio timing corrections to help synchronize audio and video in your output. To apply timing corrections, your input must meet the following requirements: * Container: MP4, or MOV, with an accurate time-to-sample (STTS) table. * Audio track: AAC. Choose from the following audio timing correction settings: * Disabled (Default): Apply no correction. * Auto: Recommended for most inputs. MediaConvert analyzes the audio timing in your input and determines which correction setting to use, if needed. * Track: Adjust the duration of each audio frame by a constant amount to align the audio track length with STTS duration. Track-level correction does not affect pitch, and is recommended for tonal audio content such as music. * Frame: Adjust the duration of each audio frame by a variable amount to align audio frames with STTS timestamps. No corrections are made to already-aligned frames. Frame-level correction may affect the pitch of corrected frames, and is recommended for atonal audio content such as speech or percussion. * Force: Apply audio duration correction, either Track or Frame depending on your input, regardless of the accuracy of your input's STTS table. Your output audio and video may not be aligned or it may contain audio artifacts."
+        },
+        "ExternalAudioFileInput": {
+          "shape": "__stringPatternS3Https",
+          "locationName": "externalAudioFileInput",
+          "documentation": "Specify the S3, HTTP, or HTTPS URL for your external audio file input."
+        },
+        "LanguageCode": {
+          "shape": "LanguageCode",
+          "locationName": "languageCode",
+          "documentation": "Specify the language to select from your audio input. In the MediaConvert console choose from a list of languages. In your JSON job settings choose from an ISO 639-2 three-letter code listed at https://www.loc.gov/standards/iso639-2/php/code_list.php"
+        },
+        "Offset": {
+          "shape": "__integerMinNegative2147483648Max2147483647",
+          "locationName": "offset",
+          "documentation": "Specify a time delta, in milliseconds, to offset the audio from the input video.\nTo specify no offset: Keep the default value, 0.\nTo specify an offset: Enter an integer from -2147483648 to 2147483647"
+        },
+        "SelectorType": {
+          "shape": "DynamicAudioSelectorType",
+          "locationName": "selectorType",
+          "documentation": "Specify which audio tracks to dynamically select from your source. To select all audio tracks: Keep the default value, All tracks. To select all audio tracks with a specific language code: Choose Language code. When you do, you must also specify a language code under the Language code setting. If there is no matching Language code in your source, then no track will be selected."
+        }
+      },
+      "documentation": "Use Dynamic audio selectors when you do not know the track layout of your source when you submit your job, but want to select multiple audio tracks. When you include an audio track in your output and specify this Dynamic audio selector as the Audio source, MediaConvert creates an audio track within that output for each dynamically selected track. Note that when you include a Dynamic audio selector for two or more inputs, each input must have the same number of audio tracks and audio channels."
+    },
+    "DynamicAudioSelectorType": {
+      "type": "string",
+      "documentation": "Specify which audio tracks to dynamically select from your source. To select all audio tracks: Keep the default value, All tracks. To select all audio tracks with a specific language code: Choose Language code. When you do, you must also specify a language code under the Language code setting. If there is no matching Language code in your source, then no track will be selected.",
+      "enum": [
+        "ALL_TRACKS",
+        "LANGUAGE_CODE"
       ]
     },
     "Eac3AtmosBitstreamMode": {
@@ -5661,6 +5889,11 @@
           "shape": "FileSourceTimeDeltaUnits",
           "locationName": "timeDeltaUnits",
           "documentation": "When you use the setting Time delta to adjust the sync between your sidecar captions and your video, use this setting to specify the units for the delta that you specify. When you don't specify a value for Time delta units, MediaConvert uses seconds by default."
+        },
+        "UpconvertSTLToTeletext": {
+          "shape": "CaptionSourceUpconvertSTLToTeletext",
+          "locationName": "upconvertSTLToTeletext",
+          "documentation": "Specify whether this set of input captions appears in your outputs in both STL and Teletext format. If you choose Upconvert, MediaConvert includes the captions data in two ways: it passes the STL data through using the Teletext compatibility bytes fields of the Teletext wrapper, and it also translates the STL data into Teletext."
         }
       },
       "documentation": "If your input captions are SCC, SMI, SRT, STL, TTML, WebVTT, or IMSC 1.1 in an xml file, specify the URI of the input caption source file. If your caption source is IMSC in an IMF package, use TrackSourceSettings instead of FileSoureSettings."
@@ -5733,6 +5966,15 @@
       },
       "documentation": "Use Force include renditions to specify one or more resolutions to include your ABR stack. * (Recommended) To optimize automated ABR, specify as few resolutions as possible. * (Required) The number of resolutions that you specify must be equal to, or less than, the Max renditions setting. * If you specify a Min top rendition size rule, specify at least one resolution that is equal to, or greater than, Min top rendition size. * If you specify a Min bottom rendition size rule, only specify resolutions that are equal to, or greater than, Min bottom rendition size. * If you specify a Force include renditions rule, do not specify a separate rule for Allowed renditions. * Note: The ABR stack may include other resolutions that you do not specify here, depending on the Max renditions setting."
     },
+    "Format": {
+      "type": "string",
+      "enum": [
+        "mp4",
+        "quicktime",
+        "matroska",
+        "webm"
+      ]
+    },
     "FrameCaptureSettings": {
       "type": "structure",
       "members": {
@@ -5758,6 +6000,34 @@
         }
       },
       "documentation": "Required when you set Codec to the value FRAME_CAPTURE."
+    },
+    "FrameMetricType": {
+      "type": "string",
+      "documentation": "* PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode.",
+      "enum": [
+        "PSNR",
+        "SSIM",
+        "MS_SSIM",
+        "PSNR_HVS",
+        "VMAF",
+        "QVBR"
+      ]
+    },
+    "FrameRate": {
+      "type": "structure",
+      "members": {
+        "Denominator": {
+          "shape": "__integer",
+          "locationName": "denominator",
+          "documentation": "The denominator, or bottom number, in the fractional frame rate. For example, if your frame rate is 24000 / 1001 (23.976 frames per second), then the denominator would be 1001."
+        },
+        "Numerator": {
+          "shape": "__integer",
+          "locationName": "numerator",
+          "documentation": "The numerator, or top number, in the fractional frame rate. For example, if your frame rate is 24000 / 1001 (23.976 frames per second), then the numerator would be 24000."
+        }
+      },
+      "documentation": "The frame rate of the video or audio track."
     },
     "GetJobRequest": {
       "type": "structure",
@@ -5809,8 +6079,7 @@
     },
     "GetPolicyRequest": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "GetPolicyResponse": {
       "type": "structure",
@@ -5869,6 +6138,48 @@
           "documentation": "You can use queues to manage the resources that are available to your AWS account for running multiple transcoding jobs at the same time. If you don't specify a queue, the service sends all jobs through the default queue. For more information, see https://docs.aws.amazon.com/mediaconvert/latest/ug/working-with-queues.html."
         }
       }
+    },
+    "GifFramerateControl": {
+      "type": "string",
+      "documentation": "If you are using the console, use the Framerate setting to specify the frame rate for this output. If you want to keep the same frame rate as the input video, choose Follow source. If you want to do frame rate conversion, choose a frame rate from the dropdown list or choose Custom. The framerates shown in the dropdown list are decimal approximations of fractions. If you choose Custom, specify your frame rate as a fraction. If you are creating your transcoding job specification as a JSON file without the console, use FramerateControl to specify which value the service uses for the frame rate for this output. Choose INITIALIZE_FROM_SOURCE if you want the service to use the frame rate from the input. Choose SPECIFIED if you want the service to use the frame rate you specify in the settings FramerateNumerator and FramerateDenominator.",
+      "enum": [
+        "INITIALIZE_FROM_SOURCE",
+        "SPECIFIED"
+      ]
+    },
+    "GifFramerateConversionAlgorithm": {
+      "type": "string",
+      "documentation": "Optional. Specify how the transcoder performs framerate conversion. The default behavior is to use Drop duplicate (DUPLICATE_DROP) conversion. When you choose Interpolate (INTERPOLATE) instead, the conversion produces smoother motion.",
+      "enum": [
+        "DUPLICATE_DROP",
+        "INTERPOLATE"
+      ]
+    },
+    "GifSettings": {
+      "type": "structure",
+      "members": {
+        "FramerateControl": {
+          "shape": "GifFramerateControl",
+          "locationName": "framerateControl",
+          "documentation": "If you are using the console, use the Framerate setting to specify the frame rate for this output. If you want to keep the same frame rate as the input video, choose Follow source. If you want to do frame rate conversion, choose a frame rate from the dropdown list or choose Custom. The framerates shown in the dropdown list are decimal approximations of fractions. If you choose Custom, specify your frame rate as a fraction. If you are creating your transcoding job specification as a JSON file without the console, use FramerateControl to specify which value the service uses for the frame rate for this output. Choose INITIALIZE_FROM_SOURCE if you want the service to use the frame rate from the input. Choose SPECIFIED if you want the service to use the frame rate you specify in the settings FramerateNumerator and FramerateDenominator."
+        },
+        "FramerateConversionAlgorithm": {
+          "shape": "GifFramerateConversionAlgorithm",
+          "locationName": "framerateConversionAlgorithm",
+          "documentation": "Optional. Specify how the transcoder performs framerate conversion. The default behavior is to use Drop duplicate (DUPLICATE_DROP) conversion. When you choose Interpolate (INTERPOLATE) instead, the conversion produces smoother motion."
+        },
+        "FramerateDenominator": {
+          "shape": "__integerMin1Max2147483647",
+          "locationName": "framerateDenominator",
+          "documentation": "When you use the API for transcode jobs that use frame rate conversion, specify the frame rate as a fraction. For example,  24000 / 1001 = 23.976 fps. Use FramerateDenominator to specify the denominator of this fraction. In this example, use 1001 for the value of FramerateDenominator. When you use the console for transcode jobs that use frame rate conversion, provide the value as a decimal number for Framerate. In this example, specify 23.976."
+        },
+        "FramerateNumerator": {
+          "shape": "__integerMin1Max2147483647",
+          "locationName": "framerateNumerator",
+          "documentation": "When you use the API for transcode jobs that use frame rate conversion, specify the frame rate as a fraction. For example,  24000 / 1001 = 23.976 fps. Use FramerateNumerator to specify the numerator of this fraction. In this example, use 24000 for the value of FramerateNumerator. When you use the console for transcode jobs that use frame rate conversion, provide the value as a decimal number for Framerate. In this example, specify 23.976."
+        }
+      },
+      "documentation": "Required when you set (Codec) under (VideoDescription)>(CodecSettings) to the value GIF"
     },
     "H264AdaptiveQuantization": {
       "type": "string",
@@ -5969,11 +6280,12 @@
     },
     "H264FramerateConversionAlgorithm": {
       "type": "string",
-      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96.",
+      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates.",
       "enum": [
         "DUPLICATE_DROP",
         "INTERPOLATE",
-        "FRAMEFORMER"
+        "FRAMEFORMER",
+        "MAINTAIN_FRAME_COUNT"
       ]
     },
     "H264GopBReference": {
@@ -6145,7 +6457,7 @@
         "FramerateConversionAlgorithm": {
           "shape": "H264FramerateConversionAlgorithm",
           "locationName": "framerateConversionAlgorithm",
-          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96."
+          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates."
         },
         "FramerateDenominator": {
           "shape": "__integerMin1Max2147483647",
@@ -6231,6 +6543,11 @@
           "shape": "__integerMin1Max2147483647",
           "locationName": "parNumerator",
           "documentation": "Required when you set Pixel aspect ratio to SPECIFIED. On the console, this corresponds to any value other than Follow source. When you specify an output pixel aspect ratio (PAR) that is different from your input video PAR, provide your output PAR as a ratio. For example, for D1/DV NTSC widescreen, you would specify the ratio 40:33. In this example, the value for parNumerator is 40."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "QualityTuningLevel": {
           "shape": "H264QualityTuningLevel",
@@ -6427,6 +6744,14 @@
         "MAIN_422_10BIT_HIGH"
       ]
     },
+    "H265Deblocking": {
+      "type": "string",
+      "documentation": "Use Deblocking to improve the video quality of your output by smoothing the edges of macroblock artifacts created during video compression. To reduce blocking artifacts at block boundaries, and improve overall video quality: Keep the default value, Enabled. To not apply any deblocking: Choose Disabled. Visible block edge artifacts might appear in the output, especially at lower bitrates.",
+      "enum": [
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
     "H265DynamicSubGop": {
       "type": "string",
       "documentation": "Choose Adaptive to improve subjective video quality for high-motion content. This will cause the service to use fewer B-frames (which infer information based on other frames) for high-motion portions of the video and more B-frames for low-motion portions. The maximum number of B-frames is limited by the value you provide for the setting B frames between reference frames.",
@@ -6461,11 +6786,12 @@
     },
     "H265FramerateConversionAlgorithm": {
       "type": "string",
-      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96.",
+      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates.",
       "enum": [
         "DUPLICATE_DROP",
         "INTERPOLATE",
-        "FRAMEFORMER"
+        "FRAMEFORMER",
+        "MAINTAIN_FRAME_COUNT"
       ]
     },
     "H265GopBReference": {
@@ -6602,6 +6928,11 @@
           "locationName": "codecProfile",
           "documentation": "Represents the Profile and Tier, per the HEVC (H.265) specification. Selections are grouped as [Profile] / [Tier], so \"Main/High\" represents Main Profile with High Tier. 4:2:2 profiles are only available with the HEVC 4:2:2 License."
         },
+        "Deblocking": {
+          "shape": "H265Deblocking",
+          "locationName": "deblocking",
+          "documentation": "Use Deblocking to improve the video quality of your output by smoothing the edges of macroblock artifacts created during video compression. To reduce blocking artifacts at block boundaries, and improve overall video quality: Keep the default value, Enabled. To not apply any deblocking: Choose Disabled. Visible block edge artifacts might appear in the output, especially at lower bitrates."
+        },
         "DynamicSubGop": {
           "shape": "H265DynamicSubGop",
           "locationName": "dynamicSubGop",
@@ -6625,7 +6956,7 @@
         "FramerateConversionAlgorithm": {
           "shape": "H265FramerateConversionAlgorithm",
           "locationName": "framerateConversionAlgorithm",
-          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96."
+          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates."
         },
         "FramerateDenominator": {
           "shape": "__integerMin1Max2147483647",
@@ -6711,6 +7042,11 @@
           "shape": "__integerMin1Max2147483647",
           "locationName": "parNumerator",
           "documentation": "Required when you set Pixel aspect ratio to SPECIFIED. On the console, this corresponds to any value other than Follow source. When you specify an output pixel aspect ratio (PAR) that is different from your input video PAR, provide your output PAR as a ratio. For example, for D1/DV NTSC widescreen, you would specify the ratio 40:33. In this example, the value for parNumerator is 40."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "QualityTuningLevel": {
           "shape": "H265QualityTuningLevel",
@@ -7250,7 +7586,7 @@
         "SegmentLengthControl": {
           "shape": "HlsSegmentLengthControl",
           "locationName": "segmentLengthControl",
-          "documentation": "Specify how you want MediaConvert to determine the segment length. Choose Exact to have the encoder use the exact length that you specify with the setting Segment length. This might result in extra I-frames. Choose Multiple of GOP to have the encoder round up the segment lengths to match the next GOP boundary."
+          "documentation": "Specify how you want MediaConvert to determine segment lengths in this output group. To use the exact value that you specify under Segment length: Choose Exact. Note that this might result in additional I-frames in the output GOP. To create segment lengths that are a multiple of the GOP: Choose Multiple of GOP. MediaConvert will round up the segment lengths to match the next GOP boundary. To have MediaConvert automatically determine a segment duration that is a multiple of both the audio packets and the frame rates: Choose Match. When you do, also specify a target segment duration under Segment length. This is useful for some ad-insertion or segment replacement workflows. Note that Match has the following requirements: - Output containers: Include at least one video output and at least one audio output. Audio-only outputs are not supported. - Output frame rate: Follow source is not supported. - Multiple output frame rates: When you specify multiple outputs, we recommend they share a similar frame rate (as in X/3, X/2, X, or 2X). For example: 5, 15, 30 and 60. Or: 25 and 50. (Outputs must share an integer multiple.) - Output audio codec: Specify Advanced Audio Coding (AAC). - Output sample rate: Choose 48kHz."
         },
         "SegmentsPerSubdirectory": {
           "shape": "__integerMin1Max2147483647",
@@ -7442,10 +7778,11 @@
     },
     "HlsSegmentLengthControl": {
       "type": "string",
-      "documentation": "Specify how you want MediaConvert to determine the segment length. Choose Exact to have the encoder use the exact length that you specify with the setting Segment length. This might result in extra I-frames. Choose Multiple of GOP to have the encoder round up the segment lengths to match the next GOP boundary.",
+      "documentation": "Specify how you want MediaConvert to determine segment lengths in this output group. To use the exact value that you specify under Segment length: Choose Exact. Note that this might result in additional I-frames in the output GOP. To create segment lengths that are a multiple of the GOP: Choose Multiple of GOP. MediaConvert will round up the segment lengths to match the next GOP boundary. To have MediaConvert automatically determine a segment duration that is a multiple of both the audio packets and the frame rates: Choose Match. When you do, also specify a target segment duration under Segment length. This is useful for some ad-insertion or segment replacement workflows. Note that Match has the following requirements: - Output containers: Include at least one video output and at least one audio output. Audio-only outputs are not supported. - Output frame rate: Follow source is not supported. - Multiple output frame rates: When you specify multiple outputs, we recommend they share a similar frame rate (as in X/3, X/2, X, or 2X). For example: 5, 15, 30 and 60. Or: 25 and 50. (Outputs must share an integer multiple.) - Output audio codec: Specify Advanced Audio Coding (AAC). - Output sample rate: Choose 48kHz.",
       "enum": [
         "EXACT",
-        "GOP_MULTIPLE"
+        "GOP_MULTIPLE",
+        "MATCH"
       ]
     },
     "HlsSettings": {
@@ -7651,6 +7988,11 @@
           "shape": "__stringMin14PatternS3XmlXMLHttpsXmlXML",
           "locationName": "dolbyVisionMetadataXml",
           "documentation": "Use this setting only when your video source has Dolby Vision studio mastering metadata that is carried in a separate XML file. Specify the Amazon S3 location for the metadata XML file. MediaConvert uses this file to provide global and frame-level metadata for Dolby Vision preprocessing. When you specify a file here and your input also has interleaved global and frame level metadata, MediaConvert ignores the interleaved metadata and uses only the the metadata from this external XML file. Note that your IAM service role must grant MediaConvert read permissions to this file. For more information, see https://docs.aws.amazon.com/mediaconvert/latest/ug/iam-role.html."
+        },
+        "DynamicAudioSelectors": {
+          "shape": "__mapOfDynamicAudioSelector",
+          "locationName": "dynamicAudioSelectors",
+          "documentation": "Use Dynamic audio selectors when you do not know the track layout of your source when you submit your job, but want to select multiple audio tracks. When you include an audio track in your output and specify this Dynamic audio selector as the Audio source, MediaConvert creates an output audio track for each dynamically selected track. Note that when you include a Dynamic audio selector for two or more inputs, each input must have the same number of audio tracks and audio channels."
         },
         "FileInput": {
           "shape": "__stringMax2048PatternS3Https",
@@ -7888,6 +8230,11 @@
           "shape": "__stringMin14PatternS3XmlXMLHttpsXmlXML",
           "locationName": "dolbyVisionMetadataXml",
           "documentation": "Use this setting only when your video source has Dolby Vision studio mastering metadata that is carried in a separate XML file. Specify the Amazon S3 location for the metadata XML file. MediaConvert uses this file to provide global and frame-level metadata for Dolby Vision preprocessing. When you specify a file here and your input also has interleaved global and frame level metadata, MediaConvert ignores the interleaved metadata and uses only the the metadata from this external XML file. Note that your IAM service role must grant MediaConvert read permissions to this file. For more information, see https://docs.aws.amazon.com/mediaconvert/latest/ug/iam-role.html."
+        },
+        "DynamicAudioSelectors": {
+          "shape": "__mapOfDynamicAudioSelector",
+          "locationName": "dynamicAudioSelectors",
+          "documentation": "Use Dynamic audio selectors when you do not know the track layout of your source when you submit your job, but want to select multiple audio tracks. When you include an audio track in your output and specify this Dynamic audio selector as the Audio source, MediaConvert creates an output audio track for each dynamically selected track. Note that when you include a Dynamic audio selector for two or more inputs, each input must have the same number of audio tracks and audio channels."
         },
         "FilterEnable": {
           "shape": "InputFilterEnable",
@@ -9205,6 +9552,11 @@
           "locationName": "audioPids",
           "documentation": "Specify the packet identifiers (PIDs) for any elementary audio streams you include in this output. Specify multiple PIDs as a JSON array. Default is the range 482-492."
         },
+        "AudioPtsOffsetDelta": {
+          "shape": "__integerMinNegative10000Max10000",
+          "locationName": "audioPtsOffsetDelta",
+          "documentation": "Manually specify the difference in PTS offset that will be applied to the audio track, in seconds or milliseconds, when you set PTS offset to Seconds or Milliseconds. Enter an integer from -10000 to 10000. Leave blank to keep the default value 0."
+        },
         "Bitrate": {
           "shape": "__integerMin0Max2147483647",
           "locationName": "bitrate",
@@ -9343,7 +9695,7 @@
         "PtsOffsetMode": {
           "shape": "TsPtsOffset",
           "locationName": "ptsOffsetMode",
-          "documentation": "Specify the initial presentation timestamp (PTS) offset for your transport stream output. To let MediaConvert automatically determine the initial PTS offset: Keep the default value, Auto. We recommend that you choose Auto for the widest player compatibility. The initial PTS will be at least two seconds and vary depending on your output's bitrate, HRD buffer size and HRD buffer initial fill percentage. To manually specify an initial PTS offset: Choose Seconds. Then specify the number of seconds with PTS offset."
+          "documentation": "Specify the initial presentation timestamp (PTS) offset for your transport stream output. To let MediaConvert automatically determine the initial PTS offset: Keep the default value, Auto. We recommend that you choose Auto for the widest player compatibility. The initial PTS will be at least two seconds and vary depending on your output's bitrate, HRD buffer size and HRD buffer initial fill percentage. To manually specify an initial PTS offset: Choose Seconds or Milliseconds. Then specify the number of seconds or milliseconds with PTS offset."
         },
         "RateMode": {
           "shape": "M2tsRateMode",
@@ -9456,6 +9808,11 @@
           "locationName": "audioPids",
           "documentation": "Packet Identifier (PID) of the elementary audio stream(s) in the transport stream. Multiple values are accepted, and can be entered in ranges and/or by comma separation."
         },
+        "AudioPtsOffsetDelta": {
+          "shape": "__integerMinNegative10000Max10000",
+          "locationName": "audioPtsOffsetDelta",
+          "documentation": "Manually specify the difference in PTS offset that will be applied to the audio track, in seconds or milliseconds, when you set PTS offset to Seconds or Milliseconds. Enter an integer from -10000 to 10000. Leave blank to keep the default value 0."
+        },
         "DataPTSControl": {
           "shape": "M3u8DataPtsControl",
           "locationName": "dataPTSControl",
@@ -9514,7 +9871,7 @@
         "PtsOffsetMode": {
           "shape": "TsPtsOffset",
           "locationName": "ptsOffsetMode",
-          "documentation": "Specify the initial presentation timestamp (PTS) offset for your transport stream output. To let MediaConvert automatically determine the initial PTS offset: Keep the default value, Auto. We recommend that you choose Auto for the widest player compatibility. The initial PTS will be at least two seconds and vary depending on your output's bitrate, HRD buffer size and HRD buffer initial fill percentage. To manually specify an initial PTS offset: Choose Seconds. Then specify the number of seconds with PTS offset."
+          "documentation": "Specify the initial presentation timestamp (PTS) offset for your transport stream output. To let MediaConvert automatically determine the initial PTS offset: Keep the default value, Auto. We recommend that you choose Auto for the widest player compatibility. The initial PTS will be at least two seconds and vary depending on your output's bitrate, HRD buffer size and HRD buffer initial fill percentage. To manually specify an initial PTS offset: Choose Seconds or Milliseconds. Then specify the number of seconds or milliseconds with PTS offset."
         },
         "Scte35Pid": {
           "shape": "__integerMin32Max8182",
@@ -9548,6 +9905,56 @@
         }
       },
       "documentation": "These settings relate to the MPEG-2 transport stream (MPEG2-TS) container for the MPEG2-TS segments in your HLS outputs."
+    },
+    "MatrixCoefficients": {
+      "type": "string",
+      "documentation": "The color space matrix coefficients of the video track.",
+      "enum": [
+        "RGB",
+        "ITU_709",
+        "UNSPECIFIED",
+        "RESERVED",
+        "FCC",
+        "ITU_470BG",
+        "SMPTE_170M",
+        "SMPTE_240M",
+        "YCgCo",
+        "ITU_2020_NCL",
+        "ITU_2020_CL",
+        "SMPTE_2085",
+        "CD_NCL",
+        "CD_CL",
+        "ITU_2100ICtCp",
+        "IPT",
+        "EBU3213",
+        "LAST"
+      ]
+    },
+    "Metadata": {
+      "type": "structure",
+      "members": {
+        "ETag": {
+          "shape": "__string",
+          "locationName": "eTag",
+          "documentation": "The entity tag (ETag) of the file."
+        },
+        "FileSize": {
+          "shape": "__long",
+          "locationName": "fileSize",
+          "documentation": "The size of the media file, in bytes."
+        },
+        "LastModified": {
+          "shape": "__timestampUnix",
+          "locationName": "lastModified",
+          "documentation": "The last modification timestamp of the media file, in Unix time."
+        },
+        "MimeType": {
+          "shape": "__string",
+          "locationName": "mimeType",
+          "documentation": "The MIME type of the media file."
+        }
+      },
+      "documentation": "Metadata and other file information."
     },
     "MinBottomRenditionSize": {
       "type": "structure",
@@ -9796,6 +10203,14 @@
       },
       "documentation": "Required when you set Codec, under AudioDescriptions>CodecSettings, to the value MP3."
     },
+    "Mp4C2paManifest": {
+      "type": "string",
+      "documentation": "When enabled, a C2PA compliant manifest will be generated, signed and embeded in the output. For more information on C2PA, see https://c2pa.org/specifications/specifications/2.1/index.html",
+      "enum": [
+        "INCLUDE",
+        "EXCLUDE"
+      ]
+    },
     "Mp4CslgAtom": {
       "type": "string",
       "documentation": "When enabled, file composition times will start at zero, composition times in the 'ctts' (composition time to sample) box for B-frames will be negative, and a 'cslg' (composition shift least greatest) box will be included per 14496-1 amendment 1. This improves compatibility with Apple players and tools.",
@@ -9828,6 +10243,16 @@
           "locationName": "audioDuration",
           "documentation": "Specify this setting only when your output will be consumed by a downstream repackaging workflow that is sensitive to very small duration differences between video and audio. For this situation, choose Match video duration. In all other cases, keep the default value, Default codec duration. When you choose Match video duration, MediaConvert pads the output audio streams with silence or trims them to ensure that the total duration of each audio stream is at least as long as the total duration of the video stream. After padding or trimming, the audio stream duration is no more than one frame longer than the video stream. MediaConvert applies audio padding or trimming only to the end of the last segment of the output. For unsegmented outputs, MediaConvert adds padding only to the end of the file. When you keep the default value, any minor discrepancies between audio and video duration will depend on your output audio codec."
         },
+        "C2paManifest": {
+          "shape": "Mp4C2paManifest",
+          "locationName": "c2paManifest",
+          "documentation": "When enabled, a C2PA compliant manifest will be generated, signed and embeded in the output. For more information on C2PA, see https://c2pa.org/specifications/specifications/2.1/index.html"
+        },
+        "CertificateSecret": {
+          "shape": "__stringMin1Max2048PatternArnAZSecretsmanagerWD12SecretAZAZ09",
+          "locationName": "certificateSecret",
+          "documentation": "Specify the name or ARN of the AWS Secrets Manager secret that contains your C2PA public certificate chain in PEM format. Provide a valid secret name or ARN. Note that your MediaConvert service role must allow access to this secret. The public certificate chain is added to the COSE header (x5chain) for signature validation. Include the signer's certificate and all intermediate certificates. Do not include the root certificate. For details on COSE, see: https://opensource.contentauthenticity.org/docs/manifest/signing-manifests"
+        },
         "CslgAtom": {
           "shape": "Mp4CslgAtom",
           "locationName": "cslgAtom",
@@ -9852,6 +10277,11 @@
           "shape": "__string",
           "locationName": "mp4MajorBrand",
           "documentation": "Overrides the \"Major Brand\" field in the output file. Usually not necessary to specify."
+        },
+        "SigningKmsKey": {
+          "shape": "__stringMin1PatternArnAwsUsGovCnKmsAZ26EastWestCentralNorthSouthEastWest1912D12KeyAFAF098AFAF094AFAF094AFAF094AFAF0912MrkAFAF0932",
+          "locationName": "signingKmsKey",
+          "documentation": "Specify the ID or ARN of the AWS KMS key used to sign the C2PA manifest in your MP4 output. Provide a valid KMS key ARN. Note that your MediaConvert service role must allow access to this key."
         }
       },
       "documentation": "These settings relate to your MP4 output container. You can create audio only outputs with this container. For more information, see https://docs.aws.amazon.com/mediaconvert/latest/ug/supported-codecs-containers-audio-only.html#output-codecs-and-containers-supported-for-audio-only."
@@ -10036,11 +10466,12 @@
     },
     "Mpeg2FramerateConversionAlgorithm": {
       "type": "string",
-      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96.",
+      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates.",
       "enum": [
         "DUPLICATE_DROP",
         "INTERPOLATE",
-        "FRAMEFORMER"
+        "FRAMEFORMER",
+        "MAINTAIN_FRAME_COUNT"
       ]
     },
     "Mpeg2GopSizeUnits": {
@@ -10149,7 +10580,7 @@
         "FramerateConversionAlgorithm": {
           "shape": "Mpeg2FramerateConversionAlgorithm",
           "locationName": "framerateConversionAlgorithm",
-          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96."
+          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates."
         },
         "FramerateDenominator": {
           "shape": "__integerMin1Max1001",
@@ -10230,6 +10661,11 @@
           "shape": "__integerMin1Max2147483647",
           "locationName": "parNumerator",
           "documentation": "Required when you set Pixel aspect ratio to SPECIFIED. On the console, this corresponds to any value other than Follow source. When you specify an output pixel aspect ratio (PAR) that is different from your input video PAR, provide your output PAR as a ratio. For example, for D1/DV NTSC widescreen, you would specify the ratio 40:33. In this example, the value for parNumerator is 40."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "QualityTuningLevel": {
           "shape": "Mpeg2QualityTuningLevel",
@@ -10799,7 +11235,7 @@
         "Extension": {
           "shape": "__stringMax256",
           "locationName": "extension",
-          "documentation": "Use Extension to specify the file extension for outputs in File output groups. If you do not specify a value, the service will use default extensions by container type as follows * MPEG-2 transport stream, m2ts * Quicktime, mov * MXF container, mxf * MPEG-4 container, mp4 * WebM container, webm * No Container, the service will use codec extensions (e.g. AAC, H265, H265, AC3)"
+          "documentation": "Use Extension to specify the file extension for outputs in File output groups. If you do not specify a value, the service will use default extensions by container type as follows * MPEG-2 transport stream, m2ts * Quicktime, mov * MXF container, mxf * MPEG-4 container, mp4 * WebM container, webm * Animated GIF container, gif * No Container, the service will use codec extensions (e.g. AAC, H265, H265, AC3)"
         },
         "NameModifier": {
           "shape": "__stringMin1Max256",
@@ -10925,6 +11361,11 @@
           "shape": "MsSmoothGroupSettings",
           "locationName": "msSmoothGroupSettings",
           "documentation": "Settings related to your Microsoft Smooth Streaming output package. For more information, see https://docs.aws.amazon.com/mediaconvert/latest/ug/outputs-file-ABR.html."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "Type": {
           "shape": "OutputGroupType",
@@ -11126,6 +11567,58 @@
         "RESERVED"
       ]
     },
+    "ProbeInputFile": {
+      "type": "structure",
+      "members": {
+        "FileUrl": {
+          "shape": "__string",
+          "locationName": "fileUrl",
+          "documentation": "Specify the S3, HTTP, or HTTPS URL for your media file."
+        }
+      },
+      "documentation": "The input file that needs to be analyzed."
+    },
+    "ProbeRequest": {
+      "type": "structure",
+      "members": {
+        "InputFiles": {
+          "shape": "__listOfProbeInputFile",
+          "locationName": "inputFiles",
+          "documentation": "Specify a media file to probe."
+        }
+      }
+    },
+    "ProbeResponse": {
+      "type": "structure",
+      "members": {
+        "ProbeResults": {
+          "shape": "__listOfProbeResult",
+          "locationName": "probeResults",
+          "documentation": "Probe results for your media file."
+        }
+      }
+    },
+    "ProbeResult": {
+      "type": "structure",
+      "members": {
+        "Container": {
+          "shape": "Container",
+          "locationName": "container",
+          "documentation": "The container of your media file. This information helps you understand the overall structure and details of your media, including format, duration, and track layout."
+        },
+        "Metadata": {
+          "shape": "Metadata",
+          "locationName": "metadata",
+          "documentation": "Metadata and other file information."
+        },
+        "TrackMappings": {
+          "shape": "__listOfTrackMapping",
+          "locationName": "trackMappings",
+          "documentation": "An array containing track mapping information."
+        }
+      },
+      "documentation": "Probe results for your media file."
+    },
     "ProresChromaSampling": {
       "type": "string",
       "documentation": "This setting applies only to ProRes 4444 and ProRes 4444 XQ outputs that you create from inputs that use 4:4:4 chroma sampling. Set Preserve 4:4:4 sampling to allow outputs to also use 4:4:4 chroma sampling. You must specify a value for this setting when your output codec profile supports 4:4:4 chroma sampling. Related Settings: For Apple ProRes outputs with 4:4:4 chroma sampling: Choose Preserve 4:4:4 sampling. Use when your input has 4:4:4 chroma sampling and your output codec Profile is Apple ProRes 4444 or 4444 XQ. Note that when you choose Preserve 4:4:4 sampling, you cannot include any of the following Preprocessors: Dolby Vision, HDR10+, or Noise reducer.",
@@ -11156,11 +11649,12 @@
     },
     "ProresFramerateConversionAlgorithm": {
       "type": "string",
-      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96.",
+      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates.",
       "enum": [
         "DUPLICATE_DROP",
         "INTERPOLATE",
-        "FRAMEFORMER"
+        "FRAMEFORMER",
+        "MAINTAIN_FRAME_COUNT"
       ]
     },
     "ProresInterlaceMode": {
@@ -11211,7 +11705,7 @@
         "FramerateConversionAlgorithm": {
           "shape": "ProresFramerateConversionAlgorithm",
           "locationName": "framerateConversionAlgorithm",
-          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96."
+          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates."
         },
         "FramerateDenominator": {
           "shape": "__integerMin1Max2147483647",
@@ -11242,6 +11736,11 @@
           "shape": "__integerMin1Max2147483647",
           "locationName": "parNumerator",
           "documentation": "Required when you set Pixel aspect ratio to SPECIFIED. On the console, this corresponds to any value other than Follow source. When you specify an output pixel aspect ratio (PAR) that is different from your input video PAR, provide your output PAR as a ratio. For example, for D1/DV NTSC widescreen, you would specify the ratio 40:33. In this example, the value for parNumerator is 40."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "ScanTypeConversionMode": {
           "shape": "ProresScanTypeConversionMode",
@@ -11834,7 +12333,7 @@
         "SystemIds": {
           "shape": "__listOf__stringPattern09aFAF809aFAF409aFAF409aFAF409aFAF12",
           "locationName": "systemIds",
-          "documentation": "Relates to SPEKE implementation. DRM system identifiers. DASH output groups support a max of two system ids. Other group types support one system id. See\n https://dashif.org/identifiers/content_protection/ for more details."
+          "documentation": "Relates to SPEKE implementation. DRM system identifiers. DASH output groups support a max of two system ids. HLS output groups support a max of 3 system ids. Other group types support one system id. See https://dashif.org/identifiers/content_protection/ for more details."
         },
         "Url": {
           "shape": "__stringPatternHttpsD",
@@ -11865,7 +12364,7 @@
         "HlsSignaledSystemIds": {
           "shape": "__listOf__stringMin36Max36Pattern09aFAF809aFAF409aFAF409aFAF409aFAF12",
           "locationName": "hlsSignaledSystemIds",
-          "documentation": "Specify the DRM system ID that you want signaled in the HLS manifest that MediaConvert creates as part of this CMAF package. The HLS manifest can currently signal only one system ID. For more information, see https://dashif.org/identifiers/content_protection/."
+          "documentation": "Specify up to 3 DRM system IDs that you want signaled in the HLS manifest that MediaConvert creates as part of this CMAF package. For more information, see https://dashif.org/identifiers/content_protection/."
         },
         "ResourceId": {
           "shape": "__stringPatternW",
@@ -11967,8 +12466,7 @@
     },
     "TagResourceResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "TeletextDestinationSettings": {
       "type": "structure",
@@ -12141,6 +12639,68 @@
       },
       "documentation": "Too many requests have been sent in too short of a time. The service limits the rate at which it will accept requests."
     },
+    "Track": {
+      "type": "structure",
+      "members": {
+        "AudioProperties": {
+          "shape": "AudioProperties",
+          "locationName": "audioProperties",
+          "documentation": "Details about the media file's audio track."
+        },
+        "Codec": {
+          "shape": "Codec",
+          "locationName": "codec",
+          "documentation": "The codec of the audio or video track, or caption format of the data track."
+        },
+        "DataProperties": {
+          "shape": "DataProperties",
+          "locationName": "dataProperties",
+          "documentation": "Details about the media file's data track."
+        },
+        "Duration": {
+          "shape": "__double",
+          "locationName": "duration",
+          "documentation": "The duration of the track, in seconds."
+        },
+        "Index": {
+          "shape": "__integer",
+          "locationName": "index",
+          "documentation": "The unique index number of the track, starting at 1."
+        },
+        "TrackType": {
+          "shape": "TrackType",
+          "locationName": "trackType",
+          "documentation": "The type of track: video, audio, or data."
+        },
+        "VideoProperties": {
+          "shape": "VideoProperties",
+          "locationName": "videoProperties",
+          "documentation": "Details about the media file's video track."
+        }
+      },
+      "documentation": "Details about each track (video, audio, or data) in the media file."
+    },
+    "TrackMapping": {
+      "type": "structure",
+      "members": {
+        "AudioTrackIndexes": {
+          "shape": "__listOf__integer",
+          "locationName": "audioTrackIndexes",
+          "documentation": "The index numbers of the audio tracks in your media file."
+        },
+        "DataTrackIndexes": {
+          "shape": "__listOf__integer",
+          "locationName": "dataTrackIndexes",
+          "documentation": "The index numbers of the data tracks in your media file."
+        },
+        "VideoTrackIndexes": {
+          "shape": "__listOf__integer",
+          "locationName": "videoTrackIndexes",
+          "documentation": "The index numbers of the video tracks in your media file."
+        }
+      },
+      "documentation": "An array containing track mapping information."
+    },
     "TrackSourceSettings": {
       "type": "structure",
       "members": {
@@ -12152,12 +12712,46 @@
       },
       "documentation": "Settings specific to caption sources that are specified by track number. Currently, this is only IMSC captions in an IMF package. If your caption source is IMSC 1.1 in a separate xml file, use FileSourceSettings instead of TrackSourceSettings."
     },
+    "TrackType": {
+      "type": "string",
+      "enum": [
+        "video",
+        "audio",
+        "data"
+      ]
+    },
+    "TransferCharacteristics": {
+      "type": "string",
+      "documentation": "The color space transfer characteristics of the video track.",
+      "enum": [
+        "ITU_709",
+        "UNSPECIFIED",
+        "RESERVED",
+        "ITU_470M",
+        "ITU_470BG",
+        "SMPTE_170M",
+        "SMPTE_240M",
+        "LINEAR",
+        "LOG10_2",
+        "LOC10_2_5",
+        "IEC_61966_2_4",
+        "ITU_1361",
+        "IEC_61966_2_1",
+        "ITU_2020_10bit",
+        "ITU_2020_12bit",
+        "SMPTE_2084",
+        "SMPTE_428_1",
+        "ARIB_B67",
+        "LAST"
+      ]
+    },
     "TsPtsOffset": {
       "type": "string",
-      "documentation": "Specify the initial presentation timestamp (PTS) offset for your transport stream output. To let MediaConvert automatically determine the initial PTS offset: Keep the default value, Auto. We recommend that you choose Auto for the widest player compatibility. The initial PTS will be at least two seconds and vary depending on your output's bitrate, HRD buffer size and HRD buffer initial fill percentage. To manually specify an initial PTS offset: Choose Seconds. Then specify the number of seconds with PTS offset.",
+      "documentation": "Specify the initial presentation timestamp (PTS) offset for your transport stream output. To let MediaConvert automatically determine the initial PTS offset: Keep the default value, Auto. We recommend that you choose Auto for the widest player compatibility. The initial PTS will be at least two seconds and vary depending on your output's bitrate, HRD buffer size and HRD buffer initial fill percentage. To manually specify an initial PTS offset: Choose Seconds or Milliseconds. Then specify the number of seconds or milliseconds with PTS offset.",
       "enum": [
         "AUTO",
-        "SECONDS"
+        "SECONDS",
+        "MILLISECONDS"
       ]
     },
     "TtmlDestinationSettings": {
@@ -12205,11 +12799,12 @@
     },
     "UncompressedFramerateConversionAlgorithm": {
       "type": "string",
-      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96.",
+      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates.",
       "enum": [
         "DUPLICATE_DROP",
         "INTERPOLATE",
-        "FRAMEFORMER"
+        "FRAMEFORMER",
+        "MAINTAIN_FRAME_COUNT"
       ]
     },
     "UncompressedInterlaceMode": {
@@ -12244,7 +12839,7 @@
         "FramerateConversionAlgorithm": {
           "shape": "UncompressedFramerateConversionAlgorithm",
           "locationName": "framerateConversionAlgorithm",
-          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96."
+          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates."
         },
         "FramerateDenominator": {
           "shape": "__integerMin1Max2147483647",
@@ -12316,8 +12911,7 @@
     },
     "UntagResourceResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "UpdateJobTemplateRequest": {
       "type": "structure",
@@ -12485,11 +13079,12 @@
     },
     "Vc3FramerateConversionAlgorithm": {
       "type": "string",
-      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96.",
+      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates.",
       "enum": [
         "DUPLICATE_DROP",
         "INTERPOLATE",
-        "FRAMEFORMER"
+        "FRAMEFORMER",
+        "MAINTAIN_FRAME_COUNT"
       ]
     },
     "Vc3InterlaceMode": {
@@ -12519,7 +13114,7 @@
         "FramerateConversionAlgorithm": {
           "shape": "Vc3FramerateConversionAlgorithm",
           "locationName": "framerateConversionAlgorithm",
-          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96."
+          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates."
         },
         "FramerateDenominator": {
           "shape": "__integerMin1Max1001",
@@ -12590,6 +13185,7 @@
         "AV1",
         "AVC_INTRA",
         "FRAME_CAPTURE",
+        "GIF",
         "H_264",
         "H_265",
         "MPEG2",
@@ -12624,6 +13220,11 @@
           "shape": "FrameCaptureSettings",
           "locationName": "frameCaptureSettings",
           "documentation": "Required when you set Codec to the value FRAME_CAPTURE."
+        },
+        "GifSettings": {
+          "shape": "GifSettings",
+          "locationName": "gifSettings",
+          "documentation": "Required when you set (Codec) under (VideoDescription)>(CodecSettings) to the value GIF"
         },
         "H264Settings": {
           "shape": "H264Settings",
@@ -12671,7 +13272,7 @@
           "documentation": "Required when you set Codec to the value XAVC."
         }
       },
-      "documentation": "Video codec settings contains the group of settings related to video encoding. The settings in this group vary depending on the value that you choose for Video codec. For each codec enum that you choose, define the corresponding settings object. The following lists the codec enum, settings object pairs. * AV1, Av1Settings * AVC_INTRA, AvcIntraSettings * FRAME_CAPTURE, FrameCaptureSettings * H_264, H264Settings * H_265, H265Settings * MPEG2, Mpeg2Settings * PRORES, ProresSettings * UNCOMPRESSED, UncompressedSettings * VC3, Vc3Settings * VP8, Vp8Settings * VP9, Vp9Settings * XAVC, XavcSettings"
+      "documentation": "Video codec settings contains the group of settings related to video encoding. The settings in this group vary depending on the value that you choose for Video codec. For each codec enum that you choose, define the corresponding settings object. The following lists the codec enum, settings object pairs. * AV1, Av1Settings * AVC_INTRA, AvcIntraSettings * FRAME_CAPTURE, FrameCaptureSettings * GIF, GifSettings * H_264, H264Settings * H_265, H265Settings * MPEG2, Mpeg2Settings * PRORES, ProresSettings * UNCOMPRESSED, UncompressedSettings * VC3, Vc3Settings * VP8, Vp8Settings * VP9, Vp9Settings * XAVC, XavcSettings"
     },
     "VideoDescription": {
       "type": "structure",
@@ -12686,10 +13287,15 @@
           "locationName": "antiAlias",
           "documentation": "The anti-alias filter is automatically applied to all outputs. The service no longer accepts the value DISABLED for AntiAlias. If you specify that in your job, the service will ignore the setting."
         },
+        "ChromaPositionMode": {
+          "shape": "ChromaPositionMode",
+          "locationName": "chromaPositionMode",
+          "documentation": "Specify the chroma sample positioning metadata for your H.264 or H.265 output. To have MediaConvert automatically determine chroma positioning: We recommend that you keep the default value, Auto. To specify center positioning: Choose Force center. To specify top left positioning: Choose Force top left."
+        },
         "CodecSettings": {
           "shape": "VideoCodecSettings",
           "locationName": "codecSettings",
-          "documentation": "Video codec settings contains the group of settings related to video encoding. The settings in this group vary depending on the value that you choose for Video codec. For each codec enum that you choose, define the corresponding settings object. The following lists the codec enum, settings object pairs. * AV1, Av1Settings * AVC_INTRA, AvcIntraSettings * FRAME_CAPTURE, FrameCaptureSettings * H_264, H264Settings * H_265, H265Settings * MPEG2, Mpeg2Settings * PRORES, ProresSettings * UNCOMPRESSED, UncompressedSettings * VC3, Vc3Settings * VP8, Vp8Settings * VP9, Vp9Settings * XAVC, XavcSettings"
+          "documentation": "Video codec settings contains the group of settings related to video encoding. The settings in this group vary depending on the value that you choose for Video codec. For each codec enum that you choose, define the corresponding settings object. The following lists the codec enum, settings object pairs. * AV1, Av1Settings * AVC_INTRA, AvcIntraSettings * FRAME_CAPTURE, FrameCaptureSettings * GIF, GifSettings * H_264, H264Settings * H_265, H265Settings * MPEG2, Mpeg2Settings * PRORES, ProresSettings * UNCOMPRESSED, UncompressedSettings * VC3, Vc3Settings * VP8, Vp8Settings * VP9, Vp9Settings * XAVC, XavcSettings"
         },
         "ColorMetadata": {
           "shape": "ColorMetadata",
@@ -12778,6 +13384,11 @@
     "VideoOverlay": {
       "type": "structure",
       "members": {
+        "Crop": {
+          "shape": "VideoOverlayCrop",
+          "locationName": "crop",
+          "documentation": "Specify a rectangle of content to crop and use from your video overlay's input video. When you do, MediaConvert uses the cropped dimensions that you specify under X offset, Y offset, Width, and Height."
+        },
         "EndTimecode": {
           "shape": "__stringPattern010920405090509092",
           "locationName": "endTimecode",
@@ -12810,6 +13421,37 @@
         }
       },
       "documentation": "Overlay one or more videos on top of your input video. For more information, see https://docs.aws.amazon.com/mediaconvert/latest/ug/video-overlays.html"
+    },
+    "VideoOverlayCrop": {
+      "type": "structure",
+      "members": {
+        "Height": {
+          "shape": "__integerMin0Max2147483647",
+          "locationName": "height",
+          "documentation": "Specify the height of the video overlay cropping rectangle. To use the same height as your overlay input video: Keep blank, or enter 0. To specify a different height for the cropping rectangle: Enter an integer representing the Unit type that you choose, either Pixels or Percentage. For example, when you enter 100 and choose Pixels, the cropping rectangle will 100 pixels high. When you enter 10, choose Percentage, and your overlay input video is 1920x1080, the cropping rectangle will be 108 pixels high."
+        },
+        "Unit": {
+          "shape": "VideoOverlayUnit",
+          "locationName": "unit",
+          "documentation": "Specify the Unit type to use when you enter a value for X position, Y position, Width, or Height. You can choose Pixels or Percentage. Leave blank to use the default value, Pixels."
+        },
+        "Width": {
+          "shape": "__integerMin0Max2147483647",
+          "locationName": "width",
+          "documentation": "Specify the width of the video overlay cropping rectangle. To use the same width as your overlay input video: Keep blank, or enter 0. To specify a different width for the cropping rectangle: Enter an integer representing the Unit type that you choose, either Pixels or Percentage. For example, when you enter 100 and choose Pixels, the cropping rectangle will 100 pixels wide. When you enter 10, choose Percentage, and your overlay input video is 1920x1080, the cropping rectangle will be 192 pixels wide."
+        },
+        "X": {
+          "shape": "__integerMin0Max2147483647",
+          "locationName": "x",
+          "documentation": "Specify the distance between the cropping rectangle and the left edge of your overlay video's frame. To position the cropping rectangle along the left edge: Keep blank, or enter 0. To position the cropping rectangle to the right, relative to the left edge of your overlay video's frame: Enter an integer representing the Unit type that you choose, either Pixels or Percentage. For example, when you enter 10 and choose Pixels, the cropping rectangle will be positioned 10 pixels from the left edge of the overlay video's frame. When you enter 10, choose Percentage, and your overlay input video is 1920x1080, the cropping rectangle will be positioned 192 pixels from the left edge of the overlay video's frame."
+        },
+        "Y": {
+          "shape": "__integerMin0Max2147483647",
+          "locationName": "y",
+          "documentation": "Specify the distance between the cropping rectangle and the top edge of your overlay video's frame. To position the cropping rectangle along the top edge: Keep blank, or enter 0. To position the cropping rectangle down, relative to the top edge of your overlay video's frame: Enter an integer representing the Unit type that you choose, either Pixels or Percentage. For example, when you enter 10 and choose Pixels, the cropping rectangle will be positioned 10 pixels from the top edge of the overlay video's frame. When you enter 10, choose Percentage, and your overlay input video is 1920x1080, the cropping rectangle will be positioned 108 pixels from the top edge of the overlay video's frame."
+        }
+      },
+      "documentation": "Specify a rectangle of content to crop and use from your video overlay's input video. When you do, MediaConvert uses the cropped dimensions that you specify under X offset, Y offset, Width, and Height."
     },
     "VideoOverlayInput": {
       "type": "structure",
@@ -12967,6 +13609,52 @@
       },
       "documentation": "Find additional transcoding features under Preprocessors. Enable the features at each output individually. These features are disabled by default."
     },
+    "VideoProperties": {
+      "type": "structure",
+      "members": {
+        "BitDepth": {
+          "shape": "__integer",
+          "locationName": "bitDepth",
+          "documentation": "The bit depth of the video track."
+        },
+        "BitRate": {
+          "shape": "__long",
+          "locationName": "bitRate",
+          "documentation": "The bit rate of the video track, in bits per second."
+        },
+        "ColorPrimaries": {
+          "shape": "ColorPrimaries",
+          "locationName": "colorPrimaries",
+          "documentation": "The color space color primaries of the video track."
+        },
+        "FrameRate": {
+          "shape": "FrameRate",
+          "locationName": "frameRate",
+          "documentation": "The frame rate of the video or audio track."
+        },
+        "Height": {
+          "shape": "__integer",
+          "locationName": "height",
+          "documentation": "The height of the video track, in pixels."
+        },
+        "MatrixCoefficients": {
+          "shape": "MatrixCoefficients",
+          "locationName": "matrixCoefficients",
+          "documentation": "The color space matrix coefficients of the video track."
+        },
+        "TransferCharacteristics": {
+          "shape": "TransferCharacteristics",
+          "locationName": "transferCharacteristics",
+          "documentation": "The color space transfer characteristics of the video track."
+        },
+        "Width": {
+          "shape": "__integer",
+          "locationName": "width",
+          "documentation": "The width of the video track, in pixels."
+        }
+      },
+      "documentation": "Details about the media file's video track."
+    },
     "VideoSelector": {
       "type": "structure",
       "members": {
@@ -13067,11 +13755,12 @@
     },
     "Vp8FramerateConversionAlgorithm": {
       "type": "string",
-      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96.",
+      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates.",
       "enum": [
         "DUPLICATE_DROP",
         "INTERPOLATE",
-        "FRAMEFORMER"
+        "FRAMEFORMER",
+        "MAINTAIN_FRAME_COUNT"
       ]
     },
     "Vp8ParControl": {
@@ -13113,7 +13802,7 @@
         "FramerateConversionAlgorithm": {
           "shape": "Vp8FramerateConversionAlgorithm",
           "locationName": "framerateConversionAlgorithm",
-          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96."
+          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates."
         },
         "FramerateDenominator": {
           "shape": "__integerMin1Max2147483647",
@@ -13178,11 +13867,12 @@
     },
     "Vp9FramerateConversionAlgorithm": {
       "type": "string",
-      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96.",
+      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates.",
       "enum": [
         "DUPLICATE_DROP",
         "INTERPOLATE",
-        "FRAMEFORMER"
+        "FRAMEFORMER",
+        "MAINTAIN_FRAME_COUNT"
       ]
     },
     "Vp9ParControl": {
@@ -13224,7 +13914,7 @@
         "FramerateConversionAlgorithm": {
           "shape": "Vp9FramerateConversionAlgorithm",
           "locationName": "framerateConversionAlgorithm",
-          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96."
+          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates."
         },
         "FramerateDenominator": {
           "shape": "__integerMin1Max2147483647",
@@ -13312,10 +14002,11 @@
     },
     "WavFormat": {
       "type": "string",
-      "documentation": "The service defaults to using RIFF for WAV outputs. If your output audio is likely to exceed 4 GB in file size, or if you otherwise need the extended support of the RF64 format, set your output WAV file format to RF64.",
+      "documentation": "Specify the file format for your wave audio output. To use a RIFF wave format: Keep the default value, RIFF. If your output audio is likely to exceed 4GB in file size, or if you otherwise need the extended support of the RF64 format: Choose RF64. If your player only supports the extensible wave format: Choose Extensible.",
       "enum": [
         "RIFF",
-        "RF64"
+        "RF64",
+        "EXTENSIBLE"
       ]
     },
     "WavSettings": {
@@ -13334,7 +14025,7 @@
         "Format": {
           "shape": "WavFormat",
           "locationName": "format",
-          "documentation": "The service defaults to using RIFF for WAV outputs. If your output audio is likely to exceed 4 GB in file size, or if you otherwise need the extended support of the RF64 format, set your output WAV file format to RF64."
+          "documentation": "Specify the file format for your wave audio output. To use a RIFF wave format: Keep the default value, RIFF. If your output audio is likely to exceed 4GB in file size, or if you otherwise need the extended support of the RF64 format: Choose RF64. If your player only supports the extensible wave format: Choose Extensible."
         },
         "SampleRate": {
           "shape": "__integerMin8000Max192000",
@@ -13363,7 +14054,7 @@
         "StylePassthrough": {
           "shape": "WebvttStylePassthrough",
           "locationName": "stylePassthrough",
-          "documentation": "To use the available style, color, and position information from your input captions: Set Style passthrough to Enabled. MediaConvert uses default settings when style and position information is missing from your input captions. To recreate the input captions exactly: Set Style passthrough to Strict. MediaConvert automatically applies timing adjustments, including adjustments for frame rate conversion, ad avails, and input clipping. Your input captions format must be WebVTT. To ignore the style and position information from your input captions and use simplified output captions: Set Style passthrough to Disabled, or leave blank."
+          "documentation": "Specify how MediaConvert writes style information in your output WebVTT captions. To use the available style, color, and position information from your input captions: Choose Enabled. MediaConvert uses default settings when style and position information is missing from your input captions. To recreate the input captions exactly: Choose Strict. MediaConvert automatically applies timing adjustments, including adjustments for frame rate conversion, ad avails, and input clipping. Your input captions format must be WebVTT. To ignore the style and position information from your input captions and use simplified output captions: Keep the default value, Disabled. Or leave blank. To use the available style, color, and position information from your input captions, while merging cues with identical time ranges: Choose merge. This setting can help prevent positioning overlaps for certain players that expect a single single cue for any given time range."
         }
       },
       "documentation": "Settings related to WebVTT captions. WebVTT is a sidecar format that holds captions in a file that is separate from the video container. Set up sidecar captions in the same output group, but different output from your video. For more information, see https://docs.aws.amazon.com/mediaconvert/latest/ug/ttml-and-webvtt-output-captions.html."
@@ -13391,11 +14082,12 @@
     },
     "WebvttStylePassthrough": {
       "type": "string",
-      "documentation": "To use the available style, color, and position information from your input captions: Set Style passthrough to Enabled. MediaConvert uses default settings when style and position information is missing from your input captions. To recreate the input captions exactly: Set Style passthrough to Strict. MediaConvert automatically applies timing adjustments, including adjustments for frame rate conversion, ad avails, and input clipping. Your input captions format must be WebVTT. To ignore the style and position information from your input captions and use simplified output captions: Set Style passthrough to Disabled, or leave blank.",
+      "documentation": "Specify how MediaConvert writes style information in your output WebVTT captions. To use the available style, color, and position information from your input captions: Choose Enabled. MediaConvert uses default settings when style and position information is missing from your input captions. To recreate the input captions exactly: Choose Strict. MediaConvert automatically applies timing adjustments, including adjustments for frame rate conversion, ad avails, and input clipping. Your input captions format must be WebVTT. To ignore the style and position information from your input captions and use simplified output captions: Keep the default value, Disabled. Or leave blank. To use the available style, color, and position information from your input captions, while merging cues with identical time ranges: Choose merge. This setting can help prevent positioning overlaps for certain players that expect a single single cue for any given time range.",
       "enum": [
         "ENABLED",
         "DISABLED",
-        "STRICT"
+        "STRICT",
+        "MERGE"
       ]
     },
     "Xavc4kIntraCbgProfileClass": {
@@ -13550,11 +14242,12 @@
     },
     "XavcFramerateConversionAlgorithm": {
       "type": "string",
-      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96.",
+      "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates.",
       "enum": [
         "DUPLICATE_DROP",
         "INTERPOLATE",
-        "FRAMEFORMER"
+        "FRAMEFORMER",
+        "MAINTAIN_FRAME_COUNT"
       ]
     },
     "XavcGopBReference": {
@@ -13705,7 +14398,7 @@
         "FramerateConversionAlgorithm": {
           "shape": "XavcFramerateConversionAlgorithm",
           "locationName": "framerateConversionAlgorithm",
-          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing the frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96."
+          "documentation": "Choose the method that you want MediaConvert to use when increasing or decreasing your video's frame rate. For numerically simple conversions, such as 60 fps to 30 fps: We recommend that you keep the default value, Drop duplicate. For numerically complex conversions, to avoid stutter: Choose Interpolate. This results in a smooth picture, but might introduce undesirable video artifacts. For complex frame rate conversions, especially if your source video has already been converted from its original cadence: Choose FrameFormer to do motion-compensated interpolation. FrameFormer uses the best conversion method frame by frame. Note that using FrameFormer increases the transcoding time and incurs a significant add-on cost. When you choose FrameFormer, your input video resolution must be at least 128x96. To create an output with the same number of frames as your input: Choose Maintain frame count. When you do, MediaConvert will not drop, interpolate, add, or otherwise change the frame count from your input to your output. Note that since the frame count is maintained, the duration of your output will become shorter at higher frame rates and longer at lower frame rates."
         },
         "FramerateDenominator": {
           "shape": "__integerMin1Max1001",
@@ -13716,6 +14409,11 @@
           "shape": "__integerMin24Max60000",
           "locationName": "framerateNumerator",
           "documentation": "When you use the API for transcode jobs that use frame rate conversion, specify the frame rate as a fraction. For example, 24000 / 1001 = 23.976 fps. Use FramerateNumerator to specify the numerator of this fraction. In this example, use 24000 for the value of FramerateNumerator. When you use the console for transcode jobs that use frame rate conversion, provide the value as a decimal number for Framerate. In this example, specify 23.976."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "Profile": {
           "shape": "XavcProfile",
@@ -13807,6 +14505,9 @@
       "type": "double"
     },
     "__doubleMin0Max2147483647": {
+      "type": "double"
+    },
+    "__doubleMin1Max10": {
       "type": "double"
     },
     "__doubleMinNegative59Max0": {
@@ -14280,6 +14981,11 @@
       "min": 96,
       "max": 600
     },
+    "__integerMinNegative10000Max10000": {
+      "type": "integer",
+      "min": -10000,
+      "max": 10000
+    },
     "__integerMinNegative1000Max1000": {
       "type": "integer",
       "min": -1000,
@@ -14401,6 +15107,12 @@
         "shape": "ForceIncludeRenditionSize"
       }
     },
+    "__listOfFrameMetricType": {
+      "type": "list",
+      "member": {
+        "shape": "FrameMetricType"
+      }
+    },
     "__listOfHlsAdMarkers": {
       "type": "list",
       "member": {
@@ -14515,6 +15227,18 @@
         "shape": "Preset"
       }
     },
+    "__listOfProbeInputFile": {
+      "type": "list",
+      "member": {
+        "shape": "ProbeInputFile"
+      }
+    },
+    "__listOfProbeResult": {
+      "type": "list",
+      "member": {
+        "shape": "ProbeResult"
+      }
+    },
     "__listOfQueue": {
       "type": "list",
       "member": {
@@ -14537,6 +15261,18 @@
       "type": "list",
       "member": {
         "shape": "TeletextPageType"
+      }
+    },
+    "__listOfTrack": {
+      "type": "list",
+      "member": {
+        "shape": "Track"
+      }
+    },
+    "__listOfTrackMapping": {
+      "type": "list",
+      "member": {
+        "shape": "TrackMapping"
       }
     },
     "__listOfVideoOverlay": {
@@ -14567,6 +15303,12 @@
       "type": "list",
       "member": {
         "shape": "__doubleMinNegative60Max6"
+      }
+    },
+    "__listOf__integer": {
+      "type": "list",
+      "member": {
+        "shape": "__integer"
       }
     },
     "__listOf__integerMin1Max2147483647": {
@@ -14617,6 +15359,9 @@
         "shape": "__stringPatternS3ASSETMAPXml"
       }
     },
+    "__long": {
+      "type": "long"
+    },
     "__mapOfAudioSelector": {
       "type": "map",
       "key": {
@@ -14642,6 +15387,15 @@
       },
       "value": {
         "shape": "CaptionSelector"
+      }
+    },
+    "__mapOfDynamicAudioSelector": {
+      "type": "map",
+      "key": {
+        "shape": "__string"
+      },
+      "value": {
+        "shape": "DynamicAudioSelector"
       }
     },
     "__mapOf__string": {
@@ -14754,6 +15508,11 @@
       "min": 1,
       "max": 50,
       "pattern": "^[a-zA-Z0-9_\\/_+=.@-]*$"
+    },
+    "__stringMin1PatternArnAwsUsGovCnKmsAZ26EastWestCentralNorthSouthEastWest1912D12KeyAFAF098AFAF094AFAF094AFAF094AFAF0912MrkAFAF0932": {
+      "type": "string",
+      "min": 1,
+      "pattern": "^(arn:aws(-us-gov|-cn)?:kms:[a-z-]{2,6}-(east|west|central|((north|south)(east|west)?))-[1-9]{1,2}:\\d{12}:key/)?[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}|mrk-[a-fA-F0-9]{32}$"
     },
     "__stringMin24Max512PatternAZaZ0902": {
       "type": "string",

@@ -52,21 +52,21 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        README [108:108]
+        README [116:116]
     Scancode info:
         Original SPDX id: GPL-1.0-or-later
         Score           : 50.00
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
     Files with this license:
-        README [108:108]
+        README [116:116]
     Scancode info:
         Original SPDX id: Linux-syscall-note
         Score           : 50.00
         Match type      : REFERENCE
         Links           : https://spdx.org/licenses/Linux-syscall-note
     Files with this license:
-        README [108:108]
+        README [116:116]
 
 KEEP     MIT                  1eaf467c6d00edd4a5876ad437b67edf
 BELONGS ya.make
@@ -107,6 +107,7 @@ BELONGS ya.make
         test/a0908ae19763.c [2:2]
         test/a4c0b3decb33.c [2:2]
         test/accept-link.c [2:2]
+        test/accept-mshot-stress.c [2:2]
         test/accept-non-empty.c [2:2]
         test/accept-reuse.c [2:2]
         test/accept-test.c [2:2]
@@ -115,9 +116,15 @@ BELONGS ya.make
         test/b19062a56726.c [2:2]
         test/b5837bd5311d.c [2:2]
         test/bind-listen.c [2:2]
+        test/buf-ring-mshot.c [2:2]
         test/buf-ring-nommap.c [2:2]
         test/buf-ring-put.c [2:2]
+        test/buf-ring-stress.c [2:2]
+        test/buf-ring-upgrade.c [2:2]
         test/buf-ring.c [2:2]
+        test/cancel-fd-userdata.c [2:2]
+        test/cancel-race.c [2:2]
+        test/cbpf_filter.c [2:2]
         test/ce593a6c480a.c [2:2]
         test/cmd-discard.c [2:2]
         test/conn-unreach.c [2:2]
@@ -126,6 +133,7 @@ BELONGS ya.make
         test/coredump.c [2:2]
         test/cq-full.c [2:2]
         test/cq-overflow.c [2:2]
+        test/cq-peek-batch-mixed.c [2:2]
         test/cq-peek-batch.c [2:2]
         test/cq-ready.c [2:2]
         test/cq-size.c [2:2]
@@ -187,9 +195,11 @@ BELONGS ya.make
         test/io_uring_setup.c [2:2]
         test/iopoll-leak.c [2:2]
         test/iopoll-overflow.c [2:2]
+        test/iopoll-sync.c [2:2]
         test/iopoll.c [2:2]
         test/iowait.c [2:2]
         test/kallsyms.c [2:2]
+        test/large-resize.c [2:2]
         test/lfs-openat-write.c [2:2]
         test/lfs-openat.c [2:2]
         test/link-timeout.c [2:2]
@@ -209,6 +219,8 @@ BELONGS ya.make
         test/no-mmap-inval.c [2:2]
         test/nolibc.c [2:2]
         test/nop-all-sizes.c [2:2]
+        test/nop-fixed-file-leak.c [2:2]
+        test/nop-flags.c [2:2]
         test/nop.c [2:2]
         test/nop32-overflow.c [2:2]
         test/nop32.c [2:2]
@@ -227,6 +239,7 @@ BELONGS ya.make
         test/poll-link.c [2:2]
         test/poll-many.c [2:2]
         test/poll-mshot-update.c [2:2]
+        test/poll-mshot-wake.c [2:2]
         test/poll-race-mshot.c [2:2]
         test/poll-race.c [2:2]
         test/poll-ring.c [2:2]
@@ -236,16 +249,20 @@ BELONGS ya.make
         test/pollfree.c [2:2]
         test/probe.c [2:2]
         test/read-before-exit.c [2:2]
+        test/read-inc-buf-more.c [2:2]
         test/read-inc-file.c [2:2]
         test/read-mshot-empty.c [2:2]
         test/read-mshot-stdin.c [2:2]
         test/read-mshot.c [2:2]
         test/read-write.c [2:2]
+        test/recv-bundle-buf-len.c [2:2]
         test/recv-bundle-short-ooo.c [2:2]
         test/recv-inc-ooo.c [2:2]
         test/recv-msgall-stream.c [2:2]
         test/recv-msgall.c [2:2]
+        test/recv-mshot-drain.c [2:2]
         test/recv-mshot-fair.c [2:2]
+        test/recvmsg-inc-tail.c [2:2]
         test/recvsend_bundle-inc.c [2:2]
         test/recvsend_bundle.c [2:2]
         test/reg-fd-only.c [2:2]
@@ -256,6 +273,7 @@ BELONGS ya.make
         test/regbuf-merge.c [2:2]
         test/register-restrictions.c [2:2]
         test/rename.c [2:2]
+        test/resize-mmap-fail.c [2:2]
         test/resize-rings.c [2:2]
         test/ring-leak.c [2:2]
         test/ring-leak2.c [2:2]
@@ -292,6 +310,7 @@ BELONGS ya.make
         test/sq-poll-share.c [2:2]
         test/sq-space_left.c [2:2]
         test/sqe-mixed-bad-wrap.c [2:2]
+        test/sqe-mixed-boundary.c [2:2]
         test/sqe-mixed-nop.c [2:2]
         test/sqe-mixed-uring_cmd.c [2:2]
         test/sqpoll-disable-exit.c [2:2]
@@ -305,9 +324,11 @@ BELONGS ya.make
         test/submit-reuse.c [2:2]
         test/symlink.c [2:2]
         test/sync-cancel.c [2:2]
+        test/task-restrict.c [2:2]
         test/teardowns.c [2:2]
         test/test.h [1:1]
         test/thread-exit.c [2:2]
+        test/timens-abs-timer.c [2:2]
         test/timeout-new.c [2:2]
         test/timeout.c [2:2]
         test/timerfd-short-read.c [2:2]
@@ -364,6 +385,7 @@ BELONGS ya.make
         Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
     Files with this license:
         src/include/liburing/io_uring.h [1:1]
+        src/include/liburing/io_uring/bpf_filter.h [1:1]
         src/include/liburing/io_uring/query.h [1:1]
     Scancode info:
         Original SPDX id: Linux-syscall-note
@@ -372,6 +394,7 @@ BELONGS ya.make
         Links           : https://spdx.org/licenses/Linux-syscall-note
     Files with this license:
         src/include/liburing/io_uring.h [1:1]
+        src/include/liburing/io_uring/bpf_filter.h [1:1]
         src/include/liburing/io_uring/query.h [1:1]
     Scancode info:
         Original SPDX id: MIT
@@ -380,6 +403,7 @@ BELONGS ya.make
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
         src/include/liburing/io_uring.h [1:1]
+        src/include/liburing/io_uring/bpf_filter.h [1:1]
         src/include/liburing/io_uring/query.h [1:1]
 
 KEEP     MIT                  8384d75c38c570f3edb87cf9f64f2ec2
@@ -394,14 +418,17 @@ BELONGS ya.make
     Files with this license:
         test/close-opath.c [2:2]
         test/defer-taskrun.c [2:2]
+        test/file-alloc-range-hint.c [2:2]
+        test/mshot-shutdown-race.c [2:2]
         test/pipe-bug.c [2:2]
+        test/pipe-direct-fixed.c [2:2]
         test/pipe.c [2:2]
         test/poll-mshot-overflow.c [2:2]
         test/recv-multishot.c [2:2]
 
 KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" 9566044df50ee1c37e39ed99e7926750
 BELONGS ya.make
-FILE_INCLUDE COPYING.GPL found in files: README at line 109
+FILE_INCLUDE COPYING.GPL found in files: README at line 117
     License text:
         COPYING.GPL and <https://spdx.org/licenses/Linux-syscall-note.html>.
     Scancode info:
@@ -410,14 +437,14 @@ FILE_INCLUDE COPYING.GPL found in files: README at line 109
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
     Files with this license:
-        README [109:109]
+        README [117:117]
     Scancode info:
         Original SPDX id: Linux-syscall-note
         Score           : 95.00
         Match type      : REFERENCE
         Links           : https://spdx.org/licenses/Linux-syscall-note
     Files with this license:
-        README [109:109]
+        README [117:117]
 
 KEEP     "(LGPL-2.1-only OR MIT)" 9d1d95673c01a94e06648bf72ecda12d
 BELONGS ya.make
@@ -446,11 +473,11 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        README [106:106]
+        README [114:114]
     Scancode info:
         Original SPDX id: LGPL-2.0-or-later
         Score           : 75.00
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
     Files with this license:
-        README [106:106]
+        README [114:114]

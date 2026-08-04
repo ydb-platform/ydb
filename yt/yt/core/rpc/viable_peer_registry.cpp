@@ -113,7 +113,6 @@ public:
     {
         auto guard = WriterGuard(SpinLock_);
 
-        HashToActiveChannel_.clear();
         PriorityToHashToActiveChannel_.clear();
         ActivePeerToPriority_.Clear();
         PriorityToActivePeers_.clear();
@@ -377,7 +376,6 @@ private:
     std::map<EPeerPriority, TIndexedHashMap<std::string, IChannelPtr>> PriorityToActivePeers_;
     TIndexedHashMap<std::string, EPeerPriority> ActivePeerToPriority_;
     // A consistent-hashing storage for serving sticky requests.
-    std::map<std::pair<size_t, std::string>, IChannelPtr> HashToActiveChannel_;
     TPeerPriorityMap<std::map<std::pair<size_t, std::string>, IChannelPtr>> PriorityToHashToActiveChannel_;
 
     THashMap<std::string, EPeerPriority> BacklogPeerToPriority_;
@@ -556,7 +554,6 @@ private:
         // Save the created channel for the given address for sticky requests.
         auto& priorityHashToActiveChannel = PriorityToHashToActiveChannel_[priority];
         GeneratePeerHashes(address, [&] (size_t hash) {
-            HashToActiveChannel_[std::pair(hash, address)] = channel;
             priorityHashToActiveChannel[std::pair(hash, address)] = channel;
         });
 
@@ -584,7 +581,6 @@ private:
 
         auto priorityHashToActiveChannelIt = GetIteratorOrCrash(PriorityToHashToActiveChannel_, activePeerIt->second);
         GeneratePeerHashes(address, [&] (size_t hash) {
-            HashToActiveChannel_.erase(std::pair(hash, address));
             priorityHashToActiveChannelIt->second.erase(std::pair(hash, address));
         });
 

@@ -189,12 +189,20 @@ class DynamicConfigGenerator(object):
                 Type=drive.type,
                 Kind=drive.kind,
             )
+            if drive.disk_scope is not None:
+                kwargs.update(DiskScope=drive.disk_scope)
             if drive.pdisk_config is not None:
                 pc = pdisk_config.TPDiskConfig()
                 utils.wrap_parse_dict(drive.pdisk_config, pc)
                 kwargs.update(PDiskConfig=pc)
             elif drive.expected_slot_count is not None:
                 pc = pdisk_config.TPDiskConfig(ExpectedSlotCount=drive.expected_slot_count)
+                kwargs.update(PDiskConfig=pc)
+            elif drive.expected_slot_size:  # zero means 'not set', as on the C++ side
+                pc = pdisk_config.TPDiskConfig(
+                    ExpectedSlotSize=drive.expected_slot_size,
+                    MaxSlots=drive.max_slots,
+                )
                 kwargs.update(PDiskConfig=pc)
             array.add(**kwargs)
 

@@ -6,7 +6,6 @@ SRCS(
     boot_queue.cpp
     boot_queue.h
     bridge_pile_info.h
-    compact_actor.cpp
     data_center_info.h
     domain_info.cpp
     domain_info.h
@@ -30,6 +29,7 @@ SRCS(
     metrics.h
     monitoring.cpp
     monitoring.h
+    move_data_actor.cpp
     node_info.cpp
     node_info.h
     object_distribution.h

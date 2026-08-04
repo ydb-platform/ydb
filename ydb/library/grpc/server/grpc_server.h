@@ -33,6 +33,7 @@ struct TSslData {
     TString Key;
     TString Root;
     bool DoRequestClientCertificate = false;
+    bool ClientCertificateRequired = false;
 };
 
 struct IExternalListener

@@ -179,16 +179,43 @@
 
 - Java
 
+  Для подключения укажите [строку подключения](../../concepts/connect.md) и при необходимости настройте [аутентификацию](../../reference/ydb-sdk/auth.md). Запросы рекомендуется выполнять через `QueryClient` и `SessionRetryContext` (см. [повторные попытки](./retry.md)).
+
   {% list tabs %}
 
   - Native SDK
 
     ```java
-    public void work() {
-        try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
-                .build()) {
-            // Работа с transport
-            doWork(transport);
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
+
+    public class InitExample {
+        public static void main(String[] args) {
+            // Строка подключения: endpoint и путь к базе данных
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                // Контекст ретраев для устойчивого выполнения запросов
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                // Проверка подключения простым запросом
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Подключение успешно, SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
         }
     }
     ```
@@ -196,11 +223,26 @@
   - JDBC
 
     ```java
-    public void work() throws SQLException {
-        // Драйвер tech.ydb.jdbc.YdbDriver должен быть в classpath для автозагрузки через DriverManager
-        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
-            // Работа с connection
-            doWork(connection);
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class JdbcInitExample {
+        public static void main(String[] args) throws SQLException {
+            // Драйвер tech.ydb.jdbc.YdbDriver должен быть в classpath для автозагрузки через DriverManager
+            String url = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection connection = DriverManager.getConnection(url);
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+
+                if (rs.next()) {
+                    System.out.println("Подключение успешно, SELECT 1 = " + rs.getInt("value"));
+                }
+            }
         }
     }
     ```

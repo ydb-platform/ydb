@@ -46,6 +46,7 @@ TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
     , Request(std::move(request))
     , TraceId(std::move(traceId))
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetReadRequestTimeout())
+    , SgList(Request->Sglist.CreateDepender())
     , ReadHint(std::move(readHint))
 {
     ReadHint.Lock.Arm();
@@ -138,14 +139,14 @@ void TReadSingleLocationRequestExecutor::StartReading()
                                   VChunkConfig.GetVChunkIndex(),
                                   *host,
                                   ReadHint.VChunkRange,
-                                  Request->Sglist,
+                                  SgList,
                                   TraceId)
                             : DirectBlockGroup->ReadBlocksFromPBuffer(
                                   VChunkConfig.GetVChunkIndex(),
                                   *host,
                                   ReadHint.Lsn,
                                   ReadHint.VChunkRange,
-                                  Request->Sglist,
+                                  SgList,
                                   TraceId);
     future.Subscribe(
         [self = shared_from_this(), host = *host]   //
@@ -164,6 +165,10 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
         return;
     }
     Failed.Set(host);
+
+    if (Promise.IsReady()) {
+        return;
+    }
 
     LOG_WARN(
         *ActorSystem,
@@ -211,7 +216,7 @@ void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
     }
 
     ReadHint.Lock.Disarm();
-    Request->Sglist.Close();
+    SgList.Close();
 
     Promise.TrySetValue(TResponse{.Error = std::move(error)});
 }

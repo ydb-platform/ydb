@@ -2,8 +2,12 @@
 
 #include "events.h"
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
+
+#include <optional>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -74,6 +78,8 @@ struct TDescribeTopicActorSettings {
 class TDescribeTopicActorImpl
 {
 protected:
+    static constexpr TDuration RequestTimeout = TDuration::Seconds(30);
+
     struct TTabletInfo {
         ui64 TabletId = 0;
         std::vector<ui32> Partitions;
@@ -100,6 +106,7 @@ public:
     void Handle(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQProxy::TEvRequestTablet::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 
     bool ProcessTablets(const NKikimrSchemeOp::TPersQueueGroupDescription& description, const TActorContext& ctx);
 
@@ -129,11 +136,18 @@ public:
     void PassAway(const TActorContext& ctx);
 
 private:
+    void CancelRequestTimeout(const TActorContext& ctx);
+
     std::map<ui64, TTabletInfo> Tablets;
     ui32 RequestsInfly = 0;
 
     bool GotLocation = false;
     bool GotReadSessions = false;
+    TBackoff LocationsBackoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
+    TActorId TimeoutTimerActorId;
+    std::optional<TInstant> RequestStartTime;
+
+    TDuration RemainingRequestTimeout() const;
 
 protected:
     ui64 BalancerTabletId = 0;
@@ -194,11 +208,11 @@ public:
     void ApplyResponse(TTabletInfo&,
                       NKikimr::TEvPersQueue::TEvStatusResponse::TPtr&,
                       const TActorContext&) override {
-        Y_ABORT();
+        AFL_ENSURE(false)("reason", "TPartitionsLocationActor: unexpected TEvStatusResponse");
     }
     virtual void ApplyResponse(TTabletInfo&, TEvPersQueue::TEvReadSessionsInfoResponse::TPtr&,
                                const TActorContext&) override {
-        Y_ABORT();
+        AFL_ENSURE(false)("reason", "TPartitionsLocationActor: unexpected TEvReadSessionsInfoResponse");
     }
 
     void Finalize();

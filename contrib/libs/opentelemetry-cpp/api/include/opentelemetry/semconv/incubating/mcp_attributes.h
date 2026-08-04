@@ -21,30 +21,49 @@ namespace mcp
 
 /**
   The name of the request or notification method.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kMcpMethodName = "mcp.method.name";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMcpMethodName = "mcp.method.name";
 
 /**
   The <a href="https://modelcontextprotocol.io/specification/versioning">version</a> of the Model
   Context Protocol used.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kMcpProtocolVersion = "mcp.protocol.version";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMcpProtocolVersion = "mcp.protocol.version";
 
 /**
   The value of the resource uri.
-  <p>
-  This is a URI of the resource provided in the following requests or notifications: @code
-  resources/read @endcode, @code resources/subscribe @endcode, @code resources/unsubscribe @endcode,
-  or @code notifications/resources/updated @endcode.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> This is a URI of the resource
+  provided in the following requests or notifications: @code resources/read @endcode, @code
+  resources/subscribe @endcode, @code resources/unsubscribe @endcode, or @code
+  notifications/resources/updated @endcode.
  */
-static constexpr const char *kMcpResourceUri = "mcp.resource.uri";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMcpResourceUri = "mcp.resource.uri";
 
 /**
   Identifies <a
   href="https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#session-management">MCP
   session</a>.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kMcpSessionId = "mcp.session.id";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMcpSessionId = "mcp.session.id";
 
 namespace McpMethodNameValues
 {

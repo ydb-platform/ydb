@@ -12,6 +12,7 @@
 #include <yt/yt/client/tablet_client/table_mount_cache.h>
 
 #include <yt/yt/client/transaction_client/helpers.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/iterator/zip.h>
 
@@ -29,6 +30,7 @@ using namespace NYTree;
 using namespace NYPath;
 using namespace NYson;
 using namespace NQueueClient;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,9 +64,9 @@ TTransaction::TTransaction(
     , PingPeriod_(pingPeriod)
     , StickyProxyAddress_(stickyParameters ? std::optional(stickyParameters->ProxyAddress) : std::nullopt)
     , SequenceNumberSourceId_(sequenceNumberSourceId)
-    , Logger(RpcProxyClientLogger().WithTag("TransactionId: %v, %v",
-        Id_,
-        Connection_->GetLoggingTag()))
+    , Logger(RpcProxyClientLogger()
+        .WithTag("TransactionId", Id_)
+        .WithTags(Connection_->GetLoggingTags()))
     , Proxy_(Channel_)
 {
     const auto& config = Connection_->GetConfig();
@@ -167,7 +169,7 @@ void TTransaction::RegisterAlienTransaction(const ITransactionPtr& transaction)
     }
 
     YT_LOG_DEBUG("Alien transaction registered (AlienConnection: {%v})",
-        transaction->GetConnection()->GetLoggingTag());
+        transaction->GetConnection()->GetLoggingTags());
 }
 
 TFuture<void> TTransaction::Ping(const NApi::TPrerequisitePingOptions& /*options*/)
@@ -194,6 +196,20 @@ void TTransaction::Detach()
     SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
     // Fire-and-forget.
     YT_UNUSED_FUTURE(req->Invoke());
+}
+
+void TTransaction::Abandon(TGuard<NThreading::TSpinLock>* /*guard*/)
+{
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
+
+    if (State_ == ETransactionState::Abandoned) {
+        return;
+    }
+
+    // Like Detach, but sends no request: the server tx is left to expire on its own.
+    State_ = ETransactionState::Abandoned;
+
+    YT_LOG_DEBUG("Transaction abandoned");
 }
 
 void TTransaction::SubscribeCommitted(const TCommittedHandler& handler)
@@ -316,7 +332,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
 
                     YT_LOG_DEBUG("Alien transaction flushed (ParticipantCellIds: %v, AlienConnection: {%v})",
                         result.ParticipantCellIds,
-                        transaction->GetConnection()->GetLoggingTag());
+                        transaction->GetConnection()->GetLoggingTags());
 
                     for (auto [cellId, signature] : Zip(result.ParticipantCellIds, result.ExpectedPrepareSignatures)) {
                         EmplaceOrCrash(AdditionalParticipantCellIds_, cellId, signature);
@@ -335,7 +351,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                 }
                 ToProto(req->mutable_prerequisite_options(), options);
                 ToProto(req->mutable_mutating_options(), options);
-                req->set_max_allowed_commit_timestamp(options.MaxAllowedCommitTimestamp);
+                req->set_max_allowed_commit_timestamp(ToProto(options.MaxAllowedCommitTimestamp));
                 SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
                 return req->Invoke();
             }))
@@ -346,7 +362,15 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                     if (rspOrError.IsOK() && State_ == ETransactionState::Committing) {
                         State_ = ETransactionState::Committed;
                     } else if (!rspOrError.IsOK()) {
-                        YT_UNUSED_FUTURE(DoAbort(&guard));
+                        if (Type_ == ETransactionType::Master &&
+                            Client_->GetOptions().AbandonMasterTransactionsOnFailedCommit)
+                        {
+                            // Keep the (possibly transient/ambiguous) failed commit's
+                            // transaction alive for a retrier instead of aborting it.
+                            Abandon(&guard);
+                        } else {
+                            YT_UNUSED_FUTURE(DoAbort(&guard));
+                        }
                         THROW_ERROR_EXCEPTION("Error committing transaction %v",
                             GetId())
                             << rspOrError;
@@ -359,7 +383,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
 
                 const auto& rsp = rspOrError.Value();
                 TTransactionCommitResult result{
-                    .PrimaryCommitTimestamp = rsp->primary_commit_timestamp(),
+                    .PrimaryCommitTimestamp = FromProto<NTransactionClient::TTimestamp>(rsp->primary_commit_timestamp()),
                     .CommitTimestamps = FromProto<NHiveClient::TTimestampMap>(rsp->commit_timestamps())
                 };
 
@@ -652,7 +676,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
     ToProto(req->mutable_queue_path(), queuePath);
 
     ToProto(req->mutable_session_id(), sessionId);
-    req->set_epoch(epoch.Underlying());
+    req->set_epoch(ToProto(epoch));
 
     if (options.UserMeta) {
         ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
@@ -1190,7 +1214,8 @@ TFuture<void> TTransaction::SendPing()
                         State_ != ETransactionState::Flushed &&
                         State_ != ETransactionState::FlushedModifications &&
                         State_ != ETransactionState::Aborted &&
-                        State_ != ETransactionState::Detached)
+                        State_ != ETransactionState::Detached &&
+                        State_ != ETransactionState::Abandoned)
                     {
                         State_ = ETransactionState::Aborted;
                         fireAborted = true;

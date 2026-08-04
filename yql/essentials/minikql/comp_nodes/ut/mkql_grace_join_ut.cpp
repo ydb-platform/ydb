@@ -867,7 +867,7 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceSelfJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -918,7 +918,7 @@ Y_UNIT_TEST_LLVM_SPILLING(TestDiffKeys) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceSelfJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                            EJoinKind::Inner, {0U}, {1U}, {2U, 0U}, {2U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -974,8 +974,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1027,8 +1027,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerDoubleCondition1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                            EJoinKind::Inner, {0U, 0U}, {0U, 1U}, {1U, 0U}, {2U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1078,8 +1078,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerManyKeyStrings) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                            EJoinKind::Inner, {0U, 1U}, {1U, 0U}, {1U, 0U}, {2U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1149,8 +1149,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerManyKeyUuid) {
                                                                 pb.NewDataType(NUdf::TDataType<NUdf::TUuid>::Id)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                            EJoinKind::Inner, {0U, 1U}, {1U, 0U}, {1U, 0U}, {2U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1205,8 +1205,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerStringKey1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1258,8 +1258,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TMiniKQLGraceJoinTestInnerMulti1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1311,8 +1311,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeft1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Left, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1367,8 +1367,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftMulti1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Left, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1424,8 +1424,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftSemi1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::LeftSemi, {0U}, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1478,8 +1478,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnly1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::LeftOnly, {0U}, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1532,8 +1532,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftSemiWithNullKey1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::LeftSemi, {0U}, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1586,8 +1586,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnlyWithNullKey1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::LeftOnly, {0U}, {0U}, {1U, 0U, 0U, 1U}, {}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1638,8 +1638,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRight1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Right, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1692,8 +1692,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightOnly1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::RightOnly, {0U}, {0U}, {}, {1U, 0U, 0U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1742,8 +1742,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightSemi1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::RightSemi, {0U}, {0U}, {}, {1U, 0U, 0U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1793,8 +1793,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightMulti1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Right, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1851,8 +1851,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightSemiWithNullKey1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::RightSemi, {0U}, {0U}, {}, {1U, 0U, 0U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1904,8 +1904,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightOnlyWithNullKey1) {
                                                                 NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::RightOnly, {0U}, {0U}, {}, {1U, 0U, 0U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -1956,8 +1956,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestFull1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Full, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -2013,8 +2013,8 @@ Y_UNIT_TEST_LLVM_SPILLING(TestExclusion1) {
                                                                 NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                                                           pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                                                           pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                           pb.ExpandMap(pb.ToFlow(list2, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                            EJoinKind::Exclusion, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
         if (SPILLING) {
@@ -2173,10 +2173,10 @@ void RunGraceJoinEmptyCaseTest(EJoinKind joinKind, bool emptyLeft, bool emptyRig
                                                             NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
     const auto joinFlow = pb.GraceJoin(
-        pb.ExpandMap(pb.ToFlow(leftStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+        pb.ExpandMap(pb.ToFlow(leftStream, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList {
             return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
         }),
-        pb.ExpandMap(pb.ToFlow(rightStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+        pb.ExpandMap(pb.ToFlow(rightStream, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList {
             return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
         }),
         joinKind,

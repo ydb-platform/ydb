@@ -5,6 +5,8 @@
 
 #include <util/stream/file.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COORDINATOR
+
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
@@ -101,7 +103,10 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
                     auto& medTx = GetMediatorTx(medId, tx.PlanOnStep, txId);
                     medTx.PushToAffected.push_back(affectedShardId);
                 } else {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_COORDINATOR, "Transaction not found: MedId = " << medId << " TxId = " << txId << " DataShardId = " << affectedShardId);
+                    YDB_LOG_ERROR_CTX(ctx, "Transaction not found",
+                        {"medId", medId},
+                        {"txId", txId},
+                        {"dataShardId", affectedShardId});
                     ++errors;
                 }
 

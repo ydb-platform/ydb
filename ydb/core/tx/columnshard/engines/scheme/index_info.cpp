@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
@@ -14,6 +15,8 @@
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <util/string/join.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
 
@@ -167,7 +170,9 @@ std::optional<ui32> TIndexInfo::GetColumnIndexOptional(const ui32 id) const {
 std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldOptional(const ui32 columnId) const {
     const std::optional<ui32> index = GetColumnIndexOptional(columnId);
     if (!index) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("column_id", columnId)("event", "incorrect_column_id");
+        YDB_LOG_DEBUG("",
+            {"columnId", columnId},
+            {"event", "incorrect_column_id"});
         return nullptr;
     }
     return ArrowSchemaWithSpecials()->GetFieldByIndexVerified(*index);
@@ -260,7 +265,9 @@ bool TIndexInfo::DeserializeDefaultCompressionFromProto(const NKikimrSchemeOp::T
     TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Serializer");
     NArrow::NSerialization::TSerializerContainer container;
     if (!container.DeserializeFromProto(compressionProto)) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "cannot_parse_default_serializer");
+        YDB_LOG_ERROR("",
+            {"event", "cannot_parse_index_info"},
+            {"reason", "cannot_parse_default_serializer"});
         return false;
     }
     DefaultSerializer = container;
@@ -330,7 +337,9 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
             AFL_VERIFY(it != columns.end());
             auto fConclusion = CreateColumnFeatures(it->second, col, operators, cache);
             if (fConclusion.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_build_column_feature")("reason", fConclusion.GetErrorMessage());
+                YDB_LOG_ERROR("",
+                    {"event", "cannot_build_column_feature"},
+                    {"reason", fConclusion.GetErrorMessage()});
                 return false;
             }
             ColumnFeatures.emplace_back(fConclusion.DetachResult());
@@ -534,6 +543,19 @@ std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui
     return nullptr;
 }
 
+std::shared_ptr<NIndexes::NMinMax::TIndexMeta> TIndexInfo::GetIndexMetaMinMax(const ui32 columnId) const {
+    for (auto&& i : Indexes) {
+        if (i.second->GetClassName() != NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
+            continue;
+        }
+        auto minMaxIndex = static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(i.second.GetObjectPtr());
+        if (minMaxIndex->GetColumnId() == columnId) {
+            return minMaxIndex;
+        }
+    }
+    return nullptr;
+}
+
 std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> TIndexInfo::GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const {
     for (auto&& i : Indexes) {
         if (i.second->GetClassName() != NIndexes::NCountMinSketch::TIndexMeta::GetClassNameStatic()) {
@@ -594,6 +616,9 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
             SchemaColumnIdsWithSpecials.emplace_back(originalColId);
             if (!IIndexInfo::IsSpecialColumn(originalColId)) {
                 AFL_VERIFY(index < original.SchemaColumnIdsWithSpecials.size() - SpecialColumnsCount);
+                auto it = original.Columns.find(originalColId);
+                AFL_VERIFY(it != original.Columns.end())("column_id", originalColId);
+                Columns.emplace(originalColId, it->second);
                 fields.emplace_back(original.SchemaWithSpecials->field(index));
             }
         };
@@ -603,6 +628,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
             AFL_VERIFY(!IIndexInfo::IsSpecialColumn(colId));
             SchemaColumnIdsWithSpecials.emplace_back(colId);
             auto tableCol = BuildColumnFromProto(col, cache);
+            Columns.emplace(colId, TNameTypeInfo(tableCol.Name, tableCol.PType));
             fields.emplace_back(BuildArrowField(tableCol, cache));
         };
         diff.ApplyForColumns(original.SchemaColumnIdsWithSpecials, addFromOriginal, addFromDiff);

@@ -39,7 +39,7 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
 
     auto guard = SgList.Acquire();
     if (!guard) {
-        Reply(MakeError(E_CANCELLED, "Failed to acquire sglist guard"), 0);
+        Reply(MakeCanNotAcquireDataError(), 0);
         return;
     }
 

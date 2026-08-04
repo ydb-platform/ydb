@@ -408,6 +408,10 @@ public:
         size_t UsedPrefixLen = 0;     // how many leading key columns are range-constrained
         size_t PointPrefixLen = 0;    // how many are pinned to a single value
         TMaybe<size_t> ExpectedMaxRanges;
+        TExprNode::TPtr Points;
+        const TStructExprType* PointsItemType = nullptr;
+        TVector<TString> PointColumns;
+        TMaybe<size_t> ExpectedMaxPoints;
     };
 
     TOpRead(TExprNode::TPtr node);
@@ -768,13 +772,21 @@ enum class ELookupStrategy : ui32 {
 
 class TOpTableLookup: public IUnaryOperator {
 public:
-    TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
-                   const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys);
+    struct TLookupKeyPrefix {
+        TExprNode::TPtr Points;
+        const TStructExprType* PointsItemType = nullptr;
+        TVector<TString> Columns;
+        TVector<std::pair<TString, TInfoUnit>> Equalities;
+    };
+
+    TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table, const TVector<TString>& fetchColumns,
+                   const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys);
 
     TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
                    const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys,
                    const TVector<TString>& lookupKeyColumns, const TString& joinKind,
-                   const std::optional<TExpression>& fetchedRowFilter);
+                   const std::optional<TExpression>& fetchedRowFilter,
+                   const std::optional<TLookupKeyPrefix>& prefix = std::nullopt);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
@@ -796,6 +808,7 @@ public:
     TVector<TString> LookupKeyColumns;
     TString JoinKind;
     std::optional<TExpression> FetchedRowFilter;
+    std::optional<TLookupKeyPrefix> Prefix;
     ELookupStrategy Strategy{ELookupStrategy::LookupRows};
 
 protected:
@@ -803,12 +816,12 @@ protected:
 };
 
 /***
- * Logical representation of index lookup join. Index lookup join has one input, so we cannot use OpJoin.
-***/
+ * Logical representation of index lookup join. In runtime it conusmes a tuple (left row, optional<right row>, cookie).
+ * Where cookie is (left row id, first row, last row).
+ ***/
 class TOpIndexLookupJoin: public IUnaryOperator {
 public:
-    TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind,
-                       const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys);
+    TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind, const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys);
 
     virtual TString ToString(TExprContext& ctx) override;
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
@@ -822,7 +835,6 @@ public:
 protected:
     void ComputeOutputIUs() override;
 };
-
 
 /***
  * This operator packages a subtree of operators in order to pass them to dynamic programming optimizer

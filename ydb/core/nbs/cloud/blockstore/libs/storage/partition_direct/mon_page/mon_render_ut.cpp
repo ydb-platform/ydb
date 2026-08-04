@@ -72,11 +72,71 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=localdb");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunk");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=latency");
         UNIT_ASSERT_STRING_CONTAINS(html, "DirectBlockGroups");
         UNIT_ASSERT_STRING_CONTAINS(html, "VChunks (total)");
         UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
         UNIT_ASSERT_STRING_CONTAINS(html, "Last safe barrier");
         UNIT_ASSERT_STRING_CONTAINS(html, "vol-1");
+    }
+
+    TLatencyStats MakeStats(
+        size_t count,
+        TDuration min,
+        TDuration p50,
+        TDuration p90,
+        TDuration p99,
+        TDuration max)
+    {
+        return {
+            .Count = count,
+            .Min = min,
+            .P50 = p50,
+            .P90 = p90,
+            .P99 = p99,
+            .Max = max,
+        };
+    }
+
+    // Two DBGs whose host 0 lands on the same node (1) through different
+    // slots — the "32 DBGs on 8 nodes" case in miniature.
+    TDbgSnapshot MakeLatencyDbg(
+        size_t index,
+        ui32 ddiskSlotId,
+        ui32 pbufferSlotId,
+        const TLatencyStats& writeStats,
+        const TLatencyStats& readDDiskStats)
+    {
+        THostSnapshot host{
+            .Index = 0,
+            .State = EHostState::Online,
+            .Health = EHostHealth::Online,
+        };
+        host.LatencyByOperation[static_cast<size_t>(
+            EOperation::WriteToPBuffer)] = writeStats;
+        host.LatencyByOperation[static_cast<size_t>(
+            EOperation::ReadFromDDisk)] = readDDiskStats;
+
+        TConnectionSnapshot connection{
+            .HostIndex = 0,
+            .DDiskId = {
+                /*nodeId*/ 1,
+                /*pdiskId*/ 1000,
+                /*ddiskSlotId*/ ddiskSlotId},
+            .PBufferId =
+                {{/*nodeId*/ 1,
+                  /*pdiskId*/ 1000,
+                  /*ddiskSlotId*/ pbufferSlotId}},
+            .DDiskSession = "Locked",
+            .PBufferConnected = true,
+        };
+        return {
+            .Index = index,
+            .VChunkCount = 32,
+            .Hosts = {host},
+            .Connections = {connection},
+            .LatencyHistoryCapacity = 10,
+        };
     }
 
     Y_UNIT_TEST(EscapesHtmlInHeader)
@@ -263,6 +323,180 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(
             html,
             "VChunkConfigs (persisted overrides)");
+    }
+
+    Y_UNIT_TEST(LatencyPageShowsHeatmapAndSlots)
+    {
+        const auto writeStats = MakeStats(
+            10,
+            TDuration::MilliSeconds(1),
+            TDuration::MilliSeconds(2),
+            TDuration::MilliSeconds(3),
+            TDuration::MilliSeconds(4),
+            TDuration::MilliSeconds(5));
+        const auto readStats = MakeStats(
+            5,
+            TDuration::MicroSeconds(100),
+            TDuration::MicroSeconds(200),
+            TDuration::MicroSeconds(300),
+            TDuration::MicroSeconds(400),
+            TDuration::MicroSeconds(500));
+
+        const TMonPageData data{
+            .Page = EMonPage::Latency,
+            .TabletInfo = {.TabletId = 42},
+            .Dbgs =
+                {MakeLatencyDbg(
+                     0,
+                     /*ddisk*/ 17,
+                     /*pbuffer*/ 18,
+                     writeStats,
+                     readStats),
+                 MakeLatencyDbg(
+                     1,
+                     /*ddisk*/ 19,
+                     /*pbuffer*/ 20,
+                     writeStats,
+                     readStats)},
+            .SelectedPercentile = ELatencyPercentile::P99,
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Latency");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Latency by node");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Slots by node");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Latency detail");
+        UNIT_ASSERT_STRING_CONTAINS(html, "WriteToPBuffer");
+        UNIT_ASSERT_STRING_CONTAINS(html, "ReadFromDDisk");
+        // Single node row for node 1 (both DBGs share it).
+        UNIT_ASSERT_STRING_CONTAINS(html, "node 1");
+        // Pbuffer slots attributed for WriteToPBuffer.
+        UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:18</a>");
+        UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:20</a>");
+        // DDisk slots attributed for ReadFromDDisk.
+        UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:17</a>");
+        UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:19</a>");
+        // Actor links for both kinds of slots.
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "/node/1/actors/ddisks/ddisk_p000001000_s000000017");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "/node/1/actors/persistent_buffer?pb=");
+        // Detail table shows Count / P50 / P99 columns.
+        UNIT_ASSERT_STRING_CONTAINS(html, "Count");
+        UNIT_ASSERT_STRING_CONTAINS(html, "P50");
+        UNIT_ASSERT_STRING_CONTAINS(html, "P99");
+        // p99 of write (4.000ms) appears in the heatmap / detail table.
+        UNIT_ASSERT_STRING_CONTAINS(html, "4.000ms");
+        // Percentile selector links.
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=latency&p=50");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=latency&p=99");
+    }
+
+    Y_UNIT_TEST(LatencyPageSelectedPercentileAndOperation)
+    {
+        const auto writeStats = MakeStats(
+            10,
+            TDuration::MilliSeconds(1),
+            TDuration::MilliSeconds(2),
+            TDuration::MilliSeconds(3),
+            TDuration::MilliSeconds(4),
+            TDuration::MilliSeconds(5));
+        const auto readStats = MakeStats(
+            5,
+            TDuration::MicroSeconds(100),
+            TDuration::MicroSeconds(200),
+            TDuration::MicroSeconds(300),
+            TDuration::MicroSeconds(400),
+            TDuration::MicroSeconds(500));
+
+        const TMonPageData data{
+            .Page = EMonPage::Latency,
+            .TabletInfo = {.TabletId = 42},
+            .Dbgs = {MakeLatencyDbg(
+                0,
+                /*ddisk*/ 17,
+                /*pbuffer*/ 18,
+                writeStats,
+                readStats)},
+            .SelectedPercentile = ELatencyPercentile::P50,
+            .SelectedLatencyOperation = EOperation::WriteToPBuffer,
+        };
+
+        const TString html = RenderMonPage(data);
+        // p50 of write is 2.000ms.
+        UNIT_ASSERT_STRING_CONTAINS(html, "2.000ms");
+        // Operation filter link highlights WriteToPBuffer and keeps p=50.
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "page=latency&p=50&op=" +
+                ToString(static_cast<size_t>(EOperation::WriteToPBuffer)));
+        UNIT_ASSERT_STRING_CONTAINS(html, "for WriteToPBuffer");
+        // Slot grid still has the pbuffer square (write), and the detail
+        // table still lists ddisk rows for ReadFromDDisk.
+        UNIT_ASSERT_STRING_CONTAINS(html, "pbuffer");
+        UNIT_ASSERT_STRING_CONTAINS(html, "ddisk");
+    }
+
+    Y_UNIT_TEST(LatencyPageDisabledWhenCapacityZero)
+    {
+        TDbgSnapshot dbg = MakeLatencyDbg(
+            0,
+            17,
+            18,
+            MakeStats(
+                10,
+                TDuration::MilliSeconds(1),
+                TDuration::MilliSeconds(1),
+                TDuration::MilliSeconds(1),
+                TDuration::MilliSeconds(1),
+                TDuration::MilliSeconds(1)),
+            {});
+        dbg.LatencyHistoryCapacity = 0;
+
+        const TMonPageData data{
+            .Page = EMonPage::Latency,
+            .TabletInfo = {.TabletId = 42},
+            .Dbgs = {dbg},
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "TimePredictionHistorySize");
+        UNIT_ASSERT(!html.Contains("Latency by node"));
+        UNIT_ASSERT(!html.Contains("Slots by node"));
+    }
+
+    Y_UNIT_TEST(LatencyPageShowsDashForEmptyOperation)
+    {
+        // Only WriteToPBuffer has samples; ReadFromDDisk is empty -> dash.
+        const auto writeStats = MakeStats(
+            3,
+            TDuration::MilliSeconds(1),
+            TDuration::MilliSeconds(1),
+            TDuration::MilliSeconds(1),
+            TDuration::MilliSeconds(1),
+            TDuration::MilliSeconds(1));
+
+        const TMonPageData data{
+            .Page = EMonPage::Latency,
+            .TabletInfo = {.TabletId = 42},
+            .Dbgs = {MakeLatencyDbg(
+                0,
+                /*ddisk*/ 17,
+                /*pbuffer*/ 18,
+                writeStats,
+                /*readDDiskStats*/ {})},
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "<span style='color:#999;'>-</span>");
+        // No fabricated zero duration for the empty operation in the detail
+        // table (only WriteToPBuffer rows).
+        UNIT_ASSERT_STRING_CONTAINS(html, "WriteToPBuffer");
+        // ReadFromDDisk appears as a heatmap column header, but not as a
+        // detail-table cell value next to a count (no samples folded).
+        UNIT_ASSERT(!html.Contains("<td>ReadFromDDisk</td>"));
     }
 }
 

@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
+    ydb/core/nbs/cloud/storage/core/libs/common
 
     ydb/core/base/services
     ydb/core/mind/bscontroller

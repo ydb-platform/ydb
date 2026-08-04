@@ -196,24 +196,23 @@ ui32 GetExpandedExecutorPoolId(const NKikimrConfig::TActorSystemConfig& systemCo
 }
 
 TVector<ui32> GetBlobStorageExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig) {
+    if (!systemConfig.HasBlobStorageExecutor()) {
+        return {};
+    }
+
+    const ui32 executorId = systemConfig.GetBlobStorageExecutor();
+    Y_ABORT_UNLESS(executorId < static_cast<ui32>(systemConfig.ExecutorSize()),
+        "BlobStorageExecutor id %" PRIu32 " is out of range; executor count is %d",
+        executorId, systemConfig.ExecutorSize());
+
+    const auto& poolConfig = systemConfig.GetExecutor(executorId);
+    const ui32 firstPoolId = GetExpandedExecutorPoolId(systemConfig, executorId);
+    const ui32 poolCount = GetExpandedExecutorPoolCount(poolConfig);
+
     TVector<ui32> executorPoolIds;
-    THashSet<ui32> seenExecutorIds;
-    for (const ui32 executorId : systemConfig.GetBlobStorageExecutor()) {
-        Y_ABORT_UNLESS(executorId < static_cast<ui32>(systemConfig.ExecutorSize()),
-            "BlobStorageExecutor id %" PRIu32 " is out of range; executor count is %d",
-            executorId, systemConfig.ExecutorSize());
-        Y_ABORT_UNLESS(seenExecutorIds.insert(executorId).second,
-            "BlobStorageExecutor id %" PRIu32 " is specified more than once", executorId);
-
-        const auto& poolConfig = systemConfig.GetExecutor(executorId);
-        Y_ABORT_UNLESS(poolConfig.GetType() == TExecutorConfig::PLACEMENT,
-            "BlobStorageExecutor id %" PRIu32 " must reference a PLACEMENT executor", executorId);
-
-        const ui32 firstPoolId = GetExpandedExecutorPoolId(systemConfig, executorId);
-        const ui32 poolCount = GetExpandedExecutorPoolCount(poolConfig);
-        for (ui32 offset = 0; offset < poolCount; ++offset) {
-            executorPoolIds.push_back(firstPoolId + offset);
-        }
+    executorPoolIds.reserve(poolCount);
+    for (ui32 offset = 0; offset < poolCount; ++offset) {
+        executorPoolIds.push_back(firstPoolId + offset);
     }
     return executorPoolIds;
 }

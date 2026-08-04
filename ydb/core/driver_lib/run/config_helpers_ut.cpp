@@ -86,30 +86,26 @@ Y_UNIT_TEST(BasicAndIoExecutorsWithoutPlacementUseCurrentAffinity) {
     AssertCpuMasksEqual(cpuManager.IO.front().Affinity, expectedAffinity);
 }
 
-Y_UNIT_TEST(OnlyExplicitBlobStorageExecutorsAreSelected) {
+Y_UNIT_TEST(SelectedPlacementBlobStorageExecutorExpandsIntoItsPools) {
     NKikimrConfig::TActorSystemConfig systemConfig;
 
     auto* system = AddExecutor(systemConfig, TExecutorConfig::BASIC, "System");
     system->SetThreads(1);
 
-    auto* firstBlobStorage = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT);
-    firstBlobStorage->SetPlacementGroups(2);
+    auto* blobStorage = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT);
+    blobStorage->SetPlacementGroups(2);
 
     auto* io = AddExecutor(systemConfig, TExecutorConfig::IO, "IO");
     io->SetThreads(1);
 
-    auto* secondBlobStorage = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT, "OtherBlobStorage");
-    secondBlobStorage->SetPlacementGroups(1);
-
-    systemConfig.AddBlobStorageExecutor(1);
-    systemConfig.AddBlobStorageExecutor(3);
+    systemConfig.SetBlobStorageExecutor(1);
 
     UNIT_ASSERT_VALUES_EQUAL(
         NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(systemConfig),
-        (TVector<ui32>{1, 2, 4}));
+        (TVector<ui32>{1, 2}));
 }
 
-Y_UNIT_TEST(PlacementExecutorsAreNotSelectedForBlobStorageByDefault) {
+Y_UNIT_TEST(BlobStorageExecutorIsNotSelectedByDefault) {
     NKikimrConfig::TActorSystemConfig systemConfig;
 
     auto* placement = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT);
@@ -119,24 +115,27 @@ Y_UNIT_TEST(PlacementExecutorsAreNotSelectedForBlobStorageByDefault) {
         NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(systemConfig).empty());
 }
 
-Y_UNIT_TEST(BlobStorageExecutorSelectionPreservesConfiguredOrder) {
+Y_UNIT_TEST(BlobStorageExecutorCanReferenceBasicOrIoExecutor) {
     NKikimrConfig::TActorSystemConfig systemConfig;
 
-    auto* firstPlacement = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT);
-    firstPlacement->SetPlacementGroups(2);
+    auto* placement = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT);
+    placement->SetPlacementGroups(2);
 
     auto* basic = AddExecutor(systemConfig, TExecutorConfig::BASIC, "System");
     basic->SetThreads(1);
 
-    auto* secondPlacement = AddExecutor(systemConfig, TExecutorConfig::PLACEMENT);
-    secondPlacement->SetPlacementGroups(1);
+    auto* io = AddExecutor(systemConfig, TExecutorConfig::IO, "IO");
+    io->SetThreads(1);
 
-    systemConfig.AddBlobStorageExecutor(2);
-    systemConfig.AddBlobStorageExecutor(0);
-
+    systemConfig.SetBlobStorageExecutor(1);
     UNIT_ASSERT_VALUES_EQUAL(
         NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(systemConfig),
-        (TVector<ui32>{3, 0, 1}));
+        (TVector<ui32>{2}));
+
+    systemConfig.SetBlobStorageExecutor(2);
+    UNIT_ASSERT_VALUES_EQUAL(
+        NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(systemConfig),
+        (TVector<ui32>{3}));
 }
 
 Y_UNIT_TEST(PlacementExecutorsUsePlacementGroupAffinityAndLeaveOtherCpusForRegularPools) {

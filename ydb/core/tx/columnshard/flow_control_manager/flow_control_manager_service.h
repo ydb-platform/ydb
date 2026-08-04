@@ -16,12 +16,22 @@ public:
     // write outcomes (TEvWriteOutcome) accumulated into cohorts, never from wall clock.
     // Hence there are no AimdGrow / AimdHold / AimdFeedback durations here anymore.
     struct TDrainRateParams {
-        double RMin = 10.0;
-        double RMax = 500.0;
+        // Count bucket (requests/sec). RMin/RMax default to 0 = "unset": the actor treats
+        // an unset floor as a tiny non-zero value and an unset ceiling as +inf, letting AIMD
+        // self-regulate instead of pinning the rate to arbitrary config nails. Burst is gone —
+        // the token bucket now uses a soft one-cohort cap (see RefillTokens).
+        double RMin = 0.0;
+        double RMax = 0.0;
         double RStart = 10.0;
-        double Burst = 20.0;
         double AimdAdd = 5.0;
         double AimdBeta = 0.5;
+
+        // Bytes bucket (bytes/sec). Same unset-bound semantics.
+        double RMinBytes = 0.0;
+        double RMaxBytes = 0.0;
+        double RStartBytes = 10'000'000.0;
+        double AimdAddBytes = 1'000'000.0;
+        double AimdBetaBytes = 0.5;
     };
 
     static NActors::TActorId MakeServiceId(ui32 nodeId);

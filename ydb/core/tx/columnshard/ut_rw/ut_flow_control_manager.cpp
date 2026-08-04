@@ -186,9 +186,9 @@ public:
         Runtime.Send(new IEventHandle(TFlowControlManagerServiceOperator::MakeServiceId(Runtime.GetNodeId(0)), ReplyTo, event), 0, true);
     }
 
-    TEvTryAdmitResult::TPtr TryAdmit(TVector<ui64> tabletIds, TDuration operationTimeout = TDuration::Seconds(60)) {
+    TEvTryAdmitResult::TPtr TryAdmit(TVector<ui64> tabletIds, TDuration operationTimeout = TDuration::Seconds(60), ui64 batchSize = 0) {
         const TInstant now = Runtime.GetCurrentTime();
-        SendToFlowControlManager(new TEvTryAdmit(std::move(tabletIds), now + operationTimeout, operationTimeout));
+        SendToFlowControlManager(new TEvTryAdmit(std::move(tabletIds), now + operationTimeout, operationTimeout, batchSize));
         return Runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(ReplyTo);
     }
 
@@ -643,7 +643,6 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         drain.RMin = 1.0;
         drain.RMax = 1.0;
         drain.RStart = 1.0;
-        drain.Burst = 1.0;
         TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
 
         TTestBasicRuntime runtime;
@@ -723,7 +722,6 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         drain.RMin = 1.0;
         drain.RMax = 1.0;
         drain.RStart = 1.0;
-        drain.Burst = 1.0;
         drain.AimdAdd = 0.0;   // do not grow during the test
         TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
 
@@ -772,7 +770,6 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         drain.RMin = 10.0;
         drain.RMax = 100.0;
         drain.RStart = 100.0;
-        drain.Burst = 1.0;
         drain.AimdBeta = 0.5;
         drain.AimdAdd = 0.0;
         TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
@@ -818,7 +815,6 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         drain.RMin = 10.0;
         drain.RMax = 500.0;
         drain.RStart = 10.0;
-        drain.Burst = 1.0;
         drain.AimdAdd = 50.0;
         TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
 
@@ -854,7 +850,6 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         drain.RMin = 20.0;
         drain.RMax = 500.0;
         drain.RStart = 200.0;
-        drain.Burst = 400.0;
         drain.AimdAdd = 0.0;
         TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
 
@@ -873,7 +868,6 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         fc->SetDrainRateMin(20);
         fc->SetDrainRateMax(100);
         fc->SetDrainRateStart(50);
-        fc->SetDrainBurst(100);
         fc->SetDrainAimdAdd(0);
         fc->SetDrainAimdBeta(0.5);
 
@@ -893,7 +887,6 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         drain.RMin = 1.0;
         drain.RMax = 100.0;
         drain.RStart = 1.0;   // cohort target = ceil(1.0) = 1
-        drain.Burst = 1.0;
         drain.AimdAdd = 5.0;
         TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
 
@@ -935,7 +928,6 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         drain.RMin = 0.1;
         drain.RMax = 100.0;
         drain.RStart = 1.0;
-        drain.Burst = 1.0;
         drain.AimdAdd = 5.0;
         drain.AimdBeta = 0.5;
         TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
@@ -967,6 +959,98 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmDeriviative("FlowControl/Drain/RateCut/Count"), 1);
     }
 
+    // A single overloaded outcome outside an open cohort must NOT apply the full AimdBeta.
+    // Historically fraction=1.0 halved both rates per stray shard-writer outcome; with write
+    // fan-out that cascaded RefillRate down by orders of magnitude and starved the queue.
+    Y_UNIT_TEST(OutOfCohortOverloadDoesNotHalveRate) {
+        TFlowControlManagerServiceOperator::TDrainRateParams drain;
+        drain.RMin = 1.0;
+        drain.RMax = 0.0;   // unset ceiling
+        drain.RStart = 100.0;
+        drain.AimdBeta = 0.5;
+        drain.AimdAdd = 0.0;
+        drain.RMinBytes = 1.0;
+        drain.RMaxBytes = 0.0;
+        drain.RStartBytes = 100'000'000.0;
+        drain.AimdBetaBytes = 0.5;
+        drain.AimdAddBytes = 0.0;
+        TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
+
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+
+        const ui64 tabletA = TTestTxConfig::TxTablet0;
+        const ui32 nodeA = 42;
+        env.SeedTabletLocation(tabletA, nodeA);
+
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmValue("FlowControl/Drain/RefillRate"), 100);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmValue("FlowControl/Drain/RefillRateBytes"), 100'000'000);
+
+        // No cohort open (empty queue): a burst of overloaded shard outcomes must not
+        // collapse the rate the way repeated full-beta cuts would (100 → 50 → 25 → …).
+        for (int i = 0; i < 10; ++i) {
+            env.SendWriteOutcome(tabletA, nodeA, /*overloaded=*/true);
+        }
+
+        // fraction = 1/ceil(100) per outcome ⇒ ~0.5% cut each; after 10 cuts ≈ 95, not 0.1.
+        const i64 rateAfter = env.ReadFcmValue("FlowControl/Drain/RefillRate");
+        UNIT_ASSERT_C(rateAfter >= 90, TStringBuilder() << "rate collapsed to " << rateAfter);
+        const i64 bytesAfter = env.ReadFcmValue("FlowControl/Drain/RefillRateBytes");
+        UNIT_ASSERT_C(bytesAfter >= 90'000'000, TStringBuilder() << "bytes rate collapsed to " << bytesAfter);
+    }
+
+    // Bytes soft cap must raise to the FIFO head's BatchSize, otherwise a request larger
+    // than one second of RefillRateBytesR can never collect enough tokens and the queue stalls.
+    Y_UNIT_TEST(LargeBatchDrainsDespiteBytesSoftCap) {
+        TFlowControlManagerServiceOperator::TDrainRateParams drain;
+        drain.RMin = 1.0;
+        drain.RMax = 1.0;
+        drain.RStart = 1.0;
+        drain.AimdAdd = 0.0;
+        drain.RMinBytes = 1'000'000.0;   // 1 MB/s
+        drain.RMaxBytes = 1'000'000.0;
+        drain.RStartBytes = 1'000'000.0;
+        drain.AimdAddBytes = 0.0;
+        TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
+
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), 1024);
+
+        const ui64 tabletA = TTestTxConfig::TxTablet0;
+        const ui32 nodeA = 42;
+        env.SeedTabletLocation(tabletA, nodeA);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        // Small head seeds TokensBytes to ~1 MB (the rate soft cap). Then a 5 MB waiter
+        // sits behind it: after the small one drains, the soft cap must rise to 5 MB and
+        // refill must be allowed to accumulate that much — otherwise the queue deadlocks.
+        UNIT_ASSERT_VALUES_EQUAL(
+            (int)env.TryAdmit({ tabletA }, TDuration::Seconds(60), /*batchSize=*/1)->Get()->GetDecision(), (int)EAdmitDecision::Wait);
+        constexpr ui64 largeBatch = 5'000'000;
+        UNIT_ASSERT_VALUES_EQUAL(
+            (int)env.TryAdmit({ tabletA }, TDuration::Seconds(60), largeBatch)->Get()->GetDecision(), (int)EAdmitDecision::Wait);
+
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+        {
+            // Small head drains immediately from the seeded cohort.
+            const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
+            UNIT_ASSERT_VALUES_EQUAL((int)drained->Get()->GetDecision(), (int)EAdmitDecision::Allow);
+        }
+
+        // Without the soft-cap raise, TokensBytes would clamp at 1 MB forever and this
+        // Allow would never arrive. Accrue > largeBatch / rate (+ one count token).
+        runtime.AdvanceCurrentTime(TDuration::Seconds(6));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        {
+            const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
+            UNIT_ASSERT_VALUES_EQUAL((int)drained->Get()->GetDecision(), (int)EAdmitDecision::Allow);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmDeriviative("FlowControl/WaitQueue/Drained/Count"), 2);
+    }
+
     // Retry-by-subscription may turn an overloaded write into a final STATUS_COMPLETED.
     // The outcome still reports Overloaded=true, so it must not be counted as clean.
     Y_UNIT_TEST(RetriedThenSucceededDoesNotGrowRate) {
@@ -974,7 +1058,6 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         drain.RMin = 1.0;
         drain.RMax = 100.0;
         drain.RStart = 1.0;
-        drain.Burst = 1.0;
         drain.AimdAdd = 5.0;
         TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
 
@@ -1010,7 +1093,6 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         drain.RMin = 3.0;
         drain.RMax = 100.0;
         drain.RStart = 3.0;   // cohort target = 3
-        drain.Burst = 3.0;
         drain.AimdAdd = 5.0;
         TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
 

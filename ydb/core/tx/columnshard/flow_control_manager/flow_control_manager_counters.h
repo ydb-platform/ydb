@@ -19,6 +19,11 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr DrainRefillRate;
     NMonitoring::TDynamicCounters::TCounterPtr DrainTokens;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainRefillRateBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainTokensBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr ObservedRateCount;
+    NMonitoring::TDynamicCounters::TCounterPtr ObservedRateBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr ObservationTransitionCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainAllowedCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainRateCutCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainRateGrowCount;
@@ -61,6 +66,11 @@ public:
         , DelayedRejectQueueCount(TBase::GetValue("FlowControl/DelayedRejectQueue/Count"))
         , DrainRefillRate(TBase::GetValue("FlowControl/Drain/RefillRate"))
         , DrainTokens(TBase::GetValue("FlowControl/Drain/Tokens"))
+        , DrainRefillRateBytes(TBase::GetValue("FlowControl/Drain/RefillRateBytes"))
+        , DrainTokensBytes(TBase::GetValue("FlowControl/Drain/TokensBytes"))
+        , ObservedRateCount(TBase::GetValue("FlowControl/Observe/RateCount"))
+        , ObservedRateBytes(TBase::GetValue("FlowControl/Observe/RateBytes"))
+        , ObservationTransitionCount(TBase::GetDeriviative("FlowControl/Observe/Transition/Count"))
         , DrainAllowedCount(TBase::GetDeriviative("FlowControl/Drain/Allowed/Count"))
         , DrainRateCutCount(TBase::GetDeriviative("FlowControl/Drain/RateCut/Count"))
         , DrainRateGrowCount(TBase::GetDeriviative("FlowControl/Drain/RateGrow/Count"))
@@ -182,6 +192,28 @@ public:
 
     void SetDrainTokens(ui64 tokens) const {
         DrainTokens->Set(tokens);
+    }
+
+    void SetDrainRefillRateBytes(ui64 rate) const {
+        DrainRefillRateBytes->Set(rate);
+    }
+
+    void SetDrainTokensBytes(ui64 tokens) const {
+        DrainTokensBytes->Set(tokens);
+    }
+
+    void SetObservedRateCount(ui64 rate) const {
+        ObservedRateCount->Set(rate);
+    }
+
+    void SetObservedRateBytes(ui64 rate) const {
+        ObservedRateBytes->Set(rate);
+    }
+
+    // A wait queue went from empty to non-empty and the drain rates were seeded from the
+    // observed fast-path throughput.
+    void OnObservationTransition() const {
+        ObservationTransitionCount->Inc();
     }
 
     void OnDrainAllowed() const {

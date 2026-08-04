@@ -56,12 +56,16 @@ class TEvTryAdmit: public NActors::TEventLocal<TEvTryAdmit, EvTryAdmit> {
     YDB_READONLY_DEF(TVector<ui64>, TabletIds);
     YDB_READONLY_DEF(TInstant, Deadline);
     YDB_READONLY_DEF(TDuration, OperationTimeout);
+    // Deserialized Arrow batch memory size in bytes; feeds the bytes-rate token bucket.
+    // 0 when unknown (older senders) → bytes bucket is inert for that request.
+    YDB_READONLY(ui64, BatchSize, 0);
 
 public:
-    TEvTryAdmit(TVector<ui64> tabletIds, TInstant deadline, TDuration operationTimeout)
+    TEvTryAdmit(TVector<ui64> tabletIds, TInstant deadline, TDuration operationTimeout, ui64 batchSize = 0)
         : TabletIds(std::move(tabletIds))
         , Deadline(deadline)
         , OperationTimeout(operationTimeout)
+        , BatchSize(batchSize)
     {
     }
 

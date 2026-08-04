@@ -14,6 +14,8 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 
+#include <limits>
+
 namespace NKikimr::NColumnShard::NFlowControl {
 
 class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
@@ -26,6 +28,7 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
         TVector<ui32> DestinationNodes;   // distinct known nodes at enqueue (for WaiterCountByNode)
         TInstant WaitDeadline;
         TInstant EnqueuedAt;
+        ui64 BatchSize = 0;   // deserialized batch bytes; charged against the bytes-rate bucket
         bool DrainScheduled = false;
         bool TokenReserved = false;
     };
@@ -72,13 +75,37 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     // (tokens accrue as RefillRateR * dt), not a control-loop timer.
     double Tokens = 0.0;
     double RefillRateR = 10.0;
-    double Burst = 20.0;
-    double RMin = 10.0;
-    double RMax = 500.0;
+    double RMin = 0.0;   // 0 => unset => EffectiveRMin() clamps to a tiny floor (no config nail)
+    double RMax = 0.0;   // 0 => unset => EffectiveRMax() is +inf (AIMD self-regulates upward)
     double AimdAdd = 5.0;
     double AimdBeta = 0.5;
     TInstant LastRefillAt;
     bool DrainWakeupScheduled = false;
+
+    // Bytes-rate token bucket (mirrors the count bucket): limits bytes/sec out of the
+    // wait queue. A waiter is released only when BOTH buckets have enough tokens, so small
+    // batches are gated by the count bucket and large batches by the bytes bucket.
+    double TokensBytes = 0.0;
+    double RefillRateBytesR = 10'000'000.0;   // bytes/sec
+    double RMinBytes = 0.0;   // 0 => unset
+    double RMaxBytes = 0.0;   // 0 => unset
+    double AimdAddBytes = 1'000'000.0;
+    double AimdBetaBytes = 0.5;
+    TInstant LastRefillBytesAt;
+
+    // Observe-then-limit: while the wait queue is empty every admit takes the fast path,
+    // so the observed throughput is the rate the system currently sustains without pushing
+    // back. We EWMA it and, the moment the queue first fills, seed the drain rates from it
+    // (× a safety factor) instead of a config "nail". ObservedOverload records whether any
+    // overload was seen during the current empty-queue window (then we seed more cautiously).
+    double ObservedRateCount = 0.0;   // EWMA requests/sec
+    double ObservedRateBytes = 0.0;   // EWMA bytes/sec
+    TInstant LastObserveAt;
+    bool ObservedOverload = false;
+    bool WasQueueEmpty = true;
+    static constexpr double ObserveTauSec = 5.0;
+    static constexpr double ObserveSafetyFactor = 0.8;
+    static constexpr double ObserveOverloadFactor = 0.5;
 
     // Outcome-counted cohort. Opened when the first waiter of a new round is released,
     // closed when Target outcomes have arrived. Growth needs no clock: it is decided
@@ -133,7 +160,32 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     // knobs are already read live. Without this the bounds were frozen at construction
     // (to process defaults if config was not yet merged), e.g. RMax stuck at 500.
     void SyncDrainBounds();
-    void RecomputeBurst();
+
+    // Unset (0) bounds mean "no limit": tiny floor to avoid a zero-rate stall, +inf ceiling.
+    double EffectiveRMin() const {
+        return RMin > 0.0 ? RMin : 0.001;
+    }
+
+    double EffectiveRMax() const {
+        return RMax > 0.0 ? RMax : std::numeric_limits<double>::infinity();
+    }
+
+    double EffectiveRMinBytes() const {
+        return RMinBytes > 0.0 ? RMinBytes : 1.0;
+    }
+
+    double EffectiveRMaxBytes() const {
+        return RMaxBytes > 0.0 ? RMaxBytes : std::numeric_limits<double>::infinity();
+    }
+
+    // Soft cap for the bytes bucket: one second of traffic, but never below the FIFO head's
+    // BatchSize — otherwise a single request larger than RefillRateBytesR permanently stalls
+    // the wait queue (tokens can never accumulate past ceil(rate)).
+    double BytesSoftCap() const;
+    // Observe-then-limit helpers.
+    void UpdateObservedThroughput(TInstant now, ui64 batchSize);
+    void InitializeRatesFromObservation(ui64 firstBatchSize = 0);
+    void MaybeMarkQueueEmpty();
     // Open a cohort (if none) and account one released waiter.
     void NoteCohortRelease();
     // Account one arrived outcome and close/apply the cohort when it is complete.

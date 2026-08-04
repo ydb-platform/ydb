@@ -597,7 +597,7 @@ namespace NActors {
         // Give more chanse to send XDC command via regular channel after RDMA region preparation.
         // It reduces rdma memory usage and latency but in theory may also decrease effecincy of regular tcp channel in case of mixed RDMA + TCP traffic
         // TODO (dcherednik): recheck impact on the huge clusters
-        const ui64 rdmaBytesToProduce = RdmaInflightDataAmount; 
+        const ui64 rdmaBytesToProduce = RdmaInflightDataAmount;
         while (NumEventsInQueue &&  (InflightDataAmount + RdmaInflightDataAmount) < GetTotalInflightAmountOfData() && GetUnsentSize() < GetUnsentLimit()) {
             if ((bytesProduced && TimeLimit->CheckExceeded()) || bytesProduced >= maxBytesToProduce || RdmaInflightDataAmount > rdmaBytesToProduce) {
                 break;
@@ -862,7 +862,11 @@ namespace NActors {
             const TString message = r == 0 ? "connection closed by peer"
                 : err ? err
                 : Sprintf("socket: %s", strerror(-r));
-            LOG_LOG_NET(::NActors::NLog::PRI_NOTICE, Proxy->PeerNodeId, "%s", message.data());
+
+            YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT_NETWORK, message,
+                {"selfNodeId", ::NActors::TActivationContext::AsActorContext().SelfID.NodeId()},
+                {"peerNodeId", Proxy->PeerNodeId});
+
             if (r == 0 && !NumEventsInQueue && LastConfirmed == OutputCounter) {
                 Terminate(TDisconnectReason::EndOfStream());
             } else {

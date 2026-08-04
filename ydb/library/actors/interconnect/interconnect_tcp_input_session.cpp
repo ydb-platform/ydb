@@ -143,7 +143,7 @@ namespace NActors {
                 );
 
                 mrOffset += credCopy.GetSize();
-                credOffset += credCopy.GetSize(); 
+                credOffset += credCopy.GetSize();
 
                 if (mrOffset == curMemReg.GetSize()) {  // section finished
                     pendingEvent.RdmaBuffers.pop_front();
@@ -1033,7 +1033,12 @@ namespace NActors {
                         : recvres == 0 ? "connection closed by peer"
                         : err ? err
                         : Sprintf("socket: %s", strerror(-recvres));
-                    LOG_LOG_NET(::NActors::NLog::PRI_NOTICE, NodeId, "%s", message.data());
+
+                    YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT_NETWORK, message,
+                        {"selfNodeId", ::NActors::TActivationContext::AsActorContext().SelfID.NodeId()},
+                        {"peerNodeId", NodeId},
+                    );
+
                     throw TExReestablishConnection{CloseInputSessionRequested ? TDisconnectReason::Debug() :
                         recvres == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-recvres)};
                 } else if (token && !*readPending) {

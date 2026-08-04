@@ -13,13 +13,6 @@
         LOG_LOG(::NActors::TActivationContext::AsActorContext(), (priority), (component), "%s " marker " %s", LogPrefix.data(), Sprintf(__VA_ARGS__).data()); \
     } while (false)
 
-#define LOG_LOG_NET(priority, NODE_ID, FMT, ...) \
-    do { \
-        const TActorContext& ctx = ::NActors::TActivationContext::AsActorContext(); \
-        LOG_LOG(ctx, (priority), ::NActorsServices::INTERCONNECT_NETWORK, "[%" PRIu32 " <-> %" PRIu32 "] %s", \
-                ctx.SelfID.NodeId(), (NODE_ID), Sprintf(FMT, __VA_ARGS__).data()); \
-    } while (false)
-
 namespace NActors {
     class TInterconnectLoggingBase {
     protected:

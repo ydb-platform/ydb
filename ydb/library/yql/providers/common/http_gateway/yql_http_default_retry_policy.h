@@ -8,22 +8,18 @@
 
 namespace NYql {
 
-struct THttpRetryPolicyOptions {
-    // If not set, default maxTime (5 minutes) is used
-    std::optional<TDuration> MaxTime;
-    // If not set, default DNS error maxTime (10 seconds) is used (only for GetFqHTTPRetryPolicy)
-    std::optional<TDuration> DnsMaxTime;
-    size_t MaxRetries = std::numeric_limits<size_t>::max();
-    std::unordered_set<CURLcode> RetriedCurlCodes;
+std::unordered_set<CURLcode> YqlRetriedCurlCodes();
 
-    THttpRetryPolicyOptions();
-    THttpRetryPolicyOptions(std::optional<TDuration> maxTime, size_t maxRetries = std::numeric_limits<size_t>::max());
+struct THttpRetryPolicyOptions {
+    std::optional<TDuration> MaxTime; // Not set means default maxTime
+    size_t MaxRetries = std::numeric_limits<size_t>::max();
+    std::unordered_set<CURLcode> RetriedCurlCodes = YqlRetriedCurlCodes();
 };
 
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions&& options = {});
 
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, size_t maxRetries = std::numeric_limits<size_t>::max()); // Zero means default maxTime
 
-IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy(THttpRetryPolicyOptions&& options = {});
+IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy();
 
 }

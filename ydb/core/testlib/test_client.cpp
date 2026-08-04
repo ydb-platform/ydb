@@ -742,6 +742,15 @@ namespace Tests {
             TMailboxType::ReadAsFilled,
             appData.UserPoolId
         );
+        system->Register(
+            NConsole::CreateJaegerTracingConfigurator(
+                appData.UserFacingTracingConfigurator,
+                Settings->AppConfig->GetUserFacingTracingConfig(),
+                static_cast<ui32>(NKikimrConsole::TConfigItem::UserFacingTracingConfigItem),
+                /*userFacing*/ true),
+            TMailboxType::ReadAsFilled,
+            appData.UserPoolId
+        );
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled, appData.UserPoolId);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);

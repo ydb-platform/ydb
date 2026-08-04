@@ -21,7 +21,9 @@ public:
     }
 
     TJaegerTracingConfigurator(TIntrusivePtr<TSamplingThrottlingConfigurator> tracingConfigurator,
-                               NKikimrConfig::TTracingConfig cfg);
+                               NKikimrConfig::TTracingConfig cfg,
+                               ui32 configItemKind,
+                               bool userFacing);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -40,13 +42,19 @@ private:
 
     TIntrusivePtr<TSamplingThrottlingConfigurator> TracingConfigurator;
     NKikimrConfig::TTracingConfig initialConfig;
+    ui32 ConfigItemKind;
+    bool UserFacing;
 };
 
 TJaegerTracingConfigurator::TJaegerTracingConfigurator(
     TIntrusivePtr<TSamplingThrottlingConfigurator> tracingConfigurator,
-    NKikimrConfig::TTracingConfig cfg)
+    NKikimrConfig::TTracingConfig cfg,
+    ui32 configItemKind,
+    bool userFacing)
     : TracingConfigurator(std::move(tracingConfigurator))
     , initialConfig(std::move(cfg))
+    , ConfigItemKind(configItemKind)
+    , UserFacing(userFacing)
 {}
 
 void TJaegerTracingConfigurator::Bootstrap(const TActorContext& ctx) {
@@ -56,9 +64,8 @@ void TJaegerTracingConfigurator::Bootstrap(const TActorContext& ctx) {
     ApplyConfigs(initialConfig);
 
     YDB_LOG_DEBUG_CTX(ctx, "TJaegerTracingConfigurator: subscribing to config updates");
-    ui32 item = static_cast<ui32>(NKikimrConsole::TConfigItem::TracingConfigItem);
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
-             new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
+             new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(ConfigItemKind));
 }
 
 void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
@@ -67,7 +74,7 @@ void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest
     YDB_LOG_INFO_CTX(ctx, "TJaegerTracingConfigurator: got new config",
         {"config", rec.GetConfig().ShortDebugString()});
 
-    ApplyConfigs(rec.GetConfig().GetTracingConfig());
+    ApplyConfigs(UserFacing ? rec.GetConfig().GetUserFacingTracingConfig() : rec.GetConfig().GetTracingConfig());
 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
     YDB_LOG_TRACE_CTX(ctx, "TJaegerTracingConfigurator: Send TEvConfigNotificationResponse");
@@ -228,8 +235,10 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
 }
 
 IActor* CreateJaegerTracingConfigurator(TIntrusivePtr<TSamplingThrottlingConfigurator> tracingConfigurator,
-                                        NKikimrConfig::TTracingConfig cfg) {
-    return new TJaegerTracingConfigurator(std::move(tracingConfigurator), std::move(cfg));
+                                        NKikimrConfig::TTracingConfig cfg,
+                                        ui32 configItemKind,
+                                        bool userFacing) {
+    return new TJaegerTracingConfigurator(std::move(tracingConfigurator), std::move(cfg), configItemKind, userFacing);
 }
 
 } // namespace NKikimr::NConsole

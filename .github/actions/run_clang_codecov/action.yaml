@@ -116,7 +116,7 @@ runs:
         token: ${{ inputs.codecov_token }}
         files: ${{ steps.ya.outputs.out_dir }}/coverage.lcov
         flags: ${{ steps.suite.outputs.flag }}
-        fail_ci_if_error: false
+        fail_ci_if_error: true
         name: ${{ inputs.suite }}
 
     - name: Publish HTML report to Object Storage

@@ -1,8 +1,10 @@
 name: Codecov C++ (SDK / CLI / workload)
 
-# Dogfood: pull_request. Switch to pull_request_target before merging to main.
+# pull_request_target: required for fork → upstream PRs so repo secrets (CODECOV_TOKEN, AWS, …)
+# are available. Same pattern as cpp_sdk_coverage.yml. Workflow file is taken from the
+# base branch (main); checkout of PR code uses refs/pull/<n>/merge below.
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened, labeled]
   push:
@@ -38,7 +40,7 @@ on:
 concurrency:
   group: >-
     ${{
-      github.event_name == 'pull_request' && format('codecov-pr-{0}', github.event.pull_request.number)
+      startsWith(github.event_name, 'pull_request') && format('codecov-pr-{0}', github.event.pull_request.number)
       || github.event_name == 'schedule' && 'codecov-weekly'
       || github.event_name == 'workflow_dispatch' && 'codecov-manual'
       || 'codecov-main'
@@ -56,7 +58,7 @@ jobs:
     # Upstream only; PRs only when targeting main (stable-* etc. skip the whole job).
     if: >-
       github.repository == 'ydb-platform/ydb' &&
-      (github.event_name != 'pull_request' || github.base_ref == 'main')
+      (!startsWith(github.event_name, 'pull_request') || github.base_ref == 'main')
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.decide.outputs.matrix || '[]' }}
@@ -66,16 +68,12 @@ jobs:
       commit_sha: ${{ github.event.pull_request.head.sha || github.sha }}
       pr_number: ${{ github.event.pull_request.number || '' }}
     steps:
-      - name: Collaborator check on labeled
-        if: github.event_name == 'pull_request' && github.event.action == 'labeled'
+      # pull_request_target runs with secrets; only collaborators may trigger (fork PRs included).
+      - name: Collaborator check
+        if: startsWith(github.event_name, 'pull_request')
         uses: actions/github-script@v8
         with:
           script: |
-            const label = context.payload.label?.name || '';
-            if (!label.startsWith('coverage/')) {
-              core.info(`Ignoring non-coverage label: ${label}`);
-              return;
-            }
             const sender = context.payload.sender.login;
             try {
               await github.rest.repos.checkCollaborator({
@@ -86,17 +84,19 @@ jobs:
             } catch (error) {
               if (!error.status || error.status != 404) throw error;
               core.setFailed(
-                `Only repository collaborators can trigger Codecov via labels (sender: @${sender}).`
+                `Only repository collaborators can trigger Codecov (sender: @${sender}).`
               );
             }
 
+      # For PRs: checkout merge ref so detect scripts match the PR (base workflow + PR tree).
       - uses: actions/checkout@v5
         with:
+          ref: ${{ startsWith(github.event_name, 'pull_request') && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.sha }}
           fetch-depth: 0
 
       - name: Strip coverage labels on sync/open/reopen
         if: >-
-          github.event_name == 'pull_request' &&
+          startsWith(github.event_name, 'pull_request') &&
           (github.event.action == 'synchronize' ||
            github.event.action == 'opened' ||
            github.event.action == 'reopened')
@@ -124,12 +124,13 @@ jobs:
           CHANGED_FILE=$(mktemp)
           LABELS_FILE=$(mktemp)
           echo '[]' > "$LABELS_FILE"
+          EVENT="${{ github.event_name }}"
 
-          if [ "${{ github.event_name }}" = "schedule" ]; then
+          if [ "$EVENT" = "schedule" ]; then
             MODE=labels
             echo '["coverage/all"]' > "$LABELS_FILE"
             : > "$CHANGED_FILE"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          elif [ "$EVENT" = "workflow_dispatch" ]; then
             MODE=labels
             case "${{ inputs.suites }}" in
               all) echo '["coverage/all"]' > "$LABELS_FILE" ;;
@@ -139,7 +140,7 @@ jobs:
               *) echo "Unknown suites input: ${{ inputs.suites }}" >&2; exit 1 ;;
             esac
             : > "$CHANGED_FILE"
-          elif [ "${{ github.event_name }}" = "push" ]; then
+          elif [ "$EVENT" = "push" ]; then
             BEFORE="${{ github.event.before }}"
             AFTER="${{ github.sha }}"
             if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
@@ -147,7 +148,7 @@ jobs:
             else
               git diff --name-only "$BEFORE" "$AFTER" > "$CHANGED_FILE"
             fi
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+          elif [ "$EVENT" = "pull_request" ] || [ "$EVENT" = "pull_request_target" ]; then
             if [ "${{ github.event.action }}" = "labeled" ]; then
               gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels" \
                 --jq '[.[].name]' > "$LABELS_FILE"
@@ -176,7 +177,8 @@ jobs:
         id: decide
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.action }}" = "labeled" ]; then
+          EVENT="${{ github.event_name }}"
+          if { [ "$EVENT" = "pull_request" ] || [ "$EVENT" = "pull_request_target" ]; } && [ "${{ github.event.action }}" = "labeled" ]; then
             LAB="${{ github.event.label.name }}"
             case "$LAB" in
               coverage/*) ;;
@@ -207,7 +209,7 @@ jobs:
         suite: ${{ fromJson(needs.detect.outputs.matrix) }}
     steps:
       - name: Verify PR is mergeable
-        if: github.event_name == 'pull_request'
+        if: startsWith(github.event_name, 'pull_request')
         uses: actions/github-script@v8
         with:
           script: |
@@ -228,7 +230,7 @@ jobs:
 
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.sha }}
+          ref: ${{ startsWith(github.event_name, 'pull_request') && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.sha }}
           fetch-depth: 0
 
       - name: Setup ydb access
@@ -256,7 +258,7 @@ jobs:
     if: >-
       always() &&
       !cancelled() &&
-      github.event_name == 'pull_request' &&
+      startsWith(github.event_name, 'pull_request') &&
       needs.detect.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:

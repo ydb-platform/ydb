@@ -77,16 +77,7 @@ public:
     }
 
     ~TKqpBufferLookupActor() {
-        AFL_ENSURE(Settings.Alloc);
-        {
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
-            for (auto& [cookie, state] : CookieToLookupState) {
-                if (state.Worker) {
-                    state.Worker->ClearResults(Settings.Alloc->Ref());
-                }
-            }
-            CookieToLookupState.clear();
-        }
+        ClearAllWorkerResults();
     }
 
     void Bootstrap() {
@@ -102,16 +93,7 @@ public:
     void PassAway() final {
         Settings.Counters->StreamLookupActorsCount->Dec();
 
-        AFL_ENSURE(Settings.Alloc);
-        {
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
-            for (auto& [cookie, state] : CookieToLookupState) {
-                if (state.Worker) {
-                    state.Worker->ClearResults(Settings.Alloc->Ref());
-                }
-            }
-            CookieToLookupState.clear();
-        }
+        ClearAllWorkerResults();
 
         for (const auto& [readId, state] : ReadIdToState) {
             Settings.Counters->SentIteratorCancels->Inc();
@@ -759,6 +741,17 @@ public:
     }
 
 private:
+    void ClearAllWorkerResults() {
+        AFL_ENSURE(Settings.Alloc);
+        TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
+        for (auto& [cookie, state] : CookieToLookupState) {
+            if (state.Worker) {
+                state.Worker->ClearResults(Settings.Alloc->Ref());
+            }
+        }
+        CookieToLookupState.clear();
+    }
+
     TKqpBufferTableLookupSettings Settings;
     TPartitioning::TCPtr Partitioning;
     const TString LogPrefix;

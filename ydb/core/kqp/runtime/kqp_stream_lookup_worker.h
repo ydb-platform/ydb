@@ -112,7 +112,7 @@ public:
     virtual bool HasPendingResults() = 0;
     virtual void ResetRowsProcessing(ui64 readId) = 0;
 
-    virtual void ClearResults(NMiniKQL::TAllocState& allocState) { (void)allocState; }
+    virtual void ClearResults(NMiniKQL::TAllocState& /*allocState*/) {}
 
 protected:
     const NMiniKQL::TTypeEnvironment& TypeEnv;

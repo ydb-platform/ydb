@@ -40,83 +40,25 @@ std::unordered_set<CURLcode> YqlRetriedCurlCodes() {
     };
 }
 
-// Custom retry policy for FQ that applies a shorter time budget for DNS resolution errors
-class TFqRetryPolicy : public IHTTPGateway::TRetryPolicy {
-public:
-    explicit TFqRetryPolicy(std::unordered_set<CURLcode> retriedCurlCodes)
-        : RetriedCurlCodes(std::move(retriedCurlCodes))
-    {}
-
-    struct TFqRetryState : IRetryState {
-        explicit TFqRetryState(std::unordered_set<CURLcode> retriedCurlCodes)
-            : RetriedCurlCodes(std::move(retriedCurlCodes))
-        {}
-
-        TMaybe<TDuration> GetNextRetryDelay(CURLcode curlCode, long httpCode) override {
-            if (!StartTime) {
-                StartTime = TInstant::Now();
-            }
-
-            auto elapsed = TInstant::Now() - *StartTime;
-
-            auto retryClass = GetRetryClass(curlCode, httpCode);
-            if (retryClass == ERetryErrorClass::NoRetry) {
-                return Nothing();
-            }
-
-            // DNS errors get a much shorter retry window
-            TDuration effectiveMaxTime = (curlCode == CURLE_COULDNT_RESOLVE_HOST)
-                ? DNS_ERROR_MAX_TIME
-                : DEFAULT_MAX_TIME;
-
-            if (elapsed >= effectiveMaxTime) {
-                return Nothing();
-            }
-
-            TDuration delay = CurrentDelay;
-            if (retryClass == ERetryErrorClass::LongRetry) {
-                delay = Max(delay, TDuration::MilliSeconds(200));
-            }
-            CurrentDelay = Min(CurrentDelay * 2.0, TDuration::Seconds(30));
-            return delay;
-        }
-
-    private:
-        ERetryErrorClass GetRetryClass(CURLcode curlCode, long httpCode) const {
-            if (curlCode != CURLE_OK) {
-                return RetriedCurlCodes.contains(curlCode)
-                    ? ERetryErrorClass::ShortRetry
-                    : ERetryErrorClass::NoRetry;
-            }
-
-            switch (httpCode) {
-                case 0:
-                    return ERetryErrorClass::NoRetry;
-                case 408: // Request Timeout
-                case 425: // Too Early
-                case 429: // Too Many Requests
-                case 500: // Internal Server Error
-                case 502: // Bad Gateway
-                case 503: // Service Unavailable
-                case 504: // Gateway Timeout
-                    return ERetryErrorClass::LongRetry;
-                default:
-                    return ERetryErrorClass::NoRetry;
-            }
-        }
-
-        const std::unordered_set<CURLcode> RetriedCurlCodes;
-        std::optional<TInstant> StartTime;
-        TDuration CurrentDelay = TDuration::MilliSeconds(10);
-    };
-
-    IRetryState::TPtr CreateRetryState() const override {
-        return std::make_unique<TFqRetryState>(RetriedCurlCodes);
+// Returns the retry error class for a curl/http error pair, shared by both policies.
+ERetryErrorClass ClassifyError(CURLcode curlCode, long httpCode, const std::unordered_set<CURLcode>& retriedCurlCodes) {
+    if (curlCode != CURLE_OK) {
+        return retriedCurlCodes.contains(curlCode) ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
     }
-
-private:
-    std::unordered_set<CURLcode> RetriedCurlCodes;
-};
+    switch (httpCode) {
+        case 0:   return ERetryErrorClass::NoRetry; // manual cancelling
+        case 408: // Request Timeout
+        case 425: // Too Early
+        case 429: // Too Many Requests
+        case 500: // Internal Server Error
+        case 502: // Bad Gateway
+        case 503: // Service Unavailable
+        case 504: // Gateway Timeout
+            return ERetryErrorClass::LongRetry;
+        default:
+            return ERetryErrorClass::NoRetry;
+    }
+}
 
 } // namespace
 
@@ -133,44 +75,61 @@ THttpRetryPolicyOptions::THttpRetryPolicyOptions(std::optional<TDuration> maxTim
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions&& options) {
     auto maxTime = options.MaxTime.value_or(DEFAULT_MAX_TIME);
     auto maxRetries = options.MaxRetries;
-    return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy([options = std::move(options)](CURLcode curlCode, long httpCode) {
-        if (curlCode == CURLE_OK) {
-            // pass
-        } else if (options.RetriedCurlCodes.contains(curlCode)) {
-            return ERetryErrorClass::ShortRetry;
-        } else {
-            return ERetryErrorClass::NoRetry;
-        }
-
-        switch (httpCode) {
-            case 0:
-                // rare case when curl code is not available like manual cancelling, not retriable anymore
-                return ERetryErrorClass::NoRetry;
-            case 408: // Request Timeout
-            case 425: // Too Early
-            case 429: // Too Many Requests
-            case 500: // Internal Server Error
-            case 502: // Bad Gateway
-            case 503: // Service Unavailable
-            case 504: // Gateway Timeout
-                return ERetryErrorClass::LongRetry;
-            default:
-                return ERetryErrorClass::NoRetry;
-        }
-    },
-    TDuration::MilliSeconds(10), // minDelay
-    TDuration::MilliSeconds(200), // minLongRetryDelay
-    TDuration::Seconds(30), // maxDelay
-    maxRetries, // maxRetries
-    maxTime); // maxTime
+    return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
+        [options = std::move(options)](CURLcode curlCode, long httpCode) {
+            return ClassifyError(curlCode, httpCode, options.RetriedCurlCodes);
+        },
+        TDuration::MilliSeconds(10),  // minDelay
+        TDuration::MilliSeconds(200), // minLongRetryDelay
+        TDuration::Seconds(30),       // maxDelay
+        maxRetries,
+        maxTime);
 }
 
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, size_t maxRetries) {
     return GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{maxTime ? std::make_optional(maxTime) : std::nullopt, maxRetries});
 }
 
+// Custom policy for FQ: applies a shorter 10-second time budget for DNS resolution errors,
+// while other retriable errors use the default 5-minute budget.
+// A plain lambda in GetExponentialBackoffPolicy cannot do this because maxTime is a single
+// value fixed at construction time — it cannot vary per error code within one retry session.
 IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy() {
+    struct TFqRetryState : IHTTPGateway::TRetryPolicy::IRetryState {
+        explicit TFqRetryState(std::unordered_set<CURLcode> codes) : RetriedCurlCodes(std::move(codes)) {}
+
+        TMaybe<TDuration> GetNextRetryDelay(CURLcode curlCode, long httpCode) override {
+            if (!StartTime) {
+                StartTime = TInstant::Now();
+            }
+            auto retryClass = ClassifyError(curlCode, httpCode, RetriedCurlCodes);
+            if (retryClass == ERetryErrorClass::NoRetry) {
+                return Nothing();
+            }
+            TDuration maxTime = (curlCode == CURLE_COULDNT_RESOLVE_HOST) ? DNS_ERROR_MAX_TIME : DEFAULT_MAX_TIME;
+            if (TInstant::Now() - *StartTime >= maxTime) {
+                return Nothing();
+            }
+            TDuration delay = (retryClass == ERetryErrorClass::LongRetry) ? Max(CurrentDelay, TDuration::MilliSeconds(200)) : CurrentDelay;
+            CurrentDelay = Min(CurrentDelay * 2.0, TDuration::Seconds(30));
+            return delay;
+        }
+
+        const std::unordered_set<CURLcode> RetriedCurlCodes;
+        std::optional<TInstant> StartTime;
+        TDuration CurrentDelay = TDuration::MilliSeconds(10);
+    };
+
+    struct TFqRetryPolicy : IHTTPGateway::TRetryPolicy {
+        explicit TFqRetryPolicy(std::unordered_set<CURLcode> codes) : RetriedCurlCodes(std::move(codes)) {}
+        IRetryState::TPtr CreateRetryState() const override {
+            return std::make_unique<TFqRetryState>(RetriedCurlCodes);
+        }
+        std::unordered_set<CURLcode> RetriedCurlCodes;
+    };
+
     return std::make_shared<TFqRetryPolicy>(FqRetriedCurlCodes());
 }
 
 }
+

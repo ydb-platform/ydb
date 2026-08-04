@@ -95,13 +95,46 @@ struct TEnvironmentSetup {
         return InitialEventsFilter.Prepare();
     }
 
-    NKikimrBlobStorage::TConfigResponse Invoke(const NKikimrBlobStorage::TConfigRequest& request) {
+    NKikimrBlobStorage::TConfigResponse Invoke(const NKikimrBlobStorage::TConfigRequest& request,
+            bool selfHeal = false) {
         const TActorId self = Runtime->AllocateEdgeActor();
         auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
         ev->Record.MutableRequest()->CopyFrom(request);
+        ev->SelfHeal = selfHeal;
         Runtime->SendToPipe(TabletId, self, ev.Release(), NodeId, GetPipeConfigWithRetries());
         auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(self);
         return response->Get()->Record.GetResponse();
+    }
+
+    void ReportVDiskStatuses(const NKikimrBlobStorage::TBaseConfig& baseConfig,
+            const TVector<std::tuple<size_t, NKikimrBlobStorage::EVDiskStatus, bool>>& updates) {
+        TMap<std::pair<ui32, ui32>, ui64> pdiskGuids;
+        for (const auto& pdisk : baseConfig.GetPDisk()) {
+            pdiskGuids.emplace(std::make_pair(pdisk.GetNodeId(), pdisk.GetPDiskId()), pdisk.GetGuid());
+        }
+
+        const TActorId sender = Runtime->AllocateEdgeActor(0);
+        auto ev = MakeHolder<TEvBlobStorage::TEvControllerRegisterNode>();
+        ev->Record.SetNodeID(Runtime->GetNodeId(0));
+        for (const auto& [slotIndex, status, onlyPhantomsRemain] : updates) {
+            const auto& slot = baseConfig.GetVSlot(slotIndex);
+            const auto& vslotId = slot.GetVSlotId();
+            auto *item = ev->Record.AddVDiskStatus();
+            item->SetNodeId(vslotId.GetNodeId());
+            item->SetPDiskId(vslotId.GetPDiskId());
+            item->SetVSlotId(vslotId.GetVSlotId());
+            item->SetPDiskGuid(pdiskGuids.at(std::make_pair(vslotId.GetNodeId(), vslotId.GetPDiskId())));
+            item->SetStatus(status);
+            item->SetOnlyPhantomsRemain(onlyPhantomsRemain);
+            auto *vdiskId = item->MutableVDiskId();
+            vdiskId->SetGroupID(slot.GetGroupId());
+            vdiskId->SetGroupGeneration(slot.GetGroupGeneration());
+            vdiskId->SetRing(slot.GetFailRealmIdx());
+            vdiskId->SetDomain(slot.GetFailDomainIdx());
+            vdiskId->SetVDisk(slot.GetVDiskIdx());
+        }
+        Runtime->SendToPipe(TabletId, sender, ev.Release(), 0, GetPipeConfigWithRetries());
+        Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(sender);
     }
 
     void RegisterNode() {
@@ -677,6 +710,148 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             cmd2->SetGroupId(2147483649);
             cmd2->SetGroupGeneration(1);
             cmd2->SetFailDomainIdx(3);
+        });
+    }
+
+    Y_UNIT_TEST(SelfHealRequestAllowsSinglePhantomsOnlyVDisk) {
+        const ui32 numNodes = 12;
+        TEnvironmentSetup env(numNodes, 1);
+
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName,
+                std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+            TFinalizer finalizer(env);
+            env.Prepare(dispatchName, setup, outActiveZone);
+
+            NKikimrBlobStorage::TConfigRequest request;
+            env.DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}},
+                env.GetNodes(), request);
+            env.DefineStoragePool(1, 1, "storage pool", 1, NKikimrBlobStorage::ROT, {}, request);
+            const size_t baseConfigIndex = request.CommandSize();
+            request.AddCommand()->MutableQueryBaseConfig();
+
+            NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            const auto baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
+            UNIT_ASSERT_VALUES_EQUAL(baseConfig.GroupSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(baseConfig.VSlotSize(), 8);
+
+            TVector<std::tuple<size_t, NKikimrBlobStorage::EVDiskStatus, bool>> readyUpdates;
+            for (size_t i = 0; i < baseConfig.VSlotSize(); ++i) {
+                readyUpdates.emplace_back(i, NKikimrBlobStorage::EVDiskStatus::READY, false);
+            }
+            env.ReportVDiskStatuses(baseConfig, readyUpdates);
+            env.Runtime->SimulateSleep(TDuration::Seconds(16));
+
+            request.Clear();
+            request.AddCommand()->MutableQueryBaseConfig();
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            for (const auto& slot : response.GetStatus(0).GetBaseConfig().GetVSlot()) {
+                UNIT_ASSERT(slot.GetReady());
+            }
+
+            constexpr size_t phantomSlotIndex = 0;
+            constexpr size_t failedSlotIndex = 1;
+            env.ReportVDiskStatuses(baseConfig, {
+                {phantomSlotIndex, NKikimrBlobStorage::EVDiskStatus::REPLICATING, true},
+                {failedSlotIndex, NKikimrBlobStorage::EVDiskStatus::ERROR, false},
+            });
+
+            request.Clear();
+            request.AddCommand()->MutableEnableSelfHeal()->SetEnable(true);
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+            const auto& group = baseConfig.GetGroup(0);
+            const auto& failedSlot = baseConfig.GetVSlot(failedSlotIndex);
+            request.Clear();
+            request.SetIgnoreGroupReserve(true);
+            request.SetAllowUnusableDisks(true);
+            auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
+            reassign->SetGroupId(group.GetGroupId());
+            reassign->SetGroupGeneration(group.GetGroupGeneration());
+            reassign->SetFailRealmIdx(failedSlot.GetFailRealmIdx());
+            reassign->SetFailDomainIdx(failedSlot.GetFailDomainIdx());
+            reassign->SetVDiskIdx(failedSlot.GetVDiskIdx());
+
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GroupsGetDegradedSize(), 1, response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetGroupsGetDegraded(0), group.GetGroupId());
+
+            response = env.Invoke(request, true);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        });
+    }
+
+    Y_UNIT_TEST(SelfHealRequestRejectsDisintegratedGroupWithPhantomsOnlyVDisk) {
+        const ui32 numNodes = 12;
+        TEnvironmentSetup env(numNodes, 1);
+
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName,
+                std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+            TFinalizer finalizer(env);
+            env.Prepare(dispatchName, setup, outActiveZone);
+
+            NKikimrBlobStorage::TConfigRequest request;
+            env.DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}},
+                env.GetNodes(), request);
+            env.DefineStoragePool(1, 1, "storage pool", 1, NKikimrBlobStorage::ROT, {}, request);
+            const size_t baseConfigIndex = request.CommandSize();
+            request.AddCommand()->MutableQueryBaseConfig();
+
+            NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            const auto baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
+            UNIT_ASSERT_VALUES_EQUAL(baseConfig.GroupSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(baseConfig.VSlotSize(), 8);
+
+            TVector<std::tuple<size_t, NKikimrBlobStorage::EVDiskStatus, bool>> readyUpdates;
+            for (size_t i = 0; i < baseConfig.VSlotSize(); ++i) {
+                readyUpdates.emplace_back(i, NKikimrBlobStorage::EVDiskStatus::READY, false);
+            }
+            env.ReportVDiskStatuses(baseConfig, readyUpdates);
+            env.Runtime->SimulateSleep(TDuration::Seconds(16));
+
+            request.Clear();
+            request.AddCommand()->MutableQueryBaseConfig();
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            for (const auto& slot : response.GetStatus(0).GetBaseConfig().GetVSlot()) {
+                UNIT_ASSERT(slot.GetReady());
+            }
+
+            constexpr size_t phantomSlotIndex = 0;
+            constexpr size_t failedSlotIndex = 1;
+            constexpr size_t readySlotToEvictIndex = 2;
+            env.ReportVDiskStatuses(baseConfig, {
+                {phantomSlotIndex, NKikimrBlobStorage::EVDiskStatus::REPLICATING, true},
+                {failedSlotIndex, NKikimrBlobStorage::EVDiskStatus::ERROR, false},
+            });
+
+            request.Clear();
+            request.AddCommand()->MutableEnableSelfHeal()->SetEnable(true);
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+            const auto& group = baseConfig.GetGroup(0);
+            const auto& readySlotToEvict = baseConfig.GetVSlot(readySlotToEvictIndex);
+            request.Clear();
+            request.SetIgnoreGroupReserve(true);
+            request.SetAllowUnusableDisks(true);
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
+            reassign->SetGroupId(group.GetGroupId());
+            reassign->SetGroupGeneration(group.GetGroupGeneration());
+            reassign->SetFailRealmIdx(readySlotToEvict.GetFailRealmIdx());
+            reassign->SetFailDomainIdx(readySlotToEvict.GetFailDomainIdx());
+            reassign->SetVDiskIdx(readySlotToEvict.GetVDiskIdx());
+
+            response = env.Invoke(request, true);
+            UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(response.GroupsGetDegradedSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GroupsGetDisintegratedSize(), 1, response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetGroupsGetDisintegrated(0), group.GetGroupId());
         });
     }
 

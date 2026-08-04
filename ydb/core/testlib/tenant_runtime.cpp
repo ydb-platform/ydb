@@ -9,7 +9,6 @@
 #include <ydb/core/mind/labels_maintainer.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller/dbs_controller.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -1158,16 +1157,6 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
             DispatchEvents(options);
         }
     }
-#if defined(YDB_EMBEDDED_NBS_ENABLED)
-    // Create DBS Controller
-    {
-        auto info = CreateTestTabletInfo(MakeDbsControllerID(), TTabletTypes::DbsController, TErasureType::ErasureNone);
-        TActorId actorId = CreateTestBootstrapper(*this, info, [&config=this->Config](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
-                    return NYdb::NBS::NBlockStore::NStorage::NDbsController::CreateDbsControllerTablet(tablet, info);
-            });
-        EnableScheduleForActor(actorId, true);
-    }
-#endif
 }
 
 TTenantTestRuntime::TTenantTestRuntime(const TTenantTestConfig &config,

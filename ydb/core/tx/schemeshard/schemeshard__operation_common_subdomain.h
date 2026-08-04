@@ -50,9 +50,14 @@ inline bool CheckStoragePoolsInQuotas(
 // (TABLES_METRICS_LEVEL) coming in with a (ext)subdomain create/alter request.
 // MetricsLevelUnspecified is accepted: at the database level it means "no
 // default", so it is also how an existing default is cleared.
-inline bool CheckTablesMetricsLevel(ETablesMetricsLevel level, TString& error) {
+inline bool CheckTablesMetricsLevel(ETablesMetricsLevel level, bool isRootDomain, TString& error) {
     if (!AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
         error = "Detailed metrics are disabled (EnableDataShardDetailedMetrics feature flag is off)";
+        return false;
+    }
+
+    if (isRootDomain) {
+        error = "TABLES_METRICS_LEVEL cannot be set on the root database";
         return false;
     }
 

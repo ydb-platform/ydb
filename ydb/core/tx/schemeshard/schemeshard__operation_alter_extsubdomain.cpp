@@ -320,7 +320,7 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
 
     if (input.HasTablesMetricsLevel()) {
         TString error;
-        if (!CheckTablesMetricsLevel(input.GetTablesMetricsLevel(), error)) {
+        if (!CheckTablesMetricsLevel(input.GetTablesMetricsLevel(), /* isRootDomain */ false, error)) {
             return paramError(error);
         }
     }

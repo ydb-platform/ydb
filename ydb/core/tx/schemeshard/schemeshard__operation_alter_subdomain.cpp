@@ -311,7 +311,8 @@ public:
         // alterData is copy-constructed from subDomainInfo, so the current
         // level is already carried over; only an explicit request changes it.
         if (settings.HasTablesMetricsLevel()) {
-            if (!CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), errStr)) {
+            const bool isRootDomain = subDomain->IsRoot() && context.SS->IsDomainSchemeShard;
+            if (!CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), isRootDomain, errStr)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }

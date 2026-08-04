@@ -1790,11 +1790,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         );
                     }
 
-                    alter->SetTablesMetricsLevel(
-                        rowset.GetValueOrDefault<Schema::SubDomainsAlterData::TablesMetricsLevel>(
-                            subdomainInfo->GetTablesMetricsLevel()
-                        )
-                    );
+                    if (!path->IsRoot() || !Self->IsDomainSchemeShard) {
+                        alter->SetTablesMetricsLevel(
+                            rowset.GetValueOrDefault<Schema::SubDomainsAlterData::TablesMetricsLevel>(
+                                subdomainInfo->GetTablesMetricsLevel()
+                            )
+                        );
+                    }
 
                     subdomainInfo->SetAlter(alter);
 

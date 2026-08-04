@@ -1002,6 +1002,57 @@ Y_UNIT_TEST_SUITE(TSchemeShardDatabaseDetailedMetricsSettingsTest) {
             {NKikimrScheme::StatusInvalidParameter});
     }
 
+    // The root database has no SysView Processor, so detailed metrics can never be
+    // aggregated for it
+    void VerifyAlterRootDatabaseTablesMetricsLevelRejected(
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level
+    ) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+        // So that the request is rejected by the root-database check, not by the
+        // ALTER DATABASE gate
+        runtime.GetAppData().FeatureFlags.SetEnableAlterDatabase(true);
+
+        TestAlterSubDomain(runtime, ++txId, "/",
+            Sprintf("Name: \"MyRoot\" TablesMetricsLevel: %u", ui32(level)),
+            {NKikimrScheme::StatusInvalidParameter});
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedTablesMetricsLevel(runtime, "/MyRoot"),
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified));
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedTablesMetricsLevel(runtime, "/MyRoot"),
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified));
+    }
+
+    Y_UNIT_TEST(AlterRootDatabaseTablesMetricsLevelUnspecifiedNotAllowed) {
+        VerifyAlterRootDatabaseTablesMetricsLevelRejected(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
+        );
+    }
+
+    Y_UNIT_TEST(AlterRootDatabaseTablesMetricsLevelDisabledNotAllowed) {
+        VerifyAlterRootDatabaseTablesMetricsLevelRejected(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled
+        );
+    }
+
+    Y_UNIT_TEST(AlterRootDatabaseTablesMetricsLevelTableNotAllowed) {
+        VerifyAlterRootDatabaseTablesMetricsLevelRejected(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+        );
+    }
+
+    Y_UNIT_TEST(AlterRootDatabaseTablesMetricsLevelPartitionNotAllowed) {
+        VerifyAlterRootDatabaseTablesMetricsLevelRejected(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+        );
+    }
+
     Y_UNIT_TEST(CreateDatabaseWithTablesMetricsLevel) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

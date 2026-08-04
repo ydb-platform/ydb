@@ -310,7 +310,7 @@ public:
         }
 
         if (settings.HasTablesMetricsLevel()) {
-            if (!CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), errStr)) {
+            if (!CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), /* isRootDomain */ false, errStr)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }

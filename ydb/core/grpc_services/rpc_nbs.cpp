@@ -14,6 +14,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/ss_proxy.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/request_info.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/volume_label.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -173,7 +174,7 @@ private:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NYdb::NBS::NBlockStore::TEvService::TEvDeleteResponse, Handle);
+            hFunc(NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionResponse, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
             hFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
             default:
@@ -187,6 +188,20 @@ private:
 
         LOG_DEBUG(ctx, NKikimrServices::NBS_PARTITION,
             "DeletePartition: received DescribeScheme response: %s", response.ToString().data());
+
+        const auto& error = response.GetError();
+        if (NYdb::NBS::HasError(error)) {
+            LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
+                "DeletePartition: DescribeScheme failed: %s",
+                NYdb::NBS::FormatError(error).data());
+            auto issue = NYql::TIssue(
+                error.GetMessage().empty()
+                    ? NYdb::NBS::FormatError(error)
+                    : error.GetMessage());
+            Request_->RaiseIssue(issue);
+            Reply(Ydb::StatusIds::GENERIC_ERROR, ActorContext());
+            return;
+        }
 
         const auto& pathDescription = response.PathDescription;
         const auto pathType = pathDescription.GetSelf().GetPathType();
@@ -225,7 +240,7 @@ private:
 
         PipeClient = CreatePipeClient(tabletId, ctx);
 
-        auto request = MakeHolder<NYdb::NBS::NBlockStore::TEvService::TEvDeleteRequest>();
+        auto request = MakeHolder<NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionRequest>();
         NTabletPipe::SendData(
             ctx,
             PipeClient,
@@ -252,11 +267,14 @@ private:
         Y_UNUSED(ev);
         const auto& ctx = TActivationContext::AsActorContext();
 
-        LOG_WARN(ctx, NKikimrServices::NBS_PARTITION,
-            "DeletePartition: pipe to partition tablet destroyed");
+        LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
+            "DeletePartition: pipe to partition tablet destroyed before response");
+        auto issue = NYql::TIssue("Pipe to partition tablet destroyed");
+        Request_->RaiseIssue(issue);
+        Reply(Ydb::StatusIds::UNAVAILABLE, ActorContext());
     }
 
-    void Handle(NYdb::NBS::NBlockStore::TEvService::TEvDeleteResponse::TPtr& ev) {
+    void Handle(NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionResponse::TPtr& ev) {
         const auto& ctx = TActivationContext::AsActorContext();
 
         LOG_DEBUG(ctx, NKikimrServices::NBS_PARTITION,

@@ -136,6 +136,36 @@ class NbsTestBase:
         assert match, f"DeletePartition did not return DiskId, output: {output}"
         return match.group(1)
 
+    def delete_disk_expect_failure(self, disk_id):
+        """
+        Attempt to delete a disk and assert that the operation fails.
+        """
+        proc = execute_dstool_grpc(
+            self.cluster,
+            "token",
+            [
+                'nbs',
+                'partition',
+                'delete',
+                '--disk-id',
+                disk_id,
+            ],
+            check_exit_code=False,
+            return_process=True,
+        )
+
+        stdout = proc.std_out.decode('utf-8')
+        stderr = proc.std_err.decode('utf-8')
+
+        assert 'DiskId:' not in stdout, (
+            f"DeletePartition unexpectedly succeeded for disk {disk_id}: "
+            f"stdout={stdout}, stderr={stderr}"
+        )
+        assert 'error' in stderr, (
+            f"DeletePartition for missing disk {disk_id} did not report error: "
+            f"stdout={stdout}, stderr={stderr}"
+        )
+
     def get_load_actor_adapter_actor_id(self, disk_id):
         get_load_actor_res = json.loads(
             execute_dstool_grpc(

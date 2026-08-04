@@ -29,14 +29,14 @@ struct TEvService
         EvGetLoadActorAdapterActorIdRequest,
         EvGetLoadActorAdapterActorIdResponse,
 
-        EvDeleteRequest,
-        EvDeleteResponse,
+        EvDeletePartitionRequest,
+        EvDeletePartitionResponse,
     };
 
     BLOCKSTORE_DECLARE_PROTO_EVENTS(WriteBlocks)
     BLOCKSTORE_DECLARE_PROTO_EVENTS(ReadBlocks)
     BLOCKSTORE_DECLARE_PROTO_EVENTS(GetLoadActorAdapterActorId)
-    BLOCKSTORE_DECLARE_PROTO_EVENTS(Delete)
+    BLOCKSTORE_DECLARE_PROTO_EVENTS(DeletePartition)
 };
 
 }   // namespace NYdb::NBS::NBlockStore

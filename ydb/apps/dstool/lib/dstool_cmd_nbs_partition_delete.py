@@ -19,6 +19,9 @@ def do(args):
 
     common.print_nbs_request_result(args, request, response)
 
+    if not common.get_status(response):
+        return
+
     result = nbs.DeletePartitionResult()
     response.operation.result.Unpack(result)
     print(result)

@@ -43,6 +43,20 @@ class TestNbs(NbsTestBase):
         deleted_disk_id = self.delete_disk(disk_id)
         assert deleted_disk_id == disk_id
 
+    def test_nbs_disk_deletion_nonexistent(self):
+        """
+        Deleting a disk that does not exist must fail
+        """
+
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+        self.create_disk(disk_id)
+        # Ensure the partition tablet is up before delete
+        self.get_load_actor_adapter_actor_id(disk_id)
+
+        # Try to delete the disk that does not exist
+        self.delete_disk_expect_failure("invalid_disk_id")
+
     def test_nbs_disk_creation_name_with_symbols(self):
         """
         Create nbs disk and check basic IO operations

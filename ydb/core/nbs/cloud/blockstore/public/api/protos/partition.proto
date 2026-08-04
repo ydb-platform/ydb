@@ -27,11 +27,11 @@ message TGetLoadActorAdapterActorIdResponse
 ////////////////////////////////////////////////////////////////////////////////
 // Delete partition request/response.
 
-message TDeleteRequest
+message TDeletePartitionRequest
 {
 }
 
-message TDeleteResponse
+message TDeletePartitionResponse
 {
     // Optional error, set only if error happened.
     NYdb.NBS.NProto.TError Error = 1;

@@ -8,17 +8,17 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TPartitionActor::HandleDelete(
-    const TEvService::TEvDeleteRequest::TPtr& ev,
+void TPartitionActor::HandleDeletePartition(
+    const TEvService::TEvDeletePartitionRequest::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "%s Handle Delete request",
+        "%s Handle DeletePartition request",
         LogTitle.GetWithTime().c_str());
 
-    auto response = std::make_unique<TEvService::TEvDeleteResponse>();
+    auto response = std::make_unique<TEvService::TEvDeletePartitionResponse>();
     ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 

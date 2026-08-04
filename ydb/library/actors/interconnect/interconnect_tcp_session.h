@@ -617,12 +617,12 @@ namespace NActors {
         TWatchdogTimer<TEvCheckLostConnection> LostConnectionWatchdog;
 
         void OnCloseOnIdleTimerHit() {
-            LOG_INFO_IC("ICS27", "CloseOnIdle timer hit, session terminated");
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICS27", ::NActors::NLog::PRI_INFO, "CloseOnIdle timer hit, session terminated");
             Terminate(TDisconnectReason::CloseOnIdle());
         }
 
         void OnLostConnectionTimerHit() {
-            LOG_ERROR_IC("ICS28", "LostConnection timer hit, session terminated");
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICS28", ::NActors::NLog::PRI_ERROR, "LostConnection timer hit, session terminated");
             Terminate(TDisconnectReason::LostConnection());
         }
 

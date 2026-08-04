@@ -88,7 +88,7 @@ public:
                 CqMap.emplace(rdmaCtx, TWaitPollerReg(ev));
                 return;
             }
-            LOG_ERROR_IC("ICRDMA", "Unable to register async_fd: %d",
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_ERROR, "Unable to register async_fd: %d",
                 rdmaCtx->GetContext()->async_fd);
         } else if (it->second.index() == 0) {
             cqPtr = std::get<0>(it->second).Cq;
@@ -106,7 +106,7 @@ public:
     }
 
     void Handle(NActors::TEvPollerRegisterResult::TPtr& ev) {
-        LOG_DEBUG_IC("ICRDMA", "Got TEvPollerRegisterResult for fd: %d",
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_DEBUG, "Got TEvPollerRegisterResult for fd: %d",
                 ev->Get()->Socket.Get()->GetDescriptor());
         auto rdmaCtx = static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get())->GetContext();
         auto cqPtr = CqFactory(rdmaCtx);
@@ -204,7 +204,7 @@ private:
 
     void ProcessCqErr(auto it) {
         TCtxData& c = std::get<0>(it->second);
-        LOG_ERROR_IC("ICRDMA", "Cq error issued on ctx %s, notify all pending cq callbacks",
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_ERROR, "Cq error issued on ctx %s, notify all pending cq callbacks",
             it->first->ToString().data());
         c.Cq->NotifyErr();
     }
@@ -218,7 +218,7 @@ private:
         auto it = CqMap.find(rdmaCtx);
         Y_ABORT_UNLESS(it != CqMap.end());
 
-        LOG_DEBUG_IC("ICRDMA", "RDMA async event issued on ctx %s, %s",
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_DEBUG, "RDMA async event issued on ctx %s, %s",
             rdmaCtx->ToString().data(), GetAsyncEventDbg(rdmaCtx, async_event).data());
 
         switch (async_event.event_type) {

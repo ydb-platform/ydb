@@ -1516,34 +1516,34 @@ namespace NActors {
             if (const NInterconnect::TAddress* addr = std::get_if<NInterconnect::TAddress>(&sockname)) {
                 rdmaCtx = NLinkMgr::GetCtx(*addr);
                 if (rdmaCtx) {
-                    LOG_TRACE_IC("ICRDMA", "Found verbs fontext for address %s",
+                    LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_TRACE, "Found verbs fontext for address %s",
                         std::get<0>(sockname).ToString().data());
                 } else {
-                    LOG_WARN_IC("ICRDMA", "Unable to find verbs context using address %s",
+                    LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_WARN, "Unable to find verbs context using address %s",
                         std::get<0>(sockname).ToString().data());
                 }
             } else if (int* err = get_if<int>(&sockname)) {
-                LOG_ERROR_IC("ICRDMA", "Unable to get local address for socket: %d, err: %d. Rdma will not be used",
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_ERROR, "Unable to get local address for socket: %d, err: %d. Rdma will not be used",
                     (int)(*MainChannel.GetSocketRef()), *err);
             } else {
-                LOG_CRIT_IC("ICRDMA", "Unknown getsockname return type for socket: %d. Rdma will not be used",
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_CRIT, "Unknown getsockname return type for socket: %d. Rdma will not be used",
                     (int)(*MainChannel.GetSocketRef()));
             }
 
             if (rdmaCtx) {
                 if (ICq::TPtr cqPtr = CreateRdmaCq(rdmaCtx)) {
-                    LOG_TRACE_IC("ICRDMA", "Got CQ handle at: %p", (void*)cqPtr.get());
+                    LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_TRACE, "Got CQ handle at: %p", (void*)cqPtr.get());
                     Rdma.Qp.reset(new NInterconnect::NRdma::TQueuePair);
                     int err = Rdma.Qp->Init(rdmaCtx, cqPtr.get(), 1024); //TODO: move in to settings
                     if (err) {
-                        LOG_ERROR_IC("ICRDMA", "Unable to initialize QP, no more attempt to use RDMA on this session");
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_ERROR, "Unable to initialize QP, no more attempt to use RDMA on this session");
                         Rdma.Qp.reset();
                         RunDelayedRdmaHandshake = true;
                     } else {
                         Rdma.Cq = cqPtr;
                     }
                 } else {
-                    LOG_ERROR_IC("ICRDMA", "Unable to get CQ handle, no more attempt to use RDMA on this session");
+                    LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_ERROR, "Unable to get CQ handle, no more attempt to use RDMA on this session");
                     RunDelayedRdmaHandshake = true;
                 }
             }
@@ -1552,12 +1552,12 @@ namespace NActors {
         NInterconnect::NRdma::ICq::TPtr CreateRdmaCq(NInterconnect::NRdma::TRdmaCtx* rdmaCtx) {
             const bool success = Send(NInterconnect::NRdma::MakeCqActorId(), new NInterconnect::NRdma::TEvGetCqHandle(rdmaCtx));
             if (!success) {
-                LOG_CRIT_IC("ICRDMA", "Cq service is not configured. This is a bug.");
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_CRIT, "Cq service is not configured. This is a bug.");
                 return nullptr;
             }
             auto ev = WaitForSpecificEvent<NInterconnect::NRdma::TEvGetCqHandle>("TEvGetCqHandle");
             if (!ev) {
-                LOG_CRIT_IC("ICRDMA", "Unable to get response from CQ actor");
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICRDMA", ::NActors::NLog::PRI_CRIT, "Unable to get response from CQ actor");
                 return nullptr;
             } else {
                 return ev->Get()->CqPtr;

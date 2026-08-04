@@ -29,7 +29,7 @@ namespace NActors {
     }
 
     void TInterconnectListenerTCP::Die(const TActorContext& ctx) {
-        LOG_DEBUG_IC("ICL08", "Dying");
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICL08", ::NActors::NLog::PRI_DEBUG, "Dying");
         TActor::Die(ctx);
     }
 
@@ -77,7 +77,7 @@ namespace NActors {
     void TInterconnectListenerTCP::Bootstrap(const TActorContext& ctx) {
         if (!Listener) {
             if (const int err = Bind()) {
-                LOG_ERROR_IC("ICL01", "Bind failed: %s (%s:%u)", strerror(err), Address.data(), Port);
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICL01", ::NActors::NLog::PRI_ERROR, "Bind failed: %s (%s:%u)", strerror(err), Address.data(), Port);
                 Listener.Reset();
                 Become(&TThis::Initial, TDuration::Seconds(1), new TEvents::TEvBootstrap);
                 return;
@@ -101,13 +101,13 @@ namespace NActors {
             NInterconnect::TAddress address;
             const int r = Listener->Accept(address);
             if (r >= 0) {
-                LOG_DEBUG_IC("ICL04", "Accepted from: %s", address.ToString().data());
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICL04", ::NActors::NLog::PRI_DEBUG, "Accepted from: %s", address.ToString().data());
                 auto socket = MakeIntrusive<NInterconnect::TStreamSocket>(static_cast<SOCKET>(r));
                 ctx.Register(CreateIncomingHandshakeActor(ProxyCommonCtx, std::move(socket)));
                 continue;
             } else if (-r != EAGAIN && -r != EWOULDBLOCK) {
                 Y_ABORT_UNLESS(-r != ENFILE && -r != EMFILE && !ExternalSocket);
-                LOG_ERROR_IC("ICL06", "Listen failed: %s (%s:%u)", strerror(-r), Address.data(), Port);
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICL06", ::NActors::NLog::PRI_ERROR, "Listen failed: %s (%s:%u)", strerror(-r), Address.data(), Port);
                 Listener.Reset();
                 PollerToken.Reset();
                 Become(&TThis::Initial, TDuration::Seconds(1), new TEvents::TEvBootstrap);

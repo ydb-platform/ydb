@@ -127,7 +127,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::Terminate(TDisconnectReason reason) {
-        LOG_INFO_IC_SESSION("ICS01", "socket: %" PRIi64 " reason# %s", (Socket ? i64(*Socket) : -1), reason.ToString().data());
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS01", ::NActors::NLog::PRI_INFO, "socket: %" PRIi64 " reason# %s", (Socket ? i64(*Socket) : -1), reason.ToString().data());
 
         // Move RdmaQp to the error state to prevent read our memory from the peer side after possible desctuction events
         if (RdmaQp) {
@@ -187,7 +187,7 @@ namespace NActors {
     void TInterconnectSessionTCP::Enqueue(STATEFN_SIG) {
         Proxy->ValidateEvent(ev, "Enqueue");
 
-        LOG_DEBUG_IC_SESSION("ICS02", "send event from: %s to: %s", ev->Sender.ToString().data(), ev->Recipient.ToString().data());
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS02", ::NActors::NLog::PRI_DEBUG, "send event from: %s to: %s", ev->Sender.ToString().data(), ev->Recipient.ToString().data());
         ++MessagesGot;
 
         ui16 evChannel = ev->GetChannel();
@@ -219,14 +219,14 @@ namespace NActors {
         // check for overloaded queues
         ui64 sendBufferDieLimit = Proxy->Common->Settings.SendBufferDieLimitInMB * ui64(1 << 20);
         if (sendBufferDieLimit != 0 && TotalOutputQueueSize > sendBufferDieLimit) {
-            LOG_ERROR_IC_SESSION("ICS03", "socket: %" PRIi64 " output queue is overloaded, actual %" PRIu64 " bytes, limit is %" PRIu64,
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS03", ::NActors::NLog::PRI_ERROR, "socket: %" PRIi64 " output queue is overloaded, actual %" PRIu64 " bytes, limit is %" PRIu64,
                          Socket ? i64(*Socket) : -1, TotalOutputQueueSize, sendBufferDieLimit);
             return Terminate(TDisconnectReason::QueueOverload());
         }
 
         ui64 outputBuffersTotalSizeLimit = Proxy->Common->Settings.OutputBuffersTotalSizeLimitInMB * ui64(1 << 20);
         if (outputBuffersTotalSizeLimit != 0 && static_cast<ui64>(Proxy->Metrics->GetOutputBuffersTotalSize()) > outputBuffersTotalSizeLimit) {
-            LOG_ERROR_IC_SESSION("ICS77", "Exceeded total limit on output buffers size");
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS77", ::NActors::NLog::PRI_ERROR, "Exceeded total limit on output buffers size");
             if (AtomicTryLock(&Proxy->Common->StartedSessionKiller)) {
                 CreateSessionKillingActor(Proxy->Common);
             }
@@ -251,7 +251,7 @@ namespace NActors {
         auto msg = ev->Release<TEvForwardSubscribeSession>();
         Y_ABORT_UNLESS(msg->Event);
 
-        LOG_DEBUG_IC_SESSION("ICS12", "subscribe for session state for %s", msg->Event->Sender.ToString().data());
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS12", ::NActors::NLog::PRI_DEBUG, "subscribe for session state for %s", msg->Event->Sender.ToString().data());
         UpdateSubscriber(msg->Event->Sender, msg->Event->Cookie, msg->ActivityIndex, std::move(msg->EventTypeName),
             std::move(msg->StackTrace));
         Send(msg->Event->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, msg->Event->Cookie);
@@ -285,13 +285,13 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::Subscribe(STATEFN_SIG) {
-        LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", ev->Sender.ToString().data());
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS04", ::NActors::NLog::PRI_DEBUG, "subscribe for session state for %s", ev->Sender.ToString().data());
         UpdateSubscriber(ev->Sender, ev->Cookie);
         Send(ev->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, ev->Cookie);
     }
 
     void TInterconnectSessionTCP::Unsubscribe(STATEFN_SIG) {
-        LOG_DEBUG_IC_SESSION("ICS05", "unsubscribe for session state for %s", ev->Sender.ToString().data());
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS05", ::NActors::NLog::PRI_DEBUG, "unsubscribe for session state for %s", ev->Sender.ToString().data());
         if (const auto it = Subscribers.find(ev->Sender); it != Subscribers.end()) {
             Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
             Subscribers.erase(it);
@@ -335,7 +335,7 @@ namespace NActors {
         ReestablishConnection({}, false, TDisconnectReason::NewSession());
         const ui64 lastInputSerial = ReceiveContext->LockLastPacketSerialToConfirm();
 
-        LOG_INFO_IC_SESSION("ICS08", "incoming handshake Self# %s Peer# %s Counter# %" PRIu64 " LastInputSerial# %" PRIu64,
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS08", ::NActors::NLog::PRI_INFO, "incoming handshake Self# %s Peer# %s Counter# %" PRIu64 " LastInputSerial# %" PRIu64,
             msg->Self.ToString().data(), msg->Peer.ToString().data(), msg->Counter, lastInputSerial);
 
         return MakeHolder<TEvHandshakeAck>(msg->Peer, lastInputSerial, Params);
@@ -348,7 +348,7 @@ namespace NActors {
             return;
         }
 
-        LOG_INFO_IC_SESSION("ICS09", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64 " qp: %d",
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS09", ::NActors::NLog::PRI_INFO, "handshake done sender: %s self: %s peer: %s socket: %" PRIi64 " qp: %d",
             ev->Sender.ToString().data(), ev->Get()->Self.ToString().data(), ev->Get()->Peer.ToString().data(),
             i64(*ev->Get()->Socket),
             (ev->Get()->RdmaHanshakeResult.IsOk() ? (int)ev->Get()->RdmaHanshakeResult.GetOk()->RdmaQp->GetQpNum() : -1));
@@ -384,7 +384,7 @@ namespace NActors {
         LastInputActivityTimestamp = LastPayloadActivityTimestamp = LastPingTimestamp = TActivationContext::Monotonic();
         ClockSkewPingTimestamp = TMonotonic::Max();
 
-        LOG_INFO_IC_SESSION("ICS10", "traffic start");
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS10", ::NActors::NLog::PRI_INFO, "traffic start");
 
         // reset parameters to initial values
         WriteBlockedByFullSendBuffer = false;
@@ -403,7 +403,7 @@ namespace NActors {
         ReceiverId = RegisterWithSameMailbox(actor.Release());
 
         // register our socket in poller actor
-        LOG_DEBUG_IC_SESSION("ICS11", "registering socket in PollerActor");
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS11", ::NActors::NLog::PRI_DEBUG, "registering socket in PollerActor");
         const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
         Y_ABORT_UNLESS(success);
         if (XdcSocket) {
@@ -416,7 +416,7 @@ namespace NActors {
         Proxy->Metrics->SetConnected(1);
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] connected", Proxy->PeerNodeId);
         if (Proxy->Common->Settings.MergePerHostCounters) {
-            LOG_INFO_IC_SESSION("ICS80", "peer-level connect PeerNodeId# %" PRIu32 " Peer# %s Host# %s",
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS80", ::NActors::NLog::PRI_INFO, "peer-level connect PeerNodeId# %" PRIu32 " Peer# %s Host# %s",
                 Proxy->PeerNodeId, Proxy->Metrics->GetHumanFriendlyPeerHostName().data(), Proxy->TechnicalPeerHostName.data());
         }
 
@@ -446,7 +446,7 @@ namespace NActors {
 
         const ui64 serial = OutputCounter - SendQueue.size() + 1;
         Y_ABORT_UNLESS(serial > LastConfirmed, "%s serial# %" PRIu64 " LastConfirmed# %" PRIu64, LogPrefix.data(), serial, LastConfirmed);
-        LOG_DEBUG_IC_SESSION("ICS06", "rewind SendQueue size# %zu LastConfirmed# %" PRIu64 " NextSerial# %" PRIu64,
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS06", ::NActors::NLog::PRI_DEBUG, "rewind SendQueue size# %zu LastConfirmed# %" PRIu64 " NextSerial# %" PRIu64,
             SendQueue.size(), LastConfirmed, serial);
 
         SetOutputStuckFlag(NumEventsInQueue != 0);
@@ -606,14 +606,14 @@ namespace NActors {
                 bytesProduced += MakePacket(true);
             } catch (const TExSerializedEventTooLarge& ex) {
                 // terminate session if the event can't be serialized properly
-                LOG_CRIT_IC("ICS31", "serialized event Type# 0x%08" PRIx32 " is too large", ex.Type);
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICS31", ::NActors::NLog::PRI_CRIT, "serialized event Type# 0x%08" PRIx32 " is too large", ex.Type);
                 return Terminate(TDisconnectReason::EventTooLarge());
             }
         }
     }
 
     void TInterconnectSessionTCP::StartHandshake() {
-        LOG_INFO_IC_SESSION("ICS15", "start handshake");
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS15", ::NActors::NLog::PRI_INFO, "start handshake");
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::StartResumeHandshake, ReceiveContext->LockLastPacketSerialToConfirm());
     }
 
@@ -624,7 +624,7 @@ namespace NActors {
     void TInterconnectSessionTCP::ReestablishConnection(TEvHandshakeDone::TPtr&& ev, bool startHandshakeOnSessionClose,
             TDisconnectReason reason) {
         if (Socket) {
-            LOG_INFO_IC_SESSION("ICS13", "reestablish connection");
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS13", ::NActors::NLog::PRI_INFO, "reestablish connection");
             ShutdownSocket(std::move(reason)); // stop sending/receiving on socket
             PendingHandshakeDoneEvent = std::move(ev);
             StartHandshakeOnSessionClose = startHandshakeOnSessionClose;
@@ -641,7 +641,7 @@ namespace NActors {
             }
 
             const bool wasConnected(Socket);
-            LOG_INFO_IC_SESSION("ICS07", "socket disconnect %" PRIi64 " reason# %s", Socket ? i64(*Socket) : -1, ev->Get()->Reason.ToString().data());
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS07", ::NActors::NLog::PRI_INFO, "socket disconnect %" PRIi64 " reason# %s", Socket ? i64(*Socket) : -1, ev->Get()->Reason.ToString().data());
             ReceiverId = TActorId(); // reset receiver actor id as we have no more receiver yet
             if (wasConnected) {
                 // we were sucessfully connected and did not expect failure, so it arrived from the input side; we should
@@ -660,7 +660,7 @@ namespace NActors {
                 Proxy->Metrics->IncDisconnectByReason(s);
             }
 
-            LOG_INFO_IC_SESSION("ICS25", "shutdown socket, reason# %s", reason.ToString().data());
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS25", ::NActors::NLog::PRI_INFO, "shutdown socket, reason# %s", reason.ToString().data());
             Proxy->UpdateErrorStateLog(TActivationContext::Now(), "close_socket", reason.ToString().data());
             Socket->Shutdown(SHUT_RDWR);
             Socket.Reset();
@@ -672,7 +672,7 @@ namespace NActors {
             SetOutputStuckFlag(false);
             LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] disconnected", Proxy->PeerNodeId);
             if (Proxy->Common->Settings.MergePerHostCounters) {
-                LOG_NOTICE_IC_SESSION("ICS81", "peer-level disconnect PeerNodeId# %" PRIu32 " Peer# %s Host# %s Reason# %s",
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS81", ::NActors::NLog::PRI_NOTICE, "peer-level disconnect PeerNodeId# %" PRIu32 " Peer# %s Host# %s Reason# %s",
                     Proxy->PeerNodeId, Proxy->Metrics->GetHumanFriendlyPeerHostName().data(),
                     Proxy->TechnicalPeerHostName.data(), reason.ToString().data());
             }
@@ -697,7 +697,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::Handle(TEvPollerReady::TPtr& ev) {
-        LOG_DEBUG_IC_SESSION("ICS29", "HandleReadyWrite WriteBlockedByFullSendBuffer# %s",
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS29", ::NActors::NLog::PRI_DEBUG, "HandleReadyWrite WriteBlockedByFullSendBuffer# %s",
             WriteBlockedByFullSendBuffer ? "true" : "false");
 
         auto *msg = ev->Get();
@@ -826,7 +826,7 @@ namespace NActors {
             if (!(ZcProcessor.ZcStateIsOk() || ZcProcessor.ZcStateIsDisabled())) {
                 TString err = ZcProcessor.ExtractErrText();
                 if (err) {
-                    LOG_WARN_IC_SESSION("ICS26", "ZeroCopy op was non success: %s",
+                    LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS26", ::NActors::NLog::PRI_WARN, "ZeroCopy op was non success: %s",
                         err.data());
 
                     Proxy->UpdateErrorStateLog(TActivationContext::Now(), "zc_error", err.data());
@@ -848,7 +848,7 @@ namespace NActors {
         const bool writeBlockedByFullSendBuffer = ReceiveContext->MainWriteBlocked || ReceiveContext->XdcWriteBlocked;
         if (WriteBlockedByFullSendBuffer < writeBlockedByFullSendBuffer) { // became blocked
             WriteBlockedCycles = GetCycleCountFast();
-            LOG_DEBUG_IC_SESSION("ICS18", "hit send buffer limit");
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS18", ::NActors::NLog::PRI_DEBUG, "hit send buffer limit");
         } else if (writeBlockedByFullSendBuffer < WriteBlockedByFullSendBuffer) { // became unblocked
             WriteBlockedTotal += TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - WriteBlockedCycles));
         }
@@ -1071,7 +1071,7 @@ namespace NActors {
             });
         }
 
-        LOG_DEBUG_IC_SESSION("ICS22", "outgoing packet Serial# %" PRIu64 " Confirm# %" PRIu64 " DataSize# %" PRIu32
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS22", ::NActors::NLog::PRI_DEBUG, "outgoing packet Serial# %" PRIu64 " Confirm# %" PRIu64 " DataSize# %" PRIu32
             " RdmaPayload# %" PRIu32 " InflightDataAmount# %" PRIu64 " RdmaInflightDataAmount# %" PRIu64, serial, lastInputSerial,
             packet.GetDataSize(), packet.GetRdmaPayloadSize(), InflightDataAmount, RdmaInflightDataAmount);
 
@@ -1084,7 +1084,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::DropConfirmed(ui64 confirm) {
-        LOG_DEBUG_IC_SESSION("ICS23", "confirm count: %" PRIu64, confirm);
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS23", ::NActors::NLog::PRI_DEBUG, "confirm count: %" PRIu64, confirm);
 
         Y_ABORT_UNLESS(LastConfirmed <= confirm && confirm <= OutputCounter,
             "%s confirm# %" PRIu64 " LastConfirmed# %" PRIu64 " OutputCounter# %" PRIu64,
@@ -1138,7 +1138,7 @@ namespace NActors {
         Proxy->Metrics->SubInflightRdmaDataAmount(bytesDroppedFromRdma);
         LWPROBE(DropConfirmed, Proxy->PeerNodeId, droppedDataAmount, InflightDataAmount);
 
-        LOG_DEBUG_IC_SESSION("ICS24", "exit InflightDataAmount: %" PRIu64 " bytes RdmaInflightDataAmount: %" PRIu64 " bytes droppedDataAmount: %" PRIu64 " bytes"
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS24", ::NActors::NLog::PRI_DEBUG, "exit InflightDataAmount: %" PRIu64 " bytes RdmaInflightDataAmount: %" PRIu64 " bytes droppedDataAmount: %" PRIu64 " bytes"
             " dropped %" PRIu32 " rdma bytes dropped %" PRIu32 " packets", InflightDataAmount, RdmaInflightDataAmount, droppedDataAmount, bytesDroppedFromRdma, numDropped);
 
         Pool->Trim(); // send any unsent free requests
@@ -1326,7 +1326,7 @@ namespace NActors {
         }
         const TMonotonic now = TActivationContext::Monotonic();
         if (now >= LastPingTimestamp + period) {
-            LOG_DEBUG_IC_SESSION("ICS00", "Issuing ping request");
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICS00", ::NActors::NLog::PRI_DEBUG, "Issuing ping request");
             LastPingTimestamp = now;
             if (Socket) {
                 MakePacket(false, GetCycleCountFast() | TTcpPacketBuf::PingRequestMask);

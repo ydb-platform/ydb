@@ -44,7 +44,7 @@ namespace NActors {
         void Bootstrap() {
             TMaybe<TString> errorText;
             if (auto addr = ExtractDefaultAddr(errorText)) {
-                LOG_TRACE_IC("ICR01", "Host: %s, CACHED address: %s", Host.c_str(), DefaultAddress.c_str());
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICR01", ::NActors::NLog::PRI_TRACE, "Host: %s, CACHED address: %s", Host.c_str(), DefaultAddress.c_str());
                 if (NodeId) {
                     return SendLocalNodeInfoAndDie({{*addr}});
                 } else {
@@ -62,7 +62,7 @@ namespace NActors {
                 return;
             }
 
-            LOG_DEBUG_IC("ICR02", "Host: %s, RESOLVING address ...", Host.c_str());
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICR02", ::NActors::NLog::PRI_DEBUG, "Host: %s, RESOLVING address ...", Host.c_str());
             Send(MakeDnsResolverActorId(),
                 NodeId
                     ? static_cast<IEventBase*>(new TEvDns::TEvGetHostByName(Host, AF_UNSPEC))
@@ -116,7 +116,7 @@ namespace NActors {
         }
 
         void SendAddressInfoAndDie(NAddr::IRemoteAddrPtr addr) {
-            LOG_DEBUG_IC("ICR03", "Host: %s, RESOLVED address", Host.c_str());
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICR03", ::NActors::NLog::PRI_DEBUG, "Host: %s, RESOLVED address", Host.c_str());
             auto reply = new TEvAddressInfo;
             reply->Address = std::move(addr);
             TActivationContext::Send(new IEventHandle(ReplyTo, ReplyFrom, reply));
@@ -124,7 +124,7 @@ namespace NActors {
         }
 
         void SendLocalNodeInfoAndDie(std::vector<NInterconnect::TAddress> addresses) {
-            LOG_DEBUG_IC("ICR04", "Host: %s, RESOLVED address", Host.c_str());
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICR04", ::NActors::NLog::PRI_DEBUG, "Host: %s, RESOLVED address", Host.c_str());
             auto reply = std::make_unique<TEvLocalNodeInfo>();
             reply->NodeId = *NodeId;
             reply->Addresses = std::move(addresses);
@@ -133,7 +133,7 @@ namespace NActors {
         }
 
         void SendErrorAndDie(const TString& errorText) {
-            LOG_DEBUG_IC("ICR05", "Host: %s, ERROR resolving: %s", Host.c_str(), errorText.c_str());
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICR05", ::NActors::NLog::PRI_DEBUG, "Host: %s, ERROR resolving: %s", Host.c_str(), errorText.c_str());
             auto *event = new TEvResolveError;
             event->Explain = errorText;
             event->Host = Host;

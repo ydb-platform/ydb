@@ -33,18 +33,18 @@ namespace NActors {
                 TString str = TStringBuilder() << "\n > Node " << nodeId << " `" << node.Address << "`:" << node.Port << ", host: " << node.Host << ", resolveHost: " << node.ResolveHost;
                 logMsg += str;
             }
-            LOG_TRACE_IC("ICN01", "%s", logMsg.c_str());
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICN01", ::NActors::NLog::PRI_TRACE, "%s", logMsg.c_str());
         }
 
         bool IsNodeUpdated(const ui32 nodeId, const TString& address, const ui32 port) {
             bool printInfo = false;
             auto it = NodeTable.find(nodeId);
             if (it == NodeTable.end()) {
-                LOG_TRACE_IC("ICN02", "New node %u `%s`: %u",
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICN02", ::NActors::NLog::PRI_TRACE, "New node %u `%s`: %u",
                     nodeId, address.c_str(), port);
                 printInfo = true;
             } else if (it->second.Address != address || it->second.Port != port) {
-                LOG_TRACE_IC("ICN03", "Updated node %u `%s`: %u (from `%s`: %u)",
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICN03", ::NActors::NLog::PRI_TRACE, "Updated node %u `%s`: %u (from `%s`: %u)",
                     nodeId, address.c_str(), port, it->second.Address.c_str(), it->second.Port);
                 printInfo = true;
                 Send(TActivationContext::InterconnectProxy(nodeId), new TEvInterconnect::TEvDisconnect);
@@ -58,7 +58,7 @@ namespace NActors {
 
             for (auto& pending : PendingRequests) {
                 if (pending.Request && pending.Deadline > now) {
-                    LOG_ERROR_IC("ICN06", "Unknown nodeId: %u", pending.Request->Get()->NodeId);
+                    LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICN06", ::NActors::NLog::PRI_ERROR, "Unknown nodeId: %u", pending.Request->Get()->NodeId);
                     auto reply = new TEvLocalNodeInfo;
                     reply->NodeId = pending.Request->Get()->NodeId;
                     ctx.Send(pending.Request->Sender, reply);
@@ -109,7 +109,7 @@ namespace NActors {
                     CFunc(TEvents::TEvWakeup::EventType, HandlePeriodic);
                 }
             } catch (...) {
-                LOG_ERROR_IC("ICN09", "%s", CurrentExceptionMessage().c_str());
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICN09", ::NActors::NLog::PRI_ERROR, "%s", CurrentExceptionMessage().c_str());
             }
         }
 
@@ -122,7 +122,7 @@ namespace NActors {
                 }
                 PendingRequests.emplace_back(std::move(ev), Min(deadline, ctx.Monotonic() + PendingPeriod));
             } else {
-                LOG_ERROR_IC("ICN07", "Unknown nodeId: %u", ev->Get()->NodeId);
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICN07", ::NActors::NLog::PRI_ERROR, "Unknown nodeId: %u", ev->Get()->NodeId);
                 TInterconnectNameserverBase::HandleMissedNodeId(ev, ctx, deadline);
             }
         }
@@ -131,7 +131,7 @@ namespace NActors {
                     const TActorContext& ctx) {
 
             auto request = ev->Get();
-            LOG_TRACE_IC("ICN04", "Update TEvNodesInfo with sz: %lu ", request->Nodes.size());
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICN04", ::NActors::NLog::PRI_TRACE, "Update TEvNodesInfo with sz: %lu ", request->Nodes.size());
 
             bool printInfo = false;
             ui32 compactionCount = 0;
@@ -144,7 +144,7 @@ namespace NActors {
 
                 for (auto& pending : PendingRequests) {
                     if (pending.Request && pending.Request->Get()->NodeId == node.NodeId) {
-                        LOG_TRACE_IC("ICN05", "Pending nodeId: %u discovered", node.NodeId);
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT, "ICN05", ::NActors::NLog::PRI_TRACE, "Pending nodeId: %u discovered", node.NodeId);
                         RegisterWithSameMailbox(
                             CreateResolveActor(node.NodeId, NodeTable[node.NodeId], pending.Request->Sender, SelfId(), pending.Deadline));
                         pending.Request.Reset();

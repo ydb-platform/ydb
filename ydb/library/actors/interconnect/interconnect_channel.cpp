@@ -138,7 +138,7 @@ namespace NActors {
     }
 
     void TEventOutputChannel::DropConfirmed(ui64 confirm, TEventHolderPool& pool) {
-        LOG_DEBUG_IC_SESSION("ICOCH98", "Dropping confirmed messages");
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICOCH98", ::NActors::NLog::PRI_DEBUG, "Dropping confirmed messages");
         for (auto it = NotYetConfirmed.begin(); it != NotYetConfirmed.end() && it->Serial <= confirm; ) {
             pool.Release(NotYetConfirmed, it++);
         }
@@ -610,7 +610,7 @@ namespace NActors {
     }
 
     void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
-        LOG_DEBUG_IC_SESSION("ICOCH89", "Notyfying about Undelivered messages! NotYetConfirmed size: %zu, Queue size: %zu", NotYetConfirmed.size(), Queue.size());
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICOCH89", ::NActors::NLog::PRI_DEBUG, "Notyfying about Undelivered messages! NotYetConfirmed size: %zu, Queue size: %zu", NotYetConfirmed.size(), Queue.size());
         if (State == EState::BODY && Queue.front().Event) {
             Y_ABORT_UNLESS(!Chunker.IsComplete()); // chunk must have an event being serialized
             Y_ABORT_UNLESS(!Queue.empty()); // this event must be the first event in queue

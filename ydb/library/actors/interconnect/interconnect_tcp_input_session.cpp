@@ -259,9 +259,9 @@ namespace NActors {
             Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
         }
         if (RdmaQp) {
-            LOG_DEBUG_IC_SESSION("ICRDMA", "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICRDMA", ::NActors::NLog::PRI_DEBUG, "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
         } else {
-            LOG_DEBUG_IC_SESSION("ICIS01", "InputSession created");
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS01", ::NActors::NLog::PRI_DEBUG, "InputSession created");
         }
         LastReceiveTimestamp = TActivationContext::Monotonic();
         TActivationContext::Send(new IEventHandle(EvResumeReceiveData, 0, SelfId(), {}, nullptr, 0));
@@ -277,10 +277,10 @@ namespace NActors {
         try {
             WorkingStateImpl(ev);
         } catch (const TExReestablishConnection& ex) {
-            LOG_DEBUG_IC_SESSION("ICIS09", "ReestablishConnection, reason# %s", ex.Reason.ToString().data());
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS09", ::NActors::NLog::PRI_DEBUG, "ReestablishConnection, reason# %s", ex.Reason.ToString().data());
             termEv = std::make_unique<TEvSocketDisconnect>(std::move(ex.Reason));
         } catch (const TExDestroySession& ex) {
-            LOG_DEBUG_IC_SESSION("ICIS13", "DestroySession, reason# %s", ex.Reason.ToString().data());
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS13", ::NActors::NLog::PRI_DEBUG, "DestroySession, reason# %s", ex.Reason.ToString().data());
             termEv.reset(TInterconnectSessionTCP::NewEvTerminate(std::move(ex.Reason)));
         }
 
@@ -336,7 +336,7 @@ namespace NActors {
 
     void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev) {
         if (!ev->Get()->Event->IsSuccess()) {
-            LOG_ERROR_IC_SESSION("ICRDMA", "Rdma IO failed, err source: %s, code %d",
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICRDMA", ::NActors::NLog::PRI_ERROR, "Rdma IO failed, err source: %s, code %d",
                 ev->Get()->Event->GetErrSource().data(), ev->Get()->Event->GetErrCode());
             throw TExDestroySession({TDisconnectReason::RdmaError()});
         }
@@ -350,7 +350,7 @@ namespace NActors {
         TTimeLimit limit(GetMaxCyclesPerEvent());
         ui64 numDataBytes = 0;
 
-        LOG_DEBUG_IC_SESSION("ICIS02", "ReceiveData called");
+        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS02", ::NActors::NLog::PRI_DEBUG, "ReceiveData called");
 
         bool enoughCpu = true;
         bool progress = false;
@@ -459,12 +459,12 @@ namespace NActors {
                 Checksum = Crc32cExtendMSanCompatible(0, &header, sizeof(header)); // start calculating checksum now
             }
             if (!PayloadSize && Checksum != ChecksumExpected) {
-                LOG_ERROR_IC_SESSION("ICIS10", "payload checksum error");
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS10", ::NActors::NLog::PRI_ERROR, "payload checksum error");
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
         }
         if (PayloadSize >= 65536) {
-            LOG_CRIT_IC_SESSION("ICIS07", "payload is way too big");
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS07", ::NActors::NLog::PRI_CRIT, "payload is way too big");
             throw TExDestroySession{TDisconnectReason::FormatError()};
         }
         if (ConfirmedByInput < confirm) {
@@ -486,7 +486,7 @@ namespace NActors {
             const ui64 expectedMax = Context->LastProcessedSerial + 1;
             Y_DEBUG_ABORT_UNLESS(expectedMin <= expectedMax);
             if (CurrentSerial ? serial != CurrentSerial + 1 : (serial == 0 || serial > expectedMin)) {
-                LOG_CRIT_IC_SESSION("ICIS06", "%s", TString(TStringBuilder()
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS06", ::NActors::NLog::PRI_CRIT, "%s", TString(TStringBuilder()
                         << "packet serial number mismatch"
                         << " Serial# " << serial
                         << " ExpectedMin# " << expectedMin
@@ -535,7 +535,7 @@ namespace NActors {
                 Checksum = XXH3_64bits_digest(&XxhashState);
             }
             if (Checksum != ChecksumExpected) { // validate payload checksum
-                LOG_ERROR_IC_SESSION("ICIS04", "payload checksum error");
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS04", ::NActors::NLog::PRI_ERROR, "payload checksum error");
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
         }
@@ -543,10 +543,10 @@ namespace NActors {
             // extract channel part header from the payload stream
             TChannelPart part;
             if (!Payload.ExtractFrontPlain(&part, sizeof(part))) {
-                LOG_CRIT_IC_SESSION("ICIS14", "missing TChannelPart header in payload");
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS14", ::NActors::NLog::PRI_CRIT, "missing TChannelPart header in payload");
                 throw TExDestroySession{TDisconnectReason::FormatError()};
             } else if (Payload.GetSize() < part.Size) {
-                LOG_CRIT_IC_SESSION("ICIS08", "payload format error ChannelPart# %s", part.ToString().data());
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS08", ::NActors::NLog::PRI_CRIT, "payload format error ChannelPart# %s", part.ToString().data());
                 throw TExDestroySession{TDisconnectReason::FormatError()};
             }
 
@@ -569,7 +569,7 @@ namespace NActors {
                 TEventDescr2 v2;
 
                 if (part.Size != sizeof(v2)) {
-                    LOG_CRIT_IC_SESSION("ICIS11", "incorrect last part of an event");
+                    LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS11", ::NActors::NLog::PRI_CRIT, "incorrect last part of an event");
                     throw TExDestroySession{TDisconnectReason::FormatError()};
                 }
 
@@ -705,7 +705,7 @@ namespace NActors {
                     const ui64 tailroom = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
                     const ui64 alignment = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
                     if (headroom == Max<ui64>() || size == Max<ui64>() || tailroom == Max<ui64>() || alignment == Max<ui64>()) {
-                        LOG_CRIT_IC_SESSION("ICIS00", "XDC command format error");
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS00", ::NActors::NLog::PRI_CRIT, "XDC command format error");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
@@ -721,7 +721,7 @@ namespace NActors {
                             const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
                             auto buffer = AllocateRcBuf(size, headroom, tailroom, alignment, isRdma);
                             if (!buffer) {
-                                LOG_CRIT_IC_SESSION("ICRDMA", "Unable to allocate rcbuf for section, sz: %d, use_rdma: %d", size, isRdma);
+                                LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICRDMA", ::NActors::NLog::PRI_CRIT, "Unable to allocate rcbuf for section, sz: %d, use_rdma: %d", size, isRdma);
                                 throw TExDestroySession{TDisconnectReason::FormatError()};
                             }
                             if (isRdma) {
@@ -750,13 +750,13 @@ namespace NActors {
                 case EXdcCommand::PUSH_DATA: {
                     const size_t cmdLen = sizeof(ui16) + (Params.Encryption ? 0 : sizeof(ui32));
                     if (static_cast<size_t>(end - ptr) < cmdLen) {
-                        LOG_CRIT_IC_SESSION("ICIS18", "XDC command format error");
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS18", ::NActors::NLog::PRI_CRIT, "XDC command format error");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
                     const ui16 size = ReadUnaligned<ui16>(ptr);
                     if (!size) {
-                        LOG_CRIT_IC_SESSION("ICIS03", "XDC empty payload");
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS03", ::NActors::NLog::PRI_CRIT, "XDC empty payload");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
@@ -779,7 +779,7 @@ namespace NActors {
                     } else {
                         // find buffers and acquire data buffer pointers
                         if (context.FetchBuffers(channel, size, XdcInputQ) == -1) {
-                            LOG_CRIT_IC_SESSION("ICIS28", "FetchBuffers: end of buffers");
+                            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS28", ::NActors::NLog::PRI_CRIT, "FetchBuffers: end of buffers");
                             throw TExDestroySession{TDisconnectReason::FormatError()};
                         }
                     }
@@ -792,7 +792,7 @@ namespace NActors {
                 case NActors::EXdcCommand::RDMA_READ: {
                     using namespace NInterconnect::NRdma;
                     if (!RdmaQp || !RdmaCq) {
-                        LOG_CRIT_IC_SESSION("ICIS22", "unexpected XDC RDMA_READ command without RDMA QP");
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS22", ::NActors::NLog::PRI_CRIT, "unexpected XDC RDMA_READ command without RDMA QP");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
                     TQueuePair& qp = *RdmaQp.get();
@@ -801,32 +801,32 @@ namespace NActors {
                     // allows to prevent such situations
                     TQueuePair::TQpState res = qp.GetState(false);
                     if (std::holds_alternative<TQueuePair::TQpErr>(res)) {
-                        LOG_ERROR_IC_SESSION("ICRDMA", "unable to get qp state, %d err is: %s",
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICRDMA", ::NActors::NLog::PRI_ERROR, "unable to get qp state, %d err is: %s",
                             qp.GetQpNum(), std::get<TQueuePair::TQpErr>(res).Err);
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }
                     TQueuePair::TQpS* qpState = std::get_if<TQueuePair::TQpS>(&res);
                     Y_ABORT_UNLESS(qpState);
                     if (!TQueuePair::IsRtsState(*qpState)) {
-                        LOG_ERROR_IC_SESSION("ICRDMA", "qp is not ready, unable to submit rdma READ, %d state is: %d",
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICRDMA", ::NActors::NLog::PRI_ERROR, "qp is not ready, unable to submit rdma READ, %d state is: %d",
                             qp.GetQpNum(), qpState->State);
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }
 
                     if (ptr + sizeof(ui16) > end) {
-                        LOG_CRIT_IC_SESSION("ICRDMA", "XDC command format error, no cred size");
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICRDMA", ::NActors::NLog::PRI_CRIT, "XDC command format error, no cred size");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
                     const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
                     ptr += sizeof(ui16);
                     if (!credsSerializedSize) {
-                        LOG_CRIT_IC_SESSION("ICRDMA", "XDC RDMA_READ command with zero size");
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICRDMA", ::NActors::NLog::PRI_CRIT, "XDC RDMA_READ command with zero size");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
                     if (ptr + credsSerializedSize + sizeof(ui32) > end) {
-                        LOG_CRIT_IC_SESSION("ICRDMA", "XDC command format error, invalid cred data");
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICRDMA", ::NActors::NLog::PRI_CRIT, "XDC command format error, invalid cred data");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
@@ -842,10 +842,10 @@ namespace NActors {
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
                     if (std::holds_alternative<ICq::TBusy>(err)) {
-                        LOG_CRIT_IC_SESSION("ICIS20", "RDMA_READ error: can not allocate cq work request: busy");
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS20", ::NActors::NLog::PRI_CRIT, "RDMA_READ error: can not allocate cq work request: busy");
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     } else if (std::holds_alternative<ICq::TErr>(err)) {
-                        LOG_CRIT_IC_SESSION("ICIS21", "RDMA_READ error: can not allocate cq work request: error");
+                        LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS21", ::NActors::NLog::PRI_CRIT, "RDMA_READ error: can not allocate cq work request: error");
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }
                     auto& packet = InboundPacketQ.back();
@@ -858,7 +858,7 @@ namespace NActors {
                 }
             }
 
-            LOG_CRIT_IC_SESSION("ICIS15", "unexpected XDC command");
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS15", ::NActors::NLog::PRI_CRIT, "unexpected XDC command");
             throw TExDestroySession{TDisconnectReason::FormatError()};
         }
     }
@@ -923,7 +923,7 @@ namespace NActors {
                 flushAccumulated(prev, accumSize);
 
                 if (pendingEvent.InternalPayload || pendingEvent.ExternalPayload) {
-                    LOG_CRIT_IC_SESSION("ICIS19", "unprocessed payload remains after shuffling"
+                    LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS19", ::NActors::NLog::PRI_CRIT, "unprocessed payload remains after shuffling"
                         " Type# 0x%08" PRIx32 " InternalPayload.size# %zu ExternalPayload.size# %zu",
                         descr.Type, pendingEvent.InternalPayload.size(), pendingEvent.ExternalPayload.size());
                     Y_DEBUG_ABORT_UNLESS(false);
@@ -940,7 +940,7 @@ namespace NActors {
 
 #if IC_FORCE_HARDENED_PACKET_CHECKS
             if (descr.Len != payload.GetSize()) {
-                LOG_CRIT_IC_SESSION("ICIS17", "event length mismatch Type# 0x%08" PRIx32 " received# %zu expected# %" PRIu32,
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS17", ::NActors::NLog::PRI_CRIT, "event length mismatch Type# 0x%08" PRIx32 " received# %zu expected# %" PRIu32,
                     descr.Type, payload.GetSize(), descr.Len);
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
@@ -952,7 +952,7 @@ namespace NActors {
                     checksum = Crc32cExtendMSanCompatible(checksum, data, size);
                 }
                 if (checksum != descr.Checksum) {
-                    LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
+                    LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS05", ::NActors::NLog::PRI_CRIT, "event checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }
@@ -967,7 +967,7 @@ namespace NActors {
                 }
                 checksum = XXH3_64bits_digest(&state);
                 if (checksum != pendingEvent.RdmaCumulativeCheckSum) {
-                    LOG_CRIT_IC_SESSION("ICIS05", "event rdma checksum error Type# 0x%08" PRIx32, descr.Type);
+                    LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS05", ::NActors::NLog::PRI_CRIT, "event rdma checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }
@@ -986,7 +986,7 @@ namespace NActors {
                 std::move(descr.TraceId));
             if (Common->EventFilter && !Common->EventFilter->CheckIncomingEvent(*ev, Common->LocalScopeId)) {
                 Metrics->IncScopeErrors();
-                LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error PeerNodeId# %" PRIu32 " Peer# %s"
+                LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIC03", ::NActors::NLog::PRI_CRIT, "Event dropped due to scope error PeerNodeId# %" PRIu32 " Peer# %s"
                     " LocalScopeId# %s PeerScopeId# %s Type# 0x%08" PRIx32,
                     NodeId, Metrics->GetHumanFriendlyPeerHostName().data(),
                     ScopeIdToString(Common->LocalScopeId).data(), ScopeIdToString(Params.PeerScopeId).data(), descr.Type);
@@ -1025,7 +1025,7 @@ namespace NActors {
                 } while (recvres == -EINTR);
             }
 
-            LOG_DEBUG_IC_SESSION("ICIS12", "Read recvres# %zd num# %zu err# %s", recvres, num, err.data());
+            LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS12", ::NActors::NLog::PRI_DEBUG, "Read recvres# %zd num# %zu err# %s", recvres, num, err.data());
 
             if (recvres <= 0 || CloseInputSessionRequested) {
                 if ((-recvres != EAGAIN && -recvres != EWOULDBLOCK) || CloseInputSessionRequested) {
@@ -1303,7 +1303,7 @@ namespace NActors {
                     XXH3_64bits_reset(&XxhashXdcState);
                 }
                 if (XdcCurrentChecksum != expected) {
-                    LOG_ERROR_IC_SESSION("ICIS16", "payload checksum error");
+                    LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, "ICIS16", ::NActors::NLog::PRI_ERROR, "payload checksum error");
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
                 XdcChecksumQ.pop_front();

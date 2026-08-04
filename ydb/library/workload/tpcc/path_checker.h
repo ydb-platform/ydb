@@ -6,6 +6,7 @@ namespace NYdb::NTPCC {
 
 // do a very basic data check before doing anything else,
 // in case of any issues print error and exit
+struct TRunConfig;
 
 void CheckPathForInit(
     const NConsoleClient::TClientCommand::TConfig& connectionConfig,
@@ -13,11 +14,13 @@ void CheckPathForInit(
 
 void CheckPathForImport(
     const NConsoleClient::TClientCommand::TConfig& connectionConfig,
-    const TString& path) noexcept;
+    const TRunConfig& runConfig) noexcept;
 
 void CheckPathForRun(
     const NConsoleClient::TClientCommand::TConfig& connectionConfig,
     const TString& path,
     int expectedWhCount) noexcept;
+
+int GetTableSize(TDriver& driver, const TString& path, const char* table) noexcept;
 
 } // namespace NYdb::NTPCC

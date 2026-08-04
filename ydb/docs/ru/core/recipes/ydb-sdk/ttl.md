@@ -343,5 +343,3 @@
   ```
 
 {% endlist %}
-
-{% endlist %}

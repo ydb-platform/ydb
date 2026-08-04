@@ -18,6 +18,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/guid.h>
@@ -106,6 +107,8 @@ public:
     void KillTopicPqrbTablet(const std::string& topicPath);
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> GetCounters(const TString& svc = "kqp", ui32 nodeIdx = 0);
+
+    void WaitCheckpointByPath(const TString& path = "", i64 count = 1, TDuration wait = TDuration::Zero(), TDuration timeout = TDuration::Minutes(1), ui32 nodeIdx = 0);
 
     // External YDB recipe
 

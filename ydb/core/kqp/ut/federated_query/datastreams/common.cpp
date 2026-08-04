@@ -203,6 +203,37 @@ TIntrusivePtr<NMonitoring::TDynamicCounters> TStreamingTestFixture::GetCounters(
     return NKikimr::GetServiceCounters(GetRuntime().GetAppData(nodeIdx).Counters, svc);
 }
 
+void TStreamingTestFixture::WaitCheckpointByPath(const TString& path, i64 count, TDuration wait, TDuration timeout, ui32 nodeIdx) {
+    if (wait == TDuration::Zero()) {
+        wait = CheckpointPeriod;
+    }
+    auto start = TInstant::Now();
+    for (;;) {
+        auto counters = GetCounters("kqp", nodeIdx);
+        if (path) {
+            counters = counters->GetSubgroup("path", path);
+        }
+        auto coordinator = counters->FindSubgroup("subsystem", "checkpoint_coordinator");
+        if (!coordinator) {
+            UNIT_ASSERT_LE_C(TInstant::Now() - start, timeout, "Timeout waiting for checkpoint counters, " << TInstant::Now() << " - " <<  start << " > " << timeout);
+            Sleep(wait);
+            continue;
+        }
+        auto completedCheckpoints = coordinator->FindCounter("CompletedCheckpoints");
+        if (!completedCheckpoints) {
+            UNIT_ASSERT_LE_C(TInstant::Now() - start, timeout, "Timeout waiting for zero checkpoint, " << TInstant::Now() << " - " <<  start << " > " << timeout);
+            Sleep(wait);
+            continue;
+        }
+        auto initialCheckpoints = completedCheckpoints->Val();
+        while(completedCheckpoints->Val() < initialCheckpoints + count) {
+            UNIT_ASSERT_LE_C(TInstant::Now() - start, timeout, "Timeout waiting for checkpoints, expected " << (initialCheckpoints + count) << ", got " << completedCheckpoints->Val() << ", " << TInstant::Now() << " - " <<  start << " > " << timeout);
+            Sleep(wait);
+        }
+        return;
+    }
+}
+
 // External YDB recipe
 
 std::shared_ptr<TDriver> TStreamingTestFixture::GetExternalDriver() {

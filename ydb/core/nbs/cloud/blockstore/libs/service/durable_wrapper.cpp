@@ -159,7 +159,7 @@ private:
                 requestId,
                 RequestName.c_str(),
                 retryCount + 1,
-                FormatError(response.Error).c_str());
+                FormatError(response.Error).Quote().c_str());
 
             promise.SetValue(std::move(response));
         } else {
@@ -168,7 +168,7 @@ private:
                 "scheduling retry #%lu in %s",
                 requestId,
                 RequestName.c_str(),
-                FormatError(response.Error).c_str(),
+                FormatError(response.Error).Quote().c_str(),
                 retryCount + 1,
                 FormatDuration(delay).c_str());
 

@@ -76,6 +76,14 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 48052:Added field content_based-deduplication (bool) to public pqv1 API [#48052](https://github.com/ydb-platform/ydb/pull/48052) ([Sergey](https://github.com/shokhor))
+* 47944:Refactors support-link URL parameter collection by extracting shared “parameters to add” construction into a single helper, and reuses it across Grafana dashboard/logging link builders to reduce duplication. [#47944](https://github.com/ydb-platform/ydb/pull/47944) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 47735:Added option `--content-based-deduplication` to `topic create` and `topic alter` subcommands.
+For `topic create` option without arguments enables the content based deduplication in the created topic.
+For `topic alter` supply either true or false argument to enable or disable deduplication in altered topic. [#47735](https://github.com/ydb-platform/ydb/pull/47735) ([Sergey](https://github.com/shokhor))
+* 47713:Added support for stored generated columns. A column may now be defined by an expression over other columns of the row; its value is computed automatically on write instead of being supplied by the user. Guarded behind the `EnableGeneratedStored` feature flag (disabled by default). [#47713](https://github.com/ydb-platform/ydb/pull/47713) ([Daniil Timižev](https://github.com/dahbka-lis))
+* 47603:Add cgroup OOM trend forecasting using linear regression over configurable short and long memory-usage windows, estimates the time to OOM, and provide actor-based reads and threshold subscriptions with Active updates and Stopped notifications. The implementation separates sampling, recalculation, and notification paths and uses an actor-only API without callbacks or futures [#47603](https://github.com/ydb-platform/ydb/pull/47603) ([kruall](https://github.com/kruall))
+* 47349:Adds a new url support links source (also used as the default) that can render named URL templates. This extends the existing support-links framework alongside the Grafana sources. [#47349](https://github.com/ydb-platform/ydb/pull/47349) ([Andrei Rykov](https://github.com/StekPerepolnen))
 
 ### Bug fixes
 
@@ -146,12 +154,9 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
-
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* None:CreateStreamingQueryMatchRecognize
+* 48397:Fixed streaming query stop after restart [#48397](https://github.com/ydb-platform/ydb/pull/48397) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 47752:Fixed #47751 In some cases RETURNING doesn't see uncommitted changes. [#47752](https://github.com/ydb-platform/ydb/pull/47752) ([Nikita Vasilev](https://github.com/nikvas0))
 
 ### YDB UI
 

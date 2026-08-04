@@ -436,8 +436,6 @@ def test_hive_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mod
     ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
-    tid = cluster.hive_tablet_id
-
     _hive_sweep(cluster, secure_path_mode=True)
 
 

@@ -583,18 +583,21 @@ TStatus ComputeTypes(TIntrusivePtr<TOpIndexLookupJoin> lookupJoin, TRBOContext& 
     }
 
     const auto* tupleType = itemType->Cast<TTupleExprType>();
+    // (left row, optional(right row), cookie)
     Y_ENSURE(tupleType->GetSize() == 3, "Unexpected lookup join input tuple");
     const auto leftItemTypes = tupleType->GetItems()[0]->Cast<TStructExprType>()->GetItems();
-    auto rightItemTypes = tupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems();
-
-    // An unmatched left row of a left join produces NULLs on the right side.
-    if (lookupJoin->JoinKind == "Left") {
-        rightItemTypes = AddOptional(rightItemTypes, ctx);
-    }
 
     TVector<const TItemExprType*> structItemTypes;
     structItemTypes.insert(structItemTypes.end(), leftItemTypes.begin(), leftItemTypes.end());
-    structItemTypes.insert(structItemTypes.end(), rightItemTypes.begin(), rightItemTypes.end());
+
+    if (JoinOutputsRight(lookupJoin->JoinKind)) {
+        auto rightItemTypes = tupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems();
+        // An unmatched left row of a left join produces NULLs on the right side.
+        if (lookupJoin->JoinKind == "Left") {
+            rightItemTypes = AddOptional(rightItemTypes, ctx);
+        }
+        structItemTypes.insert(structItemTypes.end(), rightItemTypes.begin(), rightItemTypes.end());
+    }
 
     lookupJoin->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes));
     return TStatus::Ok;

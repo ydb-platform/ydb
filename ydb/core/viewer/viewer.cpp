@@ -253,7 +253,8 @@ public:
                 }
             };
 
-            if (AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
+            const bool enableExtraSidsControl = AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer();
+            if (enableExtraSidsControl) {
                 // Every endpoint must be registered with an explicit access level below,
                 // see GetEndpointAccessType.
                 applyAccessRules({
@@ -365,15 +366,6 @@ public:
             addV2JsonAlias("/viewer/v2/json/tabletinfo", "/viewer/tabletinfo");
             addV2JsonAlias("/viewer/v2/json/nodeinfo", "/viewer/nodeinfo");
 
-            if (AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
-                // Every handler path must have an explicit access level, so it has to be registered
-                // in the rules above. Check it at the start: a path without an explicit access level
-                // is reported as an error by GetEndpointAccessType.
-                for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
-                    Y_UNUSED(GetEndpointAccessType(name));
-                }
-            }
-
             struct TEndpointAuthSettings {
                 const TMon::EAuthMode AuthMode;
                 const TVector<TString>& AllowedSIDs;
@@ -399,16 +391,23 @@ public:
                 Y_ABORT("unknown access type of the endpoint %s", path.c_str());
             };
 
-            for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
+            for (const auto& [path, handler] : JsonHandlers.JsonHandlersIndex) {
                 // temporary handling of new handlers
                 if (handler->IsHttpEvent()) {
-                    const auto auth = resolveEndpointAuth(name);
+                    const auto auth = resolveEndpointAuth(path);
                     mon->RegisterActorHandler({
-                        .Path = name,
+                        .Path = path,
                         .Handler = ctx.SelfID,
                         .AuthMode = auth.AuthMode,
                         .AllowedSIDs = auth.AllowedSIDs,
                     });
+                }
+
+                if (enableExtraSidsControl) {
+                    // Every handler path must have an explicit access level, so it has to be registered
+                    // in the rules above. Check it at the start: a path without an explicit access level
+                    // is reported as an error by GetEndpointAccessType.
+                    GetEndpointAccessType(path);
                 }
             }
         }

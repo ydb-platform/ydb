@@ -28,6 +28,9 @@ const TStatKey Hop_FarFutureStateSize("MultiHop_FarFutureStateSize", false);
 
 constexpr ui32 StateVersion = 1;
 constexpr ui32 StateVersionWithFutureEvents = 2;
+// Version 3 adds GlobalCloseBeforeIndex_ to prevent re-emission of closed windows
+// after a late event resurrects a key whose state was erased by a data watermark.
+constexpr ui32 StateVersionWithGlobalCloseIndex = 3;
 using EPolicy = NYql::NHoppingWindow::EPolicy;
 
 using TEqualsFunc = std::function<bool(NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod)>;
@@ -133,17 +136,30 @@ public:
 
         NUdf::TUnboxedValue Save() const override {
             MKQL_ENSURE(Ready.empty(), "Inconsistent state to save, not all elements are fetched");
-            bool hasFutureEvents = false;
-            for (const auto& [key, state] : StatesMap) {
-                if (!state.FutureEvents.empty()) {
-                    hasFutureEvents = true;
-                    break;
+            // Choose state version:
+            //   version 3 — when DataWatermarks mode is active; includes FutureEvents for every
+            //                key (even empty) and appends GlobalCloseBeforeIndex_ at the end.
+            //                Old binaries that don't know version 3 will reject this checkpoint,
+            //                but they also don't support dataWatermarks, so they would never have
+            //                produced such a checkpoint themselves.  A rollback that crosses this
+            //                binary boundary requires clearing the checkpoint anyway.
+            //   version 2 — FutureEvents present (watermarkMode, not yet fully released).
+            //   version 1 — baseline, no FutureEvents.
+            const bool useDataWatermarksVersion = DataWatermarkTracker.has_value();
+            bool hasFutureEvents = useDataWatermarksVersion;
+            if (!hasFutureEvents) {
+                for (const auto& [key, state] : StatesMap) {
+                    if (!state.FutureEvents.empty()) {
+                        hasFutureEvents = true;
+                        break;
+                    }
                 }
             }
-            // when no FutureEvents present, saves backward-compatible version 1 state;
-            // when FutureEvents present, saves incompatible version 2 state;
-            // acceptable since FutureEvents are only present in not-yet-released watermark code
-            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, (hasFutureEvents ? StateVersionWithFutureEvents : StateVersion), Ctx);
+
+            const ui32 version = useDataWatermarksVersion
+                ? StateVersionWithGlobalCloseIndex
+                : (hasFutureEvents ? StateVersionWithFutureEvents : StateVersion);
+            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, version, Ctx);
 
             out.Write<ui32>(StatesMap.size());
             for (const auto& [key, state] : StatesMap) {
@@ -156,17 +172,19 @@ public:
                         SerializeState(out, bucket.Value);
                     }
                 }
-                if (!hasFutureEvents) {
-                    continue;
-                }
-                out.Write<ui32>(state.FutureEvents.size());
-                for (const auto& [time, value] : state.FutureEvents) {
-                    out.Write<ui64>(time);
-                    SerializeState(out, value);
+                if (hasFutureEvents) {
+                    out.Write<ui32>(state.FutureEvents.size());
+                    for (const auto& [time, value] : state.FutureEvents) {
+                        out.Write<ui64>(time);
+                        SerializeState(out, value);
+                    }
                 }
             }
 
             out(Finished);
+            if (useDataWatermarksVersion) {
+                out.Write<ui64>(GlobalCloseBeforeIndex_);
+            }
             return out.MakeState();
         }
 
@@ -193,6 +211,8 @@ public:
             bool hasFutureEvents = false;
             if (loadStateVersion == StateVersionWithFutureEvents) {
                 hasFutureEvents = true;
+            } else if (loadStateVersion == StateVersionWithGlobalCloseIndex) {
+                hasFutureEvents = true; // version 3 always includes FutureEvents section
             } else if (loadStateVersion != StateVersion) {
                 THROW yexception() << "Invalid state version " << loadStateVersion;
             }
@@ -248,6 +268,21 @@ public:
             MKQL_SET_STAT(Ctx.Stats, Hop_KeysCount, StatesMap.size());
 
             in(Finished);
+
+            if (loadStateVersion == StateVersionWithGlobalCloseIndex) {
+                // Exact GlobalCloseBeforeIndex_ saved in version 3: restore it directly.
+                GlobalCloseBeforeIndex_ = in.Read<ui64>();
+            } else {
+                // Older checkpoint (versions 1/2): GlobalCloseBeforeIndex_ was not saved.
+                // Best-effort approximation: use the max HopIndex across surviving key states.
+                // This under-estimates when all keys were erased by the watermark, but it is
+                // safe for version-1 checkpoints that pre-date data-watermark support.
+                GlobalCloseBeforeIndex_ = 0;
+                for (auto& [key, state] : StatesMap) {
+                    GlobalCloseBeforeIndex_ = Max(GlobalCloseBeforeIndex_, state.HopIndex);
+                }
+            }
+            MKQL_ENSURE(in.Empty(), "State is corrupted");
         }
 
         bool HasListItems() const override {
@@ -437,12 +472,17 @@ public:
 
         TKeyState& GetOrCreateKeyState(NUdf::TUnboxedValue& key, ui64 hopIndex) {
             i64 keyHopIndex = Max<i64>(hopIndex + 1 - IntervalHopCount, 0);
+            // Prevent late events from reopening windows already closed by a watermark.
+            // A key whose state was erased must not restart from a hopIndex that is
+            // earlier than the global high-watermark: doing so would re-emit windows
+            // that have already been emitted and violate exactly-once semantics.
+            keyHopIndex = Max<i64>(keyHopIndex, (i64)GlobalCloseBeforeIndex_);
             // For first element we shouldn't forget windows in the past
             // Overflow is not possible, because hopIndex is a product of a division
             const auto iter = StatesMap.try_emplace(
                 key,
                 IntervalHopCount + DelayHopCount,
-                keyHopIndex);
+                (ui64)keyHopIndex);
             if (iter.second) {
                 key.Ref();
             }
@@ -589,9 +629,13 @@ public:
 
         void CloseOldBuckets(ui64 watermarkTs, i64& newHops, i64& farFutureStateSizeChange) {
             const auto watermarkIndex = watermarkTs / HopTime;
+            // Compute the close-before index once for all keys.
+            // Track the global maximum so that recreated key states (after erasure)
+            // always start at or after the latest watermark position.
+            const ui64 closeBeforeIndex = (ui64)Max<i64>((i64)(watermarkIndex + 1 - IntervalHopCount), (i64)0);
+            GlobalCloseBeforeIndex_ = Max(GlobalCloseBeforeIndex_, closeBeforeIndex);
             EraseNodesIf(StatesMap, [&](auto& iter) {
                 auto& [key, val] = iter;
-                ui64 closeBeforeIndex = Max<i64>(watermarkIndex + 1 - IntervalHopCount, 0);
                 const auto keyStateBecameEmpty = CloseOldBucketsForKey(key, val, closeBeforeIndex, newHops, farFutureStateSizeChange);
                 if (keyStateBecameEmpty) {
                     key.UnRef();
@@ -608,6 +652,7 @@ public:
                 return true;
             });
             StatesMap.rehash(0);
+            GlobalCloseBeforeIndex_ = 0;
         }
 
         const NUdf::TUnboxedValue Stream;
@@ -635,6 +680,10 @@ public:
 
         TComputationContext& Ctx;
         std::optional<TWatermarkTracker> DataWatermarkTracker;
+        // The maximum closeBeforeIndex ever applied via CloseOldBuckets.
+        // Used in GetOrCreateKeyState to prevent late events from resurrecting
+        // already-emitted windows after their key state was erased from StatesMap.
+        ui64 GlobalCloseBeforeIndex_ = 0;
     };
 
     TMultiHoppingCoreWrapper(

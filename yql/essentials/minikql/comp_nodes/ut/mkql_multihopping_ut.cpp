@@ -1227,6 +1227,54 @@ Y_UNIT_TEST(TestDataWatermarksNoGarbage) {
     TestImpl(input, expected, expectedStatsMap, 10, 30, 20, true, false);
 }
 
+// Regression test for the bug where a late event for a key whose state had been
+// erased by a data watermark would recreate that key state starting from the late
+// event's hopIndex rather than the watermark position.  As a result the already-
+// emitted window could be closed (and emitted) a second time by the next watermark
+// advance.
+//
+// Scenario (hop=10, interval=10, delay=0, dataWatermarks=true):
+//   Event1 {Key=2, Time=1}  → creates key2, hopIndex=0
+//   Event2 {Key=2, Time=11} → closes window[0] for key2 → emits {2,"0",10}
+//                             watermark(10) fires; key2 stays (bucket still live)
+//   Event3 {Key=3, Time=21} → watermark(20) fires; closes window[1] for key2
+//                             → emits {2,"0",20}; key2 erased from map
+//   Event4 {Key=2, Time=1}  → LATE. With the fix key2 is recreated at
+//                             GlobalCloseBeforeIndex_=2, so hopIndex(0) < HopIndex(2)
+//                             → event is dropped as late.
+//   Event5 {Key=3, Time=31} → closes window[2] for key3 → emits {3,"0",30};
+//                             watermark(30) fires; key2 empty entry erased cleanly
+//   Finish                  → closes window[3] for key3 → emits {3,"0",40}
+//
+// WITHOUT the fix Event4 would restart key2 at hopIndex=0, and when Event5's
+// watermark fires it would re-close window[0] and emit a duplicate {2,"0",10}.
+Y_UNIT_TEST(TestDataWatermarksNoReopenClosedWindows) {
+    const std::vector<TInputItem> input = {
+        // Key; Time; Val
+        {2,  1, 0},  // hopIndex=0, creates key2 state
+        {2, 11, 0},  // hopIndex=1, inline-closes window[0] → {2,"0",10}
+        {3, 21, 0},  // hopIndex=2, watermark closes window[1] for key2 → {2,"0",20}, key2 erased
+        {2,  1, 0},  // LATE: with fix dropped; without fix reopens key2 at hopIndex=0 (bug)
+        {3, 31, 0},  // hopIndex=3, inline-closes window[2] for key3 → {3,"0",30}
+                     //             watermark: key2 empty entry erased, no duplicate output
+    };
+    const std::vector<TOutputGroup> expected = {
+        TOutputGroup({}),                // [0] before Event1: nothing emitted yet
+        TOutputGroup({}),               // [1] before Event2: nothing emitted yet
+        TOutputGroup({{2, "0", 10}}),   // [2] before Event3: Event2 closed window[0] for key2
+        TOutputGroup({{2, "0", 20}}),   // [3] before Event4: Event3 watermark closed window[1] for key2
+        TOutputGroup({}),               // [4] before Event5: Event4 dropped as late (fix)
+        TOutputGroup({{3, "0", 30}}),   // [5] before Finish: Event5 closed window[2] for key3
+        TOutputGroup({{3, "0", 40}}),   // [6] final: Finish closed window[3] for key3
+    };
+    auto expectedStatsMap = DefaultStatsMap;
+    expectedStatsMap["MultiHop_NewHopsCount"] = 4;
+    expectedStatsMap["MultiHop_LateThrownEventsCount"] = 1;
+
+    // hop=10, interval=10, delay=0, dataWatermarks=true, watermarkMode=false
+    TestImpl(input, expected, expectedStatsMap, 10, 10, 0, true);
+}
+
 Y_UNIT_TEST(TestValidness1) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value

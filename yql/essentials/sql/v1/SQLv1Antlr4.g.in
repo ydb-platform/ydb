@@ -88,6 +88,8 @@ sql_stmt_core:
   | drop_secret_stmt
   | truncate_table_stmt
   | materialize_stmt
+  | create_volume_stmt
+  | drop_volume_stmt
 ;
 
 expr:
@@ -1275,6 +1277,21 @@ alter_secret_stmt: ALTER SECRET (IF EXISTS)? object_ref
 
 drop_secret_stmt: DROP SECRET (IF EXISTS)? object_ref;
 
+create_volume_stmt: CREATE VOLUME (IF NOT EXISTS)? object_ref
+    with_volume_settings
+;
+with_volume_settings: WITH LPAREN volume_settings_entry (COMMA volume_settings_entry)* COMMA? RPAREN;
+volume_settings_entry: an_id EQUALS volume_setting_value;
+volume_setting_value: table_setting_value | volume_channels;
+// Channel index is defined by the position in the list.
+volume_channels: LPAREN volume_channel (COMMA volume_channel)* COMMA? RPAREN;
+volume_channel: LPAREN volume_channel_entry (COMMA volume_channel_entry)* COMMA? RPAREN;
+// A channel value reuses table_setting_value: a backtick-quoted path arrives as an id, everything else as a
+// string literal or an integer.
+volume_channel_entry: an_id EQUALS table_setting_value;
+
+drop_volume_stmt: DROP VOLUME (IF EXISTS)? object_ref;
+
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;
 id: identifier | keyword;
@@ -1708,6 +1725,7 @@ keyword_as_compat:
   | VALUES
 //  | VIEW
   | VIRTUAL
+  | VOLUME
   | WATERMARK
 //  | WITH
   | WRAPPER
@@ -1952,6 +1970,7 @@ keyword_compat: (
   | VALUES
   | VIEW
   | VIRTUAL
+  | VOLUME
 //  | WATERMARK
   | WITH
   | WRAPPER
@@ -2355,6 +2374,7 @@ VALUES: V A L U E S;
 VARIANT: V A R I A N T;
 VIEW: V I E W;
 VIRTUAL: V I R T U A L;
+VOLUME: V O L U M E;
 WATERMARK: W A T E R M A R K;
 WHEN: W H E N;
 WHERE: W H E R E;

@@ -2202,6 +2202,42 @@ Y_UNIT_TEST(ResourcePoolOperations) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(VolumeOperations) {
+    TCases cases = {
+        {"creAte voLume naMe With (tYpe = \"KEY_VALUE\")",
+         "CREATE VOLUME naMe WITH (tYpe = 'KEY_VALUE');\n"},
+        {"create volume if not exists `/Root/kv` with (type=\"KEY_VALUE\",partition_count=2,"
+         "channels=((media=\"ssd\"),(media=\"ssd\"),(media=\"hdd\")))",
+         "CREATE VOLUME IF NOT EXISTS `/Root/kv` WITH (\n"
+         "\ttype = 'KEY_VALUE',\n"
+         "\tpartition_count = 2,\n"
+         "\tchannels = (\n"
+         "\t\t(media = 'ssd'),\n"
+         "\t\t(media = 'ssd'),\n"
+         "\t\t(media = 'hdd')\n"
+         "\t)\n"
+         ");\n"},
+        {"create volume kv with (type='KEY_VALUE',partition_count=1,channels=((media='ssd'),(media='ssd'),"
+         "(data_source=`/Root/src`,object_prefix='kv/',storage_pool='virtual',sync_mode='ASYNC')))",
+         "CREATE VOLUME kv WITH (\n"
+         "\ttype = 'KEY_VALUE',\n"
+         "\tpartition_count = 1,\n"
+         "\tchannels = (\n"
+         "\t\t(media = 'ssd'),\n"
+         "\t\t(media = 'ssd'),\n"
+         "\t\t(data_source = `/Root/src`, object_prefix = 'kv/', storage_pool = 'virtual', sync_mode = 'ASYNC')\n"
+         "\t)\n"
+         ");\n"},
+        {"dRop voLume naMe",
+         "DROP VOLUME naMe;\n"},
+        {"drOp   voLume  iF   exiStS  `/Root/kv`",
+         "DROP VOLUME IF EXISTS `/Root/kv`;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(BackupCollectionOperations) {
     TCases cases = {
         {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")",

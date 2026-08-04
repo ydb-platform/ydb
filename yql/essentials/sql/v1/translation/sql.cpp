@@ -193,6 +193,8 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore68: // drop secret
         case TRule_sql_stmt_core::kAltSqlStmtCore69: // truncate table
         case TRule_sql_stmt_core::kAltSqlStmtCore70: // materialize
+        case TRule_sql_stmt_core::kAltSqlStmtCore71: // create volume
+        case TRule_sql_stmt_core::kAltSqlStmtCore72: // drop volume
             return false;
         case TRule_sql_stmt_core::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");

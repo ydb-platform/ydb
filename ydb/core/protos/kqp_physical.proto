@@ -694,7 +694,26 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme DropSecret = 61;
         NKikimrSchemeOp.TModifyScheme TruncateTable = 62;
         NKikimrForcedCompaction.TForcedCompactionSettings CompactTable = 63;
+        TKqpCreateKeyValueVolume CreateKeyValueVolume = 64;
+        NKikimrSchemeOp.TModifyScheme DropKeyValueVolume = 65;
     }
+}
+
+// A volume channel backed by object storage. The BlobDepot serving such a channel is allocated in BSC before
+// the volume itself is created, so its description travels with the prepared operation.
+message TKqpKeyValueVolumeS3Channel {
+    uint32 ChannelIndex = 1;
+    string DataSourcePath = 2;
+    string ObjectPrefix = 3;
+    string StoragePoolKind = 4;
+    string BlobDepotMedia = 5;
+    bool AsyncMode = 6;
+    string VirtualGroupName = 7;
+}
+
+message TKqpCreateKeyValueVolume {
+    NKikimrSchemeOp.TModifyScheme SchemeTx = 1;
+    repeated TKqpKeyValueVolumeS3Channel S3Channels = 2;
 }
 
 message TKqpPhyTx {

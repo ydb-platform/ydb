@@ -528,15 +528,21 @@ private:
         };
 
         buildInfo.IndexName = index.name();
-        if (buildInfo.IsRebuild && index.index_columns().empty()) {
-            // Inherit columns from existing index
+        buildInfo.IndexColumns.assign(index.index_columns().begin(), index.index_columns().end());
+        buildInfo.DataColumns.assign(index.data_columns().begin(), index.data_columns().end());
+        if (buildInfo.IsRebuild && (index.index_columns().empty() || index.data_columns().empty())) {
+            // Inherit columns from the existing index when they are not provided explicitly.
+            // Index columns and data columns are inherited independently: providing one must
+            // not silently drop the other (e.g. specifying index_columns without data_columns
+            // must preserve the existing data columns).
             const auto& indexPath = TPath::Resolve(settings.source_path(), Self).Child(index.name());
             auto existingIndex = Self->Indexes.at(indexPath.Base()->PathId);
-            buildInfo.IndexColumns.assign(existingIndex->IndexKeys.begin(), existingIndex->IndexKeys.end());
-            buildInfo.DataColumns.assign(existingIndex->IndexDataColumns.begin(), existingIndex->IndexDataColumns.end());
-        } else {
-            buildInfo.IndexColumns.assign(index.index_columns().begin(), index.index_columns().end());
-            buildInfo.DataColumns.assign(index.data_columns().begin(), index.data_columns().end());
+            if (index.index_columns().empty()) {
+                buildInfo.IndexColumns.assign(existingIndex->IndexKeys.begin(), existingIndex->IndexKeys.end());
+            }
+            if (index.data_columns().empty()) {
+                buildInfo.DataColumns.assign(existingIndex->IndexDataColumns.begin(), existingIndex->IndexDataColumns.end());
+            }
         }
 
         // Re-evaluate BuildKind for vector indexes after column inheritance

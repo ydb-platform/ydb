@@ -309,7 +309,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropRebuildImplPropose(
     Y_ENSURE(buildInfo.IsRebuild);
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
-    propose->Record.SetFailOnExist(true);
+    // This propose contains only drop operations, so FailOnExist (relevant only for create) is irrelevant here.
+    propose->Record.SetFailOnExist(false);
 
     auto indexPath = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName);
     const TString indexPathStr = indexPath.PathString();

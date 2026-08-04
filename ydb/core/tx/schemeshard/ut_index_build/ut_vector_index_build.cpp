@@ -205,6 +205,73 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
     }
 
+    Y_UNIT_TEST(RebuildVectorIndexPreservesDataColumns) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "data"      Type: "String" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        // Build initial vector index with a covered data column
+        ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table",
+            TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {"value"}, {}
+            });
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        // The freshly built index must expose the covered data column
+        {
+            auto describe = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true);
+            const auto& dataColumns = describe.GetPathDescription().GetTableIndex().GetDataColumnNames();
+            UNIT_ASSERT_VALUES_EQUAL(dataColumns.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(dataColumns[0], "value");
+        }
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+
+        // Write more data
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 200, 400);
+
+        // Rebuild the index specifying only index columns (no data columns).
+        // The existing covered data column must be inherited, not silently dropped.
+        ui64 rebuildIndexTx = ++txId;
+        TestRebuildVectorIndex(runtime, rebuildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, rebuildIndexTx, tenantSchemeShard);
+
+        auto rebuildOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", rebuildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(rebuildOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        // The rebuilt index must still expose the covered data column
+        {
+            auto describe = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true);
+            TestDescribeResult(describe,
+                {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+            const auto& dataColumns = describe.GetPathDescription().GetTableIndex().GetDataColumnNames();
+            UNIT_ASSERT_VALUES_EQUAL(dataColumns.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(dataColumns[0], "value");
+        }
+    }
+
     Y_UNIT_TEST(RebuildVectorIndexOverrideSettings) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

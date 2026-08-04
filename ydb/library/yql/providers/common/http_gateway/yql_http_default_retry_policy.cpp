@@ -7,21 +7,6 @@ namespace {
 constexpr TDuration DEFAULT_MAX_TIME = TDuration::Minutes(5);
 constexpr TDuration DNS_ERROR_MAX_TIME = TDuration::Seconds(10);
 
-std::unordered_set<CURLcode> YqlRetriedCurlCodes() {
-    return {
-        CURLE_COULDNT_CONNECT,
-        CURLE_WEIRD_SERVER_REPLY,
-        CURLE_WRITE_ERROR,
-        CURLE_READ_ERROR,
-        CURLE_OPERATION_TIMEDOUT,
-        CURLE_SSL_CONNECT_ERROR,
-        CURLE_BAD_DOWNLOAD_RESUME,
-        CURLE_SEND_ERROR,
-        CURLE_RECV_ERROR,
-        CURLE_NO_CONNECTION_AVAILABLE
-    };
-}
-
 std::unordered_set<CURLcode> FqRetriedCurlCodes() {
     return {
         CURLE_COULDNT_CONNECT,
@@ -37,6 +22,21 @@ std::unordered_set<CURLcode> FqRetriedCurlCodes() {
         CURLE_NO_CONNECTION_AVAILABLE,
         CURLE_GOT_NOTHING,
         CURLE_COULDNT_RESOLVE_HOST
+    };
+}
+
+std::unordered_set<CURLcode> YqlRetriedCurlCodes() {
+    return {
+        CURLE_COULDNT_CONNECT,
+        CURLE_WEIRD_SERVER_REPLY,
+        CURLE_WRITE_ERROR,
+        CURLE_READ_ERROR,
+        CURLE_OPERATION_TIMEDOUT,
+        CURLE_SSL_CONNECT_ERROR,
+        CURLE_BAD_DOWNLOAD_RESUME,
+        CURLE_SEND_ERROR,
+        CURLE_RECV_ERROR,
+        CURLE_NO_CONNECTION_AVAILABLE
     };
 }
 
@@ -130,7 +130,7 @@ THttpRetryPolicyOptions::THttpRetryPolicyOptions(std::optional<TDuration> maxTim
     , RetriedCurlCodes(YqlRetriedCurlCodes())
 {}
 
-IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions options) {
+IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions&& options) {
     auto maxTime = options.MaxTime.value_or(DEFAULT_MAX_TIME);
     auto maxRetries = options.MaxRetries;
     return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy([options = std::move(options)](CURLcode curlCode, long httpCode) {

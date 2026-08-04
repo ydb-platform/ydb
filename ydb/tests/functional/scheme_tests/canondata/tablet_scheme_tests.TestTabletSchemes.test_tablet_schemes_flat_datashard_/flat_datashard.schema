@@ -1701,7 +1701,7 @@
             },
             {
                 "ColumnId": 7,
-                "ColumnName": "WriteIndex",
+                "ColumnName": "WriteSeqNum",
                 "ColumnType": "Uint64"
             },
             {

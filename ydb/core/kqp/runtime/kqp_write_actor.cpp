@@ -1204,8 +1204,8 @@ public:
             {"mode", static_cast<int>(Mode)},
             {"locks", txLocks});
 
-        // The batch is applied, so the next one to this shard gets a fresh write index
-        InFlightWriteIndex.erase(ev->Get()->Record.GetOrigin());
+        // The batch is applied, so the next one to this shard gets a fresh write seq num
+        InFlightWriteSeqNum.erase(ev->Get()->Record.GetOrigin());
 
         // Only collect locks in WRITE mode (COLLECTING state required by AddLock)
         if (Mode == EMode::WRITE) {
@@ -1353,14 +1353,14 @@ public:
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
             if (PipelinedWrites) {
-                // A resend (overload retry) must repeat the same index, not allocate a new one.
-                auto [it, allocated] = InFlightWriteIndex.try_emplace(shardId, 0);
+                // A resend (overload retry) must repeat the same seq num, not allocate a new one.
+                auto [it, allocated] = InFlightWriteSeqNum.try_emplace(shardId, 0);
                 if (allocated) {
-                    it->second = TxManager->NextWriteIndex(WriterIndex, shardId);
+                    it->second = TxManager->NextWriteSeqNum(WriterIndex, shardId);
                 }
-                auto* writeIndex = evWrite->Record.MutableWriteIndex();
-                writeIndex->SetWriterIndex(WriterIndex);
-                writeIndex->SetWriteIndex(it->second);
+                auto* writeSeqNum = evWrite->Record.MutableWriteSeqNum();
+                writeSeqNum->SetWriterIndex(WriterIndex);
+                writeSeqNum->SetWriteSeqNum(it->second);
             }
 
             if (MvccSnapshot && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
@@ -1721,8 +1721,8 @@ private:
     const bool PipelinedWrites;
     // This writer's id in the uncommitted write chain; one write actor per table today.
     static constexpr ui64 WriterIndex = 0;
-    // Write index of the batch in flight at each shard, kept until the shard confirms it.
-    THashMap<ui64, ui64> InFlightWriteIndex;
+    // Write seq num of the batch in flight at each shard, kept until the shard confirms it.
+    THashMap<ui64, ui64> InFlightWriteSeqNum;
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     IKqpTableWriterCallbacks* Callbacks;

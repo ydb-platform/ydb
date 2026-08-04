@@ -1780,18 +1780,18 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
             return writeOp;
     }
 
-    if (rec.HasWriteIndex()) {
-        const ui64 writerIndex = rec.GetWriteIndex().GetWriterIndex();
-        const ui64 writeIndex = rec.GetWriteIndex().GetWriteIndex();
-        if (writeIndex == 0
+    if (rec.HasWriteSeqNum()) {
+        const ui64 writerIndex = rec.GetWriteSeqNum().GetWriterIndex();
+        const ui64 writeSeqNum = rec.GetWriteSeqNum().GetWriteSeqNum();
+        if (writeSeqNum == 0
             || !rec.GetLockTxId()
             || rec.txmode() != NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
             || rec.HasLocks()
             || rec.OperationsSize() == 0)
         {
             badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
-                << "WriteIndex " << writerIndex << ":" << writeIndex << " requires a non-zero"
-                   " WriteIndex, LockTxId, MODE_IMMEDIATE, at least one operation and no Locks");
+                << "WriteSeqNum " << writerIndex << ":" << writeSeqNum << " requires a non-zero"
+                   " WriteSeqNum, LockTxId, MODE_IMMEDIATE, at least one operation and no Locks");
             return writeOp;
         }
         if (AppData()->FeatureFlags.GetEnableDataShardPipelinedUncommittedWrites()) {

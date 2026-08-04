@@ -953,11 +953,11 @@ class TDataShard
             struct Counter : Column<4, NScheme::NTypeIds::Uint64> {};
             struct CreateTimestamp : Column<5, NScheme::NTypeIds::Uint64> {};
             struct Flags : Column<6, NScheme::NTypeIds::Uint64> {};
-            struct WriteIndex : Column<7, NScheme::NTypeIds::Uint64> {};
+            struct WriteSeqNum : Column<7, NScheme::NTypeIds::Uint64> {};
             struct WriterIndex : Column<8, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<LockId>;
-            using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags, WriteIndex, WriterIndex>;
+            using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags, WriteSeqNum, WriterIndex>;
         };
 
         struct LockRanges : Table<30> {

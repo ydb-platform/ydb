@@ -44,8 +44,8 @@ public:
     virtual void AddTopicsToShards() = 0;
     virtual bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock, ui64 querySpanId = 0, ui64 deferredVictimQuerySpanId = 0) = 0;
 
-    // Next 1-based uncommitted write index for (writerIndex, shardId).
-    virtual ui64 NextWriteIndex(ui64 writerIndex, ui64 shardId) = 0;
+    // Next 1-based uncommitted write seq num for (writerIndex, shardId).
+    virtual ui64 NextWriteSeqNum(ui64 writerIndex, ui64 shardId) = 0;
 
     virtual void BreakLock(ui64 shardId) = 0;
     virtual TVector<NKikimrDataEvents::TLock> GetLocks() const = 0;

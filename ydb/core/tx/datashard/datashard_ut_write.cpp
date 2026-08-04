@@ -4511,14 +4511,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             lock = result.GetTxLocks().at(0);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(lock).GetWriterIndex(), 0u);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(lock).GetWriteIndex(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriterIndex(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 1u);
         }
         {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 2);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             lock = result.GetTxLocks().at(0);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(lock).GetWriteIndex(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 2u);
         }
 
         CommitLock(runtime, sender, shard, lock);
@@ -4527,7 +4527,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 22\n");
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteIndexGap) {
+    Y_UNIT_TEST(PipelinedUncommittedWriteSeqNumGap) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
@@ -4551,7 +4551,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 3);
             lock = result.GetTxLocks().at(0);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(lock).GetWriteIndex(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 3u);
         }
 
         CommitLock(runtime, sender, shard, lock);
@@ -4610,12 +4610,12 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 2);
             lock = result.GetTxLocks().at(0);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(lock).GetWriteIndex(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 2u);
         }
 
         // Commit as if the second flush had never been observed by the shard
         NKikimrDataEvents::TLock staleLock = lock;
-        staleLock.MutableWriteIndexes(0)->SetWriteIndex(1);
+        staleLock.MutableWriteSeqNums(0)->SetWriteSeqNum(1);
         CommitLock(runtime, sender, shard, staleLock, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
 
         auto tableState = ReadTable(server, shards, tableId);
@@ -4649,16 +4649,16 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         // The echoed set must exactly match what the shard has.
         NKikimrDataEvents::TLock extraWriterLock = lock;
-        auto* extra = extraWriterLock.AddWriteIndexes();
+        auto* extra = extraWriterLock.AddWriteSeqNums();
         extra->SetWriterIndex(1);
-        extra->SetWriteIndex(1);
+        extra->SetWriteSeqNum(1);
         CommitLock(runtime, sender, shard, extraWriterLock, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
 
         auto tableState = ReadTable(server, shards, tableId);
         UNIT_ASSERT_VALUES_EQUAL(tableState, "");
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteCommitWithoutWriteIndex) {
+    Y_UNIT_TEST(PipelinedUncommittedWriteCommitWithoutWriteSeqNum) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
@@ -4682,9 +4682,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         // An empty echo must not pass validation either.
-        NKikimrDataEvents::TLock lockWithoutWriteIndex = lock;
-        lockWithoutWriteIndex.ClearWriteIndexes();
-        CommitLock(runtime, sender, shard, lockWithoutWriteIndex, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        NKikimrDataEvents::TLock lockWithoutWriteSeqNum = lock;
+        lockWithoutWriteSeqNum.ClearWriteSeqNums();
+        CommitLock(runtime, sender, shard, lockWithoutWriteSeqNum, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
 
         auto tableState = ReadTable(server, shards, tableId);
         UNIT_ASSERT_VALUES_EQUAL(tableState, "");
@@ -4714,7 +4714,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 2);
             lock = result.GetTxLocks().at(0);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(lock).GetWriteIndex(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 2u);
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().TableAccessStatsSize(), 1u);
             access = result.GetTxStats().GetTableAccessStats(0);
@@ -4728,8 +4728,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             const auto& echoed = result.GetTxLocks().at(0);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(echoed).GetWriterIndex(), 0u);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(echoed).GetWriteIndex(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriterIndex(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriteSeqNum(), 2u);
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetGeneration(), lock.GetGeneration());
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetCounter(), lock.GetCounter());
 
@@ -4777,7 +4777,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE,
                 tableId, columns, 1, 11);
             req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableWriteIndex()->SetWriteIndex(1);
+            req->Record.MutableWriteSeqNum()->SetWriteSeqNum(1);
             return Write(runtime, sender, shard, std::move(req), expected);
         };
 
@@ -4786,7 +4786,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto result = updateMissingRow(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             const auto& lock = result.GetTxLocks().at(0);
             UNIT_ASSERT(!lock.GetHasWrites());
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(lock).GetWriteIndex(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().TableAccessStatsSize(), 1u);
             access = result.GetTxStats().GetTableAccessStats(0);
         }
@@ -4798,7 +4798,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT(!echoed.GetHasWrites());
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetSchemeShard(), tableId.PathId.OwnerId);
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetPathId(), tableId.PathId.LocalPathId);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(echoed).GetWriteIndex(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriteSeqNum(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().TableAccessStatsSize(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().GetTableAccessStats(0).DebugString(),
                 access.DebugString());
@@ -4827,13 +4827,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId1, lockNodeId, 1, 11, 0, 1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(result.GetTxLocks().at(0)).GetWriteIndex(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks().at(0)).GetWriteSeqNum(), 1u);
         }
 
         // The reply above was released before the executor even issued the commit
         runtime.WaitFor("pipelined write commit", [&]{ return blockedCommits.size() >= 1; });
 
-        // Legacy (no WriteIndex) must still wait for persistence.
+        // Legacy (no WriteSeqNum) must still wait for persistence.
         const ui64 lockTxId2 = 1234567890002;
         NLongTxService::TLockHandle lockHandle2(lockTxId2, runtime.GetActorSystem(0));
         auto legacySender = runtime.AllocateEdgeActor();
@@ -4883,7 +4883,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 2);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             lock = result.GetTxLocks().at(0);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(lock).GetWriteIndex(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 2u);
 
             // The reply was released before the executor even issued the commit
             runtime.WaitFor("write 2 commit", [&]{ return blockedCommits.size() >= 1; });
@@ -4948,7 +4948,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 222, 0, 2);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             lock = result.GetTxLocks().at(0);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(lock).GetWriteIndex(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 2u);
         }
 
         CommitLock(runtime, sender, shard, lock);
@@ -4988,7 +4988,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             blockedCommits.Unblock();
         }
 
-        // Both the write index and the lock's write tables must survive the restart.
+        // Both the write seq num and the lock's write tables must survive the restart.
         RebootTablet(runtime, shard, sender);
 
         // A duplicate of write 1 must report the unchanged lock, not an empty one.
@@ -4997,8 +4997,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             const auto& echoed = result.GetTxLocks().at(0);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(echoed).GetWriterIndex(), 0u);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(echoed).GetWriteIndex(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriterIndex(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriteSeqNum(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetGeneration(), lock.GetGeneration());
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetCounter(), lock.GetCounter());
             // The lock must report the table it was acquired on
@@ -5048,9 +5048,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         req->SetLockId(lockTxId, lockNodeId);
         req->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
         req->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
-        auto* writeIndex = req->Record.MutableWriteIndex();
-        writeIndex->SetWriterIndex(0);
-        writeIndex->SetWriteIndex(1);
+        auto* writeSeqNum = req->Record.MutableWriteSeqNum();
+        writeSeqNum->SetWriterIndex(0);
+        writeSeqNum->SetWriteSeqNum(1);
         auto result = Write(runtime, sender, shard, std::move(req));
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
@@ -5076,44 +5076,44 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const ui64 lockNodeId = runtime.GetNodeId(0);
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
 
-        // WriteIndex without LockTxId
+        // WriteSeqNum without LockTxId
         {
             auto req = MakeWriteRequestOneKeyValue(std::nullopt,
                 NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 tableId, columns, 1, 11);
-            req->Record.MutableWriteIndex()->SetWriteIndex(1);
+            req->Record.MutableWriteSeqNum()->SetWriteSeqNum(1);
             Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
 
-        // WriteIndex with MODE_PREPARE
+        // WriteSeqNum with MODE_PREPARE
         {
             auto req = MakeWriteRequestOneKeyValue(1234567890011,
                 NKikimrDataEvents::TEvWrite::MODE_PREPARE,
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 tableId, columns, 1, 11);
             req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableWriteIndex()->SetWriteIndex(1);
+            req->Record.MutableWriteSeqNum()->SetWriteSeqNum(1);
             Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
 
-        // WriteIndex with Locks{Op=Commit}
+        // WriteSeqNum with Locks{Op=Commit}
         {
             auto req = MakeWriteRequestOneKeyValue(std::nullopt,
                 NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 tableId, columns, 1, 11);
             req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableWriteIndex()->SetWriteIndex(1);
+            req->Record.MutableWriteSeqNum()->SetWriteSeqNum(1);
             req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
             Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
 
-        // WriteIndex with zero operations
+        // WriteSeqNum with zero operations
         {
             auto req = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
             req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableWriteIndex()->SetWriteIndex(1);
+            req->Record.MutableWriteSeqNum()->SetWriteSeqNum(1);
             Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
 
@@ -5124,12 +5124,12 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 tableId, columns, 1, 11);
             req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableWriteIndex()->SetWriterIndex(1);
+            req->Record.MutableWriteSeqNum()->SetWriterIndex(1);
             Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
     }
 
-    // A shard that is not pipelining (rolling restart: KQP already sends WriteIndex) must still
+    // A shard that is not pipelining (rolling restart: KQP already sends WriteSeqNum) must still
     // wait for persistence before replying, and still track the chain it is sent.
     Y_UNIT_TEST(PipelinedUncommittedWriteShardNotPipelining) {
         TPortManager pm;
@@ -5158,7 +5158,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 tableId, columns, 1, 11);
             req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableWriteIndex()->SetWriteIndex(1);
+            req->Record.MutableWriteSeqNum()->SetWriteSeqNum(1);
             runtime.SendToPipe(shard, writeSender, req.release());
         }
 
@@ -5175,13 +5175,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(writeSender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxLocks().size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(ev->Get()->Record.GetTxLocks().at(0)).GetWriteIndex(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(ev->Get()->Record.GetTxLocks().at(0)).GetWriteSeqNum(), 1u);
         }
 
         // The chain is still tracked even with the flag off
         {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 2);
-            UNIT_ASSERT_VALUES_EQUAL(WriteIndexOf(result.GetTxLocks().at(0)).GetWriteIndex(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks().at(0)).GetWriteSeqNum(), 2u);
         }
         UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 3, 33, 0, 1,
             NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);

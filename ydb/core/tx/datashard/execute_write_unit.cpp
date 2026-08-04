@@ -119,10 +119,10 @@ public:
 
     // Validates this write's position in its writer's chain; on success records the new
     // position for ApplyLocks to persist. Returns a status when the operation must stop here.
-    std::optional<EExecutionStatus> CheckWriteIndex(TWriteOperation* writeOp, TSetupSysLocks& guardLocks,
+    std::optional<EExecutionStatus> CheckWriteSeqNum(TWriteOperation* writeOp, TSetupSysLocks& guardLocks,
         TTransactionContext& txc)
     {
-        const ui64 requested = writeOp->GetWriteIndex();
+        const ui64 requested = writeOp->GetWriteSeqNum();
         if (!requested) {
             return std::nullopt;
         }
@@ -131,7 +131,7 @@ public:
         const ui64 writerIndex = writeOp->GetWriterIndex();
         auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
 
-        if (lock && lock->GetWriteIndex() && lock->GetWriterIndex() != writerIndex) {
+        if (lock && lock->GetWriteSeqNum() && lock->GetWriterIndex() != writerIndex) {
             // DataShard tracks a single writer per lock.
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
                 << "Multiple writers per lock are not supported: lock already has writer "
@@ -140,7 +140,7 @@ public:
         }
 
         // No lock means nothing applied yet, so current is 0.
-        const ui64 current = lock ? lock->GetWriteIndex() : 0;
+        const ui64 current = lock ? lock->GetWriteSeqNum() : 0;
 
         if (requested < current) {
             // Only the last write's result is remembered, so an older duplicate cannot be
@@ -153,9 +153,9 @@ public:
 
         if (requested == current) {
             // A duplicate of the last write: report its result again, touch nothing else.
-            Y_ENSURE(lock, "A non-zero write index implies the lock that carries it");
+            Y_ENSURE(lock, "A non-zero write seq num implies the lock that carries it");
             auto res = NEvents::TDataEvents::TEvWriteResult::BuildAlreadyApplied(tabletId, writeOp->GetTxId());
-            if (const auto* stats = lock->GetWriteIndexStats()) {
+            if (const auto* stats = lock->GetWriteSeqNumStats()) {
                 *res->Record.MutableTxStats() = *stats;
             }
             // KQP may have missed the original reply and still needs the lock to commit
@@ -174,7 +174,7 @@ public:
         // A gap means earlier writes never reached this shard, which is not the shard's
         // business: more than one write may be in flight, and KQP detects the loss
         // on its own and aborts if it has to.
-        guardLocks.SetWriteIndex = TLockWriteIndex{writerIndex, requested};
+        guardLocks.SetWriteSeqNum = TLockWriteSeqNum{writerIndex, requested};
         return std::nullopt;
     }
 
@@ -197,20 +197,20 @@ public:
                     {"lock", lock});
             }
 
-            writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites, lock.WriterIndex, lock.WriteIndex);
+            writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites, lock.WriterIndex, lock.WriteSeqNum);
 
             YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Add lock",
                 {"result", writeResult.Record.GetTxLocks().rbegin()->ShortDebugString()});
         }
         DataShard.SubscribeNewLocks(ctx);
 
-        if (const ui64 requested = writeOp->GetWriteIndex()) {
+        if (const ui64 requested = writeOp->GetWriteSeqNum()) {
             const ui64 writerIndex = writeOp->GetWriterIndex();
             for (const auto& lock : locks) {
                 Y_ENSURE(lock.IsError()
-                             || (lock.WriterIndex == writerIndex && lock.WriteIndex == requested),
+                             || (lock.WriterIndex == writerIndex && lock.WriteSeqNum == requested),
                          "Pipelined write " << writerIndex << ":" << requested
-                         << " reported lock with " << lock.WriterIndex << ":" << lock.WriteIndex);
+                         << " reported lock with " << lock.WriterIndex << ":" << lock.WriteSeqNum);
             }
         }
     }
@@ -615,7 +615,7 @@ public:
                         Y_ENSURE(false, "unreachable");
                 }
 
-                if (auto status = CheckWriteIndex(writeOp, guardLocks, txc)) {
+                if (auto status = CheckWriteSeqNum(writeOp, guardLocks, txc)) {
                     return *status;
                 }
             }
@@ -792,11 +792,11 @@ public:
             KqpUpdateDataShardStatCounters(DataShard, counters);
             KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
 
-            if (const ui64 writeIndex = writeOp->GetWriteIndex()) {
+            if (const ui64 writeSeqNum = writeOp->GetWriteSeqNum()) {
                 // Remembered for a duplicate delivery of this write
                 auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
-                if (lock && lock->GetWriteIndex() == writeIndex) {
-                    lock->SetWriteIndexStats(writeResult->Record.GetTxStats());
+                if (lock && lock->GetWriteSeqNum() == writeSeqNum) {
+                    lock->SetWriteSeqNumStats(writeResult->Record.GetTxStats());
                 }
             }
 

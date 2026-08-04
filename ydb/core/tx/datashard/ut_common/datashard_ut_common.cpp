@@ -2993,7 +2993,7 @@ NKikimrDataEvents::TEvWriteResult UncommittedWrite(
         TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
         const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
         ui64 lockTxId, ui64 lockNodeId, ui64 key, ui64 value,
-        ui64 writerIndex, ui64 writeIndex,
+        ui64 writerIndex, ui64 writeSeqNum,
         NKikimrDataEvents::TEvWriteResult::EStatus expected)
 {
     auto req = MakeWriteRequestOneKeyValue(std::nullopt,
@@ -3001,18 +3001,18 @@ NKikimrDataEvents::TEvWriteResult UncommittedWrite(
         NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
         tableId, columns, key, value);
     req->SetLockId(lockTxId, lockNodeId);
-    if (writeIndex) {
-        auto* reqWriteIndex = req->Record.MutableWriteIndex();
-        reqWriteIndex->SetWriterIndex(writerIndex);
-        reqWriteIndex->SetWriteIndex(writeIndex);
+    if (writeSeqNum) {
+        auto* reqWriteSeqNum = req->Record.MutableWriteSeqNum();
+        reqWriteSeqNum->SetWriterIndex(writerIndex);
+        reqWriteSeqNum->SetWriteSeqNum(writeSeqNum);
     }
     return Write(runtime, sender, shard, std::move(req), expected);
 }
 
-// Asserts the lock reports exactly one write index and returns it
-const NKikimrDataEvents::TWriteIndex& WriteIndexOf(const NKikimrDataEvents::TLock& lock) {
-    UNIT_ASSERT_VALUES_EQUAL_C(lock.GetWriteIndexes().size(), 1u, lock.ShortDebugString());
-    return lock.GetWriteIndexes(0);
+// Asserts the lock reports exactly one write seq num and returns it
+const NKikimrDataEvents::TWriteSeqNum& WriteSeqNumOf(const NKikimrDataEvents::TLock& lock) {
+    UNIT_ASSERT_VALUES_EQUAL_C(lock.GetWriteSeqNums().size(), 1u, lock.ShortDebugString());
+    return lock.GetWriteSeqNums(0);
 }
 
 NKikimrDataEvents::TEvWriteResult CommitLock(

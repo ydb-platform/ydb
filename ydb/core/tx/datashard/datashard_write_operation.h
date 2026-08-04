@@ -130,7 +130,7 @@ private:
     YDB_READONLY_DEF(ui64, LockTxId);
     YDB_READONLY_DEF(ui32, LockNodeId);
     YDB_READONLY_DEF(ui64, WriterIndex);
-    YDB_READONLY_DEF(ui64, WriteIndex);
+    YDB_READONLY_DEF(ui64, WriteSeqNum);
 
     YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
@@ -264,8 +264,8 @@ public:
         return WriteTx ? WriteTx->GetWriterIndex() : 0;
     }
 
-    ui64 GetWriteIndex() const {
-        return WriteTx ? WriteTx->GetWriteIndex() : 0;
+    ui64 GetWriteSeqNum() const {
+        return WriteTx ? WriteTx->GetWriteSeqNum() : 0;
     }
 
     bool IsPipelinedWrite() const {

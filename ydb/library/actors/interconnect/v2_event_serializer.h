@@ -120,6 +120,7 @@ namespace NActors {
             TEventQueue Events;
             std::deque<TRcBuf> SystemRequests;
             TEventHeader EventHeader;
+            size_t SerializedBytesPending = 0;
             size_t EventHeaderOffset = 0;
             TIntrusivePtr<TEventSerializedData> Buffer;
             TRope::TConstIterator Iter;

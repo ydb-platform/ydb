@@ -800,6 +800,31 @@ void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId) {
     waiter.Wait();
 }
 
+void WaitForSchemeShardStatsUpdate(
+    TTestActorRuntime& runtime, ui64 ssTabletId, bool requireFull)
+{
+    bool statsUpdateSent = false;
+    auto sendObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev) {
+        if (ev->Get()->Record.GetSchemeShardId() != ssTabletId) {
+            return;
+        }
+        if (!requireFull) {
+            statsUpdateSent = true;
+            return;
+        }
+        NKikimrStat::TSchemeShardStats statRecord;
+        if (statRecord.ParseFromString(ev->Get()->Record.GetStats())
+                && statRecord.GetAreAllStatsFull())
+        {
+            statsUpdateSent = true;
+        }
+    });
+    runtime.WaitFor(
+        requireFull ? "full TEvSchemeShardStats from SchemeShard"
+                    : "TEvSchemeShardStats from SchemeShard",
+        [&]{ return statsUpdateSent; });
+}
+
 ui64 GetRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId) {
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(nodeIndex));
     NStat::TRequest req;

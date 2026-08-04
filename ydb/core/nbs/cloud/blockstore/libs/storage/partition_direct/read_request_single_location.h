@@ -66,6 +66,7 @@ private:
     const TDuration RequestTimeout;
 
     TInstant StartAt;
+    TGuardedSgList SgList;
     TReadRangeHint ReadHint;
     THostMask Requested;
     THostMask Failed;

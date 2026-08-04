@@ -33,6 +33,10 @@ struct TEvCheckpointStorage {
         EvNewCheckpointSucceeded,
         EvGcFinished,
 
+        // Graph deletion events.
+        EvDeleteGraphRequest,
+        EvDeleteGraphResponse,
+
         EvEnd,
     };
 
@@ -246,6 +250,24 @@ struct TEvCheckpointStorage {
         TCoordinatorId CoordinatorId;
         TCheckpointId CheckpointId;
         ui64 Cookie;
+    };
+
+    // Sent to TStorageProxy to delete all checkpoint data for a graph.
+    struct TEvDeleteGraphRequest : NActors::TEventLocal<TEvDeleteGraphRequest, EvDeleteGraphRequest> {
+        explicit TEvDeleteGraphRequest(TString graphId)
+            : GraphId(std::move(graphId)) {
+        }
+
+        TString GraphId;
+    };
+
+    // Response from TStorageProxy after deleting all checkpoint data for a graph.
+    struct TEvDeleteGraphResponse : NActors::TEventLocal<TEvDeleteGraphResponse, EvDeleteGraphResponse> {
+        explicit TEvDeleteGraphResponse(NYql::TIssues issues = {})
+            : Issues(std::move(issues)) {
+        }
+
+        NYql::TIssues Issues;
     };
 };
 

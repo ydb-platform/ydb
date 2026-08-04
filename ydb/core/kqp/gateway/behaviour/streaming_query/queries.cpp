@@ -5,6 +5,8 @@
 #include <library/cpp/retry/retry_policy.h>
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
@@ -2976,6 +2978,7 @@ public:
             hFunc(TEvPrivate::TEvCleanupStreamingQueryResult, Handle);
             hFunc(TEvPrivate::TEvExecuteSchemeTransactionResult, Handle);
             hFunc(TEvPrivate::TEvUpdateStreamingQueryResult, Handle);
+            hFunc(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse, Handle);
             default:
                 StateFuncBase(ev);
         }
@@ -2989,7 +2992,7 @@ public:
         }
 
         QueryExistsInTable = false;
-        CleanupQuery();
+        DeleteQueryGraphs();
     }
 
     void Handle(TEvPrivate::TEvExecuteSchemeTransactionResult::TPtr& ev) {
@@ -3025,6 +3028,12 @@ protected:
         if (!QueryExistsInTable && !QueryExistsInSS && !SuccessOnNotExist) {
             FatalError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Streaming query " << QueryPath << " not found or you don't have access permissions");
             return;
+        }
+
+        // Checkpoint storage uses CheckpointId as graphId (set once on first execution start
+        // and reused across all restarts for the same query).
+        if (QueryExistsInTable && QueryState.HasCheckpointId()) {
+            CheckpointIdToDelete = QueryState.GetCheckpointId();
         }
 
         CleanupQuery();
@@ -3068,10 +3077,33 @@ private:
         Finish(Ydb::StatusIds::SUCCESS);
     }
 
+    void DeleteQueryGraphs() {
+        if (!CheckpointIdToDelete) {
+            CleanupQuery();
+            return;
+        }
+
+        YDB_LOG_DEBUG("[StreamingQueries] Sending TEvDeleteGraphRequest",
+            {"logPrefix", LogPrefix()},
+            {"graphId", *CheckpointIdToDelete});
+        Send(NYql::NDq::MakeCheckpointStorageID(),
+             new NFq::TEvCheckpointStorage::TEvDeleteGraphRequest(*CheckpointIdToDelete));
+    }
+
+    void Handle(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse::TPtr& ev) {
+        if (!ev->Get()->Issues.Empty()) {
+            FatalError(Ydb::StatusIds::INTERNAL_ERROR,
+                TStringBuilder() << "Failed to delete checkpoints: " << ev->Get()->Issues.ToOneLineString());
+            return;
+        }
+        CleanupQuery();
+    }
+
 private:
     const bool SuccessOnNotExist = false;
     bool QueryExistsInSS = false;
     bool QueryExistsInTable = false;
+    std::optional<TString> CheckpointIdToDelete;
 };
 
 }  // anonymous namespace

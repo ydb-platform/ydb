@@ -1623,40 +1623,76 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(streamLookup);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(rightIsColumn);
         TKikimrRunner kikimr(settings);
-        auto client = kikimr.GetTableClient();
-        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        // Column-oriented tables are only accessible via the QueryService API, so
+        // when the right table is column-store all queries (DDL, DML, SELECT) go
+        // through NQuery::TSession. Otherwise the row-store path uses NTable::TSession.
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto executeScheme = [&](const TString& q) {
+            if (rightIsColumn) {
+                auto r = querySession.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            } else {
+                auto r = tableSession.ExecuteSchemeQuery(q).ExtractValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            }
+        };
+        auto executeDml = [&](const TString& q) {
+            if (rightIsColumn) {
+                auto r = querySession.ExecuteQuery(q,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            } else {
+                auto r = tableSession.ExecuteDataQuery(q,
+                    TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            }
+        };
+        auto executeSelect = [&](const TString& q) -> TResultSet {
+            if (rightIsColumn) {
+                auto r = querySession.ExecuteQuery(q,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+                return r.GetResultSet(0);
+            } else {
+                auto r = tableSession.ExecuteDataQuery(q,
+                    TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+                return r.GetResultSet(0);
+            }
+        };
 
         {
-            auto createTableResult = session.ExecuteSchemeQuery(Q1_(R"(
+            executeScheme(Q1_(R"(
                 CREATE TABLE `/Root/Left` (
                     Key Uint64 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
                 );
-            )")).ExtractValueSync();
-            UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
+            )"));
 
-            auto result = session.ExecuteDataQuery(Q1_(R"(
+            executeDml(Q1_(R"(
                 UPSERT INTO `/Root/Left` (Key, Value) VALUES (1, 'lValue1'), (2, 'lValue2');
-            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            )"));
         }
 
         {
             const TString rightStore = rightIsColumn ? "WITH (STORE = COLUMN)" : "";
-            auto createTableResult = session.ExecuteSchemeQuery(Sprintf(R"(
+            executeScheme(Sprintf(R"(
                 CREATE TABLE `/Root/Right` (
                     Key Uint64 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
                 ) %s;
-            )", rightStore.c_str())).ExtractValueSync();
-            UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
+            )", rightStore.c_str()));
 
-            auto result = session.ExecuteDataQuery(Q1_(R"(
+            executeDml(Q1_(R"(
                 UPSERT INTO `/Root/Right` (Key, Value) VALUES (1, 'rValue1'), (3, 'rValue3');
-            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            )"));
         }
 
         {
@@ -1664,9 +1700,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
                 SELECT l.Value, r.Value FROM `/Root/Left` AS l JOIN `/Root/Right` AS r ON l.Key = r.Key;
             )");
 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([[["lValue1"];["rValue1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            auto resultSet = executeSelect(query);
+            CompareYson(R"([[["lValue1"];["rValue1"]]])", FormatResultSetYson(resultSet));
         }
     }
 
@@ -1684,40 +1719,85 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(streamLookup);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(rightIsColumn);
         TKikimrRunner kikimr(settings);
-        auto client = kikimr.GetTableClient();
-        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        // Column-oriented tables are only accessible via the QueryService API, so
+        // when the right table is column-store all queries (DDL, DML, SELECT) go
+        // through NQuery::TSession. Otherwise the row-store path uses NTable::TSession.
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto executeScheme = [&](const TString& q) {
+            if (rightIsColumn) {
+                auto r = querySession.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            } else {
+                auto r = tableSession.ExecuteSchemeQuery(q).ExtractValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            }
+        };
+        auto executeDml = [&](const TString& q) {
+            if (rightIsColumn) {
+                auto r = querySession.ExecuteQuery(q,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            } else {
+                auto r = tableSession.ExecuteDataQuery(q,
+                    TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            }
+        };
+        auto executeSelect = [&](const TString& q) -> TResultSet {
+            if (rightIsColumn) {
+                auto r = querySession.ExecuteQuery(q,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+                return r.GetResultSet(0);
+            } else {
+                auto r = tableSession.ExecuteDataQuery(q,
+                    TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+                return r.GetResultSet(0);
+            }
+        };
 
         {
-            auto createTableResult = session.ExecuteSchemeQuery(Q1_(R"(
+            executeScheme(Q1_(R"(
                 CREATE TABLE `/Root/Left` (
                     Key Uint64 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
                 );
-            )")).ExtractValueSync();
-            UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
+            )"));
 
-            auto result = session.ExecuteDataQuery(Q1_(R"(
+            executeDml(Q1_(R"(
                 UPSERT INTO `/Root/Left` (Key, Value) VALUES (1, 'lValue1'), (2, 'lValue2');
-            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            )"));
         }
 
         {
             const TString rightStore = rightIsColumn ? "WITH (STORE = COLUMN)" : "";
-            auto createTableResult = session.ExecuteSchemeQuery(Sprintf(R"(
+            // Column-oriented tables require NOT NULL key columns.
+            const TString keyType = rightIsColumn ? "Key Uint64 NOT NULL" : "Key Uint64";
+            executeScheme(Sprintf(R"(
                 CREATE TABLE `/Root/Right` (
-                    Key Uint64,
+                    %s,
                     Value String,
                     PRIMARY KEY (Key)
                 ) %s;
-            )", rightStore.c_str())).ExtractValueSync();
-            UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
+            )", keyType.c_str(), rightStore.c_str()));
 
-            auto result = session.ExecuteDataQuery(Q1_(R"(
-                UPSERT INTO `/Root/Right` (Key, Value) VALUES (1, 'rValue1'), (3, 'rValue3'), (NULL, 'rValue');
-            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            // Column-oriented tables cannot store a NULL key, so the (NULL, 'rValue')
+            // row is only inserted for the row-store variant.
+            const TString upsertRight = rightIsColumn
+                ? Q1_(R"(
+                    UPSERT INTO `/Root/Right` (Key, Value) VALUES (1, 'rValue1'), (3, 'rValue3');
+                )")
+                : Q1_(R"(
+                    UPSERT INTO `/Root/Right` (Key, Value) VALUES (1, 'rValue1'), (3, 'rValue3'), (NULL, 'rValue');
+                )");
+            executeDml(upsertRight);
         }
 
         {  // inner
@@ -1725,9 +1805,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
                 SELECT l.Value, r.Value FROM `/Root/Left` AS l JOIN `/Root/Right` AS r ON l.Key = r.Key;
             )");
 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([[["lValue1"];["rValue1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            auto resultSet = executeSelect(query);
+            CompareYson(R"([[["lValue1"];["rValue1"]]])", FormatResultSetYson(resultSet));
         }
 
         {  // left
@@ -1735,9 +1814,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
                 SELECT l.Value, r.Value FROM `/Root/Left` AS l LEFT JOIN `/Root/Right` AS r ON l.Key = r.Key ORDER BY l.Value;
             )");
 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([[["lValue1"];["rValue1"]];[["lValue2"];#]])", FormatResultSetYson(result.GetResultSet(0)));
+            auto resultSet = executeSelect(query);
+            CompareYson(R"([[["lValue1"];["rValue1"]];[["lValue2"];#]])", FormatResultSetYson(resultSet));
         }
 
         {  // right
@@ -1745,9 +1823,13 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
                 SELECT r.Value, l.Value FROM `/Root/Left` AS l RIGHT JOIN `/Root/Right` AS r ON l.Key = r.Key ORDER BY r.Value;
             )");
 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([[["rValue"];#];[["rValue1"];["lValue1"]];[["rValue3"];#]])", FormatResultSetYson(result.GetResultSet(0)));
+            auto resultSet = executeSelect(query);
+            // The column-store variant has no NULL-key row ('rValue'), so its right-join
+            // result omits the [["rValue"];#] row that the row-store variant produces.
+            const TString expectedRight = rightIsColumn
+                ? R"([[["rValue1"];["lValue1"]];[["rValue3"];#]])"
+                : R"([[["rValue"];#];[["rValue1"];["lValue1"]];[["rValue3"];#]])";
+            CompareYson(expectedRight, FormatResultSetYson(resultSet));
         }
     }
 
@@ -1765,40 +1847,76 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(streamLookup);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(rightIsColumn);
         TKikimrRunner kikimr(settings);
-        auto client = kikimr.GetTableClient();
-        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        // Column-oriented tables are only accessible via the QueryService API, so
+        // when the right table is column-store all queries (DDL, DML, SELECT) go
+        // through NQuery::TSession. Otherwise the row-store path uses NTable::TSession.
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto executeScheme = [&](const TString& q) {
+            if (rightIsColumn) {
+                auto r = querySession.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            } else {
+                auto r = tableSession.ExecuteSchemeQuery(q).ExtractValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            }
+        };
+        auto executeDml = [&](const TString& q) {
+            if (rightIsColumn) {
+                auto r = querySession.ExecuteQuery(q,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            } else {
+                auto r = tableSession.ExecuteDataQuery(q,
+                    TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            }
+        };
+        auto executeSelect = [&](const TString& q) -> TResultSet {
+            if (rightIsColumn) {
+                auto r = querySession.ExecuteQuery(q,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+                return r.GetResultSet(0);
+            } else {
+                auto r = tableSession.ExecuteDataQuery(q,
+                    TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+                return r.GetResultSet(0);
+            }
+        };
 
         {
-            auto createTableResult = session.ExecuteSchemeQuery(Q1_(R"(
+            executeScheme(Q1_(R"(
                 CREATE TABLE `/Root/Left` (
                     Key Uint64,
                     Value String,
                     PRIMARY KEY (Key)
                 );
-            )")).ExtractValueSync();
-            UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
+            )"));
 
-            auto result = session.ExecuteDataQuery(Q1_(R"(
+            executeDml(Q1_(R"(
                 UPSERT INTO `/Root/Left` (Key, Value) VALUES (1, 'lValue1'), (2, 'lValue2');
-            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            )"));
         }
 
         {
             const TString rightStore = rightIsColumn ? "WITH (STORE = COLUMN)" : "";
-            auto createTableResult = session.ExecuteSchemeQuery(Sprintf(R"(
+            executeScheme(Sprintf(R"(
                 CREATE TABLE `/Root/Right` (
                     Key Uint64 NOT NULL,
                     Value String NOT NULL,
                     PRIMARY KEY (Key)
                 ) %s;
-            )", rightStore.c_str())).ExtractValueSync();
-            UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
+            )", rightStore.c_str()));
 
-            auto result = session.ExecuteDataQuery(Q1_(R"(
+            executeDml(Q1_(R"(
                 UPSERT INTO `/Root/Right` (Key, Value) VALUES (1, 'rValue1'), (3, 'rValue3'), (4, 'rValue4');
-            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            )"));
         }
 
         {  // left join
@@ -1809,12 +1927,11 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
                     ORDER BY l.Key;
             )");
 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto resultSet = executeSelect(query);
             CompareYson(R"([
                 [[1u];["lValue1"];[1u];["rValue1"]];
                 [[2u];["lValue2"];#;#]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatResultSetYson(resultSet));
         }
     }
 

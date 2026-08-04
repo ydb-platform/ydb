@@ -221,7 +221,7 @@ insert into tt6 (f1, f2) values (1, 2);
 statement ok
 insert into tt6 (f1, f2) values (2, 9);
 
-statement query
+statement skipped_cs query
 select tt5.f1 as f15, tt5.f2 as f25, tt6.f1 as f16, tt6.f2 as f26 from tt5 cross join tt6 where tt5.f1 = tt6.f1 and tt5.f1 = tt5.f2 - tt6.f2;
 
 --

@@ -11,12 +11,8 @@ using namespace NYdb::NTable;
 
 namespace {
 
-void PrintMemoryStats(const TString& testName, const TDataQueryResult& result) {
-    if (!result.GetStats()) {
-        return;
-    }
-
-    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+template <typename TStats>
+void PrintMemoryStatsImpl(const TString& testName, const TStats& stats) {
 
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(stats.query_plan(), &plan, true);
@@ -62,6 +58,20 @@ void PrintMemoryStats(const TString& testName, const TDataQueryResult& result) {
          << ", TotalCpu=" << (stats.total_cpu_time_us() / 1000) << "ms" << Endl;
     walkPlan(plan["Plan"]);
     Cerr << "================================================" << Endl;
+}
+
+void PrintMemoryStats(const TString& testName, const TDataQueryResult& result) {
+    if (!result.GetStats()) {
+        return;
+    }
+    PrintMemoryStatsImpl(testName, NYdb::TProtoAccessor::GetProto(*result.GetStats()));
+}
+
+void PrintMemoryStats(const TString& testName, const NYdb::NQuery::TExecuteQueryResult& result) {
+    if (!result.GetStats()) {
+        return;
+    }
+    PrintMemoryStatsImpl(testName, NYdb::TProtoAccessor::GetProto(*result.GetStats()));
 }
 
 } // namespace
@@ -168,90 +178,99 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         TKikimrRunner kikimr(settings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        // Both row-store and column-store tables are accessed via the QueryService API.
+        // Use NOT NULL key columns for both table types.
+        const TString rightStore = rightIsColumn ? "WITH (STORE = COLUMN)" :
+            "WITH (UNIFORM_PARTITIONS = 2000, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2000)";
 
         constexpr ui64 TotalRows = 100000;
         constexpr ui64 BatchSize = 1000;
 
-        const TString rightStore = rightIsColumn ? "WITH (STORE = COLUMN)" :
-            "WITH (UNIFORM_PARTITIONS = 2000, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2000)";
+        const TString ddl = Sprintf(R"(
+            CREATE TABLE `/Root/RightTable` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            ) %s;
+
+            CREATE TABLE `/Root/LeftTable` (
+                Id Uint64 NOT NULL,
+                Fk Uint64,
+                PRIMARY KEY (Id)
+            );
+        )", rightStore.c_str());
 
         {
-            auto result = session.ExecuteSchemeQuery(Sprintf(R"(
-                CREATE TABLE `/Root/RightTable` (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                ) %s;
-
-                CREATE TABLE `/Root/LeftTable` (
-                    Id Uint64,
-                    Fk Uint64,
-                    PRIMARY KEY (Id)
-                );
-            )", rightStore.c_str())).GetValueSync();
+            auto result = session.ExecuteQuery(ddl, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
+        const TString dmlQuery = Q1_(R"(
+            DECLARE $offset AS Uint64;
+            DECLARE $padding AS String;
+
+            $right = ListMap(
+                ListFromRange($offset, $offset + 1000ul),
+                ($i) -> { RETURN AsStruct($i * 184467440737095ul AS Key, $padding AS Value); }
+            );
+
+            UPSERT INTO `/Root/RightTable`
+            SELECT * FROM AS_TABLE($right);
+
+            $left = ListMap(
+                ListFromRange($offset, $offset + 1000ul),
+                ($i) -> { RETURN AsStruct($i AS Id, $i * 184467440737095ul AS Fk); }
+            );
+
+            UPSERT INTO `/Root/LeftTable`
+            SELECT * FROM AS_TABLE($left);
+        )");
+
         TString padding(10240, 'x');
         for (ui64 offset = 0; offset < TotalRows; offset += BatchSize) {
-            auto params = db.GetParamsBuilder()
+            auto params = TParamsBuilder()
                 .AddParam("$offset").Uint64(offset).Build()
                 .AddParam("$padding").String(padding).Build()
                 .Build();
 
-            auto result = session.ExecuteDataQuery(Q1_(R"(
-                DECLARE $offset AS Uint64;
-                DECLARE $padding AS String;
-
-                $right = ListMap(
-                    ListFromRange($offset, $offset + 1000ul),
-                    ($i) -> { RETURN AsStruct($i * 184467440737095ul AS Key, $padding AS Value); }
-                );
-
-                UPSERT INTO `/Root/RightTable`
-                SELECT * FROM AS_TABLE($right);
-
-                $left = ListMap(
-                    ListFromRange($offset, $offset + 1000ul),
-                    ($i) -> { RETURN AsStruct($i AS Id, $i * 184467440737095ul AS Fk); }
-                );
-
-                UPSERT INTO `/Root/LeftTable`
-                SELECT * FROM AS_TABLE($left);
-            )"), TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
-
+            auto result = session.ExecuteQuery(dmlQuery,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
+        const TString selectQuery = Q1_(R"(
+            $q = SELECT b.Value AS Value
+                FROM `/Root/LeftTable` a
+                JOIN `/Root/RightTable` b ON a.Fk = b.Key;
+
+            SELECT COUNT(Value) AS cnt FROM (
+                SELECT * FROM $q
+                UNION ALL
+                SELECT * FROM $q
+                UNION ALL
+                SELECT * FROM $q
+                UNION ALL
+                SELECT * FROM $q
+                UNION ALL
+                SELECT * FROM $q
+                UNION ALL
+                SELECT * FROM $q
+                UNION ALL
+                SELECT * FROM $q
+                UNION ALL
+                SELECT * FROM $q
+            );
+        )");
+
         {
-            TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+            NYdb::NQuery::TExecuteQuerySettings execSettings;
+            execSettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
 
-            auto result = session.ExecuteDataQuery(Q1_(R"(
-                $q = SELECT b.Value AS Value
-                    FROM `/Root/LeftTable` a
-                    JOIN `/Root/RightTable` b ON a.Fk = b.Key;
-
-                SELECT COUNT(Value) AS cnt FROM (
-                    SELECT * FROM $q
-                    UNION ALL
-                    SELECT * FROM $q
-                    UNION ALL
-                    SELECT * FROM $q
-                    UNION ALL
-                    SELECT * FROM $q
-                    UNION ALL
-                    SELECT * FROM $q
-                    UNION ALL
-                    SELECT * FROM $q
-                    UNION ALL
-                    SELECT * FROM $q
-                    UNION ALL
-                    SELECT * FROM $q
-                );
-            )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            auto result = session.ExecuteQuery(selectQuery,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
 
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);

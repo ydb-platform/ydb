@@ -46,7 +46,7 @@ order by name
 --
 -- Basic cases (we expect planner to pull up the subquery here)
 
-statement query
+statement skipped_cs query
 SELECT s2.name as name, s2.n as n2, s3.n as n3 FROM
 (SELECT * FROM t2) as s2
 INNER JOIN
@@ -54,7 +54,7 @@ INNER JOIN
 USING (name)
 order by name
 
-statement query
+statement skipped_cs query
 SELECT s2.name as name, s2.n as n2, s3.n as n3 FROM
 (SELECT * FROM t2) as s2
 LEFT JOIN

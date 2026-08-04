@@ -48,11 +48,9 @@ The plugin can be installed in two ways:
    {% endcut %}
 3. In the **Add Repository** window that opens, specify a repository name (e.g., `YDB Plugin`) and paste the following URL into the **Location** field:
 
-
    ```text
    https://storage.yandexcloud.net/ydb-dbeaver-plugin
    ```
-
 
    Click **Add**. DBeaver will load the repository metadata.
 

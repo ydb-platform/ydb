@@ -21,22 +21,20 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Execute",
-            {"logPrefix", TxLogPrefix},
             {"workerId", WorkerId},
             {"error", Error});
 
         auto replication = Self->Find(WorkerId.ReplicationId());
         if (!replication) {
             YDB_LOG_WARN_CTX(ctx, "Unknown replication",
-                {"logPrefix", TxLogPrefix},
                 {"rid", WorkerId.ReplicationId()});
             return true;
         }
 
         if (replication->GetState() == TReplication::EState::Removing) {
             YDB_LOG_WARN_CTX(ctx, "Replication is being removed",
-                {"logPrefix", TxLogPrefix},
                 {"rid", WorkerId.ReplicationId()});
             return true;
         }
@@ -44,14 +42,12 @@ public:
         auto* target = replication->FindTarget(WorkerId.TargetId());
         if (!target) {
             YDB_LOG_WARN_CTX(ctx, "Unknown target",
-                {"logPrefix", TxLogPrefix},
                 {"rid", WorkerId.ReplicationId()},
                 {"tid", WorkerId.TargetId()});
             return true;
         }
 
         YDB_LOG_ERROR_CTX(ctx, "Worker error",
-            {"logPrefix", TxLogPrefix},
             {"rid", WorkerId.ReplicationId()},
             {"tid", WorkerId.TargetId()},
             {"error", Error});
@@ -76,8 +72,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", TxLogPrefix});
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
     }
 
 }; // TTxWorkerError

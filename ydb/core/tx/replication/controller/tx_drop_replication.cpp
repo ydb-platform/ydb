@@ -28,6 +28,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         if (PubEv) {
             return ExecutePub(txc, ctx);
         } else if (PrivEv) {
@@ -39,7 +40,6 @@ public:
 
     bool ExecutePub(TTransactionContext& txc, const TActorContext& ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", TxLogPrefix},
             {"execute", PubEv->Get()->ToString()});
 
         const auto& record = PubEv->Get()->Record;
@@ -49,7 +49,6 @@ public:
 
         if (!Replication) {
             YDB_LOG_WARN_CTX(ctx, "Cannot drop unknown replication",
-                {"logPrefix", TxLogPrefix},
                 {"pathId", pathId});
 
             auto ev = MakeHolder<TEvController::TEvDropReplicationResult>();
@@ -95,7 +94,6 @@ public:
         }
 
         YDB_LOG_NOTICE_CTX(ctx, "Drop replication",
-            {"logPrefix", TxLogPrefix},
             {"rid", Replication->GetId()},
             {"pathId", pathId});
 
@@ -105,7 +103,6 @@ public:
 
     bool ExecutePriv(TTransactionContext& txc, const TActorContext& ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", TxLogPrefix},
             {"execute", PrivEv->Get()->ToString()});
 
         const auto rid = PrivEv->Get()->ReplicationId;
@@ -113,14 +110,12 @@ public:
 
         if (!Replication) {
             YDB_LOG_WARN_CTX(ctx, "Cannot drop unknown replication",
-                {"logPrefix", TxLogPrefix},
                 {"rid", rid});
             return true;
         }
 
         if (Replication->GetState() != TReplication::EState::Removing) {
             YDB_LOG_WARN_CTX(ctx, "Replication state mismatch",
-                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"state", Replication->GetState()});
             return true;
@@ -145,8 +140,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", TxLogPrefix});
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Result) {
             ctx.Send(Result.Release());

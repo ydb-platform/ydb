@@ -239,14 +239,14 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Execute",
-            {"logPrefix", TxLogPrefix});
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute");
         return Load(txc.DB);
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", TxLogPrefix});
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Self->UnresolvedDatabaseReplications.empty()) {
             Self->SwitchToWork(ctx);

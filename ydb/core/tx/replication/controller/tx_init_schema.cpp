@@ -16,8 +16,8 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Execute",
-            {"logPrefix", TxLogPrefix});
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute");
 
         NIceDb::TNiceDb db(txc.DB);
         db.Materialize<Schema>();
@@ -26,8 +26,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", TxLogPrefix});
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
         Self->RunTxInit(ctx);
     }
 

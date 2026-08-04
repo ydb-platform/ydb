@@ -35,20 +35,18 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Execute",
-            {"logPrefix", TxLogPrefix},
             {"pending", Self->PendingHeartbeats.size()});
 
         if (Self->Workers.empty()) {
-            YDB_LOG_WARN_CTX(ctx, "There are no workers",
-                {"logPrefix", TxLogPrefix});
+            YDB_LOG_WARN_CTX(ctx, "There are no workers");
             return true;
         }
 
         auto replication = Self->GetSingle();
         if (!replication) {
-            YDB_LOG_ERROR_CTX(ctx, "Ambiguous replication instance",
-                {"logPrefix", TxLogPrefix});
+            YDB_LOG_ERROR_CTX(ctx, "Ambiguous replication instance");
             return true;
         }
 
@@ -118,8 +116,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", TxLogPrefix},
             {"pending", Self->PendingHeartbeats.size()});
 
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();
@@ -127,7 +125,6 @@ public:
 
         if (auto& ev = CommitProposal) {
             YDB_LOG_NOTICE_CTX(ctx, "Propose commit",
-                {"logPrefix", TxLogPrefix},
                 {"writeTxId", Self->CommittingTxId});
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
@@ -164,14 +161,13 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Execute",
-            {"logPrefix", TxLogPrefix},
             {"writeTxId", Self->CommittingTxId});
 
         auto replication = Self->GetSingle();
         if (!replication) {
-            YDB_LOG_ERROR_CTX(ctx, "Ambiguous replication instance",
-                {"logPrefix", TxLogPrefix});
+            YDB_LOG_ERROR_CTX(ctx, "Ambiguous replication instance");
             return true;
         }
 
@@ -183,7 +179,6 @@ public:
         const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
         if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
             YDB_LOG_WARN_CTX(ctx, "Error committing changes",
-                {"logPrefix", TxLogPrefix},
                 {"writeTxId", Self->CommittingTxId},
                 {"issues", NYql::IssuesFromMessageAsString(record.GetIssues())});
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
@@ -213,14 +208,13 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", TxLogPrefix});
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
 
         if (auto& ev = CommitProposal) {
             YDB_LOG_NOTICE_CTX(ctx, "Propose commit",
-                {"logPrefix", TxLogPrefix},
                 {"writeTxId", Self->CommittingTxId});
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }

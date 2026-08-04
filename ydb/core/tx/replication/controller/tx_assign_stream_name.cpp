@@ -24,8 +24,8 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", TxLogPrefix},
             {"execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
@@ -34,7 +34,6 @@ public:
         Replication = Self->Find(rid);
         if (!Replication) {
             YDB_LOG_WARN_CTX(ctx, "Unknown replication",
-                {"logPrefix", TxLogPrefix},
                 {"rid", rid});
             return true;
         }
@@ -42,7 +41,6 @@ public:
         auto* target = Replication->FindTarget(tid);
         if (!target) {
             YDB_LOG_WARN_CTX(ctx, "Unknown target",
-                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"tid", tid});
             return true;
@@ -50,7 +48,6 @@ public:
 
         if (!target->GetStreamName().empty()) {
             YDB_LOG_WARN_CTX(ctx, "Stream name already assigned",
-                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"tid", tid});
             return true;
@@ -78,7 +75,6 @@ public:
         );
 
         YDB_LOG_NOTICE_CTX(ctx, "Stream name assigned",
-            {"logPrefix", TxLogPrefix},
             {"rid", rid},
             {"tid", tid},
             {"name", target->GetStreamName()});
@@ -87,8 +83,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", TxLogPrefix});
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Replication) {
             Replication->Progress(ctx);

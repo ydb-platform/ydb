@@ -28,18 +28,21 @@ TController::TController(const TActorId& tablet, TTabletStorageInfo* info)
 }
 
 void TController::OnDetach(const TActorContext& ctx) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix);
     YDB_LOG_TRACE_CTX(ctx, "OnDetach");
     Cleanup(ctx);
     Die(ctx);
 }
 
 void TController::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext& ctx) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix);
     YDB_LOG_TRACE_CTX(ctx, "OnTabletDead");
     Cleanup(ctx);
     Die(ctx);
 }
 
 void TController::OnActivateExecutor(const TActorContext& ctx) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix);
     YDB_LOG_TRACE_CTX(ctx, "OnActivateExecutor");
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
     RunTxInitSchema(ctx);

@@ -23,8 +23,8 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", TxLogPrefix},
             {"execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
@@ -32,14 +32,12 @@ public:
         Replication = Self->Find(rid);
         if (!Replication) {
             YDB_LOG_WARN_CTX(ctx, "Unknown replication",
-                {"logPrefix", TxLogPrefix},
                 {"rid", rid});
             return true;
         }
 
         if (Replication->GetState() != TReplication::EState::Ready) {
             YDB_LOG_WARN_CTX(ctx, "Replication state mismatch",
-                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"state", Replication->GetState()});
             return true;
@@ -70,7 +68,6 @@ public:
                 );
 
                 YDB_LOG_NOTICE_CTX(ctx, "Add target",
-                    {"logPrefix", TxLogPrefix},
                     {"rid", rid},
                     {"tid", tid},
                     {"kind", target.Kind},
@@ -82,7 +79,6 @@ public:
             Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Discovery error: " << error);
 
             YDB_LOG_ERROR_CTX(ctx, "Discovery error",
-                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"error", error});
         }
@@ -97,8 +93,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", TxLogPrefix});
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Replication) {
             Replication->Progress(ctx);

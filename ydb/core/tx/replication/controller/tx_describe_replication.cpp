@@ -140,6 +140,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         if (PubEv) {
             return ExecutePub(txc, ctx);
         } else if (PrivEv) {
@@ -151,7 +152,6 @@ public:
 
     bool ExecutePub(TTransactionContext&, const TActorContext& ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", TxLogPrefix},
             {"execute", PubEv->Get()->ToString()});
 
         const auto& record = PubEv->Get()->Record;
@@ -184,7 +184,6 @@ public:
 
     bool ExecutePriv(TTransactionContext&, const TActorContext& ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", TxLogPrefix},
             {"execute", PrivEv->Get()->ToString()});
 
         const auto rid = PrivEv->Get()->ReplicationId;
@@ -311,8 +310,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", TxLogPrefix});
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Result) {
             ctx.Send(Sender, Result.Release());

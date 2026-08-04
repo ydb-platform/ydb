@@ -149,6 +149,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
 
     TRACKER_INIT_IF_EXTENDED(UpdateDurationTracker.UpdateCycleTime, updateCycle, Time in millisec);
 
+    HISTOGRAM_INIT(DeviceWritesSizes, deviceWritesSizes);
     HISTOGRAM_INIT(DeviceReadDuration, deviceReadDuration);
     HISTOGRAM_INIT(DeviceWriteDuration, deviceWriteDuration);
     HISTOGRAM_INIT(DeviceTrimDuration, deviceTrimDuration);

@@ -1,0 +1,61 @@
+# YDB Documentation
+> YDB is an open-source distributed SQL database. This file is the discovery hub for LLM-friendly documentation indexes. Prefer a version that matches the YDB server you are working with.
+
+How to use these indexes:
+- Start here, then open one locale/version `llms.txt` for a curated page list, or `llms-full.txt` for a single-file full-text dump (several MB).
+- Links without `?version=` point at the site default documentation version (see `default-branch.txt` in this repository; currently `stable-26-1` → `v26.1`).
+- Use `?version=main` for the latest docs from the `main` branch.
+- Individual pages are also available as Markdown by using the `.md` URL from the index (Diplodoc).
+- English and Russian docs are separate trees. Do not mix locales in one answer unless the user asks.
+
+## Default documentation (no version query)
+
+- [English index](https://ydb.tech/docs/en/llms.txt): Page index for the site default docs version (EN)
+- [Russian index](https://ydb.tech/docs/ru/llms.txt): Page index for the site default docs version (RU)
+- [English full text](https://ydb.tech/docs/en/llms-full.txt): Full Markdown dump for the site default docs version (EN)
+- [Russian full text](https://ydb.tech/docs/ru/llms-full.txt): Full Markdown dump for the site default docs version (RU)
+
+## Latest (main)
+
+- [English index (main)](https://ydb.tech/docs/en/llms.txt?version=main): Unreleased / tip-of-main documentation index (EN)
+- [Russian index (main)](https://ydb.tech/docs/ru/llms.txt?version=main): Unreleased / tip-of-main documentation index (RU)
+- [English full text (main)](https://ydb.tech/docs/en/llms-full.txt?version=main): Full Markdown dump for main (EN)
+- [Russian full text (main)](https://ydb.tech/docs/ru/llms-full.txt?version=main): Full Markdown dump for main (RU)
+
+## Released versions with LLM indexes
+
+Only versions that currently publish `llms.txt` are listed. After enabling Diplodoc `llms` generation on an older `stable-*` branch, add that version here.
+
+### v26.2
+
+- [English index](https://ydb.tech/docs/en/llms.txt?version=v26.2)
+- [Russian index](https://ydb.tech/docs/ru/llms.txt?version=v26.2)
+- [English full text](https://ydb.tech/docs/en/llms-full.txt?version=v26.2)
+- [Russian full text](https://ydb.tech/docs/ru/llms-full.txt?version=v26.2)
+
+### v26.1
+
+- [English index](https://ydb.tech/docs/en/llms.txt?version=v26.1)
+- [Russian index](https://ydb.tech/docs/ru/llms.txt?version=v26.1)
+- [English full text](https://ydb.tech/docs/en/llms-full.txt?version=v26.1)
+- [Russian full text](https://ydb.tech/docs/ru/llms-full.txt?version=v26.1)
+
+### v25.3
+
+- [English index](https://ydb.tech/docs/en/llms.txt?version=v25.3)
+- [Russian index](https://ydb.tech/docs/ru/llms.txt?version=v25.3)
+- [English full text](https://ydb.tech/docs/en/llms-full.txt?version=v25.3)
+- [Russian full text](https://ydb.tech/docs/ru/llms-full.txt?version=v25.3)
+
+### v25.2
+
+- [English index](https://ydb.tech/docs/en/llms.txt?version=v25.2)
+- [Russian index](https://ydb.tech/docs/ru/llms.txt?version=v25.2)
+- [English full text](https://ydb.tech/docs/en/llms-full.txt?version=v25.2)
+- [Russian full text](https://ydb.tech/docs/ru/llms-full.txt?version=v25.2)
+
+## Optional
+
+- [Human docs entry (EN)](https://ydb.tech/docs/en/): HTML documentation site (English)
+- [Human docs entry (RU)](https://ydb.tech/docs/ru/): HTML documentation site (Russian)
+- [llms.txt specification](https://llmstxt.org/): Format used by this hub and by Diplodoc-generated indexes

@@ -1,6 +1,12 @@
 allowHTML: true
-llms: 
+llms:
   enabled: true
+  description: >-
+    YDB is an open-source distributed SQL database. This file indexes Markdown
+    documentation pages for LLM agents. For a hub of all locales and release
+    versions, see https://ydb.tech/docs/llms.txt (when published) or the
+    repository file ydb/docs/llms.txt. Prefer ?version= matching the server
+    release; use llms-full.txt for a single-file full-text dump.
 langs: ['en','ru']
 pdf:
   enabled: true

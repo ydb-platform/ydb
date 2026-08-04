@@ -97,6 +97,15 @@ Builds the documentation and starts a local HTTP server to preview the results.
 
 Press `Ctrl+C` to stop the server.
 
+## LLM indexes (`llms.txt`)
+
+Diplodoc generates per-locale indexes when `llms.enabled` is set in `.yfm`:
+
+- Published: `https://ydb.tech/docs/{en|ru}/llms.txt` and `llms-full.txt` (optional `?version=vX.Y` or `?version=main`)
+- Hub (source of truth in this repo): [`llms.txt`](./llms.txt) — curated links to every locale/version index for agents
+
+After changing `llms.txt`, keep the version list in sync with stables that actually publish LLM indexes (backfill CI on older `stable-*` as needed). Serving the hub at `https://ydb.tech/docs/llms.txt` and the site-root `https://ydb.tech/llms.txt` may require a small publish/CDN follow-up; the per-locale files are already live.
+
 ## File Structure
 
 The documentation source files are organized as Markdown files with YAML configuration, following the Diplodoc documentation format. The built documentation includes both English (`en`) and Russian (`ru`) versions.

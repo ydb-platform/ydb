@@ -30,6 +30,13 @@ if ! yfm -s -i . -o $DIR --allowHTML --apply-presets; then
   exit 1
 fi
 
+# Hub index for agents (locale/version discovery). Diplodoc generates
+# en/llms.txt and ru/llms.txt separately; this file links them together.
+if [[ -f llms.txt ]]; then
+  cp -f llms.txt "$DIR/llms.txt"
+  echo "Copied docs hub llms.txt to $DIR/llms.txt"
+fi
+
 echo
 echo "Build completed successfully!"
 echo "Output directory: $DIR"

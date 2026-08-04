@@ -4493,7 +4493,7 @@ bool THive::ReassignInactiveGroups(TStoragePoolInfo& pool) {
     for (const auto& [tabletId, tablet] : Tablets) {
         TVector<ui32> channels;
         for (const auto& channel : tablet.TabletStorageInfo->Channels) {
-            if (inactiveGroups.contains(channel.LatestEntry()->GroupID)) {
+            if (channel.LatestEntry() && inactiveGroups.contains(channel.LatestEntry()->GroupID)) {
                 channels.push_back(channel.Channel);
             }
         }

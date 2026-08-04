@@ -5,22 +5,23 @@
 
 #include <util/system/datetime.h>
 
-// Uuid UDF: key-friendly UUID generators for row tables.
+#include <vector>
+
+// Uuid UDF: key-friendly UUID generators and RFC helpers.
 //
 // Returned values are raw 16-byte YDB internal Uuid representation.
-// Use as primary keys when you want:
-//   - newChrono: chronological clustering by creation time;
-//   - newSharded: shard spread via random prefix + time locality within a prefix.
-// Prefix variants accept Uint64 or Uuid as the first argument; the Uuid overload
-// reuses the top PrefixBits of the source value as the generated key prefix.
-// For plain random IDs without sort semantics, use RandomUuid() instead.
-// Assemble bytes in YDB internal (Microsoft GUID) layout and return as Uuid.
-// No RFC↔YDB conversion: generators already write sort-order-aware bytes.
+// Primary-key helpers (UUIDv8 layouts from the pk_generation RFC):
+//   - newV8RowKey: shard spread via 12-bit prefix + time locality within a prefix;
+//   - newV8ColumnKey: chronological clustering by creation time (seconds);
+//   - newV8RowGroup: batch of row keys sharing a common prefix (Uint64 or Uuid).
+// Standard variants:
+//   - newV4: random UUID v4 (analogue of RandomUuid());
+//   - newV7 / newV7At: RFC 9562 UUID v7 (stored in YDB mixed-endian layout);
+//   - extractTs / extractTs64: timestamp from a v7 UUID, NULL otherwise.
 //
-// In addition, the module contains functions for generating RFC 9562 UUID v7 values:
-//  - newV7: generate a v7 UUID value from the current timestamp.
-//  - newV7At: generate a v7 UUID value from a specific timestamp.
-//  - extractTs, extractTs64: extract the timestamp from a v7 UUID value.
+// Optional dependency arguments [T1, ...] work like RandomUuid(): they control
+// when the function is evaluated per row, not the value contents.
+// Key generators write sort-order-aware bytes directly (no RFC↔YDB conversion).
 
 using namespace NYql;
 using namespace NYql::NUdf;
@@ -91,6 +92,18 @@ TString BuildCallableTypeWithUniversalDeps(ui32 depCount, EPrefixArgType prefixA
     return sb;
 }
 
+TString BuildCallableTypeRowGroup(ui32 depCount, EPrefixArgType prefixArg) {
+    Y_ENSURE(prefixArg != EPrefixArgType::None);
+    const TStringBuf prefixTypeName = prefixArg == EPrefixArgType::Uuid ? "Uuid" : "Uint64";
+    TStringBuilder sb;
+    sb << "[CallableType;[];[];[[[DataType;" << prefixTypeName << "];[DataType;Uint64]";
+    for (ui32 i = 0; i < depCount; ++i) {
+        sb << ";[UniversalType]";
+    }
+    sb << ";[[ListType;[DataType;Uuid]]]]]";
+    return sb;
+}
+
 void AppendNoPrefixPolyArgRule(TStringBuilder& sb, ui32 depCount) {
     sb << "[";
     if (depCount == 0) {
@@ -101,21 +114,26 @@ void AppendNoPrefixPolyArgRule(TStringBuilder& sb, ui32 depCount) {
     sb << "; {type=" << BuildCallableTypeWithUniversalDeps(depCount, EPrefixArgType::None) << "}]";
 }
 
-void AppendPrefixPolyArgRule(TStringBuilder& sb, ui32 depCount, EPrefixArgType prefixArg) {
+void AppendRowGroupPolyArgRule(TStringBuilder& sb, ui32 depCount, EPrefixArgType prefixArg) {
     Y_ENSURE(prefixArg != EPrefixArgType::None);
     const TStringBuf prefixTypeName = prefixArg == EPrefixArgType::Uuid ? "Uuid" : "Uint64";
 
     sb << "[";
     if (depCount == 0) {
-        sb << "{cmd=type;arg=T0;value=[DataType;" << prefixTypeName << "]}";
+        sb << "{cmd=and;value=["
+           << "{cmd=type;arg=T0;value=[DataType;" << prefixTypeName << "]};"
+           << "{cmd=type;arg=T1;value=[DataType;Uint64]}"
+           << "]}";
     } else {
-        sb << "{cmd=and;value=[{cmd=type;arg=T0;value=[DataType;" << prefixTypeName << "]}";
+        sb << "{cmd=and;value=["
+           << "{cmd=type;arg=T0;value=[DataType;" << prefixTypeName << "]};"
+           << "{cmd=type;arg=T1;value=[DataType;Uint64]}";
         for (ui32 i = 0; i < depCount; ++i) {
-            sb << ";" << BuildDepArgKindsPredicate(TStringBuilder() << "T" << (i + 1));
+            sb << ";" << BuildDepArgKindsPredicate(TStringBuilder() << "T" << (i + 2));
         }
         sb << "]}";
     }
-    sb << "; {type=" << BuildCallableTypeWithUniversalDeps(depCount, prefixArg) << "}]";
+    sb << "; {type=" << BuildCallableTypeRowGroup(depCount, prefixArg) << "}]";
 }
 
 TString BuildNoPrefixPolyArgs(TStringBuf errorMessage) {
@@ -137,7 +155,7 @@ TString BuildNoPrefixPolyArgs(TStringBuf errorMessage) {
     return sb;
 }
 
-TString BuildPrefixPolyArgs(TStringBuf errorMessage) {
+TString BuildRowGroupPolyArgs(TStringBuf errorMessage) {
     TStringBuilder sb;
     sb << "[[";
     bool first = true;
@@ -146,16 +164,16 @@ TString BuildPrefixPolyArgs(TStringBuf errorMessage) {
             sb << ";";
         }
         first = false;
-        AppendPrefixPolyArgRule(sb, depCount, EPrefixArgType::Uuid);
+        AppendRowGroupPolyArgRule(sb, depCount, EPrefixArgType::Uuid);
         sb << ";";
-        AppendPrefixPolyArgRule(sb, depCount, EPrefixArgType::Uint64);
+        AppendRowGroupPolyArgRule(sb, depCount, EPrefixArgType::Uint64);
     }
     if (!first) {
         sb << ";";
     }
-    AppendPrefixPolyArgRule(sb, 0, EPrefixArgType::Uuid);
+    AppendRowGroupPolyArgRule(sb, 0, EPrefixArgType::Uuid);
     sb << ";";
-    AppendPrefixPolyArgRule(sb, 0, EPrefixArgType::Uint64);
+    AppendRowGroupPolyArgRule(sb, 0, EPrefixArgType::Uint64);
     sb << "; [{cmd=error;message=\"" << errorMessage << "\"}; {}]]";
     return sb;
 }
@@ -242,34 +260,44 @@ ui64 ReadTimestampMicros(const TUnboxedValuePod& arg, bool timestamp64) {
     return static_cast<ui64>(micros);
 }
 
+TUnboxedValue MakeUuidFromBytes(
+    const IValueBuilder* valueBuilder,
+    const std::array<ui8, NKikimr::NUuid::UUID_LEN>& bytes)
+{
+    return valueBuilder->NewString(TStringRef(
+        reinterpret_cast<const char*>(bytes.data()),
+        bytes.size()));
+}
+
 TUnboxedValue MakeRfcV7UuidValue(const IValueBuilder* valueBuilder, ui64 timestampMs) {
-    const auto bytes = NUuidKeyGen::MakeRfcV7YdbBytes(timestampMs);
-    return valueBuilder->NewString(TStringRef(
-        reinterpret_cast<const char*>(bytes.data()),
-        bytes.size()));
+    return MakeUuidFromBytes(valueBuilder, NUuidKeyGen::MakeRfcV7YdbBytes(timestampMs));
 }
 
-// Returns a Uuid value as 16 raw bytes in the internal format, which is Microsoft-style mixed endian GUID.
-TUnboxedValue MakeUuidValue(const IValueBuilder* valueBuilder, bool isSharded, ui64 prefix, bool hasPrefix) {
-    std::array<ui8, NKikimr::NUuid::UUID_LEN> bytes{};
-    if (isSharded) {
-        const ui64 epochSeconds = MilliSeconds() / 1000;
-        bytes = NUuidKeyGen::MakeShardedUuidBytes(prefix, epochSeconds, hasPrefix);
-    } else {
-        ui64 timestampMs = MilliSeconds();
-        bytes = NUuidKeyGen::MakeChronoUuidBytes(prefix, timestampMs, hasPrefix);
-    }
-
-    return valueBuilder->NewString(TStringRef(
-        reinterpret_cast<const char*>(bytes.data()),
-        bytes.size()));
+TUnboxedValue MakeV4UuidValue(const IValueBuilder* valueBuilder) {
+    return MakeUuidFromBytes(valueBuilder, NUuidKeyGen::MakeV4UuidBytes());
 }
 
-// IsSharded=true       → prefix-first layout with second-granularity timestamp.
-// IsSharded=false      → timestamp-first internal byte layout.
-// HasPrefix=true       → caller supplies prefix (Uint64 or Uuid as first argument).
-// PrefixFromUuid=true  → take top PrefixBits from the source Uuid MSB.
-template <bool IsSharded, bool HasPrefix, bool PrefixFromUuid = false>
+TUnboxedValue MakeRowKeyUuidValue(
+    const IValueBuilder* valueBuilder, ui64 prefix, bool hasPrefix)
+{
+    return MakeUuidFromBytes(
+        valueBuilder,
+        NUuidKeyGen::MakeRowKeyUuidBytes(prefix, Seconds(), hasPrefix));
+}
+
+TUnboxedValue MakeColumnKeyUuidValue(const IValueBuilder* valueBuilder) {
+    return MakeUuidFromBytes(
+        valueBuilder,
+        NUuidKeyGen::MakeColumnKeyUuidBytes(Seconds()));
+}
+
+enum class EKeyKind {
+    RowKey,
+    ColumnKey,
+    V4,
+};
+
+template <EKeyKind Kind>
 class TNewUuid: public TBoxedValue {
 public:
     using TTypeAwareMarker = bool;
@@ -280,22 +308,15 @@ public:
     }
 
     static const TStringRef& Name() {
-        if constexpr (HasPrefix) {
-            if constexpr (IsSharded) {
-                static auto name = TStringRef::Of("newShardedPrefix");
-                return name;
-            } else {
-                static auto name = TStringRef::Of("newChronoPrefix");
-                return name;
-            }
+        if constexpr (Kind == EKeyKind::RowKey) {
+            static auto name = TStringRef::Of("newV8RowKey");
+            return name;
+        } else if constexpr (Kind == EKeyKind::ColumnKey) {
+            static auto name = TStringRef::Of("newV8ColumnKey");
+            return name;
         } else {
-            if constexpr (IsSharded) {
-                static auto name = TStringRef::Of("newSharded");
-                return name;
-            } else {
-                static auto name = TStringRef::Of("newChrono");
-                return name;
-            }
+            static auto name = TStringRef::Of("newV4");
+            return name;
         }
     }
 
@@ -330,16 +351,6 @@ public:
         }
 
         const auto argCount = argsTypeInspector.GetElementsCount();
-        if constexpr (HasPrefix) {
-            if (argCount < 1) {
-                builder.SetError("Expected at least prefix argument.");
-                return true;
-            }
-            if (IsUuidArgType(*typeHelper, argsTypeInspector.GetElementType(0)) != PrefixFromUuid) {
-                return false;
-            }
-        }
-
         auto argsBuilder = builder.Args(argCount);
         for (ui32 i = 0; i < argCount; ++i) {
             argsBuilder->Add(argsTypeInspector.GetElementType(i));
@@ -354,12 +365,109 @@ public:
 
 private:
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+        Y_UNUSED(args);
         try {
-            ui64 prefix = 0;
-            if constexpr (HasPrefix) {
-                prefix = ReadPrefixArg(args[0], PrefixFromUuid);
+            if constexpr (Kind == EKeyKind::RowKey) {
+                return MakeRowKeyUuidValue(valueBuilder, 0, false);
+            } else if constexpr (Kind == EKeyKind::ColumnKey) {
+                return MakeColumnKeyUuidValue(valueBuilder);
+            } else {
+                return MakeV4UuidValue(valueBuilder);
             }
-            return MakeUuidValue(valueBuilder, IsSharded, prefix, HasPrefix);
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).data());
+        }
+    }
+
+    TSourcePosition Pos_;
+};
+
+template <bool PrefixFromUuid>
+class TNewV8RowGroup: public TBoxedValue {
+public:
+    using TTypeAwareMarker = bool;
+
+    explicit TNewV8RowGroup(TSourcePosition pos)
+        : Pos_(pos)
+    {
+    }
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("newV8RowGroup");
+        return name;
+    }
+
+    static bool DeclareSignature(
+        const TStringRef& name,
+        TType* userType,
+        IFunctionTypeInfoBuilder& builder,
+        bool typesOnly)
+    {
+        if (Name() != name) {
+            return false;
+        }
+
+        if (!userType) {
+            builder.SetError("Missing user type.");
+            return true;
+        }
+
+        builder.UserType(userType);
+        const auto typeHelper = builder.TypeInfoHelper();
+        const auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
+        if (!userTypeInspector || userTypeInspector.GetElementsCount() < 1) {
+            builder.SetError("Invalid user type.");
+            return true;
+        }
+
+        const auto argsTypeTuple = userTypeInspector.GetElementType(0);
+        const auto argsTypeInspector = TTupleTypeInspector(*typeHelper, argsTypeTuple);
+        if (!argsTypeInspector) {
+            builder.SetError("Invalid user type - expected tuple.");
+            return true;
+        }
+
+        const auto argCount = argsTypeInspector.GetElementsCount();
+        if (argCount < 2) {
+            builder.SetError("Expected prefix and count arguments.");
+            return true;
+        }
+        if (IsUuidArgType(*typeHelper, argsTypeInspector.GetElementType(0)) != PrefixFromUuid) {
+            return false;
+        }
+
+        auto argsBuilder = builder.Args(argCount);
+        for (ui32 i = 0; i < argCount; ++i) {
+            argsBuilder->Add(argsTypeInspector.GetElementType(i));
+        }
+        argsBuilder->Done().Returns<TListType<TUuid>>();
+
+        if (!typesOnly) {
+            builder.Implementation(new TNewV8RowGroup(GetSourcePosition(builder)));
+        }
+        return true;
+    }
+
+private:
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+        try {
+            const ui64 prefix = ReadPrefixArg(args[0], PrefixFromUuid);
+            const ui64 count = args[1].Get<ui64>();
+            if (count > NUuidKeyGen::MaxRowGroupCount) {
+                throw std::runtime_error(TStringBuilder()
+                    << "Uuid::newV8RowGroup count must be at most "
+                    << NUuidKeyGen::MaxRowGroupCount);
+            }
+
+            const ui64 epochSeconds = Seconds();
+            std::vector<TUnboxedValue> items;
+            items.reserve(count);
+            for (ui64 i = 0; i < count; ++i) {
+                items.push_back(MakeUuidFromBytes(
+                    valueBuilder,
+                    NUuidKeyGen::MakeRowKeyUuidBytes(prefix, epochSeconds, true)));
+            }
+            return valueBuilder->NewList(items.data(), items.size());
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).data());
         }
@@ -594,28 +702,28 @@ public:
     }
 
     void GetAllFunctions(IFunctionsSink& sink) const override {
-        static const TString newChronoPolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newChrono");
-        static const TString newChronoPrefixPolyArgs = BuildPrefixPolyArgs("Unexpected arguments for Uuid::newChronoPrefix");
-        static const TString newShardedPolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newSharded");
-        static const TString newShardedPrefixPolyArgs = BuildPrefixPolyArgs("Unexpected arguments for Uuid::newShardedPrefix");
+        static const TString newV8RowKeyPolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newV8RowKey");
+        static const TString newV8ColumnKeyPolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newV8ColumnKey");
+        static const TString newV8RowGroupPolyArgs = BuildRowGroupPolyArgs("Unexpected arguments for Uuid::newV8RowGroup");
+        static const TString newV4PolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newV4");
         static const TString newV7PolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newV7");
         static const TString newV7AtPolyArgs = BuildTimestampPolyArgs("Unexpected arguments for Uuid::newV7At");
 
-        auto newChrono = sink.Add(TNewUuid<false, false>::Name());
-        newChrono->SetTypeAwareness();
-        newChrono->SetPolyArgs(TStringRef(newChronoPolyArgs));
+        auto newV8RowKey = sink.Add(TNewUuid<EKeyKind::RowKey>::Name());
+        newV8RowKey->SetTypeAwareness();
+        newV8RowKey->SetPolyArgs(TStringRef(newV8RowKeyPolyArgs));
 
-        auto newChronoPrefix = sink.Add(TNewUuid<false, true>::Name());
-        newChronoPrefix->SetTypeAwareness();
-        newChronoPrefix->SetPolyArgs(TStringRef(newChronoPrefixPolyArgs));
+        auto newV8ColumnKey = sink.Add(TNewUuid<EKeyKind::ColumnKey>::Name());
+        newV8ColumnKey->SetTypeAwareness();
+        newV8ColumnKey->SetPolyArgs(TStringRef(newV8ColumnKeyPolyArgs));
 
-        auto newSharded = sink.Add(TNewUuid<true, false>::Name());
-        newSharded->SetTypeAwareness();
-        newSharded->SetPolyArgs(TStringRef(newShardedPolyArgs));
+        auto newV8RowGroup = sink.Add(TNewV8RowGroup<false>::Name());
+        newV8RowGroup->SetTypeAwareness();
+        newV8RowGroup->SetPolyArgs(TStringRef(newV8RowGroupPolyArgs));
 
-        auto newShardedPrefix = sink.Add(TNewUuid<true, true>::Name());
-        newShardedPrefix->SetTypeAwareness();
-        newShardedPrefix->SetPolyArgs(TStringRef(newShardedPrefixPolyArgs));
+        auto newV4 = sink.Add(TNewUuid<EKeyKind::V4>::Name());
+        newV4->SetTypeAwareness();
+        newV4->SetPolyArgs(TStringRef(newV4PolyArgs));
 
         auto newV7 = sink.Add(TNewV7::Name());
         newV7->SetTypeAwareness();
@@ -639,12 +747,11 @@ public:
         Y_UNUSED(typeConfig);
         try {
             const bool typesOnly = (flags & TFlags::TypesOnly);
-            const bool found = TNewUuid<false, false>::DeclareSignature(name, userType, builder, typesOnly)
-                || TNewUuid<false, true, false>::DeclareSignature(name, userType, builder, typesOnly)
-                || TNewUuid<false, true, true>::DeclareSignature(name, userType, builder, typesOnly)
-                || TNewUuid<true, false>::DeclareSignature(name, userType, builder, typesOnly)
-                || TNewUuid<true, true, false>::DeclareSignature(name, userType, builder, typesOnly)
-                || TNewUuid<true, true, true>::DeclareSignature(name, userType, builder, typesOnly)
+            const bool found = TNewUuid<EKeyKind::RowKey>::DeclareSignature(name, userType, builder, typesOnly)
+                || TNewUuid<EKeyKind::ColumnKey>::DeclareSignature(name, userType, builder, typesOnly)
+                || TNewV8RowGroup<false>::DeclareSignature(name, userType, builder, typesOnly)
+                || TNewV8RowGroup<true>::DeclareSignature(name, userType, builder, typesOnly)
+                || TNewUuid<EKeyKind::V4>::DeclareSignature(name, userType, builder, typesOnly)
                 || TNewV7::DeclareSignature(name, userType, builder, typesOnly)
                 || TNewV7At<false>::DeclareSignature(name, userType, builder, typesOnly)
                 || TNewV7At<true>::DeclareSignature(name, userType, builder, typesOnly)

@@ -13,27 +13,34 @@
 //
 // YDB stores and compares Uuid values as 16 raw bytes in Microsoft GUID
 // (mixed-endian) layout — the same order used by memcmp on table keys.
-// These functions assemble that internal byte sequence directly; they do
-// NOT produce RFC 9562 network-byte-order values.
+// Key generators assemble that internal byte sequence directly; they do
+// NOT produce RFC 9562 network-byte-order values (except newV7 helpers,
+// which convert RFC → YDB storage after generation).
 //
-// Consequently, byte order optimized for YDB key sorting differs from what
-// you see when casting a Uuid to String in YQL (canonical GUID text) or when
-// interpreting the value as a standard RFC UUID elsewhere.
-//
-// Both generators set UUID version 8 (implementation-specific per RFC 9562).
+// Row/column key layouts use UUID version 8 (custom / user-defined).
 
 namespace NYql::NUuidKeyGen {
 
-// Number of high bits in the MSB used as a partition-spread prefix (default 10 → ~1024 buckets).
-static constexpr ui32 PrefixBits = 10;
-static constexpr ui32 ShardedTimestampBits = 30;
+// Row-key layout (YDB internal bytes), per pk_generation RFC:
+//   [12 prefix][31 timestamp sec][5 random] + custom_b/ver/var/custom_c
+static constexpr ui32 PrefixBits = 12;
+static constexpr ui32 TimestampBits = 31;
+static constexpr ui64 TimestampModulus = 1ULL << TimestampBits;
 static constexpr ui64 PrefixMsbMask = ((1ULL << PrefixBits) - 1) << (64 - PrefixBits);
 static constexpr ui64 PrefixParamMask = (1ULL << PrefixBits) - 1;
-static constexpr ui32 ShardedTimestampShift = 64 - PrefixBits - ShardedTimestampBits;
-static constexpr ui64 ShardedTimestampMask = ((1ULL << ShardedTimestampBits) - 1) << ShardedTimestampShift;
+static constexpr ui32 RowKeyTimestampShift = 64 - PrefixBits - TimestampBits;
+static constexpr ui64 RowKeyTimestampMask = ((1ULL << TimestampBits) - 1) << RowKeyTimestampShift;
 
-static constexpr ui8 UuidVersionByte = 0x80;
+// Column-key layout (YDB internal bytes):
+//   [31 timestamp sec][1 random][16 random] + custom_b/ver/var/custom_c
+static constexpr ui32 ColumnKeyTimestampShift = 64 - TimestampBits;
+static constexpr ui64 ColumnKeyTimestampMask = ((1ULL << TimestampBits) - 1) << ColumnKeyTimestampShift;
+
+static constexpr ui8 UuidV8VersionByte = 0x80;
+static constexpr ui8 UuidV4VersionByte = 0x40;
 static constexpr ui8 RfcV7VersionByte = 0x70;
+
+static constexpr ui64 MaxRowGroupCount = 1'000'000;
 
 inline ui64 ReadBe64(const ui8* data) {
     ui64 value = 0;
@@ -57,9 +64,13 @@ inline void FillRandomBytes(ui8* data, size_t size) {
     }
 }
 
-inline void SetUuidVersionAndVariant(ui8* result) {
-    result[7] = static_cast<ui8>((result[7] & 0x0f) | UuidVersionByte);
+inline void SetUuidVersionAndVariant(ui8* result, ui8 versionByte) {
+    result[7] = static_cast<ui8>((result[7] & 0x0f) | versionByte);
     result[8] = static_cast<ui8>((result[8] & 0x3f) | 0x80);
+}
+
+inline void SetUuidV8VersionAndVariant(ui8* result) {
+    SetUuidVersionAndVariant(result, UuidV8VersionByte);
 }
 
 // Take the low PrefixBits of the caller-supplied Uint64 and place them
@@ -74,81 +85,77 @@ inline ui64 ExtractPrefixFromUuidBytes(const ui8* data) {
     return (msb & PrefixMsbMask) >> (64 - PrefixBits);
 }
 
-// Embed Unix epoch seconds (mod 2^30) into the MSB bit field that follows
-// the prefix in YDB internal byte order. Field position shifts with PrefixBits
-// so prefix and timestamp do not overlap.
-inline ui64 GetTimestampCode(ui64 epochSeconds) {
-    return (epochSeconds % (1ULL << ShardedTimestampBits)) << ShardedTimestampShift;
+// Embed Unix epoch seconds (mod 2^31) into the row-key MSB bit field that
+// follows the prefix. Field position shifts with PrefixBits so prefix and
+// timestamp do not overlap.
+inline ui64 GetRowKeyTimestampCode(ui64 epochSeconds) {
+    return (epochSeconds % TimestampModulus) << RowKeyTimestampShift;
 }
 
-// Merge prefix and timestamp into random MSB bits; LSB stays fully random.
-inline ui64 UpdateMsbSharded(ui64 msb, ui64 prefix, ui64 epochSeconds, bool hasPrefix) {
-    const ui64 tsCode = GetTimestampCode(epochSeconds);
+inline ui64 GetColumnKeyTimestampCode(ui64 epochSeconds) {
+    return (epochSeconds % TimestampModulus) << ColumnKeyTimestampShift;
+}
+
+// Merge prefix and timestamp into random MSB bits; remaining bits stay random.
+inline ui64 UpdateMsbRowKey(ui64 msb, ui64 prefix, ui64 epochSeconds, bool hasPrefix) {
+    const ui64 tsCode = GetRowKeyTimestampCode(epochSeconds);
     if (hasPrefix) {
-        return (msb & ~(PrefixMsbMask | ShardedTimestampMask))
-        | (PrefixParamToMsb(prefix) | (tsCode & ShardedTimestampMask));
+        return (msb & ~(PrefixMsbMask | RowKeyTimestampMask))
+            | (PrefixParamToMsb(prefix) | (tsCode & RowKeyTimestampMask));
     }
-    return (msb & ~ShardedTimestampMask) | (tsCode & ShardedTimestampMask);
+    return (msb & ~RowKeyTimestampMask) | (tsCode & RowKeyTimestampMask);
 }
 
-inline ui64 UpdateMsbChrono(ui8* result, ui64 prefix) {
-    ui64 msb = ReadBe64(result);
-    msb = (msb & ~PrefixMsbMask) | PrefixParamToMsb(prefix);
-    WriteBe64(msb, result);
-    return msb;
+inline ui64 UpdateMsbColumnKey(ui64 msb, ui64 epochSeconds) {
+    const ui64 tsCode = GetColumnKeyTimestampCode(epochSeconds);
+    return (msb & ~ColumnKeyTimestampMask) | (tsCode & ColumnKeyTimestampMask);
 }
 
-// Build a chronological key UUID in YDB internal byte layout.
+// Build a row-table key UUID in YDB internal layout (UUIDv8).
 //
-// Sort order (memcmp on stored bytes): timestamp (ms, 48 bits) first, then
-// random suffix. Bytes result[0..5] hold the timestamp MSB→LSB so that newer
-// keys compare greater when used as a primary key.
+// Sort order (memcmp on stored bytes): (1) 12-bit random prefix; (2) 31-bit
+// second-granularity timestamp; (3) random suffix in remaining bits.
 //
-// Timestamp field positions are chosen for YDB key sort order, not for RFC
-// field layout. The canonical string from CAST(Uuid AS String) will therefore
-// not show the timestamp in standard UUID text positions.
-//
-// Optional prefix (newChronoPrefix): overlays the top PrefixBits of the MSB via
-// UpdateMsbChrono for pinned-partition batch writes.
-inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeChronoUuidBytes(ui64 prefix, ui64 timestampMs, bool hasPrefix) {
+// Without an explicit prefix, prefix bits stay random → keys spread across
+// ~2^12 partition ranges. With hasPrefix=true, the prefix is fixed (used by
+// newV8RowGroup for multi-row transactions).
+inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeRowKeyUuidBytes(
+    ui64 prefix, ui64 epochSeconds, bool hasPrefix)
+{
     std::array<ui8, NKikimr::NUuid::UUID_LEN> result{};
     FillRandomBytes(result.data(), result.size());
+    SetUuidV8VersionAndVariant(result.data());
 
-    // Place timestamp directly into leading internal bytes (YDB mixed-endian MSB).
-    result[0] = static_cast<ui8>((timestampMs >> 40) & 0xff);
-    result[1] = static_cast<ui8>((timestampMs >> 32) & 0xff);
-    result[2] = static_cast<ui8>((timestampMs >> 24) & 0xff);
-    result[3] = static_cast<ui8>((timestampMs >> 16) & 0xff);
-    result[4] = static_cast<ui8>((timestampMs >> 8) & 0xff);
-    result[5] = static_cast<ui8>(timestampMs & 0xff);
-    SetUuidVersionAndVariant(result.data());
-
-    if (hasPrefix) {
-        UpdateMsbChrono(result.data(), prefix);
-    }
+    ui64 msb = ReadBe64(result.data());
+    msb = UpdateMsbRowKey(msb, prefix, epochSeconds, hasPrefix);
+    WriteBe64(msb, result.data());
 
     return result;
 }
 
-// Build a sharded key UUID in YDB internal layout.
+// Build a column-table key UUID in YDB internal layout (UUIDv8).
 //
-// Sort order (memcmp on stored bytes): (1) short random prefix — top PrefixBits of MSB;
-// (2) 30-bit second-granularity timestamp; (3) random suffix in remaining bits.
-//
-// newSharded(): prefix bits are left random from FillRandomBytes → keys spread
-// across ~2^PrefixBits partition ranges (horizontal scalability).
-// newShardedPrefix(p): prefix is fixed → keys from one transaction tend to land
-// in the same partition; timestamp still groups rows written at nearby times.
-inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeShardedUuidBytes(ui64 prefix, ui64 epochSeconds, bool hasPrefix) {
+// Sort order (memcmp on stored bytes): 31-bit second-granularity timestamp
+// first, then random suffix. No partition prefix — column tables use hash
+// partitioning.
+inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeColumnKeyUuidBytes(ui64 epochSeconds) {
     std::array<ui8, NKikimr::NUuid::UUID_LEN> result{};
     FillRandomBytes(result.data(), result.size());
 
-    SetUuidVersionAndVariant(result.data());
-
     ui64 msb = ReadBe64(result.data());
-    msb = UpdateMsbSharded(msb, prefix, epochSeconds, hasPrefix);
+    msb = UpdateMsbColumnKey(msb, epochSeconds);
     WriteBe64(msb, result.data());
+    SetUuidV8VersionAndVariant(result.data());
 
+    return result;
+}
+
+// Build a random UUID version 4 in YDB internal storage layout
+// (same layout as RandomUuid() / GenUuid4).
+inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeV4UuidBytes() {
+    std::array<ui8, NKikimr::NUuid::UUID_LEN> result{};
+    FillRandomBytes(result.data(), result.size());
+    SetUuidVersionAndVariant(result.data(), UuidV4VersionByte);
     return result;
 }
 

@@ -351,6 +351,34 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         UNIT_ASSERT_VALUES_EQUAL(bytes[7], 0x07);
     }
 
+    Y_UNIT_TEST(RfcToYdbPreservesVersionAndRandABits) {
+        // RFC layout: version nibble in byte 6 high, rand_a continues through byte 7.
+        std::array<ui8, NKikimr::NUuid::UUID_LEN> rfc{};
+        rfc[0] = 0x01;
+        rfc[1] = 0x02;
+        rfc[2] = 0x03;
+        rfc[3] = 0x04;
+        rfc[4] = 0x05;
+        rfc[5] = 0x06;
+        rfc[6] = 0x7a; // version 7 + rand_a high nibble 0xa
+        rfc[7] = 0xbc; // rand_a low byte
+        rfc[8] = 0x8d; // variant 10 + random
+        for (ui32 i = 9; i < rfc.size(); ++i) {
+            rfc[i] = static_cast<ui8>(0x10 + i);
+        }
+
+        const auto ydb = RfcUuidBytesToYdbInternal(rfc.data());
+        // Version nibble must land in YDB byte 7 high; rand_a must stay intact
+        // (YDB byte 6 = RFC byte 7, YDB byte 7 = RFC byte 6).
+        UNIT_ASSERT_VALUES_EQUAL(ydb[6], 0xbc);
+        UNIT_ASSERT_VALUES_EQUAL(ydb[7], 0x7a);
+        UNIT_ASSERT_VALUES_EQUAL(ydb[8], 0x8d);
+
+        // Reverse reorder restores the original RFC MSB, including full rand_a.
+        const ui64 restoredMsb = ReorderRfcMsbToYdb(ReadBe64(ydb.data()));
+        UNIT_ASSERT_VALUES_EQUAL(restoredMsb, ReadBe64(rfc.data()));
+    }
+
     Y_UNIT_TEST(ExtractV7TimestampRoundtrip) {
         const ui64 timestampMs = 1'700'000'000'123ULL;
         const ui64 expectedMicros = timestampMs * 1000;

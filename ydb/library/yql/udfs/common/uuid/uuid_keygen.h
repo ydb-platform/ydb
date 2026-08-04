@@ -160,6 +160,10 @@ inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeV4UuidBytes() {
 }
 
 // Reorder RFC MSB (big-endian) into YDB GUID (Microsoft mixed-endian) storage.
+// Byte map: RFC [0 1 2 3 4 5 6 7] → YDB [3 2 1 0 5 4 7 6].
+// Involutory: applying twice restores the original value.
+// Version nibble (RFC byte 6 high) lands in YDB byte 7 high; LSB/variant
+// bytes are not reordered and stay in place.
 inline ui64 ReorderRfcMsbToYdb(ui64 msb) {
     const ui64 b0 = (msb >> 56) & 0xff;
     const ui64 b1 = (msb >> 48) & 0xff;
@@ -173,22 +177,13 @@ inline ui64 ReorderRfcMsbToYdb(ui64 msb) {
         | (b5 << 24) | (b4 << 16) | (b7 << 8) | b6;
 }
 
-// reorder() does not place version bits for YDB canonical layout; patch after reorder.
-inline ui64 UpdateRfcV7MsbVersionForYdb(ui64 msb) {
-    return (msb & ~0xF000ULL) | 0x7000ULL;
-}
-
-inline ui64 UpdateRfcLsbVariantForYdb(ui64 lsb) {
-    return (lsb & 0x3FFFFFFFFFFFFFFFULL) | 0x8000000000000000ULL;
-}
-
 // RFC 9562 (network byte order) → YDB internal storage.
+// Expects version/variant already set in the RFC layout (as in MakeRfcV7Bytes);
+// only the first 8 bytes are reordered — no post-patch of version/variant.
 inline std::array<ui8, NKikimr::NUuid::UUID_LEN> RfcUuidBytesToYdbInternal(const ui8* rfc) {
     ui64 msb = ReadBe64(rfc);
     ui64 lsb = ReadBe64(rfc + 8);
     msb = ReorderRfcMsbToYdb(msb);
-    msb = UpdateRfcV7MsbVersionForYdb(msb);
-    lsb = UpdateRfcLsbVariantForYdb(lsb);
     std::array<ui8, NKikimr::NUuid::UUID_LEN> ydb{};
     WriteBe64(msb, ydb.data());
     WriteBe64(lsb, ydb.data() + 8);

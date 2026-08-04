@@ -615,6 +615,11 @@ public:
 private:
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         try {
+            // UUID v7 encodes only unix_ts_ms (48-bit millisecond timestamp per RFC 9562).
+            // Timestamp/Timestamp64 arguments are microsecond-based, so sub-millisecond
+            // digits are truncated here. Consequently extractTs(newV7At(ts)) equals ts
+            // only when ts falls on a millisecond boundary; otherwise the result is
+            // floor(ts_us / 1000) * 1000.
             const ui64 timestampUs = ReadTimestampMicros(args[0], Timestamp64);
             const ui64 timestampMs = timestampUs / 1000;
             return MakeRfcV7UuidValue(valueBuilder, timestampMs);

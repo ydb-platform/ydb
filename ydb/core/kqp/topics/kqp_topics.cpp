@@ -776,9 +776,7 @@ bool TTopicOperations::HasThisPartitionAlreadyBeenAdded(const TString& topicPath
         entry.PQGroupInfo->Description;
 
     TString path = CanonizePath(entry.Path);
-    Y_ABORT_UNLESS(path == topicPath,
-                   "path=%s, topicPath=%s",
-                   path.data(), topicPath.data());
+    AFL_ENSURE(path == topicPath)("path", path)("topic_path", topicPath);
 
     for (const auto& partition : description.GetPartitions()) {
         if (partition.GetPartitionId() == partitionId) {

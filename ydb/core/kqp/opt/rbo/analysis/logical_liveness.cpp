@@ -300,6 +300,13 @@ void TOpSort::PropagateLiveness(ILivenessContext& ctx) {
 void TOpTableLookup::PropagateLiveness(ILivenessContext& ctx) {
     TInfoUnitSet inputLive;
     AddInfoUnits(inputLive, LookupKeys);
+    if (Prefix) {
+        // The prefix equalities are checked on the left row before the lookup.
+        for (const auto& [column, iu] : Prefix->Equalities) {
+            Y_UNUSED(column);
+            AddInfoUnit(inputLive, iu);
+        }
+    }
     if (IsJoin()) {
         const auto& liveOut = ctx.GetLiveOut(this);
         for (const auto& iu : GetInput()->GetOutputIUs()) {

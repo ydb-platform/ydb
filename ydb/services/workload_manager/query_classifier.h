@@ -8,6 +8,10 @@
 #include <ydb/library/aclib/aclib.h>
 
 
+namespace NKikimr {
+struct TAppData;
+}  // namespace NKikimr
+
 namespace NKikimr::NKqp {
 struct TUserRequestContext;
 }  // namespace NKikimr::NKqp
@@ -84,6 +88,14 @@ public:
 std::shared_ptr<IQueryClassifier> CreateQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
                                                         TClassifierConfigsView classifierView,
                                                         const TString& databaseId,
-                                                        TClassifyContext context);
+                                                        TClassifyContext context,
+                                                        std::optional<TString> resourcePoolForSharedReading);
+
+std::shared_ptr<IQueryClassifier> CreateQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
+                                                        TClassifierConfigsView classifierView,
+                                                        const TString& databaseId,
+                                                        TClassifyContext context,
+                                                        const TAppData& appData);
+
 
 } // namespace NKikimr::NWorkloadManager

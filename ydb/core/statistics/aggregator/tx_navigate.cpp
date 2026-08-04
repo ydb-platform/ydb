@@ -33,7 +33,7 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
                 Self->DeleteStatisticsFromTable();
             } else {
                 // Navigate failure -> traversal cannot proceed; mark the operation FAILED.
-                Self->FinishTraversal(db, Ydb::Table::AnalyzeState::STATE_FAILED);
+                Self->FinishTraversal(db, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, Ydb::Table::AnalyzeState::STATE_FAILED);
             }
             return true;
         }

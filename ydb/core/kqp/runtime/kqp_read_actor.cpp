@@ -958,7 +958,8 @@ public:
             {"snapshotTxId", Settings->GetSnapshot().GetTxId()},
             {"snapshotStep", Settings->GetSnapshot().GetStep()},
             {"lockTxId", Settings->GetLockTxId()},
-            {"lockNodeId", Settings->GetLockNodeId()});
+            {"lockNodeId", Settings->GetLockNodeId()},
+            {"lockMode", Settings->GetLockMode()});
 
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);

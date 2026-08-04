@@ -51,7 +51,17 @@ struct TLookupKey {
     TString Column;
 };
 
-std::optional<TVector<TLookupKey>> MatchKeyPrefix(const TOpJoin& join, const TOpRead& read, const TVector<TString>& keyColumnNames) {
+struct TKeyMatch {
+    // Represents a constant prefix keys.
+    TVector<TLookupKey> PrefixKeys;
+    // Represents a lookup keys.
+    TVector<TLookupKey> LookupKeys;
+};
+
+std::optional<TKeyMatch> MatchKeyPrefix(const TOpJoin& join, const TOpRead& read, const TVector<TString>& keyColumnNames,
+                                        size_t pointPrefixLen) {
+    Y_ENSURE(pointPrefixLen < keyColumnNames.size());
+
     THashMap<TInfoUnit, TString, TInfoUnit::THashFunction> readColumnByIU;
     for (size_t i = 0; i < read.OutputIUs.size(); ++i) {
         readColumnByIU[read.OutputIUs[i]] = read.Columns[i];
@@ -67,23 +77,37 @@ std::optional<TVector<TLookupKey>> MatchKeyPrefix(const TOpJoin& join, const TOp
         }
     }
 
-    // Actually we can support this case by filtering after stream lookup connection.
-    if (keyByColumn.size() > keyColumnNames.size()) {
+    TKeyMatch match;
+    size_t matchedJoinKeys = 0;
+    for (size_t i = 0; i < keyColumnNames.size(); ++i) {
+        const auto it = keyByColumn.find(keyColumnNames[i]);
+        if (i < pointPrefixLen) {
+            if (it != keyByColumn.end()) {
+                match.PrefixKeys.push_back(it->second);
+                ++matchedJoinKeys;
+            }
+            continue;
+        }
+
+        if (it == keyByColumn.end()) {
+            break;
+        }
+
+        match.LookupKeys.push_back(it->second);
+        ++matchedJoinKeys;
+    }
+
+    // TODO: Support filtering after streamlookup connection, we can apply a filter on join keys which are not.
+    if (matchedJoinKeys != keyByColumn.size()) {
         return std::nullopt;
     }
 
-    TVector<TLookupKey> keys;
-    keys.reserve(keyByColumn.size());
-
-    // Match all keys.
-    for (size_t i = 0; i < keyByColumn.size(); ++i) {
-        const auto* key = keyByColumn.FindPtr(keyColumnNames[i]);
-        if (!key) {
-            return std::nullopt;
-        }
-        keys.push_back(*key);
+    // Lookup keys cannot be empty.
+    if (match.LookupKeys.empty()) {
+        return std::nullopt;
     }
-    return keys;
+
+    return match;
 }
 
 bool KeyTypesMatch(IOperator& leftInput, IOperator& rightInput, const TVector<TLookupKey>& keys) {
@@ -96,6 +120,33 @@ bool KeyTypesMatch(IOperator& leftInput, IOperator& rightInput, const TVector<TL
         }
     }
     return true;
+}
+
+bool KeyTypesMatch(IOperator& leftInput, IOperator& rightInput, const TKeyMatch& keys) {
+    return KeyTypesMatch(leftInput, rightInput, keys.LookupKeys) && KeyTypesMatch(leftInput, rightInput, keys.PrefixKeys);
+}
+
+bool IsUsablePointPrefix(const TOpRead::TRangeInfo& ranges, const TVector<TString>& keyColumnNames, const TString& joinKind,
+                         size_t pointsLimit) {
+    if (!ranges.Points || !ranges.PointsItemType || ranges.PointColumns.empty()) {
+        return false;
+    }
+
+    if (ranges.PointColumns.size() >= keyColumnNames.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < ranges.PointColumns.size(); ++i) {
+        if (ranges.PointColumns[i] != keyColumnNames[i]) {
+            return false;
+        }
+    }
+
+    // For left join we cannot support more than 1 point lookup.
+    if (joinKind == "Left") {
+        pointsLimit = std::min<size_t>(pointsLimit, 1);
+    }
+    return ranges.ExpectedMaxPoints.Defined() && *ranges.ExpectedMaxPoints <= pointsLimit;
 }
 
 } // anonymous namespace
@@ -172,7 +223,21 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         return input;
     }
 
-    const auto keys = MatchKeyPrefix(*join, *read, tableMeta->KeyColumnNames);
+    if (tableMeta->KeyColumnNames.empty()) {
+        return input;
+    }
+
+    size_t pointPrefixLen = 0;
+    if (read->RangeInfo && IsUsablePointPrefix(*read->RangeInfo, tableMeta->KeyColumnNames, joinKind, ctx.KqpCtx.Config->GetIdxLookupJoinPointsLimit())) {
+        pointPrefixLen = read->RangeInfo->PointColumns.size();
+    }
+
+    auto keys = MatchKeyPrefix(*join, *read, tableMeta->KeyColumnNames, pointPrefixLen);
+    if (!keys && pointPrefixLen != 0) {
+        pointPrefixLen = 0;
+        keys = MatchKeyPrefix(*join, *read, tableMeta->KeyColumnNames, 0);
+    }
+
     // Different types for keys are not supported.
     if (!keys || !KeyTypesMatch(*join->GetLeftInput(), *read, *keys)) {
         return input;
@@ -180,18 +245,31 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
 
     TVector<TInfoUnit> lookupKeys;
     TVector<TString> lookupKeyColumns;
-    lookupKeys.reserve(keys->size());
-    lookupKeyColumns.reserve(keys->size());
-    for (const auto& key : *keys) {
+    lookupKeys.reserve(keys->LookupKeys.size());
+    lookupKeyColumns.reserve(keys->LookupKeys.size());
+    for (const auto& key : keys->LookupKeys) {
         lookupKeys.push_back(key.LeftIU);
         lookupKeyColumns.push_back(key.Column);
+    }
+
+    std::optional<TOpTableLookup::TLookupKeyPrefix> prefix;
+    if (pointPrefixLen != 0) {
+        const auto& ranges = *read->RangeInfo;
+        TOpTableLookup::TLookupKeyPrefix keyPrefix;
+        keyPrefix.Points = ranges.Points;
+        keyPrefix.PointsItemType = ranges.PointsItemType;
+        keyPrefix.Columns = ranges.PointColumns;
+        for (const auto& key : keys->PrefixKeys) {
+            keyPrefix.Equalities.emplace_back(key.Column, key.LeftIU);
+        }
+        prefix = std::move(keyPrefix);
     }
 
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Rewriting a " << joinKind << " join into an index lookup join of "
                                  << table.Path().StringValue();
 
     auto lookup = MakeIntrusive<TOpTableLookup>(join->GetLeftInput(), join->Pos, read->GetTable(), read->Columns, read->OutputIUs,
-                                                lookupKeys, lookupKeyColumns, joinKind, fetchedRowFilter);
+                                                lookupKeys, lookupKeyColumns, joinKind, fetchedRowFilter, prefix);
     return MakeIntrusive<TOpIndexLookupJoin>(lookup, join->Pos, joinKind, join->JoinKeys);
 }
 

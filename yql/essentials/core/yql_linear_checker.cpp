@@ -355,6 +355,14 @@ bool ValidateLinearTypes(const TExprNode& root, TExprContext& ctx) {
             }
         }
 
+        // AsErased hides a value inside an opaque box, defeating the single-use
+        // tracking that is the point of linear types, so reject boxing any linear value.
+        if (node.IsCallable("AsErased") && node.Head().GetTypeAnn()->HasStaticLinear()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "AsErased is not allowed for linear types"));
+            hasErrors = true;
+            return false;
+        }
+
         return true;
     });
 

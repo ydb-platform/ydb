@@ -3357,7 +3357,8 @@ struct TBuiltinFuncData {
             {"pickle", {"Pickle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Pickle", 1, 1)}},
             {"stablepickle", {"StablePickle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StablePickle", 1, 1)}},
             {"unpickle", {"Unpickle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Unpickle", 2, 2)}},
-
+            {"aserased", {"AsErased", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsErased", 1, 1), NYql::NFeature::TypeErasure.MinLangVer}},
+            {"peekerased", {"PeekErased", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PeekErased", 2, 2), NYql::NFeature::TypeErasure.MinLangVer}},
             {"typehandle", {"TypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeHandle", 1, 1)}},
             {"parsetypehandle", {"ParseTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ParseTypeHandle", 1, 1)}},
             {"typekind", {"TypeKind", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeKind", 1, 1)}},

@@ -166,7 +166,7 @@ struct TDataEvents {
             return result;
         }
 
-        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites, ui64 writerIndex = 0, ui64 writeIndex = 0) {
+        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites, ui64 writerIndex = 0, ui64 writeSeqNum = 0) {
             auto entry = Record.AddTxLocks();
             entry->SetLockId(lockId);
             entry->SetDataShard(shard);
@@ -177,10 +177,10 @@ struct TDataEvents {
             if (hasWrites) {
                 entry->SetHasWrites(true);
             }
-            if (writeIndex) {
-                auto* entryWriteIndex = entry->AddWriteIndexes();
-                entryWriteIndex->SetWriterIndex(writerIndex);
-                entryWriteIndex->SetWriteIndex(writeIndex);
+            if (writeSeqNum) {
+                auto* entryWriteSeqNum = entry->AddWriteSeqNums();
+                entryWriteSeqNum->SetWriterIndex(writerIndex);
+                entryWriteSeqNum->SetWriteSeqNum(writeSeqNum);
             }
         }
 

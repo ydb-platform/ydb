@@ -399,7 +399,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         bool UsePragma;
 
     protected:
-        void Setup(TKikimrSettings& settings) override {   
+        void Setup(TKikimrSettings& settings) override {
             if (!UsePragma) {
                 settings.AppConfig.MutableTableServiceConfig()->SetDefaultTxMode([&]() {
                     if (Isolation == "SerializableRW") {
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     } else {
                         ythrow yexception() << "unknonw isolation: " << Isolation;
                     }
-                }());     
+                }());
             }
         }
 
@@ -512,8 +512,8 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
     class TDisableOnlineRO : public TTableDataModificationTester {
     protected:
-        void Setup(TKikimrSettings& settings) override {   
-            settings.AppConfig.MutableFeatureFlags()->SetDisableOnlineRO(true);     
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableFeatureFlags()->SetDisableOnlineRO(true);
         }
 
         void DoExecute() override {
@@ -621,7 +621,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
-    // KQP must skip ColumnShard, which does not implement WriteIndex
+    // KQP must skip ColumnShard, which does not implement WriteSeqNum
     Y_UNIT_TEST(PipelinedUncommittedWritesOlap) {
         TPipelinedUncommittedWrites tester;
         tester.SetEnabled(true);

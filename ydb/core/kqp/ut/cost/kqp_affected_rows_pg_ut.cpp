@@ -21,18 +21,26 @@ NKikimrConfig::TAppConfig GetAppConfig() {
 NYdb::NQuery::TExecuteQuerySettings GetQuerySettingsBasic() {
     NYdb::NQuery::TExecuteQuerySettings execSettings;
     execSettings.StatsMode(NYdb::NQuery::EStatsMode::Basic);
+    execSettings.CollectAffectedRows(true);
     return execSettings;
 }
 
 NYdb::NQuery::TExecuteQuerySettings GetQuerySettingsFull() {
     NYdb::NQuery::TExecuteQuerySettings execSettings;
     execSettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+    execSettings.CollectAffectedRows(true);
     return execSettings;
 }
 
 NYdb::NQuery::TExecuteQuerySettings GetQuerySettingsNone() {
     NYdb::NQuery::TExecuteQuerySettings execSettings;
     execSettings.StatsMode(NYdb::NQuery::EStatsMode::None);
+    return execSettings;
+}
+
+NYdb::NQuery::TExecuteQuerySettings GetQuerySettingsBasicNoAffectedRows() {
+    NYdb::NQuery::TExecuteQuerySettings execSettings;
+    execSettings.StatsMode(NYdb::NQuery::EStatsMode::Basic);
     return execSettings;
 }
 
@@ -390,7 +398,8 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
         )"), BeginSerializableRW(), GetQuerySettingsBasic()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        UNIT_ASSERT_C(!HasAnyAffectedRows(result), "affected_rows field should NOT be present with SerializableRW isolation level");
+        auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
+        UNIT_ASSERT_VALUES_EQUAL(affectedRows, 1u);
     }
 
     Y_UNIT_TEST(ReadCommittedRW_InsertFromSelect) {
@@ -601,6 +610,43 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
 
             auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(affectedRows, 1u);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ReadCommittedRW_CollectAffectedRows, AffectedRows) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        {
+            auto result = session.ExecuteQuery(Q_(R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment)
+                VALUES (1u, "Anna", 3500u, "None");
+            )"),
+                BeginReadCommittedRW(),
+                AffectedRows
+                ? GetQuerySettingsBasic()
+                : GetQuerySettingsBasicNoAffectedRows()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(affectedRows, static_cast<ui64>(AffectedRows));
+        }
+
+        {
+            auto result = session.ExecuteQuery(Q_(R"(
+                DELETE FROM `/Root/TestTable` WHERE Group = 1u;
+            )"), 
+                BeginReadCommittedRW(),
+                AffectedRows
+                ? GetQuerySettingsBasic()
+                : GetQuerySettingsBasicNoAffectedRows()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(affectedRows, static_cast<ui64>(AffectedRows));
         }
     }
 }

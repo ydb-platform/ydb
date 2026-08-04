@@ -153,6 +153,7 @@ public:
         ui64 MkqlMemoryLimit = 0; // old engine compatibility
         ui64 PerShardKeysSizeLimitBytes = 0;
         Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+        bool CollectAffectedRows = false;
         TDuration ProgressStatsPeriod;
         TKqpSnapshot Snapshot = TKqpSnapshot();
         std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;

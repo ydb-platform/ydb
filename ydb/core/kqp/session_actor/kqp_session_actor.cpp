@@ -1605,6 +1605,7 @@ public:
             }
 
             request.StatsMode = queryState->GetStatsMode();
+            request.CollectAffectedRows = queryState->GetCollectAffectedRows();
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
             request.QueryType = queryState->GetType();
             request.OutputChunkMaxSize = queryState->GetOutputChunkMaxSize();

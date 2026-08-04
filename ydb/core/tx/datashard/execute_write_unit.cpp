@@ -225,7 +225,7 @@ public:
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT ||
                     (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                        && userDb.GetLockMode() == TDataShardUserDb::ELockMode::PessimisticNone) ||
+                        && userDb.GetCollectAffectedRows()) ||
                     userDb.NeedToReadBeforeWrite(fullTableId))
                 {
                     for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
@@ -432,6 +432,7 @@ public:
         userDb.SetLockTxId(writeTx->GetLockTxId());
         userDb.SetLockNodeId(writeTx->GetLockNodeId());
         userDb.SetLockMode(writeTx->GetLockMode());
+        userDb.SetCollectAffectedRows(writeTx->GetCollectAffectedRows());
 
         if (op->HasVolatilePrepareFlag() || op->GetRemainReadSets()) {
             userDb.SetVolatileTxId(txId);

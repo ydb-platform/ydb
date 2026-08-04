@@ -322,6 +322,7 @@ public:
         auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
         request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
         request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
+        request.set_collect_affected_rows(settings.CollectAffectedRows_);
         request.set_pool_id(TStringType{settings.ResourcePool_});
         request.mutable_query_content()->set_text(TStringType{query});
         request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));

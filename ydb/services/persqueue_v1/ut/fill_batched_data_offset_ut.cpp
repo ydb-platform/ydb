@@ -5,6 +5,7 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

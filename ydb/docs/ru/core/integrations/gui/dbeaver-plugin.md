@@ -28,7 +28,21 @@
 Плагин устанавливается через механизм установки расширений DBeaver из URL-репозитория, что обеспечивает автоматическое получение обновлений.
 
 1. Откройте DBeaver. В верхнем меню выберите **Help → Install New Software...**.
+
+    {% cut "Скриншот" %}
+
+    ![](./_assets/dbeaver-plugin-context.png)
+
+    {% endcut %}
+
 1. Нажмите кнопку **Add...** справа от поля **Work with:**.
+
+    {% cut "Скриншот" %}
+
+    ![](./_assets/dbeaver-plugin-add.png)
+
+    {% endcut %}
+
 1. В открывшемся окне **Add Repository** укажите имя репозитория (например, `YDB Plugin`) и вставьте в поле **Location** следующий URL:
 
     ```text
@@ -36,8 +50,29 @@
     ```
 
     Нажмите **Add**. DBeaver загрузит метаданные репозитория.
+
+    {% cut "Скриншот" %}
+
+    ![](./_assets/dbeaver-plugin-add-repository.png)
+
+    {% endcut %}
+
 1. В списке компонентов появится категория **DBeaver YDB Support**. Отметьте её и нажмите **Next >**.
+
+    {% cut "Скриншот" %}
+
+    ![](./_assets/dbeaver-plugin-ydb-support.png)
+
+    {% endcut %}
+
 1. На экране **Install Details** убедитесь, что в списке присутствуют оба компонента (`org.jkiss.dbeaver.ext.ydb` и `org.jkiss.dbeaver.ext.ydb.ui`), и нажмите **Next >**.
+
+    {% cut "Скриншот" %}
+
+    ![](./_assets/dbeaver-plugin-install-details.png)
+
+    {% endcut %}
+
 1. DBeaver может показать предупреждение о неподписанном содержимом. Это ожидаемое поведение — JAR-файлы плагина не подписаны коммерческим сертификатом. Нажмите **Install Anyway**.
 
     {% note info %}
@@ -47,6 +82,13 @@
     {% endnote %}
 
 1. Ознакомьтесь с лицензией (Apache License 2.0), выберите **I accept the terms of the license agreements** и нажмите **Finish**.
+
+    {% cut "Скриншот" %}
+
+    ![](./_assets/dbeaver-plugin-license.png)
+
+    {% endcut %}
+
 1. DBeaver установит плагин и предложит перезапуск. Нажмите **Restart Now**. После перезапуска плагин станет активным.
 
 ## Создание подключения к {{ ydb-name }} {#connection}

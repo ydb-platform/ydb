@@ -75,6 +75,8 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , EnablePersistentPhantomFlagStorage(0, 0, 1)
     , PhantomFlagStorageLimitPerVDiskBytes(10'000'000, 0, 100'000'000'000)
     , VolatilePhantomFlagStorageBlobSizeLimitBytes(1'000'000, 1, 10'000'000)
+    , EnableChecksumReadValidationOnVDisk(0, 0, 1)
+    , EnableChecksumWriteValidationOnVDisk(0, 0, 1)
     , EnableChunkKeeper(0, 0, 1)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , MaxCommonLogChunksSSD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
@@ -99,6 +101,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
     , ReportingControllerLeakRate(1, 1, 100'000)
     , MaxPutTimeoutSeconds(DefaultMaxPutTimeout.Seconds(), 1, 1'000'000)
+    , EnableChecksumCalcAndValidationOnDsProxy(0, 0, 1)
     , EnableDeepScrubbing(false, false, true)
     , EnableFreshSyncDataThrottling(0, 0, 1)
     , EnableStorageRetroTraceGeneration(DefaultEnableStorageRetroTraceGeneration, false, true)
@@ -477,6 +480,8 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(PhantomFlagStorageLimitPerVDiskBytes, icb->VDiskControls.PhantomFlagStorageLimitPerVDiskBytes);
         TControlBoard::RegisterSharedControl(VolatilePhantomFlagStorageBlobSizeLimitBytes,
                 icb->VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes);
+        TControlBoard::RegisterSharedControl(EnableChecksumReadValidationOnVDisk, icb->VDiskControls.EnableChecksumReadValidationOnVDisk);
+        TControlBoard::RegisterSharedControl(EnableChecksumWriteValidationOnVDisk, icb->VDiskControls.EnableChecksumWriteValidationOnVDisk);
         TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
 
         TControlBoard::RegisterSharedControl(MaxInProgressStartupDataSyncCount, icb->VDiskControls.MaxInProgressStartupDataSyncCount);
@@ -521,6 +526,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(ReportingControllerLeakDurationMs, icb->DSProxyControls.RequestReportingSettings.LeakDurationMs);
         TControlBoard::RegisterSharedControl(ReportingControllerLeakRate, icb->DSProxyControls.RequestReportingSettings.LeakRate);
         TControlBoard::RegisterSharedControl(MaxPutTimeoutSeconds, icb->DSProxyControls.MaxPutTimeoutSeconds);
+        TControlBoard::RegisterSharedControl(EnableChecksumCalcAndValidationOnDsProxy, icb->DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy);
 
         TControlBoard::RegisterSharedControl(EnableFreshSyncDataThrottling, icb->VDiskControls.EnableFreshSyncDataThrottling);
         TControlBoard::RegisterSharedControl(EnableStorageRetroTraceGeneration,

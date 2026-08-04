@@ -1380,7 +1380,9 @@ namespace NKikimr {
 
         void AddResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, ui64 sh,
                        std::variant<TRope, ui32> dataOrSize, const ui64 *cookie = nullptr,
-                       const ui64 *ingress = nullptr, bool keep = false, bool doNotKeep = false) {
+                       const ui64 *ingress = nullptr, bool keep = false, bool doNotKeep = false,
+                       const ui64 *checksum = nullptr,
+                       NKikimrBlobStorage::TChecksumType checksumType = NKikimrBlobStorage::TChecksumType::NoChecksum) {
             TRope *data = nullptr;
             ui32 size = 0;
 
@@ -1411,6 +1413,10 @@ namespace NKikimr {
             }
             if (doNotKeep) {
                 r->SetDoNotKeep(true);
+            }
+            if (checksum) {
+                r->SetChecksum(*checksum);
+                r->SetChecksumType(checksumType);
             }
             Y_DEBUG_ABORT_UNLESS(keep + doNotKeep <= 1);
         }

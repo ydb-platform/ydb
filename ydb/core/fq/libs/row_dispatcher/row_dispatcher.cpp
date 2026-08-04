@@ -1362,6 +1362,14 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
         ui64 queuedBytes = 0;
         ui64 queuedRows = 0;
         for (auto& [partitionId, partition] : consumer->Partitions) {
+            // QueuedBytes/QueuedRows are snapshot (current state) values — always include them
+            // regardless of StatisticsUpdated so the read actor sees the full queue size.
+            // YQ-5407: previously, partitions with StatisticsUpdated=false were skipped entirely,
+            // causing the total QueuedBytes to be underreported when some partitions had not
+            // received a fresh TEvSessionStatistic in the current cycle.
+            queuedBytes += partition.Stat.QueuedBytes;
+            queuedRows += partition.Stat.QueuedRows;
+
             if (!partition.StatisticsUpdated) {
                 continue;
             }
@@ -1373,8 +1381,6 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
             readBytes += partition.Stat.ReadBytes;
             filteredBytes += partition.Stat.FilteredBytes;
             filteredRows += partition.Stat.FilteredRows;
-            queuedBytes += partition.Stat.QueuedBytes;
-            queuedRows += partition.Stat.QueuedRows;
             partition.Stat.Clear();
             partition.StatisticsUpdated = false;
         }

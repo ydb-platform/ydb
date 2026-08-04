@@ -3,6 +3,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher.h>
 #include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
@@ -272,6 +273,42 @@ public:
 
         MockMessageBatch(partId, topicSessionActorId, readActorId, generation);
         ExpectMessageBatch(readActorId);
+    }
+
+    // Send a mock TEvSessionStatistic from a topic session actor to the RowDispatcher.
+    // This simulates the topic session reporting current queue state for a given partition.
+    void MockSessionStatistic(
+        NActors::TActorId topicSessionId,
+        const NYql::NPq::NProto::TDqPqTopicSource& source,
+        NActors::TActorId readActorId,
+        ui32 partitionId,
+        i64 queuedBytes)
+    {
+        NFq::TTopicSessionStatistic stat;
+        stat.SessionKey.ReadGroup = source.GetReadGroup();
+        stat.SessionKey.Endpoint = source.GetEndpoint();
+        stat.SessionKey.Database = source.GetDatabase();
+        stat.SessionKey.TopicPath = source.GetTopicPath();
+        stat.SessionKey.PartitionId = partitionId;
+        stat.Common.QueuedBytes = queuedBytes;
+
+        NFq::TTopicSessionClientStatistic clientStat;
+        clientStat.ReadActorId = readActorId;
+        clientStat.PartitionId = partitionId;
+        clientStat.QueuedBytes = queuedBytes;
+        stat.Clients.push_back(clientStat);
+
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvSessionStatistic>(stat);
+        Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
+    }
+
+    // Grab the next TEvStatistics event delivered to the given read actor
+    // and return the QueuedBytes field from it.
+    ui64 ExpectStatisticsQueuedBytes(NActors::TActorId readActorId) {
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStatistics>(
+            readActorId, TDuration::Seconds(5));
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+        return eventHolder->Get()->Record.GetQueuedBytes();
     }
 
     TActorSystemStub actorSystemStub;
@@ -545,6 +582,58 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
 
         MockHeartbeat(PartitionId0, ReadActorId1, generation);
         ExpectNoSession(ReadActorId1, generation);
+    }
+
+    // Regression test for YQ-5407:
+    // When TEvSendStatistic fires, only partitions with StatisticsUpdated=true contribute
+    // their QueuedBytes to the aggregated sum sent to the read actor. If a partition has
+    // queued data but its StatisticsUpdated flag was cleared in the previous cycle (because
+    // it didn't receive a new TEvSessionStatistic), its bytes are dropped from the total,
+    // causing query.input_queued_bytes to underreport the actual queue size.
+    //
+    // The correct behavior: QueuedBytes is a snapshot value and should always be included
+    // in the sum regardless of StatisticsUpdated — only incremental fields (FilteredBytes,
+    // ReadBytes) should be gated on StatisticsUpdated.
+    Y_UNIT_TEST_F(QueuedBytesFromAllPartitionsIncludedInStatistics, TFixture) {
+        // Set up a consumer with two partitions.
+        MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId1);
+        auto topicSession0 = ExpectRegisterTopicSession();  // for PartitionId0 (100)
+        auto topicSession1 = ExpectRegisterTopicSession();  // for PartitionId1 (101)
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(topicSession0);
+        ExpectStartSession(topicSession1);
+
+        const i64 queuedBytes0 = 100;
+        const i64 queuedBytes1 = 50;
+
+        // Both partitions report their current queue state to the RowDispatcher.
+        // This sets StatisticsUpdated=true for both partitions in the consumer.
+        MockSessionStatistic(topicSession0, Source1, ReadActorId1, PartitionId0, queuedBytes0);
+        MockSessionStatistic(topicSession1, Source1, ReadActorId1, PartitionId1, queuedBytes1);
+
+        // Wait for TEvSendStatistic to fire (period = 1 second, configured in SetUp).
+        // After this, both partitions will have StatisticsUpdated=false again.
+        // The read actor should receive the total: 100 + 50 = 150 bytes.
+        Runtime.SimulateSleep(TDuration::Seconds(2));
+        ui64 firstQueuedBytes = ExpectStatisticsQueuedBytes(ReadActorId1);
+        UNIT_ASSERT_VALUES_EQUAL_C(firstQueuedBytes, queuedBytes0 + queuedBytes1,
+            "First statistics send: expected combined queued bytes from both partitions");
+
+        // Now only partition 0 sends a new statistics update (data was consumed from partition 1
+        // but we haven't received a new stat update yet — StatisticsUpdated remains false for it).
+        MockSessionStatistic(topicSession0, Source1, ReadActorId1, PartitionId0, queuedBytes0);
+        // Partition 1 does NOT send a new stat, so StatisticsUpdated stays false for it.
+        // Its last-known QueuedBytes (50) should still be reported in the next aggregation.
+
+        // Wait for the second TEvSendStatistic to fire.
+        // BUG: Currently reports only 100 (just PartitionId0) because PartitionId1 has
+        // StatisticsUpdated=false and gets skipped.
+        // EXPECTED (correct): should report 150 = 100 + 50 (both partitions' snapshot values).
+        Runtime.SimulateSleep(TDuration::Seconds(2));
+        ui64 secondQueuedBytes = ExpectStatisticsQueuedBytes(ReadActorId1);
+        UNIT_ASSERT_VALUES_EQUAL_C(secondQueuedBytes, queuedBytes0 + queuedBytes1,
+            "Second statistics send: QueuedBytes from all partitions (including ones without "
+            "recent updates) must be included — QueuedBytes is a snapshot, not an increment");
     }
 }
 

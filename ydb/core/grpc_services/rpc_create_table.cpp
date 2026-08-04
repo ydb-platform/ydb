@@ -64,7 +64,7 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        YDB_LOG_CRIT_CTX(ctx, "");
+        YDB_LOG_CRIT_CTX(ctx, "TCreateTableRPC: cannot deliver config request to Configs Dispatcher (empty default profile is available only)");
         SendProposeRequest(ctx);
         Become(&TCreateTableRPC::StateWork);
     }

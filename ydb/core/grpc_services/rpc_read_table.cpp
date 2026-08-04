@@ -656,7 +656,7 @@ private:
             {"selfId", SelfId()},
             {"size", data.size()},
             {"required", ru},
-            {"getRlPAth", getRlPAth()});
+            {"getRlPath", getRlPAth()});
 
         TString out;
         NullSerializeReadTableResponse(data, StatusIds::SUCCESS, PlanStep, TxId, &out);

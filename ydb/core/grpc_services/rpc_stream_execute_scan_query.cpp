@@ -431,15 +431,14 @@ private:
         TDuration timeout;
         YDB_LOG_DEBUG_CTX(ctx, "Got timeout event",
             {"inactiveClientTimeout", InactiveClientTimeout_},
-            {"GRpcResponsesSizeQueue", FlowControl_.QueueSize()});
+            {"grpcResponsesSizeQueue", FlowControl_.QueueSize()});
 
         if (InactiveClientTimeout_ && FlowControl_.QueueSize() > 0) {
             TDuration processTime = now - LastDataStreamTimestamp_;
             if (processTime >= InactiveClientTimeout_) {
                 auto message = TStringBuilder() << this->SelfId() << " Client cannot process data in " << processTime
                    << " which exceeds client timeout " << InactiveClientTimeout_;
-                YDB_LOG_WARN_CTX(ctx, "",
-                    {"message", message});
+                YDB_LOG_WARN_CTX(ctx, message);
 
                 if (ExecuterActorId_) {
                     auto timeoutEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Client timeout");

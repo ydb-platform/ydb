@@ -138,7 +138,7 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::GRPC_PROXY, "");
+        YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::GRPC_PROXY, "TAlterTableRPC: cannot deliver config request to Configs Dispatcher (empty default profile is available only)");
         AlterTable(ctx);
         Become(&TAlterTableRPC::AlterStateWork);
     }
@@ -248,9 +248,8 @@ private:
             }
 
             TString error(builder);
-            YDB_LOG_ERROR_COMP(NKikimrServices::TX_PROXY, "",
-                {"logPrefix", LogPrefix},
-                {"error", error});
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_PROXY, error,
+                {"logPrefix", LogPrefix});
             Request_->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, error));
             return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
         }

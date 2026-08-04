@@ -340,7 +340,7 @@ public:
         TimeoutTimerActorId = CreateLongTimer(ctx, std::min(clientTimeout, DEFAULT_TIMEOUT), new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
         Become(&TThis::MainState);
 
-        YDB_LOG_DEBUG("TReadRowsRPC bootstraped");
+        YDB_LOG_DEBUG("TReadRowsRPC bootstrapped");
 
         auto selfId = ctx.SelfID;
         auto* actorSystem = ctx.ActorSystem();
@@ -818,8 +818,7 @@ public:
         if (logAppendix) {
             message << *logAppendix;
         }
-        YDB_LOG_ERROR("",
-            {"message", message});
+        YDB_LOG_ERROR(message);
         SendResult(status, errorMsg, issues);
     }
 

@@ -46,7 +46,7 @@ public:
         if (status != FederatedQuery::QueryMeta_ComputeStatus_COMPLETED) {
             TString errorMsg = TStringBuilder{} << "created query " << result.query().meta().common().id() <<
                 " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
-            YDB_LOG_INFO_CTX(ctx, "",
+            YDB_LOG_INFO_CTX(ctx, "Query finished with non-success status",
                 {"logContext", (TLogCtx{.Owner_ = *this, .QueryId_ = result.query().meta().common().id()})},
                 {"error", errorMsg});
 

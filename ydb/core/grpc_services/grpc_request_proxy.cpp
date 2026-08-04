@@ -142,8 +142,7 @@ private:
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (!SchemeCache) {
             const TString error = "Grpc proxy is not ready to accept request, no proxy service";
-            YDB_LOG_ERROR_CTX(ctx, "",
-                {"error", error});
+            YDB_LOG_ERROR_CTX(ctx, error);
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, error);
             requestBaseCtx->RaiseIssue(issue);
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
@@ -636,11 +635,11 @@ void LogRequest(const TEvent& event) {
     };
 
     if constexpr (std::is_same_v<TEvListEndpointsRequest::TPtr, TEvent>) {
-        YDB_LOG_INFO_CTX(*TlsActivationContext, "",
+        YDB_LOG_INFO_CTX(*TlsActivationContext, "Request",
             {"ev", getDebugString()});
     }
     else {
-        YDB_LOG_DEBUG_CTX(*TlsActivationContext, "Dump #_getDebugString().c_str",
+        YDB_LOG_DEBUG_CTX(*TlsActivationContext, "Dump request",
             {"ev", getDebugString()});
     }
 }

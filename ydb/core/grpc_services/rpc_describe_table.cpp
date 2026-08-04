@@ -299,7 +299,7 @@ private:
 
     void ReplyOnException(const std::exception& ex, const char* logPrefix) noexcept {
         auto& ctx = TlsActivationContext->AsActorContext();
-        YDB_LOG_ERROR_CTX(ctx, "",
+        YDB_LOG_ERROR_CTX(ctx, "Reply on exception",
             {"logPrefix", logPrefix},
             {"ex", ex.what()});
         Request_->RaiseIssue(NYql::ExceptionToIssue(ex));

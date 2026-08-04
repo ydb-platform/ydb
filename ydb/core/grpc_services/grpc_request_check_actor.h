@@ -447,7 +447,7 @@ private:
             switch (resp.operation().status()) {
                 case Ydb::StatusIds::SUCCESS:
                     Counters_->ReportThrottleDelay(delay);
-                    YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_SERVER, "Request delayed for by ratelimiter",
+                    YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_SERVER, "Request delayed by ratelimiter",
                         {"delay", delay});
                     SetTokenAndDie();
                     break;
@@ -464,7 +464,7 @@ private:
                                               resp.operation().status(),
                                               CheckedDatabaseName_.c_str(),
                                               issues.ToString().c_str());
-                        YDB_LOG_ERROR_CTX_COMP(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "",
+                        YDB_LOG_ERROR_CTX_COMP(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "RateLimiter error",
                             {"error", error});
 
                         ReplyUnavailableAndDie(issues); // same as cloud-go serverless proxy
@@ -732,8 +732,7 @@ private:
         }
 
         const TString error = "No permission to connect to the database";
-        YDB_LOG_INFO_COMP(NKikimrServices::GRPC_SERVER, "",
-            {"error", error},
+        YDB_LOG_INFO_COMP(NKikimrServices::GRPC_SERVER, "No permission to connect to the database",
             {"checkedDatabaseName", CheckedDatabaseName_},
             {"user", TBase::GetUserSID()},
             {"ip", GrpcRequestBaseCtx_->GetPeerName()});

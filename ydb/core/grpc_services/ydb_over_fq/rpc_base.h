@@ -205,7 +205,7 @@ protected:
         NYql::IssuesFromMessage(operation.issues(), issues);
 
         TString errorMsg = TStringBuilder{} << "failed to " << opName << " with status: " << Ydb::StatusIds::StatusCode_Name(operation.status());
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "",
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Operation failed",
             {"logContext", TLogCtx{.Owner_ = *this}},
             {"errorMsg", errorMsg},
             {"issues", issues.ToOneLineString()});

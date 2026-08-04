@@ -399,8 +399,7 @@ private:
             if (processTime >= InactiveClientTimeout_) {
                 auto message = TStringBuilder() << this->SelfId() << " Client cannot process data in " << processTime
                    << " which exceeds client timeout " << InactiveClientTimeout_;
-                YDB_LOG_WARN_CTX(ctx, "",
-                    {"message", message});
+                YDB_LOG_WARN_CTX(ctx, message);
 
                 CancelationFlag->store(true);
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);

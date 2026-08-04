@@ -1045,6 +1045,8 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
     # TS_OUTPUTS(dist) -- files: ["build/dist"] ❌
     normalized_pj_files = [_normalize_path(f) for f in pj.get_files()]
     normalized_ts_outputs = [_normalize_path(f) for f in ts_outputs]
+    if normalized_ts_outputs:
+        unit.set(["_TS_OUTPUTS_JOINED", "|".join(normalized_ts_outputs)])
 
     missing_outputs = []
     for output in normalized_ts_outputs:

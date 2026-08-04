@@ -80,9 +80,9 @@ public:
         Lock.Acquire();
         const ui64 requestId = ++RequestIdGenerator;
 
-        auto [it, inserted] = Inflights.emplace(
+        auto [it, inserted] = InflightRequests.emplace(
             requestId,
-            TInflight{.CallContex = callContext, .Request = request});
+            TInflight{.CallContext = callContext, .Request = request});
         Y_ABORT_UNLESS(inserted);
         auto result = it->second.Promise.GetFuture();
         Lock.Release();
@@ -96,7 +96,7 @@ public:
 private:
     struct TInflight
     {
-        TCallContextPtr CallContex;
+        TCallContextPtr CallContext;
         std::shared_ptr<TRequest> Request;
         NThreading::TPromise<TResponse> Promise =
             NThreading::NewPromise<TResponse>();
@@ -136,8 +136,8 @@ private:
 
         {   // Getting necessary data from the shared state under lock.
             auto guard = Guard(Lock);
-            auto it = Inflights.find(requestId);
-            if (it == Inflights.end()) {
+            auto it = InflightRequests.find(requestId);
+            if (it == InflightRequests.end()) {
                 // Belated response.
                 return;
             }
@@ -146,7 +146,7 @@ private:
             retryCount = request.RetryCount;
             if (shouldReply) {
                 promise = std::move(request.Promise);
-                Inflights.erase(it);
+                InflightRequests.erase(it);
             } else {
                 delay = request.BackoffDelay.GetDelayAndIncrease();
             }
@@ -155,7 +155,7 @@ private:
         if (shouldReply) {
             STORAGE_LOG(
                 retryCount == 0 ? TLOG_DEBUG : TLOG_INFO,
-                "[%lu] %s request copleted on retry #%lu with %s",
+                "[%lu] %s request completed on retry #%lu with %s",
                 requestId,
                 RequestName.c_str(),
                 retryCount + 1,
@@ -191,8 +191,8 @@ private:
 
         {   // Getting necessary data from the shared state under lock.
             auto guard = Guard(Lock);
-            auto it = Inflights.find(requestId);
-            if (it == Inflights.end()) {
+            auto it = InflightRequests.find(requestId);
+            if (it == InflightRequests.end()) {
                 // Belated retry.
                 return;
             }
@@ -200,7 +200,7 @@ private:
 
             ++r.RetryCount;
             retryCount = r.RetryCount;
-            callContext = r.CallContex;
+            callContext = r.CallContext;
             request = r.Request;
         }
 
@@ -221,7 +221,7 @@ private:
     TLog Log;
     TAdaptiveLock Lock;
     ui64 RequestIdGenerator = 0;
-    THashMap<ui64, TInflight> Inflights{};
+    THashMap<ui64, TInflight> InflightRequests{};
 };
 
 using TDurableRead =

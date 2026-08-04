@@ -418,7 +418,7 @@ void TAnalyzeActor::DispatchSomeScanActors() {
         auto actor = std::make_unique<TScanActor>(
             SelfId(), DatabaseName,
             SelectBuilder->Build(TableName, tabletId), SelectBuilder->ColumnCount());
-        ScanActorsInFlight[Register(actor.release())] = TScanActorInfo{
+        ScanActorsInFlight[Register(actor.release(), TMailboxType::HTSwap, AppData()->BatchPoolId)] = TScanActorInfo{
             .TabletNodeId = nodeId,
         };
     };

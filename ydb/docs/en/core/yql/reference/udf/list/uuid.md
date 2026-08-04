@@ -76,6 +76,12 @@ Generates a v7 UUID from an explicit timestamp. Accepts `Timestamp` or `Timestam
 * `Uuid::newV7At(Timestamp{Flags:AutoMap}[, T1[, T2, ...]]) -> Uuid`
 * `Uuid::newV7At(Timestamp64{Flags:AutoMap}[, T1[, T2, ...]]) -> Uuid`
 
+{% note info %}
+
+The source timestamp passed to `Uuid::newV7At` may be specified with microsecond precision. UUIDv7 values encode the timestamp with millisecond precision. When generating a UUIDv7 value, the timestamp is truncated to millisecond precision.
+
+{% endnote %}
+
 ### `Uuid::extractTs` and `Uuid::extractTs64` {#extract-ts}
 
 Extract the timestamp embedded in a v7 UUID. Returns `NULL` if the argument is not UUIDv7 (for example, a key from `newV8RowKey` or `newV8ColumnKey`).

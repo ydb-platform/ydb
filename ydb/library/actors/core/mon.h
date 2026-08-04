@@ -185,22 +185,6 @@ namespace NActors {
             }
         };
 
-        // TODO: tablet mon replies carry no HTTP status.
-        //
-        // TEvRemoteHttpInfoRes and TEvRemoteJsonInfoRes hold a payload and nothing else, and
-        // NTabletMonitoringProxy hardcodes "HTTP/1.1 200 Ok" for both. A handler that fails can
-        // therefore only report it inside the payload, and every client that looks at the status
-        // code sees success. TEvRemoteBinaryInfoRes below is the escape hatch: callers hand-build
-        // a whole raw HTTP response, status line included, just to be able to answer 4xx. Hive
-        // does exactly that in MakeRawHttpEvent().
-        //
-        // The fix is to give the reply events an explicit status defaulting to 200 and let the
-        // proxy emit it. Two things make it more than a one-liner:
-        //   * the wire format of these events is a bare string (see Load() below), so adding a
-        //     field changes serialization and needs a story for a tablet and a proxy running
-        //     different versions during a rolling restart;
-        //   * about 18 files construct these events, so every error path has to be revisited to
-        //     decide which status it should now report.
         struct TEvRemoteBinaryInfoRes: public NActors::TEventBase<TEvRemoteBinaryInfoRes, RemoteBinaryInfoRes> {
             TEvRemoteBinaryInfoRes() {
             }

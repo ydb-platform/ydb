@@ -34,24 +34,17 @@ public:
         : State_(std::move(state))
     {}
 
-    // Registers a topic in the given pending map (PendingReadTopics_ or PendingWriteTopics_).
-    // For read topics the caller passes the user-supplied schema (rowSpec/columnOrder).
-    // For write topics rowSpec/columnOrder are empty.
-    // Each map is managed independently; the same topic may appear in both.
-    void AddToPendingTopics(const TString& cluster, const TString& topicPath, TPositionHandle pos,
-                            TExprNode::TPtr rowSpec, TExprNode::TPtr columnOrder, bool isWrite,
-                            TTopics& pendingTopics) {
+    void AddToPendingTopics(const TString& cluster, const TString& topicPath, TPositionHandle pos, TExprNode::TPtr rowSpec, TExprNode::TPtr columnOrder, TTopics& pendingTopics) {
         const auto topicKey = std::make_pair(cluster, topicPath);
         if (State_->Topics.FindPtr(topicKey) || pendingTopics.FindPtr(topicKey)) {
             return;
         }
 
-        YQL_CLOG(INFO, ProviderPq) << "Load topic meta for " << (isWrite ? "write" : "read") << ": `" << cluster << "`.`" << topicPath << "`";
+        YQL_CLOG(INFO, ProviderPq) << "Load topic meta for: `" << cluster << "`.`" << topicPath << "`";
         TPendingTopic pending;
         pending.Meta.Pos = pos;
         pending.Meta.RowSpec = rowSpec;
         pending.Meta.ColumnOrder = columnOrder;
-        pending.IsWrite = isWrite;
         pendingTopics.emplace(topicKey, std::move(pending));
     }
 
@@ -70,12 +63,12 @@ public:
                 }
 
                 TTopicKeyParser topicParser(read.Arg(2).Ref(), read.Ref().Child(4), ctx);
-                AddToPendingTopics(read.DataSource().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), topicParser.GetUserSchema(), topicParser.GetColumnOrder(), /*isWrite*/ false, PendingReadTopics_);
+                AddToPendingTopics(read.DataSource().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), topicParser.GetUserSchema(), topicParser.GetColumnOrder(), PendingReadTopics_);
             } else if (auto maybePqWrite = TMaybeNode<TPqWrite>(node)) {
                 TPqWrite write = maybePqWrite.Cast();
                 if (write.DataSink().Category().Value() == PqProviderName) {
                     TTopicKeyParser topicParser(write.Arg(2).Ref(), nullptr, ctx);
-                    AddToPendingTopics(write.DataSink().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), {}, {}, /*isWrite*/ true, PendingWriteTopics_);
+                    AddToPendingTopics(write.DataSink().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), {}, {}, PendingWriteTopics_);
                 }
             }
             return true;
@@ -124,43 +117,12 @@ public:
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
 
-        auto applyChanges = [&](TTopics& pendingTopics) -> TStatus {
-            for (auto& [key, pending] : pendingTopics) {
-                const TStructExprType* itemType = nullptr;
-                try {
-                    pending.Meta.FederatedTopic = pending.Future.GetValue();
-                    itemType = CreateDefaultItemType(ctx);
-                } catch (const std::exception& ex) {
-                    if (!State_->UseYtflowEngine || !pending.IsWrite) {
-                        TIssues issues;
-                        issues.AddIssue(ex.what());
-                        ctx.IssueManager.AddIssues(issues);
-                        return TStatus::Error;
-                    }
-                }
-
-                if (!itemType) {
-                    itemType = CreateDefaultItemType(ctx);
-                }
-
-                if (!pending.Meta.RowSpec) {
-                    pending.Meta.RowSpec = ExpandType(pending.Meta.Pos, *itemType, ctx);
-                }
-                // Do not overwrite an entry already stored by a read-side registration.
-                State_->Topics.emplace(key, pending.Meta);
-            }
-            return TStatus::Ok;
-        };
-
-        if (auto status = applyChanges(PendingReadTopics_); status != TStatus::Ok) {
+        if (auto status = FillState(PendingReadTopics_, ctx, false); status != TStatus::Ok) {
             return status;
         }
-        if (auto status = applyChanges(PendingWriteTopics_); status != TStatus::Ok) {
+        if (auto status = FillState(PendingWriteTopics_, ctx, true); status != TStatus::Ok) {
             return status;
         }
-
-        PendingReadTopics_.clear();
-        PendingWriteTopics_.clear();
         return TStatus::Ok;
     }
 
@@ -182,6 +144,37 @@ private:
         return ctx.MakeType<TStructExprType>(items);
     }
 
+    TStatus FillState(TTopics& pendingTopics, TExprContext& ctx, bool isWrite) {
+        for (auto& [key, pending] : pendingTopics) {
+            const TStructExprType* itemType = nullptr;
+            try {
+                pending.Meta.FederatedTopic = pending.Future.GetValue();
+                itemType = CreateDefaultItemType(ctx);
+            } catch (const std::exception& ex) {
+                if (!State_->UseYtflowEngine || !isWrite) {
+                    TIssues issues;
+                    issues.AddIssue(ex.what());
+                    ctx.IssueManager.AddIssues(issues);
+                    return TStatus::Error;
+                }
+            }
+
+            if (!itemType) {
+                itemType = CreateDefaultItemType(ctx);
+            }
+
+            if (!pending.Meta.RowSpec) {
+                pending.Meta.RowSpec = ExpandType(pending.Meta.Pos, *itemType, ctx);
+            }
+            // Do not overwrite an entry already stored by a read-side registration.
+            State_->Topics.emplace(key, pending.Meta);
+        }
+        pendingTopics.clear();
+        return TStatus::Ok;
+    }
+
+
+
     void Rewind() final {
         PendingReadTopics_.clear();
         PendingWriteTopics_.clear();
@@ -190,8 +183,8 @@ private:
 
 private:
     TPqState::TPtr State_;
-    TTopics PendingReadTopics_;
     TTopics PendingWriteTopics_;
+    TTopics PendingReadTopics_;
     NThreading::TFuture<void> AsyncFuture_;
 };
 

@@ -1,4 +1,4 @@
-# Вкладка Tablets
+# Вкладка Tablets {#tablets_list}
 
 На вкладке отображается список таблеток, работающих в кластере. Вкладка входит в набор вкладок [главной страницы](monitoring_main.md) вместе с [Databases](tab-databases.md), [Nodes](tab-nodes.md), [Storage](tab-storage.md) и [Versions](tab-versions.md).
 

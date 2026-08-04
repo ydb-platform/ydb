@@ -198,7 +198,7 @@ Access level lists are configured in the `security_config` section. For detailed
 || Parameter | Description ||
 || `database_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the database access level.
 
-This level is less privileged than viewer. Subjects can only operate within a database scope — backend calls without a specified database are forbidden. Cluster-level requests (e.g., listing cluster nodes) return 403. Database-scoped requests (e.g., database pages in [Embedded UI](../embedded-ui/ydb-monitoring.md)) work normally.
+This level is less privileged than viewer. Subjects can only operate within a database scope — backend calls without a specified database are forbidden. Cluster-level requests (e.g., listing cluster nodes) return 403. Database-scoped requests (e.g., database pages in [YDB UI](../ydb-ui/ydb-monitoring.md)) work normally.
 
 Intended for applications or users restricted to a single database.
     ||
@@ -234,7 +234,7 @@ For technical reasons, this list must include `root@builtin`.
 
 The access level lists are empty by default.
 
-An **empty** list means "allow any user" — any SID is acceptable (or no SID at all if anonymous access is allowed). Empty `administration_allowed_sids` grants any user administrator privileges; empty `viewer_allowed_sids` (with other UI lists empty) allows any user viewer-level access to Embedded UI. If all four hierarchical lists are empty, any user has full administrative access.
+An **empty** list means "allow any user" — any SID is acceptable (or no SID at all if anonymous access is allowed). Empty `administration_allowed_sids` grants any user administrator privileges; empty `viewer_allowed_sids` (with other UI lists empty) allows any user viewer-level access to YDB UI. If all four hierarchical lists are empty, any user has full administrative access.
 
 For a secure {{ ydb-short-name }} deployment, plan the access model beforehand and define the group lists before starting the cluster for the first time.
 
@@ -247,7 +247,7 @@ It is recommended to add user groups and separate service accounts to the `*_all
 **Where the lists are used:**
 
 - **`database_allowed_sids`**, **`viewer_allowed_sids`**, **`monitoring_allowed_sids`**, **`administration_allowed_sids`**
-    To access Embedded UI and viewer HTTP endpoints.
+    To access YDB UI and viewer HTTP endpoints.
 
 - **`administration_allowed_sids`**
     For all administrative checks.

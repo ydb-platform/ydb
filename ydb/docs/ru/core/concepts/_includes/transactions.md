@@ -8,7 +8,7 @@
 
 ## Режимы транзакций {#modes}
 
-{{ ydb-short-name }} поддерживает несколько режимов выполнения транзакций. По умолчанию транзакции выполняются в режиме *Serializable*, который предоставляет самый строгий [уровень изоляции](https://en.wikipedia.org/wiki/Isolation_(database_systems)#Serializable) для пользовательских транзакций. Режим выполнения транзакции задаётся в настройках при её создании. Примеры для {{ ydb-short-name }} SDK см. в [{#T}](../../recipes/ydb-sdk/tx-control.md). Во [встроенном UI](../../reference/embedded-ui/index.md) режим транзакции также можно выбрать в настройках.
+{{ ydb-short-name }} поддерживает несколько режимов выполнения транзакций. По умолчанию транзакции выполняются в режиме *Serializable*, который предоставляет самый строгий [уровень изоляции](https://en.wikipedia.org/wiki/Isolation_(database_systems)#Serializable) для пользовательских транзакций. Режим выполнения транзакции задаётся в настройках при её создании. Примеры для {{ ydb-short-name }} SDK см. в [{#T}](../../recipes/ydb-sdk/tx-control.md). В [YDB UI](../../reference/ydb-ui/index.md) режим транзакции также можно выбрать в настройках.
 
 Поддерживаются **режимы чтения-записи**: *Serializable* (по умолчанию) и *Snapshot Read-Write*; **режимы только для чтения**: *Snapshot Read-Only* и *Stale Read-Only*. Режим *Online Read-Only* оставлен для совместимости со старым кодом (**legacy**); в новых сценариях вместо него следует использовать *Snapshot Read-Only*.
 
@@ -61,7 +61,7 @@
 
 Логика неявных транзакций применяется при отправке одного YQL-скрипта на сервер без явного выбора [режима транзакции](#modes). Типичные точки входа:
 
-* [Встроенный UI](../../reference/embedded-ui/index.md) — вкладка **Query** на странице базы данных ([форма выполнения запроса](../../reference/embedded-ui/ydb-monitoring.md#tenant_scheme)), при запуске без выбора режима транзакции в настройках.
+* [YDB UI](../../reference/ydb-ui/index.md) — вкладка **Query** на странице базы данных ([форма выполнения запроса](../../reference/ydb-ui/ydb-monitoring/database.md#query)), при запуске без выбора режима транзакции в настройках.
 * [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — разовая отправка скрипта командой [`ydb sql`](../../reference/ydb-cli/sql.md).
 * Приложения на [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — режим [ImplicitTx](../../recipes/ydb-sdk/tx-control.md#implicittx).
 
@@ -90,7 +90,7 @@
 
 Чтобы явно задать режим транзакции, используйте соответствующие настройки в каждой точке входа:
 
-* [Встроенный UI](../../reference/embedded-ui/index.md) — выберите режим транзакции в настройках выполнения на вкладке **Query**.
+* [YDB UI](../../reference/ydb-ui/index.md) — выберите режим транзакции в настройках выполнения на вкладке **Query**.
 * [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — у подкоманды [`table query execute`](../../reference/ydb-cli/table-query-execute.md) для запросов типа `data` задайте параметр [`--tx-mode`](../../reference/ydb-cli/table-query-execute.md#options) (по умолчанию `serializable-rw`, что соответствует режиму *Serializable*).
 * [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — см. [установку режима в {{ ydb-short-name }} SDK](../../recipes/ydb-sdk/tx-control.md).
 

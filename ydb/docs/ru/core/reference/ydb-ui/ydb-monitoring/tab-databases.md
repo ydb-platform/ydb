@@ -1,4 +1,4 @@
-# Вкладка Databases
+# Вкладка Databases {#database_list}
 
 На вкладке отображается список баз данных и их ключевые метрики. Вкладка входит в набор вкладок [главной страницы](monitoring_main.md) вместе с [Nodes](tab-nodes.md), [Storage](tab-storage.md), [Tablets](tab-tablets.md) и [Versions](tab-versions.md).
 

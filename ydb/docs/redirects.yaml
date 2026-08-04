@@ -352,6 +352,12 @@ common:
     to: /reference/ydb-ui/charts.md
   - from: /maintenance/embedded_monitoring/index.md
     to: /reference/ydb-ui/index.md
+  # Explicit before catch-all: RU nested monitoring (no flat ydb-monitoring.md)
+  # and removed RU overview stub; also fine for EN (overview → index, monitoring → same page URL).
+  - from: /reference/embedded-ui/overview.md
+    to: /reference/ydb-ui/index.md
+  - from: /reference/embedded-ui/ydb-monitoring.md
+    to: /reference/ydb-ui/ydb-monitoring/
   - from: /reference/embedded-ui/(.*)$
     to: /reference/ydb-ui/$1
 

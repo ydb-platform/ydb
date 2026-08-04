@@ -54,7 +54,7 @@
   - `ca.crt` — сертификат, использованный при развертывании кластера.
   - `grafana-dashboards` — каталог с шаблонами дашбордов для Grafana. Шаблоны загружаются из [репозитория GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards).
 
-  Проверьте содержимое сгенерированных файлов `ydbd-storage.yml` и `ydbd-database.yml`. Список узлов и портов должен совпадать с фактической топологией кластера, в том числе с узлами, отображаемыми во [встроенном UI кластера](../../reference/embedded-ui/ydb-monitoring.md).
+  Проверьте содержимое сгенерированных файлов `ydbd-storage.yml` и `ydbd-database.yml`. Список узлов и портов должен совпадать с фактической топологией кластера, в том числе с узлами, отображаемыми в [YDB UI](../../reference/ydb-ui/ydb-monitoring/index.md).
 
   Пример проверки содержимого каталога с конфигурацией:
 

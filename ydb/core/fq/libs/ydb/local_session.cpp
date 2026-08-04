@@ -82,6 +82,13 @@ public:
             partitioningPolicy = policy;
         }
 
+        if (const auto minPartitionsCount = partitioningSettings.GetMinPartitionsCount()) {
+            if (!partitioningPolicy) {
+                partitioningPolicy = NKikimrSchemeOp::TPartitioningPolicy{};
+            }
+            partitioningPolicy->SetMinPartitionsCount(static_cast<ui32>(minPartitionsCount));
+        }
+
         Register(
             NKikimr::CreateTableCreator(
                 NKikimr::SplitPath(Path),

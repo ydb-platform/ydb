@@ -684,6 +684,7 @@ TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
         .SetPrimaryKeyColumn("graph_id")
         .BeginPartitioningSettings()
             .SetPartitioningBySize(true)
+            .SetMinPartitionsCount(1)
         .EndPartitioningSettings()
         .Build();
     auto f1 = CreateTable(YdbConnection, CoordinatorsSyncTable, std::move(graphDesc), acl);
@@ -702,6 +703,7 @@ TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
         .SetPrimaryKeyColumns({"graph_id", "coordinator_generation", "seq_no"})
         .BeginPartitioningSettings()
             .SetPartitioningBySize(true)
+            .SetMinPartitionsCount(1)
         .EndPartitioningSettings()
         .Build();
     auto f2 = CreateTable(YdbConnection, CheckpointsMetadataTable, std::move(checkpointDesc), acl);
@@ -713,6 +715,7 @@ TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
         .SetPrimaryKeyColumn("id")
         .BeginPartitioningSettings()
             .SetPartitioningBySize(true)
+            .SetMinPartitionsCount(1)
         .EndPartitioningSettings()
         .Build();
     auto f3 = CreateTable(YdbConnection, CheckpointsGraphsDescriptionTable, std::move(checkpointGraphsDescDesc), acl);

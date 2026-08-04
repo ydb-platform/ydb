@@ -379,6 +379,7 @@ TFuture<TIssues> TStateStorage::Init(const NACLib::TDiffACL& acl) {
         .SetPrimaryKeyColumns({"graph_id", "task_id", "coordinator_generation", "seq_no", "blob_seq_num"})
         .BeginPartitioningSettings()
             .SetPartitioningBySize(true)
+            .SetMinPartitionsCount(1)
         .EndPartitioningSettings()
         .Build();
 

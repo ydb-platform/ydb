@@ -39,6 +39,7 @@ TVolumeRequestCounters::TVolumeRequestCounters(
     , ReplyOk(parent ? parent->GetCounter("ReplyOk", true) : nullptr)
     , ReplyErr(parent ? parent->GetCounter("ReplyErr", true) : nullptr)
     , Bytes(parent ? parent->GetCounter("Bytes", true) : nullptr)
+    , Inflight(parent ? parent->GetCounter("Inflight", false) : nullptr)
     , RequestTime(
           parent ? parent->GetHistogram(
                        "RequestTimeMs",
@@ -49,22 +50,28 @@ TVolumeRequestCounters::TVolumeRequestCounters(
 void TVolumeRequestCounters::RequestStarted(ui32 bytes)
 {
     if (Requests) {
-        ++*Requests;
+        Requests->Inc();
     }
     if (bytes && Bytes) {
-        *Bytes += bytes;
+        Bytes->Add(bytes);
+    }
+    if (Inflight) {
+        Inflight->Inc();
     }
 }
 
 void TVolumeRequestCounters::RequestFinished(bool ok, TDuration duration)
 {
     if (ok && ReplyOk) {
-        ++*ReplyOk;
+        ReplyOk->Inc();
     } else if (!ok && ReplyErr) {
-        ++*ReplyErr;
+        ReplyErr->Inc();
     }
     if (RequestTime && duration != TDuration::Zero()) {
         RequestTime->Collect(duration.MillisecondsFloat());
+    }
+    if (Inflight) {
+        Inflight->Dec();
     }
 }
 

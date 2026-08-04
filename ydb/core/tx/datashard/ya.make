@@ -319,6 +319,7 @@ ENDIF()
 END()
 
 RECURSE_FOR_TESTS(
+    fuzz_targets
     build_index/ut
     ut_bloom_filter
     ut_borrowed_compaction

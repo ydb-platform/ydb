@@ -1,0 +1,13 @@
+RECURSE(
+    http2_frame_parse
+    http2_hpack_decode
+    http_address_crack
+    http_cookies_parse
+    http_crack_url
+    http_headers_parse
+    http_incremental_parse
+    http_render_roundtrip
+    http_request_parse
+    http_response_parse
+    http_url_parameters_parse
+)

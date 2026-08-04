@@ -181,6 +181,7 @@ SRCS(
     ydb_result_set_old.proto
     ydb_table_impl.proto
     yql_translation_settings.proto
+    fuzz_inputs.proto
 )
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)

@@ -1,0 +1,20 @@
+RECURSE(
+    bit_containers
+    chunked_buffer_stateful
+    compact_containers_stateful
+    concurrent_hash_threaded_stateful
+    comptrie
+    comptrie_pattern_searcher
+    cow_string_stateful
+    disjoint_interval_tree_stateful
+    fragmented_buffer_stateful
+    generic_hash_stateful
+    intrusive_avl_tree_stateful
+    intrusive_rb_tree_stateful
+    paged_vector_stateful
+    ring_buffer_stateful
+    tbuffer_stateful
+    worker_b_intrusive_stateful
+    worker_b_memory_stateful
+    worker_c_hash_stateful
+)

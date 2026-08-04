@@ -1,0 +1,11 @@
+FUZZ()
+
+SIZE(MEDIUM)
+
+SRCS(
+    main.cpp
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()

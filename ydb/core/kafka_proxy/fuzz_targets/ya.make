@@ -1,0 +1,15 @@
+RECURSE(
+    kafka_admin_requests
+    kafka_consumer_group_requests
+    kafka_consumer_protocol_assignment
+    kafka_consumer_protocol_subscription
+    kafka_fetch_request
+    kafka_list_offsets_request
+    kafka_metadata_request
+    kafka_missing_requests
+    kafka_offset_commit_request
+    kafka_offset_fetch_request
+    kafka_produce_request
+    kafka_record_batch
+    kafka_request_header
+)

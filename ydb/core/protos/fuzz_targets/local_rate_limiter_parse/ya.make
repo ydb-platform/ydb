@@ -1,0 +1,10 @@
+FUZZ()
+PEERDIR(
+    ydb/core/grpc_services
+    ydb/public/api/protos
+    yql/essentials/public/udf/service/stub
+    yql/essentials/public/udf/arrow
+    yql/essentials/sql/pg_dummy
+)
+SRCS(main.cpp)
+END()

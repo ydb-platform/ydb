@@ -17,3 +17,6 @@ RECURSE(
     utils
 )
 
+RECURSE_FOR_TESTS(
+    fuzz_targets
+)

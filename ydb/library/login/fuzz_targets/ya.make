@@ -1,0 +1,15 @@
+RECURSE(
+    login_can_decode_token
+    login_hashes_checker
+    login_jwt_params
+    login_password_check
+    login_sanitize_jwt
+    login_sasl_saslprep
+    login_sasl_scram_final_client
+    login_sasl_scram_final_server
+    login_sasl_scram_first_client
+    login_sasl_scram_first_server
+    login_security_state
+    login_user_group_ops
+    login_validate_token
+)

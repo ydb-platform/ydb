@@ -30,4 +30,3 @@ RECURSE_FOR_TESTS(
     ut/row_table
     ut/transfer_metrics
 )
-

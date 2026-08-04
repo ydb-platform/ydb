@@ -1,0 +1,3 @@
+RECURSE(
+    drr_stateful
+)

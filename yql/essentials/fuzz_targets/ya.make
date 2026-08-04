@@ -1,0 +1,13 @@
+RECURSE(
+    binary_json_raw_parse
+    jsonpath_parse_binary
+    pg_sql_parse
+    result_format_parse
+    sql_feature_builtins_parse
+    sql_feature_hints_parse
+    sql_feature_select_parse
+    sql_feature_statements_parse
+    sql_feature_types_parse
+    sql_parse_format
+    yson_dom_parse
+)

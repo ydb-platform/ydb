@@ -104,6 +104,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    fuzz_targets
     ut_rw
     ut_schema
     backup

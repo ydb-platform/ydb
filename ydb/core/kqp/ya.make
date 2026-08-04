@@ -77,6 +77,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    fuzz_targets
     ut
     common/result_set_format/ut
     tools/cbo_latency_dataset

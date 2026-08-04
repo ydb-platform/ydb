@@ -24,3 +24,7 @@ RECURSE(
     v0
     v1
 )
+
+RECURSE_FOR_TESTS(
+    fuzz_targets
+)

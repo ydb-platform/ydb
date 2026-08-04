@@ -508,9 +508,10 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& ev
         return;
     }
 
-    NWilson::TTraceId traceId = NWilson::TTraceId(event->TraceId); // Can be not empty in case of internal subrequests // In this case it is part of the big request
-    if (!traceId) {
-        TMaybe<TString> traceparentHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
+    const TMaybe<TString> traceparentHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
+    NWilson::TTraceId traceId(event->TraceId);
+    const bool internalSubrequest = static_cast<bool>(traceId);
+    if (!internalSubrequest) {
         traceId = NJaegerTracing::HandleTracing(ctx.GetRequestDiscriminator(), traceparentHeader);
     }
 
@@ -523,11 +524,13 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& ev
         ctx.StartTracing(std::move(grpcRequestProxySpan));
     }
 
-    // Both channels continue the incoming traceparent but make independent sampling decisions.
-    NWilson::TTraceId userTraceId = NJaegerTracing::HandleUserFacingTracing(
-        ctx.GetRequestDiscriminator(), ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER));
-    if (userTraceId) {
-        ctx.SetUserFacingTraceId(std::move(userTraceId));
+    // Internal subrequests must not start an independently sampled user trace.
+    if (!internalSubrequest) {
+        NWilson::TTraceId userTraceId = NJaegerTracing::HandleUserFacingTracing(
+            ctx.GetRequestDiscriminator(), traceparentHeader);
+        if (userTraceId) {
+            ctx.SetUserFacingTraceId(std::move(userTraceId));
+        }
     }
 }
 

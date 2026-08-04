@@ -3957,6 +3957,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
             {"txId", event.GetTxId()});
 
         AddPendingDeferredReadSetAck({.Sender = ev->Sender, .Ack = std::move(ack)});
+        TryWriteTxs(ctx);
     }
 }
 
@@ -4139,7 +4140,8 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
         CanProcessWriteTxs() ||
         CanProcessTxWrites() ||
         TxWritesChanged ||
-        !DeleteTxs.empty()
+        !DeleteTxs.empty() ||
+        !PendingDeferredReadSetAcks.empty()
         ;
     if (!canProcess) {
         return;

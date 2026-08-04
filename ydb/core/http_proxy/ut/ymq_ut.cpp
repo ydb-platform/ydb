@@ -492,8 +492,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     NJson::TJsonValue ReceiveOneMessage(THttpProxyTestMock& fixture, const TString& queueUrl, ui32 waitTimeSeconds = 1) {
+        NJson::TJsonMap json;
         for (int i = 0; i < 3; ++i) {
-            auto json = fixture.ReceiveMessage({
+            json = fixture.ReceiveMessage({
                 {"QueueUrl", queueUrl},
                 {"WaitTimeSeconds", waitTimeSeconds},
                 {"VisibilityTimeout", 30},
@@ -505,7 +506,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             }
             return json["Messages"][0];
         }
-        UNIT_FAIL(TStringBuilder() << "failed to receive message from " << queueUrl);
+        UNIT_FAIL(TStringBuilder() << "failed to receive message: " << json.GetStringRobust());
         return {};
     }
 

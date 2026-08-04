@@ -120,25 +120,31 @@ class NbsTestBase:
         """
         Delete a disk by disk id. Returns the deleted disk id.
         """
-        output = execute_dstool_grpc(
-            self.cluster,
-            "token",
-            [
-                'nbs',
-                'partition',
-                'delete',
-                '--disk-id',
-                disk_id,
-            ],
-        ).decode('utf-8')
+        output = json.loads(
+            execute_dstool_grpc(
+                self.cluster,
+                "token",
+                [
+                    'nbs',
+                    'partition',
+                    'delete',
+                    '--disk-id',
+                    disk_id,
+                ],
+            )
+        )
 
-        match = re.search(r'DiskId:\s*"?([^"\s]+)"?', output)
-        assert match, f"DeletePartition did not return DiskId, output: {output}"
-        return match.group(1)
+        assert output.get('status') == 'SUCCESS', (
+            f"DeletePartition failed for disk {disk_id}: {output}"
+        )
+        deleted_disk_id = output.get('diskId', '')
+        assert deleted_disk_id != "", f"DeletePartition did not return diskId: {output}"
+        return deleted_disk_id
 
-    def delete_disk_expect_failure(self, disk_id):
+    def delete_disk_expect_failure(self, disk_id, expected_status='NOT_FOUND'):
         """
-        Attempt to delete a disk and assert that the operation fails.
+        Attempt to delete a disk and assert that the operation fails with the
+        expected YDB status.
         """
         proc = execute_dstool_grpc(
             self.cluster,
@@ -157,13 +163,21 @@ class NbsTestBase:
         stdout = proc.std_out.decode('utf-8')
         stderr = proc.std_err.decode('utf-8')
 
-        assert 'DiskId:' not in stdout, (
-            f"DeletePartition unexpectedly succeeded for disk {disk_id}: "
-            f"stdout={stdout}, stderr={stderr}"
+        try:
+            output = json.loads(stdout)
+        except json.JSONDecodeError as e:
+            assert False, (
+                f"DeletePartition for disk {disk_id} did not return JSON: "
+                f"{e}; stdout={stdout}, stderr={stderr}"
+            )
+
+        status = output.get('status')
+        assert status == expected_status, (
+            f"DeletePartition for disk {disk_id} returned status {status}, "
+            f"expected {expected_status}; output={output}, stderr={stderr}"
         )
-        assert 'error' in stderr, (
-            f"DeletePartition for missing disk {disk_id} did not report error: "
-            f"stdout={stdout}, stderr={stderr}"
+        assert 'diskId' not in output, (
+            f"DeletePartition unexpectedly returned diskId on failure: {output}"
         )
 
     def get_load_actor_adapter_actor_id(self, disk_id):

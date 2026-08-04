@@ -1,5 +1,7 @@
+import json
 import ydb.apps.dstool.lib.common as common
 import ydb.public.api.protos.draft.ydb_nbs_pb2 as nbs
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 
 
 description = 'Delete NBS 2.0 partition'
@@ -19,9 +21,12 @@ def do(args):
 
     common.print_nbs_request_result(args, request, response)
 
-    if not common.get_status(response):
-        return
+    output = {
+        'status': StatusIds.StatusCode.Name(response.operation.status),
+    }
+    if common.get_status(response):
+        result = nbs.DeletePartitionResult()
+        response.operation.result.Unpack(result)
+        output['diskId'] = result.DiskId or ''
 
-    result = nbs.DeletePartitionResult()
-    response.operation.result.Unpack(result)
-    print(result)
+    print(json.dumps(output))

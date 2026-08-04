@@ -199,7 +199,16 @@ private:
                     ? NYdb::NBS::FormatError(error)
                     : error.GetMessage());
             Request_->RaiseIssue(issue);
-            Reply(Ydb::StatusIds::GENERIC_ERROR, ActorContext());
+
+            auto status = Ydb::StatusIds::GENERIC_ERROR;
+            if (FACILITY_FROM_CODE(error.GetCode()) == NYdb::NBS::FACILITY_SCHEMESHARD) {
+                const auto schemeStatus = static_cast<NKikimrScheme::EStatus>(
+                    STATUS_FROM_CODE(error.GetCode()));
+                if (schemeStatus == NKikimrScheme::StatusPathDoesNotExist) {
+                    status = Ydb::StatusIds::NOT_FOUND;
+                }
+            }
+            Reply(status, ActorContext());
             return;
         }
 

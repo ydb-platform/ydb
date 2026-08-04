@@ -321,6 +321,12 @@ private:
                         // Repack the modified source settings back into the task input.
                         input.MutableSource()->MutableSettings()->PackFrom(topicSource);
                     }
+                    // Serialize the (possibly updated) TDqPqTopicSource into TaskParams so
+                    // that TPqDqTaskTransform can use the current per-cluster PartitionsCount
+                    // from FederatedClusters instead of the compile-time values baked into
+                    // the MiniKQL program bytes.
+                    (*dqTask->MutableTaskParams())["pq_topic_source"] =
+                        topicSource.SerializeAsString();
                     break;
                 }
 

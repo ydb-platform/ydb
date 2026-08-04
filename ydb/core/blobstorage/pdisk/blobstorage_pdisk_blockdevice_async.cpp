@@ -988,6 +988,7 @@ protected:
                 Mon.DeviceInFlightWrites->Dec();
                 (*Mon.DeviceBytesWritten) += size;
                 Mon.DeviceWrites->Inc();
+                Mon.DeviceWritesSizes.Increment(size);
                 break;
             case IAsyncIoOperation::EType::PRead:
                 (*Mon.DeviceInFlightBytesRead) -= size;

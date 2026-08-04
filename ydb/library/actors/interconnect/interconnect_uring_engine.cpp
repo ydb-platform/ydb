@@ -87,6 +87,25 @@ namespace NActors {
     struct TEvDestroyEvents : TEventLocal<TEvDestroyEvents, 0> {
         std::vector<std::unique_ptr<IEventBase>> Events;
         std::vector<TIntrusivePtr<TEventSerializedData>> Buffers;
+        size_t Bytes = 0;
+        std::shared_ptr<std::atomic<TAtomicBase>> Counter;
+
+        ~TEvDestroyEvents() {
+            if (Counter) {
+                Counter->fetch_sub(Bytes, std::memory_order_relaxed);
+            }
+        }
+
+        size_t CalculateTotalSize() const {
+            size_t bytes = 0;
+            for (const auto& ev : Events) {
+                bytes += ev->CalculateSerializedSizeCached();
+            }
+            for (const auto& buffer : Buffers) {
+                bytes += buffer->GetSize();
+            }
+            return bytes;
+        }
     };
 
     class TUringEngine final : public IUringEngine {
@@ -157,6 +176,8 @@ namespace NActors {
             ui64 ReceiveCycles = 0;
             ui64 EventsReceivedCallback = 0;
             ui64 EventsReceivedActorSystem = 0;
+
+            std::atomic_uint64_t TotalOutputQueueSize{0};
 
             TSession(ui32 shardIdx, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
                     TActorId sessionId, bool checksumming, TScopeId peerScopeId,
@@ -291,7 +312,17 @@ namespace NActors {
                 Y_ABORT_UNLESS(num <= UnsentBytes, "num# %zu UnsentBytes# %zu", num, UnsentBytes);
                 UnsentBytes -= num;
 
+                size_t numEvents = events->size();
+                size_t numBuffers = buffers->size();
+                size_t bytes = 0;
                 Serializer.CommitProducedBytes(num, eventToWireTime, events, buffers);
+                for (size_t i = numEvents, count = events->size(); i < count; ++i) {
+                    bytes += (*events)[i]->CalculateSerializedSizeCached();
+                }
+                for (size_t i = numBuffers, count = buffers->size(); i < count; ++i) {
+                    bytes += (*buffers)[i]->GetSize();
+                }
+                TotalOutputQueueSize.fetch_sub(bytes, std::memory_order_relaxed);
             }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -759,6 +790,18 @@ namespace NActors {
             void Send(ui64 conn, std::unique_ptr<IEventHandle> ev, TIntrusivePtr<IReceiveCallback> replyCallback) {
                 ++*EventsSent;
 
+                // handle output queue size here
+                const size_t size = ev->HasBuffer() ? ev->GetChainBuffer()->GetSize() :
+                    ev->HasEvent() ? ev->GetBase()->CalculateSerializedSizeCached() : 0;
+                if (size > Engine.Common->Settings.MaxSerializedEventSize) {
+                    return SendInternal(conn, static_cast<ui32>(ENetwork::EvUringEventTooLarge), {}, nullptr, true);
+                }
+                auto& session = *reinterpret_cast<TSession*>(conn);
+                const ui64 newQueueSize = size + session.TotalOutputQueueSize.fetch_add(size, std::memory_order_relaxed);
+                if (const ui64 limit = Engine.Common->Settings.SendBufferDieLimitInMB; limit && newQueueSize > limit * 1_MB) {
+                    return SendInternal(conn, static_cast<ui32>(ENetwork::EvUringQueueOverload), {}, nullptr, true);
+                }
+
                 // this event is strictly sequenced
                 SendImpl(conn, std::move(ev), std::move(replyCallback), true);
             }
@@ -959,7 +1002,14 @@ namespace NActors {
 
                     // discard pending events/buffers, if any
                     if (!EvDestroyEvents->Events.empty() || !EvDestroyEvents->Buffers.empty()) {
-                        Engine.ActorSystem->Send(new IEventHandle(Engine.DestructorActorId, {}, EvDestroyEvents.release()));
+                        const size_t bytes = EvDestroyEvents->CalculateTotalSize();
+                        const auto& counter = Engine.Common->DestructorQueueSize;
+                        const size_t max = Engine.Common->MaxDestructorQueueSize;
+                        EvDestroyEvents->Counter = counter;
+                        EvDestroyEvents->Bytes = bytes;
+                        if (Y_LIKELY(!counter || counter->fetch_add(bytes, std::memory_order_relaxed) + bytes <= max)) {
+                            Engine.ActorSystem->Send(new IEventHandle(Engine.DestructorActorId, {}, EvDestroyEvents.release()));
+                        }
                         EvDestroyEvents = std::make_unique<TEvDestroyEvents>();
                     }
 
@@ -1100,6 +1150,18 @@ namespace NActors {
                     case static_cast<ui32>(ENetwork::EvUringMonRequest):
                         ProcessMonRequest(GetSession(record), std::move(record->Ev->Get<TEvUringMonRequest>()->Ev));
                         break;
+
+                    case static_cast<ui32>(ENetwork::EvUringQueueOverload): {
+                        TSession& session = GetSession(record);
+                        session.Disconnect(TDisconnectReason::QueueOverload());
+                        break;
+                    }
+
+                    case static_cast<ui32>(ENetwork::EvUringEventTooLarge): {
+                        TSession& session = GetSession(record);
+                        session.Disconnect(TDisconnectReason::EventTooLarge());
+                        break;
+                    }
 
                     default: {
                         TSession& session = GetSession(record);
@@ -1532,6 +1594,10 @@ namespace NActors {
 
         void IssueMonRequest(ui64 conn, NMon::TEvHttpInfoRes::TPtr ev) override {
             GetShard(conn).IssueMonRequest(conn, std::move(ev));
+        }
+
+        ui64 GetTotalOutputQueueSize(ui64 conn) override {
+            return reinterpret_cast<TSession*>(conn)->TotalOutputQueueSize.load(std::memory_order_relaxed);
         }
     };
 

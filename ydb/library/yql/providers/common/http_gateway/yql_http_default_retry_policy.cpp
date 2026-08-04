@@ -94,41 +94,62 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, si
 // while other retriable errors use the default 5-minute budget.
 // A plain lambda in GetExponentialBackoffPolicy cannot do this because maxTime is a single
 // value fixed at construction time — it cannot vary per error code within one retry session.
+// TFqRetryState delegates to two standard exponential-backoff states, selecting by curl code.
 IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy() {
+    auto makeDnsPolicy = []() {
+        return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
+            [](CURLcode curlCode, long httpCode) {
+                return curlCode == CURLE_COULDNT_RESOLVE_HOST ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
+            },
+            TDuration::MilliSeconds(10),  // minDelay
+            TDuration::MilliSeconds(200), // minLongRetryDelay
+            TDuration::Seconds(30),       // maxDelay
+            std::numeric_limits<size_t>::max(),
+            DNS_ERROR_MAX_TIME);
+    };
+
+    auto makeOtherPolicy = [](std::unordered_set<CURLcode> codes) {
+        return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
+            [codes = std::move(codes)](CURLcode curlCode, long httpCode) {
+                return ClassifyError(curlCode, httpCode, codes);
+            },
+            TDuration::MilliSeconds(10),  // minDelay
+            TDuration::MilliSeconds(200), // minLongRetryDelay
+            TDuration::Seconds(30),       // maxDelay
+            std::numeric_limits<size_t>::max(),
+            DEFAULT_MAX_TIME);
+    };
+
     struct TFqRetryState : IHTTPGateway::TRetryPolicy::IRetryState {
-        explicit TFqRetryState(std::unordered_set<CURLcode> codes) : RetriedCurlCodes(std::move(codes)) {}
+        TFqRetryState(IHTTPGateway::TRetryPolicy::TPtr dnsPolicy, IHTTPGateway::TRetryPolicy::TPtr otherPolicy)
+            : DnsState(dnsPolicy->CreateRetryState())
+            , OtherState(otherPolicy->CreateRetryState())
+        {}
 
         TMaybe<TDuration> GetNextRetryDelay(CURLcode curlCode, long httpCode) override {
-            if (!StartTime) {
-                StartTime = TInstant::Now();
-            }
-            auto retryClass = ClassifyError(curlCode, httpCode, RetriedCurlCodes);
-            if (retryClass == ERetryErrorClass::NoRetry) {
-                return Nothing();
-            }
-            TDuration maxTime = (curlCode == CURLE_COULDNT_RESOLVE_HOST) ? DNS_ERROR_MAX_TIME : DEFAULT_MAX_TIME;
-            if (TInstant::Now() - *StartTime >= maxTime) {
-                return Nothing();
-            }
-            TDuration delay = (retryClass == ERetryErrorClass::LongRetry) ? Max(CurrentDelay, TDuration::MilliSeconds(200)) : CurrentDelay;
-            CurrentDelay = Min(CurrentDelay * 2.0, TDuration::Seconds(30));
-            return delay;
+            return curlCode == CURLE_COULDNT_RESOLVE_HOST
+                ? DnsState->GetNextRetryDelay(curlCode, httpCode)
+                : OtherState->GetNextRetryDelay(curlCode, httpCode);
         }
 
-        const std::unordered_set<CURLcode> RetriedCurlCodes;
-        std::optional<TInstant> StartTime;
-        TDuration CurrentDelay = TDuration::MilliSeconds(10);
+        IHTTPGateway::TRetryPolicy::IRetryState::TPtr DnsState;
+        IHTTPGateway::TRetryPolicy::IRetryState::TPtr OtherState;
     };
 
     struct TFqRetryPolicy : IHTTPGateway::TRetryPolicy {
-        explicit TFqRetryPolicy(std::unordered_set<CURLcode> codes) : RetriedCurlCodes(std::move(codes)) {}
+        TFqRetryPolicy(IHTTPGateway::TRetryPolicy::TPtr dnsPolicy, IHTTPGateway::TRetryPolicy::TPtr otherPolicy)
+            : DnsPolicy(std::move(dnsPolicy))
+            , OtherPolicy(std::move(otherPolicy))
+        {}
         IRetryState::TPtr CreateRetryState() const override {
-            return std::make_unique<TFqRetryState>(RetriedCurlCodes);
+            return std::make_unique<TFqRetryState>(DnsPolicy, OtherPolicy);
         }
-        std::unordered_set<CURLcode> RetriedCurlCodes;
+        IHTTPGateway::TRetryPolicy::TPtr DnsPolicy;
+        IHTTPGateway::TRetryPolicy::TPtr OtherPolicy;
     };
 
-    return std::make_shared<TFqRetryPolicy>(FqRetriedCurlCodes());
+    auto fqCodes = FqRetriedCurlCodes();
+    return std::make_shared<TFqRetryPolicy>(makeDnsPolicy(), makeOtherPolicy(std::move(fqCodes)));
 }
 
 }

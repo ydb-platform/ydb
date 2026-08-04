@@ -24,7 +24,7 @@ bool IsTabletDevUiSecurePath(TStringBuf pathInfo);
 // True if the tablet type exposes an `/app/secure` subtree and EnableTabletDevUiSecurePath is set.
 // Such a tablet may still serve part of its DevUI on plain `/app/` (e.g. SchemeShard keeps its
 // read-only pages there and moves only admin actions).
-bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type);
+bool HasTabletDevUiSecureSubtree(const TAppData* appData, TTabletTypes::EType type);
 
 bool IsTabletDevUiAppPageAdminOnly(const TAppData* appData, TTabletTypes::EType type);
 

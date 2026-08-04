@@ -3,7 +3,6 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <util/string/vector.h>
-#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include "hive_impl.h"
@@ -19,20 +18,6 @@ namespace NHive {
 
 static constexpr ui64 MAX_REASSIGNS_WITHOUT_CONFIRMATION = 1000;
 static constexpr i64 REASSIGN_CONFIRMATION_ERROR_MARGIN = 10;
-
-// Loads hive.js and publishes the DevUI path every link on the page must use. The path is
-// resolved here rather than re-derived in JS from a feature flag: these pages are rendered
-// server-side, so `app` vs `app/secure` is already known, and keeping the mapping in one place
-// avoids it drifting from TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH.
-static void AppendHiveDevUiScript(IOutputStream& out, TStringBuf pathInfo, const TAppData* appData) {
-    const TStringBuf monRoot = IsTabletDevUiSecurePath(pathInfo) ? TStringBuf("../..") : TStringBuf("..");
-    const TStringBuf appPath = UsesTabletDevUiSecurePath(appData, TTabletTypes::Hive)
-        ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
-        : TStringBuf("app");
-    // Must precede hive.js, which reads it from hiveAppUrl()/makeTabletDevUiUrl().
-    out << "<script>window.HiveDevUiAppPath = \"" << appPath << "\";</script>";
-    out << "<script src=\"" << monRoot << "/cms/hive.js\"></script>";
-}
 
 TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self) {
     Index = ++self->OperationsLogIndex;
@@ -514,7 +499,6 @@ public:
 
     void RenderHTMLPage(IOutputStream &out) {
         out << "<script>$('.container').css('width', 'auto');</script>";
-        AppendHiveDevUiScript(out, Event.Get()->PathInfo(), AppData());
         out << "<table class='table table-sortable'>";
         out << "<thead>";
         out << "<tr>";
@@ -534,8 +518,7 @@ public:
             out << "<td>" << domainKey << "</td>";
             out << "<td>" << domainInfo.Path << "</td>";
             if (domainInfo.HiveId) {
-                out << "<td><a href='#' onclick='location.href=makeTabletDevUiUrl(\"TabletID="
-                    << domainInfo.HiveId << "\");return false;'>" << domainInfo.HiveId << "</a></td>";
+                out << "<td><a href='?TabletID=" << domainInfo.HiveId << "'>" << domainInfo.HiveId << "</a></td>";
                 if (domainInfo.HiveId == Self->TabletID()) {
                     out << "<td>itself</td>";
                 } else {
@@ -1594,7 +1577,6 @@ public:
         }
 
         out << "<head>";
-        AppendHiveDevUiScript(out, Event.Get()->PathInfo(), AppData());
         out << "<style>";
         out << "table.simple-table1 th { text-align: center; }";
         out << "table.simple-table1 td { padding: 1px 3px; }";
@@ -1710,49 +1692,49 @@ public:
 
         out << "<div class='row' style='margin-top:100px'>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=MemStateTablets&bad=1&max=1000\");' style='width:138px'>Bad Tablets</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=MemStateTablets&bad=1&max=1000\";' style='width:138px'>Bad Tablets</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=MemStateTablets&sort=weight&max=1000\");' style='width:138px'>Heavy Tablets</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=MemStateTablets&sort=weight&max=1000\";' style='width:138px'>Heavy Tablets</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=MemStateTablets&wait=1&max=1000\");' style='width:138px'>Waiting Tablets</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=MemStateTablets&wait=1&max=1000\";' style='width:138px'>Waiting Tablets</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=Resources\");' style='width:138px'>Resources</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=Resources\";' style='width:138px'>Resources</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=MemStateDomains\");' style='width:138px'>Tenants</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=MemStateDomains\";' style='width:138px'>Tenants</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' data-toggle='modal' data-target='#rebalance' style='width:138px'>Balancer</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=OperationsLog&max=100\");' style='width:138px'>Operations Log</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=OperationsLog&max=100\";' style='width:138px'>Operations Log</button>";
         out << "</div>";
         out << "</div>";
 
         out << "<div class='row' style='margin-top:10px'>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=MemStateNodes\");' style='width:138px'>Nodes</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=MemStateNodes\";' style='width:138px'>Nodes</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=Storage\");' style='width:138px'>Storage</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=Storage\";' style='width:138px'>Storage</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=Groups\");' style='width:138px'>Groups</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=Groups\";' style='width:138px'>Groups</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=Settings\");' style='width:138px'>Settings</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=Settings\";' style='width:138px'>Settings</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' data-toggle='modal' data-target='#reassign-groups' style='width:138px'>Reassign Groups</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=Subactors\");' style='width:138px'>SubActors</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=Subactors\";' style='width:138px'>SubActors</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=ManualOperations\");' style='width:138px'>Manual Ops</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=ManualOperations\";' style='width:138px'>Manual Ops</button>";
         out << "</div>";
         out << "</div>";
 
@@ -2025,7 +2007,7 @@ function initReassignGroups() {
     }
     $('#last_reassign').text(lastReassign);
     var current_reassigns_link = document.getElementById('current_reassigns');
-    current_reassigns_link.href = hiveAppUrl('TabletID=' + hiveId + '&page=Subactors');
+    current_reassigns_link.href = ('?TabletID=' + hiveId + '&page=Subactors');
 }
 
 initReassignGroups();
@@ -2041,7 +2023,7 @@ function queryTablets() {
     var channel_from = $('#tablet_from_channel').val();
     var channel_to = $('#tablet_to_channel').val();
     var percent = $('#tablet_percent').val();
-    var url = hiveAppUrl('TabletID=' + hiveId + '&page=FindTablet');
+    var url = ('?TabletID=' + hiveId + '&page=FindTablet');
     if (storage_pool) {
         url = url + '&storagePool=' + storage_pool;
     }
@@ -2090,7 +2072,7 @@ function continueReassign() {
         $('#current_inflight').text(current_inflight);
         $.ajax({
             type: 'POST',
-            url: hiveAppUrl('TabletID=' + hiveId
+            url: ('?TabletID=' + hiveId
                 + '&page=ReassignTablet&tablet=' + tablet.tabletId
                 + '&channel=' + tablet.channels
                 + '&wait=1'
@@ -2145,7 +2127,7 @@ function reassignGroups() {
         var max_inflight = $('#tablet_reassign_inflight').val();
         var async = $('#reassign_async')[0].checked;
         var num_tablets = $('#confirm_tablets').val();
-        var url = hiveAppUrl('TabletID=' + hiveId + '&page=ReassignTablet' + '&tablet=all' + '&wait=0');
+        var url = ('?TabletID=' + hiveId + '&page=ReassignTablet' + '&tablet=all' + '&wait=0');
         if (storage_pool) {
             url = url + '&storagePool=' + storage_pool;
         }
@@ -2187,11 +2169,11 @@ function setDown(element, nodeId, down) {
     if (down && $(element).hasClass('glyphicon-ok')) {
         $(element).removeClass('glyphicon-ok');
         element.inProgress = true;
-        $.ajax({type: 'POST', url: hiveAppUrl('TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=1'), success: function(){ $(element).addClass('glyphicon-remove'); element.inProgress = false; }});
+        $.ajax({type: 'POST', url: ('?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=1'), success: function(){ $(element).addClass('glyphicon-remove'); element.inProgress = false; }});
     } else if (!down && $(element).hasClass('glyphicon-remove')) {
         $(element).removeClass('glyphicon-remove');
         element.inProgress = true;
-        $.ajax({type: 'POST', url: hiveAppUrl('TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=0'), success: function(){ $(element).addClass('glyphicon-ok'); element.inProgress = false; }});
+        $.ajax({type: 'POST', url: ('?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=0'), success: function(){ $(element).addClass('glyphicon-ok'); element.inProgress = false; }});
     }
 }
 
@@ -2203,33 +2185,33 @@ function toggleFreeze(element, nodeId) {
     if ($(element).hasClass('glyphicon-play')) {
         $(element).removeClass('glyphicon-play');
         element.inProgress = true;
-        $.ajax({type: 'POST', url: hiveAppUrl('TabletID=' + hiveId + '&node=' + nodeId + '&page=SetFreeze&freeze=1'), success: function(){ $(element).addClass('glyphicon-pause'); element.inProgress = false; }});
+        $.ajax({type: 'POST', url: ('?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetFreeze&freeze=1'), success: function(){ $(element).addClass('glyphicon-pause'); element.inProgress = false; }});
     } else if ($(element).hasClass('glyphicon-pause')) {
         $(element).removeClass('glyphicon-pause');
         element.inProgress = true;
-        $.ajax({type: 'POST', url: hiveAppUrl('TabletID=' + hiveId + '&node=' + nodeId + '&page=SetFreeze&freeze=0'), success: function(){ $(element).addClass('glyphicon-play'); element.inProgress = false; }});
+        $.ajax({type: 'POST', url: ('?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetFreeze&freeze=0'), success: function(){ $(element).addClass('glyphicon-play'); element.inProgress = false; }});
     }
 }
 
 function kickNode(element, nodeId) {
     $(element).removeClass('glyphicon-transfer');
-    $.ajax({type: 'POST', url: hiveAppUrl('TabletID=' + hiveId + '&node=' + nodeId + '&page=KickNode'), success: function(){ $(element).addClass('glyphicon-transfer'); }});
+    $.ajax({type: 'POST', url: ('?TabletID=' + hiveId + '&node=' + nodeId + '&page=KickNode'), success: function(){ $(element).addClass('glyphicon-transfer'); }});
 }
 
 function drainNode(element, nodeId) {
     $(element).removeClass('glyphicon-transfer');
-    $.ajax({type: 'POST', url: hiveAppUrl('TabletID=' + hiveId + '&node=' + nodeId + '&page=DrainNode'), success: function(){ $(element).addClass('blinking'); Nodes[nodeId].Drain = true; }});
+    $.ajax({type: 'POST', url: ('?TabletID=' + hiveId + '&node=' + nodeId + '&page=DrainNode'), success: function(){ $(element).addClass('blinking'); Nodes[nodeId].Drain = true; }});
 }
 
 function rebalanceTablets() {
     var max_movements = $('#balancer_max_movements').val();
     var in_flight = $('#balancer_in_flight').val();
-    $.ajax({type: 'POST', url: hiveAppUrl('TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements + '&inflight=' + in_flight)});
+    $.ajax({type: 'POST', url: ('?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements + '&inflight=' + in_flight)});
 }
 
 function rebalanceTabletsFromScratch(element) {
     var tenant_name = $('#tenant_name').val();
-    $.ajax({type: 'POST', url: hiveAppUrl('TabletID=' + hiveId + '&page=RebalanceFromScratch&tenantName=' + tenant_name)});
+    $.ajax({type: 'POST', url: ('?TabletID=' + hiveId + '&page=RebalanceFromScratch&tenantName=' + tenant_name)});
 }
 
 function toggleAlert() {
@@ -2544,14 +2526,14 @@ function updateDataShort() {
         updateDataLong();
         return;
     }
-    $.ajax({url: hiveAppUrl('TabletID=' + hiveId + '&page=LandingData'),
+    $.ajax({url: ('?TabletID=' + hiveId + '&page=LandingData'),
         success: function(result){ onFreshDataShort(result); },
         error: function(){ toggleAlert(); setTimeout(updateDataShort, 1000); }
     });
 }
 
 function updateDataLong() {
-    $.ajax({url: hiveAppUrl('TabletID=' + hiveId + '&page=LandingData&nodes=1&moves=1'),
+    $.ajax({url: ('?TabletID=' + hiveId + '&page=LandingData&nodes=1&moves=1'),
         success: function(result){ onFreshDataLong(result); },
         error: function(){ toggleAlert(); setTimeout(updateDataLong, 1000); }
     });
@@ -4930,7 +4912,6 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         TStringStream out;
-        AppendHiveDevUiScript(out, Event.Get()->PathInfo(), AppData());
         out << "<div>";
         out << "<form id='dynamicForm' method='POST'>";
         out << R"(
@@ -5050,7 +5031,7 @@ public:
 
                 function sendPostRequest(data) {
                     $.ajax({
-                        url: hiveAppUrl('TabletID=' + hiveId),
+                        url: ('?TabletID=' + hiveId),
                         method: 'POST',
                         data: data,
                         success: function(d) {

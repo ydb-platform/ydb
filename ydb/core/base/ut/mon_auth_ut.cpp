@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TabletDevUiMonAccess) {
         UNIT_ASSERT(!IsTabletDevUiSecurePath("/x/app/secure"));
     }
 
-    Y_UNIT_TEST(UsesTabletDevUiSecurePath) {
+    Y_UNIT_TEST(HasTabletDevUiSecureSubtree) {
         TTabletDevUiMonAccessFixture fixture;
 
         for (const auto type : {
@@ -53,20 +53,20 @@ Y_UNIT_TEST_SUITE(TabletDevUiMonAccess) {
             TTabletTypes::SchemeShard,
         }) {
             fixture.SetEnableTabletDevUiSecurePath(false);
-            UNIT_ASSERT(!UsesTabletDevUiSecurePath(fixture.GetAppData(), type));
+            UNIT_ASSERT(!HasTabletDevUiSecureSubtree(fixture.GetAppData(), type));
 
             fixture.SetEnableTabletDevUiSecurePath(true);
-            UNIT_ASSERT(UsesTabletDevUiSecurePath(fixture.GetAppData(), type));
+            UNIT_ASSERT(HasTabletDevUiSecureSubtree(fixture.GetAppData(), type));
         }
 
         for (const auto type : {
             TTabletTypes::Coordinator,
         }) {
             fixture.SetEnableTabletDevUiSecurePath(false);
-            UNIT_ASSERT(!UsesTabletDevUiSecurePath(fixture.GetAppData(), type));
+            UNIT_ASSERT(!HasTabletDevUiSecureSubtree(fixture.GetAppData(), type));
 
             fixture.SetEnableTabletDevUiSecurePath(true);
-            UNIT_ASSERT(!UsesTabletDevUiSecurePath(fixture.GetAppData(), type));
+            UNIT_ASSERT(!HasTabletDevUiSecureSubtree(fixture.GetAppData(), type));
         }
     }
 

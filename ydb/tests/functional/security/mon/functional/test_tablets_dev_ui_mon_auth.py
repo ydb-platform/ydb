@@ -472,7 +472,7 @@ def test_hive_destroy_operations_with_secure_path_mode(
         )
 
 
-def test_hive_devui_links_use_secure_path(
+def test_hive_devui_links_stay_on_current_app_path(
     ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
@@ -484,8 +484,11 @@ def test_hive_devui_links_use_secure_path(
     )
 
     assert response.status_code == 200, response.text
-    assert 'window.HiveDevUiAppPath = "app/secure";' in response.text
-    assert '/cms/hive.js' in response.text
+    assert f'location.href="?TabletID={tid}&page=MemStateNodes"' in response.text
+    assert "'?TabletID=' + hiveId" in response.text
+    assert 'hive.js' not in response.text
+    assert f'href="app?TabletID={tid}' not in response.text
+    assert f"href='app?TabletID={tid}" not in response.text
 
 
 def _schemeshard_endpoint_cases(endpoint_paths, token_statuses):

@@ -24,7 +24,7 @@ bool IsTabletDevUiSecurePath(TStringBuf pathInfo) {
     return pathInfo.StartsWith(TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX + "/");
 }
 
-bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type) {
+bool HasTabletDevUiSecureSubtree(const TAppData* appData, TTabletTypes::EType type) {
     if (!appData) {
         return false;
     }

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import pytest
+
 from common import NbsTestBase
 from vhost_user_blk_client import (
     VIRTIO_BLK_S_OK,
@@ -214,3 +216,46 @@ class TestNbs(NbsTestBase):
         # Verify the data matches (trimmed to the original length)
         assert read_data_1[: len(test_data_1)] == test_data_1
         assert read_data_2[: len(test_data_2)] == test_data_2
+
+    def _restart_tenant_slots(self):
+        """
+        Restart the NBS tenant slots (the processes hosting the partition
+        tablet) and wait until the tenant is back up.
+        """
+        for slot in self.cluster.slots.values():
+            slot.stop()
+        for slot in self.cluster.slots.values():
+            slot.start()
+        self.cluster.wait_tenant_up("/Root/NBS")
+
+    @pytest.mark.xfail(
+        strict=False,
+        reason="data safety: after a tablet restart the read succeeds but "
+        "returns garbage instead of the written block; the restore path "
+        "is broken (its unit test is disabled with #if 0). Kept as a live "
+        "repro for the fix.",
+    )
+    def test_nbs_data_survives_tablet_restart(self):
+        """
+        Data safety: write a block, restart the NBS tenant slot (the
+        partition tablet process), read the block back. The static storage
+        nodes keep running, so PBuffers and DDisks keep their content: this
+        exercises the tablet restore path in a real cluster (the functional
+        counterpart of the red ShouldRestorePartitionAfterRestart unit test).
+        """
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+        self.create_disk(disk_id)
+        actor_id = self.get_load_actor_adapter_actor_id(disk_id)
+
+        test_data = self.generate_random_data(1024)
+        self.write(actor_id, 0, test_data)
+        assert self.read(actor_id, 0)[: len(test_data)] == test_data
+
+        self._restart_tenant_slots()
+
+        # The load actor adapter is re-created after the restart.
+        actor_id = self.get_load_actor_adapter_actor_id(disk_id)
+        read_data = self.read(actor_id, 0)
+        assert read_data[: len(test_data)] == test_data, (
+            "block content lost or corrupted across a tablet restart")

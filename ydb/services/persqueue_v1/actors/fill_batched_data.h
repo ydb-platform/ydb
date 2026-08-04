@@ -18,6 +18,9 @@
 #include <google/protobuf/util/time_util.h>
 #include <util/charset/utf8.h>
 
+#include <type_traits>
+#include <utility>
+
 #ifndef YDB_LOG_THIS_FILE_COMPONENT
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
 #define FILL_BATCHED_DATA_DEFINED_YDB_LOG_THIS_FILE_COMPONENT

@@ -49,6 +49,9 @@ namespace NActors {
 
         // Issue monitoring request.
         virtual void IssueMonRequest(ui64 conn, NMon::TEvHttpInfoRes::TPtr ev) = 0;
+
+        // Get total output queue size (in bytes).
+        virtual ui64 GetTotalOutputQueueSize(ui64 conn) = 0;
     };
 
     using TUringEnginePtr = TIntrusivePtr<IUringEngine>;

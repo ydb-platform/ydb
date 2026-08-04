@@ -543,11 +543,14 @@ ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_tpch
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.ERROR]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.NO]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.WARNING]
+ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.ERROR]
 ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[first_query_set.1.sql]
 ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsvArrow.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW10T4SdkCompaction.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[10]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[12]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[13]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[14]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[15]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[16]
@@ -557,6 +560,7 @@ ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[19]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[3]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[4]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[5]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[6]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[7]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[8]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[9]
@@ -564,6 +568,7 @@ ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWM.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWMComputeSchedulerP1T1.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestTpchWMS0_1.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltp50.test
+ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpTpchS0_1.test
 ydb/tests/functional/tpc/medium/tpch py3test.[test_decimal.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py */*] chunk

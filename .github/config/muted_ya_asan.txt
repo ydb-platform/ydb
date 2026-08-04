@@ -84,7 +84,6 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestAuthMatrixForSendMessa
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestAuthMatrixForSendMessageXmlSqs
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibility
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch
-ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibility_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueSetsContentBasedDeduplicationMessageRateLimit
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueSetsDefaultTopicMessageRateLimit
@@ -110,6 +109,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteMessage_TableImp
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteQueue
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteQueue_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueAttributes
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueAttributes_ApproximateSum_TableAndTopic_Compatibility
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueAttributes_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueUrl
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueUrlOfNotExistingQueue
@@ -145,6 +145,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageWithIAMWith
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageWithIAMWithoutFolderId_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility_WithUserSettings
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_MigrationFinished_WithUserSettings
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_WithUserSettings
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSetQueueAttributes
@@ -192,7 +193,6 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageCharg
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageIdempotence
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageNonExistentConsumerInFederation
-ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageWithAtSignInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageWithLeadingSlashInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueueInFederation
@@ -309,7 +309,6 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueExis
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueExistingTopicNoConsumerWithExtendedRetention
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueExistingTopicWithSharedConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueExistingTopicWithStreamingConsumer
-ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueFifo
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueSetsContentBasedDeduplicationMessageRateLimit
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueSetsDefaultTopicMessageRateLimit
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithAttributes
@@ -318,8 +317,6 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWith
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithEmptyName
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithSameNameAndDifferentParams
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithSameNameAndSameParams
-ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteMessage
-ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteMessageBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteMessageIdempotence
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteMessageInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueue
@@ -430,8 +427,9 @@ ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.IndexesActualization-QueryService
-ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.MinMaxIndexAppliedToDataAfterCompaction-QueryService-SchemeObjectDisabled
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.MinMaxIndexAppliedToDataAfterCompaction-QueryService-SchemeObjectEnabled
+ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery+EnableIndexStreamWrite
+ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelAuto
@@ -453,6 +451,7 @@ ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap-UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap-UseAdmin
+ydb/core/kqp/ut/scheme KqpAcl.AclInterruptInheritance
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableViaApiMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
@@ -505,9 +504,10 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWith
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCounters
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCountersWithKeepMessageOrder
-ydb/core/persqueue/pqtablet/quota/ut TWriteQuoterTests.WaitMessagesQuota
 ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
+ydb/core/persqueue/public/describer/ut TDescriberTests.AccessOrAllows
 ydb/core/persqueue/public/describer/ut TDescriberTests.CDC
+ydb/core/persqueue/public/describer/ut TDescriberTests.CustomAccessRightsAlterSchema
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicNotCanonizedPath
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicNotExists
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicNotTopic
@@ -515,6 +515,7 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithoutDatabase
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.CapacitySmokeKeepOrder
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.UnlockMultiPartition
+ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.ConsumerNotExists
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.ReceiveAttemptIdPartitionRouting
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.Deduplicated_Reboot
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteToAutopartitioningTopic
@@ -523,6 +524,7 @@ ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteTwoMessage_OnePartition
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteTwoMessage_TwoPartition
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
 ydb/core/persqueue/public/schema/ut SchemaOps.AddAndRemoveConsumerActors
+ydb/core/persqueue/ut PQCountersLabeled.PartitionReadCounters
 ydb/core/quoter/ut QuoterWithKesusTest.AllocationStatistics
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
@@ -550,8 +552,6 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.EmptyEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BuildTable+WithForeign
-ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.MainTable
-ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardValidateUniqueIndexScan.RunScan
 ydb/core/tx/datashard/build_index/ut unittest.sole chunk
@@ -576,6 +576,8 @@ ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Families
 ydb/core/tx/datashard/ut_stats unittest.sole chunk
 ydb/core/tx/datashard/ut_validate_row_condition unittest.sole chunk
 ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParametersIsRestoredFromLocalDb
+ydb/core/tx/schemeshard/ut_olap TOlap.ReadOnlyCopyColumnTableDiskQuotaStuckAfterDropSource
+ydb/core/tx/schemeshard/ut_olap unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore TRestoreTests.ShouldHandleOverloadedShard-EnableDataShardDirectPartImport-false
 ydb/core/tx/schemeshard/ut_set_column_constraint unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
@@ -870,7 +872,6 @@ ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
-ydb/tests/functional/secrets test_old_secrets_usage.py.test_existing_objects_are_ok_if_old_secret_creation_is_disabled
 ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[enforce_user_token_disabled-no_schema_grants]
 ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[enforce_user_token_disabled-with_schema_grants]
 ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[enforce_user_token_enabled-no_schema_grants]

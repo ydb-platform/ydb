@@ -9450,6 +9450,8 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         entryPathId->SetOwnerId(pathId.OwnerId);
         entryPathId->SetLocalId(pathId.LocalPathId);
         entry->SetRowCount(areStatsFull ? aggregated.RowCount : 0);
+        entry->SetRowUpdates(areStatsFull ? aggregated.RowUpdates : 0);
+        entry->SetRowDeletes(areStatsFull ? aggregated.RowDeletes : 0);
         entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(false);
         entry->SetAreStatsFull(areStatsFull);
@@ -9484,6 +9486,8 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         entryPathId->SetOwnerId(pathId.OwnerId);
         entryPathId->SetLocalId(pathId.LocalPathId);
         entry->SetRowCount(areStatsFull ? aggregated.RowCount : 0);
+        entry->SetRowUpdates(areStatsFull ? aggregated.RowUpdates : 0);
+        entry->SetRowDeletes(areStatsFull ? aggregated.RowDeletes : 0);
         entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(true);
         entry->SetAreStatsFull(areStatsFull);

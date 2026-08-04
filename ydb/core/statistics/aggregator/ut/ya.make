@@ -29,6 +29,7 @@ SRCS(
     ut_analyze_op.cpp
     ut_traverse_datashard.cpp
     ut_traverse_columnshard.cpp
+    ut_background_change_ratio.cpp
 )
 
 END()

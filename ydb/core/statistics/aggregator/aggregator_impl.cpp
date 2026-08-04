@@ -52,6 +52,8 @@ void TStatisticsAggregator::OnActivateExecutor(const TActorContext& ctx) {
     Y_ABORT_UNLESS(appData);
     StatisticsConfig = appData->StatisticsConfig;
 
+    InitAnalyzeCounters();
+
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
 }
@@ -840,7 +842,8 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
                 };
                 AnalyzeActorId = ctx.Register(new TAnalyzeActor(
                     SelfId(), operation.OperationId, operation.DatabaseName, operationTable.PathId,
-                    operationTable.ColumnTags, analyzeActorConfig));
+                    operationTable.ColumnTags, analyzeActorConfig),
+                    TMailboxType::HTSwap, AppData()->BatchPoolId);
                 YDB_LOG_DEBUG("ScheduleNextAnalyze. started analyzing table",
                     {"tabletId", TabletID()},
                     {"operationId", operation.OperationId.Quote()},
@@ -866,54 +869,58 @@ void TStatisticsAggregator::ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db)
         {"tabletId", TabletID()});
     Y_ABORT_UNLESS(!TraversalPathId);
 
-    TString databaseName;
-    TPathId pathId;
-
-    if (!ScheduleTraversalsByTime.Empty()){
-        auto* oldestTable = ScheduleTraversalsByTime.Top();
-        if (TInstant::Now() < oldestTable->LastUpdateTime + ScheduleTraversalPeriod) {
-            YDB_LOG_TRACE("Background traversal is skipped. The oldest table update time is too fresh",
-                {"tabletId", TabletID()},
-                {"pathId", oldestTable->PathId},
-                {"lastUpdateTime", oldestTable->LastUpdateTime});
-            return;
-        }
-
-        databaseName = ""; // it's intentional, because ScheduleTraversalsByTime is filled by SchemeShards
-        pathId = oldestTable->PathId;
-    }
-
-    if (!pathId) {
+    if (ScheduleTraversalsByTime.Empty()) {
         YDB_LOG_TRACE("No traversal request to send",
             {"tabletId", TabletID()});
         return;
     }
 
-    TraversalDatabase = databaseName;
+    // Select the table to traverse. The heap top is the table analyzed longest ago;
+    // it becomes due once the periodic interval elapses (this also covers
+    // never-analyzed tables, whose LastUpdateTime is 0). Otherwise, look for a
+    // column table whose statistics are stale by change ratio anywhere in the
+    // schedule — staleness is independent of the time ordering, so we cannot
+    // decide it from the heap top alone.
+    auto* oldestTable = ScheduleTraversalsByTime.Top();
+    TScheduleTraversal* chosenTable = nullptr;
+    if (TInstant::Now() >= oldestTable->LastUpdateTime + ScheduleTraversalPeriod) {
+        chosenTable = oldestTable;
+    } else {
+        chosenTable = FindStaleColumnTable();
+    }
+
+    if (!chosenTable) {
+        YDB_LOG_TRACE("Background traversal is skipped. No table is stale and no traversal interval elapsed",
+            {"tabletId", TabletID()},
+            {"oldestPathId", oldestTable->PathId},
+            {"oldestLastUpdateTime", oldestTable->LastUpdateTime});
+        return;
+    }
+
+    TPathId pathId = chosenTable->PathId;
+
+    TraversalDatabase = "";  // background traversals use empty database
     TraversalPathId = pathId;
     TraversalStartTime = TInstant::Now();
     LastTraversalWasForce = false;
 
     std::optional<bool> isColumnTable = IsColumnTable(pathId);
-    if (!isColumnTable){
-        DeleteStatisticsFromTable();
-        return;
-    }
-
-    // Datashard traversal is temporary disabled
-    if (!*isColumnTable) {
-        YDB_LOG_DEBUG("ScheduleNextBackgroundTraversal. Skip traversal for datashard table",
-            {"tabletId", TabletID()},
-            {"pathId", pathId});
+    if (!isColumnTable) {
+        PersistTraversal(db);
         DeleteStatisticsFromTable();
         return;
     }
 
     TraversalIsColumnTable = *isColumnTable;
 
-    YDB_LOG_DEBUG("Start background traversal navigate for path",
-        {"tabletId", TabletID()},
-        {"pathId", pathId});
+    if (!*isColumnTable) {
+        YDB_LOG_DEBUG("ScheduleNextBackgroundTraversal. Skip traversal for datashard table",
+            {"tabletId", TabletID()},
+            {"pathId", pathId});
+        PersistTraversal(db);
+        DeleteStatisticsFromTable();
+        return;
+    }
 
     StartTraversal(db);
 }
@@ -931,20 +938,86 @@ void TStatisticsAggregator::StartTraversal(NIceDb::TNiceDb& db) {
 
 void TStatisticsAggregator::FinishTraversal(
     NIceDb::TNiceDb& db,
+    NKikimrStat::TEvAnalyzeResponse::EStatus status,
     std::optional<Ydb::Table::AnalyzeState::State> forceTerminalState,
     NYql::TIssues issues)
 {
     auto pathId = TraversalPathId;
 
+    bool traversalSucceeded = (status == NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+
     auto pathIt = ScheduleTraversals.find(pathId);
     if (pathIt != ScheduleTraversals.end()) {
         auto& traversalTable = pathIt->second;
         traversalTable.LastUpdateTime = TraversalStartTime;
-        db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
-            NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()));
+
+        if (traversalSucceeded) {
+            auto current = GetCurrentChangeCounters(pathId);
+            // Do not baseline at (0, 0): that happens when FinishTraversal races
+            // ahead of the first full SchemeShard stats report, and the next
+            // full report then looks like a huge change ratio. Keep Max so the
+            // table stays "never analyzed" until real counters arrive.
+            if (current.RowCount > 0 || current.RowUpdates > 0 || current.RowDeletes > 0) {
+                traversalTable.LastAnalyzeRowUpdates = current.RowUpdates;
+                traversalTable.LastAnalyzeRowDeletes = current.RowDeletes;
+
+                db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()),
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowUpdates>(current.RowUpdates),
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowDeletes>(current.RowDeletes));
+            } else {
+                db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()));
+            }
+        } else {
+            db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()));
+        }
 
         if (ScheduleTraversalsByTime.Has(&traversalTable)) {
             ScheduleTraversalsByTime.Update(&traversalTable);
+        }
+    }
+
+    // The BackgroundAnalyze counters track background traversals only; force
+    // (user-initiated) ANALYZE has its own reporting and must not inflate them.
+    if (!LastTraversalWasForce) {
+        if (traversalSucceeded) {
+            BackgroundAnalyzeCompletedCounter->Inc();
+        } else {
+            BackgroundAnalyzeFailedCounter->Inc();
+        }
+    }
+    InvalidateCachedChangeCounters();
+    ReportAnalyzeCounters();
+
+    // When a background traversal completes successfully, check whether there
+    // are pending force (user-initiated) ANALYZE requests for the same table
+    // that have not started yet. If so, mark them as finished — the background
+    // traversal just collected the same statistics, so re-traversing would be
+    // redundant. This deduplication only applies to background traversals;
+    // force traversals have their own completion path below.
+    if (!LastTraversalWasForce && traversalSucceeded) {
+        for (auto& operation : ForceTraversals) {
+            if (IsTerminalAnalyzeState(operation.State)) {
+                continue;
+            }
+            for (auto& table : operation.Tables) {
+                if (table.PathId == pathId
+                        && table.Status == TForceTraversalTable::EStatus::None) {
+                    UpdateForceTraversalTableStatus(
+                        TForceTraversalTable::EStatus::TraversalFinished,
+                        operation.OperationId, table, db);
+                }
+            }
+            bool tablesRemained = std::any_of(operation.Tables.begin(), operation.Tables.end(),
+                [](const TForceTraversalTable& elem) {
+                    return elem.Status != TForceTraversalTable::EStatus::TraversalFinished;
+                });
+            if (!tablesRemained) {
+                MarkForceTraversalOperationFinished(operation.OperationId,
+                    Ydb::Table::AnalyzeState::STATE_DONE, TActivationContext::Now(), db);
+            }
         }
     }
 
@@ -1352,6 +1425,16 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
                 PrintContainerStart(ForceTraversals, 2, str, extr);
             }
 
+            // Per-table change counters (from cached BaseStatistics).
+            const auto& cachedCounters = GetCachedChangeCounters();
+            str << "CachedChangeCounters: " << cachedCounters.size() << Endl;
+            for (const auto& [pathId, counters] : cachedCounters) {
+                str << "  " << pathId
+                    << " RowUpdates=" << counters.RowUpdates
+                    << " RowDeletes=" << counters.RowDeletes
+                    << " RowCount=" << counters.RowCount << Endl;
+            }
+
             str << Endl;
             str << "NavigatePathId: " << NavigatePathId << Endl;
 
@@ -1411,5 +1494,145 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
     TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_ROW_COUNT].Set(totalRowCount);
     TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_BYTES_SIZE].Set(totalBytesSize);
  }
+
+TStatisticsAggregator::TChangeCounters TStatisticsAggregator::GetCurrentChangeCounters(const TPathId& pathId) const {
+    // A path is owned by the schemeshard identified by pathId.OwnerId, so its
+    // base stats live in that schemeshard's blob (see IsKnownTable).
+    auto it = BaseStatistics.find(pathId.OwnerId);
+    if (it == BaseStatistics.end() || !it->second.Latest) {
+        return {};
+    }
+    NKikimrStat::TSchemeShardStats stats;
+    if (!stats.ParseFromString(*it->second.Latest)) {
+        return {};
+    }
+    for (const auto& entry : stats.GetEntries()) {
+        if (TPathId::FromProto(entry.GetPathId()) == pathId) {
+            return {entry.GetRowUpdates(), entry.GetRowDeletes(), entry.GetRowCount()};
+        }
+    }
+    return {};
+}
+
+bool TStatisticsAggregator::IsChangeRatioAboveThreshold(
+    const TChangeCounters& lastAnalyze, const TChangeCounters& current) const
+{
+    if (lastAnalyze.RowUpdates == Max<ui64>() || lastAnalyze.RowDeletes == Max<ui64>()) {
+        // Never analyzed — but only treat as stale once SchemeShard has sent
+        // real counters. Otherwise FinishTraversal would keep baselining at
+        // zero and we would re-analyze on every scheduling tick.
+        return current.RowCount > 0 || current.RowUpdates > 0 || current.RowDeletes > 0;
+    }
+    // RowUpdates and RowDeletes are monotonic cumulative counters, so current
+    // should not fall below the snapshot taken at the last ANALYZE. Guard
+    // against underflow.
+    if (current.RowCount == 0) {
+        return false;
+    }
+    if (current.RowUpdates <= lastAnalyze.RowUpdates && current.RowDeletes <= lastAnalyze.RowDeletes) {
+        return false;
+    }
+
+    // RowUpdates and RowDeletes are monotonic cumulative counters, so current
+    // should not fall below the snapshot taken at the last ANALYZE. Guard
+    // against underflow.
+    ui64 updatesSinceAnalyze = current.RowUpdates > lastAnalyze.RowUpdates
+        ? current.RowUpdates - lastAnalyze.RowUpdates : 0;
+    ui64 deletesSinceAnalyze = current.RowDeletes > lastAnalyze.RowDeletes
+        ? current.RowDeletes - lastAnalyze.RowDeletes : 0;
+    ui64 changesSinceAnalyze = updatesSinceAnalyze + deletesSinceAnalyze;
+    auto threshold = StatisticsConfig.GetBackgroundAnalyzeChangeRatioThresholdPercent();
+
+
+    double changeRatio = static_cast<double>(changesSinceAnalyze) / current.RowCount * 100.0;
+    return changeRatio >= static_cast<double>(threshold);
+}
+
+const THashMap<TPathId, TStatisticsAggregator::TChangeCounters>& TStatisticsAggregator::GetCachedChangeCounters() {
+    if (!CachedChangeCountersValid) {
+        // Parse each schemeshard's base stats once into a pathId -> TChangeCounters
+        // lookup. The cache is reused across scheduling ticks and counter reports,
+        // avoiding re-parsing all BaseStatistics blobs every second.
+        CachedChangeCounters.clear();
+        for (const auto& [ssId, serializedStats] : BaseStatistics) {
+            if (!serializedStats.Latest) {
+                continue;
+            }
+            NKikimrStat::TSchemeShardStats stats;
+            if (!stats.ParseFromString(*serializedStats.Latest)) {
+                continue;
+            }
+            for (const auto& entry : stats.GetEntries()) {
+                CachedChangeCounters[TPathId::FromProto(entry.GetPathId())] =
+                    {entry.GetRowUpdates(), entry.GetRowDeletes(), entry.GetRowCount()};
+            }
+        }
+        CachedChangeCountersValid = true;
+    }
+    return CachedChangeCounters;
+}
+
+void TStatisticsAggregator::InvalidateCachedChangeCounters() {
+    CachedChangeCountersValid = false;
+}
+
+TStatisticsAggregator::TScheduleTraversal* TStatisticsAggregator::FindStaleColumnTable() {
+    // Column statistics staleness (change ratio) is independent of the time-based
+    // ordering in ScheduleTraversalsByTime, so we must scan all tables rather than
+    // inspecting only the heap top. Among the stale column tables pick the one
+    // analyzed longest ago.
+    const auto& currentCounters = GetCachedChangeCounters();
+
+    TScheduleTraversal* stalest = nullptr;
+    for (auto& [pathId, traversal] : ScheduleTraversals) {
+        if (!traversal.IsColumnTable) {
+            continue;
+        }
+        auto it = currentCounters.find(pathId);
+        TChangeCounters current = it != currentCounters.end() ? it->second : TChangeCounters{};
+        TChangeCounters lastAnalyze{traversal.LastAnalyzeRowUpdates, traversal.LastAnalyzeRowDeletes, 0};
+        if (!IsChangeRatioAboveThreshold(lastAnalyze, current)) {
+            continue;
+        }
+        if (!stalest || traversal.LastUpdateTime < stalest->LastUpdateTime) {
+            stalest = &traversal;
+        }
+    }
+    return stalest;
+}
+
+void TStatisticsAggregator::InitAnalyzeCounters() {
+    // Initialize dynamic counters for background ANALYZE monitoring.
+    // Uses GetSubgroup to create a single metric with a "status" label:
+    //   BackgroundAnalyze{status="pending"}   — gauge: tables needing ANALYZE
+    //   BackgroundAnalyze{status="completed"} — cumulative: successful ANALYZE
+    //   BackgroundAnalyze{status="failed"}    — cumulative: failed ANALYZE
+    auto analyzeCounters = GetServiceCounters(AppData()->Counters, "statistics")
+        ->GetSubgroup("subsystem", "background_analyze");
+    BackgroundAnalyzePendingCounter = analyzeCounters
+        ->GetSubgroup("status", "pending")->GetCounter("BackgroundAnalyze", false);
+    BackgroundAnalyzeCompletedCounter = analyzeCounters
+        ->GetSubgroup("status", "completed")->GetCounter("BackgroundAnalyze", true);
+    BackgroundAnalyzeFailedCounter = analyzeCounters
+        ->GetSubgroup("status", "failed")->GetCounter("BackgroundAnalyze", true);
+}
+
+void TStatisticsAggregator::ReportAnalyzeCounters() {
+    const auto& currentCounters = GetCachedChangeCounters();
+
+    ui64 pendingTables = 0;
+    for (const auto& [pathId, traversal] : ScheduleTraversals) {
+        if (!traversal.IsColumnTable) {
+            continue;
+        }
+        auto it = currentCounters.find(pathId);
+        TChangeCounters current = it != currentCounters.end() ? it->second : TChangeCounters{};
+        TChangeCounters lastAnalyze{traversal.LastAnalyzeRowUpdates, traversal.LastAnalyzeRowDeletes, 0};
+        if (IsChangeRatioAboveThreshold(lastAnalyze, current)) {
+            ++pendingTables;
+        }
+    }
+    *BackgroundAnalyzePendingCounter = pendingTables;
+}
 
 } // NKikimr::NStat

@@ -422,7 +422,9 @@ TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseN
     runtime.SimulateSleep(TDuration::Seconds(1));
 
     ExecuteYqlScript(env, Sprintf(R"(
-        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS,
+                    `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`,
+                    `COMPACTION_PLANNER.FEATURES`=`{"accumulator_portion_size_limit":0}`);
     )", fullTableName.c_str()));
     runtime.SimulateSleep(TDuration::Seconds(1));
 
@@ -796,6 +798,31 @@ void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId) {
     });
 
     waiter.Wait();
+}
+
+void WaitForSchemeShardStatsUpdate(
+    TTestActorRuntime& runtime, ui64 ssTabletId, bool requireFull)
+{
+    bool statsUpdateSent = false;
+    auto sendObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev) {
+        if (ev->Get()->Record.GetSchemeShardId() != ssTabletId) {
+            return;
+        }
+        if (!requireFull) {
+            statsUpdateSent = true;
+            return;
+        }
+        NKikimrStat::TSchemeShardStats statRecord;
+        if (statRecord.ParseFromString(ev->Get()->Record.GetStats())
+                && statRecord.GetAreAllStatsFull())
+        {
+            statsUpdateSent = true;
+        }
+    });
+    runtime.WaitFor(
+        requireFull ? "full TEvSchemeShardStats from SchemeShard"
+                    : "TEvSchemeShardStats from SchemeShard",
+        [&]{ return statsUpdateSent; });
 }
 
 ui64 GetRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId) {

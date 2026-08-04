@@ -532,6 +532,64 @@ def test_lockfile_merge():
     }
 
 
+def test_lockfile_merge_rebases_injected_package_paths():
+    root = Lockfile(path="/build/tsg/cli/pnpm-lock.yaml")
+    root.data = {"lockfileVersion": "9.0", "importers": {".": {}}}
+
+    dependency = Lockfile(path="/build/tsg/libs/i18n-utils/pnpm-lock.yaml")
+    dependency.data = {
+        "lockfileVersion": "9.0",
+        "importers": {
+            ".": {
+                "devDependencies": {
+                    "@yatool/vitest-reporter": {
+                        "specifier": "workspace:../../../../../library/typescript/test-reporters/vitest",
+                        "version": "file:../../../../../library/typescript/test-reporters/vitest(vitest@4.1.9)",
+                    }
+                }
+            }
+        },
+        "packages": {
+            "@yatool/ci-reporter@file:../../../../../library/typescript/ci-reporter": {
+                "resolution": {
+                    "directory": "../../../../../library/typescript/ci-reporter",
+                    "type": "directory",
+                }
+            },
+            "@yatool/vitest-reporter@file:../../../../../library/typescript/test-reporters/vitest": {
+                "resolution": {
+                    "directory": "../../../../../library/typescript/test-reporters/vitest",
+                    "type": "directory",
+                }
+            },
+        },
+        "snapshots": {
+            "@yatool/vitest-reporter@file:../../../../../library/typescript/test-reporters/vitest(vitest@4.1.9)": {
+                "dependencies": {
+                    "@yatool/ci-reporter": "file:../../../../../library/typescript/ci-reporter"
+                }
+            }
+        },
+    }
+
+    root.merge(dependency)
+
+    importer = root.get_importers()["../libs/i18n-utils"]
+    assert (
+        importer["devDependencies"]["@yatool/vitest-reporter"]["version"]
+        == "file:../../../../../library/typescript/test-reporters/vitest(vitest@4.1.9)"
+    )
+    assert root.data["packages"][
+        "@yatool/ci-reporter@file:../../../../../library/typescript/ci-reporter"
+    ] == {
+        "resolution": {"directory": "../../../library/typescript/ci-reporter", "type": "directory"}
+    }
+    snapshot = root.data["snapshots"][
+        "@yatool/vitest-reporter@file:../../../../../library/typescript/test-reporters/vitest(vitest@4.1.9)"
+    ]
+    assert snapshot["dependencies"]["@yatool/ci-reporter"] == "file:../../../../../library/typescript/ci-reporter"
+
+
 def test_lockfile_merge_dont_overrides_packages():
     lf1 = Lockfile(path="/foo/pnpm-lock.yaml")
     lf1.data = {

@@ -36,6 +36,23 @@ const THashSet<TErrorCode> TableMountCacheRetryableCodes = {
 
 static constexpr auto TabletCacheSweepPeriod = TDuration::Seconds(60);
 
+bool IsRetryableError(const TError& error)
+{
+    bool retryable = true;
+    auto onError = [&] (const TError& error, auto&& self) -> void {
+        if (TableMountCacheRetryableCodes.contains(error.GetCode())) {
+            retryable &= error.Attributes().Get<bool>("retryable", true);
+        }
+
+        for (const auto& innerError : error.InnerErrors()) {
+            self(innerError, self);
+        }
+    };
+
+    onError(error, onError);
+    return retryable;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TTabletInfoOwnerCache::TTabletInfoOwnerCache(NLogging::TLogger logger)
@@ -266,6 +283,7 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
     -> std::optional<TInvalidationResult>
 {
     static const THashSet<TErrorCode> handledCodes = {
+        NTabletClient::EErrorCode::ReadOnlySmoothMovementStage,
         NTabletClient::EErrorCode::TabletServantIsNotActive,
         NTabletClient::EErrorCode::TabletResharded,
     };
@@ -273,6 +291,7 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
     std::vector<std::pair<TSmoothMovementRedirectionHint, TTabletInfoPtr>> smoothMovementRedirectionHints;
     TReshardRedirectionHintPtr reshardRedirectionHint;
     TTabletInfoPtr reshardTabletInfo;
+    bool retryInplace = false;
 
     auto onError = [&] (const TError& error, auto&& self) {
         if (handledCodes.contains(error.GetCode())) {
@@ -288,6 +307,10 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
             auto tabletInfo = FindTabletInfo(*tabletId);
             if (!tabletInfo) {
                 return;
+            }
+
+            if (error.GetCode() == NTabletClient::EErrorCode::ReadOnlySmoothMovementStage) {
+                retryInplace = error.Attributes().Get<bool>("retry_inplace", retryInplace);
             }
 
             auto redirectionHint = error.Attributes().Find<TTabletRedirectionHint>("redirection_hint");
@@ -310,7 +333,22 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
 
     onError(error, onError);
 
-    if (reshardRedirectionHint) {
+    if (retryInplace) {
+        YT_LOG_ALERT_UNLESS(
+            smoothMovementRedirectionHints.empty() && !reshardRedirectionHint,
+            error,
+            "In-place retry is combined with tablet redirection hints "
+            "within a single request; redirection hints are ignored in favor of in-place retry "
+            "(HasSmoothMovementRedirectionHints: %v, HasReshardRedirectionHint: %v)",
+            !smoothMovementRedirectionHints.empty(),
+            static_cast<bool>(reshardRedirectionHint));
+
+        return {{
+            .Retryable = true,
+            .ErrorCode = NTabletClient::EErrorCode::ReadOnlySmoothMovementStage,
+            .TableInfoUpdatedFromError = true,
+        }};
+    } else if (reshardRedirectionHint) {
         // TODO(ifsmirnov, atalmenev): process multiple reshard redirection hints
         // at once similar to smooth movement hints.
         return TryHandleTabletReshardedError(reshardRedirectionHint, reshardTabletInfo);
@@ -612,7 +650,9 @@ auto TTableMountCacheBase::InvalidateOnError(const TError& error, bool forceRetr
         return {};
     }
 
+    bool retryable = IsRetryableError(error);
     if (auto result = TryHandleRedirectionError(error)) {
+        result->Retryable &= retryable;
         return *result;
     }
 
@@ -664,7 +704,7 @@ auto TTableMountCacheBase::InvalidateOnError(const TError& error, bool forceRetr
         }
 
         return {
-            .Retryable = true,
+            .Retryable = retryable,
             .ErrorCode = code,
             .TabletInfo = tabletInfo,
             .TableInfoUpdatedFromError = false,

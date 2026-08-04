@@ -3287,7 +3287,7 @@ Y_UNIT_TEST_F(Deferred_ReadSetAck_Waits_For_Successful_WriteTx, TPQTabletFixture
     auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
         if (holdWriteTx) {
             if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
-                if (msg->Record.GetCookie() == 5 /* WRITE_TX_COOKIE */) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
                     heldRequests.push_back(event);
                     return TTestActorRuntimeBase::EEventAction::DROP;
                 }
@@ -3342,13 +3342,13 @@ Y_UNIT_TEST_F(Deferred_ReadSetAck_While_WriteTx_In_Progress, TPQTabletFixture)
     bool seenWriteTxRequest = false;
     auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
         if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
-            if (msg->Record.GetCookie() == 5 /* WRITE_TX_COOKIE */) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
                 seenWriteTxRequest = true;
             }
         }
         if (holdWriteTxResponse && seenWriteTxRequest) {
             if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvResponse>()) {
-                if (msg->Record.GetCookie() == 5 /* WRITE_TX_COOKIE */) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
                     heldResponses.push_back(event);
                     return TTestActorRuntimeBase::EEventAction::DROP;
                 }

@@ -209,7 +209,7 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
         write->SetLockId(lockId, 1);
     }
     if (timeout) {
-        // When the shard throttles the write (e.g. compaction/metadata overload), it holds the request in its
+        // When the shard throttles the write (e.g. small-blobs/compaction overload), it holds the request in its
         // queue until this timeout elapses and then rejects it with OVERLOADED; set it so a blocked write fails fast.
         write->Record.SetTimeoutSeconds(timeout->Seconds());
     }

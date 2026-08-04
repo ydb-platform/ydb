@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -143,6 +144,13 @@ public:
 private:
   std::shared_ptr<MeterContext> context_;
   std::mutex lock_;
+
+#if defined(__cpp_lib_atomic_value_initialization) && \
+    __cpp_lib_atomic_value_initialization >= 201911L
+  std::atomic_flag shutdown_latch_{};
+#else
+  std::atomic_flag shutdown_latch_ = ATOMIC_FLAG_INIT;
+#endif
 };
 }  // namespace metrics
 }  // namespace sdk

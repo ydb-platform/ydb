@@ -7,6 +7,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/library/arrow_parquet/result_set_parquet_printer.h>
+#include <ydb/library/plan2svg/plan2svg.h>
 
 #include <iomanip>
 #include <regex>
@@ -54,6 +55,7 @@ namespace {
         { EDataFormat::Csv, "CSV format" },
         { EDataFormat::Tsv, "TSV format" },
         { EDataFormat::Parquet, "Parquet format" },
+        { EDataFormat::Svg, "SVG format" },
     };
 
     THashMap<EMessagingFormat, TString> MessagingFormatDescriptions = {
@@ -456,6 +458,9 @@ void TQueryPlanPrinter::Print(const TString& plan) {
         case EDataFormat::JsonBase64:
             PrintJson(plan);
             break;
+        case EDataFormat::Svg:
+            PrintSvg(plan);
+            break;
         default:
             throw TMisuseException() << "This command doesn't support " << Format << " output format";
     }
@@ -463,6 +468,12 @@ void TQueryPlanPrinter::Print(const TString& plan) {
 
 void TQueryPlanPrinter::PrintJson(const TString& plan) {
     Output << NJson::PrettifyJson(plan, false) << Endl;
+}
+
+void TQueryPlanPrinter::PrintSvg(const TString& plan) {
+    TPlanVisualizer planViz;
+    planViz.LoadPlans(plan);
+    Output << planViz.PrintSvg() << Endl;
 }
 
 void TQueryPlanPrinter::PrintPretty(const NJson::TJsonValue& plan) {

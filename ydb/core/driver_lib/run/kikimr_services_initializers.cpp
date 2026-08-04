@@ -760,25 +760,22 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             icCommon->MonCounters = interconectCounters;
             icCommon->ChannelsConfig = channels;
             icCommon->Settings = settings;
+            icCommon->DestructorId = GetDestructActorID();
 
             if (settings.V2.Enable) {
                 // Create the shared v2 io_uring data-plane engine once, at startup, and publish it in Common.
                 // The actor system does not exist yet, so the engine is bound to it later (once it is up,
                 // TInterconnectProxyTCP::Registered calls SetActorSystem). CreateUringEngine returns null when
                 // io_uring is unavailable, in which case v2 is simply never negotiated during the handshake.
-                icCommon->UringEngineV2 = CreateUringEngine(settings.V2.UringEngineThreads,
-                    interconectCounters->GetSubgroup("subsystem", "uring"),
-                    settings.V2.EnableSQPOLL,
-                    settings.V2.UringEngineRingsPerShard,
-                    settings.V2.UringEngineSqThreadIdleMs,
-                    settings.V2.ShareRingsAmongThreads);
+                // The engine takes its parameters from Common, so Settings/MonCounters/DestructorId must
+                // already be filled in by this point.
+                icCommon->UringEngineV2 = CreateUringEngine(icCommon);
                 setup->OnActorSystemCreated.push_back([engine = icCommon->UringEngineV2](TActorSystem *actorSystem) {
                     if (engine) {
                         engine->SetActorSystem(actorSystem);
                     }
                 });
             }
-            icCommon->DestructorId = GetDestructActorID();
             icCommon->DestructorQueueSize = destructorQueueSize;
             icCommon->HandshakeBallastSize = icConfig.GetHandshakeBallastSize();
             icCommon->LocalScopeId = ScopeId.GetInterconnectScopeId();

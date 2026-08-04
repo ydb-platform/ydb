@@ -34,10 +34,16 @@ JSON_DEFINE_TO(NLsp::TCompletionOptions, value) {
     return json;
 }
 
+JSON_DEFINE_TO(NLsp::TDocumentFormattingOptions, value) {
+    Y_UNUSED(value);
+    return TJsonValue(JSON_MAP);
+}
+
 JSON_DEFINE_TO(NLsp::TServerCapabilities, value) {
     TJsonValue json(JSON_MAP);
     SaveTo(json, "textDocumentSync", std::move(value.TextDocumentSync));
     SaveTo(json, "completionProvider", std::move(value.CompletionProvider));
+    SaveTo(json, "documentFormattingProvider", std::move(value.DocumentFormattingProvider));
     return json;
 }
 

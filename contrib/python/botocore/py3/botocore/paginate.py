@@ -324,8 +324,7 @@ class PageIterator:
                     and previous_next_token == next_token
                 ):
                     message = (
-                        f"The same next token was received "
-                        f"twice: {next_token}"
+                        f"The same next token was received twice: {next_token}"
                     )
                     raise PaginationError(message=message)
                 self._inject_token_into_kwargs(current_kwargs, next_token)

@@ -13,6 +13,7 @@ SRCS(
 PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/common
+    ydb/core/persqueue/public
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/pqtablet/common
     ydb/core/quoter/public

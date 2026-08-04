@@ -9,7 +9,6 @@
 
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/metrics/async_instruments.h"
-#include "opentelemetry/metrics/observer_result.h"
 #include "opentelemetry/nostd/function_ref.h"
 #include "opentelemetry/nostd/variant.h"
 #include "opentelemetry/sdk/common/global_log_handler.h"

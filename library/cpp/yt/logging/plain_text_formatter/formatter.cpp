@@ -172,10 +172,8 @@ void FormatPayload(TBaseFormatter* out, const TTaggedLogEventPayload& payload)
         } else {
             out->AppendString(parenOpen ? ", "_sb : " ("_sb);
             parenOpen = true;
-            if (tag->Key != TraceLoggingTagKey) {
-                FormatMessage(out, tag->Key);
-                out->AppendString(": "_sb);
-            }
+            FormatMessage(out, tag->Key);
+            out->AppendString(": "_sb);
             FormatMessage(out, tag->Value);
         }
     }

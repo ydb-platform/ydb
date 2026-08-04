@@ -33,6 +33,7 @@ from botocore.exceptions import (
 )
 from botocore.model import StructureShape
 from botocore.response import StreamingBody
+from botocore.useragent import register_feature_id
 from botocore.utils import (
     conditionally_calculate_md5,
     determine_content_length,
@@ -243,6 +244,17 @@ class StreamingChecksumBody(StreamingBody):
             self._validate_checksum()
         return chunk
 
+    def readinto(self, b):
+        amount_read = super().readinto(b)
+        if amount_read == len(b):
+            view = b
+        else:
+            view = memoryview(b)[:amount_read]
+        self._checksum.update(view)
+        if amount_read == 0 and len(b) > 0:
+            self._validate_checksum()
+        return amount_read
+
     def _validate_checksum(self):
         if self._checksum.digest() != base64.b64decode(self._expected):
             error_msg = (
@@ -386,6 +398,7 @@ def _apply_request_header_checksum(request):
     checksum_cls = _CHECKSUM_CLS.get(algorithm["algorithm"])
     digest = checksum_cls().handle(request["body"])
     request["headers"][location_name] = digest
+    _register_checksum_algorithm_feature_id(algorithm)
 
 
 def _apply_request_trailer_checksum(request):
@@ -409,6 +422,7 @@ def _apply_request_trailer_checksum(request):
     else:
         headers["Content-Encoding"] = "aws-chunked"
     headers["X-Amz-Trailer"] = location_name
+    _register_checksum_algorithm_feature_id(algorithm)
 
     content_length = determine_content_length(body)
     if content_length is not None:
@@ -430,6 +444,16 @@ def _apply_request_trailer_checksum(request):
         checksum_cls=checksum_cls,
         checksum_name=location_name,
     )
+
+
+def _register_checksum_algorithm_feature_id(algorithm):
+    checksum_algorithm_name = algorithm["algorithm"].upper()
+    if checksum_algorithm_name == "CRC64NVME":
+        checksum_algorithm_name = "CRC64"
+    checksum_algorithm_name_feature_id = (
+        f"FLEXIBLE_CHECKSUMS_REQ_{checksum_algorithm_name}"
+    )
+    register_feature_id(checksum_algorithm_name_feature_id)
 
 
 def resolve_response_checksum_algorithms(

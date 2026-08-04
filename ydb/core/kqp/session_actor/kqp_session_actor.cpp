@@ -603,7 +603,7 @@ public:
         }
 
         bool sent = false;
-        const auto result = classifier->PreCompileClassify();
+        const auto result = classifier->PreCompileClassify(*QueryState->UserRequestContext);
 
         using TError = std::optional<std::pair<Ydb::StatusIds::StatusCode, TString>>;
         auto error = std::visit(TOverloaded {

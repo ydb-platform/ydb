@@ -14,6 +14,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
+
 using namespace NActors;
 
 namespace NInterconnect::NRdma {
@@ -208,8 +210,9 @@ private:
 
     void ProcessCqErr(auto it) {
         TCtxData& c = std::get<0>(it->second);
-        LOG_ERROR_IC("ICRDMA", "CQ/SRQ error issued on ctx %s, notify all pending cq callbacks",
-            it->first->ToString().data());
+        YDB_LOG_ERROR("CQ/SRQ error issued on ctx notify all pending cq callbacks",
+            {"marker", "ICRDMA"},
+            {"rdmaCtx", it->first->ToString().data()});
         c.Cq->NotifyErr();
     }
 

@@ -9,6 +9,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT_SESSION
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT_SESSION
+
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
@@ -1088,7 +1090,9 @@ namespace NActors {
                 }
                 checksum = XXH3_64bits_digest(&state);
                 if (checksum != *pendingEvent.RdmaCumulativeCheckSum) {
-                    LOG_CRIT_IC_SESSION("ICIS05", "event rdma checksum error Type# 0x%08" PRIx32, descr.Type);
+                    YDB_LOG_CRIT("Event rdma checksum error",
+                        {"marker", "ICIS05"},
+                        {"descrType", descr.Type});
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }
@@ -1444,7 +1448,8 @@ namespace NActors {
                         XXH3_64bits_reset(&XxhashXdcState);
                     }
                     if (XdcCurrentChecksum != *expected) {
-                        LOG_ERROR_IC_SESSION("ICIS16", "payload checksum error");
+                        YDB_LOG_ERROR("Payload checksum error",
+                            {"marker", "ICIS16"});
                         throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                     }
                 }

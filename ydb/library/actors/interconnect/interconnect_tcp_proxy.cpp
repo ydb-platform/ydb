@@ -7,6 +7,8 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/system/getpid.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
+
 namespace NActors {
     static constexpr TDuration GetNodeRequestTimeout = TDuration::Seconds(5);
     static constexpr TDuration BaseRdmaRetryDelay = TDuration::Seconds(5);
@@ -261,19 +263,27 @@ namespace NActors {
                 {"peer", msg->Peer});
         } else if (SessionVirtualId != ev->Get()->Peer || RemoteSessionVirtualId != ev->Get()->Self) {
             // check session virtual ids for continuation
-            LOG_NOTICE_IC("ICP13", "(actor %s) virtual id mismatch with existing session (Peer: %s Self: %s"
-                   " SessionVirtualId: %s RemoteSessionVirtualId: %s)", ev->Sender.ToString().data(),
-                  ev->Get()->Peer.ToString().data(), ev->Get()->Self.ToString().data(), SessionVirtualId.ToString().data(),
-                  RemoteSessionVirtualId.ToString().data());
+            YDB_LOG_NOTICE("(actor virtual id mismatch with existing session",
+                {"marker", "ICP13"},
+                {"sender", ev->Sender},
+                {"peer", ev->Get()->Peer},
+                {"self", ev->Get()->Self},
+                {"sessionVirtualId", SessionVirtualId},
+                {"remoteSessionVirtualId", RemoteSessionVirtualId});
         } else if (!Session->SupportsContinuation()) {
             // v2 sessions do not support continuation; reject the resume request so the peer establishes
             // a brand new session instead
-            LOG_NOTICE_IC("ICP14", "(actor %s) rejecting resume for session that does not support continuation"
-                " Self# %s Peer# %s", ev->Sender.ToString().data(), msg->Self.ToString().data(),
-                msg->Peer.ToString().data());
+            YDB_LOG_NOTICE("(actor rejecting resume for session that does not support continuation",
+                {"marker", "ICP14"},
+                {"sender", ev->Sender},
+                {"self", msg->Self},
+                {"peer", msg->Peer});
         } else if (Session->HasRdmaState()) {
-            LOG_NOTICE_IC("ICRDMA", "(actor %s) rejecting graceful reconnect for RDMA session Self# %s Peer# %s",
-                ev->Sender.ToString().data(), msg->Self.ToString().data(), msg->Peer.ToString().data());
+            YDB_LOG_NOTICE("(actor rejecting graceful reconnect for RDMA session",
+                {"marker", "ICRDMA"},
+                {"sender", ev->Sender},
+                {"self", msg->Self},
+                {"peer", msg->Peer});
             InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::NewSession());
         } else {
             // if we already have incoming handshake, then terminate existing one
@@ -1248,7 +1258,8 @@ namespace NActors {
         ICPROXY_PROFILED;
 
         if (Session && Session->GetSocket()) {
-            LOG_INFO_IC("ICP34", logEntry.data());
+            YDB_LOG_INFO(logEntry.data(),
+                {"marker", "ICP34"});
             Session->GetSocket()->Shutdown(SHUT_RDWR);
         }
     }

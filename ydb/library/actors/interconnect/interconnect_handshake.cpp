@@ -918,7 +918,7 @@ namespace NActors {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to promote QP to RTS, handshake",
                     {"marker", "ICRDMA"},
                     {"err", err},
-                    {"#_strerror(err)", strerror(err)},
+                    {"strerror", strerror(err)},
                     {"data", sb.data()});
                 Rdma.HandShakeMemRegion.Reset();
                 Rdma.Clear();
@@ -1617,11 +1617,11 @@ namespace NActors {
                 if (rdmaCtx) {
                     YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Found verbs fontext for address",
                         {"marker", "ICRDMA"},
-                        {"#_std::get<0>(sockname)", std::get<0>(sockname)});
+                        {"address", std::get<0>(sockname)});
                 } else {
                     YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT, "Unable to find verbs context using address",
                         {"marker", "ICRDMA"},
-                        {"#_std::get<0>(sockname)", std::get<0>(sockname)});
+                        {"address", std::get<0>(sockname)});
                 }
             } else if (int* err = get_if<int>(&sockname)) {
                 YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Unable to get local address for Rdma will not be used",
@@ -1636,9 +1636,9 @@ namespace NActors {
 
             if (rdmaCtx) {
                 if (ICq::TPtr cqPtr = CreateRdmaCq(rdmaCtx)) {
-                    YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Got CQ handle at: %p",
+                    YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Got CQ handle",
                         {"marker", "ICRDMA"},
-                        {"#_(void*)cqPtr.get", (void*)cqPtr.get()});
+                        {"cqPtr", static_cast<void*>(cqPtr.get())});
                     Rdma.Qp.reset(new NInterconnect::NRdma::TQueuePair);
                     int err = Rdma.Qp->Init(rdmaCtx, cqPtr.get(), 1024); //TODO: move in to settings
                     if (err) {
@@ -1692,7 +1692,7 @@ namespace NActors {
                     YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to promote QP to RTS, handshake",
                         {"marker", "ICRDMA"},
                         {"err", err},
-                        {"#_strerror(err)", strerror(err)},
+                        {"strerror", strerror(err)},
                         {"data", sb.data()});
                     Rdma.Clear();
                     return;
@@ -1715,7 +1715,7 @@ namespace NActors {
             if (cred.GetSize() > RdmaHandshakeRegionSize) {
                 TStringBuilder err;
                 err << "Unexpected rdma region size for READ request, sz: " << cred.GetSize();
-                YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "",
+                YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, err,
                     {"marker", "ICRDMA"});
                 rdmaReadAck.SetErr(err);
                 return rdmaReadAck;
@@ -1724,7 +1724,7 @@ namespace NActors {
             TMemRegionPtr mr = Common->RdmaMemPool->Alloc(cred.GetSize(),IMemPool::EMPTY);
             if (!mr) {
                 TString err("Unable to allocate memory region for handshake rdma read");
-                YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "",
+                YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, err,
                     {"marker", "ICRDMA"});
                 rdmaReadAck.SetErr(err);
                 return rdmaReadAck;
@@ -1755,7 +1755,7 @@ namespace NActors {
             if (err) {
                 TStringBuilder sb;
                 sb << "Unable to launch work reqeust";
-                YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "",
+                YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, sb,
                     {"marker", "ICRDMA"});
                 rdmaReadAck.SetErr(sb);
                 return rdmaReadAck;
@@ -1780,7 +1780,7 @@ namespace NActors {
                     if (Rdma.Qp) {
                         sb << " qp: " << Rdma.Qp;
                     }
-                    YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "",
+                    YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, sb,
                         {"marker", "ICRDMA"});
                     rdmaReadAck.SetErr(sb);
                 }

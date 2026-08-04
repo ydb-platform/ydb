@@ -35,9 +35,8 @@ namespace NActors {
                 TString str = TStringBuilder() << "\n > Node " << nodeId << " `" << node.Address << "`:" << node.Port << ", host: " << node.Host << ", resolveHost: " << node.ResolveHost;
                 logMsg += str;
             }
-            YDB_LOG_TRACE("",
-                {"marker", "ICN01"},
-                {"logMsg", logMsg});
+            YDB_LOG_TRACE(logMsg,
+                {"marker", "ICN01"});
         }
 
         bool IsNodeUpdated(const ui32 nodeId, const TString& address, const ui32 port) {
@@ -123,7 +122,7 @@ namespace NActors {
                     CFunc(TEvents::TEvWakeup::EventType, HandlePeriodic);
                 }
             } catch (...) {
-                YDB_LOG_ERROR("",
+                YDB_LOG_ERROR("Catch exception",
                     {"marker", "ICN09"},
                     {"exception", CurrentExceptionMessage()});
             }

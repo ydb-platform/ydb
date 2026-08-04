@@ -14,6 +14,8 @@
 
 #include <tuple>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT_SESSION
+
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
@@ -697,9 +699,11 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::StartHandshake() {
-        LOG_INFO_IC_SESSION("ICS15", "start handshake");
+        YDB_LOG_INFO("Start handshake",
+            {"marker", "ICS15"});
         if (HasRdmaState()) {
-            LOG_NOTICE_IC_SESSION("ICRDMA", "start initial handshake instead of graceful reconnect for RDMA session");
+            YDB_LOG_NOTICE("Start initial handshake instead of graceful reconnect for RDMA session",
+                {"marker", "ICRDMA"});
             IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::StartInitialHandshake);
             return;
         }

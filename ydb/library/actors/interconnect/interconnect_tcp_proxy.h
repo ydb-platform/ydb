@@ -538,7 +538,8 @@ namespace NActors {
 
             // drop existing session if we have one
             if (Session) {
-                LOG_INFO_IC("ICP04", "terminating current session as we are negotiating a new one");
+                YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "Terminating current session as we are negotiating a new one",
+                    {"marker", "ICP04"});
                 InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::NewSession());
             }
 

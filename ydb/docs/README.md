@@ -99,12 +99,7 @@ Press `Ctrl+C` to stop the server.
 
 ## LLM indexes (`llms.txt`)
 
-Diplodoc generates per-locale indexes when `llms.enabled` is set in `.yfm`:
-
-- Published: `https://ydb.tech/docs/{en|ru}/llms.txt` and `llms-full.txt` (optional `?version=vX.Y` or `?version=main`)
-- Hub (source of truth in this repo): [`llms.txt`](./llms.txt) — curated links to every locale/version index for agents
-
-After changing `llms.txt`, keep the version list in sync with stables that actually publish LLM indexes (backfill CI on older `stable-*` as needed). Serving the hub at `https://ydb.tech/docs/llms.txt` and the site-root `https://ydb.tech/llms.txt` may require a small publish/CDN follow-up; the per-locale files are already live.
+Diplodoc generates per-locale indexes (`/docs/{en|ru}/llms.txt` and `llms-full.txt`, optional `?version=`). The hub [`llms.txt`](./llms.txt) in this directory links agents to those indexes across locales and release versions. Keep the version list in sync with stables that publish LLM indexes.
 
 ## File Structure
 

@@ -470,7 +470,8 @@ protected:
                 << " Handle TEvNotify " << event.ToString());
 
         CheckYellowChannels(ev->Get()->Stat);
-        State.OnRequestComplete(event.RequestUid, event.Generation, event.Step, ctx, Info(), event.Status, event.Stat);
+        State.OnRequestComplete(event.RequestUid, event.Generation, event.Step, ctx, Info(), event.Status, event.Stat,
+            event.AcquiredChannels);
         State.DropRefCountsOnError(event.RefCountsIncr, true, ctx);
         if (!event.RefCountsIncr.empty()) {
             Execute(new TTxDropRefCountsOnError(std::move(event.RefCountsIncr), this), ctx);

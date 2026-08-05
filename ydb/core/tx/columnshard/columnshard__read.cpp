@@ -54,8 +54,14 @@ private:
     // Result format requested by the reader.
     const NKikimrDataEvents::EDataFormat ResultFormat;
 
+    // Quotas from the reader (0 means unlimited).
+    const ui64 MaxRows;
+
     // For CELLVEC format: converted result batch.
     TOwnedCellVecBatch ResultBatch;
+
+    // Flag to stop collecting more data when quota is reached.
+    bool QuotaExceeded = false;
     // For ARROW format: collected arrow table.
     std::shared_ptr<arrow::Table> ArrowResult;
 
@@ -121,6 +127,16 @@ private:
                 Error = errorMessage;
                 return TConclusionStatus::Fail(errorMessage);
             }
+
+            // Check row quota.
+            if (MaxRows && ResultBatch.Size() > MaxRows) {
+                QuotaExceeded = true;
+            }
+        }
+
+        // Stop collecting if quota was exceeded.
+        if (QuotaExceeded) {
+            return TConclusionStatus::Success();
         }
         return TConclusionStatus::Success();
     }
@@ -167,6 +183,10 @@ private:
                     record.SetRowCount(0);
                 }
             } else {
+                // Truncate to MaxRows if needed.
+                if (MaxRows && ResultBatch.Size() > MaxRows) {
+                    ResultBatch.Truncate(MaxRows);
+                }
                 record.SetRowCount(ResultBatch.Size());
                 ev->SetBatch(std::move(ResultBatch));
             }
@@ -195,7 +215,7 @@ public:
         const std::optional<ui64> schemaVersion, std::vector<std::pair<TString, NScheme::TTypeInfo>>&& ydbPk,
         const std::shared_ptr<arrow::Schema>& arrPk, std::vector<ui32>&& scanColumnIds,
         std::vector<std::pair<TString, NScheme::TTypeInfo>>&& resultSchema, std::vector<TSerializedCellVec>&& keys,
-        NKikimrDataEvents::EDataFormat resultFormat)
+        NKikimrDataEvents::EDataFormat resultFormat, ui64 maxRows)
         : TBase(tabletId, tabletActorId, "read_iterator::" + ::ToString(readId))
         , ReplyTo(replyTo)
         , Cookie(cookie)
@@ -209,6 +229,7 @@ public:
         , ResultSchema(std::move(resultSchema))
         , Keys(std::move(keys))
         , ResultFormat(resultFormat)
+        , MaxRows(maxRows)
     {
     }
 };
@@ -261,17 +282,9 @@ void TColumnShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& 
         return;
     }
 
-    // Reject requests with MaxRows/MaxBytes - column shard read iterator does not support quotas.
-    if (record.HasMaxRows() && record.GetMaxRows()) {
-        SendReadError(ctx, replyTo, cookie, readId, Ydb::StatusIds::UNSUPPORTED,
-            "MaxRows is not supported by column shard read iterator");
-        return;
-    }
-    if (record.HasMaxBytes() && record.GetMaxBytes()) {
-        SendReadError(ctx, replyTo, cookie, readId, Ydb::StatusIds::UNSUPPORTED,
-            "MaxBytes is not supported by column shard read iterator");
-        return;
-    }
+    // Ignore MaxRows/MaxBytes quotas - column shard read iterator does not enforce them.
+    // The stream lookup join worker sets these quotas but for point lookups by primary
+    // key the result set is small (typically 1 row per key), so quotas are not needed.
 
     // Determine result format - default to CELLVEC.
     NKikimrDataEvents::EDataFormat resultFormat = NKikimrDataEvents::FORMAT_CELLVEC;
@@ -344,7 +357,7 @@ void TColumnShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& 
 
     auto task = std::make_shared<TReadIteratorRestoreTask>(TabletID(), SelfId(), replyTo, cookie, readId, pathId, snapshot,
         schemaVersion, std::move(ydbPk), arrPk, std::move(scanColumnIds), std::move(resultSchema), std::move(keys),
-        resultFormat);
+        resultFormat, record.HasMaxRows() ? record.GetMaxRows() : 0);
     ctx.Register(new NOlap::NDataReader::TActor(task));
 
 }

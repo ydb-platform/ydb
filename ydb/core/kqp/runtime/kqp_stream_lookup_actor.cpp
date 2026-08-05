@@ -765,6 +765,16 @@ private:
                 read.SetBlocked();
                 return RetryTableRead(read);
             }
+            case Ydb::StatusIds::UNSUPPORTED: {
+                // ColumnShard read iterator may reject reads with MaxRows/MaxBytes quotas.
+                // Treat as terminal error since the reader cannot retry without quotas.
+                YDB_LOG_DEBUG("Received UNSUPPORTED status",
+                    {"logPrefix", this->LogPrefix},
+                    {"tablet", read.ShardId},
+                    {"issues", getIssues().ToOneLineString()});
+                return replyError("Read request not supported by column shard",
+                    NYql::NDqProto::StatusIds::UNSUPPORTED);
+            }
             default: {
                 return replyError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED);
             }

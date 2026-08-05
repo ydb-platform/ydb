@@ -977,6 +977,21 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT_C(!result.GetCommitTimestamp().has_value(), "Commit timestamp should not be present for non-StrictSerializableRW isolation");
     }
 
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_SnapshotRW) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (450u, "Snapshot");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(!result.GetCommitTimestamp().has_value(), "Commit timestamp should not be present for non-StrictSerializableRW isolation");
+    }
+
     Y_UNIT_TEST(StrictSerializable_CommitTimestamp_Order) {
         TKikimrSettings settings;
         settings.SetEnableStrictSerializableIsolation(true);

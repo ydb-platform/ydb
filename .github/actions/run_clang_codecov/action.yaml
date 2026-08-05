@@ -42,6 +42,10 @@ inputs:
   commit_sha:
     description: Commit SHA for meta/links
     required: true
+  branch:
+    description: Branch name for Codecov (ref_name / head_ref)
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -118,8 +122,15 @@ runs:
         flags: ${{ steps.suite.outputs.flag }}
         fail_ci_if_error: true
         name: ${{ inputs.suite }}
+        # Self-hosted runners often cannot download cli.codecov.io (get HTML); use PyPI instead.
+        use_pypi: true
+        disable_search: true
+        override_commit: ${{ inputs.commit_sha }}
+        override_branch: ${{ inputs.branch }}
 
     - name: Publish HTML report to Object Storage
+      # Still publish HTML if Codecov upload fails (e.g. CDN blocked on runner).
+      if: ${{ always() && steps.ya.outcome == 'success' }}
       continue-on-error: true
       shell: bash
       env:

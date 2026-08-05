@@ -251,6 +251,7 @@ jobs:
           bazel_remote_password: ${{ secrets.REMOTE_CACHE_PASSWORD }}
           pr_number: ${{ needs.detect.outputs.pr_number }}
           commit_sha: ${{ needs.detect.outputs.commit_sha }}
+          branch: ${{ github.head_ref || github.ref_name }}
 
   finalize:
     name: Finalize PR labels

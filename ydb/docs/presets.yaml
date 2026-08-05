@@ -31,6 +31,7 @@ default:
   ydb-name: YDB
   ydb-full-name: YDB
   ydb-short-name: YDB
+  ydb-ui-name: YDB UI
   yandex-cloud: Yandex.Cloud
   objstorage-full-name: Yandex Object Storage
   sf-name: Cloud Functions

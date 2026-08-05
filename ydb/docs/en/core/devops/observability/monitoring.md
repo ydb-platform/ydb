@@ -58,7 +58,7 @@ The list of [storage nodes](../../concepts/glossary.md#storage-node) and [dynami
   - `ca.crt`: certificate used when deploying the cluster.
   - `grafana-dashboards` — directory with Grafana dashboard templates. Templates are loaded from the [GitHub repository](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards).
 
-  Check the contents of the generated files `ydbd-storage.yml` and `ydbd-database.yml`. The list of nodes and ports must match the actual cluster topology, including the nodes displayed in the [built-in cluster UI](../../reference/embedded-ui/ydb-monitoring.md).
+  Check the contents of the generated files `ydbd-storage.yml` and `ydbd-database.yml`. The list of nodes and ports must match the actual cluster topology, including the nodes displayed in the [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
 
   Example of checking the contents of the configuration directory:
 

@@ -9,5 +9,5 @@ Main resources:
 - [{#T}](../../observability/monitoring.md)
 - [{#T}](../../observability/logging.md)
 - [{#T}](../../backup-and-recovery.md)
-- [{#T}](../../../reference/embedded-ui/index.md)
+- [{#T}](../../../reference/ydb-ui/index.md)
 - [{#T}](../../observability/system-views.md)

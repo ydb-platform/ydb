@@ -226,7 +226,7 @@ After running this command, the source file `/tmp/config.yaml` is no longer used
 
 {% endlist %}
 
-After starting the static nodes, verify they are working via the {{ ydb-short-name }} built-in web interface (Embedded UI):
+After starting the static nodes, verify they are working via the {{ ydb-short-name }} built-in web interface ({{ ydb-ui-name }}):
 
 1. Open `https://<node.ydb.tech>:8765` in your browser, where `<node.ydb.tech>` is the FQDN of the server running any static node;
 2. Go to the **Nodes** tab;
@@ -429,7 +429,7 @@ To verify access to the {{ ydb-short-name }} built-in web interface, open `https
 
 The web browser must be configured to trust the Certificate Authority that issued the certificates for the {{ ydb-short-name }} cluster; otherwise, a warning about using an untrusted certificate will be displayed.
 
-If authentication is enabled in the cluster, the web browser will display a login and password prompt. After entering valid authentication credentials, the built-in web interface home page should appear. A description of the available features and user interface is provided in [{#T}](../../../../reference/embedded-ui/index.md).
+If authentication is enabled in the cluster, the web browser will display a login and password prompt. After entering valid authentication credentials, the built-in web interface home page should appear. A description of the available features and user interface is provided in [{#T}](../../../../reference/ydb-ui/index.md).
 
 {% note info %}
 

@@ -132,8 +132,8 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
     auto id = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
 
     // determine if we want to inject BS errors
-    if (Cfg->BlobStorageConfig.GetServiceSet().HasFailureInjectionConfig()) {
-        auto const& fiConfig = Cfg->BlobStorageConfig.GetServiceSet().GetFailureInjectionConfig();
+    if (Cfg->BlobStorageConfig->GetServiceSet().HasFailureInjectionConfig()) {
+        auto const& fiConfig = Cfg->BlobStorageConfig->GetServiceSet().GetFailureInjectionConfig();
         if (fiConfig.GetFailureProbability() > 0) {
             const auto gid = TGroupId::FromValue(groupId);
             if (IsDynamicGroup(gid) || fiConfig.GetIncludeStaticGroups()) {

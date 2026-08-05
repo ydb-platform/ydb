@@ -706,17 +706,71 @@ void TError::EnrichFromException(const std::exception& exception)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TError& TError::operator <<= (const TErrorAttribute& attribute) &
+void TError::AddAttribute(const TErrorAttribute& attribute)
 {
     MutableAttributes()->SetAttribute(attribute);
+}
+
+void TError::AddInnerError(const TError& innerError)
+{
+    YT_VERIFY(!innerError.IsOK());
+    MutableInnerErrors()->push_back(innerError);
+}
+
+void TError::AddInnerError(TError&& innerError)
+{
+    YT_VERIFY(!innerError.IsOK());
+    MutableInnerErrors()->push_back(std::move(innerError));
+}
+
+TError TError::With(const TErrorAttribute& attribute) const &
+{
+    auto result = TError(*this);
+    result.AddAttribute(attribute);
+    return result;
+}
+
+TError&& TError::With(const TErrorAttribute& attribute) &&
+{
+    AddAttribute(attribute);
+    return std::move(*this);
+}
+
+TError TError::With(const TError& innerError) const &
+{
+    auto result = TError(*this);
+    result.AddInnerError(innerError);
+    return result;
+}
+
+TError&& TError::With(const TError& innerError) &&
+{
+    AddInnerError(innerError);
+    return std::move(*this);
+}
+
+TError TError::With(TError&& innerError) const &
+{
+    auto result = TError(*this);
+    result.AddInnerError(std::move(innerError));
+    return result;
+}
+
+TError&& TError::With(TError&& innerError) &&
+{
+    AddInnerError(std::move(innerError));
+    return std::move(*this);
+}
+
+TError& TError::operator <<= (const TErrorAttribute& attribute) &
+{
+    AddAttribute(attribute);
     return *this;
 }
 
 TError& TError::operator <<= (const std::vector<TErrorAttribute>& attributes) &
 {
-    for (const auto& attribute : attributes) {
-        MutableAttributes()->SetAttribute(attribute);
-    }
+    AddAttributes(attributes);
     return *this;
 }
 

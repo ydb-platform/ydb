@@ -1610,7 +1610,11 @@ TSQLResult<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, c
             result.Expr = DictLiteral(node.GetAlt_atom_expr11().GetRule_dict_literal1());
             break;
         case TRule_atom_expr::kAltAtomExpr12:
-            result.Expr = StructLiteral(node.GetAlt_atom_expr12().GetRule_struct_literal1());
+            if (auto expected = StructLiteral(node.GetAlt_atom_expr12().GetRule_struct_literal1())) {
+                result.Expr = std::move(*expected);
+            } else {
+                return std::unexpected(expected.error());
+            }
             break;
         case TRule_atom_expr::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
@@ -1711,7 +1715,11 @@ TSQLResult<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& no
             result.Expr = DictLiteral(node.GetAlt_in_atom_expr10().GetRule_dict_literal1());
             break;
         case TRule_in_atom_expr::kAltInAtomExpr11:
-            result.Expr = StructLiteral(node.GetAlt_in_atom_expr11().GetRule_struct_literal1());
+            if (auto expected = StructLiteral(node.GetAlt_in_atom_expr11().GetRule_struct_literal1())) {
+                result.Expr = std::move(*expected);
+            } else {
+                return std::unexpected(expected.error());
+            }
             break;
         case TRule_in_atom_expr::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");

@@ -1,5 +1,9 @@
 #include "stat_processor.h"
 
+#include <ydb/core/base/group_stat.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/nodewarden/group_stat_aggregator.h>
+
 namespace NKikimr::NBsController {
 
     class TStatProcessorActor : public TActorBootstrapped<TStatProcessorActor> {

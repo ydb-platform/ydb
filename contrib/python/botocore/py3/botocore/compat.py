@@ -70,8 +70,6 @@ def set_socket_timeout(http_response, timeout):
     http_response._fp.fp.raw._sock.settimeout(timeout)
 
 def accepts_kwargs(func):
-    # In python3.4.1, there's backwards incompatible
-    # changes when using getargspec with functools.partials.
     return inspect.getfullargspec(func)[2]
 
 def ensure_unicode(s, encoding=None, errors=None):
@@ -86,12 +84,9 @@ def ensure_bytes(s, encoding='utf-8', errors='strict'):
     raise ValueError(f"Expected str or bytes, received {type(s)}.")
 
 
-try:
-    import xml.etree.cElementTree as ETree
-except ImportError:
-    # cElementTree does not exist from Python3.9+
-    import xml.etree.ElementTree as ETree
+import xml.etree.ElementTree as ETree
 XMLParseError = ETree.ParseError
+
 import json
 
 

@@ -221,6 +221,10 @@ class Serializer:
             value = "NaN"
         return value
 
+    def _handle_query_compatible_trait(self, operation_model, serialized):
+        if operation_model.service_model.is_query_compatible:
+            serialized['headers']['x-amzn-query-mode'] = 'true'
+
 
 class QuerySerializer(Serializer):
     TIMESTAMP_FORMAT = 'iso8601'
@@ -380,6 +384,8 @@ class JSONSerializer(Serializer):
             'X-Amz-Target': target,
             'Content-Type': f'application/x-amz-json-{json_version}',
         }
+        self._handle_query_compatible_trait(operation_model, serialized)
+
         body = self.MAP_TYPE()
         input_shape = operation_model.input_shape
         if input_shape is not None:
@@ -1198,6 +1204,7 @@ class RpcV2CBORSerializer(BaseRpcV2Serializer, CBORSerializer):
             header_val = 'application/vnd.amazon.eventstream'
         else:
             header_val = 'application/cbor'
+        self._handle_query_compatible_trait(operation_model, serialized)
 
         has_body = serialized['body'] != b''
         has_content_type = has_header('Content-Type', serialized['headers'])

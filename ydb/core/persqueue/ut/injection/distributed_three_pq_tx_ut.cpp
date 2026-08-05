@@ -142,14 +142,51 @@ struct TThreeRealPqEnv {
         }
     }
 
+    // Shared Edge receives replies from all tablets; match TabletId before accepting.
+    THolder<TEvPersQueue::TEvOffsetsResponse> GrabOffsetsResponseFor(
+        ui64 tabletId, TDuration timeout)
+    {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline) {
+            const TDuration left = deadline - TInstant::Now();
+            auto result = Runtime->GrabEdgeEvent<TEvPersQueue::TEvOffsetsResponse>(left);
+            if (!result) {
+                return {};
+            }
+            if (!result->Record.HasTabletId() || result->Record.GetTabletId() != tabletId) {
+                continue;
+            }
+            return result;
+        }
+        return {};
+    }
+
+    // TEvResponse may lack TabletId; stamp PartitionRequest cookie with tabletId and filter on it.
+    THolder<TEvPersQueue::TEvResponse> GrabResponseForCookie(ui64 cookie, TDuration timeout) {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline) {
+            const TDuration left = deadline - TInstant::Now();
+            auto result = Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(left);
+            if (!result) {
+                return {};
+            }
+            if (!result->Record.HasPartitionResponse() ||
+                result->Record.GetPartitionResponse().GetCookie() != cookie)
+            {
+                continue;
+            }
+            return result;
+        }
+        return {};
+    }
+
     bool IsTabletReady(ui64 tabletId) {
         try {
             Runtime->ResetScheduledCount();
             ResetPipe(tabletId);
             auto request = MakeHolder<TEvPersQueue::TEvOffsets>();
             SendToTablet(tabletId, request.Release());
-            auto result = Runtime->GrabEdgeEvent<TEvPersQueue::TEvOffsetsResponse>(
-                TDuration::MilliSeconds(200));
+            auto result = GrabOffsetsResponseFor(tabletId, TDuration::MilliSeconds(200));
             if (!result || result->Record.PartResultSize() == 0) {
                 return false;
             }
@@ -190,8 +227,7 @@ struct TThreeRealPqEnv {
                 ResetPipe(tabletId);
                 auto request = MakeHolder<TEvPersQueue::TEvOffsets>();
                 SendToTablet(tabletId, request.Release());
-                auto result = Runtime->GrabEdgeEvent<TEvPersQueue::TEvOffsetsResponse>(
-                    kDistThreePqEdgeTimeout);
+                auto result = GrabOffsetsResponseFor(tabletId, kDistThreePqEdgeTimeout);
                 if (!result || result->Record.PartResultSize() == 0) {
                     continue;
                 }
@@ -216,9 +252,11 @@ struct TThreeRealPqEnv {
                 auto request = MakeHolder<TEvPersQueue::TEvRequest>();
                 auto* req = request->Record.MutablePartitionRequest();
                 req->SetPartition(0);
+                // Cookie identifies the target tablet among shared-Edge replies.
+                req->SetCookie(tabletId);
                 req->MutableCmdGetClientOffset()->SetClientId(user);
                 SendToTablet(tabletId, request.Release());
-                auto result = Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(kDistThreePqEdgeTimeout);
+                auto result = GrabResponseForCookie(tabletId, kDistThreePqEdgeTimeout);
                 if (!result) {
                     continue;
                 }

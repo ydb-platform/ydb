@@ -800,7 +800,8 @@ void RenderLatencyValueBar(
         << stats.P90.MicroSeconds() << "' data-p99='"
         << stats.P99.MicroSeconds() << "' data-max='"
         << stats.Max.MicroSeconds() << "' title='"
-        << HtmlEscape(LatencyStatsTitle(stats)) << "'>"
+        << HtmlEscape(LatencyStatsTitle(stats))
+        << "'>"
            "<div class='lat-bar-text'>"
         << FormatDuration(value)
         << "</div>"
@@ -1055,7 +1056,8 @@ void RenderLatencyClientScript(IOutputStream& str)
            "var timer=null;"
            "var refreshing=false;"
            "var opNames=["
-        << opNamesJs << "];"
+        << opNamesJs
+        << "];"
            "function val(id){var el=document.getElementById(id);return "
            "el?el.value:'';}"
            "function checked(id){var el=document.getElementById(id);return "
@@ -1459,8 +1461,8 @@ void RenderLatencySlotGrid(
                                     : MakePBufferMonPageUrl(slot.SlotId);
             // data-ops holds every operation's stats so Slot grid operation /
             // Percentile can redraw without a server round-trip.
-            str << "<a class='lat-slot' href='" << url
-                << "' data-ops='" << SlotOpsJson(slot)
+            str << "<a class='lat-slot' href='" << url << "' data-ops='"
+                << SlotOpsJson(slot)
                 << "' style='display:inline-block; vertical-align:top;"
                    " margin:0 0.25em 0.2em 0; text-decoration:none;"
                    " color:inherit; min-width:5em;'>";
@@ -1614,7 +1616,8 @@ void RenderLatency(IOutputStream& str, const TMonPageData& data)
             DIV_CLASS ("alert alert-warning") {
                 str << "Latency history is disabled "
                        "(OracleConfig.TimePredictionHistorySize = 0). "
-                       "Set TimePredictionHistorySize &gt; 0 to collect "
+                       "Set OracleConfig.TimePredictionHistorySize &gt; 0 to "
+                       "collect "
                        "per-host sliding windows.";
             }
         }

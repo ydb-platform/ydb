@@ -489,7 +489,7 @@ TVector<TOracleHostStat> TOracle::BuildHostStats(TInstant now) const
     TVector<TOracleHostStat> stats;
     stats.reserve(HostStatistics.size());
     for (THostIndex hostIndex = 0; hostIndex < GetHostCount(); ++hostIndex) {
-        // Compute latency stats for for monitoring snapshot.
+        // Compute latency stats for monitoring snapshot.
         TLatencyByOperation latencyByOperation{};
         for (size_t operation = 0; operation < OperationCount; ++operation) {
             latencyByOperation[operation] =

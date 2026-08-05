@@ -439,8 +439,9 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "history.pushState");
         // lat-nav must not trigger a data refetch.
         UNIT_ASSERT(html.Contains("redrawViews();"));
-        UNIT_ASSERT(!html.Contains("history.pushState(null,'',href);"
-                                   "refreshLive();"));
+        UNIT_ASSERT(
+            !html.Contains("history.pushState(null,'',href);"
+                           "refreshLive();"));
     }
 
     Y_UNIT_TEST(LatencyPageSelectedPercentileAndOperation)

@@ -23,6 +23,7 @@ from collections import namedtuple
 from copy import deepcopy
 from hashlib import sha1
 
+import dateutil.parser
 from dateutil.parser import parse
 from dateutil.tz import tzlocal, tzutc
 
@@ -50,6 +51,7 @@ from botocore.utils import (
     InstanceMetadataFetcher,
     JSONFileCache,
     SSOTokenLoader,
+    create_nested_client,
     parse_key_val_file,
     resolve_imds_endpoint_mode,
 )
@@ -265,7 +267,9 @@ def _get_client_creator(session, region_name):
     def client_creator(service_name, **kwargs):
         create_client_kwargs = {'region_name': region_name}
         create_client_kwargs.update(**kwargs)
-        return session.create_client(service_name, **create_client_kwargs)
+        return create_nested_client(
+            session, service_name, **create_client_kwargs
+        )
 
     return client_creator
 
@@ -2192,6 +2196,7 @@ class SSOCredentialFetcher(CachedCredentialFetcher):
         expiry_window_seconds=None,
         token_provider=None,
         sso_session_name=None,
+        time_fetcher=_local_now,
     ):
         self._client_creator = client_creator
         self._sso_region = sso_region
@@ -2201,6 +2206,7 @@ class SSOCredentialFetcher(CachedCredentialFetcher):
         self._token_loader = token_loader
         self._token_provider = token_provider
         self._sso_session_name = sso_session_name
+        self._time_fetcher = time_fetcher
         super().__init__(cache, expiry_window_seconds)
 
     def _create_cache_key(self):
@@ -2242,7 +2248,16 @@ class SSOCredentialFetcher(CachedCredentialFetcher):
             initial_token_data = self._token_provider.load_token()
             token = initial_token_data.get_frozen_token().token
         else:
-            token = self._token_loader(self._start_url)['accessToken']
+            token_dict = self._token_loader(self._start_url)
+            token = token_dict['accessToken']
+
+            # raise an UnauthorizedSSOTokenError if the loaded legacy token
+            # is expired to save a call to GetRoleCredentials with an
+            # expired token.
+            expiration = dateutil.parser.parse(token_dict['expiresAt'])
+            remaining = total_seconds(expiration - self._time_fetcher())
+            if remaining <= 0:
+                raise UnauthorizedSSOTokenError()
 
         kwargs = {
             'roleName': self._role_name,

@@ -1160,10 +1160,10 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(new TRealPDiskServiceFactory()));
     if (Config.HasBlobStorageConfig()) {
         const auto& bsc = Config.GetBlobStorageConfig();
-        nodeWardenConfig->FeatureFlags = Config.GetFeatureFlags();
-        nodeWardenConfig->BlobStorageConfig.CopyFrom(bsc);
+        nodeWardenConfig->FeatureFlags = std::make_unique<NKikimrConfig::TFeatureFlags>(Config.GetFeatureFlags());
+        nodeWardenConfig->BlobStorageConfig->CopyFrom(bsc);
         if (Config.HasNameserviceConfig()) {
-            nodeWardenConfig->NameserviceConfig.CopyFrom(Config.GetNameserviceConfig());
+            nodeWardenConfig->NameserviceConfig->CopyFrom(Config.GetNameserviceConfig());
         }
         if (Config.HasVDiskConfig()) {
             nodeWardenConfig->AllVDiskKinds->Merge(Config.GetVDiskConfig());
@@ -1195,16 +1195,16 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
         nodeWardenConfig->EnableVDiskCooldownTimeout = true;
     }
     if (Config.HasDomainsConfig()) {
-        nodeWardenConfig->DomainsConfig.emplace(Config.GetDomainsConfig());
+        nodeWardenConfig->DomainsConfig = std::make_unique<NKikimrConfig::TDomainsConfig>(Config.GetDomainsConfig());
     }
     if (Config.HasSelfManagementConfig()) {
-        nodeWardenConfig->SelfManagementConfig.emplace(Config.GetSelfManagementConfig());
+        nodeWardenConfig->SelfManagementConfig = std::make_unique<NKikimrConfig::TSelfManagementConfig>(Config.GetSelfManagementConfig());
     }
     if (Config.HasBridgeConfig()) {
-        nodeWardenConfig->BridgeConfig.emplace(Config.GetBridgeConfig());
+        nodeWardenConfig->BridgeConfig = std::make_unique<NKikimrConfig::TBridgeConfig>(Config.GetBridgeConfig());
     }
     if (Config.HasDynamicNodeConfig()) {
-        nodeWardenConfig->DynamicNodeConfig.emplace(Config.GetDynamicNodeConfig());
+        nodeWardenConfig->DynamicNodeConfig = std::make_unique<NKikimrConfig::TDynamicNodeConfig>(Config.GetDynamicNodeConfig());
     }
 
     if (Config.HasConfigDirPath()) {
@@ -1274,7 +1274,7 @@ void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSe
 
     std::unique_ptr<IActor> proxyActor;
 
-    for (const NKikimrConfig::TDomainsConfig::TStateStorage &ssconf : Config.GetDomainsConfig().GetStateStorage()) {
+    for (const NKikimrConfig::TStateStorageConfig &ssconf : Config.GetDomainsConfig().GetStateStorage()) {
         Y_ABORT_UNLESS(ssconf.GetSSId() == 1);
 
         BuildStateStorageInfos(ssconf, ssrInfo, ssbInfo, sbrInfo);

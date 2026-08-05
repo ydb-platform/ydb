@@ -21,7 +21,6 @@ from __future__ import annotations
 import enum
 import logging
 import threading
-import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,7 +58,7 @@ class GuardMode(enum.Enum):
     BYPASS = "bypass"
 
 
-# Recovery window for types without ``auto_recovery_sec``: longer than a systemd restart + rejoin.
+# Extract-trigger / timeout base when auto_recovery_sec is unset — not a budget-release timer.
 DEFAULT_RECOVERY_SEC: float = 120.0
 
 # Share of the cluster's slots allowed down at once.
@@ -275,24 +274,16 @@ class BudgetView:
 
 @dataclass
 class _Impairment:
-    """One recorded fault. ``deadline`` is ``time.monotonic()``; ``None`` = held until extracted."""
+    """One recorded fault; held until release / record_extract (no timer expiry)."""
 
     execution_id: str
     racks: set[str]
     identity_key: str
-    deadline: float | None
     slots: int = 0
 
 
 class FailureModelGuard:
-    """Tracks impaired fail domains + slots. No dispatch-time veto; two ways in:
-
-    * lease API (boundary scheduler): :meth:`budget_view` to filter, :meth:`reserve` to claim
-      atomically (the only call that refuses), :meth:`release` on recovery;
-    * plan-then-record (legacy loop, manual inject): :meth:`filter_safe`, then
-      :meth:`record_inject` / :meth:`record_extract` — recording never refuses, the fault already
-      happened.
-    """
+    """Impaired fail domains + slots. Lease API (reserve/release) or plan-then-record; no timer expiry."""
 
     def __init__(
         self,
@@ -305,7 +296,8 @@ class FailureModelGuard:
         self._lock = threading.Lock()
         self._impairments: list[_Impairment] = []
         slots = max(0, int(total_slots))
-        # ≥1 so slot chaos still runs on small clusters; 0 (slot count unknown) never blocks.
+        self._total_slots = slots
+        # ≥1 on small clusters; 0 (unknown) never blocks.
         self._max_slots = max(1, int(slots * float(slot_fraction))) if slots else 0
 
     @property
@@ -359,30 +351,22 @@ class FailureModelGuard:
 
     # -- impairment bookkeeping (call under _lock) --------------------------
 
-    def _purge_expired(self, now: float) -> None:
-        self._impairments = [
-            imp for imp in self._impairments if imp.deadline is None or imp.deadline > now
-        ]
-
-    def _active_racks(self, now: float) -> set[str]:
-        self._purge_expired(now)
+    def _active_racks(self) -> set[str]:
         active: set[str] = set()
         for imp in self._impairments:
             active |= imp.racks
         return active
 
-    def _active_slots(self, now: float) -> int:
-        self._purge_expired(now)
+    def _active_slots(self) -> int:
         return sum(imp.slots for imp in self._impairments)
 
-    def _slots_ok(self, add_slots: int, now: float) -> bool:
+    def _slots_ok(self, add_slots: int) -> bool:
         """Whether ``add_slots`` more slots stay within the budget."""
         if add_slots <= 0 or self._max_slots <= 0:
             return True
-        return _slots_within_budget(self._active_slots(now), add_slots, self._max_slots)
+        return _slots_within_budget(self._active_slots(), add_slots, self._max_slots)
 
-    def _touched_keys(self, now: float) -> set[str]:
-        self._purge_expired(now)
+    def _touched_keys(self) -> set[str]:
         return {imp.identity_key for imp in self._impairments}
 
     # -- tolerance check ----------------------------------------------------
@@ -420,11 +404,10 @@ class FailureModelGuard:
         always admitted here and :meth:`reserve` is what refuses it.
         """
         candidates = list(candidates)
-        now = time.monotonic()
         safe: list[ChaosTarget] = []
         with self._lock:
-            active = self._active_racks(now)
-            touched = self._touched_keys(now)
+            active = self._active_racks()
+            touched = self._touched_keys()
             for target in candidates:
                 if target.identity_key() in touched:
                     continue
@@ -444,20 +427,13 @@ class FailureModelGuard:
     def reserve(
         self,
         footprint: Footprint,
-        recovery_sec: float | None = None,
         identity_key: str | None = None,
     ) -> str | None:
-        """Claim ``footprint`` atomically; return a unique lease id, or None if it exceeds a budget.
-
-        ``recovery_sec`` auto-expires the lease; ``None`` holds it until :meth:`release`.
-        ``identity_key`` is reported by :meth:`budget_view` so schedulers skip impaired targets.
-        """
-        now = time.monotonic()
-        deadline = None if recovery_sec is None else now + float(recovery_sec)
+        """Claim ``footprint``; return lease id or None. Held until :meth:`release`."""
         with self._lock:
-            if not self._is_tolerable(self._active_racks(now) | set(footprint.racks)):
+            if not self._is_tolerable(self._active_racks() | set(footprint.racks)):
                 return None
-            if not self._slots_ok(footprint.slots, now):
+            if not self._slots_ok(footprint.slots):
                 return None
             lease_id = uuid.uuid4().hex
             self._impairments.append(
@@ -465,7 +441,6 @@ class FailureModelGuard:
                     execution_id=lease_id,
                     racks=set(footprint.racks),
                     identity_key=identity_key or f"lease:{lease_id}",
-                    deadline=deadline,
                     slots=footprint.slots,
                 )
             )
@@ -473,12 +448,11 @@ class FailureModelGuard:
 
     def budget_view(self) -> BudgetView:
         """Snapshot both budgets and the impaired identities under one lock."""
-        now = time.monotonic()
         with self._lock:
             return BudgetView(
-                impaired_racks=frozenset(self._active_racks(now)),
-                impaired_slots=self._active_slots(now),
-                touched=frozenset(self._touched_keys(now)),
+                impaired_racks=frozenset(self._active_racks()),
+                impaired_slots=self._active_slots(),
+                touched=frozenset(self._touched_keys()),
                 is_tolerable=self._is_tolerable,
                 max_slots=self._max_slots,
             )
@@ -498,20 +472,14 @@ class FailureModelGuard:
         execution_id: str,
         target: ChaosTarget | str,
         scope: ImpactScope,
-        recovery_sec: float | None = DEFAULT_RECOVERY_SEC,
     ) -> None:
-        """Account for an already-dispatched fault; never refuses.
-
-        Charges both dimensions of :meth:`footprint_for` (nothing is recorded for tablets).
-        ``recovery_sec=None`` holds the impairment until an explicit extract.
-        """
+        """Account for an already-dispatched fault; held until extract / probe release."""
         chaos_target = (
             target if isinstance(target, ChaosTarget) else ChaosTarget.for_host(str(target))
         )
         footprint = self.footprint_for(chaos_target, scope)
         if not footprint:
             return
-        deadline = None if recovery_sec is None else time.monotonic() + float(recovery_sec)
         with self._lock:
             self._impairments = [
                 imp for imp in self._impairments if imp.execution_id != execution_id
@@ -521,7 +489,6 @@ class FailureModelGuard:
                     execution_id=execution_id,
                     racks=set(footprint.racks),
                     identity_key=chaos_target.identity_key(),
-                    deadline=deadline,
                     slots=footprint.slots,
                 )
             )
@@ -532,7 +499,7 @@ class FailureModelGuard:
         target: ChaosTarget | str,
         scope: ImpactScope,
     ) -> None:
-        """Release the impairment recorded for ``execution_id`` (early recovery)."""
+        """Drop impairment by ``execution_id``, else by identity."""
         chaos_target = (
             target if isinstance(target, ChaosTarget) else ChaosTarget.for_host(str(target))
         )
@@ -542,22 +509,21 @@ class FailureModelGuard:
                 imp for imp in self._impairments if imp.execution_id != execution_id
             ]
             if len(self._impairments) == before:
-                # Untracked execution (e.g. after a restart): drop by identity, not by domain —
-                # one domain can hold unrelated impairments.
+                # Identity fallback: one domain can hold unrelated impairments.
                 key = chaos_target.identity_key()
                 self._impairments = [
                     imp for imp in self._impairments if imp.identity_key != key
                 ]
 
     def snapshot(self) -> dict:
-        now = time.monotonic()
         with self._lock:
-            active = sorted(self._active_racks(now))
+            active = sorted(self._active_racks())
             return {
                 "enabled": self.enabled,
                 "erasure": self._topology.tolerance.erasure,
                 "impaired_racks": active,
-                "impaired_slots": self._active_slots(now),
+                "impaired_slots": self._active_slots(),
+                "total_slots": self._total_slots,
                 "max_slots": self._max_slots,
                 "tracked_executions": len(self._impairments),
             }

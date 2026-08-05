@@ -4425,7 +4425,8 @@ TReadInfo MakeReadInfoForAddBlobsFromBodyTest(
     ui16 partNo = 0,
     ui64 messageCountLimit = kAddBlobsFromBodyDefaultMsgLimit,
     ui32 byteSizeLimit = kAddBlobsFromBodyDefaultByteLimit,
-    ui64 readTimestampMs = 0)
+    ui64 readTimestampMs = 0,
+    bool readToBlobEnd = true)
 {
     return {
         TString("user"),
@@ -4435,7 +4436,7 @@ TReadInfo MakeReadInfoForAddBlobsFromBodyTest(
         partNo,
         messageCountLimit,
         byteSizeLimit,
-        true, // readToBlobEnd
+        readToBlobEnd,
         ui64{0},
         readTimestampMs,
         TDuration::Zero(),
@@ -4888,6 +4889,80 @@ Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRenameMultipart, TPar
     Ctx->Runtime->DispatchEvents(options);
 }
 
+// Multipart logical message split across two BodyKeys (PartNo 0..1 then PartNo 2) after
+// Key≠Header rename. Mid-message PartNo=1 must stay on parent Offset across the blob gap.
+Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRenameMultipartAcrossBlobs, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    const TPartitionId partitionId(1);
+    constexpr ui64 supportiveHeaderOffset = 391;
+    constexpr ui16 totalParts = 3;
+    constexpr ui32 bytesPerPart = 32;
+    constexpr ui64 parentKeyOffset = 547'189'849;
+    constexpr ui64 readOffset = parentKeyOffset;
+    constexpr ui16 readPartNo = 1;
+
+    std::deque<TClientBlob> dq0;
+    dq0.push_back(MakeMultipartBodyReadBlob(1, 0, totalParts, bytesPerPart, 'a'));
+    dq0.push_back(MakeMultipartBodyReadBlob(1, 1, totalParts, bytesPerPart, 'b'));
+    TString raw0 = SerializePackedBatchForReadBodyTest(
+        TBatch::FromBlobs(supportiveHeaderOffset, std::move(dq0)));
+
+    std::deque<TClientBlob> dq1;
+    dq1.push_back(MakeMultipartBodyReadBlob(1, 2, totalParts, bytesPerPart, 'c'));
+    TString raw1 = SerializePackedBatchForReadBodyTest(
+        TBatch::FromBlobs(supportiveHeaderOffset, std::move(dq1)));
+
+    const TKey key0 = TKey::FromKey(
+        TKey::ForBody(TKeyPrefix::TypeData, partitionId, supportiveHeaderOffset, 0, 0, 2),
+        TKeyPrefix::TypeData, partitionId, parentKeyOffset);
+    const TKey key1 = TKey::FromKey(
+        TKey::ForBody(TKeyPrefix::TypeData, partitionId, supportiveHeaderOffset, 2, 1, 0),
+        TKeyPrefix::TypeData, partitionId, parentKeyOffset);
+
+    TVector<TRequestedBlob> blobs;
+    // Incomplete multipart: Count=0 / InternalPartsCount=2 until last part lands in the next key.
+    blobs.push_back(MakeRequestedBlobForRead(parentKeyOffset, 0, 0, 2, std::move(raw0), key0));
+    blobs.push_back(MakeRequestedBlobForRead(parentKeyOffset, 2, 1, 0, std::move(raw1), key1));
+
+    auto probe = [&](const TActorContext& ctx) {
+        TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(
+            Ctx->Edge, readOffset, 0, readPartNo);
+        info.Blobs = blobs;
+        info.CompactedBlobsCount = 2;
+
+        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
+
+        bool needStop = false;
+        ui32 cnt = 0;
+        ui32 size = 0;
+        ui32 lastBlobSize = 0;
+
+        TMaybe<TReadAnswer> early = info.AddBlobsFromBody(
+            blobs, 0, 2, nullptr, readOffset, parentKeyOffset + 10,
+            kAddBlobsFromBodyProbeSizeLag, Ctx->Edge, readOffset,
+            readResult, answer, needStop, cnt, size, lastBlobSize, ctx);
+
+        UNIT_ASSERT(!early.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(0).GetOffset(), parentKeyOffset);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(0).GetPartNo(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(1).GetOffset(), parentKeyOffset);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(1).GetPartNo(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(info.Offset, parentKeyOffset + 1);
+        UNIT_ASSERT_VALUES_EQUAL(info.PartNo, 0u);
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
 // Read from blob start (Offset == Key.Offset): no FindPos, but results must still be Key-space.
 Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRenameFromBlobStart, TPartitionFixture) {
     UNIT_ASSERT(Ctx.Defined());
@@ -5121,6 +5196,114 @@ Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRenameNonZeroHeaderBa
     Ctx->Runtime->DispatchEvents(options);
 }
 
+// UpdateUsage resume after messageCountLimit mid-blob: first read stops after k messages
+// (needStop from UpdateUsage), second read resumes at S+k via FindPos. Key≠Header after
+// tx rename — results must stay in parent/key space, not supportive header k, k+1, …
+Y_UNIT_TEST_F(AddBlobsFromBodyUpdateUsageLimitSplitMidBatchAfterTxKeyRename, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    const TPartitionId partitionId(1);
+    constexpr ui64 supportiveHeaderOffset = 391;
+    constexpr ui32 messageCount = 6;
+    constexpr ui32 limitK = 2;
+    constexpr ui64 parentKeyOffset = 547'189'849;
+    static_assert(limitK > 0 && limitK < messageCount);
+
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlob(1, 'a'));
+    dq.push_back(MakeSinglePartBodyReadBlob(2, 'b'));
+    dq.push_back(MakeSinglePartBodyReadBlob(3, 'c'));
+    dq.push_back(MakeSinglePartBodyReadBlob(4, 'd'));
+    dq.push_back(MakeSinglePartBodyReadBlob(5, 'e'));
+    dq.push_back(MakeSinglePartBodyReadBlob(6, 'f'));
+    TString raw = SerializePackedBatchForReadBodyTest(
+        TBatch::FromBlobs(supportiveHeaderOffset, std::move(dq)));
+
+    const TKey supportiveKey = TKey::ForBody(
+        TKeyPrefix::TypeData, partitionId, supportiveHeaderOffset, 0, messageCount, 0);
+    const TKey parentKey = TKey::FromKey(
+        supportiveKey, TKeyPrefix::TypeData, partitionId, parentKeyOffset);
+    UNIT_ASSERT_VALUES_EQUAL(parentKey.GetOffset(), parentKeyOffset);
+
+    TRequestedBlob blob = MakeRequestedBlobForRead(
+        parentKeyOffset, 0, messageCount, 0, std::move(raw), parentKey);
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(std::move(blob));
+
+    auto probe = [&](const TActorContext& ctx) {
+        // First read: from blob start S, stop after limitK via UpdateUsage (cnt >= Count).
+        {
+            TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(
+                Ctx->Edge, parentKeyOffset, 0, 0, limitK);
+            info.Blobs = blobs;
+            info.CompactedBlobsCount = 1;
+
+            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
+            bool needStop = false;
+            ui32 cnt = 0;
+            ui32 size = 0;
+            ui32 lastBlobSize = 0;
+
+            TMaybe<TReadAnswer> early = info.AddBlobsFromBody(
+                blobs, 0, 1, nullptr, parentKeyOffset, parentKeyOffset + messageCount + 10,
+                kAddBlobsFromBodyProbeSizeLag, Ctx->Edge, parentKeyOffset,
+                readResult, answer, needStop, cnt, size, lastBlobSize, ctx);
+
+            UNIT_ASSERT(!early.Defined());
+            UNIT_ASSERT(needStop);
+            UNIT_ASSERT_VALUES_EQUAL(cnt, limitK);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), limitK);
+            for (ui32 i = 0; i < limitK; ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(i).GetOffset(), parentKeyOffset + i);
+                UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(i).GetPartNo(), 0u);
+            }
+            // Next read starts at S+k (key space), not supportive header base + k.
+            UNIT_ASSERT_VALUES_EQUAL(info.Offset, parentKeyOffset + limitK);
+            UNIT_ASSERT_VALUES_EQUAL(info.PartNo, 0u);
+        }
+
+        // Second read: resume mid-blob at S+k — FindPos + HeaderOffsetToKeySpace path.
+        {
+            const ui64 resumeOffset = parentKeyOffset + limitK;
+            TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, resumeOffset);
+            info.Blobs = blobs;
+            info.CompactedBlobsCount = 1;
+
+            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
+            bool needStop = false;
+            ui32 cnt = 0;
+            ui32 size = 0;
+            ui32 lastBlobSize = 0;
+
+            TMaybe<TReadAnswer> early = info.AddBlobsFromBody(
+                blobs, 0, 1, nullptr, resumeOffset, parentKeyOffset + messageCount + 10,
+                kAddBlobsFromBodyProbeSizeLag, Ctx->Edge, resumeOffset,
+                readResult, answer, needStop, cnt, size, lastBlobSize, ctx);
+
+            UNIT_ASSERT(!early.Defined());
+            const ui32 expectedRemaining = messageCount - limitK;
+            UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), expectedRemaining);
+            for (ui32 i = 0; i < expectedRemaining; ++i) {
+                // Must be S+k, S+k+1, … — not supportive 391+k or bare k, k+1.
+                UNIT_ASSERT_VALUES_EQUAL(
+                    readResult->GetResult(i).GetOffset(), parentKeyOffset + limitK + i);
+                UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(i).GetPartNo(), 0u);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(info.Offset, parentKeyOffset + messageCount);
+        }
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
 // FormAnswer: after renamed body FindPos, CachedOffset jump must stay in Key space.
 Y_UNIT_TEST_F(FormAnswerKeepsKeySpaceOffsetAfterTxKeyRenameWithCache, TPartitionFixture) {
     UNIT_ASSERT(Ctx.Defined());
@@ -5181,6 +5364,233 @@ Y_UNIT_TEST_F(FormAnswerKeepsKeySpaceOffsetAfterTxKeyRenameWithCache, TPartition
         UNIT_ASSERT_VALUES_EQUAL(readResult.GetResult(1).GetOffset(), parentKeyOffset + 3);
         UNIT_ASSERT_VALUES_EQUAL(readResult.GetResult(2).GetOffset(), cachedOffset);
         UNIT_ASSERT_VALUES_EQUAL(info.Offset, cachedOffset + 1);
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+// FormAnswer boundary: !ReadToBlobEnd + small Size stops mid renamed blob; Offset stays parent-space.
+Y_UNIT_TEST_F(FormAnswerKeepsKeySpaceOffsetAfterTxKeyRenameByteLimitNoReadToBlobEnd, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    const TPartitionId partitionId(1);
+    constexpr ui64 supportiveHeaderOffset = 391;
+    constexpr ui32 messageCount = 6;
+    constexpr ui64 parentKeyOffset = 547'189'849;
+    constexpr ui64 readOffset = parentKeyOffset + 1;
+
+    std::deque<TClientBlob> dq;
+    for (ui32 i = 0; i < messageCount; ++i) {
+        dq.push_back(MakeSinglePartBodyReadBlob(i + 1, static_cast<char>('a' + i)));
+    }
+    TString raw = SerializePackedBatchForReadBodyTest(
+        TBatch::FromBlobs(supportiveHeaderOffset, std::move(dq)));
+
+    const TKey parentKey = TKey::FromKey(
+        TKey::ForBody(TKeyPrefix::TypeData, partitionId, supportiveHeaderOffset, 0, messageCount, 0),
+        TKeyPrefix::TypeData, partitionId, parentKeyOffset);
+
+    TRequestedBlob blob = MakeRequestedBlobForRead(
+        parentKeyOffset, 0, messageCount, 0, std::move(raw), parentKey);
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(std::move(blob));
+
+    // Size of one MakeSinglePartBodyReadBlob is enough to stop after the first returned message
+    // when ReadToBlobEnd=false (UpdateUsage: size >= Size && !ReadToBlobEnd).
+    const ui32 oneBlobSerialized = MakeSinglePartBodyReadBlob(1, 'x').GetSerializedSize();
+
+    auto probe = [&](const TActorContext& ctx) {
+        TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(
+            Ctx->Edge, readOffset, 0, 0,
+            /*messageCountLimit=*/100,
+            /*byteSizeLimit=*/oneBlobSerialized,
+            /*readTimestampMs=*/0,
+            /*readToBlobEnd=*/false);
+        info.Blobs = blobs;
+        info.CompactedBlobsCount = 1;
+
+        TEvPQ::TEvBlobResponse blobResponse(0, TVector<TRequestedBlob>(blobs));
+        TReadAnswer answer = info.FormAnswer(
+            ctx,
+            blobResponse,
+            readOffset,
+            parentKeyOffset + messageCount + 10,
+            partitionId,
+            nullptr,
+            0,
+            kAddBlobsFromBodyProbeSizeLag,
+            Ctx->Edge,
+            NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS,
+            true,
+            [](bool, NKikimrClient::TCmdReadResult&) {});
+
+        auto* proxy = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get());
+        UNIT_ASSERT(proxy != nullptr);
+        const auto& readResult = proxy->Response->GetPartitionResponse().GetCmdReadResult();
+
+        UNIT_ASSERT_C(readResult.ResultSize() >= 1u, "byte limit must still return at least one row");
+        UNIT_ASSERT_C(readResult.ResultSize() < messageCount - 1,
+                      "byte limit + !ReadToBlobEnd must stop before draining the renamed blob");
+        for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                readResult.GetResult(i).GetOffset(), readOffset + i,
+                "supportive leak would be near " << (supportiveHeaderOffset + 1 + i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(info.Offset, readOffset + readResult.ResultSize());
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+// FormAnswer mid-LMC packed batch after Key≠Header rename: OffsetDelta rewind stays in key space.
+Y_UNIT_TEST_F(FormAnswerKeepsKeySpaceOffsetAfterTxKeyRenameMidLmc, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    const TPartitionId partitionId(1);
+    constexpr ui64 supportiveHeaderOffset = 391;
+    constexpr ui32 firstLmc = 5;
+    constexpr ui32 secondLmc = 4;
+    constexpr ui32 offsetSpan = firstLmc + secondLmc;
+    constexpr ui64 parentKeyOffset = 547'189'849;
+    constexpr ui64 midReadOffset = parentKeyOffset + 3; // inside first LMC slot
+
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlobWithLmc(1, 'a', firstLmc));
+    dq.push_back(MakeSinglePartBodyReadBlobWithLmc(2, 'b', secondLmc));
+    TString raw = SerializePackedBatchForReadBodyTest(
+        TBatch::FromBlobs(supportiveHeaderOffset, std::move(dq)));
+
+    const TKey parentKey = TKey::FromKey(
+        TKey::ForBody(TKeyPrefix::TypeData, partitionId, supportiveHeaderOffset, 0, offsetSpan, 0),
+        TKeyPrefix::TypeData, partitionId, parentKeyOffset);
+
+    TRequestedBlob blob = MakeRequestedBlobForRead(
+        parentKeyOffset, 0, offsetSpan, 0, std::move(raw), parentKey);
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(std::move(blob));
+
+    auto probe = [&](const TActorContext& ctx) {
+        TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, midReadOffset);
+        info.Blobs = blobs;
+        info.CompactedBlobsCount = 1;
+
+        TEvPQ::TEvBlobResponse blobResponse(0, TVector<TRequestedBlob>(blobs));
+        TReadAnswer answer = info.FormAnswer(
+            ctx,
+            blobResponse,
+            midReadOffset,
+            parentKeyOffset + offsetSpan + 10,
+            partitionId,
+            nullptr,
+            0,
+            kAddBlobsFromBodyProbeSizeLag,
+            Ctx->Edge,
+            NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS,
+            true,
+            [](bool, NKikimrClient::TCmdReadResult&) {});
+
+        auto* proxy = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get());
+        UNIT_ASSERT(proxy != nullptr);
+        const auto& readResult = proxy->Response->GetPartitionResponse().GetCmdReadResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), 2u);
+        // Mid-LMC rewind reports batch base in parent/key space (not supportive 391 / mid 394).
+        UNIT_ASSERT_VALUES_EQUAL(readResult.GetResult(0).GetOffset(), parentKeyOffset);
+        UNIT_ASSERT_VALUES_EQUAL(readResult.GetResult(0).GetLogicalMessageCount(), firstLmc);
+        UNIT_ASSERT_VALUES_EQUAL(readResult.GetResult(1).GetOffset(), parentKeyOffset + firstLmc);
+        UNIT_ASSERT_VALUES_EQUAL(readResult.GetResult(1).GetLogicalMessageCount(), secondLmc);
+        UNIT_ASSERT_VALUES_EQUAL(info.Offset, parentKeyOffset + offsetSpan);
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+// FormAnswer over a BodyKeys chain with different supportive header bases after rename.
+Y_UNIT_TEST_F(FormAnswerKeepsKeySpaceOffsetAfterTxKeyRenameBodyKeysChainDifferentHeaderBases, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    const TPartitionId partitionId(1);
+    constexpr ui64 supportive0 = 391;
+    constexpr ui64 supportive1 = 17;
+    constexpr ui32 count0 = 3;
+    constexpr ui32 count1 = 4;
+    constexpr ui64 parent0 = 547'189'849;
+    constexpr ui64 parent1 = parent0 + count0;
+    constexpr ui64 readOffset = parent1 + 1;
+
+    std::deque<TClientBlob> dq0;
+    dq0.push_back(MakeSinglePartBodyReadBlob(1, 'a'));
+    dq0.push_back(MakeSinglePartBodyReadBlob(2, 'b'));
+    dq0.push_back(MakeSinglePartBodyReadBlob(3, 'c'));
+    TString raw0 = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(supportive0, std::move(dq0)));
+
+    std::deque<TClientBlob> dq1;
+    dq1.push_back(MakeSinglePartBodyReadBlob(4, 'd'));
+    dq1.push_back(MakeSinglePartBodyReadBlob(5, 'e'));
+    dq1.push_back(MakeSinglePartBodyReadBlob(6, 'f'));
+    dq1.push_back(MakeSinglePartBodyReadBlob(7, 'g'));
+    TString raw1 = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(supportive1, std::move(dq1)));
+
+    const TKey key0 = TKey::FromKey(
+        TKey::ForBody(TKeyPrefix::TypeData, partitionId, supportive0, 0, count0, 0),
+        TKeyPrefix::TypeData, partitionId, parent0);
+    const TKey key1 = TKey::FromKey(
+        TKey::ForBody(TKeyPrefix::TypeData, partitionId, supportive1, 0, count1, 0),
+        TKeyPrefix::TypeData, partitionId, parent1);
+
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(MakeRequestedBlobForRead(parent0, 0, count0, 0, std::move(raw0), key0));
+    blobs.push_back(MakeRequestedBlobForRead(parent1, 0, count1, 0, std::move(raw1), key1));
+
+    auto probe = [&](const TActorContext& ctx) {
+        TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, readOffset);
+        info.Blobs = blobs;
+        info.CompactedBlobsCount = 2;
+
+        TEvPQ::TEvBlobResponse blobResponse(0, TVector<TRequestedBlob>(blobs));
+        TReadAnswer answer = info.FormAnswer(
+            ctx,
+            blobResponse,
+            readOffset,
+            parent1 + count1 + 10,
+            partitionId,
+            nullptr,
+            0,
+            kAddBlobsFromBodyProbeSizeLag,
+            Ctx->Edge,
+            NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS,
+            true,
+            [](bool, NKikimrClient::TCmdReadResult&) {});
+
+        auto* proxy = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get());
+        UNIT_ASSERT(proxy != nullptr);
+        const auto& readResult = proxy->Response->GetPartitionResponse().GetCmdReadResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), 3u);
+        for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                readResult.GetResult(i).GetOffset(), readOffset + i,
+                "supportive leak would be near " << (supportive1 + 1 + i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(info.Offset, parent1 + count1);
     };
 
     Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
@@ -5702,6 +6112,175 @@ Y_UNIT_TEST_F(CommitWriteOperationsRenamesBodyKeysThenMidRead, TPartitionTxTestH
         UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(0).GetOffset(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(1).GetOffset(), 3u);
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+// A2: real CommitWriteOperations rename with non-empty parent (Key.Offset = S ≠ header 0),
+// then mid-blob FormAnswer/AddBlobsFromBody (same path CmdRead uses after KV fetch).
+// Full proxy/SDK CmdRead path is covered by TxWriteMidCommitReconnectAssertsParentOffsets_*.
+Y_UNIT_TEST_F(CommitWriteOperationsRenamesBodyKeysThenMidReadNonZeroParent, TPartitionTxTestHelper) {
+    constexpr ui64 parentKeyOffset = 100;
+    Init({.EndOffset = parentKeyOffset});
+    const TPartitionId partitionId(0);
+    constexpr ui32 messageCount = 6;
+    constexpr ui32 blobSize = 100;
+    constexpr ui64 supportiveOffset = 0;
+    constexpr ui64 midReadOffset = parentKeyOffset + 2;
+
+    std::deque<TClientBlob> dq;
+    for (ui32 i = 0; i < messageCount; ++i) {
+        dq.push_back(MakeSinglePartBodyReadBlob(i + 1, static_cast<char>('a' + i)));
+    }
+    TString raw = SerializePackedBatchForReadBodyTest(
+        TBatch::FromBlobs(supportiveOffset, std::move(dq)));
+
+    const TKey supportiveKey = TKey::ForBody(
+        TKeyPrefix::TypeData, partitionId, supportiveOffset, 0, messageCount, 0);
+
+    auto tx = MakeAndSendWriteTx({{"src1", {1, messageCount}}});
+    std::deque<NPQ::TDataKey> bodyKeys;
+    bodyKeys.push_back(MakeBodyDataKeyForTx(partitionId, supportiveOffset, messageCount, blobSize));
+    InjectBodyKeys(tx, std::move(bodyKeys));
+
+    WaitWriteInfoRequest(tx, true);
+    WaitTxPredicateReply(tx);
+    SendTxCommit(tx);
+    WaitKvRequest();
+
+    UNIT_ASSERT(LastKvRequest);
+    UNIT_ASSERT_VALUES_EQUAL(LastKvRequest->Record.CmdRenameSize(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(LastKvRequest->Record.GetCmdRename(0).GetOldKey(), supportiveKey.ToString());
+
+    auto& encoder = TPartitionTestWrapper::BlobEncoder(Partition());
+    UNIT_ASSERT(!encoder.CompactedKeys.empty());
+    const TKey parentKey = encoder.CompactedKeys.front().first;
+    UNIT_ASSERT_VALUES_EQUAL(parentKey.GetOffset(), parentKeyOffset);
+    UNIT_ASSERT_VALUES_EQUAL(parentKey.GetCount(), messageCount);
+    UNIT_ASSERT(parentKey.IsFastWrite());
+
+    SendKvResponse();
+    WaitCommitDone(tx);
+
+    UNIT_ASSERT(!encoder.DataKeysBody.empty());
+    UNIT_ASSERT_VALUES_EQUAL(encoder.DataKeysBody.back().Key.GetOffset(), parentKeyOffset);
+
+    TRequestedBlob blob = MakeRequestedBlobForRead(
+        parentKeyOffset, 0, messageCount, 0, std::move(raw), parentKey);
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(std::move(blob));
+
+    auto probe = [&](const TActorContext& ctx) {
+        TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, midReadOffset);
+        info.Blobs = blobs;
+        info.CompactedBlobsCount = 1;
+
+        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
+        bool needStop = false;
+        ui32 cnt = 0;
+        ui32 size = 0;
+        ui32 lastBlobSize = 0;
+
+        TMaybe<TReadAnswer> early = info.AddBlobsFromBody(
+            blobs, 0, 1, nullptr, midReadOffset, parentKeyOffset + messageCount + 10,
+            kAddBlobsFromBodyProbeSizeLag, Ctx->Edge, midReadOffset,
+            readResult, answer, needStop, cnt, size, lastBlobSize, ctx);
+
+        UNIT_ASSERT(!early.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), messageCount - 2);
+        for (ui32 i = 0; i < readResult->ResultSize(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                readResult->GetResult(i).GetOffset(), midReadOffset + i);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(info.Offset, parentKeyOffset + messageCount);
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+// A3: LMC>1 packed batch after real tx BodyKeys rename; mid-batch FindPos OffsetDelta rewind
+// must report parent-space base (not supportive header 0).
+Y_UNIT_TEST_F(CommitWriteOperationsRenamesBodyKeysThenMidReadWithLmc, TPartitionTxTestHelper) {
+    constexpr ui64 parentKeyOffset = 200;
+    Init({.EndOffset = parentKeyOffset});
+    const TPartitionId partitionId(0);
+    constexpr ui32 firstLmc = 5;
+    constexpr ui32 secondLmc = 4;
+    constexpr ui32 offsetSpan = firstLmc + secondLmc;
+    constexpr ui32 blobSize = 100;
+    constexpr ui64 supportiveOffset = 0;
+    // Inside first logical batch → OffsetDelta FindPos rewinds to base.
+    constexpr ui64 midReadOffset = parentKeyOffset + 3;
+
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlobWithLmc(1, 'a', firstLmc));
+    dq.push_back(MakeSinglePartBodyReadBlobWithLmc(2, 'b', secondLmc));
+    TBatch batch = TBatch::FromBlobs(supportiveOffset, std::move(dq));
+    UNIT_ASSERT(batch.HasOffsetDelta());
+    TString raw = SerializePackedBatchForReadBodyTest(std::move(batch));
+
+    auto tx = MakeAndSendWriteTx({{"src1", {1, offsetSpan}}});
+    std::deque<NPQ::TDataKey> bodyKeys;
+    bodyKeys.push_back(MakeBodyDataKeyForTx(partitionId, supportiveOffset, offsetSpan, blobSize));
+    InjectBodyKeys(tx, std::move(bodyKeys));
+
+    WaitWriteInfoRequest(tx, true);
+    WaitTxPredicateReply(tx);
+    SendTxCommit(tx);
+    WaitKvRequest();
+
+    UNIT_ASSERT(LastKvRequest);
+    UNIT_ASSERT_VALUES_UNEQUAL(LastKvRequest->Record.CmdRenameSize(), 0u);
+
+    auto& encoder = TPartitionTestWrapper::BlobEncoder(Partition());
+    UNIT_ASSERT(!encoder.CompactedKeys.empty());
+    const TKey parentKey = encoder.CompactedKeys.front().first;
+    UNIT_ASSERT_VALUES_EQUAL(parentKey.GetOffset(), parentKeyOffset);
+    UNIT_ASSERT_VALUES_EQUAL(parentKey.GetCount(), offsetSpan);
+
+    SendKvResponse();
+    WaitCommitDone(tx);
+
+    TRequestedBlob blob = MakeRequestedBlobForRead(
+        parentKeyOffset, 0, offsetSpan, 0, std::move(raw), parentKey);
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(std::move(blob));
+
+    auto probe = [&](const TActorContext& ctx) {
+        TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, midReadOffset);
+        info.Blobs = blobs;
+        info.CompactedBlobsCount = 1;
+
+        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
+        bool needStop = false;
+        ui32 cnt = 0;
+        ui32 size = 0;
+        ui32 lastBlobSize = 0;
+
+        TMaybe<TReadAnswer> early = info.AddBlobsFromBody(
+            blobs, 0, 1, nullptr, midReadOffset, parentKeyOffset + offsetSpan + 10,
+            kAddBlobsFromBodyProbeSizeLag, Ctx->Edge, midReadOffset,
+            readResult, answer, needStop, cnt, size, lastBlobSize, ctx);
+
+        UNIT_ASSERT(!early.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(0).GetOffset(), parentKeyOffset);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(0).GetLogicalMessageCount(), firstLmc);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(1).GetOffset(), parentKeyOffset + firstLmc);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(1).GetLogicalMessageCount(), secondLmc);
     };
 
     Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));

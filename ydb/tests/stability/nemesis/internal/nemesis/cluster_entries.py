@@ -154,8 +154,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "target_kind": TargetKind.NODE,
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
-        # SIGKILL + systemd restart + rejoin; shorter windows cried "stuck" too early.
-        "auto_recovery_sec": 120,
+        # Self-healing (SIGKILL + systemd); probe releases on endpoint + storage GREEN.
     }
     # out["DnsNemesis"] = {
     #     "runner": DnsNemesis(),
@@ -210,7 +209,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
         "supports_manual": False,
-        # Toggle fault: skew the clock, then the scheduler dispatches extract (re-enable ntp).
+        # Toggle: probe extracts after auto_recovery_sec (re-enable ntp).
         "recovery": "extract",
         "auto_recovery_sec": 120,
     }
@@ -262,8 +261,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
             "guard_mode": GuardMode.BYPASS,
         }
 
-    # --- daemon kills -------------------------------------------------------
-    # SIGKILL + systemd restart, so the budget is released on a timer, not by an extract.
+    # --- daemon kills (self-healing; probe releases by HC) ------------------
     out["KillSlotDaemonNemesis"] = {
         "runner": ClusterKillSlotDaemonNemesis(),
         "schedule": 120,
@@ -271,7 +269,6 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "target_kind": TargetKind.SLOT,
         "impact_scope": ImpactScope.SLOT,
         "guard_mode": GuardMode.FULL,
-        "auto_recovery_sec": 90,
     }
     out["KillNodeDaemonNemesis"] = {
         "runner": ClusterKillNodeDaemonNemesis(),
@@ -280,7 +277,6 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "target_kind": TargetKind.NODE,
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
-        "auto_recovery_sec": 90,
     }
 
     # --- serial kills -------------------------------------------------------
@@ -306,17 +302,17 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "guard_mode": GuardMode.FULL,
     }
 
-    # --- disk / rolling / stop-start / suspend ------------------------------
-    # Toggle faults: the scheduler holds the budget for ``auto_recovery_sec``, then extracts.
+    # --- disk / rolling / stop-start / suspend (toggle: extract then HC confirm) ---
     for wire, cls, sched, scope, tkind, extra in (
         ("SafelyBreakDiskNemesis", ClusterSafelyBreakDiskNemesis, 400, ImpactScope.DISK, TargetKind.DISK,
          {"recovery": "extract", "auto_recovery_sec": 120}),
+        # Obliterate: confirm waits out full re-replication.
         ("SafelyCleanupDisksNemesis", ClusterSafelyCleanupDisksNemesis, 400, ImpactScope.DISK, TargetKind.DISK,
-         {"recovery": "extract", "auto_recovery_sec": 90}),
+         {"recovery": "extract", "auto_recovery_sec": 90, "confirm_timeout_sec": 7200}),
         # ("RollingUpdateClusterNemesis", ClusterRollingUpdateNemesis, 120, ImpactScope.NODE, TargetKind.NODE, {}),
         ("StopStartNodeNemesis", ClusterStopStartNodeNemesis, 400, ImpactScope.NODE, TargetKind.NODE,
          {"recovery": "extract", "auto_recovery_sec": 90}),
-        # SIGSTOP: the node never comes back on its own, so it needs an extract like the others.
+        # SIGSTOP never self-heals — needs extract.
         ("SuspendNodeNemesis", ClusterSuspendNodeNemesis, 800, ImpactScope.NODE, TargetKind.NODE,
          {"recovery": "extract", "auto_recovery_sec": 90}),
     ):
@@ -370,7 +366,7 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
             "target_kind": TargetKind.DATACENTER,
             "impact_scope": ImpactScope.DATACENTER,
             "guard_mode": GuardMode.FULL,  # reserves the whole realm
-            "auto_recovery_sec": 240,
+            # Self-healing pulse; probe waits for DC endpoints + storage GREEN.
             "supports_manual": False,
         }
 

@@ -7,6 +7,7 @@
 #include <ydb/core/protos/analyze_operation.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -21,6 +22,8 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <ydb/core/util/intrusive_heap.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/intrlist.h>
 
@@ -195,10 +198,30 @@ private:
     void StartTraversal(NIceDb::TNiceDb& db);
     void FinishTraversal(
         NIceDb::TNiceDb& db,
+        NKikimrStat::TEvAnalyzeResponse::EStatus status,
         std::optional<Ydb::Table::AnalyzeState::State> forceTerminalState,
         NYql::TIssues issues = {});
 
     void ReportBaseStatisticsCounters();
+    void ReportAnalyzeCounters();
+    void InitAnalyzeCounters();
+
+    // Per-table change counters parsed from BaseStatistics.
+    struct TChangeCounters {
+        ui64 RowUpdates = 0;
+        ui64 RowDeletes = 0;
+        ui64 RowCount = 0;
+    };
+
+    bool IsChangeRatioAboveThreshold(
+        const TChangeCounters& lastAnalyze, const TChangeCounters& current) const;
+    TChangeCounters GetCurrentChangeCounters(const TPathId& pathId) const;
+
+    // Returns cached change counters, rebuilding the cache from BaseStatistics
+    // if it is invalid. The cache is invalidated when BaseStatistics is updated
+    // (TTxSchemeShardStats::Complete) or when a traversal finishes (FinishTraversal).
+    const THashMap<TPathId, TChangeCounters>& GetCachedChangeCounters();
+    void InvalidateCachedChangeCounters();
 
     std::optional<bool> IsKnownTable(const TPathId& pathId) const;
     std::optional<bool> IsColumnTable(const TPathId& pathId) const;
@@ -272,6 +295,18 @@ private:
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
 
+    // Dynamic counters for background ANALYZE monitoring (with status label via GetSubgroup)
+    NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzePendingCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzeCompletedCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzeFailedCounter;
+
+    // Cached parsed change counters (pathId -> TChangeCounters).
+    // Invalidated when BaseStatistics is updated (TTxSchemeShardStats::Complete)
+    // or when a traversal finishes (FinishTraversal). This avoids re-parsing
+    // all BaseStatistics protobuf blobs on every 1-second scheduling tick.
+    THashMap<TPathId, TChangeCounters> CachedChangeCounters;
+    bool CachedChangeCountersValid = false;
+
     TInstant AggregationRequestBeginTime;
 
     bool EnableStatistics = false;
@@ -340,6 +375,9 @@ private:
         TInstant LastUpdateTime;
         bool IsColumnTable = false;
 
+        ui64 LastAnalyzeRowUpdates = Max<ui64>();
+        ui64 LastAnalyzeRowDeletes = Max<ui64>();
+
         size_t HeapIndexByTime = -1;
 
         struct THeapIndexByTime {
@@ -354,6 +392,11 @@ private:
             }
         };
     };
+
+    // Returns the column table analyzed longest ago whose statistics are stale by
+    // change ratio, or nullptr if none is stale. Declared after TScheduleTraversal
+    // because it returns a pointer into ScheduleTraversals.
+    TScheduleTraversal* FindStaleColumnTable();
 
     size_t ResolveRound = 0;
     static constexpr size_t MaxResolveRoundCount = 5;

@@ -542,7 +542,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
             new TNodeWardenConfig(STRAND_PDISK && !runtime.IsRealThreads()
                                   ? static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime))
                                   : static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory()));
-        google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig.MutableServiceSet());
+        google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig->MutableServiceSet());
 
         if (nodeIndex == 0) {
             TString pDiskPath;
@@ -562,7 +562,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
                 static TTempDir tempDir;
                 pDiskPath = tempDir() + "/pdisk0.dat";
             }
-            nodeWardenConfig->BlobStorageConfig.MutableServiceSet()->MutablePDisks(0)->SetPath(pDiskPath);
+            nodeWardenConfig->BlobStorageConfig->MutableServiceSet()->MutablePDisks(0)->SetPath(pDiskPath);
             ui64 pDiskGuid = 1;
             static ui64 iteration = 0;
             ++iteration;

@@ -283,7 +283,7 @@ protected:
                                            TEvTablet::TEvTabletDead::EReason reason);
     ITransaction* CreateBootTablet(TTabletId tabletId);
     ITransaction* CreateKillNode(TNodeId nodeId, const TActorId& local);
-    ITransaction* CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters> groups = {});
+    ITransaction* CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TGroupMetrics::TGroupParameters> groups = {});
     ITransaction* CreateCheckTablets();
     ITransaction* CreateSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec);
     ITransaction* CreateStopTablet(TTabletId tabletId, const TActorId& actorToNotify);
@@ -1132,7 +1132,7 @@ protected:
             const TMetrics& after,
             const TTabletInfo* tablet);
     static void DivideMetrics(TMetrics& metrics, ui64 divider);
-    TVector<TTabletId> UpdateStoragePools(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters>& groups);
+    TVector<TTabletId> UpdateStoragePools(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TGroupMetrics::TGroupParameters>& groups);
     void InitDefaultChannelBind(TChannelBind& bind);
     void RequestPoolsInformation();
     void RequestFreeSequence();

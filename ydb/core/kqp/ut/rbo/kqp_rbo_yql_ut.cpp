@@ -3787,6 +3787,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             TString Query;
             // How many joins are expected to be executed as a stream lookup join.
             ui32 LookupJoins;
+            // Set when the old optimizer cannot be used as a reference for the result.
+            const char* ExpectedYson = nullptr;
         };
 
         const TVector<TCase> cases = {
@@ -3854,8 +3856,121 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY a;
             )", 1},
 
-            // The join key is the second key column of t3, so a lookup would have to scan the whole
-            // table for every left row.
+            {"point predicate ahead of the join key", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t3` AS t3 ON t1.d = t3.b
+                WHERE t3.a = 1
+                ORDER BY a, t3c;
+            )", 1},
+
+            {"inner join over a subquery with a point predicate", R"(
+                SELECT t1.a AS a, t3.b AS t3b
+                FROM `/Root/t1` AS t1
+                    INNER JOIN (SELECT a, b FROM `/Root/t3` WHERE a = 1) AS t3 ON t1.d = t3.b
+                ORDER BY a, t3b;
+            )", 1},
+
+            // Point predicate is ok with 2 points for inner join.
+            {"several point predicates ahead of the join key", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t3` AS t3 ON t1.d = t3.b
+                WHERE t3.a IN (1, 2)
+                ORDER BY a, t3c;
+            )", 1},
+
+            {"null point predicate ahead of the join key", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t3` AS t3 ON t1.d = t3.b
+                WHERE t3.a IS NULL
+                ORDER BY a, t3c;
+            )", 1},
+
+            {"point predicate on a join key", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t3` AS t3 ON t1.c = t3.a AND t1.d = t3.b
+                WHERE t3.a = 1
+                ORDER BY a, t3c;
+            )", 1},
+
+            {"left join with a point predicate ahead of the join key", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    LEFT JOIN (SELECT * FROM `/Root/t3` WHERE a = 2) AS t3 ON t1.d = t3.b
+                ORDER BY a, t3c;
+            )", 1},
+
+            // Here is a bug for old optimizer, we cannot use stream lookup join for point predicates > 1 with left joins.
+            {"left join with several point predicates ahead of the join key", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    LEFT JOIN (SELECT * FROM `/Root/t3` WHERE a IN (1, 2)) AS t3 ON t1.d = t3.b
+                ORDER BY a, t3c;
+            )", 0,
+             R"([[[1];["p1a"]];[[1];["p2a"]];[[2];["p1b"]];[[3];["p1a"]];[[3];["p2a"]];[[4];["p1a"]];)"
+             R"([[4];["p2a"]];[[5];["p1a"]];[[5];["p2a"]];[[6];["p1a"]];[[6];["p2a"]];[[7];["p1a"]];[[7];["p2a"]]])"},
+
+            {"semi join from an in subplan", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.c IN (SELECT a FROM `/Root/t3`)
+                ORDER BY a;
+            )", 1},
+
+            {"left only join from subselect", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.a NOT IN (SELECT a FROM `/Root/t2`)
+                ORDER BY a;
+            )", 1},
+
+            {"semi join with a filtered probed side", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.c IN (SELECT a FROM `/Root/t3` WHERE d >= 30)
+                ORDER BY a;
+            )", 1},
+
+            {"left only join with a filtered probed side", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.a NOT IN (SELECT a FROM `/Root/t3` WHERE d >= 30 AND d <= 50)
+                ORDER BY a;
+            )", 1},
+
+            {"semi join with a point predicate ahead of the join key", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.d IN (SELECT b FROM `/Root/t3` WHERE a = 2)
+                ORDER BY a;
+            )", 1},
+
+            {"left only join with a point predicate ahead of the join key", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.d NOT IN (SELECT b FROM `/Root/t3` WHERE a = 2)
+                ORDER BY a;
+            )", 1},
+
+            {"semi join with several point predicates ahead of the join key", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.d IN (SELECT b FROM `/Root/t3` WHERE a IN (1, 2))
+                ORDER BY a;
+            )", 0,
+             R"([[[1]];[[2]];[[3]];[[4]];[[5]];[[6]];[[7]]])"},
+
+            {"left only join with several point predicates ahead of the join key", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.d NOT IN (SELECT b FROM `/Root/t3` WHERE a IN (1, 2))
+                ORDER BY a;
+            )", 0,
+             R"([])"},
+
             {"join key is not a key prefix", R"(
                 SELECT t1.a AS a, t3.c AS t3c
                 FROM `/Root/t1` AS t1
@@ -3863,7 +3978,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY a, t3c;
             )", 0},
 
-            // The lookup key would have to be cast to the type of the probed column first.
+            // Need support for cast.
             {"join key types differ", R"(
                 SELECT t1.a AS a, t2.b AS t2b
                 FROM `/Root/t1` AS t1
@@ -3896,6 +4011,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 auto result = db.BulkUpsert(table, rows.Build()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             };
+            // For debugging.
+            const bool enableAstDump = false;
 
             {
                 NYdb::TValueBuilder rows;
@@ -3944,6 +4061,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             }
 
             {
+                // A null in the first key column: a point predicate can select it, so the constant
+                // cell of a lookup key prefix has to be allowed to hold a null.
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                rows.AddListItem().BeginStruct()
+                    .AddMember("a").OptionalInt32(std::nullopt)
+                    .AddMember("b").OptionalString("a")
+                    .AddMember("c").OptionalString("pna")
+                    .AddMember("d").OptionalInt32(60)
+                    .AddMember("e").OptionalInt32(30)
+                    .EndStruct();
+                rows.EndList();
+                bulkUpsert("/Root/t3", rows);
+            }
+
+            {
                 NYdb::TValueBuilder rows;
                 rows.BeginList();
                 for (const auto& [a, b, c, d, e] :
@@ -3981,6 +4114,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
                 results.push_back({FormatResultSetYson(result.GetResultSet(0)), TString{*explained.GetStats()->GetAst()},
                                    TString{*explained.GetStats()->GetPlan()}});
+
+                if (enableAstDump && newRbo && getenv("DUMP_AST") && TString(testCase.Name) == getenv("DUMP_AST")) {
+                    Cout << "=== AST DUMP [" << testCase.Name << "] ===\n"
+                         << *explained.GetStats()->GetAst() << "\n=== AST DUMP END ===\n";
+                }
             }
             return results;
         };
@@ -4003,7 +4141,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             const auto& newRbo = newRboResults[i];
 
             // Check that results are the same.
-            UNIT_ASSERT_VALUES_EQUAL_C(newRbo.Yson, yqlResults[i].Yson, testCase.Name);
+            if (testCase.ExpectedYson) {
+                UNIT_ASSERT_VALUES_EQUAL_C(newRbo.Yson, TString(testCase.ExpectedYson), testCase.Name);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(newRbo.Yson, yqlResults[i].Yson, testCase.Name);
+            }
 
             const auto lookupJoins = countOccurrences(newRbo.Ast, "KqpIndexLookupJoin");
             UNIT_ASSERT_VALUES_EQUAL_C(lookupJoins, testCase.LookupJoins, testCase.Name << ", ast:\n" << newRbo.Ast);

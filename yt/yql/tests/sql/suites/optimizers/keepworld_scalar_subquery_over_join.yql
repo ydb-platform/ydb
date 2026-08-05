@@ -1,0 +1,38 @@
+pragma config.flags('OptimizerFlags', 'KeepWorld', 'CheckMissingWorld');
+use plato;
+
+$src = (select key, subkey, value from Input);
+
+$total = (select count(*) from $src);
+
+$global = (
+    select
+        key,
+        subkey,
+        cnt,
+        cnt * 1.0 / $total as ratio
+    from (
+        select key, subkey, count(*) as cnt
+        from $src
+        where value != "q"
+        group by key, subkey
+    )
+);
+
+$groups = (
+    select key, subkey, count(*) as gcnt
+    from $src
+    group by key, subkey
+);
+
+select
+    g.key as key,
+    g.subkey as subkey,
+    gl.key as gkey,
+    gl.subkey as gsubkey,
+    gl.cnt as gcnt,
+    gl.ratio as ratio
+from $groups as g
+left join $global as gl
+on g.key = gl.key and g.subkey = gl.subkey
+order by key, subkey;

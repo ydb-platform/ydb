@@ -2562,6 +2562,7 @@ void TSchemeShard::PersistSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pat
     }
     PersistSubDomainAuditSettingsAlter(db, pathId, subDomain);
     PersistSubDomainServerlessComputeResourcesModeAlter(db, pathId, subDomain);
+    PersistSubDomainTablesMetricsLevelAlter(db, pathId, subDomain);
 
     for (auto shardIdx: subDomain.GetPrivateShards()) {
         db.Table<Schema::SubDomainShardsAlterData>().Key(pathId.LocalPathId, shardIdx.GetLocalId()).Update();
@@ -2632,6 +2633,7 @@ void TSchemeShard::PersistSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId, 
 
     PersistSubDomainAuditSettings(db, pathId, subDomain);
     PersistSubDomainServerlessComputeResourcesMode(db, pathId, subDomain);
+    PersistSubDomainTablesMetricsLevel(db, pathId, subDomain);
 
     db.Table<Schema::SubDomainsAlterData>().Key(pathId.LocalPathId).Delete();
 
@@ -2779,6 +2781,22 @@ void TSchemeShard::PersistSubDomainServerlessComputeResourcesModeAlter(NIceDb::T
                                                                        const TSubDomainInfo& subDomain) {
     const auto& serverlessComputeResourcesMode = subDomain.GetServerlessComputeResourcesMode();
     PersistSubDomainServerlessComputeResourcesModeImpl<Schema::SubDomainsAlterData>(db, pathId, serverlessComputeResourcesMode);
+}
+
+template <class Table>
+void PersistSubDomainTablesMetricsLevelImpl(NIceDb::TNiceDb& db, const TPathId& pathId, ETablesMetricsLevel value) {
+    using Field = typename Table::TablesMetricsLevel;
+    db.Table<Table>().Key(pathId.LocalPathId).Update(NIceDb::TUpdate<Field>(value));
+}
+
+void TSchemeShard::PersistSubDomainTablesMetricsLevel(NIceDb::TNiceDb& db, const TPathId& pathId,
+                                                      const TSubDomainInfo& subDomain) {
+    PersistSubDomainTablesMetricsLevelImpl<Schema::SubDomains>(db, pathId, subDomain.GetTablesMetricsLevel());
+}
+
+void TSchemeShard::PersistSubDomainTablesMetricsLevelAlter(NIceDb::TNiceDb& db, const TPathId& pathId,
+                                                           const TSubDomainInfo& subDomain) {
+    PersistSubDomainTablesMetricsLevelImpl<Schema::SubDomainsAlterData>(db, pathId, subDomain.GetTablesMetricsLevel());
 }
 
 void TSchemeShard::PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
@@ -8181,6 +8199,16 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
         proto->MutableIncrementalBackupConfig()->CopyFrom(tableInfo->IncrementalBackupConfig());
     }
 
+    // The alter body is a delta, but DataShard reads its METRICS_LEVEL override
+    // out of whatever this message carries, so the effective settings have to be
+    // restated on every alter: the pending change if there is one (including an
+    // explicit drop, which arrives as NotConfigured), otherwise the current one.
+    if (alterData->TableDescriptionFull.Defined() && alterData->TableDescriptionFull->HasDetailedMetricsSettings()) {
+        proto->MutableDetailedMetricsSettings()->CopyFrom(alterData->TableDescriptionFull->GetDetailedMetricsSettings());
+    } else if (tableInfo->HasDetailedMetricsSettings()) {
+        proto->MutableDetailedMetricsSettings()->MutableConfigured()->CopyFrom(tableInfo->GetDetailedMetricsSettings());
+    }
+
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
     return txBody;
@@ -9450,6 +9478,8 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         entryPathId->SetOwnerId(pathId.OwnerId);
         entryPathId->SetLocalId(pathId.LocalPathId);
         entry->SetRowCount(areStatsFull ? aggregated.RowCount : 0);
+        entry->SetRowUpdates(areStatsFull ? aggregated.RowUpdates : 0);
+        entry->SetRowDeletes(areStatsFull ? aggregated.RowDeletes : 0);
         entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(false);
         entry->SetAreStatsFull(areStatsFull);
@@ -9484,6 +9514,8 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         entryPathId->SetOwnerId(pathId.OwnerId);
         entryPathId->SetLocalId(pathId.LocalPathId);
         entry->SetRowCount(areStatsFull ? aggregated.RowCount : 0);
+        entry->SetRowUpdates(areStatsFull ? aggregated.RowUpdates : 0);
+        entry->SetRowDeletes(areStatsFull ? aggregated.RowDeletes : 0);
         entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(true);
         entry->SetAreStatsFull(areStatsFull);

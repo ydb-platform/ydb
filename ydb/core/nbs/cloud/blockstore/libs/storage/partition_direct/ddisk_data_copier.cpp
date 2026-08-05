@@ -219,7 +219,7 @@ void TDDiskDataCopier::OnRangeRead(
             "%s %s Read error: %s",
             LogTitle.GetWithTime().c_str(),
             copyRangeState->Range.Print().c_str(),
-            FormatError(response.Error).c_str());
+            FormatError(response.Error).Quote().c_str());
 
         Complete.SetValue(EResult::Error);
         return;
@@ -255,7 +255,7 @@ void TDDiskDataCopier::OnRangeWritten(
             "%s %s Write error: %s",
             LogTitle.GetWithTime().c_str(),
             copyRangeState->Range.Print().c_str(),
-            FormatError(response.Error).c_str());
+            FormatError(response.Error).Quote().c_str());
 
         Complete.SetValue(EResult::Error);
         return;

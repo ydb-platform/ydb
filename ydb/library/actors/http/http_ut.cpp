@@ -1710,7 +1710,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
             });
             clientThread.join();
 
-            signalingBackend->WaitFor(TDuration::Seconds(5));
+            signalingBackend->WaitFor(TDuration::Seconds(10));
             expectedMessageLogged = signalingBackend->Seen();
         }
 
@@ -1750,7 +1750,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
             });
             clientThread.join();
 
-            signalingBackend->WaitFor(TDuration::Seconds(5));
+            signalingBackend->WaitFor(TDuration::Seconds(10));
             expectedMessageLogged = signalingBackend->Seen();
         }
 

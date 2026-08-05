@@ -622,11 +622,13 @@ class WorkloadSecondaryIndex(WorkloadBase):
         # Weight towards UPSERT/REPLACE to avoid PreconditionFailed on duplicate keys
         op_type = random.choice(["INSERT", "UPSERT", "UPSERT", "REPLACE", "REPLACE"])
 
-        # If table has DEFAULT columns, omit them to exercise the DEFAULT mechanism.
+        # If table has DEFAULT columns, randomly choose whether to omit them to exercise
+        # the DEFAULT mechanism (and also test explicit values combined with RETURNING).
         # Otherwise include all columns.
+        omit_defaults = bool(table_info.default_columns) and random.random() < 0.5
         included_column_indices = [
             i for i in range(self.config.columns)
-            if i < pk_size or i not in table_info.default_columns
+            if i < pk_size or not omit_defaults or i not in table_info.default_columns
         ]
         included_column_names = [self._column_names[i] for i in included_column_indices]
         included_column_types = [table_info.column_types[i] for i in included_column_indices]

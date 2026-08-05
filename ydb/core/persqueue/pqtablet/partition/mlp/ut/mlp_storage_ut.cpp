@@ -412,7 +412,7 @@ Y_UNIT_TEST(AddMessageToEmptyStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 1); // STD builds group structures too
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
@@ -507,7 +507,7 @@ Y_UNIT_TEST(AddNotFirstMessageToEmptyStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 1); // STD builds group structures too
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
@@ -571,7 +571,7 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 1); // STD builds group structures too
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
@@ -812,7 +812,7 @@ void AddMessageWithDelay_UnlockImpl(bool keepMessageOrder, bool differentGroups)
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, keepMessageOrder ? 1 : 0);
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, keepMessageOrder ? (differentGroups ? 2 : 1) : 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, differentGroups ? 2 : 1); // STD builds group structures too
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
@@ -3150,7 +3150,14 @@ Y_UNIT_TEST(TOrderedMessageGroupIdHash) {
 }
 
 struct TFairnessModel {
-    TStorage Storage = TStorage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
+    explicit TFairnessModel(bool keepMessageOrder = true)
+        : KeepMessageOrder(keepMessageOrder)
+        , Storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = keepMessageOrder})
+    {
+    }
+
+    bool KeepMessageOrder = true;
+    TStorage Storage;
     ui64 Offset = 0;
     TSet<ui64> Infly;
     TSet<ui64> Committed;
@@ -3159,8 +3166,26 @@ struct TFairnessModel {
     TMap<ui32, ui32> LastReadTime;
     ui32 ReadTime = 1;
 
-    // Returns the set of offsets that Next is currently allowed to return
+    // Returns the set of offsets that Next is currently allowed to return.
     TSet<ui64> GetAvailalableOffsets() const {
+        return KeepMessageOrder ? GetAvailalableOffsetsFifo() : GetAvailalableOffsetsStd();
+    }
+
+    // STD: many messages of one group may be in flight at once, so every not-yet-committed, not-in-flight,
+    // non-expired message (grouped or groupless) is a valid candidate. Fairness only affects the order in
+    // which they come out, not the drainable set, so the model does not constrain the within-group order.
+    TSet<ui64> GetAvailalableOffsetsStd() const {
+        TSet<ui64> res;
+        for (auto [o, _] : Hashes) {
+            if (!Committed.contains(o) && !Infly.contains(o)) {
+                res.insert(o);
+            }
+        }
+        return res;
+    }
+
+    // FIFO: at most one message per group is in flight; while a group is busy its other messages are blocked.
+    TSet<ui64> GetAvailalableOffsetsFifo() const {
         TSet<ui64> res;
         for (ui64 o : Groupless) {
             if (!Committed.contains(o) && !Infly.contains(o)) {
@@ -3267,8 +3292,20 @@ struct TFairnessModel {
 };
 
 
-void NextWithFairnessBasicImpl(TConstArrayRef<ui32> groups, size_t readSize) {
-    TFairnessModel model;
+static void DrainWithCommitStd(TFairnessModel& model, size_t readSize = 3) {
+    for (int guard = 0; guard < 500; ++guard) {
+        auto batch = model.Next(readSize);
+        if (batch.empty()) {
+            break;
+        }
+        for (auto& m : batch) {
+            model.Commit(m.Offset);
+        }
+    }
+}
+
+void NextWithFairnessBasicImpl(TConstArrayRef<ui32> groups, size_t readSize, bool keepMessageOrder = true) {
+    TFairnessModel model(keepMessageOrder);
     const size_t n = groups.size();
     for (ui32 g : groups) {
         model.AddMessage(g);
@@ -3278,6 +3315,11 @@ void NextWithFairnessBasicImpl(TConstArrayRef<ui32> groups, size_t readSize) {
         for (auto& m : model.Next(readSize)) {
             model.Commit(m.Offset);
         }
+    }
+    // FIFO serves at most one message per group per round, so a large single group may not fully drain within
+    // the fixed number of rounds. STD has no such restriction and must be fully drained here.
+    if (!keepMessageOrder) {
+        UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
     }
 }
 
@@ -3296,6 +3338,148 @@ Y_UNIT_TEST(NextWithFairness3) {
 
 Y_UNIT_TEST(NextWithFairness4) {
     NextWithFairnessBasicImpl({0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4}, 3);
+}
+
+Y_UNIT_TEST(NextWithFairnessStd1) {
+    NextWithFairnessBasicImpl({0, 1, 0, 3, 0, 5, 0, 7, 0, 9, 0, 11, 0, 13, 0, 15, 0, 17, 0, 19, 0, 21, 0, 23, 0}, 1, /*keepMessageOrder*/ false);
+}
+
+Y_UNIT_TEST(NextWithFairnessStd2) {
+    NextWithFairnessBasicImpl({0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4}, 1, /*keepMessageOrder*/ false);
+}
+
+Y_UNIT_TEST(NextWithFairnessStd3) {
+    NextWithFairnessBasicImpl({0, 1, 0, 3, 0, 5, 0, 7, 0, 9, 0, 11, 0, 13, 0, 15, 0, 17, 0, 19, 0, 21, 0, 23, 0}, 3, /*keepMessageOrder*/ false);
+}
+
+Y_UNIT_TEST(NextWithFairnessStd4) {
+    NextWithFairnessBasicImpl({0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4}, 3, /*keepMessageOrder*/ false);
+}
+
+Y_UNIT_TEST(StdManyInflightPerGroup) {
+    // In STD mode there is no one-in-flight-per-group restriction: all messages sharing a group may be handed
+    // out simultaneously in a single read burst, unlike FIFO where a busy group blocks its tail.
+    TFairnessModel model(/*keepMessageOrder*/ false);
+    for (int i = 0; i < 5; ++i) {
+        model.AddMessage(7); // all in a single group
+    }
+
+    auto batch = model.Next(5);
+    UNIT_ASSERT_VALUES_EQUAL_C(batch.size(), 5, "all messages of one group must be available at once in STD");
+    TSet<ui64> offsets;
+    for (auto& m : batch) {
+        UNIT_ASSERT_VALUES_EQUAL(m.Group, 7u);
+        offsets.insert(m.Offset);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(offsets, (TSet<ui64>{0, 1, 2, 3, 4}));
+
+    for (auto& m : batch) {
+        model.Commit(m.Offset);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
+}
+
+Y_UNIT_TEST(StdFairnessRoundRobinAcrossGroups) {
+    // STD still spreads reads across groups: a burst smaller than the total should touch several groups rather
+    // than draining one group first. Here three groups of two messages each; the fairness order rotates.
+    TFairnessModel model(/*keepMessageOrder*/ false);
+    for (ui32 g : {ui32(0), ui32(0), ui32(1), ui32(1), ui32(2), ui32(2)}) {
+        model.AddMessage(g);
+    }
+
+    // First three reads must come from three distinct groups (round-robin), leaving one message per group.
+    auto batch = model.Next(3);
+    UNIT_ASSERT_VALUES_EQUAL(batch.size(), 3);
+    TSet<ui32> firstRoundGroups;
+    for (auto& m : batch) {
+        firstRoundGroups.insert(m.Group);
+    }
+    UNIT_ASSERT_VALUES_EQUAL_C(firstRoundGroups.size(), 3, "STD fairness must rotate across all groups first");
+
+    for (auto& m : batch) {
+        model.Commit(m.Offset);
+    }
+    DrainWithCommitStd(model);
+    UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
+}
+
+Y_UNIT_TEST(StdInterleavedCommitUnlock) {
+    // Mix Next / Commit / Unlock in STD mode: unlocked messages return to their group and must be redelivered,
+    // committed ones must not, and every message is eventually drained exactly once.
+    TFairnessModel model(/*keepMessageOrder*/ false);
+    const int n = 24;
+    for (int i = 0; i < n; ++i) {
+        model.AddMessage(i % 4);
+    }
+
+    for (int round = 0; round < n; ++round) {
+        auto v = model.Next(3);
+        for (size_t j = 0; j < v.size(); ++j) {
+            if (j % 2 == 0) {
+                model.Commit(v[j].Offset);
+            } else {
+                model.Unlock(v[j].Offset);
+            }
+        }
+    }
+    DrainWithCommitStd(model);
+    UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
+}
+
+Y_UNIT_TEST(StdWithGrouplessMessages) {
+    // Groupless messages coexist with grouped ones in STD mode and are all drainable.
+    TFairnessModel model(/*keepMessageOrder*/ false);
+    model.AddMessage(0, /*hasGroup*/ false); // 0
+    model.AddMessage(1, /*hasGroup*/ true);  // 1
+    model.AddMessage(1, /*hasGroup*/ true);  // 2
+    model.AddMessage(0, /*hasGroup*/ false); // 3
+    model.AddMessage(2, /*hasGroup*/ true);  // 4
+
+    DrainWithCommitStd(model);
+    UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
+}
+
+Y_UNIT_TEST(StdByOffsetPolicyReturnsAscendingOffsets) {
+    // With EReadSelectionPolicy::ByOffset the STD read path ignores group fairness and returns messages by
+    // increasing offset, exactly like the legacy scan, even when several messages share one group.
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
+    storage.AddMessage(0, true, 7, TInstant::Now());
+    storage.AddMessage(1, true, 7, TInstant::Now());
+    storage.AddMessage(2, true, 7, TInstant::Now());
+    storage.AddMessage(3, true, 9, TInstant::Now());
+
+    TStorage::TPosition position;
+    std::vector<ui64> seen;
+    for (int i = 0; i < 4; ++i) {
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+        UNIT_ASSERT_C(result.has_value(), i);
+        seen.push_back(result->Offset);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(seen, (std::vector<ui64>{0, 1, 2, 3}));
+
+    auto empty = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+    UNIT_ASSERT(!empty.has_value());
+}
+
+Y_UNIT_TEST(StdGroupsRestoredFromSnapshotAndWAL) {
+    // The per-group structures are not serialized; they must be rebuilt on restore for STD too. Read some
+    // messages (leaving several in flight), snapshot + WAL, reload and verify the state matches exactly.
+    TUtils utils(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 16, .KeepMessageOrder = false});
+    for (ui32 i = 0; i < 8; ++i) {
+        utils.AddMessageWithGroup(i, i % 3); // groups 0,1,2 with several messages each
+    }
+
+    utils.Begin();
+    // Lock a few messages so groups have a mix of Locked and Unprocessed members.
+    auto read = utils.ReadMessages(4);
+    UNIT_ASSERT_VALUES_EQUAL(read.size(), 4);
+    UNIT_ASSERT(utils.Commit(read.front().Offset));
+    utils.End();
+
+    // InflightMessageGroupCount must reflect the three groups that still have messages.
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageGroupCount, 3);
+
+    utils.AssertLoad();
 }
 
 Y_UNIT_TEST(NextWithFairnessInterleavedCommit) {

@@ -43,6 +43,14 @@ namespace NKikimr::NPQ::NMLP {
     };
 
 
+// Selects how TStorage::Next picks the next message to return.
+enum class EReadSelectionPolicy {
+    // Return the oldest available message (smallest offset). Legacy scan order.
+    ByOffset,
+    // Pick a message whose MessageGroupId has not been served for the longest time, with fairness.
+    ByMessageGroupFairness,
+};
+
 class TStorage {
     static constexpr size_t MAX_MESSAGES = 120000;
     static constexpr size_t MIN_MESSAGES = 100;
@@ -134,8 +142,26 @@ public:
             NextMessageGroupIdOffset_ = offset;
         }
 
+        // STD-only doubly-linked chain accessors. Allow O(1) unlink of an arbitrary node
+        // (out-of-order commits and slow-zone removals). Not used on the FIFO path.
+        TMaybe<ui64> PrevMessageGroupIdOffset() const {
+            if (!HasMessageGroupId || PrevMessageGroupIdOffset_ == LastMessageGroupIdOffsetSentinel) {
+                return Nothing();
+            }
+            return PrevMessageGroupIdOffset_;
+        }
+
+        void RelinkNextMessageGroupIdOffset(TMaybe<ui64> offset) {
+            NextMessageGroupIdOffset_ = offset.GetOrElse(LastMessageGroupIdOffsetSentinel);
+        }
+
+        void RelinkPrevMessageGroupIdOffset(TMaybe<ui64> offset) {
+            PrevMessageGroupIdOffset_ = offset.GetOrElse(LastMessageGroupIdOffsetSentinel);
+        }
+
     private:
         ui64 NextMessageGroupIdOffset_; // not serialized
+        ui64 PrevMessageGroupIdOffset_ = LastMessageGroupIdOffsetSentinel; // not serialized, STD only
         static constexpr ui64 LastMessageGroupIdOffsetSentinel = Max<ui64>();
     };
 
@@ -265,7 +291,7 @@ public:
     // deadline - time for processing visibility
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
-    std::optional<TReadMessage> Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups = {});
+    std::optional<TReadMessage> Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups = {}, EReadSelectionPolicy policy = EReadSelectionPolicy::ByMessageGroupFairness);
     // Read up to maxCount messages. When receiveAttemptId is set, repeated reads with the same
     // attempt id within ReceiveAttemptIdPeriod replay the same message set (SQS FIFO semantics).
     std::deque<TReadMessage> Read(
@@ -274,7 +300,8 @@ public:
         TPosition& position,
         const absl::flat_hash_set<ui32>& skipMessageGroups,
         size_t maxCount,
-        const TString& receiveAttemptId
+        const TString& receiveAttemptId,
+        EReadSelectionPolicy policy = EReadSelectionPolicy::ByMessageGroupFairness
     );
     EOperationResult Commit(ui64 message);
     EOperationResult Unlock(ui64 message);
@@ -350,6 +377,12 @@ private:
     void UpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& message);
     void UpdateMessageGroupOnMessageStatusChange(ui64 offset, const TMessage& message, EMessageStatus newStatus);
     void UpdateMessageGroupToNextMessage(ui64 offset, const TMessage& message);
+    // STD-mode (KeepMessageOrder == false) counterparts. They maintain the doubly-linked
+    // per-group chain and UnprocessedCount-based eligibility, allowing many in-flight per group.
+    void StdUpdateMessageGroupForNewMessage(ui64 offset, TMessage& message);
+    void StdUpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& message);
+    void StdUpdateMessageGroupOnMessageStatusChange(ui64 offset, const TMessage& message, EMessageStatus newStatus);
+    void StdUnlinkMessageFromGroup(ui64 offset, const TMessage& message);
     void UpdateMessageGroupsParentLocks(const absl::flat_hash_set<ui32>& currLocked, const absl::flat_hash_set<ui32>& prevLocked, bool modeChanged);
     void BuildAndLinkMessageGroups();
 
@@ -433,6 +466,9 @@ private:
         TLockedGroup Locked;
         ui64 FirstOffset; // exclude DLQ
         ui64 LastOffset;
+        // STD only: number of Unprocessed messages currently in the group. The group is
+        // eligible for Next while this is > 0, regardless of how many are in flight.
+        ui32 UnprocessedCount = 0;
     };
 
     class TMessageGroups {
@@ -441,6 +477,8 @@ private:
         size_t UnlockedMessageGroupsIdSize() const;
         bool UnlockedMessageGroupsIdErase(const ui32 messageGroupIdHash);
         void UpdateLockedMaps(const TLockedGroup& locked, ui32 messageGroupIdHash);
+        // STD only: keep the group in the unlocked fairness order iff eligible.
+        void SetUnlockedEligibility(ui32 messageGroupIdHash, bool eligible);
         const TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder() const;
         TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder();
         void Clear();
@@ -449,7 +487,7 @@ private:
     public:
         absl::flat_hash_map<ui32, TSingleMessageGroupIdInfo> Groups;
         absl::flat_hash_set<ui32> LockedMessageGroupsId; // without parents
-        absl::flat_hash_set<ui64> UnorderedOffsets; // Groupless
+        std::set<ui64> UnorderedOffsets; // Groupless; ordered so groupless messages are served by increasing offset
 
     private:
         absl::flat_hash_set<TOrderedMessageGroupIdHash> UnlockedMessageGroupsId; // without parents

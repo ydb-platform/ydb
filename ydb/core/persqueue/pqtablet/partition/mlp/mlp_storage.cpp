@@ -1908,7 +1908,7 @@ size_t TStorage::TMessageGroups::UnlockedMessageGroupsIdSize() const {
 }
 
 bool TStorage::TMessageGroups::UnlockedMessageGroupsIdErase(const ui32 messageGroupIdHash) {
-    constexpr size_t maxCheckSizeLimit = 150;
+    constexpr size_t maxCheckSizeLimit = 15;
     const bool checkSize = Y_IS_DEBUG_BUILD && UnlockedMessageGroupsId.size() < maxCheckSizeLimit;
     size_t viewOrderSz0 = checkSize ? UnlockedMessageGroupsIdViewOrder.Size() : 0;
     size_t n = UnlockedMessageGroupsId.erase(messageGroupIdHash);

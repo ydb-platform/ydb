@@ -104,6 +104,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeferredTopicCreation_
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeferredTopicCreation_MessagingWhileTopicPending
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteMessage
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteMessageBatch
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteMessageBatch_MixedTableAndTopicReceipts_TablesFormat0
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteMessageBatch_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteMessage_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteQueue
@@ -125,8 +126,10 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestListQueueTags
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestListQueues
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationCompatibility_TablesFormat0_DlqApis
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationCompatibility_TablesFormat0_FifoMessagingApis
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationCompatibility_TablesFormat0_QueueManagementApis
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationFinished_DoesNotServePreFinishedTableMessages
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationFinished_FifoSendReceiveDelete
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationFinished_TablesFormat0_SendReceiveDelete
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationFinished_TablesFormat1_MessagingApis
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMoveMessagesToDLQ
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestPurgeQueue
@@ -526,6 +529,7 @@ ydb/core/persqueue/public/mlp/ut TMLPChangerTests.CapacitySmokeKeepOrder
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.DeadlineChangerMultiPartitionDifferentDeadlines
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.UnlockMultiPartition
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.ConsumerNotExists
+ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.DescribeEmptyTopic
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.DescribeTest
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.UnauthorizedDescriber
@@ -592,6 +596,7 @@ ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Columns
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Families
 ydb/core/tx/datashard/ut_stats unittest.sole chunk
 ydb/core/tx/datashard/ut_validate_row_condition unittest.sole chunk
+ydb/core/tx/schemeshard/ut_generated_columns unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParametersIsRestoredFromLocalDb
 ydb/core/tx/schemeshard/ut_olap TOlap.ReadOnlyCopyColumnTableDiskQuotaStuckAfterDropSource
 ydb/core/tx/schemeshard/ut_olap unittest.[*/*] chunk
@@ -1105,6 +1110,7 @@ ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
 ydb/tests/stress/vector_workload/tests py3test.sole chunk
 ydb/tests/stress/vector_workload/tests test_workload.py.TestYdbVectorWorkload.test
 ydb/tools/mnc/viewer/ut py3test.sole chunk
+ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_settings_save_deploy_flags_from_checkboxes
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_agents_tab_navigation_matches_state_machine
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_operation_tab_navigation_matches_state_machine
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_tab_navigation_matches_state_machine_for_core_command_sequences

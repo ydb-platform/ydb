@@ -653,7 +653,7 @@ sudo chmod 700 /opt/ydb/certs
 
 {% endlist %}
 
-After starting the static nodes, verify they are running via the {{ ydb-short-name }} built-in web interface (Embedded UI):
+After starting the static nodes, verify they are running via the {{ ydb-short-name }} built-in web interface ({{ ydb-ui-name }}):
 
 1. Open `https://<node.ydb.tech>:8765` in your browser, where `<node.ydb.tech>` is the FQDN of the server running any static node;
 2. Go to the **Nodes** tab;
@@ -854,7 +854,7 @@ To check access to the {{ ydb-short-name }} built-in web interface, open `https:
 
 Configure your browser to trust the Certificate Authority that issued certificates for the {{ ydb-short-name }} cluster. Otherwise, you will see a warning about an untrusted certificate.
 
-If authentication is enabled in the cluster, the browser will prompt for login and password. After entering valid credentials, the built-in web interface welcome page will appear. The available features and user interface are described in [{#T}](../../../../reference/embedded-ui/index.md).
+If authentication is enabled in the cluster, the browser will prompt for login and password. After entering valid credentials, the built-in web interface welcome page will appear. The available features and user interface are described in [{#T}](../../../../reference/ydb-ui/index.md).
 
 {% note info %}
 

@@ -7,7 +7,7 @@
 - [{#T}](../../performance/schemas/overloaded-shards.md);
 - [{#T}](../../performance/hardware/cpu-bottleneck.md).
 
-Статья начинается с [описания возникшей проблемы](#initial-issue). Затем мы проанализируем графики в Grafana и информацию на вкладке **Diagnostics** в [Embedded UI](../../../reference/embedded-ui/index.md), чтобы [найти решение](#solution), и проверим [его эффективность](#aftermath).
+Статья начинается с [описания возникшей проблемы](#initial-issue). Затем мы проанализируем графики в Grafana и информацию на вкладке **Diagnostics** в [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md), чтобы [найти решение](#solution), и проверим [его эффективность](#aftermath).
 
 В конце статьи приводятся шаги по [воспроизведению проблемы](#testbed).
 
@@ -75,7 +75,7 @@
 
 Мы видим рост нагрузки на CPU [в пуле ресурсов пользователей (красный) и интерконнекта (жёлтый)](../../../concepts/glossary.md#actor-system-pool).
 
-Мы также можем взглянуть на общее использование CPU на вкладке **Diagnostics** в [Embedded UI](../../../reference/embedded-ui/index.md):
+Мы также можем взглянуть на общее использование CPU на вкладке **Diagnostics** в [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md):
 
 ![CPU diagnostics](./_assets/overloaded-shard-insufficient-cpu/incident-embeddedui-diagnostics.png)
 
@@ -93,7 +93,7 @@
 
 {% endcut %}
 
-Чтобы определить, какую таблицу обслуживает перегруженный data shard, откроем вкладку **Diagnostics > Top shards** во встроенном UI:
+Чтобы определить, какую таблицу обслуживает перегруженный data shard, откроем вкладку **Diagnostics > Top shards** в {{ ydb-ui-name }}:
 
 ![Diagnostics > shards](./_assets/overloaded-shard-insufficient-cpu/incident-embeddedui-top-shards.png)
 
@@ -115,7 +115,7 @@
 
 Нам необходимо увеличить лимит на максимальное количество партиций для таблицы `kv_test`:
 
-1. Во встроенном UI выберите базу данных.
+1. В {{ ydb-ui-name }} выберите базу данных.
 2. Откройте вкладку **Query**.
 3. Выполните следующий запрос:
 
@@ -171,7 +171,7 @@
 
 ## Проблема с недостаточным количеством ядер CPU
 
-Однако, если мы откроем диагностику во встроенном UI, то мы увидим предупреждение о том, что кластеру {{ ydb-short-name }} не хватает ресурсов процессора в пользовательском пуле:
+Однако, если мы откроем диагностику в {{ ydb-ui-name }}, то мы увидим предупреждение о том, что кластеру {{ ydb-short-name }} не хватает ресурсов процессора в пользовательском пуле:
 
 ![CPU diagnostics](./_assets/overloaded-shard-insufficient-cpu/fixed-embeddedui-diagnostics-cpu.png)
 

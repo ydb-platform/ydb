@@ -1,6 +1,6 @@
 # monitoring_config
 
-Секция `monitoring_config` файла конфигурации {{ ydb-short-name }} задаёт параметры [YDB Monitoring](../embedded-ui/ydb-monitoring.md).
+Секция `monitoring_config` файла конфигурации {{ ydb-short-name }} задаёт параметры [YDB Monitoring](../ydb-ui/ydb-monitoring.md).
 
 ## Аутентификация на страницах мониторинга {#authentication}
 
@@ -52,7 +52,7 @@ monitoring_config:
 
 ## TLS на страницах мониторинга {#tls}
 
-{{ ydb-short-name }} открывает отдельный HTTP-порт для работы [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/observability/monitoring.md) и других вспомогательных команд.
+{{ ydb-short-name }} открывает отдельный HTTP-порт для работы [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md), отображения [метрик](../../devops/observability/monitoring.md) и других вспомогательных команд.
 
 На HTTP-порту можно включить [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security), таким образом порт начнёт принимать только HTTPS-соединения. Обычные HTTP-запросы при этом будут отклоняться на уровне TLS-рукопожатия без какого-либо ответа и без редиректа на HTTPS. Одновременная работа HTTP и HTTPS на разных портах не поддерживается: мониторинг использует один порт, который работает только как HTTP либо только как HTTPS.
 

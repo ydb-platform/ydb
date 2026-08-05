@@ -1985,7 +1985,9 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
                 TActorId(),
                 TActorSetupCmd(
-                    NConsole::CreateJaegerTracingConfigurator(appData->TracingConfigurator, Config.GetTracingConfig()),
+                    NConsole::CreateJaegerTracingConfigurator(
+                        appData->TracingConfigurator, Config.GetTracingConfig(),
+                        static_cast<ui32>(NKikimrConsole::TConfigItem::TracingConfigItem), /*userFacing*/ false),
                     TMailboxType::ReadAsFilled,
                     appData->UserPoolId)));
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(

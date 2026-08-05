@@ -178,11 +178,9 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
         UNIT_ASSERT_STRING_CONTAINS(result, R"("name":"value")");
     }
 
-    Y_UNIT_TEST(SortParts) {
-        TTestAuditLogService test(NKikimrConfig::TAuditConfig::TXT);
-
-        // Parts are intentionally given in random priority order to verify sorting
-        TAuditLogParts parts = {
+    // Parts are intentionally given in random priority order to verify sorting
+    TAuditLogParts MakeUnsortedParts() {
+        return {
             {"remote_address",  "192.168.1.1"},
             {"status",          "ERROR"},
             {"operation",       "DESCRIBE TABLE"},
@@ -199,16 +197,46 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
             {"masked_token",    "user***"},
             {"sanitized_token", "user@domain"},
         };
+    }
+
+    Y_UNIT_TEST(SortParts) {
+        TTestAuditLogService test(NKikimrConfig::TAuditConfig::TXT);
 
         // Verify the full sorted output in one assertion:
         // known fields ordered by priority (0..12), then unknown fields lexicographically (paths < tx_id)
         UNIT_ASSERT_STRING_CONTAINS(
-            test.SendAuditLog(std::move(parts)),
+            test.SendAuditLog(MakeUnsortedParts()),
             "component=schemeshard, subject=user@domain, remote_address=192.168.1.1, "
             "sanitized_token=user@domain, masked_token=user***, operation=DESCRIBE TABLE, "
             "status=ERROR, detailed_status=UNAUTHORIZED, reason=Access denied, "
             "cloud_id=cloud-abc, folder_id=folder-abc, resource_id=resource-abc, "
             "database=/my/db, paths=/my/db/table1, /my/db/table2, tx_id=281474976710656"
+        );
+    }
+
+    Y_UNIT_TEST(SortPartsJson) {
+        TTestAuditLogService test(NKikimrConfig::TAuditConfig::JSON);
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            test.SendAuditLog(MakeUnsortedParts()),
+            R"({"component":"schemeshard","subject":"user@domain","remote_address":"192.168.1.1",)"
+            R"("sanitized_token":"user@domain","masked_token":"user***","operation":"DESCRIBE TABLE",)"
+            R"("status":"ERROR","detailed_status":"UNAUTHORIZED","reason":"Access denied",)"
+            R"("cloud_id":"cloud-abc","folder_id":"folder-abc","resource_id":"resource-abc",)"
+            R"("database":"/my/db","paths":"/my/db/table1, /my/db/table2","tx_id":"281474976710656"})"
+        );
+    }
+
+    Y_UNIT_TEST(SortPartsJsonLogCompatible) {
+        TTestAuditLogService test(NKikimrConfig::TAuditConfig::JSON_LOG_COMPATIBLE);
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            test.SendAuditLog(MakeUnsortedParts()),
+            R"("component":"schemeshard","subject":"user@domain","remote_address":"192.168.1.1",)"
+            R"("sanitized_token":"user@domain","masked_token":"user***","operation":"DESCRIBE TABLE",)"
+            R"("status":"ERROR","detailed_status":"UNAUTHORIZED","reason":"Access denied",)"
+            R"("cloud_id":"cloud-abc","folder_id":"folder-abc","resource_id":"resource-abc",)"
+            R"("database":"\/my\/db","paths":"\/my\/db\/table1, \/my\/db\/table2","tx_id":"281474976710656"})"
         );
     }
 }

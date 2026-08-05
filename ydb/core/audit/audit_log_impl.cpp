@@ -1,8 +1,7 @@
 #include <util/charset/utf8.h>
 #include <util/string/hex.h>
 
-#include <library/cpp/json/json_value.h>
-#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/writer/json.h>
 #include <library/cpp/logger/record.h>
 #include <library/cpp/logger/backend.h>
 
@@ -85,11 +84,14 @@ void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBacken
 TString GetJsonLog(TInstant time, const TAuditLogParts& parts) {
     TStringStream ss;
     ss << time << ": ";
-    NJson::TJsonMap m;
-    for (auto& [k, v] : parts) {
-        m[k] = v;
+    NJsonWriter::TBuf json(NJsonWriter::HEM_UNSAFE, &ss);
+    {
+        auto obj = json.BeginObject();
+        for (auto& [k, v] : parts) {
+            obj.WriteKey(k).WriteString(v);
+        }
+        json.EndObject();
     }
-    NJson::WriteJson(&ss, &m, false, false);
     ss << Endl;
     return ss.Str();
 }
@@ -226,7 +228,7 @@ private:
             return std::make_pair(lhsOrder, lhs.first) < std::make_pair(rhsOrder, rhs.first);
         };
 
-        std::sort(sortedParts.begin(), sortedParts.end(), cmpToSort);
+        std::stable_sort(sortedParts.begin(), sortedParts.end(), cmpToSort);
 
         for (auto& logBackends : LogBackends) {
             const auto builderIndex = static_cast<size_t>(logBackends.first);

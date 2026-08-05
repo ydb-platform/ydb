@@ -11,7 +11,6 @@
 #include "antlr_token.h"
 #include "secret_settings.h"
 
-#include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
 #include <yql/essentials/sql/v1/proto_parser/statement.h>
 #include <yql/essentials/sql/v1/proto_parser/token.h>
 
@@ -332,38 +331,27 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             const auto& stmt = core.GetAlt_sql_stmt_core2().GetRule_select_stmt1();
-            const auto selectKind = Unpack(stmt.GetRule_select_stmt_core2().GetRule_select_stmt_intersect1().GetRule_select_kind_parenthesis1());
+            TNodePtr node = YqlSelectOrLegacy(
+                [&]() -> TNodeResult {
+                    return BuildYqlSelectStatement(*this, stmt);
+                },
+                [&]() -> TNodePtr {
+                    Ctx_.BodyPart();
 
-            const auto buildLegacy = [&](const auto& stmt) -> TNodePtr {
-                Ctx_.BodyPart();
+                    TPosition pos;
+                    TSourcePtr source = TSqlSelect(*this).Build(stmt, pos);
+                    if (!source) {
+                        return nullptr;
+                    }
 
-                TPosition pos;
-                TSourcePtr source = TSqlSelect(*this).Build(stmt, pos);
-                if (!source) {
-                    return nullptr;
-                }
-
-                return BuildSelectResult(
-                    pos,
-                    std::move(source),
-                    Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
-                    Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
-                    Ctx_.Scoped);
-            };
-
-            TNodePtr node;
-            if (IsOnlySelect(stmt) && !selectKind.GetRule_select_kind1().GetBlock2().HasAlt3()) {
-                node = buildLegacy(stmt);
-            } else {
-                node = YqlSelectOrLegacy(
-                    [&]() -> TNodeResult {
-                        return BuildYqlSelectStatement(*this, stmt);
-                    },
-                    [&]() -> TNodePtr {
-                        return buildLegacy(stmt);
-                    },
-                    Ctx_.TokenPosition(Beginning(stmt)));
-            }
+                    return BuildSelectResult(
+                        pos,
+                        std::move(source),
+                        Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
+                        Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
+                        Ctx_.Scoped);
+                },
+                Ctx_.TokenPosition(Beginning(stmt)));
 
             if (!node) {
                 return false;

@@ -1033,7 +1033,7 @@ TJoinTestData RightFilterInnerTestData() {
     TVector<ui64> expRightKeys = {2, 3};
     TVector<ui64> expRightVals = {50, 60};
     td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
-    // left[1] < 80 (drop 100)
+    // right[1] < 80 (drop 100)
     td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, 80);
     return td;
 }

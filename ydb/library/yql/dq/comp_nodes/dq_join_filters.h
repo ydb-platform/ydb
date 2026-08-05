@@ -68,11 +68,11 @@ inline TJoinFilters ParseJoinFilters(const TComputationNodeFactoryContext& ctx, 
     };
 
     TJoinFilters filters;
-    locateArgs(firstInput + 0, filters.Args.Probe);
-    locateArgs(firstInput + 1, filters.Args.Build);
     filters.OneSide.Probe = locateBody(firstInput + 2);
     filters.OneSide.Build = locateBody(firstInput + 3);
     filters.BothSides = locateBody(firstInput + 4);
+    locateArgs(firstInput + 0, filters.Args.Probe);
+    locateArgs(firstInput + 1, filters.Args.Build);
     return filters;
 }
 

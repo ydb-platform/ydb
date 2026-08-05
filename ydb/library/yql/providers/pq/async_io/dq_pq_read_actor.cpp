@@ -19,6 +19,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/gateway/clients/composite/yql_pq_composite_read_session.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -1335,7 +1336,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
 }
 
 void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
-    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
+    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>(PqSource,
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod, enableStreamingQueriesCounters](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)

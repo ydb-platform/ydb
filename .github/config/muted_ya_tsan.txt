@@ -743,6 +743,7 @@ ydb/tests/stress/compare_index_performance/tests test_compare.py.TestCompareInde
 ydb/tests/stress/fulltext_workload/tests py3test.sole chunk
 ydb/tests/stress/fulltext_workload/tests test_workload.py.TestYdbFulltextWorkload.test
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test_batched_source
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kv_volume_tool/tests py3test.sole chunk
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[1GB]
@@ -770,6 +771,7 @@ ydb/tests/stress/topic/tests py3test.[*/*] chunk
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_0
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_3
 ydb/tests/stress/tpcc/tests py3test.sole chunk
 ydb/tests/stress/tpcc/tests test_workload.py.TestYdbTpccWorkload.test
 ydb/tests/stress/transfer/tests py3test.sole chunk

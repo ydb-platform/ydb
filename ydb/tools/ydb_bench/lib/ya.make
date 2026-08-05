@@ -5,9 +5,14 @@ PY_SRCS(
     actors_core.py
     cli.py
     common.py
+    config.py
     runner.py
     system_info.py
     topology.py
+)
+
+PEERDIR(
+    contrib/python/PyYAML
 )
 
 END()

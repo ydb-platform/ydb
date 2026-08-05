@@ -1,52 +1,85 @@
 # YDB benchmark
 
-`ydb_bench` packages benchmark executables into a single Python tool and runs
-reproducible platform-acceptance scenarios. The initial `actors-core` scenario
-bundles the program variant of `ydb/library/actors/core/ut_fat` and runs only
-`HeavyActorBenchmark::SendActivateReceiveCSVManual`.
-
-Build and inspect the tool:
+`ydb_bench` packages actor benchmark executables into one Python tool and runs
+reproducible benchmark profiles described by a YAML file. Build it with the
+profile build type so the same binary can also be used with `perf`:
 
 ```bash
 ./ya make --build=profile ydb/tools/ydb_bench
+```
+
+The tool currently provides two benchmarks:
+
+- `ping-bench`: pairwise actor ping throughput;
+- `star-ping-bench`: star-topology actor ping throughput.
+
+Inspect them and print the standard JSON Schema for the YAML configuration:
+
+```bash
 ydb/tools/ydb_bench/ydb_bench list
-ydb/tools/ydb_bench/ydb_bench describe actors-core
+ydb/tools/ydb_bench/ydb_bench describe ping-bench
+ydb/tools/ydb_bench/ydb_bench describe star-ping-bench
+ydb/tools/ydb_bench/ydb_bench config-schema
 ```
 
-The profile build is required for profiler runs so the bundled benchmark ELF
-retains stable symbols, source information, and a build ID.
+A configuration can contain multiple benchmarks and multiple arbitrarily named
+profiles for each benchmark:
 
-Run a short check or the fixed comparison profile:
+```yaml
+ping-bench:
+  baseline:
+    threads: [1, 2, 4, 8, 16]
+    actor-pairs: [512]
+    inflight: [1]
+    duration: 3
+    repetitions: 5
+    affinity: [none, one-whole-numa, one-whole-chiplet, multi-chiplet]
+  focused:
+    threads: [16]
+    duration: 20
+    repetitions: 1
+    affinity: [one-whole-chiplet]
 
-```bash
-ydb/tools/ydb_bench/ydb_bench run actors-core \
-    --profile smoke \
-    --output ydb-bench-smoke
-
-ydb/tools/ydb_bench/ydb_bench run actors-core \
-    --profile baseline \
-    --output ydb-bench-baseline
+star-ping-bench:
+  star-sweep:
+    threads: [4, 8, 16]
+    actor-pairs: [512]
+    stars: [1, 2, 4]
+    duration: 3
+    repetitions: 5
+    affinity: [none, one-whole-chiplet]
 ```
 
-Record a profiling run with the same `cycles:u`, 99 Hz, DWARF-call-stack setup
-used by the YDB platform investigation:
+`threads`, `duration`, `repetitions`, and `affinity` are required and arrays
+must be non-empty. `actor-pairs` defaults to `[512]`; `inflight` and `stars`
+default to `[1]` for their respective benchmarks. A per-process `timeout` can
+be specified; otherwise it is computed from the requested parameter matrix and
+duration. Unknown fields, benchmark names, affinity modes, and unsafe profile
+names are rejected before a result directory is created.
+
+Run every benchmark/profile pair from the file:
 
 ```bash
-ydb/tools/ydb_bench/ydb_bench run actors-core \
-    --profile smoke \
-    --threads 16 \
-    --duration 20 \
-    --repetitions 1 \
-    --affinity one-whole-chiplet \
+ydb/tools/ydb_bench/ydb_bench run \
+    --config bench.yaml \
+    --output ydb-bench-results
+```
+
+Add `--perf` to record each repetition with the same `cycles:u`, 99 Hz, and
+DWARF-call-stack setup used by the YDB platform investigation:
+
+```bash
+ydb/tools/ydb_bench/ydb_bench run \
+    --config bench.yaml \
     --perf \
     --output ydb-bench-profile
 ```
 
 `--perf` is rejected unless `ydb_bench` itself was built with
 `--build=profile`. Profiling changes both the build and runtime overhead, so its
-throughput must not be mixed with the non-profile baseline.
+throughput must not be mixed with a non-profile baseline.
 
-Every scenario is run in four placement modes by default:
+The available placement modes are:
 
 - `none`: no explicit affinity;
 - `one-whole-numa`: all allowed CPUs from one NUMA node;
@@ -57,31 +90,24 @@ The `one-whole-*` modes use the complete allowed CPU set of the selected
 topology group, independently of the largest requested thread count. The
 `multi-chiplet` mode uses the same number of CPUs as that thread count. Topology
 is read from Linux sysfs and intersected with the process's allowed CPU set. A
-mode that the machine cannot provide is recorded as `unsupported` in `run.json`;
-it is never silently replaced with a different placement. Use, for example,
-`--affinity none,one-whole-numa` to run a subset.
+mode that the machine cannot provide is recorded as `unsupported` in the
+profile's `run.json`; it is never silently replaced with another placement.
+
+The top-level output contains:
+
+- `run.json` with the config hash, tool revision, binary hash, and status of
+  every benchmark/profile pair;
+- `summary.csv` with normalized results from every benchmark and profile;
+- `<benchmark>/<profile>/run.json` and `summary.csv` with benchmark-specific
+  parameters;
+- `<benchmark>/<profile>/<affinity>/repeat-NNN/` with raw stdout, stderr, and
+  extracted `metrics.csv`.
+
+With `--perf`, the exact bundled profile ELF is saved once under `profiler/`.
+Each repetition also contains raw `perf.data`, a symbolized flat
+`perf-report.txt`, and `perf-buildids.txt`. These artifacts are generated before
+the temporary executable is removed.
 
 Use `--work-dir` when the system temporary directory is mounted with `noexec`.
-The tool extracts the bundled executable atomically into a unique temporary
-subdirectory and removes it after the run.
-
-The output contains:
-
-- `run.json` with the tool revision, binary SHA-256, platform description,
-  command, benchmark parameters, whitelisted environment, and status;
-- `<affinity>/repeat-NNN/stdout.txt` and `stderr.txt` with unmodified process
-  output;
-- `<affinity>/repeat-NNN/metrics.csv` with CSV rows extracted from the unit-test
-  output;
-- `summary.csv` with median, minimum, and maximum throughput per affinity mode
-  across external repetitions.
-
-With `--perf`, the output also contains the exact bundled profile ELF and, for
-each repetition, raw `perf.data`, a symbolized flat `perf-report.txt`, and
-`perf-buildids.txt`. The report and build-ID list are generated before the
-temporary executable is removed.
-
-The run fails if the process exits unsuccessfully, times out, or produces an
-empty or parameter-mismatched CSV result. Timeout and interruption stop the
-whole process group so that scenarios can safely grow to include a server and
-workload processes.
+The run fails if a process exits unsuccessfully, times out, is interrupted, or
+produces empty or parameter-mismatched CSV data.

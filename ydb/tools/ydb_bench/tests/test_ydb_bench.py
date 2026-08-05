@@ -12,13 +12,15 @@ from pathlib import Path
 from unittest import mock
 
 from ydb.tools.ydb_bench.lib.actors_core import (
-    CSV_HEADER,
+    PING_BENCHMARK,
+    STAR_PING_BENCHMARK,
     RunConfiguration,
     parse_metrics,
     run_actors_core,
 )
+from ydb.tools.ydb_bench.lib.cli import main
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
-from ydb.tools.ydb_bench.lib.cli import PROFILES, main
+from ydb.tools.ydb_bench.lib.config import CONFIG_SCHEMA, load_config
 from ydb.tools.ydb_bench.lib.runner import run_command
 from ydb.tools.ydb_bench.lib.topology import (
     AFFINITY_MODES,
@@ -47,12 +49,18 @@ class YdbBenchTest(unittest.TestCase):
         data = path.read_bytes()
         return extract_executable(data, self.root / "extracted", "actors_core_ut_fat")
 
-    def _configuration(self, repetitions=1, timeout=5):
+    def _config(self, body, name="bench.yaml"):
+        path = self.root / name
+        path.write_text(textwrap.dedent(body), encoding="utf-8")
+        return path
+
+    def _configuration(self, repetitions=1, timeout=5, benchmark=PING_BENCHMARK):
         return RunConfiguration(
+            benchmark=benchmark,
             profile="test",
             threads=(1, 2),
             actor_pairs=(32,),
-            inflights=(1,),
+            parameter_values=(1,),
             duration_seconds=1,
             repetitions=repetitions,
             timeout_seconds=timeout,
@@ -71,42 +79,179 @@ class YdbBenchTest(unittest.TestCase):
         stdout = "\n".join(
             [
                 "[==========] Running 1 test",
-                CSV_HEADER,
+                PING_BENCHMARK.csv_header,
                 "1,32,1,1000,1.5,900,1100",
                 "[       OK ] HeavyActorBenchmark::SendActivateReceiveCSVManual",
             ]
         )
         self.assertEqual(parse_metrics(stdout)[0]["msgs_per_sec"], 1000)
 
+    def test_parse_star_metrics_uses_star_column(self):
+        stdout = "\n".join([STAR_PING_BENCHMARK.csv_header, "1,32,4,1000,1.5,900,1100"])
+        rows = parse_metrics(stdout, STAR_PING_BENCHMARK)
+        self.assertEqual(rows[0]["star_multiply"], 4)
+
     def test_parse_metrics_rejects_header_without_rows(self):
         with self.assertRaisesRegex(BenchmarkError, "no metric rows"):
-            parse_metrics(CSV_HEADER + "\n[       OK ]")
+            parse_metrics(PING_BENCHMARK.csv_header + "\n[       OK ]")
 
-    def test_list_and_describe_expose_actors_core(self):
+    def test_list_describe_and_config_schema_expose_current_contract(self):
         output = io.StringIO()
         with redirect_stdout(output):
             self.assertEqual(main(["list"]), 0)
-            self.assertEqual(main(["describe", "actors-core"]), 0)
-        self.assertIn("actors-core", output.getvalue())
-        self.assertIn("summary.csv", output.getvalue())
+            self.assertEqual(main(["describe", "ping-bench"]), 0)
+            self.assertEqual(main(["describe", "star-ping-bench"]), 0)
+        description = output.getvalue()
+        self.assertIn("ping-bench", description)
+        self.assertIn("star-ping-bench", description)
+        self.assertNotIn("smoke", description)
 
-    def test_baseline_covers_a_full_minimum_chiplet(self):
-        self.assertEqual(PROFILES["baseline"].threads, (1, 2, 4, 8, 16))
+        schema_output = io.StringIO()
+        with redirect_stdout(schema_output):
+            self.assertEqual(main(["config-schema"]), 0)
+        self.assertEqual(json.loads(schema_output.getvalue()), CONFIG_SCHEMA)
+        self.assertEqual(set(CONFIG_SCHEMA["properties"]), {"ping-bench", "star-ping-bench"})
 
-    def test_timeout_rejects_non_finite_values(self):
-        for value in ("nan", "inf", "-inf"):
-            with self.subTest(value=value):
-                error = io.StringIO()
-                with redirect_stderr(error), self.assertRaises(SystemExit) as raised:
-                    main(["run", "actors-core", "--timeout={}".format(value)])
-                self.assertEqual(raised.exception.code, 2)
-                self.assertIn("must be a finite positive number", error.getvalue())
+    def test_config_supports_multiple_benchmarks_and_profiles(self):
+        config = self._config(
+            """
+            ping-bench:
+              baseline:
+                threads: [1, 2, 4]
+                duration: 3
+                repetitions: 5
+                affinity: [none]
+              focused:
+                threads: [16]
+                actor-pairs: [1024]
+                inflight: [2, 4]
+                duration: 10
+                repetitions: 1
+                affinity: [one-whole-chiplet]
+            star-ping-bench:
+              star-sweep:
+                threads: [8]
+                stars: [1, 2, 4]
+                duration: 4
+                repetitions: 2
+                affinity: [none, multi-chiplet]
+            """
+        )
+        loaded = load_config(config, perf_enabled=True, perf_frequency=123)
+        self.assertEqual(
+            [(run.benchmark.name, run.profile) for run in loaded.runs],
+            [
+                ("ping-bench", "baseline"),
+                ("ping-bench", "focused"),
+                ("star-ping-bench", "star-sweep"),
+            ],
+        )
+        self.assertEqual(loaded.runs[0].actor_pairs, (512,))
+        self.assertEqual(loaded.runs[0].parameter_values, (1,))
+        self.assertEqual(loaded.runs[1].parameter_values, (2, 4))
+        self.assertEqual(loaded.runs[2].parameter_values, (1, 2, 4))
+        self.assertTrue(all(run.perf_enabled for run in loaded.runs))
+        self.assertTrue(all(run.perf_frequency == 123 for run in loaded.runs))
+
+    def test_config_rejects_empty_arrays_unknown_fields_and_unsafe_profile_names(self):
+        cases = (
+            (
+                "empty-threads.yaml",
+                """
+                ping-bench:
+                  baseline:
+                    threads: []
+                    duration: 1
+                    repetitions: 1
+                    affinity: [none]
+                """,
+                "non-empty array",
+            ),
+            (
+                "unknown-field.yaml",
+                """
+                ping-bench:
+                  baseline:
+                    threads: [1]
+                    duration: 1
+                    repetitions: 1
+                    affinity: [none]
+                    surprise: 42
+                """,
+                "unknown fields: surprise",
+            ),
+            (
+                "unsafe-name.yaml",
+                """
+                ping-bench:
+                  ../escape:
+                    threads: [1]
+                    duration: 1
+                    repetitions: 1
+                    affinity: [none]
+                """,
+                "profile names must match",
+            ),
+        )
+        for name, body, error in cases:
+            with self.subTest(name=name), self.assertRaisesRegex(BenchmarkError, error):
+                load_config(self._config(body, name=name))
+
+    def test_config_rejects_non_finite_timeout(self):
+        for value in (".nan", ".inf", "-.inf"):
+            with self.subTest(value=value), self.assertRaisesRegex(BenchmarkError, "finite positive number"):
+                load_config(
+                    self._config(
+                        """
+                        ping-bench:
+                          baseline:
+                            threads: [1]
+                            duration: 1
+                            repetitions: 1
+                            affinity: [none]
+                            timeout: {}
+                        """.format(value),
+                        name="timeout-{}.yaml".format(value.replace("/", "_")),
+                    )
+                )
+
+    def test_config_rejects_duplicate_yaml_keys(self):
+        config = self._config(
+            """
+            ping-bench:
+              baseline:
+                threads: [1]
+                threads: [2]
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+            """
+        )
+        with self.assertRaisesRegex(BenchmarkError, "duplicate key 'threads'"):
+            load_config(config)
 
     def test_perf_requires_profile_build(self):
+        config = self._config(
+            """
+            ping-bench:
+              baseline:
+                threads: [1]
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+            """
+        )
         error = io.StringIO()
         with redirect_stderr(error):
             code = main(
-                ["run", "actors-core", "--perf", "--output", str(self.root / "non-profile")],
+                [
+                    "run",
+                    "--config",
+                    str(config),
+                    "--perf",
+                    "--output",
+                    str(self.root / "non-profile"),
+                ],
                 resource_loader=lambda _: b"fake",
                 tool_revision={"build_type": "relwithdebinfo", "commit_id": "test"},
             )
@@ -114,7 +259,87 @@ class YdbBenchTest(unittest.TestCase):
         self.assertIn("--build=profile", error.getvalue())
         self.assertFalse((self.root / "non-profile").exists())
 
+    def test_cli_runs_multiple_benchmarks_and_profiles(self):
+        benchmark = self._script(
+            """
+            test "$ACTORSYSTEM_TEST_MODE" = "manual" || exit 10
+            test "$ACTORSYSTEM_THREADS" = "1" || exit 11
+            test "$ACTORSYSTEM_ACTOR_PAIRS" = "32" || exit 12
+            case "$1" in
+              HeavyActorBenchmark::SendActivateReceiveCSVManual)
+                test "$ACTORSYSTEM_INFLIGHTS" = "1" || exit 13
+                echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+                echo "1,32,1,1000,1.0,900,1100"
+                ;;
+              HeavyActorBenchmark::StarSendActivateReceiveCSVManual)
+                test "$ACTORSYSTEM_STARS" = "2" || exit 14
+                test "$ACTORSYSTEM_DURATION" = "2" || exit 15
+                printf '%s%s\n' \
+                  "threads,actorPairs,star_multiply,msgs_per_sec,elapsed_seconds," \
+                  "min_pair_sent_msgs,max_pair_sent_msgs"
+                echo "1,32,2,2000,2.0,1800,2200"
+                ;;
+              *) exit 16 ;;
+            esac
+            """
+        )
+        config = self._config(
+            """
+            ping-bench:
+              first:
+                threads: [1]
+                actor-pairs: [32]
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+              second:
+                threads: [1]
+                actor-pairs: [32]
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+            star-ping-bench:
+              star:
+                threads: [1]
+                actor-pairs: [32]
+                stars: [2]
+                duration: 2
+                repetitions: 1
+                affinity: [none]
+            """
+        )
+        output = self.root / "multi-output"
+        self.assertEqual(
+            main(
+                ["run", "--config", str(config), "--output", str(output)],
+                resource_loader=lambda _: benchmark.read_bytes(),
+                tool_revision={"build_type": "relwithdebinfo", "commit_id": "test"},
+            ),
+            0,
+        )
+        manifest = json.loads((output / "run.json").read_text())
+        self.assertEqual(manifest["status"], "completed")
+        self.assertEqual(len(manifest["runs"]), 3)
+        self.assertTrue(all(run["status"] == "completed" for run in manifest["runs"]))
+        self.assertTrue((output / "ping-bench" / "first" / "summary.csv").is_file())
+        self.assertTrue((output / "ping-bench" / "second" / "summary.csv").is_file())
+        self.assertTrue((output / "star-ping-bench" / "star" / "summary.csv").is_file())
+        summary = (output / "summary.csv").read_text()
+        self.assertIn("ping-bench,first,none,1,32,inflight,1,1,1000.0", summary)
+        self.assertIn("star-ping-bench,star,none,1,32,stars,2,1,2000.0", summary)
+
     def test_cli_exit_code_uses_interruption_error_type(self):
+        config = self._config(
+            """
+            ping-bench:
+              test:
+                threads: [1]
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+            """
+        )
+
         def loader_for(error):
             def loader(_):
                 raise error
@@ -124,15 +349,19 @@ class YdbBenchTest(unittest.TestCase):
         error_output = io.StringIO()
         with redirect_stderr(error_output):
             generic_code = main(
-                ["run", "actors-core", "--output", str(self.root / "generic-error")],
-                resource_loader=loader_for(BenchmarkError("benchmark was interrupted by another component")),
+                ["run", "--config", str(config), "--output", str(self.root / "generic-error")],
+                resource_loader=loader_for(BenchmarkError("benchmark failed")),
             )
             interrupted_code = main(
-                ["run", "actors-core", "--output", str(self.root / "interrupted-error")],
+                ["run", "--config", str(config), "--output", str(self.root / "interrupted-error")],
                 resource_loader=loader_for(BenchmarkInterrupted("benchmark stopped")),
             )
         self.assertEqual(generic_code, 1)
         self.assertEqual(interrupted_code, 130)
+        generic_manifest = json.loads((self.root / "generic-error" / "run.json").read_text())
+        interrupted_manifest = json.loads((self.root / "interrupted-error" / "run.json").read_text())
+        self.assertEqual(generic_manifest["status"], "failed")
+        self.assertEqual(interrupted_manifest["status"], "interrupted")
 
     def test_run_writes_manifest_raw_metrics_and_median_summary(self):
         script = self._script(
@@ -163,7 +392,8 @@ class YdbBenchTest(unittest.TestCase):
         self.assertTrue((output / "summary.csv").is_file())
         self.assertIn("none,1,32,1,3,1000.0,1000.0,1000.0,1.0", (output / "summary.csv").read_text())
         stored = json.loads((output / "run.json").read_text())
-        self.assertEqual(stored["schema_version"], 2)
+        self.assertEqual(stored["schema_version"], 3)
+        self.assertEqual(stored["benchmark"], "ping-bench")
         self.assertEqual(stored["affinity"][0]["mode"], "none")
         self.assertEqual(stored["binary"]["sha256"], self._binary(script).sha256)
         for index in range(1, 4):
@@ -171,6 +401,38 @@ class YdbBenchTest(unittest.TestCase):
             self.assertTrue((repetition / "stdout.txt").is_file())
             self.assertTrue((repetition / "stderr.txt").is_file())
             self.assertTrue((repetition / "metrics.csv").is_file())
+
+    def test_star_run_selects_star_filter_environment_and_summary(self):
+        script = self._script(
+            """
+            test "$1" = "HeavyActorBenchmark::StarSendActivateReceiveCSVManual" || exit 10
+            test "$ACTORSYSTEM_STARS" = "2,4" || exit 11
+            test "$ACTORSYSTEM_DURATION" = "3" || exit 12
+            echo "threads,actorPairs,star_multiply,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,2,1000,3.0,900,1100"
+            echo "1,32,4,2000,3.0,1800,2200"
+            echo "2,32,2,3000,3.0,2800,3200"
+            echo "2,32,4,4000,3.0,3800,4200"
+            """
+        )
+        output = self.root / "star-output"
+        output.mkdir()
+        configuration = RunConfiguration(
+            **{
+                **self._configuration(benchmark=STAR_PING_BENCHMARK).__dict__,
+                "parameter_values": (2, 4),
+                "duration_seconds": 3,
+            }
+        )
+        manifest = run_actors_core(
+            self._binary(script),
+            configuration,
+            output,
+            tool_revision={"commit_id": "test"},
+        )
+        self.assertEqual(manifest["benchmark"], "star-ping-bench")
+        self.assertEqual(manifest["parameters"]["stars"], [2, 4])
+        self.assertIn("star_multiply", (output / "summary.csv").read_text().splitlines()[0])
 
     def test_perf_run_preserves_binary_data_report_and_buildids(self):
         benchmark = self._script(
@@ -391,10 +653,11 @@ class YdbBenchTest(unittest.TestCase):
             chiplets=((0, (0, 1)),),
         )
         configuration = RunConfiguration(
+            benchmark=PING_BENCHMARK,
             profile="test",
             threads=(1, 2),
             actor_pairs=(32,),
-            inflights=(1,),
+            parameter_values=(1,),
             duration_seconds=1,
             repetitions=1,
             timeout_seconds=5,

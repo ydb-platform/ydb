@@ -1,5 +1,6 @@
 import csv
 import io
+import os
 import statistics
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -17,17 +18,52 @@ from ydb.tools.ydb_bench.lib.system_info import collect_system_info
 from ydb.tools.ydb_bench.lib.topology import discover_topology, plan_affinity, topology_record
 
 
-CSV_COLUMNS = (
-    "threads",
-    "actorPairs",
-    "in_flight",
-    "msgs_per_sec",
-    "elapsed_seconds",
-    "min_pair_sent_msgs",
-    "max_pair_sent_msgs",
+@dataclass(frozen=True)
+class BenchmarkDefinition:
+    name: str
+    description: str
+    test_filter: str
+    parameter_name: str
+    parameter_environment: str
+    parameter_column: str
+
+    @property
+    def csv_columns(self):
+        return (
+            "threads",
+            "actorPairs",
+            self.parameter_column,
+            "msgs_per_sec",
+            "elapsed_seconds",
+            "min_pair_sent_msgs",
+            "max_pair_sent_msgs",
+        )
+
+    @property
+    def csv_header(self):
+        return ",".join(self.csv_columns)
+
+
+PING_BENCHMARK = BenchmarkDefinition(
+    name="ping-bench",
+    description="pairwise actor ping throughput",
+    test_filter="HeavyActorBenchmark::SendActivateReceiveCSVManual",
+    parameter_name="inflight",
+    parameter_environment="ACTORSYSTEM_INFLIGHTS",
+    parameter_column="in_flight",
 )
-CSV_HEADER = ",".join(CSV_COLUMNS)
-TEST_FILTER = "HeavyActorBenchmark::SendActivateReceiveCSVManual"
+STAR_PING_BENCHMARK = BenchmarkDefinition(
+    name="star-ping-bench",
+    description="star-topology actor ping throughput",
+    test_filter="HeavyActorBenchmark::StarSendActivateReceiveCSVManual",
+    parameter_name="stars",
+    parameter_environment="ACTORSYSTEM_STARS",
+    parameter_column="star_multiply",
+)
+BENCHMARKS = {
+    benchmark.name: benchmark
+    for benchmark in (PING_BENCHMARK, STAR_PING_BENCHMARK)
+}
 
 
 @dataclass(frozen=True)
@@ -35,21 +71,24 @@ class RunConfiguration:
     profile: str
     threads: tuple
     actor_pairs: tuple
-    inflights: tuple
+    parameter_values: tuple
     duration_seconds: int
     repetitions: int
     timeout_seconds: float
     affinity_modes: tuple = ("none",)
     perf_enabled: bool = False
     perf_frequency: int = 99
+    benchmark: BenchmarkDefinition = PING_BENCHMARK
 
 
-def parse_metrics(stdout):
+def parse_metrics(stdout, benchmark=PING_BENCHMARK):
     lines = stdout.splitlines()
     try:
-        header_index = next(index for index, line in enumerate(lines) if line.strip() == CSV_HEADER)
+        header_index = next(index for index, line in enumerate(lines) if line.strip() == benchmark.csv_header)
     except StopIteration as error:
-        raise BenchmarkError("benchmark output does not contain the expected CSV header") from error
+        raise BenchmarkError(
+            "benchmark output does not contain the expected CSV header for {}".format(benchmark.name)
+        ) from error
 
     rows = []
     for line in lines[header_index + 1 :]:
@@ -57,13 +96,13 @@ def parse_metrics(stdout):
             values = next(csv.reader([line]))
         except csv.Error:
             continue
-        if len(values) != len(CSV_COLUMNS):
+        if len(values) != len(benchmark.csv_columns):
             continue
         try:
             row = {
                 "threads": int(values[0]),
                 "actorPairs": int(values[1]),
-                "in_flight": int(values[2]),
+                benchmark.parameter_column: int(values[2]),
                 "msgs_per_sec": float(values[3]),
                 "elapsed_seconds": float(values[4]),
                 "min_pair_sent_msgs": int(values[5]),
@@ -78,22 +117,23 @@ def parse_metrics(stdout):
     return rows
 
 
-def render_metrics(rows):
+def render_metrics(rows, benchmark=PING_BENCHMARK):
     output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=CSV_COLUMNS, lineterminator="\n")
+    writer = csv.DictWriter(output, fieldnames=benchmark.csv_columns, lineterminator="\n")
     writer.writeheader()
     writer.writerows(rows)
     return output.getvalue()
 
 
 def validate_metrics(rows, configuration):
+    parameter_column = configuration.benchmark.parameter_column
     expected = {
-        (threads, actor_pairs, in_flight)
+        (threads, actor_pairs, parameter_value)
         for threads in configuration.threads
         for actor_pairs in configuration.actor_pairs
-        for in_flight in configuration.inflights
+        for parameter_value in configuration.parameter_values
     }
-    actual = {(row["threads"], row["actorPairs"], row["in_flight"]) for row in rows}
+    actual = {(row["threads"], row["actorPairs"], row[parameter_column]) for row in rows}
     if len(actual) != len(rows):
         raise BenchmarkError("benchmark produced duplicate metric rows")
     if actual != expected:
@@ -106,11 +146,11 @@ def validate_metrics(rows, configuration):
         )
 
 
-def summarize_metrics(repetition_rows):
+def summarize_metrics(repetition_rows, benchmark=PING_BENCHMARK):
     grouped = {}
     for affinity_mode, rows in repetition_rows:
         for row in rows:
-            key = (affinity_mode, row["threads"], row["actorPairs"], row["in_flight"])
+            key = (affinity_mode, row["threads"], row["actorPairs"], row[benchmark.parameter_column])
             grouped.setdefault(key, []).append(row)
 
     summary = []
@@ -123,7 +163,7 @@ def summarize_metrics(repetition_rows):
                 "affinity_mode": key[0],
                 "threads": key[1],
                 "actorPairs": key[2],
-                "in_flight": key[3],
+                benchmark.parameter_column: key[3],
                 "repetitions": len(rows),
                 "median_msgs_per_sec": statistics.median(rates),
                 "min_msgs_per_sec": min(rates),
@@ -134,12 +174,12 @@ def summarize_metrics(repetition_rows):
     return summary
 
 
-def render_summary(rows):
+def render_summary(rows, benchmark=PING_BENCHMARK):
     columns = (
         "affinity_mode",
         "threads",
         "actorPairs",
-        "in_flight",
+        benchmark.parameter_column,
         "repetitions",
         "median_msgs_per_sec",
         "min_msgs_per_sec",
@@ -162,16 +202,18 @@ def _environment(configuration):
         "ACTORSYSTEM_TEST_MODE": "manual",
         "ACTORSYSTEM_THREADS": ",".join(str(value) for value in configuration.threads),
         "ACTORSYSTEM_ACTOR_PAIRS": ",".join(str(value) for value in configuration.actor_pairs),
-        "ACTORSYSTEM_INFLIGHTS": ",".join(str(value) for value in configuration.inflights),
+        configuration.benchmark.parameter_environment: ",".join(
+            str(value) for value in configuration.parameter_values
+        ),
         "ACTORSYSTEM_DURATION": str(configuration.duration_seconds),
     }
 
 
-def _command_record(binary_path):
-    return [str(binary_path), TEST_FILTER]
+def _command_record(binary_path, benchmark):
+    return [str(binary_path), benchmark.test_filter]
 
 
-def _perf_record_command(binary_path, perf_data_path, frequency):
+def _perf_record_command(binary_path, perf_data_path, frequency, benchmark):
     return [
         "perf",
         "record",
@@ -185,7 +227,7 @@ def _perf_record_command(binary_path, perf_data_path, frequency):
         "--call-graph",
         "dwarf",
         "--",
-        *_command_record(binary_path),
+        *_command_record(binary_path, benchmark),
     ]
 
 
@@ -243,8 +285,16 @@ def _run_perf_postprocessing(perf_data_path, repetition_directory, timeout_secon
     return records
 
 
-def run_actors_core(binary, configuration, output_directory, tool_revision, work_dir_hint=None):
+def run_actors_core(
+    binary,
+    configuration,
+    output_directory,
+    tool_revision,
+    work_dir_hint=None,
+    profiler_binary_path=None,
+):
     output_directory = Path(output_directory)
+    benchmark = configuration.benchmark
     environment = _environment(configuration)
     topology = discover_topology()
     placements = [
@@ -257,13 +307,16 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
         "size": binary.size,
     }
     if configuration.perf_enabled:
-        stored_binary = output_directory / "profiler" / binary.path.name
-        atomic_copy_file(binary.path, stored_binary, mode=0o755)
-        binary_record["artifact"] = str(stored_binary.relative_to(output_directory))
+        if profiler_binary_path is None:
+            stored_binary = output_directory / "profiler" / binary.path.name
+            atomic_copy_file(binary.path, stored_binary, mode=0o755)
+        else:
+            stored_binary = Path(profiler_binary_path)
+        binary_record["artifact"] = os.path.relpath(stored_binary, output_directory)
 
     manifest = {
-        "schema_version": 2,
-        "scenario": "actors-core",
+        "schema_version": 3,
+        "benchmark": benchmark.name,
         "profile": configuration.profile,
         "status": "running",
         "started_at": _utc_now(),
@@ -274,7 +327,7 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
         "parameters": {
             "threads": list(configuration.threads),
             "actor_pairs": list(configuration.actor_pairs),
-            "inflights": list(configuration.inflights),
+            benchmark.parameter_name: list(configuration.parameter_values),
             "duration_seconds": configuration.duration_seconds,
             "repetitions": configuration.repetitions,
             "timeout_seconds": configuration.timeout_seconds,
@@ -290,7 +343,7 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
             for placement in placements
         ],
         "environment": environment,
-        "command": _command_record(binary.path),
+        "command": _command_record(binary.path, benchmark),
         "profiler": (
             {
                 "type": "perf-record",
@@ -331,9 +384,14 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
             perf_data_path = repetition_directory / "perf.data"
             if configuration.perf_enabled:
                 repetition_directory.mkdir()
-                command = _perf_record_command(binary.path, perf_data_path, configuration.perf_frequency)
+                command = _perf_record_command(
+                    binary.path,
+                    perf_data_path,
+                    configuration.perf_frequency,
+                    benchmark,
+                )
             else:
-                command = _command_record(binary.path)
+                command = _command_record(binary.path, benchmark)
             started_at = _utc_now()
             try:
                 result = run_command(
@@ -400,12 +458,15 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
                 failure = "benchmark exited with code {}".format(result.exit_code)
             else:
                 try:
-                    metrics = parse_metrics(result.stdout)
+                    metrics = parse_metrics(result.stdout, benchmark)
                     validate_metrics(metrics, configuration)
                 except BenchmarkError as error:
                     failure = str(error)
                 else:
-                    atomic_write_text(repetition_directory / "metrics.csv", render_metrics(metrics))
+                    atomic_write_text(
+                        repetition_directory / "metrics.csv",
+                        render_metrics(metrics, benchmark),
+                    )
                     run_record["metrics"] = str(relative_directory / "metrics.csv")
                     run_record["metric_rows"] = len(metrics)
                     if configuration.perf_enabled:
@@ -442,8 +503,8 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
         affinity_record["status"] = "completed"
         atomic_write_json(manifest_path, manifest)
 
-    summary = summarize_metrics(repetition_rows)
-    atomic_write_text(output_directory / "summary.csv", render_summary(summary))
+    summary = summarize_metrics(repetition_rows, benchmark)
+    atomic_write_text(output_directory / "summary.csv", render_summary(summary, benchmark))
     manifest["status"] = "completed"
     manifest["finished_at"] = _utc_now()
     manifest["summary"] = "summary.csv"

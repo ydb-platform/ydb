@@ -310,7 +310,16 @@ bool ValidateStreamingConstraintsInternal(const TExprNode::TPtr& node, TNodeMap<
         return it->second;
     }
 
-    bool isStreaming = node->GetConstraint<TStreamingConstraintNode>();
+    const bool hasStreamingConstraint = node->GetConstraint<TStreamingConstraintNode>();
+    bool hasStreamingMultiOutput = false;
+    if (const auto* multiConstraint = node->GetConstraint<TMultiConstraintNode>()) {
+        hasStreamingMultiOutput = std::ranges::find_if(
+            multiConstraint->GetItems(),
+            &TConstraintSet::GetConstraint<TStreamingConstraintNode>,
+            &TMultiConstraintNode::TMapType::value_type::second
+        ) != multiConstraint->GetItems().end();
+    }
+    bool isStreaming = hasStreamingConstraint || hasStreamingMultiOutput;
 
     // Validate that all sub-nodes are not streaming
     for (const auto& child : node->Children()) {
@@ -322,7 +331,7 @@ bool ValidateStreamingConstraintsInternal(const TExprNode::TPtr& node, TNodeMap<
         }
     }
 
-    if (node->IsCallable() && !node->GetConstraint<TStreamingConstraintNode>() && isStreaming && !hasErrors) {
+    if (node->IsCallable() && !hasStreamingConstraint && !hasStreamingMultiOutput && isStreaming && !hasErrors) {
         hasErrors = true;
         YQL_CLOG(WARN, ProviderKqp) << "Found invalid streaming processing node: " << KqpExprToPrettyString(*node, ctx);
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Unsupported callable for streaming processing: '" << node->Content() << "'"));

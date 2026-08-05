@@ -8,6 +8,14 @@ namespace NKikimr::NBsController {
 
     class TGroupGeometryInfo;
 
+    enum class ESelfHealReassignmentReason : ui8 {
+        None,
+        Faulty,
+        ToBeRemoved,
+        Decommit,
+        Maintenance,
+    };
+
     struct TSelfHealSettings {
         bool PreferLessOccupiedRack = false;
         bool WithAttentionToReplication = false;
@@ -17,15 +25,16 @@ namespace NKikimr::NBsController {
         struct TGroupContent {
             struct TVDiskInfo {
                 TVSlotId Location;
-                bool RequiresReassignment;
+                ESelfHealReassignmentReason ReassignmentReason;
                 bool UnavailabilityRisk;
                 bool Decommitted;
-                bool IsSelfHealReasonDecommit;
                 bool OnlyPhantomsRemain;
                 bool IsReady;
                 TMonotonic ReadySince;
                 NKikimrBlobStorage::EVDiskStatus VDiskStatus;
                 std::optional<TString> DiskScope;
+
+                bool RequiresReassignment() const;
             };
             ui32 Generation;
             TBlobStorageGroupType Type;

@@ -11,6 +11,36 @@
 #define YDB_LOG_THIS_FILE_COMPONENT BS_SELFHEAL
 
 namespace NKikimr::NBsController {
+    bool TEvControllerUpdateSelfHealInfo::TGroupContent::TVDiskInfo::RequiresReassignment() const {
+        return ReassignmentReason != ESelfHealReassignmentReason::None;
+    }
+
+    ESelfHealReassignmentReason TBlobStorageController::TPDiskInfo::GetSelfHealReassignmentReason() const {
+        if (Status == NKikimrBlobStorage::EDriveStatus::FAULTY) {
+            return ESelfHealReassignmentReason::Faulty;
+        } else if (Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED) {
+            return ESelfHealReassignmentReason::ToBeRemoved;
+        } else if (DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT) {
+            return ESelfHealReassignmentReason::Decommit;
+        } else if (MaintenanceStatus == NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED) {
+            return ESelfHealReassignmentReason::Maintenance;
+        } else {
+            return ESelfHealReassignmentReason::None;
+        }
+    }
+
+    bool TBlobStorageController::TPDiskInfo::ShouldBeSettledBySelfHeal() const {
+        return GetSelfHealReassignmentReason() != ESelfHealReassignmentReason::None;
+    }
+
+    bool TBlobStorageController::TPDiskInfo::IsSelfHealReasonDecommit() const {
+        return GetSelfHealReassignmentReason() == ESelfHealReassignmentReason::Decommit;
+    }
+
+    std::tuple<ESelfHealReassignmentReason, bool, bool> TBlobStorageController::TPDiskInfo::GetSelfHealStatusTuple() const {
+        return std::make_tuple(GetSelfHealReassignmentReason(), BadInTermsOfSelfHeal(), Decommitted());
+    }
+
     enum class EGroupRepairOperation {
         SelfHeal = 0,
         GroupLayoutSanitizer,
@@ -44,7 +74,7 @@ namespace NKikimr::NBsController {
         const std::optional<TVDiskID> VDiskToReplace;
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
         TBlobStorageGroupInfo::TGroupVDisks FailedGroupDisks;
-        const bool IsSelfHealReasonDecommit;
+        const ESelfHealReassignmentReason ReassignmentReason;
         const bool IgnoreDegradedGroupsChecks;
         const bool DonorMode;
         const bool PreferLessOccupiedRack;
@@ -52,19 +82,20 @@ namespace NKikimr::NBsController {
         THashSet<TVDiskID> PendingVDisks;
         THashMap<TActorId, TVDiskID> ActorToDiskMap;
         THashMap<TNodeId, TVector<TVDiskID>> NodeToDiskMap;
+        bool AllOtherVDisksOperationalAndReplicated = true;
 
     public:
         TReassignerActor(TActorId controllerId, TGroupId groupId, TEvControllerUpdateSelfHealInfo::TGroupContent group,
                 std::optional<TVDiskID> vdiskToReplace, std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology,
-                bool isSelfHealReasonDecommit, bool ignoreDegradedGroupsChecks, bool donorMode, bool preferLessOccupiedRack,
-                bool withAttentionToReplication)
+                ESelfHealReassignmentReason reassignmentReason, bool ignoreDegradedGroupsChecks, bool donorMode,
+                bool preferLessOccupiedRack, bool withAttentionToReplication)
             : ControllerId(controllerId)
             , GroupId(groupId)
             , Group(std::move(group))
             , VDiskToReplace(vdiskToReplace)
             , Topology(std::move(topology))
             , FailedGroupDisks(Topology.get())
-            , IsSelfHealReasonDecommit(isSelfHealReasonDecommit)
+            , ReassignmentReason(reassignmentReason)
             , IgnoreDegradedGroupsChecks(ignoreDegradedGroupsChecks)
             , DonorMode(donorMode)
             , PreferLessOccupiedRack(preferLessOccupiedRack)
@@ -109,6 +140,7 @@ namespace NKikimr::NBsController {
             if (PendingVDisks.erase(vdiskId)) {
                 if (!diskIsOk) {
                     FailedGroupDisks |= {Topology.get(), vdiskId};
+                    AllOtherVDisksOperationalAndReplicated = false;
                 }
                 if (!PendingVDisks) {
                     ProcessResult();
@@ -159,6 +191,16 @@ namespace NKikimr::NBsController {
         }
 
         void ProcessResult() {
+            if (ReassignmentReason == ESelfHealReassignmentReason::Maintenance &&
+                    !AllOtherVDisksOperationalAndReplicated) {
+                YDB_LOG_DEBUG("Cannot perform maintenance reassignment with a non-operational or unreplicated VDisk",
+                    {"marker", "BSSH12"},
+                    {"groupId", GroupId});
+                Finish(false, 0,
+                    "Cannot perform maintenance reassignment with a non-operational or unreplicated VDisk");
+                return;
+            }
+
             auto& checker = Topology->GetQuorumChecker();
             if (!checker.CheckFailModelForGroup(FailedGroupDisks)) {
                 YDB_LOG_DEBUG("Reassigner ProcessResult quorum checker failed",
@@ -183,7 +225,7 @@ namespace NKikimr::NBsController {
                 cmd->SetConvertToDonor(DonorMode);
                 cmd->SetAllowUnusableDisks(true);
                 cmd->SetSettleOnlyOnOperationalDisks(true);
-                cmd->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
+                cmd->SetIsSelfHealReasonDecommit(ReassignmentReason == ESelfHealReassignmentReason::Decommit);
                 cmd->SetFromSelfHeal(true);
                 Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
                 return;
@@ -194,7 +236,7 @@ namespace NKikimr::NBsController {
             auto *request = record.MutableRequest();
             request->SetIgnoreGroupReserve(true);
             request->SetSettleOnlyOnOperationalDisks(true);
-            request->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
+            request->SetIsSelfHealReasonDecommit(ReassignmentReason == ESelfHealReassignmentReason::Decommit);
             if (IgnoreDegradedGroupsChecks) {
                 request->SetIgnoreDegradedGroupsChecks(IgnoreDegradedGroupsChecks);
             }
@@ -296,6 +338,13 @@ namespace NKikimr::NBsController {
             NotNeeded = 0,
             Enqueued,
             Active,
+        };
+
+        enum class EReassignmentPriority : ui8 {
+            Faulty,
+            Other,
+            Maintenance,
+            None,
         };
 
         struct TGroupRecord
@@ -407,7 +456,7 @@ namespace NKikimr::NBsController {
                     ui32 numVDisksPerFailDomain = 0;
 
                     for (const auto& [vdiskId, vdisk] : g.Content.VDisks) {
-                        hasVDisksToReassign |= vdisk.RequiresReassignment;
+                        hasVDisksToReassign |= vdisk.RequiresReassignment();
                         numFailRealms = Max<ui32>(numFailRealms, 1 + vdiskId.FailRealm);
                         numFailDomainsPerFailRealm = Max<ui32>(numFailDomainsPerFailRealm, 1 + vdiskId.FailDomain);
                         numVDisksPerFailDomain = Max<ui32>(numVDisksPerFailDomain, 1 + vdiskId.VDisk);
@@ -502,7 +551,7 @@ namespace NKikimr::NBsController {
 
                     bool allDisksAreFullyOperational = true;
                     for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
-                        if (vdisk.UnavailabilityRisk || vdisk.RequiresReassignment || !IsReady(vdisk, now)) {
+                        if (vdisk.UnavailabilityRisk || vdisk.RequiresReassignment() || !IsReady(vdisk, now)) {
                             // don't sanitize groups with non-operational or replicating disks
                             allDisksAreFullyOperational = false;
                             break;
@@ -572,8 +621,8 @@ namespace NKikimr::NBsController {
         }
 
         std::optional<TVDiskID> FindVDiskToReplace(const TEvControllerUpdateSelfHealInfo::TGroupContent& content,
-                TMonotonic now, TBlobStorageGroupInfo::TTopology *topology, bool *isSelfHealReasonDecommit,
-                bool *ignoreDegradedGroupsChecks) {
+                TMonotonic now, TBlobStorageGroupInfo::TTopology *topology,
+                ESelfHealReassignmentReason *reassignmentReason, bool *ignoreDegradedGroupsChecks) {
             // main idea of selfhealing is step-by-step healing of bad group; we can allow healing of group with more
             // than one disk missing, but we should not move next faulty disk until previous one is replicated, at least
             // partially (meaning only phantoms left)
@@ -582,8 +631,19 @@ namespace NKikimr::NBsController {
             // semi-replicated disk to prevent selfheal blocking
             TBlobStorageGroupInfo::TGroupVDisks failedByReadiness(topology);
             TBlobStorageGroupInfo::TGroupVDisks failedByUnavailabilityRisk(topology);
+            TBlobStorageGroupInfo::TGroupVDisks notFullyOperational(topology);
+            std::optional<ESelfHealReassignmentReason> preferredReassignmentReason;
             bool alreadySeenReplicatingWithPhantomsOnly = false;
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
+                if (vdisk.RequiresReassignment() && (!preferredReassignmentReason ||
+                        vdisk.ReassignmentReason < *preferredReassignmentReason)) {
+                    preferredReassignmentReason = vdisk.ReassignmentReason;
+                }
+                if (vdisk.UnavailabilityRisk || vdisk.OnlyPhantomsRemain ||
+                        vdisk.VDiskStatus != NKikimrBlobStorage::EVDiskStatus::READY || !IsReady(vdisk, now)) {
+                    notFullyOperational |= {topology, vdiskId};
+                }
+
                 bool replicatingWithPhantomsOnly = false;
                 switch (vdisk.VDiskStatus) {
                     case NKikimrBlobStorage::EVDiskStatus::REPLICATING:
@@ -611,18 +671,32 @@ namespace NKikimr::NBsController {
             const auto& checker = topology->GetQuorumChecker();
             const auto failed = failedByReadiness | failedByUnavailabilityRisk;
 
+            if (!preferredReassignmentReason) {
+                return std::nullopt;
+            }
+            const ESelfHealReassignmentReason reason = *preferredReassignmentReason;
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
-                if (vdisk.RequiresReassignment) {
-                    const auto newFailed = failed | TBlobStorageGroupInfo::TGroupVDisks(topology, vdiskId);
-                    if (!checker.CheckFailModelForGroup(newFailed)) {
-                        continue; // healing this disk would break the group
-                    } else if (checker.IsDegraded(failed) < checker.IsDegraded(newFailed)) {
-                        continue; // this group will become degraded when applying self-heal logic, skip disk
-                    }
-                    *isSelfHealReasonDecommit = vdisk.IsSelfHealReasonDecommit;
-                    *ignoreDegradedGroupsChecks = checker.IsDegraded(failedByReadiness) && *EnableSelfHealWithDegraded;
-                    return vdiskId;
+                if (vdisk.ReassignmentReason != reason) {
+                    continue;
                 }
+
+                if (reason == ESelfHealReassignmentReason::Maintenance) {
+                    const TBlobStorageGroupInfo::TGroupVDisks otherNotFullyOperational = notFullyOperational -
+                        TBlobStorageGroupInfo::TGroupVDisks(topology, vdiskId);
+                    if (otherNotFullyOperational) {
+                        continue;
+                    }
+                }
+
+                const auto newFailed = failed | TBlobStorageGroupInfo::TGroupVDisks(topology, vdiskId);
+                if (!checker.CheckFailModelForGroup(newFailed)) {
+                    continue; // healing this disk would break the group
+                } else if (checker.IsDegraded(failed) < checker.IsDegraded(newFailed)) {
+                    continue; // this group will become degraded when applying self-heal logic, skip disk
+                }
+                *reassignmentReason = reason;
+                *ignoreDegradedGroupsChecks = checker.IsDegraded(failedByReadiness) && *EnableSelfHealWithDegraded;
+                return vdiskId;
             }
 
             // no options for this group
@@ -686,8 +760,46 @@ namespace NKikimr::NBsController {
 
         void ProcessReassignQueues() {
             while (!ActiveReassignerActorId && !SelfHealReassignQueue.empty()) {
-                TGroupId groupId = SelfHealReassignQueue.front();
-                SelfHealReassignQueue.pop_front();
+                auto bestIt = SelfHealReassignQueue.begin();
+                EReassignmentPriority bestPriority = EReassignmentPriority::None;
+                for (auto it = SelfHealReassignQueue.begin(); it != SelfHealReassignQueue.end(); ++it) {
+                    const auto groupIt = Groups.find(*it);
+                    if (groupIt == Groups.end()) {
+                        continue;
+                    }
+
+                    EReassignmentPriority priority = EReassignmentPriority::None;
+                    for (const auto& [_, vdisk] : groupIt->second.Content.VDisks) {
+                        switch (vdisk.ReassignmentReason) {
+                            case ESelfHealReassignmentReason::Faulty:
+                                priority = EReassignmentPriority::Faulty;
+                                break;
+                            case ESelfHealReassignmentReason::ToBeRemoved:
+                            case ESelfHealReassignmentReason::Decommit:
+                                priority = Min(priority, EReassignmentPriority::Other);
+                                break;
+                            case ESelfHealReassignmentReason::Maintenance:
+                                priority = Min(priority, EReassignmentPriority::Maintenance);
+                                break;
+                            case ESelfHealReassignmentReason::None:
+                                break;
+                        }
+                        if (priority == EReassignmentPriority::Faulty) {
+                            break;
+                        }
+                    }
+
+                    if (priority < bestPriority) {
+                        bestPriority = priority;
+                        bestIt = it;
+                        if (bestPriority == EReassignmentPriority::Faulty) {
+                            break;
+                        }
+                    }
+                }
+
+                const TGroupId groupId = *bestIt;
+                SelfHealReassignQueue.erase(bestIt);
                 CreateReassignerActorIfNeededForSelfHeal(groupId);
             }
 
@@ -697,7 +809,7 @@ namespace NKikimr::NBsController {
                 auto it = Groups.find(groupId);
                 if (it != Groups.end()) {
                     TGroupRecord& group = it->second;
-                    CreateReassignerActor(group, std::nullopt, false, false);
+                    CreateReassignerActor(group, std::nullopt, ESelfHealReassignmentReason::None, false);
                 }
             }
         }
@@ -716,14 +828,14 @@ namespace NKikimr::NBsController {
             }
 
             // check if it is possible to move anything out
-            bool isSelfHealReasonDecommit;
+            ESelfHealReassignmentReason reassignmentReason;
             bool ignoreDegradedGroupsChecks;
             if (const std::optional<TVDiskID> vdiskId = FindVDiskToReplace(group.Content, TActivationContext::Monotonic(),
-                    group.Topology.get(), &isSelfHealReasonDecommit, &ignoreDegradedGroupsChecks)) {
+                    group.Topology.get(), &reassignmentReason, &ignoreDegradedGroupsChecks)) {
                 if (auto it = UnreassignableGroups.find(groupId); it != UnreassignableGroups.end()) {
                     UnreassignableGroups.erase(it);
                 }
-                CreateReassignerActor(group, vdiskId, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks);
+                CreateReassignerActor(group, vdiskId, reassignmentReason, ignoreDegradedGroupsChecks);
                 return true;
             } else {
                 // unable to reassign VDisk
@@ -742,7 +854,7 @@ namespace NKikimr::NBsController {
                         ss << "{";
                         ss << vdiskId;
                         ss << (IsReady(vdisk, now) ? " Ready" : " NotReady");
-                        ss << (vdisk.RequiresReassignment ? " RequiresReassignment" : "");
+                        ss << (vdisk.RequiresReassignment() ? " RequiresReassignment" : "");
                         ss << (vdisk.UnavailabilityRisk ? " UnavailabilityRisk" : "");
                         ss << (vdisk.Decommitted ? " Decommitted" : "");
                         ss << "}";
@@ -760,13 +872,14 @@ namespace NKikimr::NBsController {
         }
 
 
-        void CreateReassignerActor(TGroupRecord& group, std::optional<TVDiskID> vdiskId, bool isSelfHealReasonDecommit,
-                bool ignoreDegradedGroupsChecks) {
+        void CreateReassignerActor(TGroupRecord& group, std::optional<TVDiskID> vdiskId,
+                ESelfHealReassignmentReason reassignmentReason, bool ignoreDegradedGroupsChecks) {
             group.ReassignStatus = EReassignStatus::Active;
             Y_ABORT_UNLESS(!ActiveReassignerActorId);
             ActiveReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
-                    vdiskId, group.Topology, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks, DonorMode,
-                    SelfHealSettings.PreferLessOccupiedRack, SelfHealSettings.WithAttentionToReplication));
+                    vdiskId, group.Topology, reassignmentReason, ignoreDegradedGroupsChecks, DonorMode,
+                    SelfHealSettings.PreferLessOccupiedRack,
+                    SelfHealSettings.WithAttentionToReplication));
         }
 
         void EnqueueReassign(TGroupRecord& group, EGroupRepairOperation operation) {
@@ -896,7 +1009,7 @@ namespace NKikimr::NBsController {
                                         for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
                                             TABLED() {
                                                 const auto& l = vdisk.Location;
-                                                if (vdisk.RequiresReassignment) {
+                                                if (vdisk.RequiresReassignment()) {
                                                     out << "<strong>";
                                                 }
                                                 if (vdisk.UnavailabilityRisk) {
@@ -906,7 +1019,7 @@ namespace NKikimr::NBsController {
                                                 if (vdisk.UnavailabilityRisk) {
                                                     out << "</font>";
                                                 }
-                                                if (vdisk.RequiresReassignment) {
+                                                if (vdisk.RequiresReassignment()) {
                                                     out << "</strong>";
                                                 }
                                             }
@@ -1004,7 +1117,7 @@ namespace NKikimr::NBsController {
                                         for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
                                             TABLED() {
                                                 const auto& l = vdisk.Location;
-                                                if (vdisk.RequiresReassignment) {
+                                                if (vdisk.RequiresReassignment()) {
                                                     out << "<strong>";
                                                 }
                                                 if (vdisk.UnavailabilityRisk) {
@@ -1014,7 +1127,7 @@ namespace NKikimr::NBsController {
                                                 if (vdisk.UnavailabilityRisk) {
                                                     out << "</font>";
                                                 }
-                                                if (vdisk.RequiresReassignment) {
+                                                if (vdisk.RequiresReassignment()) {
                                                     out << "</strong>";
                                                 }
                                             }
@@ -1089,10 +1202,9 @@ namespace NKikimr::NBsController {
             for (const TVSlotInfo *slot : groupInfo->VDisksInGroup) {
                 group->VDisks[slot->GetVDiskId()] = {
                     .Location = slot->VSlotId,
-                    .RequiresReassignment = slot->PDisk->ShouldBeSettledBySelfHeal(),
+                    .ReassignmentReason = slot->PDisk->GetSelfHealReassignmentReason(),
                     .UnavailabilityRisk = slot->PDisk->BadInTermsOfSelfHeal(),
                     .Decommitted =  slot->PDisk->Decommitted(),
-                    .IsSelfHealReasonDecommit = slot->PDisk->IsSelfHealReasonDecommit(),
                     .OnlyPhantomsRemain = slot->IsReplicatingWithPhantomsOnly(),
                     .IsReady = slot->IsReady,
                     .ReadySince = TMonotonic::Zero(),
@@ -1139,16 +1251,17 @@ namespace NKikimr::NBsController {
                     }
 
                     vdiskInfo = {
-                        vslotId,
-                        pdiskInfo ? pdiskInfo->ShouldBeSettledBySelfHeal() : false,
-                        pdiskInfo ? pdiskInfo->BadInTermsOfSelfHeal() : false,
-                        pdiskInfo ? pdiskInfo->Decommitted() : false,
-                        pdiskInfo ? pdiskInfo->IsSelfHealReasonDecommit() : false,
-                        info.IsReplicatingWithPhantomsOnly(), /* OnlyPhantomsRemain */
-                        true, /* IsReady; decision is based on ReadySince */
-                        info.ReadySince,
-                        info.VDiskStatus.value_or(NKikimrBlobStorage::EVDiskStatus::ERROR),
-                        pdiskInfo ? pdiskInfo->DiskScope : std::nullopt,
+                        .Location = vslotId,
+                        .ReassignmentReason = pdiskInfo
+                            ? pdiskInfo->GetSelfHealReassignmentReason()
+                            : ESelfHealReassignmentReason::None,
+                        .UnavailabilityRisk = pdiskInfo ? pdiskInfo->BadInTermsOfSelfHeal() : false,
+                        .Decommitted = pdiskInfo ? pdiskInfo->Decommitted() : false,
+                        .OnlyPhantomsRemain = info.IsReplicatingWithPhantomsOnly(),
+                        .IsReady = true, /* decision is based on ReadySince */
+                        .ReadySince = info.ReadySince,
+                        .VDiskStatus = info.VDiskStatus.value_or(NKikimrBlobStorage::EVDiskStatus::ERROR),
+                        .DiskScope = pdiskInfo ? pdiskInfo->DiskScope : std::nullopt,
                     };
                 }
             }

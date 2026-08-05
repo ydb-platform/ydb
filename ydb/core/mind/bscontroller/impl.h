@@ -529,18 +529,11 @@ public:
                 Metrics.GetState() == NKikimrBlobStorage::TPDiskState::Normal);
         }
 
-        bool ShouldBeSettledBySelfHeal() const {
-            return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
-                || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
-                || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT
-                || MaintenanceStatus == NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
-        }
+        ESelfHealReassignmentReason GetSelfHealReassignmentReason() const;
 
-        bool IsSelfHealReasonDecommit() const {
-            return DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT &&
-                Status != NKikimrBlobStorage::EDriveStatus::FAULTY &&
-                Status != NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED;
-        }
+        bool ShouldBeSettledBySelfHeal() const;
+
+        bool IsSelfHealReasonDecommit() const;
 
         bool UsableInTermsOfDecommission(bool isSelfHealReasonDecommit) const {
             return DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE // acceptable in any case
@@ -552,9 +545,7 @@ public:
                 || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
         }
 
-        auto GetSelfHealStatusTuple() const {
-            return std::make_tuple(ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal(), Decommitted(), IsSelfHealReasonDecommit());
-        }
+        std::tuple<ESelfHealReassignmentReason, bool, bool> GetSelfHealStatusTuple() const;
 
         bool AcceptsNewSlots() const {
             return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE

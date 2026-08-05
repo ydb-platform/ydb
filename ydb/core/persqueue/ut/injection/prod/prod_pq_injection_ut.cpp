@@ -30,11 +30,18 @@ constexpr TDuration kEdgeTimeout = TDuration::Seconds(2);
 constexpr ui32 kSeedMsgCount = 2;
 constexpr ui32 kTxWriteMsgCount = 2;
 constexpr ui32 kPqTabletCount = 4;
+constexpr ui32 kAlterLifetimeSeconds = 7200;
+constexpr ui32 kCreateLifetimeSeconds = 3600;
 constexpr const char* kTopicName = "TopicTx";
 constexpr const char* kTopicPath = "/MyRoot/DirA/TopicTx";
 constexpr const char* kConsumer = "user";
 constexpr const char* kTxWriteOwner = "prod-tx-write-owner";
 constexpr const char* kTxWriteSourceId = "prod-tx-src";
+
+// Half-range boundary used by schemeshard split UTs (1/2 of ui128 key space).
+const unsigned char kSplitBoundHalf[] = {
+    0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE};
 
 class TProdPqRetry : public yexception {
 };
@@ -44,15 +51,40 @@ struct TPartitionRef {
     ui64 TabletId = 0;
 };
 
-TString TopicCreateScheme(ui32 partitions, ui32 partitionsPerTablet = 1) {
-    return TStringBuilder()
-        << "Name: \"" << kTopicName << "\" "
-        << "TotalGroupCount: " << partitions << " "
-        << "PartitionPerTablet: " << partitionsPerTablet << " "
-        << "PQTabletConfig: {"
-        << "  PartitionConfig { LifetimeSeconds: 3600 }"
-        << "  Consumers { Name: \"" << kConsumer << "\" Important: true }"
-        << "}";
+TString TopicCreateScheme(
+    ui32 partitions,
+    ui32 partitionsPerTablet = 1,
+    ui32 lifetimeSeconds = kCreateLifetimeSeconds,
+    bool canSplitAndMerge = false)
+{
+    TStringBuilder sb;
+    sb << "Name: \"" << kTopicName << "\" "
+       << "TotalGroupCount: " << partitions << " "
+       << "PartitionPerTablet: " << partitionsPerTablet << " "
+       << "PQTabletConfig: {"
+       << "  PartitionConfig { LifetimeSeconds: " << lifetimeSeconds << " }"
+       << "  Consumers { Name: \"" << kConsumer << "\" Important: true }";
+    if (canSplitAndMerge) {
+        sb << "  PartitionStrategy { PartitionStrategyType: CAN_SPLIT_AND_MERGE }";
+    }
+    sb << "}";
+    return sb;
+}
+
+ui32 GetTopicLifetimeSeconds(TTestActorRuntime& runtime) {
+    return DescribePath(runtime, kTopicPath)
+        .GetPathDescription()
+        .GetPersQueueGroup()
+        .GetPQTabletConfig()
+        .GetPartitionConfig()
+        .GetLifetimeSeconds();
+}
+
+ui32 GetTopicPartitionCount(TTestActorRuntime& runtime) {
+    return DescribePath(runtime, kTopicPath, /*returnPartitioning=*/true)
+        .GetPathDescription()
+        .GetPersQueueGroup()
+        .PartitionsSize();
 }
 
 TVector<TPartitionRef> DescribePartitions(TTestActorRuntime& runtime) {
@@ -581,11 +613,26 @@ TTestEnvOptions MakeEnvOptions() {
 }
 
 // Data-plane reboot targets: Hive-owned PQ tablets + FakeCoordinator (plan deliverer).
-// FakeHive assigns PQ ids at FakeHiveTablets..+3; balancer follows at +4.
-TVector<ui64> DataPlaneRebootTablets() {
+// FakeHive assigns PQ ids at FakeHiveTablets..+(N-1); balancer follows.
+TVector<ui64> DataPlaneRebootTablets(ui32 pqTabletCount = kPqTabletCount) {
     TVector<ui64> ids;
-    ids.reserve(kPqTabletCount + 1);
-    for (ui32 i = 0; i < kPqTabletCount; ++i) {
+    ids.reserve(pqTabletCount + 1);
+    for (ui32 i = 0; i < pqTabletCount; ++i) {
+        ids.push_back(TTestTxConfig::FakeHiveTablets + i);
+    }
+    ids.push_back(TTestTxConfig::Coordinator);
+    return ids;
+}
+
+// Control-plane: PQ + FakeCoordinator.
+// SchemeShard is intentionally not in the reboot vector here: SS-only reboots are
+// already covered by schemeshard/ut_pq_reboots, and rebooting SS mid-alter under
+// RunTestWithReboots livelocks the runtime (event storm past SetScheduledLimit).
+// Injection here focuses on PQ config/split propose + plan delivery.
+TVector<ui64> ControlPlaneRebootTablets(ui32 pqTabletCount = kPqTabletCount) {
+    TVector<ui64> ids;
+    ids.reserve(pqTabletCount + 1);
+    for (ui32 i = 0; i < pqTabletCount; ++i) {
         ids.push_back(TTestTxConfig::FakeHiveTablets + i);
     }
     ids.push_back(TTestTxConfig::Coordinator);
@@ -599,14 +646,18 @@ struct TProdPqEnv {
     TActorId Edge;
     TVector<TPartitionRef> Parts;
     THashSet<ui64> PqTabletIds;
+    ui32 ExpectedPqTabletCount = kPqTabletCount;
 
     void Prepare(
         const TString& dispatchName,
         std::function<void(TTestActorRuntime&)> setup,
         bool& activeZone,
-        bool seedMessages = true)
+        bool seedMessages = true,
+        ui32 partitions = kPqTabletCount,
+        bool canSplitAndMerge = false)
     {
         activeZone = false;
+        ExpectedPqTabletCount = partitions;
         Cerr << Endl
              << "====== " << TInstant::Now()
              << " ===== PROD_PQ RUN: " << dispatchName
@@ -621,14 +672,14 @@ struct TProdPqEnv {
         Edge = Runtime->AllocateEdgeActor();
 
         // Topic create (+ optional seed) stay outside the reboot/pipe-reset zone.
-        // One partition per tablet → kPqTabletCount real PQ tablets + RS mesh among them.
+        // One partition per tablet → N real PQ tablets (+ RS mesh when N>1).
         TestCreatePQGroup(
             *Runtime, ++TxId, "/MyRoot/DirA",
-            TopicCreateScheme(/*partitions=*/kPqTabletCount, /*perTablet=*/1));
+            TopicCreateScheme(partitions, /*perTablet=*/1, kCreateLifetimeSeconds, canSplitAndMerge));
         Env->TestWaitNotification(*Runtime, TxId);
         Parts = DescribePartitions(*Runtime);
         PqTabletIds = UniqueTabletIds(Parts);
-        UNIT_ASSERT_VALUES_EQUAL(PqTabletIds.size(), kPqTabletCount);
+        UNIT_ASSERT_VALUES_EQUAL(PqTabletIds.size(), ExpectedPqTabletCount);
         if (seedMessages) {
             SeedAllPartitions(*Runtime, Parts);
         }
@@ -844,6 +895,132 @@ void RunDataPlaneInjection(
         });
 }
 
+void AlterTopicLifetime(TProdPqEnv& env, ui32 lifetimeSeconds) {
+    TestAlterPQGroup(
+        *env.Runtime, ++env.TxId, "/MyRoot/DirA",
+        TStringBuilder()
+            << "Name: \"" << kTopicName << "\" "
+            << "PQTabletConfig: {"
+            << "  PartitionConfig { LifetimeSeconds: " << lifetimeSeconds << " }"
+            << "  Consumers { Name: \"" << kConsumer << "\" Important: true }"
+            << "}");
+    env.Env->TestWaitNotification(*env.Runtime, env.TxId);
+}
+
+void SplitTopicPartition(TProdPqEnv& env, ui32 partitionId, const TString& boundary) {
+    NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+    scheme.SetName(kTopicName);
+    scheme.MutablePQTabletConfig()->MutablePartitionConfig();
+    auto* split = scheme.AddSplit();
+    split->SetPartition(partitionId);
+    split->SetSplitBoundary(boundary);
+
+    TStringBuilder sb;
+    sb << scheme;
+    const TString schemeText = sb.substr(1, sb.size() - 2);
+    Cerr << "====== PROD_PQ split scheme: " << schemeText << " ======" << Endl;
+    TestAlterPQGroup(*env.Runtime, ++env.TxId, "/MyRoot/DirA", schemeText);
+    env.Env->TestWaitNotification(*env.Runtime, env.TxId);
+}
+
+// Active zone: AlterPQGroup → wait notification (SS→PQ config tx through FakeCoordinator).
+void ControlPlaneAlterScenario(TProdPqEnv& env, bool& activeZone) {
+    activeZone = false;
+    UNIT_ASSERT_VALUES_EQUAL(GetTopicLifetimeSeconds(*env.Runtime), kCreateLifetimeSeconds);
+
+    Cerr << "====== PROD_PQ alter enter activeZone ======" << Endl;
+    activeZone = true;
+    AlterTopicLifetime(env, kAlterLifetimeSeconds);
+    activeZone = false;
+
+    UNIT_ASSERT_VALUES_EQUAL(GetTopicLifetimeSeconds(*env.Runtime), kAlterLifetimeSeconds);
+    TestDescribeResult(
+        DescribePath(*env.Runtime, kTopicPath),
+        {NLs::Finished, NLs::RetentionPeriod(TDuration::Seconds(kAlterLifetimeSeconds))});
+    Cerr << "====== PROD_PQ alter COMPLETE ok ======" << Endl;
+}
+
+// Active zone: split partition 0 → wait notification.
+void ControlPlaneSplitScenario(TProdPqEnv& env, bool& activeZone) {
+    activeZone = false;
+    UNIT_ASSERT_VALUES_EQUAL(GetTopicPartitionCount(*env.Runtime), 1u);
+
+    const TString boundary(reinterpret_cast<const char*>(kSplitBoundHalf), sizeof(kSplitBoundHalf));
+    Cerr << "====== PROD_PQ split enter activeZone ======" << Endl;
+    activeZone = true;
+    SplitTopicPartition(env, /*partitionId=*/0, boundary);
+    activeZone = false;
+
+    const ui32 partsAfter = GetTopicPartitionCount(*env.Runtime);
+    UNIT_ASSERT_C(partsAfter >= 3, "expected parent+2 children, got=" << partsAfter);
+    Cerr << "====== PROD_PQ split COMPLETE ok partitions=" << partsAfter << " ======" << Endl;
+}
+
+// DROP mid distributed offset-commit (after PlanStep → WAIT_RS / commit path).
+// Success: topic gone, PQ tablets deleted, no hang.
+void ControlPlaneDropMidCommitScenario(TProdPqEnv& env, bool& activeZone) {
+    activeZone = false;
+    DrainStaleProposeResults(*env.Runtime, env.Edge);
+
+    const ui64 commitTxId = 9600;
+    const auto tablets = env.PqTabletIds;
+    TVector<ui64> tabletIds(tablets.begin(), tablets.end());
+
+    Cerr << "====== PROD_PQ drop-mid prepare propose txId=" << commitTxId << " ======" << Endl;
+    for (const auto& part : env.Parts) {
+        ProposeOffsetCommit(
+            *env.Runtime, env.Edge, commitTxId, part, tablets,
+            /*begin=*/0, /*end=*/kSeedMsgCount);
+    }
+    WaitPreparedFromTablets(*env.Runtime, env.Edge, commitTxId, tablets.size());
+
+    Cerr << "====== PROD_PQ drop-mid enter activeZone (plan+drop) ======" << Endl;
+    activeZone = true;
+    PlanViaFakeCoordinator(*env.Runtime, env.Edge, commitTxId, tablets);
+    // Best-effort: allow plan/RS to start before DROP kills the path.
+    try {
+        env.Runtime->SimulateSleep(TDuration::MilliSeconds(10));
+    } catch (...) {
+    }
+    TestDropPQGroup(*env.Runtime, ++env.TxId, "/MyRoot/DirA", kTopicName);
+    env.Env->TestWaitNotification(*env.Runtime, env.TxId);
+    activeZone = false;
+
+    env.Env->TestWaitTabletDeletion(*env.Runtime, tabletIds);
+    TestDescribeResult(DescribePath(*env.Runtime, kTopicPath), {NLs::PathNotExist});
+    Cerr << "====== PROD_PQ drop-mid COMPLETE ok ======" << Endl;
+}
+
+void RunControlPlaneInjection(
+    std::function<void(
+        const TVector<ui64>&,
+        std::function<TTestActorRuntime::TEventFilter()>,
+        std::function<void(const TString&, std::function<void(TTestActorRuntime&)>, bool&)>)> runner,
+    std::function<void(TProdPqEnv&, bool&)> scenario,
+    ui32 partitions,
+    bool seedMessages,
+    bool canSplitAndMerge = false,
+    const std::unordered_set<TString>& extraSkipEventTypes = {})
+{
+    TInitialEventsFilter filter;
+    runner(
+        ControlPlaneRebootTablets(partitions),
+        [&]() {
+            return filter.Prepare(
+                {TabletPipe, NPDisk, KeyValue, PQ},
+                extraSkipEventTypes);
+        },
+        [&](const TString& dispatchName,
+            std::function<void(TTestActorRuntime&)> setup,
+            bool& activeZone) {
+            TProdPqEnv env;
+            activeZone = false;
+            env.Prepare(
+                dispatchName, setup, activeZone, seedMessages, partitions, canSplitAndMerge);
+            scenario(env, activeZone);
+        });
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TProdPqInjectionTests) {
@@ -973,20 +1150,164 @@ Y_UNIT_TEST(DistributedTopicWriteWithPipeResets) {
         /*seedMessages=*/false);
 }
 
-#if 0 // control plane: enable after data-plane RunTestWithReboots approach is stable
-Y_UNIT_TEST(AlterTopicConfigWithSchemeShardReboot) {
-    // TODO: activeZone from SS→PQ config propose until tx deleted;
-    // reboot targets: PQ + SchemeShard + FakeCoordinator.
+// --- Control plane: SS schema txs under PQ+SchemeShard+Coordinator injection ---
+
+Y_UNIT_TEST(SmokeAlterTopicConfigViaSchemeShard) {
+    TTestBasicRuntime runtime;
+    runtime.SetScheduledLimit(50'000);
+    TTestEnv env(runtime, MakeEnvOptions());
+    env.SetupLogging(runtime);
+    ui64 txId = 1000;
+    TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
+    TestCreatePQGroup(
+        runtime, ++txId, "/MyRoot/DirA",
+        TopicCreateScheme(/*partitions=*/2, /*perTablet=*/1));
+    env.TestWaitNotification(runtime, txId);
+    UNIT_ASSERT_VALUES_EQUAL(GetTopicLifetimeSeconds(runtime), kCreateLifetimeSeconds);
+
+    TestAlterPQGroup(
+        runtime, ++txId, "/MyRoot/DirA",
+        TStringBuilder()
+            << "Name: \"" << kTopicName << "\" "
+            << "PQTabletConfig: {"
+            << "  PartitionConfig { LifetimeSeconds: " << kAlterLifetimeSeconds << " }"
+            << "  Consumers { Name: \"" << kConsumer << "\" Important: true }"
+            << "}");
+    env.TestWaitNotification(runtime, txId);
+    TestDescribeResult(
+        DescribePath(runtime, kTopicPath),
+        {NLs::Finished, NLs::RetentionPeriod(TDuration::Seconds(kAlterLifetimeSeconds))});
 }
 
-Y_UNIT_TEST(SplitPartitionOnProdLikeEnv) {
-    // TODO: same control-plane discipline.
+Y_UNIT_TEST(AlterTopicConfigWithTabletReboots) {
+    RunControlPlaneInjection(
+        [](const auto& tabletIds, auto filterFactory, auto testFunc) {
+            RunTestWithReboots(tabletIds, filterFactory, testFunc);
+        },
+        ControlPlaneAlterScenario,
+        /*partitions=*/2,
+        /*seedMessages=*/false);
 }
 
-Y_UNIT_TEST(DropTopicMidDistributedCommit) {
-    // TODO: DROP mid WAIT_RS → Dead path.
+Y_UNIT_TEST(AlterTopicConfigWithPipeResets) {
+    RunControlPlaneInjection(
+        [](const auto& tabletIds, auto filterFactory, auto testFunc) {
+            RunTestWithPipeResets(tabletIds, filterFactory, testFunc);
+        },
+        ControlPlaneAlterScenario,
+        /*partitions=*/2,
+        /*seedMessages=*/false);
 }
-#endif
+
+Y_UNIT_TEST(SmokeSplitPartitionViaSchemeShard) {
+    TTestBasicRuntime runtime;
+    runtime.SetScheduledLimit(50'000);
+    TTestEnv env(runtime, MakeEnvOptions());
+    env.SetupLogging(runtime);
+    ui64 txId = 1000;
+    TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
+    TestCreatePQGroup(
+        runtime, ++txId, "/MyRoot/DirA",
+        TopicCreateScheme(
+            /*partitions=*/1, /*perTablet=*/1, kCreateLifetimeSeconds, /*canSplit=*/true));
+    env.TestWaitNotification(runtime, txId);
+    UNIT_ASSERT_VALUES_EQUAL(GetTopicPartitionCount(runtime), 1u);
+
+    NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+    scheme.SetName(kTopicName);
+    scheme.MutablePQTabletConfig()->MutablePartitionConfig();
+    auto* split = scheme.AddSplit();
+    split->SetPartition(0);
+    split->SetSplitBoundary(
+        TString(reinterpret_cast<const char*>(kSplitBoundHalf), sizeof(kSplitBoundHalf)));
+    TStringBuilder sb;
+    sb << scheme;
+    TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA", sb.substr(1, sb.size() - 2));
+    env.TestWaitNotification(runtime, txId);
+
+    const ui32 partsAfter = GetTopicPartitionCount(runtime);
+    UNIT_ASSERT_C(partsAfter >= 3, "expected parent+2 children, got=" << partsAfter);
+}
+
+Y_UNIT_TEST(SplitPartitionWithTabletReboots) {
+    RunControlPlaneInjection(
+        [](const auto& tabletIds, auto filterFactory, auto testFunc) {
+            RunTestWithReboots(tabletIds, filterFactory, testFunc);
+        },
+        ControlPlaneSplitScenario,
+        /*partitions=*/1,
+        /*seedMessages=*/false,
+        /*canSplitAndMerge=*/true);
+}
+
+Y_UNIT_TEST(SplitPartitionWithPipeResets) {
+    RunControlPlaneInjection(
+        [](const auto& tabletIds, auto filterFactory, auto testFunc) {
+            RunTestWithPipeResets(tabletIds, filterFactory, testFunc);
+        },
+        ControlPlaneSplitScenario,
+        /*partitions=*/1,
+        /*seedMessages=*/false,
+        /*canSplitAndMerge=*/true);
+}
+
+Y_UNIT_TEST(SmokeDropTopicMidDistributedCommit) {
+    TTestBasicRuntime runtime;
+    runtime.SetScheduledLimit(50'000);
+    TTestEnv env(runtime, MakeEnvOptions());
+    env.SetupLogging(runtime);
+    ui64 txId = 1000;
+    TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
+    TestCreatePQGroup(
+        runtime, ++txId, "/MyRoot/DirA",
+        TopicCreateScheme(/*partitions=*/kPqTabletCount, /*perTablet=*/1));
+    env.TestWaitNotification(runtime, txId);
+    auto parts = DescribePartitions(runtime);
+    SeedAllPartitions(runtime, parts);
+    const auto tablets = UniqueTabletIds(parts);
+    TVector<ui64> tabletIds(tablets.begin(), tablets.end());
+
+    const TActorId edge = runtime.AllocateEdgeActor();
+    const ui64 commitTxId = 9600;
+    for (const auto& part : parts) {
+        ProposeOffsetCommit(runtime, edge, commitTxId, part, tablets, 0, kSeedMsgCount);
+    }
+    WaitPreparedFromTablets(runtime, edge, commitTxId, tablets.size());
+    PlanViaFakeCoordinator(runtime, edge, commitTxId, tablets);
+    try {
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+    } catch (...) {
+    }
+    TestDropPQGroup(runtime, ++txId, "/MyRoot/DirA", kTopicName);
+    env.TestWaitNotification(runtime, txId);
+    env.TestWaitTabletDeletion(runtime, tabletIds);
+    TestDescribeResult(DescribePath(runtime, kTopicPath), {NLs::PathNotExist});
+}
+
+// DROP mid commit under PQ reboots only (Coordinator reboot mid DROP livelocks the event loop).
+// Not under pipe-reset matrix — peer removal / Dead path, not transient pipe breaks.
+Y_UNIT_TEST(DropTopicMidDistributedCommitWithTabletReboots) {
+    TInitialEventsFilter filter;
+    TVector<ui64> pqOnly;
+    for (ui32 i = 0; i < kPqTabletCount; ++i) {
+        pqOnly.push_back(TTestTxConfig::FakeHiveTablets + i);
+    }
+    RunTestWithReboots(
+        pqOnly,
+        [&]() {
+            return filter.Prepare({TabletPipe, NPDisk, KeyValue, PQ});
+        },
+        [&](const TString& dispatchName,
+            std::function<void(TTestActorRuntime&)> setup,
+            bool& activeZone) {
+            TProdPqEnv env;
+            activeZone = false;
+            env.Prepare(
+                dispatchName, setup, activeZone,
+                /*seedMessages=*/true, kPqTabletCount);
+            ControlPlaneDropMidCommitScenario(env, activeZone);
+        });
+}
 
 } // Y_UNIT_TEST_SUITE(TProdPqInjectionTests)
 

@@ -84,10 +84,10 @@ struct TStoragePoolInfo {
     bool AcquireAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId);
     bool ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId);
     TStorageGroupInfo& GetStorageGroup(TStorageGroupId groupId);
-    void UpdateStorageGroup(TStorageGroupId groupId, const TEvControllerSelectGroupsResult::TGroupParameters& groupParameters);
+    void UpdateStorageGroup(TStorageGroupId groupId, const TGroupMetrics::TGroupParameters& groupParameters);
     void DeleteStorageGroup(TStorageGroupId groupId);
     // Guarantees to first call filter on all groups, then call calculateUsage on ones that passed the filter
-    const TEvControllerSelectGroupsResult::TGroupParameters* FindFreeAllocationUnit(std::function<bool(const TStorageGroupInfo&)> filter,
+    const TGroupMetrics::TGroupParameters* FindFreeAllocationUnit(std::function<bool(const TStorageGroupInfo&)> filter,
                                                                                     std::function<double(const TStorageGroupInfo*)> calculateUsage = [](const TStorageGroupInfo* group) {
                                                                                         return group->GetUsage();
                                                                                     });

@@ -6,6 +6,7 @@
 #include "timer_actor.h"
 #include "events.h"
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 struct TEnvironmentSetup {
     std::unique_ptr<TTestActorSystem> Runtime;

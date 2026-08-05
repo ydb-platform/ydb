@@ -520,9 +520,9 @@ void THive::Handle(TEvHive::TEvBootTablet::TPtr& ev) {
     }
 }
 
-TVector<TTabletId> THive::UpdateStoragePools(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters>& groups) {
+TVector<TTabletId> THive::UpdateStoragePools(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TGroupMetrics::TGroupParameters>& groups) {
     TVector<TTabletId> tabletsToUpdate;
-    std::unordered_map<TString, std::vector<const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters*>> poolToGroup;
+    std::unordered_map<TString, std::vector<const NKikimrBlobStorage::TGroupMetrics::TGroupParameters*>> poolToGroup;
     for (const auto& gp : groups) {
         poolToGroup[gp.GetStoragePoolName()].emplace_back(&gp);
     }
@@ -530,7 +530,7 @@ TVector<TTabletId> THive::UpdateStoragePools(const google::protobuf::RepeatedPtr
         std::unordered_set<TStorageGroupId> groups;
         TStoragePoolInfo& storagePool = GetStoragePool(poolName);
         std::transform(storagePool.Groups.begin(), storagePool.Groups.end(), std::inserter(groups, groups.end()), [](const auto& pr) { return pr.first; });
-        for (const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* group : groupParams) {
+        for (const NKikimrBlobStorage::TGroupMetrics::TGroupParameters* group : groupParams) {
             TStorageGroupId groupId = group->GetGroupID();
             groups.erase(groupId);
             storagePool.UpdateStorageGroup(groupId, *group);
@@ -1230,7 +1230,7 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
         }
         auto forcedGroupsSize = record.ForcedGroupIDsSize();
         if (forcedGroupsSize > 0) {
-            TVector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters> groups;
+            TVector<NKikimrBlobStorage::TGroupMetrics::TGroupParameters> groups;
             tablet->ChannelProfileNewGroup = channelProfileNewGroup;
             groups.resize(forcedGroupsSize);
             for (ui32 i = 0; i < forcedGroupsSize; ++i) {

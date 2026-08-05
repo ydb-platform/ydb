@@ -124,6 +124,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestListQueues
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationCompatibility_TablesFormat0_DlqApis
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationFinished_DoesNotServePreFinishedTableMessages
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationFinished_FifoSendReceiveDelete
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationFinished_TablesFormat1_MessagingApis
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMoveMessagesToDLQ
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestPurgeQueue
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestPurgeQueue_TableImplementation
@@ -152,6 +153,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSetQueueAttributes
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSetQueueAttributes_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTagQueue
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTagQueueMultipleQueriesInflight
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTopicMissing_Compatibility_ReceivePurgeGetAttributes_DoNotLeakPath
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTopicMissing_ReceivePurgeGetAttributes_DoNotLeakPath
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestUntagQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_MessageGroupId
@@ -780,6 +782,7 @@ ydb/tests/compatibility/workloads test_statistics.py.TestAnalyzeRollingUpdate.te
 ydb/tests/datashard/set_column_constraint/functional py3test.[test_set_not_null.py */*] chunk
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Datetime64]
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Decimal(35,10)]
+ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Int16]
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[JsonDocument]
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Timestamp64]
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Uint16]

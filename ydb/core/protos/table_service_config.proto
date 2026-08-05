@@ -65,7 +65,6 @@ message TTableServiceConfig {
 
         optional uint64 KqpLevelCacheMaxSizeBytes = 32 [default = 0];
         optional uint64 KqpLevelCacheIncreaseBatchSizeBytes = 33 [default = 33554432];
-
         // Bind the compute actor memory quota to the memory hungry operators (RFC dq_memory_quota_20), so that
         // DqHashCombine / DqHashAggregate / DqBlockHashJoin can request memory before growing, read a numeric
         // memory availability instead of the allocator yellow zone and give memory back explicitly.
@@ -90,6 +89,7 @@ message TTableServiceConfig {
         // RM/ArenaBurstGrows. The free part counts against the kqp queue limit like the usage.
         optional uint64 MemoryArenaMinFreeSize = 37 [default = 33554432];   // 32 MiB
         optional uint64 MemoryArenaMaxFreeSize = 38 [default = 134217728];  // 128 MiB
+        optional uint64 VectorIndexHnswCacheMaxSize = 39 [default = 0]; // bytes, 0 is unlimited
     }
 
     message TSpillingServiceConfig {

@@ -20,9 +20,7 @@ namespace {
 
 using TDqJoinImplRenames = TDqRenames<ESide>;
 
-// Must match TDqProgramBuilder::DqBlockHashJoin.
 constexpr ui32 BaseInputs = 8;
-constexpr ui32 TotalInputs = BaseInputs + JoinFilterInputs;
 
 struct TDqBlockJoinContext {
     TSides<TVector<TBlockType*>> InputTypes;
@@ -302,7 +300,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
 } // namespace
 
 IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == TotalInputs, "Expected " << TotalInputs << " args");
+    MKQL_ENSURE(callable.GetInputsCount() >= BaseInputs, "Expected at least " << BaseInputs << " args");
     TDqBlockJoinContext meta;
 
     const auto joinType = callable.GetType()->GetReturnType();

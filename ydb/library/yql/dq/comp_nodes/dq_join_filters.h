@@ -41,6 +41,13 @@ struct TJoinFilters {
 inline constexpr ui32 JoinFilterInputs = 5;
 
 inline TJoinFilters ParseJoinFilters(const TComputationNodeFactoryContext& ctx, TCallable& callable, ui32 firstInput) {
+    if (callable.GetInputsCount() == firstInput) {
+        return {};
+    }
+    MKQL_ENSURE(callable.GetInputsCount() == firstInput + JoinFilterInputs,
+                "Expected " << firstInput << " or " << firstInput + JoinFilterInputs << " args, got "
+                            << callable.GetInputsCount());
+
     const auto locateArgs = [&](ui32 input, TComputationExternalNodePtrVector& args) {
         const auto* tuple = AS_VALUE(TTupleLiteral, callable.GetInput(input));
         args.reserve(tuple->GetValuesCount());

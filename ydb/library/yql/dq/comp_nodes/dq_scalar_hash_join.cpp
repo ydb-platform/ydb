@@ -16,9 +16,7 @@ namespace {
 
 using TDqJoinImplRenames = TDqRenames<ESide>;
 
-// Must match TDqProgramBuilder::DqScalarHashJoin.
 constexpr ui32 BaseInputs = 7;
-constexpr ui32 TotalInputs = BaseInputs + JoinFilterInputs;
 
 struct TDqScalarJoinMetadata {
     TSides<TVector<TType*>> InputTypes;
@@ -305,7 +303,7 @@ private:
 } // namespace
 
 IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == TotalInputs, "Expected " << TotalInputs << " args");
+    MKQL_ENSURE(callable.GetInputsCount() >= BaseInputs, "Expected at least " << BaseInputs << " args");
 
     const auto joinType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting flow");

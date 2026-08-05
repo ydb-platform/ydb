@@ -1510,7 +1510,7 @@ void TDirectBlockGroup::DoEstablishConnection(
     if (connectionType == EConnectionType::DDisk) {
         actualSeqNo++;
 
-        LOG_INFO(
+        LOG_WARN(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "%s %s starting session: new seq_no: %lu",
@@ -1581,7 +1581,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
 
     LOG_LOG(
         *ActorSystem,
-        HasError(error) ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_TRACE,
+        HasError(error) ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_NOTICE,
         NKikimrServices::NBS_PARTITION,
         "%s OnConnectionEstablished: %s %s",
         LogTitle.GetWithTime().c_str(),

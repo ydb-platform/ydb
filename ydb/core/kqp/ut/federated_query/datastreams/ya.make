@@ -36,6 +36,11 @@ PEERDIR(
     ydb/library/testlib/solomon_helpers
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
+<<<<<<< HEAD
+=======
+    ydb/public/lib/ydb_cli/commands/interactive/common
+    ydb/services/workload_manager/ut/common
+>>>>>>> f138e855b78 (YQ-5559 removed extra issues from script executions (#48872))
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     yql/essentials/udfs/common/yson2

@@ -22,9 +22,8 @@ on:
       - ".github/scripts/tests/generate_coverage_landing.py"
       - ".github/workflows/cpp_codecov.yml"
       - ".github/codecov.yml"
-  schedule:
-    # Weekly full refresh for carryforward baselines (Sunday 03:00 UTC).
-    - cron: "0 3 * * 0"
+  # Baselines on main: push + paths above (only changed suites). No weekly cron —
+  # unused flags stay via Codecov carryforward until the next relevant merge.
   workflow_dispatch:
     inputs:
       suites:
@@ -41,7 +40,6 @@ concurrency:
   group: >-
     ${{
       startsWith(github.event_name, 'pull_request') && format('codecov-pr-{0}', github.event.pull_request.number)
-      || github.event_name == 'schedule' && 'codecov-weekly'
       || github.event_name == 'workflow_dispatch' && 'codecov-manual'
       || 'codecov-main'
     }}
@@ -64,7 +62,7 @@ jobs:
       matrix: ${{ steps.decide.outputs.matrix || '[]' }}
       should_run: ${{ steps.decide.outputs.should_run || 'false' }}
       hanging_labels: ${{ steps.decide.outputs.hanging_labels || '[]' }}
-      # Head SHA for Codecov/S3 meta; PR number for S3 prefix (empty on push/schedule/manual).
+      # Head SHA for Codecov/S3 meta; PR number for S3 prefix (empty on push/manual).
       commit_sha: ${{ github.event.pull_request.head.sha || github.sha }}
       pr_number: ${{ github.event.pull_request.number || '' }}
     steps:
@@ -126,11 +124,7 @@ jobs:
           echo '[]' > "$LABELS_FILE"
           EVENT="${{ github.event_name }}"
 
-          if [ "$EVENT" = "schedule" ]; then
-            MODE=labels
-            echo '["coverage/all"]' > "$LABELS_FILE"
-            : > "$CHANGED_FILE"
-          elif [ "$EVENT" = "workflow_dispatch" ]; then
+          if [ "$EVENT" = "workflow_dispatch" ]; then
             MODE=labels
             case "${{ inputs.suites }}" in
               all) echo '["coverage/all"]' > "$LABELS_FILE" ;;

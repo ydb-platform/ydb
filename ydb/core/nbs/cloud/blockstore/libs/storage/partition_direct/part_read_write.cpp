@@ -1,42 +1,21 @@
-#include "load_actor_adapter.h"
+#include "fast_path_service.h"
+#include "partition_direct_actor.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/public/api/protos/io.pb.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/sglist.h>
 
-#include <ydb/core/base/appdata_fwd.h>
-
-#include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/services/services.pb.h>
-
-using namespace NThreading;
-using namespace NActors;
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+using namespace NActors;
+using namespace NKikimr;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLoadActorAdapter::TLoadActorAdapter(
-    std::shared_ptr<TFastPathService> fastPathService)
-    : FastPathService(std::move(fastPathService))
-{}
-
-void TLoadActorAdapter::Bootstrap(const TActorContext& ctx)
-{
-    Y_UNUSED(ctx);
-    Become(&TThis::StateWork);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// !! LOAD ACTOR SHOULD GUARANTEE THAT THERE WILL BE NO MORE THAN ONE WRITE
-// REQUEST TO THE SAME BLOCK AT A TIME !!
-///////////////////////////////////////////////////////////////////////////////
-
-void TLoadActorAdapter::HandleWriteBlocksRequest(
+void TPartitionActor::HandleWriteBlocksRequest(
     const TEvService::TEvWriteBlocksRequest::TPtr& ev,
     const TActorContext& ctx)
 {
@@ -99,7 +78,7 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
         });
 }
 
-void TLoadActorAdapter::HandleReadBlocksRequest(
+void TPartitionActor::HandleReadBlocksRequest(
     const TEvService::TEvReadBlocksRequest::TPtr& ev,
     const TActorContext& ctx)
 {
@@ -145,47 +124,6 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
         });
 }
 
-///////////////////////////////////////////////////////////////////////////////
-
-STFUNC(TLoadActorAdapter::StateWork)
-{
-    LOG_DEBUG(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "Processing event: %s from sender: %lu",
-        ev->GetTypeName().data(),
-        ev->Sender.LocalId());
-
-    switch (ev->GetTypeRewrite()) {
-        cFunc(TEvents::TEvPoison::EventType, PassAway);
-
-        HFunc(TEvService::TEvWriteBlocksRequest, HandleWriteBlocksRequest);
-        HFunc(TEvService::TEvReadBlocksRequest, HandleReadBlocksRequest);
-
-        default:
-            LOG_DEBUG_S(
-                TActivationContext::AsActorContext(),
-                NKikimrServices::NBS_PARTITION,
-                "Unhandled event type: " << ev->GetTypeRewrite()
-                                         << " event: " << ev->ToString());
-            break;
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-TActorId CreateLoadActorAdapter(
-    const TActorId& owner,
-    std::shared_ptr<TFastPathService> fastPathService)
-{
-    auto actor =
-        std::make_unique<TLoadActorAdapter>(std::move(fastPathService));
-
-    return TActivationContext::Register(
-        actor.release(),
-        owner,
-        TMailboxType::ReadAsFilled,
-        NKikimr::AppData()->SystemPoolId);
-}
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

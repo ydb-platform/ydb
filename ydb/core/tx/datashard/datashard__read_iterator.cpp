@@ -1,6 +1,7 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
 #include "datashard_read_operation.h"
+#include "hnsw_index.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
 #include "probes.h"
@@ -46,6 +47,10 @@ struct TReadIteratorVectorTop {
     TString Target;
     std::unique_ptr<NKMeans::IClusters> KMeans;
     std::vector<ui32> DistinctColumns;
+
+    // Set when a ready in-memory HNSW index is available for this table/column;
+    // if set, TReader::IterateRange uses it instead of the brute-force scan below.
+    std::shared_ptr<NDataShard::THnswIndex> HnswIndex;
 
     std::unordered_set<TString> UniqueKeys;
     std::vector<TReadIteratorVectorTopItem> Rows;
@@ -111,6 +116,19 @@ namespace {
 
 constexpr ui64 MinRowsPerCheck  = 1000;
 constexpr ui64 MinBytesPerCheck = 1_MB;
+
+// Defaults used when VectorIndexSettings.hnsw_min_rows / hnsw_max_memory_bytes
+// are unset (0).
+constexpr ui64 DefaultHnswMinRows = 10'000;
+constexpr ui64 DefaultHnswMaxMemoryBytes = 512_MB;
+
+ui64 EffectiveHnswMinRows(const Ydb::Table::VectorIndexSettings& settings) {
+    return settings.hnsw_min_rows() != 0 ? settings.hnsw_min_rows() : DefaultHnswMinRows;
+}
+
+ui64 EffectiveHnswMaxMemoryBytes(const Ydb::Table::VectorIndexSettings& settings) {
+    return settings.hnsw_max_memory_bytes() != 0 ? settings.hnsw_max_memory_bytes() : DefaultHnswMaxMemoryBytes;
+}
 
 TMaybe<ui64> ResolveVictimQuerySpanId(TMaybe<ui64> lockVictimQuerySpanId, ui64 currentQuerySpanId) {
     if (lockVictimQuerySpanId) {
@@ -249,6 +267,7 @@ struct TShortTableInfo {
         SchemaVersion = tableInfo->GetTableSchemaVersion();
         KeyColumnTypes = tableInfo->KeyColumnTypes;
         KeyColumnCount = tableInfo->KeyColumnIds.size();
+        KeyColumnIds.assign(tableInfo->KeyColumnIds.begin(), tableInfo->KeyColumnIds.end());
 
         for (const auto& it: tableInfo->Columns) {
             const auto& column = it.second;
@@ -303,8 +322,74 @@ struct TShortTableInfo {
     ui64 SchemaVersion = 0;
     size_t KeyColumnCount = 0;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    TVector<NTable::TTag> KeyColumnIds;
     TMap<NTable::TTag, TShortColumnInfo> Columns;
 };
+
+// Scans the full local table partition for (primary key, vector column) pairs
+// and builds an in-memory HNSW index from them. Returns nullptr (and sets
+// hasPageFault) if the scan needs to page-fault and retry; the caller should
+// then bail out of the current transaction without marking the build as done.
+std::unique_ptr<NDataShard::THnswIndex> BuildHnswIndexFromTable(
+    TDataShard* self,
+    TTransactionContext& txc,
+    const TShortTableInfo& tableInfo,
+    ui32 vectorColumn,
+    const Ydb::Table::VectorIndexSettings& settings,
+    bool& hasPageFault)
+{
+    hasPageFault = false;
+
+    std::vector<NTable::TTag> columns;
+    columns.push_back(vectorColumn);
+    for (ui32 keyColId : tableInfo.KeyColumnIds) {
+        if (keyColId != vectorColumn) {
+            columns.push_back(keyColId);
+        }
+    }
+
+    auto precharge = txc.DB.Precharge(
+        tableInfo.LocalTid, {}, {}, columns, 0, 0, 0, NTable::EDirection::Forward, TRowVersion::Max());
+    if (!precharge.Ready) {
+        hasPageFault = true;
+        return nullptr;
+    }
+
+    std::vector<std::pair<TString, TString>> keysAndVectors;
+    keysAndVectors.reserve(precharge.ItemsPrecharged);
+
+    auto iter = txc.DB.IterateRange(tableInfo.LocalTid, {}, columns, TRowVersion::Max(), nullptr, nullptr);
+    while (true) {
+        auto ready = iter->Next(NTable::ENext::All);
+        if (ready == NTable::EReady::Page) {
+            hasPageFault = true;
+            return nullptr;
+        }
+        if (ready == NTable::EReady::Gone) {
+            break;
+        }
+
+        TDbTupleRef keyData = iter->GetKey();
+        if (keyData.Cells().size() == 0) {
+            continue;
+        }
+        TString serializedKey = TSerializedCellVec::Serialize(keyData.Cells());
+
+        TDbTupleRef rowData = iter->GetValues();
+        if (rowData.Cells().size() > 0 && !rowData.Cells()[0].IsNull()) {
+            keysAndVectors.emplace_back(std::move(serializedKey), TString(rowData.Cells()[0].AsBuf()));
+        }
+    }
+
+    TString error;
+    auto index = NDataShard::THnswIndex::Build(settings, keysAndVectors, EffectiveHnswMaxMemoryBytes(settings), error);
+    if (!index) {
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+            self->TabletID() << " HNSW: skipped building index for local table " << tableInfo.LocalTid
+            << ": " << error);
+    }
+    return index;
+}
 
 std::unique_ptr<IBlockBuilder> CreateBlockBuilder(
     const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
@@ -1111,8 +1196,53 @@ private:
                             State.ReadVersion);
     }
 
+    // Fetches full rows for a set of HNSW search results and appends them
+    // to VectorTopK's row buffer for output via ToBlockBuilder. Returns
+    // NeedData on page fault (leaving VectorTopK untouched so the whole
+    // scan can be retried from the top; HNSW search is cheap to redo).
+    EReadStatus MaterializeHnswResults(const THnswSearchResult& results, TTransactionContext& txc) {
+        auto& topK = *State.VectorTopK;
+
+        for (const auto& [serializedKey, distance] : results.Results) {
+            TSerializedCellVec keyCells(serializedKey);
+            const auto rawKey = ToRawTypeValue(keyCells.GetCells(), TableInfo, /* addNulls */ false);
+
+            NTable::TRowState rowState;
+            rowState.Init(State.Columns.size());
+            NTable::TSelectStats stats;
+            auto ready = txc.DB.Select(TableInfo.LocalTid, rawKey, State.Columns, rowState, stats, 0,
+                State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
+
+            if (ready == NTable::EReady::Page) {
+                return EReadStatus::NeedData;
+            }
+            if (ready == NTable::EReady::Gone) {
+                continue; // Row was deleted since the index was built.
+            }
+
+            TDbTupleRef value(ColumnTypes.data(), (*rowState).data(), ColumnTypes.size());
+            RowsProcessed++;
+            topK.TotalReadRows++;
+            topK.TotalReadBytes += EstimateSize(value.Cells());
+            topK.Rows.emplace_back(value.Cells(), static_cast<double>(distance), TString());
+            std::push_heap(topK.Rows.begin(), topK.Rows.end());
+        }
+
+        return EReadStatus::Done;
+    }
+
     template <typename TIterator>
     EReadStatus IterateRange(TIterator* iter, NTable::TKeyRange& iterRange, TTransactionContext& txc) {
+        // DistinctColumns dedup (used e.g. for overlapping KMeans clusters,
+        // where the same logical row can appear under multiple posting-table
+        // prefixes) is not implemented for the HNSW path; fall back to brute
+        // force in that case rather than risk duplicate/incorrect results.
+        if (State.VectorTopK && State.VectorTopK->HnswIndex && State.VectorTopK->DistinctColumns.empty()) {
+            auto& topK = *State.VectorTopK;
+            auto results = topK.HnswIndex->Search(topK.Target, topK.Limit);
+            return MaterializeHnswResults(results, txc);
+        }
+
         auto keyAccessSampler = Self->GetKeyAccessSampler();
 
         bool advanced = false;
@@ -2400,6 +2530,41 @@ public:
             topState->Column = topK.GetColumn();
             topState->Limit = topK.GetLimit();
             topState->Target = topK.GetTargetVector();
+
+            // Try to use an already-built in-memory HNSW index, or build one
+            // now (once per table, in this same transaction) if this table
+            // is eligible and no build is already in progress.
+            const ui32 localTid = TableInfo.LocalTid;
+            const auto& settings = topK.GetSettings();
+            if (auto cached = Self->GetHnswIndex(localTid)) {
+                topState->HnswIndex = std::move(cached);
+            } else if (settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+                    && !Self->IsHnswIndexBuilding(localTid))
+            {
+                ui64 rowCount = 0;
+                if (auto userTable = Self->FindUserTable(state.PathId)) {
+                    rowCount = userTable->Stats.DataStats.RowCount;
+                }
+                if (rowCount >= EffectiveHnswMinRows(settings)) {
+                    Self->SetHnswIndexBuilding(localTid, true);
+                    bool hasPageFault = false;
+                    const ui32 vectorColumnTag = record.GetColumns(topK.GetColumn());
+                    auto built = BuildHnswIndexFromTable(Self, txc, TableInfo, vectorColumnTag, settings, hasPageFault);
+                    if (hasPageFault) {
+                        // CheckRequestAndInit (TCheckReadUnit) does not retry on page
+                        // faults, so we simply give up on this attempt; a later read
+                        // request will retry once the required pages are resident.
+                        Self->SetHnswIndexBuilding(localTid, false);
+                    } else if (built) {
+                        auto shared = std::shared_ptr<NDataShard::THnswIndex>(std::move(built));
+                        Self->SetHnswIndex(localTid, shared, rowCount);
+                        topState->HnswIndex = std::move(shared);
+                    } else {
+                        Self->SetHnswIndexBuilding(localTid, false);
+                    }
+                }
+            }
+
             state.VectorTopK = std::move(topState);
         }
 

@@ -21,6 +21,7 @@
 #include "datashard_trans_queue.h"
 #include "datashard_user_table.h"
 #include "datashard_write.h"
+#include "hnsw_index.h"
 #include "incr_restore_scan.h"
 #include "datashard_tli.h"
 #include "multi_txids.h"
@@ -1770,6 +1771,9 @@ public:
 
         SysLocks.RemoveSchema(tableId, locksDb);
         Pipeline.GetDepTracker().RemoveSchema(tableId);
+        if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end()) {
+            HnswIndexCache.erase(it->second->LocalTid);
+        }
         TableInfos.erase(tableId.LocalPathId);
     }
 
@@ -1777,9 +1781,57 @@ public:
         if (locksDb) {
             SysLocks.RemoveSchema(tableId, locksDb);
         }
+        if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end() && it->second->LocalTid != tableInfo->LocalTid) {
+            HnswIndexCache.erase(it->second->LocalTid);
+        }
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
+    }
+
+    // Returns a ready cached HNSW index for the given local table id, or
+    // nullptr if none exists yet (never triggers a build).
+    std::shared_ptr<NDataShard::THnswIndex> GetHnswIndex(ui32 localTid) const {
+        auto it = HnswIndexCache.find(localTid);
+        if (it != HnswIndexCache.end() && it->second.Index) {
+            return it->second.Index;
+        }
+        return nullptr;
+    }
+
+    // Returns true if a build for this local table id is already running
+    // (in the same read transaction that started it) and should not be
+    // started again concurrently.
+    bool IsHnswIndexBuilding(ui32 localTid) const {
+        auto it = HnswIndexCache.find(localTid);
+        return it != HnswIndexCache.end() && it->second.Building;
+    }
+
+    void SetHnswIndexBuilding(ui32 localTid, bool building) {
+        HnswIndexCache[localTid].Building = building;
+    }
+
+    void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index, ui64 rowCountAtBuild) {
+        auto& entry = HnswIndexCache[localTid];
+        entry.Index = std::move(index);
+        entry.RowCountAtBuild = rowCountAtBuild;
+        entry.Building = false;
+    }
+
+    // Invalidates a cached HNSW index if the current row count has drifted
+    // too far from what it was built with (heuristic staleness check).
+    void InvalidateHnswIndexIfStale(ui32 localTid, ui64 currentRowCount) {
+        auto it = HnswIndexCache.find(localTid);
+        if (it == HnswIndexCache.end() || !it->second.Index) {
+            return;
+        }
+        const ui64 builtRows = it->second.RowCountAtBuild;
+        const ui64 diff = builtRows > currentRowCount ? builtRows - currentRowCount : currentRowCount - builtRows;
+        // More than ~20% drift since build time: treat as stale and drop it,
+        // a later request will trigger a fresh build.
+        if (builtRows == 0 || diff * 5 > builtRows) {
+            HnswIndexCache.erase(it);
+        }
     }
 
     bool IsUserTable(const TTableId& tableId) const {
@@ -2886,6 +2938,15 @@ private:
     TInstant StopKeyAccessSamplingAt;
 
     TUserTable::TTableInfos TableInfos;  // tableId -> local table info
+
+    // In-memory HNSW index cache for accelerated vector top-K search, keyed by
+    // local table id (i.e. one entry per posting table hosted by this tablet).
+    struct THnswIndexCacheEntry {
+        std::shared_ptr<NDataShard::THnswIndex> Index;
+        ui64 RowCountAtBuild = 0;
+        bool Building = false;
+    };
+    THashMap<ui32, THnswIndexCacheEntry> HnswIndexCache;  // LocalTid -> cache entry
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;

@@ -90,6 +90,18 @@ message VectorIndexSettings {
     optional VectorType vector_type = 2;
 
     optional uint32 vector_dimension = 3;
+
+    // Minimum number of rows in a posting table partition required to build
+    // an in-memory HNSW index for accelerated search. Below this threshold,
+    // brute force search is used instead. 0 (default) means an implementation
+    // defined default threshold is used.
+    optional uint64 hnsw_min_rows = 4;
+
+    // Maximum memory budget, in bytes, for one in-memory HNSW index instance.
+    // If the estimated memory required to build or hold the index would exceed
+    // this budget, HNSW is skipped and brute force search is used instead.
+    // 0 (default) means an implementation defined default budget is used.
+    optional uint64 hnsw_max_memory_bytes = 5;
 }
 
 message KMeansTreeSettings {

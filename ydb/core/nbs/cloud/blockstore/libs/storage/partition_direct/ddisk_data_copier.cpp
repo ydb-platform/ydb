@@ -235,7 +235,7 @@ void TDDiskDataCopier::OnRangeRead(
             copyRangeState->Range.Print().c_str(),
             FormatError(response.Error).Quote().c_str());
 
-        if (IsNeverRetriableErrors(response.Error)) {
+        if (IsNeverRetriableError(response.Error)) {
             Complete.SetValue(EResult::Error);
         } else {
             ScheduleStartCopyRange(BackoffDelayProvider.GetDelayAndIncrease());
@@ -275,7 +275,7 @@ void TDDiskDataCopier::OnRangeWritten(
             copyRangeState->Range.Print().c_str(),
             FormatError(response.Error).Quote().c_str());
 
-        if (IsNeverRetriableErrors(response.Error)) {
+        if (IsNeverRetriableError(response.Error)) {
             Complete.SetValue(EResult::Error);
         } else {
             ScheduleStartCopyRange(BackoffDelayProvider.GetDelayAndIncrease());

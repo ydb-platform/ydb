@@ -132,7 +132,7 @@ private:
     void OnResponse(ui64 requestId, ui32 generation, TResponse response)
     {
         const bool shouldReply =
-            !HasError(response.Error) || IsNeverRetriableErrors(response.Error);
+            !HasError(response.Error) || IsNeverRetriableError(response.Error);
 
         NThreading::TPromise<TResponse> promise;
         TDuration delay;

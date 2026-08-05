@@ -207,7 +207,7 @@ bool IsDeviceBrokenError(const NProto::TError& e)
            e.GetMessage() == DeviceBrokenErrorMessage;
 }
 
-bool IsNeverRetriableErrors(const NProto::TError& e)
+bool IsNeverRetriableError(const NProto::TError& e)
 {
     constexpr EWellKnownResultCodes NeverRetriableErrors[] = {
         E_CANCELLED,   // Request is canceled,

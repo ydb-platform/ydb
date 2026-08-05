@@ -58,22 +58,29 @@ namespace NActors {
         return true;
     }
 
-    void TCoroutineChunkSerializer::Produce(const void* data, size_t size,
+    void TCoroutineChunkSerializer::Produce(const void* data, ssize_t size,
             const NInterconnect::NRdma::TMemRegion* memRegion) {
-        Y_ABORT_UNLESS(size <= TotalSizeRemain);
+        Y_ABORT_UNLESS(size < 0 || static_cast<size_t>(size) <= TotalSizeRemain);
         TotalSizeRemain -= size;
         TotalSerializedDataSize += size;
 
         if (LastChunk.Buf + LastChunk.Size == data && LastChunk.MemRegion == memRegion) {
-            auto& ref = Chunks.back();
-            ref.Size += size;
+            Y_ABORT_UNLESS(size > 0 || static_cast<size_t>(-size) <= LastChunk.Size);
             LastChunk.Size += size;
+            if (LastChunk.Size == 0) {
+                Chunks.pop_back();
+                LastChunk = Chunks.empty() ? TChunk{nullptr, 0, nullptr} : Chunks.back();
+            } else {
+                Chunks.back().Size += size;
+            }
             return;
         }
 
+        Y_ABORT_UNLESS(size > 0);
+
         LastChunk = Chunks.emplace_back(TChunk{
             .Buf = static_cast<const char*>(data),
-            .Size = size,
+            .Size = static_cast<size_t>(size),
             .MemRegion = memRegion,
         });
     }
@@ -174,25 +181,11 @@ namespace NActors {
         if (!count) {
             return;
         }
-        Y_ABORT_UNLESS(count > 0);
-        Y_ABORT_UNLESS(!Chunks.empty());
-        TChunk& buf = Chunks.back();
-        Y_ABORT_UNLESS((size_t)count <= buf.Size, "count# %d buf.Size# %zu", count, buf.Size);
-        Y_ABORT_UNLESS(buf.Buf + buf.Size == Buffer.data(), "buf# %p:%zu Buffer.data# %p Buffer.size# %zu"
-            " NumChunks# %zu", buf.Buf, buf.Size, Buffer.data(), Buffer.size(), Chunks.size());
-        buf.Size -= count;
-        LastChunk.Size -= count;
-        if (!buf.Size) {
-            Chunks.pop_back();
-            if (!Chunks.empty()) {
-                LastChunk = Chunks.back();
-            } else {
-                LastChunk = {nullptr, 0, nullptr};
-            }
-        }
-        Buffer = {Buffer.data() - count, Buffer.size() + count};
-        TotalSizeRemain += count;
-        TotalSerializedDataSize -= count;
+        Produce(Buffer.data(), -count, nullptr);
+        Buffer = {
+            Buffer.data() - count,
+            Buffer.size() + count,
+        };
     }
 
     void TCoroutineChunkSerializer::Resume() {
@@ -217,6 +210,38 @@ namespace NActors {
         return WriteAliasedRaw(s->data(), s->length());
     }
 
+    bool TCoroutineChunkSerializer::WriteCord(const y_absl::Cord& cord) {
+        if (WithCord) {
+            for (const y_absl::string_view& chunk : cord.Chunks()) {
+                if (!WriteAliasedRawImpl(chunk.data(), chunk.size(), nullptr)) {
+                    return false;
+                }
+            }
+            // retain ownership of the cord
+            Cords.push_back(cord);
+        } else {
+            for (const y_absl::string_view& chunk : cord.Chunks()) {
+                const char *chunkData = chunk.data();
+                size_t chunkSize = chunk.size();
+                while (chunkSize) {
+                    void *buffer;
+                    int bufferSize;
+                    if (!Next(&buffer, &bufferSize)) {
+                        return false;
+                    }
+                    size_t numBytesToCopy = Min<size_t>(chunkSize, bufferSize);
+                    memcpy(buffer, chunkData, numBytesToCopy);
+                    chunkData += numBytesToCopy;
+                    chunkSize -= numBytesToCopy;
+                    buffer = (char*)buffer + numBytesToCopy;
+                    bufferSize -= numBytesToCopy;
+                    BackUp(bufferSize);
+                }
+            }
+        }
+        return true;
+    }
+
     std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(void* data, size_t size,
             EAliasedMode aliasedMode) {
         TMutableContiguousSpan buffer(static_cast<char*>(data), size);
@@ -235,6 +260,7 @@ namespace NActors {
         Chunks.clear();
         LastChunk = {nullptr, 0, nullptr};
         AliasedMode = aliasedMode;
+        Y_ABORT_UNLESS(Cords.empty());
         Resume();
 
         Y_DEBUG_ABORT_UNLESS(Buffer.data() >= buffer->data() &&
@@ -243,12 +269,13 @@ namespace NActors {
         return Chunks;
     }
 
-    void TCoroutineChunkSerializer::SetSerializingEvent(const IEventBase *event, bool withCachedSizes) {
+    void TCoroutineChunkSerializer::SetSerializingEvent(const IEventBase *event, bool withCachedSizes, bool withCord) {
         Y_ABORT_UNLESS(Event == nullptr);
         Event = event;
         TotalSerializedDataSize = 0;
         AbortFlag = false;
         WithCachedSizes = withCachedSizes;
+        WithCord = withCord;
     }
 
     void TCoroutineChunkSerializer::Abort() {

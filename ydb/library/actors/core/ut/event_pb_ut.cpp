@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TEventSerialization) {
         for (int i = 0; i < 4; ++i) {
             TMockEvent event;
             event.msg = &bm;
-            chunker.SetSerializingEvent(&event, true);
+            chunker.SetSerializingEvent(&event, true, false);
             char buf1[87];
             TString bmChunkedSerialized;
             while (!chunker.IsComplete()) {

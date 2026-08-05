@@ -1,3 +1,5 @@
+/* integer log2 вместо inline-шаблона std::log2 —
+   comdat-копия из AVX-512 TU (vcvtusi2sd) прилетала в AVX2-путь -> SIGILL на Zen3 */
 /*******************************************************************
  * Copyright (C) 2022 Intel Corporation
  * Copyright (C) 2021 Serge Sans Paille
@@ -627,7 +629,7 @@ X86_SIMD_SORT_INLINE void xss_qsort(T *arr, arrsize_t arrsize, bool hasnan)
 
         UNUSED(hasnan);
         qsort_<vtype, comparator, T>(
-                arr, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize));
+                arr, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
 
         replace_inf_with_nan(arr, arrsize, nan_count, descending);
     }
@@ -663,7 +665,7 @@ xss_qselect(T *arr, arrsize_t k, arrsize_t arrsize, bool hasnan)
                                        k,
                                        index_first_elem,
                                        index_last_elem,
-                                       2 * (arrsize_t)log2(arrsize));
+                                       2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
     }
 }
 

@@ -16,6 +16,7 @@
 
 #include <util/generic/size_literals.h>
 
+#include <ranges>
 #include <type_traits>
 
 namespace NYT {
@@ -64,6 +65,20 @@ concept CErrorNestable = requires (TError& error, TValue&& operand)
 {
     { error <<= std::forward<TValue>(operand) } -> std::same_as<TError&>;
 };
+
+template <class TRange>
+concept CErrorAttributeRange =
+    std::ranges::input_range<TRange> &&
+    std::same_as<
+        std::remove_cv_t<std::ranges::range_value_t<TRange>>,
+        TErrorAttribute>;
+
+template <class TRange>
+concept CErrorRange =
+    std::ranges::input_range<TRange> &&
+    std::same_as<
+        std::remove_cv_t<std::ranges::range_value_t<TRange>>,
+        TError>;
 
 template <>
 class [[nodiscard]] TErrorOr<void>
@@ -164,9 +179,9 @@ public:
     void ThrowOnError(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... args) &&;
     inline void ThrowOnError() &&;
 
-    template <CInvocable<bool(const TError&)> TFilter>
+    template <NMpl::CInvocable<bool(const TError&)> TFilter>
     std::optional<TError> FindMatching(const TFilter& filter) const;
-    template <CInvocable<bool(TErrorCode)> TFilter>
+    template <NMpl::CInvocable<bool(TErrorCode)> TFilter>
     std::optional<TError> FindMatching(const TFilter& filter) const;
     std::optional<TError> FindMatching(TErrorCode code) const;
     std::optional<TError> FindMatching(const THashSet<TErrorCode>& codes) const;
@@ -200,6 +215,29 @@ public:
     //! yt/yt/library/error_skeleton. Calling this method without PEERDIR'ing implementation
     //! results in an exception.
     std::string GetSkeleton() const;
+
+    template <CConvertibleToAttributeValue TValue>
+    [[nodiscard]] TError With(const TErrorAttribute::TKey& key, const TValue& value) const &;
+    template <CConvertibleToAttributeValue TValue>
+    [[nodiscard]] TError&& With(const TErrorAttribute::TKey& key, const TValue& value) &&;
+
+    [[nodiscard]] TError With(const TErrorAttribute& attribute) const &;
+    [[nodiscard]] TError&& With(const TErrorAttribute& attribute) &&;
+
+    template <CErrorAttributeRange TRange>
+    [[nodiscard]] TError With(TRange&& attributes) const &;
+    template <CErrorAttributeRange TRange>
+    [[nodiscard]] TError&& With(TRange&& attributes) &&;
+
+    [[nodiscard]] TError With(const TError& innerError) const &;
+    [[nodiscard]] TError&& With(const TError& innerError) &&;
+    [[nodiscard]] TError With(TError&& innerError) const &;
+    [[nodiscard]] TError&& With(TError&& innerError) &&;
+
+    template <CErrorRange TRange>
+    [[nodiscard]] TError With(TRange&& innerErrors) const &;
+    template <CErrorRange TRange>
+    [[nodiscard]] TError&& With(TRange&& innerErrors) &&;
 
     TError& operator <<= (const TErrorAttribute& attribute) &;
     TError& operator <<= (const std::vector<TErrorAttribute>& attributes) &;
@@ -251,6 +289,17 @@ private:
     void MakeMutable();
     void Enrich();
     void EnrichFromException(const std::exception& exception);
+
+    void AddAttribute(const TErrorAttribute& attribute);
+
+    template <CErrorAttributeRange TRange>
+    void AddAttributes(TRange&& attributes);
+
+    void AddInnerError(const TError& innerError);
+    void AddInnerError(TError&& innerError);
+
+    template <CErrorRange TRange>
+    void AddInnerErrors(TRange&& innerErrors);
 
     friend class TErrorAttributes;
 };

@@ -2049,11 +2049,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffValue(NKikimr::NMiniKQL::TType* type, ui64
         uwrappedType = static_cast<TOptionalType*>(type)->GetItemType();
     }
 
-    if (IsOptionalSingular(type, nativeYtTypeFlags)) {
-        return NUdf::TUnboxedValue();
-    }
-
-    if (isOptional) {
+    if (isOptional && !IsOptionalSingular(type, nativeYtTypeFlags)) {
         auto marker = buf.Read();
         if (!marker) {
             return NUdf::TUnboxedValue();
@@ -2061,11 +2057,15 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffValue(NKikimr::NMiniKQL::TType* type, ui64
     }
 
     if (uwrappedType->IsVoid()) {
-        return NUdf::TUnboxedValue::Zero();
+        // Incorrect backward-compatible behavior TODO: switch
+        // return isOptional ? NUdf::TUnboxedValuePod::Zero().MakeOptional() : NUdf::TUnboxedValuePod::Zero();
+        return NUdf::TUnboxedValuePod();
     }
 
     if (uwrappedType->IsNull()) {
-        return NUdf::TUnboxedValue();
+        // Incorrect backward-compatible behavior TODO: switch
+        // return isOptional ? NUdf::TUnboxedValuePod().MakeOptional() : NUdf::TUnboxedValuePod();
+        return NUdf::TUnboxedValuePod();
     }
 
     if (uwrappedType->IsData()) {

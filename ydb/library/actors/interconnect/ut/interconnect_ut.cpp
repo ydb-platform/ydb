@@ -2,6 +2,7 @@
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
 #include <ydb/library/actors/interconnect/interconnect_counters.h>
 #include <ydb/library/actors/interconnect/interconnect_metrics_aggregator.h>
+#include <ydb/library/actors/interconnect/uring_context.h>
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/interconnect/ut/protos/interconnect_test.pb.h>
@@ -893,6 +894,28 @@ void RunKernelLivenessMixedConfigAsymmetric(bool withRdma, ui32 kernelLivenessNo
     UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), node1Expected);
 }
 
+void RunKernelLivenessWithTls() {
+    auto settingsCustomizer = [](ui32, TInterconnectSettings& settings) {
+        settings.EnableKernelLiveness = true;
+        settings.PingPeriod = TDuration::MilliSeconds(200);
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr,
+        TTestICCluster::Flags(TTestICCluster::USE_TLS | TTestICCluster::DISABLE_RDMA),
+        {}, TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto* recipientPtr = new TRecipientActor;
+    const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+    cluster.RegisterActor(new TSenderActor(recipient, 1), 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return recipientPtr->GetReceived() >= 1;
+    }, "TLS initial message delivery with kernel liveness");
+
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 1ULL);
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), 1ULL);
+}
+
 void RunKernelLivenessSocketSetupFallback(bool withRdma) {
     if (SkipIfRdmaUnavailable(withRdma, "KernelLivenessSocketSetupFallbackRdma")) {
         return;
@@ -1488,6 +1511,10 @@ Y_UNIT_TEST_SUITE(Interconnect) {
 
     Y_UNIT_TEST(KernelLivenessMixedConfigFallbackReverse) {
         RunKernelLivenessMixedConfigAsymmetric(false, 1);
+    }
+
+    Y_UNIT_TEST(KernelLivenessWithTls) {
+        RunKernelLivenessWithTls();
     }
 
     Y_UNIT_TEST(KernelLivenessSocketSetupFallback) {

@@ -119,6 +119,9 @@ public:
         if (Alloc) {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
             Input.Clear();
+            if (StreamLookupWorker) {
+                StreamLookupWorker->ClearResults(Alloc->Ref());
+            }
             StreamLookupWorker.reset();
             StreamLockWorker.reset();
         }
@@ -463,6 +466,9 @@ private:
         {
             auto alloc = BindAllocator();
             Input.Clear();
+            if (StreamLookupWorker) {
+                StreamLookupWorker->ClearResults(Alloc->Ref());
+            }
             StreamLookupWorker.reset();
             StreamLockWorker.reset();
             for (auto& [id, state] : Reads) {
@@ -1241,7 +1247,8 @@ private:
             {"snapshotTxId", record.GetSnapshot().GetTxId()},
             {"step", record.GetSnapshot().GetStep()},
             {"lockTxId", record.GetLockTxId()},
-            {"lockNodeId", record.GetLockNodeId()});
+            {"lockNodeId", record.GetLockNodeId()},
+            {"lockMode", record.GetLockMode()});
 
         const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
 

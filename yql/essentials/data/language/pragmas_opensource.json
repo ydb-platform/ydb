@@ -267,6 +267,12 @@
     "name": "yt.JoinCommonAnySideFirst"
   },
   {
+    "name": "yt.JoinCommonFlatPayloadColumnLimit"
+  },
+  {
+    "name": "yt.JoinCommonUseFlatPayload"
+  },
+  {
     "name": "yt.JoinCommonUseMapMultiOut"
   },
   {

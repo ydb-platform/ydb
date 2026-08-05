@@ -95,7 +95,7 @@ using TAfterSwitch = TFunctionView<void()>;
 // We do that because callback can resume fiber which will destroy the
 // closure on its stack creating the risk of stack-use-after-scope.
 // The only safe place at that moment is caller's stack frame.
-template <CInvocable<void()> T>
+template <NMpl::CInvocable<void()> T>
 auto MakeAfterSwitch(T&& lambda)
 {
     class TMoveOnCall
@@ -201,10 +201,10 @@ Y_FORCE_INLINE ELogLevel SwapMinLogLevel(ELogLevel minLogLevel)
     return result;
 }
 
-Y_FORCE_INLINE std::string SwapMessageTag(std::string messageTag)
+Y_FORCE_INLINE NLogging::TLoggingTagList SwapMessageTags(NLogging::TLoggingTagList messageTags)
 {
-    auto result = std::move(GetThreadMessageTag());
-    SetThreadMessageTag(std::move(messageTag));
+    auto result = GetThreadMessageTags();
+    SetThreadMessageTags(std::move(messageTags));
     return result;
 }
 
@@ -768,7 +768,7 @@ class TTlsAddressStorage
 public:
     TTlsAddressStorage() = default;
 
-    template <CInvocable<T*()> TTlsReader>
+    template <NMpl::CInvocable<T*()> TTlsReader>
     Y_FORCE_INLINE explicit TTlsAddressStorage(TTlsReader reader)
     {
 #ifdef YT_ENABLE_TLS_ADDRESS_TRACKING
@@ -783,7 +783,7 @@ public:
         return *Address_;
     }
 
-    template <CInvocable<T*()> TTlsReader>
+    template <NMpl::CInvocable<T*()> TTlsReader>
     Y_FORCE_INLINE void ReReadAddress(TTlsReader reader)
     {
         auto* address = reader();
@@ -827,7 +827,7 @@ protected:
         Fls_ = SwapCurrentFls(Fls_);
         TContextSwitchManager::Get()->OnIn();
         MinLogLevel_ = SwapMinLogLevel(MinLogLevel_);
-        MessageTag_ = SwapMessageTag(MessageTag_);
+        MessageTags_ = SwapMessageTags(std::move(MessageTags_));
     }
 
     ~TBaseSwitchHandler()
@@ -835,14 +835,14 @@ protected:
         YT_VERIFY(FiberId_ == InvalidFiberId);
         YT_VERIFY(!Fls_);
         YT_VERIFY(MinLogLevel_ == ELogLevel::Minimum);
-        YT_VERIFY(MessageTag_.empty());
+        YT_VERIFY(MessageTags_.IsEmpty());
     }
 
 private:
     TFls* Fls_ = nullptr;
     TFiberId FiberId_ = InvalidFiberId;
     ELogLevel MinLogLevel_ = ELogLevel::Minimum;
-    std::string MessageTag_;
+    NLogging::TLoggingTagList MessageTags_;
 };
 
 class TFiberSwitchHandler;

@@ -247,7 +247,7 @@ TTraceContext::TTraceContext(
     , SpanName_(spanName)
     , RequestId_(ParentContext_ ? ParentContext_->GetRequestId() : TRequestId{})
     , TargetEndpoint_(ParentContext_ ? ParentContext_->GetTargetEndpoint() : std::nullopt)
-    , LoggingTag_(ParentContext_ ? ParentContext_->GetLoggingTag() : std::string{})
+    , LoggingTags_(ParentContext_ ? ParentContext_->GetLoggingTags() : NLogging::TLoggingTagList{})
     , StartTime_(startTime.value_or(GetCpuInstant()))
     , LeakDeadline_(StartTime_ + NDetail::TraceContextDefaultLeakDurationThreshold.load(std::memory_order::relaxed))
     , Baggage_(ParentContext_ ? ParentContext_->GetBaggage() : TYsonString{})
@@ -269,9 +269,9 @@ void TTraceContext::SetRequestId(TRequestId requestId)
     RequestId_ = requestId;
 }
 
-void TTraceContext::SetLoggingTag(const std::string& loggingTag)
+void TTraceContext::SetLoggingTags(NLogging::TLoggingTagList loggingTags)
 {
-    LoggingTag_ = loggingTag;
+    LoggingTags_ = std::move(loggingTags);
 }
 
 TAllocationTags TTraceContext::GetAllocationTags() const

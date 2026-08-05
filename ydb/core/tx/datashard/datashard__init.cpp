@@ -371,6 +371,13 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     LOAD_SYS_BOOL(db, Schema::Sys_SubDomainOutOfSpace, Self->SubDomainOutOfSpace);
 
     {
+        ui64 subDomainTablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
+        LOAD_SYS_UI64(db, Schema::Sys_SubDomainTablesMetricsLevel, subDomainTablesMetricsLevel);
+        Self->SubDomainTablesMetricsLevel =
+            static_cast<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel>(subDomainTablesMetricsLevel);
+    }
+
+    {
         TString rawProcessingParams;
         LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams);
         if (!rawProcessingParams.empty()) {

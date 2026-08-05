@@ -3,6 +3,10 @@
 #include "defs.h"
 #include "types.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+
+#include <ydb/library/actors/core/interconnect.h>
+
 namespace NKikimr {
     namespace NBsController {
 

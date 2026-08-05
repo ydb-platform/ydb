@@ -1,12 +1,40 @@
 #include "merger.h"
 
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap {
 
+namespace {
+
+std::shared_ptr<arrow::Table> CombineAndSortExistsData(
+    const std::vector<std::shared_ptr<arrow::Table>>& chunks, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    AFL_VERIFY(!chunks.empty());
+    if (chunks.size() == 1 && chunks.front()->num_rows() <= 1) {
+        return chunks.front();
+    }
+    auto table = NArrow::TStatusValidator::GetValid(arrow::ConcatenateTables(chunks));
+    if (!table->num_rows()) {
+        return table;
+    }
+    auto batch = NArrow::ToBatch(table);
+    batch = NArrow::SortBatch(batch, pkSchema, false);
+    return NArrow::ToTable(batch);
+}
+
+}   // namespace
+
 NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::Finish() {
+    if (!ExistsChunks.empty()) {
+        auto existsData = CombineAndSortExistsData(ExistsChunks, Schema->GetIndexInfo().GetReplaceKey());
+        ExistsChunks.clear();
+        auto result = MergeExistsDataOrdered(existsData);
+        if (result.IsFail()) {
+            return result;
+        }
+    }
     while (!IncomingFinished) {
         auto result = OnIncomingOnly(IncomingPosition);
         if (result.IsFail()) {
@@ -18,6 +46,14 @@ NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::Finish() {
 }
 
 NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::AddExistsDataOrdered(const std::shared_ptr<arrow::Table>& data) {
+    AFL_VERIFY(data);
+    if (data->num_rows()) {
+        ExistsChunks.emplace_back(data);
+    }
+    return TYdbConclusionStatus::Success();
+}
+
+NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::MergeExistsDataOrdered(const std::shared_ptr<arrow::Table>& data) {
     AFL_VERIFY(data);
     NArrow::NMerger::TRWSortableBatchPosition existsPosition(
         data, 0, Schema->GetPKColumnNames(), Schema->GetIndexInfo().GetColumnSTLNames(false), false);

@@ -199,6 +199,9 @@ void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId,
 
 void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId);
 
+void WaitForSchemeShardStatsUpdate(
+    TTestActorRuntime& runtime, ui64 ssTabletId, bool requireFull = false);
+
 ui64 GetRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId);
 void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId, size_t expectedRowCount);
 void WaitForRowCount(

@@ -318,7 +318,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         return;
     }
 
-    LOG_INFO(
+    LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "%s Sent TEvWriteToPBuffer with requestId# %lu was failed - can't "

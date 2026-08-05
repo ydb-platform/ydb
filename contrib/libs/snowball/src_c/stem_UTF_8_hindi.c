@@ -1,8 +1,11 @@
-/* Generated from hindi.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from hindi.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_UTF_8_hindi.h"
 
-static int r_CONSONANT(struct SN_env * z);
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -10,18 +13,10 @@ extern int hindi_UTF_8_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
-#ifdef __cplusplus
-extern "C" {
-#endif
+
+static int r_CONSONANT(struct SN_env * z);
 
 
-extern struct SN_env * hindi_UTF_8_create_env(void);
-extern void hindi_UTF_8_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_0[3] = { 0xE0, 0xA5, 0x80 };
 static const symbol s_0_1[12] = { 0xE0, 0xA5, 0x82, 0xE0, 0xA4, 0x82, 0xE0, 0xA4, 0x97, 0xE0, 0xA5, 0x80 };
 static const symbol s_0_2[12] = { 0xE0, 0xA5, 0x87, 0xE0, 0xA4, 0x82, 0xE0, 0xA4, 0x97, 0xE0, 0xA5, 0x80 };
@@ -172,11 +167,11 @@ static const struct among a_0[132] = {
 { 9, s_0_14, -14, -1, 0},
 { 12, s_0_15, -1, -1, 0},
 { 12, s_0_16, -2, -1, 0},
-{ 6, s_0_17, -17, -1, r_CONSONANT},
+{ 6, s_0_17, -17, -1, 1},
 { 9, s_0_18, -1, -1, 0},
 { 9, s_0_19, -2, -1, 0},
 { 9, s_0_20, -3, -1, 0},
-{ 6, s_0_21, -21, -1, r_CONSONANT},
+{ 6, s_0_21, -21, -1, 1},
 { 9, s_0_22, -1, -1, 0},
 { 6, s_0_23, 0, -1, 0},
 { 6, s_0_24, 0, -1, 0},
@@ -186,7 +181,7 @@ static const struct among a_0[132] = {
 { 12, s_0_28, -4, -1, 0},
 { 3, s_0_29, 0, -1, 0},
 { 6, s_0_30, 0, -1, 0},
-{ 9, s_0_31, -1, -1, r_CONSONANT},
+{ 9, s_0_31, -1, -1, 1},
 { 12, s_0_32, -1, -1, 0},
 { 12, s_0_33, -2, -1, 0},
 { 12, s_0_34, -3, -1, 0},
@@ -207,18 +202,18 @@ static const struct among a_0[132] = {
 { 9, s_0_49, -2, -1, 0},
 { 9, s_0_50, -3, -1, 0},
 { 9, s_0_51, -4, -1, 0},
-{ 12, s_0_52, -1, -1, r_CONSONANT},
+{ 12, s_0_52, -1, -1, 1},
 { 15, s_0_53, -1, -1, 0},
-{ 12, s_0_54, -3, -1, r_CONSONANT},
+{ 12, s_0_54, -3, -1, 1},
 { 15, s_0_55, -1, -1, 0},
 { 6, s_0_56, 0, -1, 0},
 { 9, s_0_57, -1, -1, 0},
 { 9, s_0_58, -2, -1, 0},
 { 9, s_0_59, -3, -1, 0},
 { 9, s_0_60, -4, -1, 0},
-{ 12, s_0_61, -1, -1, r_CONSONANT},
+{ 12, s_0_61, -1, -1, 1},
 { 15, s_0_62, -1, -1, 0},
-{ 12, s_0_63, -3, -1, r_CONSONANT},
+{ 12, s_0_63, -3, -1, 1},
 { 15, s_0_64, -1, -1, 0},
 { 6, s_0_65, 0, -1, 0},
 { 12, s_0_66, -1, -1, 0},
@@ -238,11 +233,11 @@ static const struct among a_0[132] = {
 { 9, s_0_80, -6, -1, 0},
 { 12, s_0_81, -1, -1, 0},
 { 12, s_0_82, -2, -1, 0},
-{ 6, s_0_83, -9, -1, r_CONSONANT},
+{ 6, s_0_83, -9, -1, 1},
 { 9, s_0_84, -1, -1, 0},
 { 9, s_0_85, -2, -1, 0},
 { 9, s_0_86, -3, -1, 0},
-{ 6, s_0_87, -13, -1, r_CONSONANT},
+{ 6, s_0_87, -13, -1, 1},
 { 9, s_0_88, -1, -1, 0},
 { 9, s_0_89, -2, -1, 0},
 { 9, s_0_90, -3, -1, 0},
@@ -263,7 +258,7 @@ static const struct among a_0[132] = {
 { 3, s_0_105, 0, -1, 0},
 { 6, s_0_106, -1, -1, 0},
 { 6, s_0_107, -2, -1, 0},
-{ 6, s_0_108, 0, -1, r_CONSONANT},
+{ 6, s_0_108, 0, -1, 1},
 { 9, s_0_109, -1, -1, 0},
 { 9, s_0_110, -2, -1, 0},
 { 9, s_0_111, -3, -1, 0},
@@ -276,11 +271,11 @@ static const struct among a_0[132] = {
 { 9, s_0_118, -6, -1, 0},
 { 12, s_0_119, -1, -1, 0},
 { 12, s_0_120, -2, -1, 0},
-{ 6, s_0_121, -9, -1, r_CONSONANT},
+{ 6, s_0_121, -9, -1, 1},
 { 9, s_0_122, -1, -1, 0},
 { 9, s_0_123, -2, -1, 0},
 { 9, s_0_124, -3, -1, 0},
-{ 6, s_0_125, -13, -1, r_CONSONANT},
+{ 6, s_0_125, -13, -1, 1},
 { 9, s_0_126, -1, -1, 0},
 { 9, s_0_127, -2, -1, 0},
 { 9, s_0_128, -3, -1, 0},
@@ -291,10 +286,8 @@ static const struct among a_0[132] = {
 
 static const unsigned char g_consonant[] = { 255, 255, 255, 255, 159, 0, 0, 0, 248, 7 };
 
-
 static int r_CONSONANT(struct SN_env * z) {
-    if (in_grouping_b_U(z, g_consonant, 2325, 2399, 0)) return 0;
-    return 1;
+    return !in_grouping_b_U(z, g_consonant, 2325, 2399, 0);
 }
 
 extern int hindi_UTF_8_stem(struct SN_env * z) {
@@ -305,7 +298,7 @@ extern int hindi_UTF_8_stem(struct SN_env * z) {
     }
     z->lb = z->c; z->c = z->l;
     z->ket = z->c;
-    if (!find_among_b(z, a_0, 132)) return 0;
+    if (!find_among_b(z, a_0, 132, r_CONSONANT)) return 0;
     z->bra = z->c;
     {
         int ret = slice_del(z);
@@ -315,7 +308,11 @@ extern int hindi_UTF_8_stem(struct SN_env * z) {
     return 1;
 }
 
-extern struct SN_env * hindi_UTF_8_create_env(void) { return SN_create_env(0, 0); }
+extern struct SN_env * hindi_UTF_8_create_env(void) {
+    return SN_new_env(sizeof(struct SN_env));
+}
 
-extern void hindi_UTF_8_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void hindi_UTF_8_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

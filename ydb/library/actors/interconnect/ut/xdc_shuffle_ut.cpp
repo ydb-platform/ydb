@@ -33,18 +33,18 @@ Y_UNIT_TEST_SUITE(InterconnectXdcShuffle) {
         UNIT_ASSERT(info.Sections[2].IsInline);
         UNIT_ASSERT_VALUES_EQUAL(info.Sections[2].Size, 0u);
 
+        TCoroutineChunkSerializer chunker;
+        chunker.SetSerializingEvent(&event, true, false);
+
+        TString headerBuffer(info.Sections[0].Size, '\0');
         auto getSerializedSize = [](std::span<TCoroutineChunkSerializer::TChunk> chunks) {
             size_t result = 0;
-            for (const auto& [_, size] : chunks) {
-                result += size;
+            for (const auto& chunk : chunks) {
+                result += chunk.Size;
             }
             return result;
         };
 
-        TCoroutineChunkSerializer chunker;
-        chunker.SetSerializingEvent(&event, true);
-
-        TString headerBuffer(info.Sections[0].Size, '\0');
         auto chunks = chunker.FeedBuf(headerBuffer.begin(), headerBuffer.size());
         UNIT_ASSERT_VALUES_EQUAL(getSerializedSize(chunks), info.Sections[0].Size);
         UNIT_ASSERT(!chunker.IsComplete());

@@ -258,7 +258,7 @@ void TPartitionActor::HandleAddHostAllocationResult(
             "recovery: %s",
             LogTitle.GetWithTime().c_str(),
             dbgId,
-            FormatError(error).c_str());
+            FormatError(error).Quote().c_str());
         return;
     }
 
@@ -376,7 +376,7 @@ void TPartitionActor::RejectAddHost(
         "%s AddHost failed (dbgId=%lu): %s",
         LogTitle.GetWithTime().c_str(),
         dbgId,
-        FormatError(error).c_str());
+        FormatError(error).Quote().c_str());
 
     // Notify the DBG that asked for the host. dbgId is always a valid request
     // index (see ValidateAddHostToDBGRequest), so the DBG exists.

@@ -83,9 +83,8 @@ namespace NActors {
             as->Send(selfId, new TEvPrivate::TEvTerminate(reason));
         };
         SetNonBlock(*Socket, false);
-        EngineHandle = Proxy->Common->UringEngineV2->Register(Socket, SelfId(),
-            Proxy->Common->Settings.V2.ChecksumEvents, Params.PeerScopeId, onDisconnectCallback,
-            SelfId().NodeId() < Proxy->PeerNodeId, ClockSkew, PingRTT);
+        EngineHandle = Proxy->Common->UringEngineV2->Register(Socket, SelfId(), Params.PeerScopeId,
+            onDisconnectCallback, SelfId().NodeId() < Proxy->PeerNodeId, ClockSkew, PingRTT);
         if (!EngineHandle) {
             LOG_ERROR_IC_SESSION("ICS99", "v2 io_uring engine failed to register the connection");
             return Terminate(TDisconnectReason::LostConnection());
@@ -96,6 +95,15 @@ namespace NActors {
 
     void TInterconnectSessionTCPv2::Terminate(TDisconnectReason reason) {
         LOG_INFO_IC_SESSION("ICS92", "v2 session terminated reason# %s", reason.ToString().data());
+
+        if (const TString& s = reason.ToString()) {
+            Proxy->Metrics->IncDisconnectByReason(s);
+        }
+
+        Proxy->UpdateErrorStateLog(TActivationContext::Now(), "close_socket", reason.ToString().data());
+        Proxy->Metrics->IncDisconnections();
+        Proxy->Metrics->SetConnected(0);
+        Proxy->RegisterDisconnect();
 
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
 
@@ -116,8 +124,6 @@ namespace NActors {
             Send(actorId, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, info.Cookie);
         }
         Subscribers.clear();
-
-        Proxy->Metrics->SetConnected(0);
 
         Proxy->Common->UringEngineV2->Unregister(EngineHandle);
 
@@ -208,6 +214,10 @@ namespace NActors {
 
     void TInterconnectSessionTCPv2::HandlePoison() {
         Terminate(TDisconnectReason::UserRequest());
+    }
+
+    ui64 TInterconnectSessionTCPv2::GetTotalOutputQueueSize() const {
+        return Proxy->Common->UringEngineV2->GetTotalOutputQueueSize(EngineHandle);
     }
 
     void TInterconnectSessionTCPv2::GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) {

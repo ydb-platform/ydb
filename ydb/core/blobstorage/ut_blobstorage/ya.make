@@ -99,5 +99,6 @@ RECURSE_FOR_TESTS(
     ut_cluster_balancing
     ut_move_pdisk
     ut_vdisk_internals
+    ut_checksumming
     ut_oos
 )

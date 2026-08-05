@@ -501,7 +501,7 @@ void TSolomonExporter::DoHandleShard(
 {
     TPromise<TSharedRef> responsePromise = NewPromise<TSharedRef>();
 
-    auto Logger = NProfiling::Logger().WithTag("Shard: %v", name);
+    auto Logger = NProfiling::Logger().WithTag("Shard", name);
 
     try {
         auto outputEncodingContext = CreateOutputEncodingContextFromHeaders(req->GetHeaders());

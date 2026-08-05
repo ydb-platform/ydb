@@ -12,8 +12,6 @@ SRCS(
     preprocessor_ut.cpp
     range_helpers_ut.cpp
     strong_typedef_ut.cpp
-    tag_invoke_cpo_ut.cpp
-    tag_invoke_impl_ut.cpp
     typeid_sample.cpp
     typeid_ut.cpp
 )

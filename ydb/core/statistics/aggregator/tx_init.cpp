@@ -191,6 +191,8 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 lastUpdateTime = rowset.GetValue<Schema::ScheduleTraversals::LastUpdateTime>();
                 ui64 schemeShardId = rowset.GetValue<Schema::ScheduleTraversals::SchemeShardId>();
                 bool isColumnTable = rowset.GetValue<Schema::ScheduleTraversals::IsColumnTable>();
+                ui64 lastAnalyzeRowUpdates = rowset.GetValueOrDefault<Schema::ScheduleTraversals::LastAnalyzeRowUpdates>(Max<ui64>());
+                ui64 lastAnalyzeRowDeletes = rowset.GetValueOrDefault<Schema::ScheduleTraversals::LastAnalyzeRowDeletes>(Max<ui64>());
 
                 auto pathId = TPathId(ownerId, localPathId);
 
@@ -199,6 +201,8 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 scheduleTraversal.SchemeShardId = schemeShardId;
                 scheduleTraversal.LastUpdateTime = TInstant::MicroSeconds(lastUpdateTime);
                 scheduleTraversal.IsColumnTable = isColumnTable;
+                scheduleTraversal.LastAnalyzeRowUpdates = lastAnalyzeRowUpdates;
+                scheduleTraversal.LastAnalyzeRowDeletes = lastAnalyzeRowDeletes;
 
                 auto [it, _] = Self->ScheduleTraversals.emplace(pathId, scheduleTraversal);
                 Self->ScheduleTraversalsByTime.Add(&it->second);

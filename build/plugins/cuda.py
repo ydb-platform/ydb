@@ -13,7 +13,7 @@ def arch2num(arch):
 
 
 @macro
-def CUDA_SRCS(unit: Unit, *args: tuple[str, ...]):
+def CUDA_SRCS(unit: Unit, *args: str):
     """
     @usage: CUDA_SRCS(File...)
 

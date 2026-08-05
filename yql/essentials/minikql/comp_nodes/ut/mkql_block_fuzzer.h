@@ -16,10 +16,7 @@ struct TFuzzOptions {
     bool FuzzZeroOptionalBitmaskRemove = true;
     bool FuzzOffsetShift = true;
     bool FuzzImmutable = true;
-
-    static TFuzzOptions FuzzAll() {
-        return TFuzzOptions{.FuzzZeroOptionalBitmaskRemove = true, .FuzzOffsetShift = true, .FuzzImmutable = true};
-    }
+    bool FuzzChunked = false;
 };
 
 class IFuzzer {

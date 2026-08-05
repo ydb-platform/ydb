@@ -1,6 +1,5 @@
 (
 (let config (DataSource 'config))
-(let world (Configure! world config '"OptimizerFlags" '"ExpandLMapOrShuffleByKeysViaBlock"))
 
 (let input (AsList
   (Int32 '1)

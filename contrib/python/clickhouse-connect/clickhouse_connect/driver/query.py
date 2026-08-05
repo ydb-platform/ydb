@@ -34,14 +34,7 @@ limit_re = re.compile(r"\s+LIMIT($|\s)", re.IGNORECASE)
 select_re = re.compile(r"(^|\s)SELECT\s", re.IGNORECASE)
 insert_re = re.compile(r"(^|\s)INSERT\s*INTO", re.IGNORECASE)
 command_re = re.compile(r"(^\s*)(" + commands + r")\s", re.IGNORECASE)
-row_policy_show_re = re.compile(r"^\s*SHOW\s+(ROW\s+)?POLICIES\b", re.IGNORECASE)
 bare_row_policy_show_re = re.compile(r"^\s*SHOW\s+(ROW\s+)?POLICIES\s*$", re.IGNORECASE)
-
-
-def returns_empty_string_on_empty_body(cmd: str | bytes) -> bool:
-    if not isinstance(cmd, str):
-        return False
-    return row_policy_show_re.search(remove_sql_comments(cmd)) is not None
 
 
 class QueryContext(BaseQueryContext):

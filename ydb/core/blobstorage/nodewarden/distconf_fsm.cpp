@@ -2,6 +2,7 @@
 #include "distconf_quorum.h"
 #include "distconf_invoke.h"
 
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/retro_tracing/collector/retro_span_deserialization.h>
 #include <ydb/library/actors/retro_tracing/span/retro_span.h>
 #include <ydb/library/actors/retro_tracing/span/span_buffer.h>

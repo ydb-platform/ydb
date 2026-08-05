@@ -340,7 +340,7 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
             .NodeCount = erasure.BlobSubgroupSize() + 1,
             .Erasure = erasure,
             .ConfigPreprocessor = [](ui32, TNodeWardenConfig& conf) {
-                auto* bscSettings = conf.BlobStorageConfig.MutableBscSettings();
+                auto* bscSettings = conf.BlobStorageConfig->MutableBscSettings();
                 auto* selfHealSettings = bscSettings->MutableSelfHealSettings();
 
                 selfHealSettings->SetPreferLessOccupiedRack(true);

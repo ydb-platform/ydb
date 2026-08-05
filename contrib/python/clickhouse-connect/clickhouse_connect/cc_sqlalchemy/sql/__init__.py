@@ -1,10 +1,11 @@
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import Table, and_
 from sqlalchemy.sql.selectable import FromClause, Select
 
 from clickhouse_connect.cc_sqlalchemy.sql.clauses import ArrayJoin, LimitByClause, PreWhereClause
 from clickhouse_connect.cc_sqlalchemy.sql.clauses import array_join as _array_join_fromclause
+from clickhouse_connect.cc_sqlalchemy.sql.clauses import ch_join as _ch_join_fromclause
 from clickhouse_connect.driver.binding import quote_identifier
 
 # Non-rendering statement-hint dialect tag. Used only to force distinct
@@ -13,7 +14,7 @@ _CH_MODIFIER_DIALECT = "_ch_modifier"
 
 
 def full_table(table_name: str, schema: str | None = None) -> str:
-    if table_name.startswith("(") or "." in table_name or not schema:
+    if table_name.startswith("(") or not schema:
         return quote_identifier(table_name)
     return f"{quote_identifier(schema)}.{quote_identifier(table_name)}"
 
@@ -157,6 +158,64 @@ def limit_by(select_stmt: Select, by_clauses: Any, limit: int, offset: int | Non
     return new_stmt
 
 
+def _select_ch_join(
+    self: Select,
+    right: Any,
+    onclause: Any = None,
+    *,
+    isouter: bool = False,
+    full: bool = False,
+    cross: bool = False,
+    using: Any = None,
+    strictness: str | None = None,
+    distribution: str | None = None,
+) -> Select:
+    """Chainable ClickHouse JOIN. Resolves the left side from the prior join or the single FROM/select_from target."""
+    if not isinstance(self, Select):
+        raise TypeError("ch_join() expects a SQLAlchemy Select instance")
+
+    if getattr(self, "_setup_joins", ()):
+        raise ValueError(
+            "ch_join() cannot be combined with SQLAlchemy's native .join() on the same statement. "
+            "Use .ch_join() for all joins in the chain."
+        )
+
+    left = getattr(self, "_ch_join_root", None)
+    if left is None:
+        from_obj: tuple[FromClause, ...] = getattr(self, "_from_obj", ())
+        if len(from_obj) == 1:
+            left = from_obj[0]
+        elif not from_obj:
+            froms = self.get_final_froms()
+            if len(froms) == 1:
+                left = froms[0]
+        if left is None:
+            raise ValueError(
+                "ch_join() cannot determine the left side of the join. "
+                "Use the module-level ch_join(left, right, ...) with select_from() instead."
+            )
+
+    join = _ch_join_fromclause(
+        left,
+        right,
+        onclause,
+        isouter=isouter,
+        full=full,
+        cross=cross,
+        using=using,
+        strictness=strictness,
+        distribution=distribution,
+    )
+    new = self.select_from(join)
+    # The join subsumes the prior froms (left's tables are hidden), so collapse
+    # _from_obj to exactly (join,). Keeps the cache key equal to the
+    # select_from(ch_join(...)) factory form and stops deep chains from
+    # accumulating froms.
+    new._from_obj = (join,)  # type: ignore[attr-defined]
+    new._ch_join_root = join  # type: ignore[attr-defined]
+    return new
+
+
 def _select_prewhere(self: Select, whereclause: Any) -> Select:
     return prewhere(self, whereclause)
 
@@ -171,3 +230,90 @@ Select.array_join = _select_array_join  # type: ignore[attr-defined]
 Select.left_array_join = _select_left_array_join  # type: ignore[attr-defined]
 Select.prewhere = _select_prewhere  # type: ignore[attr-defined]
 Select.limit_by = _select_limit_by  # type: ignore[attr-defined]
+Select.ch_join = _select_ch_join  # type: ignore[attr-defined]
+
+
+class ClickHouseSelect(Select[Any]):
+    """Select subclass exposing ClickHouse chainables as typed methods.
+    Construct with cc_sqlalchemy.select(...)."""
+
+    inherit_cache = True
+
+    def add_columns(self, *entities: Any) -> "ClickHouseSelect":
+        return cast("ClickHouseSelect", super().add_columns(*entities))
+
+    def with_only_columns(
+        self,
+        *entities: Any,
+        maintain_column_froms: bool = False,
+        **kwargs: Any,
+    ) -> "ClickHouseSelect":
+        return cast(
+            "ClickHouseSelect",
+            super().with_only_columns(
+                *entities,
+                maintain_column_froms=maintain_column_froms,
+                **kwargs,
+            ),
+        )
+
+    def column(self, column: Any) -> "ClickHouseSelect":
+        return cast("ClickHouseSelect", super().column(column))
+
+    def reduce_columns(self, only_synonyms: bool = True) -> "ClickHouseSelect":
+        return cast("ClickHouseSelect", super().reduce_columns(only_synonyms=only_synonyms))
+
+    def final(self, table: FromClause | None = None) -> "ClickHouseSelect":
+        return cast("ClickHouseSelect", final(self, table=table))
+
+    def sample(self, sample_value: str | int | float, table: FromClause | None = None) -> "ClickHouseSelect":
+        return cast("ClickHouseSelect", sample(self, sample_value=sample_value, table=table))
+
+    def array_join(self, *cols: Any, alias: Any = None) -> "ClickHouseSelect":
+        return cast("ClickHouseSelect", _apply_array_join(self, cols, alias, is_left=False))
+
+    def left_array_join(self, *cols: Any, alias: Any = None) -> "ClickHouseSelect":
+        return cast("ClickHouseSelect", _apply_array_join(self, cols, alias, is_left=True))
+
+    def prewhere(self, whereclause: Any) -> "ClickHouseSelect":
+        return cast("ClickHouseSelect", prewhere(self, whereclause))
+
+    def limit_by(self, by_clauses: Any, limit: int, offset: int | None = None) -> "ClickHouseSelect":
+        return cast("ClickHouseSelect", limit_by(self, by_clauses, limit, offset))
+
+    def ch_join(
+        self,
+        right: Any,
+        onclause: Any = None,
+        *,
+        isouter: bool = False,
+        full: bool = False,
+        cross: bool = False,
+        using: Any = None,
+        strictness: str | None = None,
+        distribution: str | None = None,
+    ) -> "ClickHouseSelect":
+        return cast(
+            "ClickHouseSelect",
+            _select_ch_join(
+                self,
+                right,
+                onclause,
+                isouter=isouter,
+                full=full,
+                cross=cross,
+                using=using,
+                strictness=strictness,
+                distribution=distribution,
+            ),
+        )
+
+
+def select(*entities: Any) -> ClickHouseSelect:
+    """Runtime drop-in for sqlalchemy.select that adds the ClickHouse chainables as typed methods.
+    Result rows type as Any until the generic follow-up lands."""
+    # SQLAlchemy 1.4 disables Select.__init__; use its future-style class factory when present.
+    create_future_select = getattr(ClickHouseSelect, "_create_future_select", None)
+    if create_future_select is not None:
+        return cast("ClickHouseSelect", create_future_select(*entities))
+    return ClickHouseSelect(*entities)

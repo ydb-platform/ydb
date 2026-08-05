@@ -10,6 +10,9 @@
 
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
+
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
@@ -119,8 +122,7 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
     }
 }
 
-bool TBlobStorageController::TGroupInfo::FillInGroupParameters(
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
+bool TBlobStorageController::TGroupInfo::FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
         TBlobStorageController *self) const {
     if (GroupMetrics) {
         params->MergeFrom(GroupMetrics->GetGroupParameters());
@@ -157,8 +159,8 @@ bool TBlobStorageController::TGroupInfo::FillInGroupParameters(
     }
 }
 
-bool TBlobStorageController::TGroupInfo::FillInResources(
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const {
+bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb,
+        bool countMaxSlots) const {
     // count minimum params for each of slots assuming they are shared fairly between all the slots (expected or currently created)
     std::optional<ui64> size;
     std::optional<double> iops;
@@ -229,8 +231,7 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
     return Topology->GetQuorumChecker().CheckQuorumForGroup(vdisksWithAllMetrics);
 }
 
-bool TBlobStorageController::TGroupInfo::FillInVDiskResources(
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const {
+bool TBlobStorageController::TGroupInfo::FillInVDiskResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *pb) const {
     Y_ABORT_UNLESS(Topology);
     TBlobStorageGroupInfo::TGroupVDisks vdisksWithAllMetrics(Topology.get());
 

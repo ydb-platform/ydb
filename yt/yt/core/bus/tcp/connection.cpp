@@ -128,10 +128,9 @@ TConnection::TConnection(
     , UnixDomainSocketPath_(unixDomainSocketPath)
     , Handler_(std::move(handler))
     , Poller_(std::move(poller))
-    , LoggingTag_(Format("ConnectionId: %v, Endpoint: %v",
-        Id_,
-        EndpointDescription_))
-    , Logger(BusLogger().WithRawTag(LoggingTag_))
+    , Logger(BusLogger()
+        .WithTag("ConnectionId", Id_)
+        .WithTag("Endpoint", EndpointDescription_))
     , GenerateChecksums_(Config_->GenerateChecksums)
     , Socket_(socket)
     , MultiplexingBand_(multiplexingBand)
@@ -299,9 +298,9 @@ void TConnection::RunPeriodicCheck()
     }
 }
 
-const std::string& TConnection::GetLoggingTag() const
+const NLogging::TLoggingTagList& TConnection::GetLoggingTags() const
 {
-    return LoggingTag_;
+    return Logger.GetTags();
 }
 
 void TConnection::TryEnqueueHandshake()

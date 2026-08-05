@@ -25,10 +25,12 @@ from botocore.exceptions import (
     UnknownSignatureVersionError,
     UnsupportedSignatureVersionError,
 )
-from botocore.utils import ArnParser, datetime2timestamp
-
-# Keep these imported.  There's pre-existing code that uses them.
-from botocore.utils import fix_s3_host  # noqa
+from botocore.tokens import FrozenAuthToken
+from botocore.utils import (
+    ArnParser,
+    datetime2timestamp,
+    fix_s3_host,  # noqa: F401
+)
 
 
 class RequestSigner:
@@ -285,9 +287,12 @@ class RequestSigner:
             )
 
         if cls.REQUIRES_TOKEN is True:
-            frozen_token = None
-            if self._auth_token is not None:
+            if self._auth_token and not isinstance(
+                self._auth_token, FrozenAuthToken
+            ):
                 frozen_token = self._auth_token.get_frozen_token()
+            else:
+                frozen_token = self._auth_token
             auth = cls(frozen_token)
             return auth
 

@@ -28,7 +28,7 @@ struct TTestEnv {
         .VDiskReplPausedAtStart = false,
         .Erasure = erasure,
         .ConfigPreprocessor = [maxReassignAttemptsPerBucketPerIteration, iterationInterval](ui32, TNodeWardenConfig& conf) {
-            auto* bscSettings = conf.BlobStorageConfig.MutableBscSettings();
+            auto* bscSettings = conf.BlobStorageConfig->MutableBscSettings();
             auto* clusterBalancingSettings = bscSettings->MutableClusterBalancingSettings();
 
             clusterBalancingSettings->SetEnable(true);

@@ -35,6 +35,8 @@ struct TAggregatorSchema : NIceDb::Schema {
         struct LastUpdateTime : Column<3, NScheme::NTypeIds::Timestamp> {};
         struct SchemeShardId  : Column<4, NScheme::NTypeIds::Uint64> {};
         struct IsColumnTable  : Column<5, NScheme::NTypeIds::Bool> {};
+        struct LastAnalyzeRowUpdates : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct LastAnalyzeRowDeletes : Column<7, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<OwnerId, LocalPathId>;
         using TColumns = TableColumns<
@@ -42,7 +44,9 @@ struct TAggregatorSchema : NIceDb::Schema {
             LocalPathId,
             LastUpdateTime,
             SchemeShardId,
-            IsColumnTable
+            IsColumnTable,
+            LastAnalyzeRowUpdates,
+            LastAnalyzeRowDeletes
         >;
     };
 

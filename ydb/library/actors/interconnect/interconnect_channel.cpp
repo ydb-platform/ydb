@@ -174,7 +174,7 @@ namespace NActors {
                         State = EState::BODY;
                         IEventBase *base = event.Event.Get();
                         if (event.EventSerializedSize) {
-                            Chunker.SetSerializingEvent(base, /*withCachedSizes=*/ true);
+                            Chunker.SetSerializingEvent(base, /*withCachedSizes=*/ true, /*withCord=*/ false);
                         }
                         SerializationInfoContainer = base->CreateSerializationInfo(Params.UseExternalDataChannel);
                         SerializationInfo = &SerializationInfoContainer;
@@ -314,8 +314,8 @@ namespace NActors {
                 if (!out.size()) {
                     break;
                 }
-                for (const auto& [buffer, size] : Chunker.FeedBuf(out.data(), out.size())) {
-                    addChunk(buffer, size, false);
+                for (const auto& chunk : Chunker.FeedBuf(out.data(), out.size())) {
+                    addChunk(chunk.Buf, chunk.Size, false);
                 }
                 complete = Chunker.IsComplete();
                 if (complete) {

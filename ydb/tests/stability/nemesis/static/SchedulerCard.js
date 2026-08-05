@@ -48,16 +48,22 @@ export default {
 
     const slotsText = computed(() => {
       const used = budget.value.impaired_slots
+      const total = budget.value.total_slots
       const max = budget.value.max_slots
       if (used == null) return '-'
-      return max ? `${used}/${max}` : `${used} (unbounded)`
+      if (!max) return `${used} (unbounded)`
+      if (!total) return `${used} / ${max} (budget)`
+      const pct = Math.round((used / total) * 100)
+      return `${used} / ${total} (${pct}%; budget ${max})`
     })
 
     const problemList = computed(() => props.problems?.problems || [])
     const problemsByKind = computed(() => props.problems?.by_kind || {})
 
     function problemBadgeClass(kind) {
-      return kind === 'stuck_fault' ? 'badge-error' : 'badge-warning'
+      // stuck_fault / recovery_probe_blind → error badge.
+      return (kind === 'stuck_fault' || kind === 'recovery_probe_blind')
+        ? 'badge-error' : 'badge-warning'
     }
 
     return {
@@ -110,8 +116,14 @@ export default {
               <div class="font-mono">{{ intervalText }}</div>
             </div>
             <div>
-              <div class="opacity-60">Max faults / tick</div>
-              <div class="font-mono">{{ scheduler.max_per_tick ?? '-' }}</div>
+              <div class="opacity-60"
+                   title="Per-tick burst fuse for budgeted faults — the failure budget is the real limit; tablet (bypass) chaos is capped separately">
+                Fuse / tick
+              </div>
+              <div class="font-mono">
+                {{ scheduler.max_per_tick ?? '-' }}
+                <span class="opacity-60">+{{ scheduler.max_bypass_per_tick ?? 1 }} bypass</span>
+              </div>
             </div>
             <div>
               <div class="opacity-60">Types</div>
@@ -130,6 +142,10 @@ export default {
             <h3 class="font-bold text-sm mb-1 flex items-center gap-2">
               Failure budget
               <span class="badge badge-sm badge-ghost font-mono">{{ budget.erasure || 'unknown' }}</span>
+              <span v-if="probe && probe.blind" class="badge badge-sm badge-error"
+                    title="No fresh healthcheck data: budget releases and stuck detection are paused">
+                probe blind
+              </span>
             </h3>
             <div class="grid grid-cols-3 gap-2 text-xs">
               <div>
@@ -137,13 +153,16 @@ export default {
                 <div class="font-mono">{{ impairedDomains.length }}</div>
               </div>
               <div>
-                <div class="opacity-60">Slots down</div>
+                <div class="opacity-60"
+                     title="Dynamic nodes currently impaired vs total in the cluster; budget = max allowed down at once (30% of total)">
+                  Slots down
+                </div>
                 <div class="font-mono">{{ slotsText }}</div>
               </div>
               <div>
-                <div class="opacity-60">Probe tracked / stuck</div>
-                <div class="font-mono" :class="probe && probe.stuck ? 'text-error' : ''">
-                  {{ probe ? probe.tracked : '-' }} / {{ probe ? probe.stuck : '-' }}
+                <div class="opacity-60">Probe tracked / confirm / stuck</div>
+                <div class="font-mono" :class="probe && (probe.stuck || probe.blind) ? 'text-error' : ''">
+                  {{ probe ? probe.tracked : '-' }} / {{ probe ? (probe.confirming ?? 0) : '-' }} / {{ probe ? probe.stuck : '-' }}
                 </div>
               </div>
             </div>
@@ -167,7 +186,7 @@ export default {
             </h3>
             <div v-if="showProblems">
               <div v-if="problemList.length === 0" class="text-xs opacity-50">
-                No stuck faults, guard is doing its job.
+                No problems — guard and probe are doing their job.
               </div>
               <div v-else class="overflow-x-auto">
                 <table class="table table-xs w-full">
@@ -182,6 +201,13 @@ export default {
                     <tr v-for="(p, idx) in problemList" :key="idx">
                       <td>
                         <span class="badge badge-xs" :class="problemBadgeClass(p.kind)">{{ p.kind }}</span>
+                        <span v-if="p.details && p.details.phase"
+                              class="badge badge-xs badge-ghost font-mono"
+                              :title="p.details.phase === 'confirm'
+                                ? 'extract dispatched, waiting for the healthcheck confirm'
+                                : 'waiting for the recovery predicate'">
+                          {{ p.details.phase }}
+                        </span>
                         <span v-if="p.count > 1" class="text-xs opacity-70">x{{ p.count }}</span>
                       </td>
                       <td class="font-mono text-xs break-all">{{ p.target || '-' }}</td>

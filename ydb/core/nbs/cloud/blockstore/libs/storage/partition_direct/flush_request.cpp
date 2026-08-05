@@ -130,7 +130,7 @@ void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
                 LogTitle.GetWithTime().c_str(),
                 Hint.Segments[i].Lsn,
                 Hint.Segments[i].Range.Print().c_str(),
-                FormatError(response.Errors[i]).c_str());
+                FormatError(response.Errors[i]).Quote().c_str());
 
             flushFailed.push_back(Hint.Segments[i].Lsn);
         } else {

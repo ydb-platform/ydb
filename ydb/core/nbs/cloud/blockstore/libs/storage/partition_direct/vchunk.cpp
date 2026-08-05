@@ -340,7 +340,7 @@ void TVChunk::OnWriteBlocksResponse(
         "%s OnWriteBlocksResponse: %s %s",
         LogTitle.GetWithTime().c_str(),
         bundle->GetVChunkRange().Print().c_str(),
-        FormatError(response.Error).c_str());
+        FormatError(response.Error).Quote().c_str());
 
     --InflightWritesCount;
 
@@ -437,17 +437,17 @@ void TVChunk::DoStop()
 
     Stopped = true;
 
+    if (Copiers.empty()) {
+        OnStopped();
+        return;
+    }
+
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "%s DoStop copiers: %zu",
         LogTitle.GetWithTime().c_str(),
         Copiers.size());
-
-    if (Copiers.empty()) {
-        OnStopped();
-        return;
-    }
 
     TVector<TFuture<TDDiskDataCopier::EResult>> copierStops;
     for (const auto& [_, copier]: Copiers) {

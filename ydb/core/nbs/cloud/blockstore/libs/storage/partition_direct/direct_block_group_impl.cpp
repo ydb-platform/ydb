@@ -1005,7 +1005,7 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
             LogTitle.GetWithTime().c_str(),
             segmentCount,
             response.ShortUtf8DebugString().c_str(),
-            FormatError(error).c_str());
+            FormatError(error).Quote().c_str());
 
         if (IsSessionBlockedError(error)) {
             HandleBlockedGeneration(ddiskHostIndex, "SyncWithPBuffer");
@@ -1305,8 +1305,8 @@ void TDirectBlockGroup::OnAddHostResult(
             NKikimrServices::NBS_PARTITION,
             "%s AddHost %s request failed: %s",
             LogTitle.GetWithTime().c_str(),
-            PrintHostIndex(newHostIndex).c_str(),
-            FormatError(error).c_str());
+            PrintHostAndNode(newHostIndex).c_str(),
+            FormatError(error).Quote().c_str());
         return;
     }
 
@@ -1420,7 +1420,7 @@ void TDirectBlockGroup::QueryAddHost(THostIndex newHostIndex)
         NKikimrServices::NBS_PARTITION,
         "%s QueryAddHost %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(newHostIndex).c_str());
+        PrintHostAndNode(newHostIndex).c_str());
 
     Service->QueryAddHost(DirectBlockGroupIndex, newHostIndex);
 }
@@ -1586,7 +1586,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
         "%s OnConnectionEstablished: %s %s",
         LogTitle.GetWithTime().c_str(),
         PrintHostAndNode(hostIndex).c_str(),
-        FormatError(error).c_str());
+        FormatError(error).Quote().c_str());
 
     if (!HasError(error)) {
         Counters.OnConnectOk(ToDBGConnectionType(connectionType));
@@ -1625,7 +1625,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
             "%s connection failed %s: %s",
             LogTitle.GetWithTime().c_str(),
             PrintHostAndNode(hostIndex).c_str(),
-            FormatError(error).c_str());
+            FormatError(error).Quote().c_str());
         ReEstablishConnection(connectionType, hostIndex);
         return;
     }
@@ -1800,7 +1800,7 @@ void TDirectBlockGroup::OnResponse(
             LogTitle.GetWithTime().c_str(),
             PrintHostAndNode(hostIndex).c_str(),
             ToString(operation).c_str(),
-            FormatError(error).c_str());
+            FormatError(error).Quote().c_str());
 
         if (IsCancelledError(error)) {
             Oracle.OnRequestCancelled(hostIndex, operation, TInstant::Now());

@@ -2,6 +2,8 @@
 
 namespace NYql {
 
+namespace {
+
 constexpr TDuration DEFAULT_MAX_TIME = TDuration::Minutes(5);
 constexpr TDuration DNS_ERROR_MAX_TIME = TDuration::Seconds(10);
 
@@ -21,6 +23,8 @@ std::unordered_set<CURLcode> FqRetriedCurlCodes() {
         CURLE_GOT_NOTHING,
         CURLE_COULDNT_RESOLVE_HOST
     };
+}
+
 }
 
 std::unordered_set<CURLcode> YqlRetriedCurlCodes() {

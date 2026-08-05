@@ -823,10 +823,6 @@ public:
         }
     }
 
-    void ResumeStream() {
-        Finished = false;
-    }
-
     TEncryptionIV GetIV() const {
         return IV;
     }
@@ -887,10 +883,6 @@ TEncryptedFileDeserializer TEncryptedFileDeserializer::RestoreFromState(const TS
     TEncryptedFileDeserializer deserializer;
     deserializer.Impl->RestoreFromState(state);
     return deserializer;
-}
-
-void TEncryptedFileDeserializer::ResumeStream() {
-    Impl->ResumeStream();
 }
 
 std::pair<TBuffer, TEncryptionIV> TEncryptedFileDeserializer::DecryptFullFile(TEncryptionKey key, TBuffer data) {

@@ -549,7 +549,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             if (const TString& deserializerState = state.GetEncryptedDeserializerState()) {
                 try {
                     Deserializer = NBackup::TEncryptedFileDeserializer::RestoreFromState(deserializerState);
-                    Deserializer.ResumeStream();
                     ConfirmedDeserializerState = deserializerState;
                     FeedUnprocessedBytes = 0;
                     ReadyInputBytes = 0;

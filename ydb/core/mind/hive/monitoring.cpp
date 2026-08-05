@@ -46,20 +46,16 @@ TCgiParameters GetParams(const NMon::TEvRemoteHttpInfo* ev) {
     return cgi;
 }
 
-// TODO: make every Hive mon handler report its HTTP status through this helper.
+// These handlers answer through NMon::TEvRemoteJsonInfoRes instead of this helper:
+//   * TTxMonEvent_TabletAvailability
+//   * TTxMonEvent_ResetTablet
+//   * TTxMonEvent_SetDomain
+//   * TTxMonEvent_ManualOps, on parameter validation
+//   * TUpdateResourcesActor and TDeleteTabletActor, on timeout
 //
-// There are two ways to answer a mon request here and they disagree on failures. This helper
-// builds the whole response by hand, status line included, so the caller picks the status; about
-// twenty error paths use it and answer 4xx correctly. The other way is NMon::TEvRemoteJsonInfoRes,
-// which carries the payload only -- NTabletMonitoringProxy then answers 200 for it unconditionally.
-// Handlers that report a failure that way (TabletAvailability, ResetTablet, SetDomain, the
-// UpdateResources and DeleteTablet timeouts, ManualOps parameter validation) look successful to
-// any client that checks the status code and describe the error in the body instead.
+// They answer with an unconditional 200, which is wrong: the payload may carry an error.
 //
-// Moving those over to this helper makes Hive consistent on its own. Teaching
-// TEvRemoteJsonInfoRes to carry a status would be the cleaner fix, but it changes a contract
-// shared with about eighteen other files and the serialized form of the event, so it does not
-// belong to a Hive-local change.
+// TODO: migrate all handlers to this helper to make sure the status is always properly reported.
 NMon::TEvRemoteBinaryInfoRes* MakeRawHttpEvent(const TString& status, const TString& content) {
     return new NMon::TEvRemoteBinaryInfoRes(
         TStringBuilder() << "HTTP/1.1 " << status << "\r\n"

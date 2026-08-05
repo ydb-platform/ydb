@@ -60,7 +60,7 @@ namespace NBlockIO {
 
         const EStatus Status;
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-        TVector<NPageCollection::TLoadedPage> Pages;
+        TVector<NPageCollection::TLoadedPageData> Pages;
         const ui64 Cookie;
     };
 

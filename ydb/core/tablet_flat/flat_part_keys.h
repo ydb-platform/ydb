@@ -125,7 +125,7 @@ namespace NTable {
             return true;
         }
 
-        bool LoadPage(TPageLocation location)
+        bool LoadPage(const TPageLocation& location)
         {
             Y_ENSURE(location.Offset != TPageOffset::Max(), "Unexpected seek to an invalid page id");
             if (Offset != location.Offset) {

@@ -83,13 +83,13 @@ public:
         Y_ENSURE(false, "IPages::Locate(TPart*, ...) shouldn't be used here");
     }
 
-    const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override {
+    const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
         Y_ENSURE(groupId.IsMain(), "Unsupported column group");
 
         auto partStore = CheckedCast<const TPartStore*>(part);
         auto info = partStore->PageCollections.at(groupId.Index).Get();
         auto type = location.Type;
-        Y_ENSURE(type == EPage::FlatIndex || type == EPage::BTreeIndex);
+        Y_ENSURE(type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2);
 
         auto& partPages = Pages[part];
         auto page = partPages.FindPtr(location.Offset);
@@ -110,7 +110,7 @@ public:
         Resume();
 
         for (auto& loaded : ev->Get()->Pages) {
-            partPages.emplace(loaded.Location.Offset, TPinnedPageRef(loaded.Page).GetData());
+            partPages.emplace(loaded.Offset, TPinnedPageRef(loaded.Page).GetData());
             PageRefs.emplace_back(std::move(loaded.Page));
         }
 

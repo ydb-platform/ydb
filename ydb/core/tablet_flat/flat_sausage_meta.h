@@ -41,7 +41,7 @@ namespace NPageCollection {
         ui64 GetPageSize(ui32 pageId) const;
         TStringBuf GetPageInplaceData(ui32 pageId) const;
 
-        TBorder Bounds(NTable::NPage::TPageLocation location) const;
+        TBorder Bounds(const NTable::NPage::TPageLocation& location) const;
         TPageLocation GetLocation(ui32 pageId) const;
 
     public:

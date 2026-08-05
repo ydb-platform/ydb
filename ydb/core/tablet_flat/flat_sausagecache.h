@@ -85,28 +85,15 @@ public:
         // Mutable methods can be only called on a construction stage or from a Private Cache
         // Otherwise stat counters would be out of sync
 
-        bool AddPage(TPageId pageId, TSharedPageRef sharedBody) {
-            auto location = PageCollection->GetLocation(pageId);
-            return AddPage(location, std::move(sharedBody));
-        }
-
-        bool AddPage(TPageLocation location, TSharedPageRef sharedBody) {
+        bool AddPage(TPageOffset offset, size_t size, TSharedPageRef sharedBody) {
             return PageMap.emplace(MakeHolder<TPage>(
-                location.Offset, location.Size, std::move(sharedBody), this)).second;
+                offset, size, std::move(sharedBody), this)).second;
         }
 
-        bool AddStickyPage(TPageId pageId, TSharedPageRef sharedBody) {
-            return AddStickyPage(PageCollection->GetLocation(pageId), std::move(sharedBody));
-        }
-
-        bool AddStickyPage(TPageLocation location, TSharedPageRef sharedBody) {
+        bool AddStickyPage(TPageOffset offset, size_t size, TSharedPageRef sharedBody) {
             Y_ENSURE(sharedBody.IsUsed());
-            AddPage(location, sharedBody);
-            return StickyPages.emplace(location.Offset, std::move(sharedBody)).second;
-        }
-
-        bool DropPage(TPageId pageId) {
-            return DropPage(PageCollection->GetLocation(pageId).Offset);
+            AddPage(offset, size, sharedBody);
+            return StickyPages.emplace(offset, std::move(sharedBody)).second;
         }
 
         bool DropPage(NTable::NPage::TPageOffset offset, ui64 *size = nullptr) {
@@ -124,6 +111,10 @@ public:
 
         void SetCacheMode(ECacheMode cacheMode) {
             CacheMode = cacheMode;
+        }
+
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const {
+            return PageCollection->GetLocation(pageId);
         }
 
         const TLogoBlobID Id;
@@ -160,23 +151,11 @@ public:
 
     const TStats& GetStats() const { return Stats; }
 
-    TSharedPageRef TryGetPage(TPageId pageId, TPageCollection *pageCollection) {
-        return TryGetPage(pageCollection->PageCollection->GetLocation(pageId).Offset, pageCollection);
-    }
     TSharedPageRef TryGetPage(TPageOffset offset, TPageCollection *pageCollection);
 
-    void DropPage(TPageId pageId, TPageCollection *pageCollection) {
-        DropPage(pageCollection->PageCollection->GetLocation(pageId).Offset, pageCollection);
-    }
     void DropPage(TPageOffset offset, TPageCollection *pageCollection);
-    void AddPage(TPageId pageId, TSharedPageRef sharedBody, TPageCollection *pageCollection) {
-        AddPage(pageCollection->PageCollection->GetLocation(pageId), std::move(sharedBody), pageCollection);
-    }
-    void AddPage(TPageLocation location, TSharedPageRef sharedBody, TPageCollection *pageCollection);
-    void AddStickyPage(TPageId pageId, TSharedPageRef sharedBody, TPageCollection *pageCollection) {
-        AddStickyPage(pageCollection->PageCollection->GetLocation(pageId), std::move(sharedBody), pageCollection);
-    }
-    void AddStickyPage(TPageLocation location, TSharedPageRef sharedBody, TPageCollection *pageCollection);
+    void AddPage(TPageOffset offset, size_t size, const TSharedPageRef& sharedBody, TPageCollection *pageCollection);
+    void AddStickyPage(TPageOffset offset, size_t size, TSharedPageRef sharedBody, TPageCollection *pageCollection);
     bool UpdateCacheMode(ECacheMode newCacheMode, TPageCollection *pageCollection);
 
     THashMap<TLogoBlobID, TIntrusivePtr<TPageCollection>> DetachPrivatePageCache();

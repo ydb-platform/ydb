@@ -342,6 +342,9 @@ TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& 
 TString GetTypePrettyDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 
+// Members with this prefix are reserved for YQL internal needs and must not be used by user data
+inline constexpr TStringBuf SystemMemberPrefix = "_yql_";
+
 bool IsSystemMember(const TStringBuf& memberName);
 
 template<bool Deduplicte = true, ui8 OrListsOfAtomsDepth = 0U>

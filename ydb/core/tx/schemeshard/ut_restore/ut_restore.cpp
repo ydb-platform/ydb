@@ -3044,11 +3044,24 @@ value {
         return result;
     }
 
+    enum class EEncryptedImportRebootMode {
+        None,
+        AfterLastPortion,
+        AfterReadAndAfterStateSave,
+    };
+
     // Test that checks different combinations of:
     // - downloaded blocks size
     // - decrypted blocks size
     // - compression blocks size
-    void ImportBigEncryptedFile(size_t encryptedBlockSize, size_t resultFileSize, size_t readBatchSize, bool compressed, bool enableDataShardDirectPartImport, bool rebootAfterLastPortion = false) {
+    void ImportBigEncryptedFile(
+            size_t encryptedBlockSize,
+            size_t resultFileSize,
+            size_t readBatchSize,
+            bool compressed,
+            bool enableDataShardDirectPartImport,
+            EEncryptedImportRebootMode rebootMode = EEncryptedImportRebootMode::None)
+    {
         TString key = "Cool very very secret rand key!!";
         NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
 
@@ -3084,18 +3097,30 @@ value {
 
         bool wholeFileRead = false;
         bool readyToReboot = false;
-        if (rebootAfterLastPortion) {
+        ui32 rebootCount = 0;
+
+        if (rebootMode != EEncryptedImportRebootMode::None) {
             runtime.SetObserverFunc([&, contentLength](TAutoPtr<IEventHandle>& ev) {
+                if (readyToReboot) {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                const bool afterRead = rebootCount % 2 == 0;
                 switch (ev->GetTypeRewrite()) {
                 case NWrappers::NExternalStorage::EvGetObjectResponse: {
                     const auto& interval = ev->Get<NWrappers::NExternalStorage::TEvGetObjectResponse>()->GetReadInterval();
-                    if (interval.second + 1 == contentLength) {
-                        wholeFileRead = true;
+                    if (rebootMode == EEncryptedImportRebootMode::AfterLastPortion) {
+                        wholeFileRead |= interval.second + 1 == contentLength;
+                    } else if (afterRead) {
+                        readyToReboot = true;
                     }
                     break;
                 }
                 case TEvDataShard::EvS3UploadRowsResponse:
-                    readyToReboot = wholeFileRead;
+                    if (rebootMode == EEncryptedImportRebootMode::AfterLastPortion) {
+                        readyToReboot = wholeFileRead;
+                    } else if (!afterRead) {
+                        readyToReboot = true;
+                    }
                     break;
                 }
                 return TTestActorRuntime::EEventAction::PROCESS;
@@ -3126,7 +3151,7 @@ value {
         )", GenerateTableDescription(desc).data(), s3Port, readBatchSize, PrintInProtoText(iv).c_str(), key.c_str()));
         UNIT_ASSERT_EQUAL(status, NKikimrScheme::StatusAccepted);
 
-        if (rebootAfterLastPortion) {
+        auto waitReadyToReboot = [&]() {
             if (!readyToReboot) {
                 TDispatchOptions opts;
                 opts.FinalEvents.emplace_back([&readyToReboot](IEventHandle&) -> bool {
@@ -3135,8 +3160,21 @@ value {
                 runtime.DispatchEvents(opts);
             }
             UNIT_ASSERT(readyToReboot);
+        };
+
+        if (rebootMode == EEncryptedImportRebootMode::AfterLastPortion) {
+            waitReadyToReboot();
             runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
             RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
+        } else if (rebootMode == EEncryptedImportRebootMode::AfterReadAndAfterStateSave) {
+            constexpr ui32 rebootsCount = 4;
+            for (ui32 i = 0; i < rebootsCount; ++i) {
+                waitReadyToReboot();
+                RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
+                ++rebootCount;
+                readyToReboot = false;
+            }
+            runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
         }
 
         env.TestWaitNotification(runtime, txId);
@@ -3146,8 +3184,13 @@ value {
     }
 
     Y_UNIT_TEST(ImportBigEncryptedFileWithRebootAfterLastPortion) {
-        ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false, false, true);
-        ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true, false, true);
+        ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false, false, EEncryptedImportRebootMode::AfterLastPortion);
+        ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true, false, EEncryptedImportRebootMode::AfterLastPortion);
+    }
+
+    Y_UNIT_TEST(ImportBigEncryptedFileWithRebootsAfterReadAndStateSave) {
+        ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
+        ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
     }
 
     Y_UNIT_TEST_FLAG(ImportBigEncryptedFile, EnableDataShardDirectPartImport) {

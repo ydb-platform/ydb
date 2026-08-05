@@ -437,6 +437,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 THolder<IReadController> deserializedDataController,
                 ui64 readBatchSize)
             : Deserializer(std::move(key), std::move(expectedIV))
+            , ConfirmedDeserializerState(Deserializer.GetState())
             , DataController(std::move(deserializedDataController))
             , ReadBatchSize(readBatchSize)
         {
@@ -522,9 +523,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 FeedUnprocessedBytes -= readyBytes;
                 ReadyInputBytes = 0;
             }
-            if (ConfirmedDeserializerState) {
-                state.SetEncryptedDeserializerState(ConfirmedDeserializerState);
-            }
+            state.SetEncryptedDeserializerState(ConfirmedDeserializerState);
             DataController->Confirm(state);
         }
 
@@ -570,9 +569,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         ui64 ReadyInputBytes = 0;
         bool NewData = false;
         ui64 BytesFedToChild = 0;
-        TString ConfirmedDeserializerState;
         TMaybe<TString> FeedError;
         NBackup::TEncryptedFileDeserializer Deserializer;
+        TString ConfirmedDeserializerState;
         THolder<IReadController> DataController;
         const ui64 ReadBatchSize;
     };

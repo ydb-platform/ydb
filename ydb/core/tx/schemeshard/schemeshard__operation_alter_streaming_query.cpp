@@ -13,8 +13,9 @@ namespace {
 
 class TPropose : public TSubOperationState {
 public:
-    explicit TPropose(TOperationId id)
+    explicit TPropose(TOperationId id, i64 runDelta = 0)
         : OperationId(std::move(id))
+        , RunDelta(runDelta)
     {}
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -24,6 +25,10 @@ public:
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterStreamingQuery);
+
+        if (RunDelta != 0) {
+            context.SS->TabletCounters->Simple()[COUNTER_RUNNING_STREAMING_QUERY_COUNT].Add(RunDelta);
+        }
 
         const TPathId& pathId = txState->TargetPathId;
         const TPath& path = TPath::Init(pathId, context.SS);
@@ -53,6 +58,7 @@ private:
 
 private:
     const TOperationId OperationId;
+    const i64 RunDelta;
 };
 
 class TAlterStreamingQuery : public TSubOperation {
@@ -76,7 +82,8 @@ class TAlterStreamingQuery : public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            // RunDelta_ is 0 on restart (init already loaded the updated state from DB)
+            return MakeHolder<TPropose>(OperationId, RunDelta_);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -220,6 +227,15 @@ public:
         const auto queryInfo = GetAlteredQueryInfo(dstPath, context);
         RETURN_RESULT_UNLESS(IsDescriptionValid(result, queryInfo));
 
+        // Compute delta for COUNTER_RUNNING_STREAMING_QUERY_COUNT before persisting the alter
+        {
+            const auto& oldProps = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr)->Properties.GetProperties();
+            const auto& newProps = queryInfo->Properties.GetProperties();
+            const bool wasRun = oldProps.contains("run") && oldProps.at("run") == "true";
+            const bool willRun = newProps.contains("run") && newProps.at("run") == "true";
+            RunDelta_ = static_cast<i64>(willRun) - static_cast<i64>(wasRun);
+        }
+
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         const auto guard = context.DbGuard();
@@ -239,6 +255,11 @@ public:
         LOG_N("TAlterStreamingQuery AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);
     }
+
+private:
+    // Delta to apply to COUNTER_RUNNING_STREAMING_QUERY_COUNT when the alter is committed.
+    // Set in Propose(); remains 0 on restart (init already loaded the post-alter state).
+    i64 RunDelta_ = 0;
 };
 
 }  // anonymous namespace

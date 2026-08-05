@@ -171,7 +171,6 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     if (!config->GetEndpoint() && LocalTopicClientFactory) {
         NYdb::NTopic::TDescribeTopicSettings settings;
-        settings.IncludeStats(true);
         return LocalTopicClientFactory->CreateTopicClient(GetYdbPqClientOptions(database, *config, credentialsProviderFactory))->DescribeTopic(path, settings)
             .Apply([path](const TAsyncDescribeTopicResult& f) {
                 IPqGateway::TClusterInfo info = {.Info = {.Status = TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE}};
@@ -185,13 +184,6 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                     const auto& response = f.GetValue();
                     if (response.IsSuccess()) {
                         info.PartitionsCount = response.GetTopicDescription().GetTotalPartitionsCount();
-                        const auto& partitions = response.GetTopicDescription().GetPartitions();
-                        for (const auto& partitionInfo : partitions) {
-                            if (!partitionInfo.GetPartitionStats()) {
-                                continue;
-                            }
-                            info.MaxWriteTime[partitionInfo.GetPartitionId()] = partitionInfo.GetPartitionStats()->GetLastWriteTime();
-                        }
                     } else {
                         setError(response.GetIssues().ToString());
                     }
@@ -232,7 +224,6 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                     } else {
                         clusterInfo.AdjustTopicClientSettings(topicSettings);
                         NYdb::NTopic::TDescribeTopicSettings settings;
-                        settings.IncludeStats(true);
                         futures.emplace_back(TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath, settings));
                     }
                     results.emplace_back(std::move(clusterInfo));
@@ -269,16 +260,6 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                                 continue;
                             }
                             results[i].PartitionsCount = describeTopicResult.GetTopicDescription().GetTotalPartitionsCount();
-
-                            const auto& partitions = describeTopicResult.GetTopicDescription().GetPartitions();
-                            for (const auto& partitionInfo : partitions) {
-                                if (!partitionInfo.GetPartitionStats()) {
-                                    continue;
-                                }
-                                Cerr << "Partition " << partitionInfo.GetPartitionId() << " has last write time " << partitionInfo.GetPartitionStats()->GetLastWriteTime() << Endl;
-                                results[i].MaxWriteTime[partitionInfo.GetPartitionId()] = partitionInfo.GetPartitionStats()->GetLastWriteTime();
-                            }
-
                             gotAnyTopic = true;
                         } catch (...) {
                             addErrorCluster();

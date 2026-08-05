@@ -603,6 +603,8 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.V2.UringEngineRingsPerShard = v2.GetUringEngineRingsPerShard();
         result.V2.UringEngineSqThreadIdleMs = v2.GetUringEngineSqThreadIdleMs();
         result.V2.ShareRingsAmongThreads = v2.GetShareRingsAmongThreads();
+        result.V2.EnableFixedFiles = v2.GetEnableFixedFiles();
+        result.V2.UringEngineFixedFilesPerRing = v2.GetUringEngineFixedFilesPerRing();
     }
 
     return result;

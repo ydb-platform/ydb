@@ -136,6 +136,11 @@ private:
         FinishInfo.Update(status, std::move(issues));
 
         if (!LeaseUpdateStartTime) {
+            LOG_I("Exit, send response"
+                << ", finish status: " << *FinishInfo.Status
+                << ", issues: " << FinishInfo.Issues.ToOneLineString()
+                << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString());
+
             Send(Owner, new TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished(*FinishInfo.Status, std::move(FinishInfo.Issues)));
             PassAway();
         }

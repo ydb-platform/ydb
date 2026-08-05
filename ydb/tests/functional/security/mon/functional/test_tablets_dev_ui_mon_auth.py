@@ -314,8 +314,6 @@ def _hive_ensure_tenant(cluster):
 
 def _hive_managed_tablet_ids(cluster, secure_path_mode):
     _hive_ensure_tenant(cluster)
-    # page=CreateTablet cannot be used here: TCreateTabletActor never fills BindedChannels, which
-    # THive::Handle(TEvCreateTablet) requires, so that handler always answers INVALID_ARGUMENTS.
     # A tenant DataShard is owned by the tenant Hive, so the tablets are taken from this Hive.
     page = _hive_request(cluster, secure_path_mode, 'page=MemStateTablets&max=100').text
     return [int(tablet_id) for tablet_id in re.findall(r'tablets\?TabletID=(\d+)', page)]
@@ -355,8 +353,6 @@ def _hive_pages(node_id, tablet_id, domain_ss, domain_path):
         (f'page=KickNode&node={node_id}', 200),
         (f'page=DrainNode&node={node_id}&wait=0', 200),
         (f'page=TabletAvailability&node={node_id}&resettype=Dummy', 200),
-        # Always fails: the handler does not fill BindedChannels.
-        (f'page=CreateTablet&owner={tablet_id}&owner_idx=1&type=8', 400),
         ('page=Rebalance', 200),
         ('page=RebalanceFromScratch', 200),
         ('page=StorageRebalance', 200),

@@ -3,7 +3,6 @@
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/minikql/mkql_runtime_version.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -147,12 +146,6 @@ void TDqProgramBuilder::AddJoinFilters(TCallableBuilder& callableBuilder, TRunti
                                        TRuntimeNode rightInput, EJoinKind joinKind,
                                        const TJoinFilterLambda& leftFilter, const TJoinFilterLambda& rightFilter,
                                        const TJoinCommonFilterLambda& commonFilter) {
-    if constexpr (RuntimeVersion < 84U) {
-        MKQL_ENSURE(!leftFilter && !rightFilter && !commonFilter,
-                    "Runtime version (" << RuntimeVersion << ") too old for join filters");
-        return;
-    }
-
     TRuntimeNode::TList leftArgs;
     if (leftFilter || commonFilter) {
         leftArgs = MakeRowArgs(leftInput, /*forceOptional=*/false);

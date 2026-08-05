@@ -1,6 +1,9 @@
 #include "impl.h"
 #include "config.h"
 
+#include <ydb/core/util/format.h>
+#include <ydb/core/blobstorage/base/utility.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {

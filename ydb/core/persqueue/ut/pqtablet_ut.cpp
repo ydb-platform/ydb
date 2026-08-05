@@ -367,6 +367,17 @@ protected:
     void SendDeferredPublicationWriteRequestWithoutWait(const TWriteId& writeId, const TString& ownerCookie, ui32 partitionId = 0);
     void WaitDeferredPublicationWriteResponse();
     TVector<TString> ReadMainPartitionMessages(ui32 partitionId = 0, ui32 count = 10);
+    NKikimrClient::TCmdReadResult CmdReadCapture(const TPQCmdReadSettings& settings);
+    void CommitTopicTransaction(const TWriteId& writeId, ui32 supportivePartitionId, ui64 txId,
+                                const std::vector<ui32>& partitionIds = {0});
+    void SendSupportivePartitionWrite(
+        const TWriteId& writeId,
+        const TString& ownerCookie,
+        ui64 seqNo,
+        ui64 messageNo,
+        const TString& data,
+        ui64 cookie,
+        ui32 partitionId = 0);
     void CommitDeferredPublicationFinalize(
         const TWriteId& writeId,
         ui64 txId,
@@ -1161,6 +1172,17 @@ void TPQTabletFixture::WaitAbortDeferredStagingResponse(const ui64 cookie) {
 TVector<TString> TPQTabletFixture::ReadMainPartitionMessages(const ui32 partitionId, const ui32 count) {
     TPQCmdReadSettings readSettings{"", partitionId, 0, count, 16_MB, 0};
 
+    const auto readResult = CmdReadCapture(readSettings);
+
+    TVector<TString> payloads;
+    payloads.reserve(readResult.ResultSize());
+    for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+        payloads.push_back(readResult.GetResult(i).GetData());
+    }
+    return payloads;
+}
+
+NKikimrClient::TCmdReadResult TPQTabletFixture::CmdReadCapture(const TPQCmdReadSettings& settings) {
     bool found = false;
     NKikimrClient::TCmdReadResult readResult;
     auto observer = [&found, &readResult](TAutoPtr<IEventHandle>& event) {
@@ -1175,22 +1197,79 @@ TVector<TString> TPQTabletFixture::ReadMainPartitionMessages(const ui32 partitio
         return TTestActorRuntimeBase::EEventAction::PROCESS;
     };
     auto prev = Ctx->Runtime->SetObserverFunc(observer);
-
-    BeginCmdRead(readSettings, *Ctx);
-
+    BeginCmdRead(settings, *Ctx);
     TDispatchOptions options;
-    options.CustomFinalCondition = [&found]() {
-        return found;
-    };
+    options.CustomFinalCondition = [&found]() { return found; };
     UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
     Ctx->Runtime->SetObserverFunc(prev);
+    return readResult;
+}
 
-    TVector<TString> payloads;
-    payloads.reserve(readResult.ResultSize());
-    for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
-        payloads.push_back(readResult.GetResult(i).GetData());
+void TPQTabletFixture::SendSupportivePartitionWrite(
+    const TWriteId& writeId,
+    const TString& ownerCookie,
+    const ui64 seqNo,
+    const ui64 messageNo,
+    const TString& data,
+    const ui64 cookie,
+    const ui32 partitionId)
+{
+    EnsurePipeExist();
+
+    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* request = event->Record.MutablePartitionRequest();
+    request->SetTopic("/topic");
+    request->SetPartition(partitionId);
+    request->SetCookie(cookie);
+    request->SetOwnerCookie(ownerCookie);
+    request->SetMessageNo(messageNo);
+    SetWriteId(*request, writeId);
+    ActorIdToProto(Pipe, request->MutablePipeClient());
+
+    auto* cmdWrite = request->AddCmdWrite();
+    cmdWrite->SetSourceId("tx-src");
+    cmdWrite->SetSeqNo(seqNo);
+    cmdWrite->SetData(data);
+    cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+    cmdWrite->SetDisableDeduplication(true);
+    cmdWrite->SetUncompressedSize(data.size());
+    cmdWrite->SetIgnoreQuotaDeadline(true);
+    cmdWrite->SetExternalOperation(true);
+
+    SendToPipe(Ctx->Edge, event.Release());
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
+    UNIT_ASSERT(response != nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetPartitionResponse().GetCookie(), cookie);
+}
+
+void TPQTabletFixture::CommitTopicTransaction(
+    const TWriteId& writeId,
+    const ui32 supportivePartitionId,
+    const ui64 txId,
+    const std::vector<ui32>& partitionIds)
+{
+    EnsurePipeExist();
+
+    TProposeTransactionParams params;
+    params.TxId = txId;
+    params.Senders = {Ctx->TabletId};
+    params.Receivers = {Ctx->TabletId};
+    params.WriteId = writeId;
+    for (const ui32& partitionId : partitionIds) {
+        params.TxOps.push_back({
+            .Partition = partitionId,
+            .Path = "/topic",
+            .SupportivePartition = supportivePartitionId,
+        });
     }
-    return payloads;
+    SendProposeTransactionRequest(params);
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
 }
 
 void TPQTabletFixture::CommitDeferredPublicationFinalize(
@@ -3314,6 +3393,180 @@ Y_UNIT_TEST_F(DeferredPublication_Publish_Successful_Commit, TPQTabletFixture) {
     const auto messages = ReadMainPartitionMessages();
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(messages[0], "deferred-publish-payload");
+}
+
+// Full tablet CmdRead after seed (parent EndOffset = S) + kafka-tx BodyKeys rename.
+// Mid-blob Offset = S+k must return parent-space GetOffset(), not supportive header coords.
+Y_UNIT_TEST_F(KafkaTxnRenameThenMidCmdReadKeepsParentOffsets, TPQTabletFixture) {
+    constexpr ui32 seedCount = 5;
+    constexpr ui32 txCount = 6;
+    constexpr ui32 midK = 2;
+    constexpr ui64 parentKeyOffset = seedCount;
+    constexpr ui64 midReadOffset = parentKeyOffset + midK;
+    static_assert(midK > 0 && midK < txCount);
+
+    PQTabletPrepare({.partitions=1}, {{"user1", true}}, *Ctx);
+    EnsurePipeExist();
+
+    // Advance parent so rename maps supportive headers (0..) onto Key.Offset = S.
+    TVector<std::pair<ui64, TString>> seed;
+    for (ui32 i = 0; i < seedCount; ++i) {
+        seed.emplace_back(i + 1, TStringBuilder() << "seed-" << i);
+    }
+    CmdWrite(/*partition=*/0, "seed-src", seed, *Ctx);
+
+    NKafka::TProducerInstanceId producerInstanceId = {7, 0};
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    for (ui32 i = 0; i < txCount; ++i) {
+        auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto* request = event->Record.MutablePartitionRequest();
+        request->SetTopic("/topic");
+        request->SetPartition(0);
+        request->SetCookie(200 + i);
+        request->SetOwnerCookie(ownerCookie);
+        request->SetMessageNo(i);
+
+        auto* writeId = request->MutableWriteId();
+        writeId->SetKafkaTransaction(true);
+        auto* requestProducerInstanceId = writeId->MutableKafkaProducerInstanceId();
+        requestProducerInstanceId->SetId(producerInstanceId.Id);
+        requestProducerInstanceId->SetEpoch(producerInstanceId.Epoch);
+
+        ActorIdToProto(Pipe, request->MutablePipeClient());
+
+        auto* cmdWrite = request->AddCmdWrite();
+        cmdWrite->SetSourceId(std::to_string(producerInstanceId.Id));
+        cmdWrite->SetSeqNo(i);
+        const TString data = TStringBuilder() << "tx-" << i;
+        cmdWrite->SetData(data);
+        cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+        cmdWrite->SetDisableDeduplication(true);
+        cmdWrite->SetUncompressedSize(data.size());
+        cmdWrite->SetIgnoreQuotaDeadline(true);
+        cmdWrite->SetExternalOperation(true);
+
+        SendToPipe(Ctx->Edge, event.Release());
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
+        UNIT_ASSERT(response != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetPartitionResponse().GetCookie(), 200 + i);
+    }
+
+    CommitKafkaTransaction(producerInstanceId, /*txId=*/9001);
+
+    TPQCmdReadSettings readSettings{"", /*partition=*/0, static_cast<i64>(midReadOffset),
+                                    /*count=*/txCount, 16_MB, 0};
+    readSettings.User = "user1";
+
+    const auto readResult = CmdReadCapture(readSettings);
+
+    constexpr ui32 expectedCount = txCount - midK;
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), expectedCount);
+    for (ui32 i = 0; i < expectedCount; ++i) {
+        const ui64 expectedOffset = midReadOffset + i;
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            readResult.GetResult(i).GetOffset(), expectedOffset,
+            "result index=" << i
+                << " (supportive leak would be near " << midK + i << " / header space)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult.GetResult(i).GetData(),
+            TStringBuilder() << "tx-" << (midK + i));
+    }
+}
+
+// Same Key≠Header mid-CmdRead contract for Topic API (KQP) write tx: BodyKeys rename
+// uses SupportivePartition from propose; blob headers stay in supportive space.
+Y_UNIT_TEST_F(TopicTxRenameThenMidCmdReadKeepsParentOffsets, TPQTabletFixture) {
+    constexpr ui32 seedCount = 5;
+    constexpr ui32 txCount = 6;
+    constexpr ui32 midK = 2;
+    constexpr ui64 parentKeyOffset = seedCount;
+    constexpr ui64 midReadOffset = parentKeyOffset + midK;
+    static_assert(midK > 0 && midK < txCount);
+
+    PQTabletPrepare({.partitions=1}, {{"user1", true}}, *Ctx);
+    EnsurePipeExist();
+
+    TVector<std::pair<ui64, TString>> seed;
+    for (ui32 i = 0; i < seedCount; ++i) {
+        seed.emplace_back(i + 1, TStringBuilder() << "seed-" << i);
+    }
+    CmdWrite(/*partition=*/0, "seed-src", seed, *Ctx);
+
+    const TWriteId writeId(0, 42);
+    const TString ownerCookie = CreateSupportivePartitionForDeferredPublication(writeId);
+    for (ui32 i = 0; i < txCount; ++i) {
+        SendSupportivePartitionWrite(
+            writeId, ownerCookie, /*seqNo=*/i, /*messageNo=*/i,
+            TStringBuilder() << "topic-tx-" << i, /*cookie=*/300 + i);
+    }
+    const ui32 supportivePartitionId =
+        WaitForExactTxWritesCount(1).GetTxWrites(0).GetInternalPartitionId();
+    CommitTopicTransaction(writeId, supportivePartitionId, /*txId=*/9101);
+
+    TPQCmdReadSettings readSettings{"", /*partition=*/0, static_cast<i64>(midReadOffset),
+                                    /*count=*/txCount, 16_MB, 0};
+    readSettings.User = "user1";
+    const auto readResult = CmdReadCapture(readSettings);
+
+    constexpr ui32 expectedCount = txCount - midK;
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), expectedCount);
+    for (ui32 i = 0; i < expectedCount; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            readResult.GetResult(i).GetOffset(), midReadOffset + i,
+            "result index=" << i
+                << " (supportive leak would be near " << midK + i << " / header space)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult.GetResult(i).GetData(),
+            TStringBuilder() << "topic-tx-" << (midK + i));
+    }
+}
+
+// Deferred publication Publish also renames BodyKeys; mid-blob CmdRead must keep parent offsets.
+Y_UNIT_TEST_F(DeferredPublicationRenameThenMidCmdReadKeepsParentOffsets, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    constexpr ui32 seedCount = 5;
+    constexpr ui32 txCount = 6;
+    constexpr ui32 midK = 2;
+    constexpr ui64 parentKeyOffset = seedCount;
+    constexpr ui64 midReadOffset = parentKeyOffset + midK;
+    static_assert(midK > 0 && midK < txCount);
+
+    PQTabletPrepare({.partitions=1}, {{"user1", true}}, *Ctx);
+    EnsurePipeExist();
+
+    TVector<std::pair<ui64, TString>> seed;
+    for (ui32 i = 0; i < seedCount; ++i) {
+        seed.emplace_back(i + 1, TStringBuilder() << "seed-" << i);
+    }
+    CmdWrite(/*partition=*/0, "seed-src", seed, *Ctx);
+
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(77, "ext-77");
+    const TString ownerCookie = CreateSupportivePartitionForDeferredPublication(writeId);
+    for (ui32 i = 0; i < txCount; ++i) {
+        SendSupportivePartitionWrite(
+            writeId, ownerCookie, /*seqNo=*/i, /*messageNo=*/i,
+            TStringBuilder() << "deferred-tx-" << i, /*cookie=*/400 + i);
+    }
+    WaitForExactTxWritesCount(1);
+    CommitDeferredPublicationFinalize(writeId, /*txId=*/9201, TDeferredPublicationApi::Publish);
+
+    TPQCmdReadSettings readSettings{"", /*partition=*/0, static_cast<i64>(midReadOffset),
+                                    /*count=*/txCount, 16_MB, 0};
+    readSettings.User = "user1";
+    const auto readResult = CmdReadCapture(readSettings);
+
+    constexpr ui32 expectedCount = txCount - midK;
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), expectedCount);
+    for (ui32 i = 0; i < expectedCount; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            readResult.GetResult(i).GetOffset(), midReadOffset + i,
+            "result index=" << i
+                << " (supportive leak would be near " << midK + i << " / header space)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult.GetResult(i).GetData(),
+            TStringBuilder() << "deferred-tx-" << (midK + i));
+    }
 }
 
 Y_UNIT_TEST_F(DeferredPublication_Cancel_Successful_Commit, TPQTabletFixture) {

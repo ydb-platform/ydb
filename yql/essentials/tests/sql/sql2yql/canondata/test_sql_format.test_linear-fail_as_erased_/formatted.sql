@@ -1,0 +1,6 @@
+/* custom error:AsErased is not allowed for linear types*/
+$x = ToMutDict({1: 2}, 0);
+
+SELECT
+    PeekErased(AsErased($x), Int32)
+;

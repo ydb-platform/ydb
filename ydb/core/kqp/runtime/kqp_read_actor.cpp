@@ -285,6 +285,10 @@ public:
             Points.push_back(std::move(point));
         }
 
+        void ReservePoints(size_t count) {
+            Points.reserve(count);
+        }
+
     private:
         TSmallVec<TSerializedTableRange> Ranges;
         TSmallVec<TSerializedCellVec> Points;
@@ -346,9 +350,11 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NWilson::TTraceId& traceId,
-        TIntrusivePtr<TKqpCounters> counters)
+        TIntrusivePtr<TKqpCounters> counters,
+        TVector<TSerializedCellVec> keyPoints)
         : Settings(settings)
         , Arena(arena)
+        , DirectKeyPoints(std::move(keyPoints))
         , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
         , ComputeActorId(computeActorId)
         , InputIndex(inputIndex)
@@ -433,7 +439,16 @@ public:
         PendingShards.PushBack(stateHolder.Get());
         auto& state = *stateHolder.Release();
 
-        if (Settings->HasFullRange()) {
+        if (!DirectKeyPoints.empty()) {
+            // Points handed over pre-parsed by an in-process parent actor; consume
+            // them as-is instead of copying and re-parsing the settings' KeyPoints.
+            YQL_ENSURE(!Settings->HasFullRange() && !Settings->HasRanges());
+            state.ReservePoints(DirectKeyPoints.size());
+            for (auto& point : DirectKeyPoints) {
+                state.AddPoint(std::move(point));
+            }
+            DirectKeyPoints.clear();
+        } else if (Settings->HasFullRange()) {
             state.AddRange(TSerializedTableRange(Settings->GetFullRange()));
         } else {
             YQL_ENSURE(Settings->HasRanges());
@@ -444,6 +459,7 @@ public:
                 }
             } else {
                 YQL_ENSURE(Settings->GetRanges().KeyPointsSize() > 0);
+                state.ReservePoints(Settings->GetRanges().KeyPointsSize());
                 for (const auto& point : Settings->GetRanges().GetKeyPoints()) {
                     state.AddPoint(TSerializedCellVec(point));
                 }
@@ -958,7 +974,8 @@ public:
             {"snapshotTxId", Settings->GetSnapshot().GetTxId()},
             {"snapshotStep", Settings->GetSnapshot().GetStep()},
             {"lockTxId", Settings->GetLockTxId()},
-            {"lockNodeId", Settings->GetLockNodeId()});
+            {"lockNodeId", Settings->GetLockNodeId()},
+            {"lockMode", Settings->GetLockMode()});
 
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
@@ -1683,6 +1700,9 @@ private:
 
     const NKikimrTxDataShard::TKqpReadRangesSourceSettings* Settings;
     TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
+    // Pre-parsed point lookups passed in-process (see CreateKqpReadActor); moved
+    // into the initial shard state by StartTableScan, empty afterwards.
+    TVector<TSerializedCellVec> DirectKeyPoints;
 
     TVector<TResultColumn> ResultColumns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -1764,8 +1784,9 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpReadActor(con
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const NWilson::TTraceId& traceId,
-    TIntrusivePtr<TKqpCounters> counters) {
-    auto* actor = new TKqpReadActor(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
+    TIntrusivePtr<TKqpCounters> counters,
+    TVector<TSerializedCellVec> keyPoints) {
+    auto* actor = new TKqpReadActor(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters, std::move(keyPoints));
     return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
 }
 

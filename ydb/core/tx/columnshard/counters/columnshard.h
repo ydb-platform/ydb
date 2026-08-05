@@ -19,8 +19,8 @@ enum class EOverloadStatus {
     Disk /* "disk" */,
     None /* "none" */,
     OverloadCompaction /* "overload_compaction" */,
-    RejectProbability,
-    SmallBlobsQuota,
+    RejectProbability /* "reject_probability" */,
+    SmallBlobsQuota /* "small_blobs_quota" */,
 };
 
 struct TOverloadStatus {

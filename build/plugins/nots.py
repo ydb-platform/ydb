@@ -380,7 +380,7 @@ def _setup_prebuilder_resource(unit: ymake.Unit) -> None:
 
 @ymake.macro
 @_with_report_configure_error
-def _SET_APPEND_WITH_DIRECTIVE(unit: ymake.Unit, var_name: str, directive: str, *values: tuple[str, ...]) -> None:
+def _SET_APPEND_WITH_DIRECTIVE(unit: ymake.Unit, var_name: str, directive: str, *values: str) -> None:
     wrapped = [f'${{{directive}:"{v}"}}' for v in values]
 
     __set_append(unit, var_name, " ".join(wrapped))
@@ -403,7 +403,7 @@ def _check_nodejs_version(unit: ymake.Unit, major: int) -> None:
 
 @ymake.macro
 @_with_report_configure_error
-def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: tuple[str, ...]) -> None:
+def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
     from lib.nots.package_manager import PackageManager
 
     pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
@@ -895,9 +895,6 @@ def _TS_PROTO_CONFIGURE(unit: ymake.Unit) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _TS_PROTO_AUTO_CONFIGURE(unit: ymake.Unit) -> None:
-    unit.set(["_INJECT_PEERS", "yes"])
-    unit.set(["_INJECT_PEERS_ARG", "--inject-peers yes"])
-
     in_package_json = _build_directives(["hide", "input"], ["package.json"])
     out_lockfile = _build_directives(["hide", "output"], ["pnpm-lock.yaml"])
     __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_package_json, out_lockfile])
@@ -975,9 +972,6 @@ def _PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _TS_PROTO_AUTO_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
-    unit.set(["_INJECT_PEERS", "yes"])
-    unit.set(["_INJECT_PEERS_ARG", "--inject-peers yes"])
-
     deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
     unit.onpeerdir([deps_path])
 
@@ -1051,6 +1045,8 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
     # TS_OUTPUTS(dist) -- files: ["build/dist"] ❌
     normalized_pj_files = [_normalize_path(f) for f in pj.get_files()]
     normalized_ts_outputs = [_normalize_path(f) for f in ts_outputs]
+    if normalized_ts_outputs:
+        unit.set(["_TS_OUTPUTS_JOINED", "|".join(normalized_ts_outputs)])
 
     missing_outputs = []
     for output in normalized_ts_outputs:
@@ -1334,14 +1330,14 @@ def __on_ts_files(unit: ymake.Unit, files_in: list[str], files_out: list[str]) -
 
 @ymake.macro
 @_with_report_configure_error
-def _TS_FILES(unit: ymake.Unit, *files: tuple[str, ...]) -> None:
+def _TS_FILES(unit: ymake.Unit, *files: str) -> None:
     files = list(files)
     __on_ts_files(unit, files, files)
 
 
 @ymake.macro
 @_with_report_configure_error
-def _TS_LARGE_FILES(unit: ymake.Unit, destination: str, *files: tuple[str, ...]) -> None:
+def _TS_LARGE_FILES(unit: ymake.Unit, destination: str, *files: str) -> None:
     if destination == REQUIRED_MISSING:
         ymake.report_configure_error(
             "Macro TS_LARGE_FILES() requires to use DESTINATION parameter.\n"
@@ -1427,7 +1423,7 @@ def _ESCAPE_SPACES(unit: ymake.Unit, var_name: str) -> None:
 
 @ymake.macro
 @_with_report_configure_error
-def _TS_CONF_ERROR(unit: ymake.Unit, *messages: tuple[str, ...]) -> None:
+def _TS_CONF_ERROR(unit: ymake.Unit, *messages: str) -> None:
     msg = " ".join(messages).replace("\\n", "\n").format(COLORS=COLORS)
     ymake.report_configure_error(msg)
 

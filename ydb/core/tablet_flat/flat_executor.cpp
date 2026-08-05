@@ -5570,7 +5570,9 @@ void TExecutor::VacuumComplete(TVacuumGeneration generation, const TActorContext
     }
     MoveDataVacuumInProgress = false;
     for (const auto& actor : MoveDataSubscribers) {
-        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(TabletId()));
+        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(
+            TabletId(),
+            NKikimrTabletBase::TEvMoveDataResponse::Success));
     }
     MoveDataSubscribers.clear();
 }

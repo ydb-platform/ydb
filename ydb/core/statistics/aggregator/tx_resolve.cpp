@@ -35,7 +35,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
                 Self->DeleteStatisticsFromTable();
             } else {
                 // Resolve failure -> mark the operation FAILED.
-                Self->FinishTraversal(db, Ydb::Table::AnalyzeState::STATE_FAILED);
+                Self->FinishTraversal(db, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, Ydb::Table::AnalyzeState::STATE_FAILED);
             }
             return true;
         }
@@ -66,7 +66,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
         if (Self->TraversalIsColumnTable && Self->TabletsForReqDistribution.empty()) {
             // Natural completion of an empty table — pass nullopt so FinishTraversal marks only the
             // current table done; the operation flips to STATE_DONE when all its tables are done.
-            Self->FinishTraversal(db, std::nullopt);
+            Self->FinishTraversal(db, NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS, std::nullopt);
             StartColumnShardEventDistribution = false;
         }
 

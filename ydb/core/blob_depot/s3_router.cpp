@@ -38,7 +38,8 @@ namespace NKikimr::NBlobDepot {
             NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
         };
 
-        explicit TRouteCounters(NMonitoring::TDynamicCounterPtr group) {
+        explicit TRouteCounters(NMonitoring::TDynamicCounterPtr routeGroup,
+                       NMonitoring::TDynamicCounterPtr hostGroup) {
             using namespace NWrappers::NExternalStorage;
             static constexpr TStringBuf methods[] = {
                 TEvListObjectsRequest::RequestName,
@@ -55,13 +56,14 @@ namespace NKikimr::NBlobDepot {
             };
 
             for (auto&& method : methods) {
-                auto sub = group->GetSubgroup("method", TString(method));
+                auto routeSub = routeGroup->GetSubgroup("method", TString(method));
+                auto hostSub = hostGroup->GetSubgroup("method", TString(method));
                 PerMethod.emplace(method, TMethodCounters{
-                    .LatencyMs = sub->GetHistogram("LatencyMs", GetRequestLatencyCollector()),
-                    .Requests = sub->GetCounter("Requests", true),
-                    .Errors = sub->GetCounter("Errors", true),
-                    .BytesRead = sub->GetCounter("BytesRead", true),
-                    .BytesWritten = sub->GetCounter("BytesWritten", true),
+                    .LatencyMs = routeSub->GetHistogram("LatencyMs", GetRequestLatencyCollector()),
+                    .Requests = hostSub->GetCounter("Requests", true),
+                    .Errors = hostSub->GetCounter("Errors", true),
+                    .BytesRead = hostSub->GetCounter("BytesRead", true),
+                    .BytesWritten = hostSub->GetCounter("BytesWritten", true),
                 });
             }
         }
@@ -217,7 +219,9 @@ namespace NKikimr::NBlobDepot {
                 return nullptr;
             }
 
-            return MakeIntrusive<TRouteCounters>(CountersGroup->GetSubgroup("route", route)->GetSubgroup("host", host));
+            auto routeGroup = CountersGroup->GetSubgroup("route", route);
+            auto hostGroup = routeGroup->GetSubgroup("host", host);
+            return MakeIntrusive<TRouteCounters>(routeGroup, hostGroup);
         }
 
         ui16 BalancerProxyPort() const {

@@ -16,6 +16,7 @@ SHARED_PATH_PREFIXES = [
     ".github/scripts/tests/detect_codecov_matrix.py",
     ".github/scripts/tests/export_coverage_lcov.py",
     ".github/scripts/tests/generate_coverage_landing.py",
+    ".github/scripts/tests/overlay_trusted_codecov_ci.sh",
     ".github/workflows/cpp_codecov.yml",
     ".github/codecov.yml",
 ]

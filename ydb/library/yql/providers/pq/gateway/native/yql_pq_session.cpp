@@ -223,8 +223,7 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                         futures.emplace_back(NThreading::MakeErrorFuture<TDescribeTopicResult>(std::make_exception_ptr(NThreading::TFutureException() << "Cluster " << clusterInfo.Name << " is unavailable for read")));
                     } else {
                         clusterInfo.AdjustTopicClientSettings(topicSettings);
-                        NYdb::NTopic::TDescribeTopicSettings settings;
-                        futures.emplace_back(TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath, settings));
+                        futures.emplace_back(TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath));
                     }
                     results.emplace_back(std::move(clusterInfo));
                 }

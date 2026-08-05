@@ -35,23 +35,31 @@ namespace {
         return tx.State == NKikimrPQ::TTransaction_EState_WAIT_RS;
     }
 
-    bool IsPersQueueDevUiAdminRequest(const TCgiParameters& cgi) {
-        if (cgi.Has("SendReadSet")) {
-            return true;
+    // Parameters that only select a read-only view, see TPersQueue::OnRenderAppHtmlPage() for the
+    // dispatch. SendReadSet is deliberately absent: it commits or aborts a transaction.
+    bool IsKnownPublicPersQueueDevUiParam(TStringBuf name) {
+        static constexpr TStringBuf names[] = {
+            "TabletID",
+            "FollowerID",
+            "kv",
+            "section",
+            "consumer",
+            "partitionId",
+            "TxId",
+        };
+        return std::find(std::begin(names), std::end(names), name) != std::end(names);
+    }
+
+    bool IsPublicPersQueueDevUiRequest(const TCgiParameters& cgi) {
+        for (const auto& [name, _] : cgi) {
+            if (!IsKnownPublicPersQueueDevUiParam(name)) {
+                YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "PersQueue DevUI request is admin only",
+                    {"logPrefix", LogPrefix()},
+                    {"param", name},
+                    {"cgi", cgi.Print()});
+                return false;
+            }
         }
-        if (cgi.Has("action")) {
-            return true;
-        }
-        if (cgi.Has("kv")
-            || (cgi.Has("consumer") && cgi.Has("partitionId"))
-            || cgi.Has("TxId")
-            || (!cgi.Has("consumer") && !cgi.Has("partitionId")))
-        {
-            return false;
-        }
-        YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "PersQueue DevUI request to unknown page",
-            {"logPrefix", LogPrefix()},
-            {"cgi", cgi.Print()});
         return true;
     }
 
@@ -331,7 +339,7 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
             AppData(ctx),
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
-            !IsPersQueueDevUiAdminRequest(cgi)))
+            IsPublicPersQueueDevUiRequest(cgi)))
     {
         ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;

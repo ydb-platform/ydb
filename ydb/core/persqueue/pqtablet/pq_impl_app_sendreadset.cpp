@@ -59,7 +59,7 @@ TString TPersQueue::RenderSendReadSetHtmlForms(
     const TString formAction = BuildSendReadSetFormAction(
         pathInfo,
         TabletID(),
-        UsesTabletDevUiSecurePath(AppData(), TTabletTypes::PersQueue));
+        HasTabletDevUiSecureSubtree(AppData(), TTabletTypes::PersQueue));
     struct TOption {
         const char* Decision;
         const char* Text;

@@ -115,21 +115,32 @@ runs:
           --output "$OUT/coverage.lcov"
 
     - name: Upload to Codecov
-      uses: codecov/codecov-action@v5
-      with:
-        token: ${{ inputs.codecov_token }}
-        files: ${{ steps.ya.outputs.out_dir }}/coverage.lcov
-        flags: ${{ steps.suite.outputs.flag }}
-        fail_ci_if_error: true
-        name: ${{ inputs.suite }}
-        # Self-hosted runners often cannot download cli.codecov.io (get HTML); use PyPI instead.
-        use_pypi: true
-        disable_search: true
-        override_commit: ${{ inputs.commit_sha }}
-        override_branch: ${{ inputs.branch }}
+      shell: bash
+      env:
+        CODECOV_TOKEN: ${{ inputs.codecov_token }}
+        OUT: ${{ steps.ya.outputs.out_dir }}
+        FLAG: ${{ steps.suite.outputs.flag }}
+        SUITE: ${{ inputs.suite }}
+        COMMIT_SHA: ${{ inputs.commit_sha }}
+        BRANCH: ${{ inputs.branch }}
+      run: |
+        set -euxo pipefail
+        # Prefer PyPI: self-hosted runners often cannot download cli.codecov.io (HTML instead of binary).
+        pip3 install --user 'codecov-cli'
+        export PATH="${HOME}/.local/bin:${PATH}"
+        codecovcli upload-coverage \
+          -t "${CODECOV_TOKEN}" \
+          --fail-on-error \
+          --git-service github \
+          --sha "${COMMIT_SHA}" \
+          --branch "${BRANCH}" \
+          --disable-search \
+          --file "${OUT}/coverage.lcov" \
+          --flag "${FLAG}" \
+          --name "${SUITE}"
 
     - name: Publish HTML report to Object Storage
-      # Still publish HTML if Codecov upload fails (e.g. CDN blocked on runner).
+      # Still publish HTML if Codecov upload fails.
       if: ${{ always() && steps.ya.outcome == 'success' }}
       continue-on-error: true
       shell: bash

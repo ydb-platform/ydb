@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -14,10 +13,10 @@ extern "C" void DeleteString(void* strData);
 
 template <size_t Size>
 class TSizePrimitiveTypeWrapper: public TDecoratorCodegeneratorNode<TSizePrimitiveTypeWrapper<Size>> {
-    typedef TDecoratorCodegeneratorNode<TSizePrimitiveTypeWrapper<Size>> TBaseComputation;
+    using TBaseComputation = TDecoratorCodegeneratorNode<TSizePrimitiveTypeWrapper<Size>>;
 
 public:
-    TSizePrimitiveTypeWrapper(IComputationNode* data)
+    explicit TSizePrimitiveTypeWrapper(IComputationNode* data)
         : TBaseComputation(data)
     {
     }
@@ -38,17 +37,17 @@ public:
 
 template <bool IsOptional>
 class TSizeWrapper: public TMutableCodegeneratorNode<TSizeWrapper<IsOptional>> {
-    typedef TMutableCodegeneratorNode<TSizeWrapper<IsOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TSizeWrapper<IsOptional>>;
 
 public:
     TSizeWrapper(TComputationMutables& mutables, IComputationNode* data)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Data(data)
+        , Data_(data)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& data = Data->GetValue(ctx);
+        const auto& data = Data_->GetValue(ctx);
         if (IsOptional && !data) {
             return NUdf::TUnboxedValuePod();
         }
@@ -61,7 +60,7 @@ public:
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto data = GetNodeValue(this->Data, ctx, block);
+        const auto data = GetNodeValue(this->Data_, ctx, block);
 
         const auto type = Type::getInt8Ty(context);
         const auto embType = FixedVectorType::get(type, 16);
@@ -126,10 +125,10 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Data);
+        this->DependsOn(Data_);
     }
 
-    IComputationNode* const Data;
+    IComputationNode* const Data_;
 };
 
 } // namespace
@@ -159,5 +158,4 @@ IComputationNode* WrapSize(TCallable& callable, const TComputationNodeFactoryCon
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

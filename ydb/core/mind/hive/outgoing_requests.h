@@ -3,26 +3,29 @@
 #include <unordered_map>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/struct_log/create_message.h>
 
 namespace NKikimr::NHive {
+
+using NActors::NStructuredLog::TStructuredMessage;
 
 struct TRequestInfo {
     TInstant StartTime;
     TActorId Recipient;
-    TString Description;
+    TStructuredMessage Description;
 };
 
 struct TRequests {
     std::unordered_map<ui64, TRequestInfo> Requests;
     ui32 Cookie = 0;
 
-    ui32 AddRequest(const TString& description, const TActorId& recipient) {
-        Requests.emplace(++Cookie, TRequestInfo{TActivationContext::Now(), recipient, description});
+    ui32 AddRequest(TStructuredMessage description, const TActorId& recipient) {
+        Requests.emplace(++Cookie, TRequestInfo{TActivationContext::Now(), recipient, std::move(description)});
         return Cookie;
     }
 
     ui32 AddRequest(const IEventBase* event, const TActorId& recipient) {
-        return AddRequest(event->ToStringHeader(), recipient);
+        return AddRequest(YDB_LOG_CREATE_MESSAGE({"eventType", event->Type()}, {"eventHeader", event->ToStringHeader()}), recipient);
     }
 
     void FinishRequests(TActorId recipient) {

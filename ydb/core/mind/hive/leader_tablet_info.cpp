@@ -112,7 +112,7 @@ bool TLeaderTabletInfo::InitiateBlockStorage(TSideEffects& sideEffects) {
     Kill(sideEffects);
     // blocks PREVIOUS entry of tablet history
     IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), KnownGeneration, true);
-    sideEffects.RegisterAndTrack(x, TStringBuilder() << "BlockStorage(" << Id << ")");
+    sideEffects.RegisterAndTrack(x, YDB_LOG_CREATE_MESSAGE({"description", "BlockStorage"}, {"tabletId", Id}));
     return true;
 }
 
@@ -126,13 +126,13 @@ bool TLeaderTabletInfo::InitiateBlockStorage(TSideEffects& sideEffects, ui32 gen
     }
     Y_ABORT_UNLESS(channel != nullptr && !channel->History.empty());
     IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), generation, false);
-    sideEffects.RegisterAndTrack(x, TStringBuilder() << "BlockStorage(" << Id << ")");
+    sideEffects.RegisterAndTrack(x, YDB_LOG_CREATE_MESSAGE({"description", "BlockStorage"}, {"tabletId", Id}));
     return true;
 }
 
 bool TLeaderTabletInfo::InitiateDeleteStorage(TSideEffects& sideEffects) {
     IActor* x = CreateTabletReqDelete(Hive.SelfId(), TabletStorageInfo);
-    sideEffects.RegisterAndTrack(x, TStringBuilder() << "DeleteStorage(" << Id << ")");
+    sideEffects.RegisterAndTrack(x, YDB_LOG_CREATE_MESSAGE({"description", "DeleteStorage"}, {"tabletId", Id}));
     return true;
 }
 

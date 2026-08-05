@@ -133,7 +133,22 @@ struct ISubActor {
 
 
 struct TCompleteNotifications {
-    TVector<std::pair<THolder<IEventHandle>, TDuration>> Notifications;
+    struct TNotification {
+        THolder<IEventHandle> Event;
+        TDuration Delay;
+
+        TNotification(IEventHandle* event, TDuration delay = {})
+            : Event(event)
+            , Delay(delay)
+        {
+        }
+
+        TString ToString() const {
+            return TStringBuilder() << Event->Type << " " << Event.Get()->Recipient << " " << Event->ToString();
+        }
+    };
+
+    TVector<TNotification> Notifications;
     TActorId SelfID;
 
     void Reset(const TActorId& selfId) {
@@ -143,7 +158,7 @@ struct TCompleteNotifications {
 
     void Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
         Y_ABORT_UNLESS(!!SelfID);
-        Notifications.emplace_back(new IEventHandle(recipient, SelfID, ev, flags, cookie), TDuration());
+        Notifications.emplace_back(new IEventHandle(recipient, SelfID, ev, flags, cookie));
     }
 
     void Schedule(TDuration duration, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
@@ -156,19 +171,43 @@ struct TCompleteNotifications {
     }
 
     void Send(const TActorContext&) {
-        for (auto& [notification, duration] : Notifications) {
-            if (duration) {
-                TActivationContext::Schedule(duration, std::move(notification));
+        for (auto& notification : Notifications) {
+            if (notification.Delay) {
+                TActivationContext::Schedule(notification.Delay, std::move(notification.Event));
             } else {
-                TActivationContext::Send(std::move(notification));
+                TActivationContext::Send(std::move(notification.Event));
             }
         }
         Notifications.clear();
     }
+
+    TStructuredMessage ToStructuredMessage() const {
+        return YDB_LOG_CREATE_MESSAGE({"notifications", Notifications});
+    }
 };
 
 struct TCompleteActions {
-    std::vector<std::pair<std::unique_ptr<IActor>, TString>> Actors;
+    struct TActorAction {
+        std::unique_ptr<IActor> Actor;
+        std::optional<TStructuredMessage> Description;
+
+        TActorAction(IActor* actor, TStructuredMessage description)
+            : Actor(actor)
+            , Description(description)
+        {
+        }
+
+        TActorAction(IActor* actor)
+            : Actor(actor)
+        {
+        }
+
+        TString ToString() const {
+            return TypeName(*Actor.get());
+        }
+    };
+
+    std::vector<TActorAction> Actors;
     std::vector<std::function<void()>> Callbacks;
 
     void Reset() {
@@ -177,11 +216,11 @@ struct TCompleteActions {
     }
 
     void Register(IActor* actor) {
-        Actors.emplace_back(std::piecewise_construct, std::tuple<IActor*>{actor}, std::tuple{});
+        Actors.emplace_back(actor);
     }
 
-    void RegisterAndTrack(IActor* actor, TString description) {
-        Actors.emplace_back(std::piecewise_construct, std::tuple<IActor*>{actor}, std::tuple<TString>{std::move(description)});
+    void RegisterAndTrack(IActor* actor, TStructuredMessage description) {
+        Actors.emplace_back(actor, std::move(description));
     }
 
     void Callback(std::function<void()> callback) {
@@ -193,13 +232,17 @@ struct TCompleteActions {
             callback();
         }
         Callbacks.clear();
-        for (auto& [actor, description] : Actors) {
-            auto actorId = ctx.Register(actor.release());
-            if (description) {
-                requests.AddRequest(std::move(description), actorId);
+        for (auto& action : Actors) {
+            auto actorId = ctx.Register(action.Actor.release());
+            if (action.Description) {
+                requests.AddRequest(std::move(*action.Description), actorId);
             }
         }
         Actors.clear();
+    }
+
+    TStructuredMessage ToStructuredMessage() const {
+        return YDB_LOG_CREATE_MESSAGE({"actors", Actors}, {"callbacksCount", Callbacks.size()});
     }
 };
 
@@ -212,6 +255,11 @@ struct TSideEffects : TCompleteNotifications, TCompleteActions {
     void Complete(const TActorContext& ctx, TRequests& requests) {
         TCompleteActions::Run(ctx, requests);
         TCompleteNotifications::Send(ctx);
+    }
+
+    TStructuredMessage ToStructuredMessage() const {
+        auto message = TCompleteNotifications::ToStructuredMessage();
+        return message.AppendMessage(TCompleteActions::ToStructuredMessage());
     }
 };
 
@@ -448,49 +496,3 @@ TFullTabletId ToFullTabletId(TTabletId tabletId);
 
 } // NHive
 } // NKikimr
-
-template <>
-inline void Out<NKikimr::NHive::TCompleteNotifications>(IOutputStream& o, const NKikimr::NHive::TCompleteNotifications& n) {
-    if (!n.Notifications.empty()) {
-        o << "Notifications: ";
-        for (auto it = n.Notifications.begin(); it != n.Notifications.end(); ++it) {
-            if (it != n.Notifications.begin()) {
-                o << ',';
-            }
-            o << Hex(it->first->Type) << " " << it->first.Get()->Recipient << " " << it->first->ToString();
-        }
-    }
-}
-
-template <>
-inline void Out<NKikimr::NHive::TCompleteActions>(IOutputStream& o, const NKikimr::NHive::TCompleteActions& n) {
-    if (!n.Callbacks.empty()) {
-        o << "Callbacks: " << n.Callbacks.size();
-    }
-    if (!n.Actors.empty()) {
-        if (!n.Callbacks.empty()) {
-            o << ' ';
-        }
-        o << "Actions: ";
-        for (auto it = n.Actors.begin(); it != n.Actors.end(); ++it) {
-            if (it != n.Actors.begin()) {
-                o << ',';
-            }
-            o << TypeName(*(it->first.get()));
-            if (it->second) {
-                o << ' ' << it->second;
-            }
-        }
-    }
-}
-
-template <>
-inline void Out<NKikimr::NHive::TSideEffects>(IOutputStream& o, const NKikimr::NHive::TSideEffects& e) {
-    o << '{';
-    o << static_cast<const NKikimr::NHive::TCompleteNotifications&>(e);
-    if (!e.Notifications.empty() && !e.Actors.empty()) {
-        o << ' ';
-    }
-    o << static_cast<const NKikimr::NHive::TCompleteActions&>(e);
-    o << '}';
-}

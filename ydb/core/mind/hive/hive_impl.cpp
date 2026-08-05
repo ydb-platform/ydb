@@ -4344,7 +4344,7 @@ void THive::Handle(TEvPrivate::TEvLogHangingRequests::TPtr&) {
             {"logPrefix", GetLogPrefix()},
             {"startTime", request.StartTime},
             {"actorId", request.Recipient},
-            {"description", request.Description});
+            {"request", request.Description});
     }
     Schedule(TDuration::Minutes(1), new TEvPrivate::TEvLogHangingRequests);
 }

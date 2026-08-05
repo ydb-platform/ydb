@@ -65,7 +65,11 @@ namespace NKikimr {
 
         void Prev() {
             Y_DEBUG_ABORT_UNLESS(Ptr && Ptr <= End() && Ptr >= Begin());
-            --Ptr;
+            if (Ptr == Begin()) {
+                Ptr = nullptr;
+            } else {
+                --Ptr;
+            }
         }
 
         TKey GetCurKey() const {
@@ -83,8 +87,7 @@ namespace NKikimr {
         }
 
         void SeekToLast() {
-            Ptr = End();
-            --Ptr;
+            Ptr = Begin() == End() ? nullptr : End() - 1;
         }
 
         void Seek(const TKey& key) {
@@ -174,6 +177,13 @@ namespace NKikimr {
             Y_DEBUG_ABORT_UNLESS(Segment && Low
                     && Low >= Segment->IndexLow.begin() && Low <= Segment->IndexLow.end());
 
+            if (Low == Segment->IndexLow.begin()) {
+                High = {};
+                Low = {};
+                LowRangeBegin = {};
+                return;
+            }
+
             if (Y_UNLIKELY(Low == LowRangeBegin)) {
                 --High;
                 LowRangeBegin = Segment->IndexLow.begin() +
@@ -202,7 +212,9 @@ namespace NKikimr {
         void SeekToLast() {
             High = Segment->IndexHigh.end();
             Low = LowRangeBegin = Segment->IndexLow.end();
-            Prev();
+            if (!Segment->IndexLow.empty()) {
+                Prev();
+            }
         }
 
         void Seek(const TKeyLogoBlob& key) {

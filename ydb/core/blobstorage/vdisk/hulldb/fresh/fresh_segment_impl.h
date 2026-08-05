@@ -626,6 +626,7 @@ namespace NKikimr {
         using TBase::Prev;
         using TBase::Valid;
         using TBase::Seek;
+        using TBase::SeekToLast;
         using TBase::PutToHeap;
     };
 
@@ -681,6 +682,12 @@ namespace NKikimr {
             Next();
         }
 
+        void Seek(const TKey &key) {
+            Recs.clear();
+            It.Seek(key);
+            Next();
+        }
+
         TKey GetUnmergedKey() const {
             return Recs.back().first;
         }
@@ -691,6 +698,77 @@ namespace NKikimr {
 
     private:
         TForwardIterator It; // generic merging iterator
+        std::vector<std::pair<TKey, TMemRec>> Recs;
+    };
+
+    template <class TKey, class TMemRec>
+    class TFreshSegmentSnapshot<TKey, TMemRec>::TBackwardIteratorWOMerge {
+    public:
+        using TContType = TFreshSegmentSnapshot;
+
+        TBackwardIteratorWOMerge(const THullCtxPtr &hullCtx, const TContType *data)
+            : It(hullCtx, data)
+        {}
+
+        TBackwardIteratorWOMerge(const TBackwardIteratorWOMerge &) = default;
+        TBackwardIteratorWOMerge &operator=(const TBackwardIteratorWOMerge &) = default;
+
+        bool Valid() const {
+            return !Recs.empty();
+        }
+
+        void Prev() {
+            if (!Recs.empty()) {
+                Recs.pop_back();
+                if (!Recs.empty()) {
+                    return; // more records to go with the current key
+                }
+            }
+
+            if (!It.Valid()) {
+                return;
+            }
+
+            struct {
+                std::vector<std::pair<TKey, TMemRec>>& Recs;
+
+                void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64, const void*) {
+                    Y_DEBUG_ABORT("should not be called");
+                }
+
+                void AddFromFresh(const TMemRec& memRec, const TRope* /*data*/, const TKey& key, ui64 /*lsn*/) {
+                    Recs.emplace_back(key, memRec);
+                }
+
+                static constexpr bool HaveToMergeData() { return false; }
+            } m{Recs};
+
+            It.PutToMerger(&m);
+            It.Prev();
+        }
+
+        void SeekToLast() {
+            Recs.clear();
+            It.SeekToLast();
+            Prev();
+        }
+
+        void Seek(const TKey &key) {
+            Recs.clear();
+            It.Seek(key);
+            Prev();
+        }
+
+        TKey GetUnmergedKey() const {
+            return Recs.back().first;
+        }
+
+        TMemRec GetUnmergedMemRec() const {
+            return Recs.back().second;
+        }
+
+    private:
+        TBackwardIterator It; // generic merging iterator
         std::vector<std::pair<TKey, TMemRec>> Recs;
     };
 

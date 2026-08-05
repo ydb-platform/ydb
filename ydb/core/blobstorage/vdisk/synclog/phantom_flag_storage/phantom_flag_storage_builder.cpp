@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
-#include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap_events.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
 

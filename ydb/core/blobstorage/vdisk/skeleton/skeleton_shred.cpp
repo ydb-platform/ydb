@@ -2,7 +2,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap.h>
-#include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap_events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_SHRED
 

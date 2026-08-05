@@ -510,11 +510,11 @@ bool TSqlSelect::ValidateSelectColumns(const TVector<TNodePtr>& terms) {
         }
         if (term->IsAsterisk()) {
             const auto& source = *term->GetSourceName();
-            if (source.empty() && terms.ysize() > 1) {
+            if (source.empty() && terms.size() > 1) {
                 Ctx_.Error(term->GetPos()) << "Unable to use plain '*' with other projection items. Please use qualified asterisk instead: '<table>.*' (<table> can be either table name or table alias).";
                 return false;
             } else if (!asteriskSources.insert(source).second) {
-                Ctx_.Error(term->GetPos()) << "Unable to use twice same quialified asterisk. Invalid source: " << source;
+                Ctx_.Error(term->GetPos()) << "Unable to use twice same qualified asterisk. Invalid source: " << source;
                 return false;
             }
         } else if (label.empty()) {
@@ -532,7 +532,7 @@ bool TSqlSelect::ValidateSelectColumns(const TVector<TNodePtr>& terms) {
     return true;
 }
 
-TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVector<TString>& derivedColumns, TPosition derivedColumnsPos, bool unorderedSubquery) {
+TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVector<TString>& derivedColumns, TPosition derivedColumnsPos, bool unorderedSubquery, TTableHints& tableHints, TMaybe<TString>& keyFunc, TString& provider, bool& isAnonymous) {
     switch (node.Alt_case()) {
         case TRule_single_source::kAltSingleSource1: {
             const auto& alt = node.GetAlt_single_source1();
@@ -547,7 +547,7 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
                 return source;
             } else {
                 TTableRef table;
-                if (!TableRefImpl(alt.GetRule_table_ref1(), table, unorderedSubquery)) {
+                if (!TableRefImpl(alt.GetRule_table_ref1(), table, unorderedSubquery, tableHints, keyFunc, &provider, &isAnonymous)) {
                     return nullptr;
                 }
 
@@ -581,6 +581,97 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
     }
 }
 
+TSourcePtr TSqlSelect::HintedSingleSource(
+    const TRule_hinted_single_source& node,
+    const TVector<TString>& derivedColumns,
+    TPosition derivedColumnsPos,
+    bool unorderedSubquery)
+{
+    // hinted_single_source: single_source table_hints?;
+
+    TSourcePtr ret;
+    TTableHints hints;
+    TTableHints contextHints = GetContextHints(Ctx_);
+    TString provider;
+    TMaybe<TString> keyFunc;
+    bool isAnonymous = false;
+
+    {
+        TTableHints tableHints;
+
+        auto singleSource = SingleSource(
+            node.GetRule_single_source1(),
+            derivedColumns,
+            derivedColumnsPos,
+            unorderedSubquery,
+            tableHints,
+            keyFunc,
+            provider,
+            isAnonymous);
+        if (!singleSource) {
+            return nullptr;
+        }
+        ret = std::move(singleSource);
+
+        MergeHints(contextHints, tableHints);
+    }
+
+    if (node.HasBlock2()) {
+        auto tmp = TableHintsImpl(node.GetBlock2().GetRule_table_hints1(), provider, keyFunc.GetOrElse(""));
+        if (!tmp) {
+            return nullptr;
+        }
+        hints = *tmp;
+    }
+
+    TNodePtr watermarkLambda;
+    TTableHints watermarkHints;
+    if (!ret->IsTableSource()) {
+        for (auto it = hints.begin(); it != hints.end();) {
+            auto& [name, value] = *it;
+            auto normalizedName = name;
+            auto normalizeError = NormalizeName(Ctx_.Pos(), normalizedName);
+            if (!normalizeError.Empty()) {
+                YQL_ENSURE(value.empty() || value.front());
+                const auto pos = value ? value.front()->GetPos() : Ctx_.Pos();
+                Ctx_.Error(pos) << normalizeError->GetMessage();
+                return nullptr;
+            } else if (normalizedName == "watermark") {
+                YQL_ENSURE(value.size() == 1);
+                watermarkLambda = std::move(value[0]);
+                it = hints.erase(it);
+            } else if (normalizedName.StartsWith("watermark")) {
+                watermarkHints.emplace(normalizedName, std::move(value));
+                it = hints.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    if (hints || contextHints) {
+        if (isAnonymous) {
+            Ctx_.Error(Ctx_.Pos()) << "Hints are not supported for anonymous tables";
+            return nullptr;
+        }
+        if (!ret->SetTableHints(Ctx_, Ctx_.Pos(), hints, contextHints)) {
+            return nullptr;
+        }
+    }
+
+    if (watermarkLambda) {
+        auto pos = watermarkLambda->GetPos();
+        auto watermarkSettings = BuildInputOptions(pos, watermarkHints);
+        if (!watermarkSettings) {
+            watermarkSettings = BuildList(pos);
+        }
+        watermarkSettings = BuildQuote(pos, watermarkSettings);
+        ret = BuildWatermarkSource(std::move(pos), std::move(ret), std::move(watermarkLambda), std::move(watermarkSettings));
+    }
+
+    return ret;
+}
+
 TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, bool unorderedSubquery) {
     // named_single_source: single_source match_recognize_clause? (((AS an_id) | an_id_as_compat) pure_column_list?)? (sample_clause | tablesample_clause)?;
     TVector<TString> derivedColumns;
@@ -590,7 +681,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
         Token(columns.GetToken1());
         derivedColumnsPos = Ctx_.Pos();
 
-        if (node.GetRule_single_source1().Alt_case() != TRule_single_source::kAltSingleSource3) {
+        if (node.GetRule_hinted_single_source1().GetRule_single_source1().Alt_case() != TRule_single_source::kAltSingleSource3) {
             Error() << "Derived column list is only supported for VALUES";
             return nullptr;
         }
@@ -598,7 +689,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
         PureColumnListStr(columns, *this, derivedColumns);
     }
 
-    auto singleSource = SingleSource(node.GetRule_single_source1(), derivedColumns, derivedColumnsPos, unorderedSubquery);
+    auto singleSource = HintedSingleSource(node.GetRule_hinted_single_source1(), derivedColumns, derivedColumnsPos, unorderedSubquery);
     if (!singleSource) {
         return nullptr;
     }
@@ -696,7 +787,7 @@ bool TSqlSelect::ColumnName(TVector<TNodePtr>& keys, const TRule_column_name& no
     const auto sourceName = OptIdPrefixAsStr(node.GetRule_opt_id_prefix1(), *this);
     const auto columnName = Id(node.GetRule_an_id2(), *this);
     if (columnName.empty()) {
-        // TDOD: Id() should return TMaybe<TString>
+        // TODO(vitya-smirnov): Id() should return TMaybe<TString>
         if (!Ctx_.HasPendingErrors) {
             Ctx_.Error() << "Empty column name is not allowed";
         }
@@ -723,7 +814,7 @@ bool TSqlSelect::ColumnName(TVector<TNodePtr>& keys, const TRule_without_column_
     }
 
     if (columnName.empty()) {
-        // TDOD: Id() should return TMaybe<TString>
+        // TODO(vitya-smirnov): Id() should return TMaybe<TString>
         if (!Ctx_.HasPendingErrors) {
             Ctx_.Error() << "Empty column name is not allowed";
         }
@@ -1083,8 +1174,9 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         Ctx_.IncrementMonCounter("sql_features", "Where");
     }
 
-    /// \todo merge gtoupByExpr and groupBy in one
-    TVector<TNodePtr> groupByExpr, groupBy;
+    /// \todo merge groupByExpr and groupBy in one
+    TVector<TNodePtr> groupByExpr;
+    TVector<TNodePtr> groupBy;
     TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec;
     bool compactGroupBy = false;
     TString groupBySuffix;

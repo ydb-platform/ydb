@@ -56,8 +56,8 @@ public:
             VisitPragmaStmt(dynamic_cast<const TRule_pragma_stmt&>(msg));
         } else if (descr == TRule_into_simple_table_ref::GetDescriptor()) {
             VisitInsertTableRef(dynamic_cast<const TRule_into_simple_table_ref&>(msg));
-        } else if (descr == TRule_table_ref::GetDescriptor()) {
-            VisitReadTableRef(dynamic_cast<const TRule_table_ref&>(msg));
+        } else if (descr == TRule_hinted_single_source::GetDescriptor()) {
+            VisitHintedSingleSource(dynamic_cast<const TRule_hinted_single_source&>(msg));
         }
 
         TStringBuf fullName = descr->full_name();
@@ -156,9 +156,9 @@ private:
         }
     }
 
-    void VisitReadTableRef(const TRule_table_ref& msg) {
-        if (msg.HasBlock4()) {
-            const auto& hints = msg.GetBlock4().GetRule_table_hints1();
+    void VisitHintedSingleSource(const TRule_hinted_single_source& msg) {
+        if (msg.HasBlock2()) {
+            const auto& hints = msg.GetBlock2().GetRule_table_hints1();
             VisitHints(hints, "READ_HINT");
         }
     }

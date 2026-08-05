@@ -76,6 +76,9 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 34812:Interconnect: add `CounterMergeMode=PER_HOST` to reduce interconnect metrics cardinality by aggregating counters per peer host. [#34812](https://github.com/ydb-platform/ydb/pull/34812) ([Robert Drynkin](https://github.com/robdrynkin))
+* 34290:This PR adds the new `MaxInFlightCount` metric to vdisk `SkeletonFront` monitoring to get more insights about the current queues state. [#34290](https://github.com/ydb-platform/ydb/pull/34290) ([Daniil Zakhlystov](https://github.com/usernamedt))
+* 34195:Refactors `MVP/OIDC/Meta` auth config to protobuf-based parsing and adds `OAuth2` token-exchange token flow with config+token-file merge by token name. [#34195](https://github.com/ydb-platform/ydb/pull/34195) ([Andrei Rykov](https://github.com/StekPerepolnen))
 
 ### Bug fixes
 
@@ -146,12 +149,22 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 34961:Fixed s3 files flush in block output (too many small files creation) [#34961](https://github.com/ydb-platform/ydb/pull/34961) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 34915:- `DEFAULT NULL` is not allowed (set, drop, add, create table).
+- `DROP DEFAULT` for `NOT NULL` columns is allowed.
+- `SET DEFAULT` for `Serial` is not allowed.
+- `SET DEFAULT` with nullable for `NOT NULL` columns is not allowed.
+- `SET DEFAULT` checks different types and unsupported values.
+- Units for everything (and default pk)!
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
+From:
+- #34826
+- #34825
 
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+... [#34915](https://github.com/ydb-platform/ydb/pull/34915) ([Daniil Timižev](https://github.com/dahbka-lis))
+* 34822:Fix Rebalance ALL tablets FROM SCRATCH button in Embedded Hive UI https://github.com/ydb-platform/ydb/issues/34823 [#34822](https://github.com/ydb-platform/ydb/pull/34822) ([Vladilen](https://github.com/Vladilen))
+* 34620:В федерации перестал работать точечный коммит оффсета [#34620](https://github.com/ydb-platform/ydb/pull/34620) ([Nikolay Shestakov](https://github.com/nshestakov))
 
 ### YDB UI
 

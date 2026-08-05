@@ -106,4 +106,4 @@ config:
 
 ## Проверка результата {#verify-result}
 
-Проверить, что изменения применились, можно  в разделе `CMS` в [Embedded UI](../../reference/embedded-ui/index.md) кластера (доступен на порту 8765): перейдите на вкладку `Sentinel` для просмотра статуса Sentinel и Self Heal State Storage.
+Проверить, что изменения применились, можно  в разделе `CMS` в [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) кластера (доступен на порту 8765): перейдите на вкладку `Sentinel` для просмотра статуса Sentinel и Self Heal State Storage.

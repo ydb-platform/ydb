@@ -1,8 +1,9 @@
 name: Codecov C++ (SDK / CLI / workload)
 
 # pull_request_target: required for fork → upstream PRs so repo secrets (CODECOV_TOKEN, AWS, …)
-# are available. Same pattern as cpp_sdk_coverage.yml. Workflow file is taken from the
-# base branch (main); checkout of PR code uses refs/pull/<n>/merge below.
+# are available. Workflow YAML is always taken from the base branch (main).
+# Product code is checked out from refs/pull/<n>/merge; coverage actions/scripts are then
+# overlaid from the PR base SHA so an untrusted PR tree cannot replace secret-bearing helpers.
 on:
   pull_request_target:
     branches: [main]
@@ -20,6 +21,7 @@ on:
       - ".github/scripts/tests/detect_codecov_matrix.py"
       - ".github/scripts/tests/export_coverage_lcov.py"
       - ".github/scripts/tests/generate_coverage_landing.py"
+      - ".github/scripts/tests/overlay_trusted_codecov_ci.sh"
       - ".github/workflows/cpp_codecov.yml"
       - ".github/codecov.yml"
   # Baselines on main: push + paths above (only changed suites). No weekly cron —
@@ -86,11 +88,33 @@ jobs:
               );
             }
 
-      # For PRs: checkout merge ref so detect scripts match the PR (base workflow + PR tree).
+      # PR product tree (merge ref). push / workflow_dispatch: the event commit.
       - uses: actions/checkout@v5
         with:
           ref: ${{ startsWith(github.event_name, 'pull_request') && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.sha }}
           fetch-depth: 0
+
+      # Trusted marketplace action + inline copy (not a local composite): helpers must
+      # come from base, not from the PR tree that was just checked out.
+      - name: Checkout trusted coverage CI helpers from base
+        if: startsWith(github.event_name, 'pull_request')
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: |
+            .github/actions/run_clang_codecov
+            .github/actions/setup_ci_ydb_service_account_key_file_credentials
+            .github/scripts/tests/codecov_suites.py
+            .github/scripts/tests/detect_codecov_matrix.py
+            .github/scripts/tests/export_coverage_lcov.py
+            .github/scripts/tests/generate_coverage_landing.py
+            .github/scripts/tests/overlay_trusted_codecov_ci.sh
+          sparse-checkout-cone-mode: false
+          path: _trusted_coverage_ci
+
+      - name: Overlay trusted coverage CI helpers
+        if: startsWith(github.event_name, 'pull_request')
+        run: bash _trusted_coverage_ci/.github/scripts/tests/overlay_trusted_codecov_ci.sh
 
       - name: Strip coverage labels on sync/open/reopen
         if: >-
@@ -226,6 +250,26 @@ jobs:
         with:
           ref: ${{ startsWith(github.event_name, 'pull_request') && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.sha }}
           fetch-depth: 0
+
+      - name: Checkout trusted coverage CI helpers from base
+        if: startsWith(github.event_name, 'pull_request')
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: |
+            .github/actions/run_clang_codecov
+            .github/actions/setup_ci_ydb_service_account_key_file_credentials
+            .github/scripts/tests/codecov_suites.py
+            .github/scripts/tests/detect_codecov_matrix.py
+            .github/scripts/tests/export_coverage_lcov.py
+            .github/scripts/tests/generate_coverage_landing.py
+            .github/scripts/tests/overlay_trusted_codecov_ci.sh
+          sparse-checkout-cone-mode: false
+          path: _trusted_coverage_ci
+
+      - name: Overlay trusted coverage CI helpers
+        if: startsWith(github.event_name, 'pull_request')
+        run: bash _trusted_coverage_ci/.github/scripts/tests/overlay_trusted_codecov_ci.sh
 
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials

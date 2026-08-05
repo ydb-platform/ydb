@@ -156,6 +156,8 @@ namespace NActors {
             size_t BytesToWriteLastTime = 0;
             int ReadPendingRingIdx = -1;
             ui32 PreferredRingIdx = 0;
+            // Index into the preferred ring's fixed-file table, or -1 when using the raw socket fd.
+            int FixedFileIndex = -1;
             std::atomic_uint64_t IncomingSeqNo{1};
             ui64 ExpectedSeqNo = 1;
 
@@ -457,6 +459,7 @@ namespace NActors {
                                     PARAM(UnsentBytes)
                                     PARAM(ReadPendingRingIdx)
                                     PARAM(PreferredRingIdx)
+                                    PARAM(FixedFileIndex)
                                     PARAM2("IncomingSeqNo", IncomingSeqNo.load())
                                     PARAM(ExpectedSeqNo)
                                     PARAM(MigrateTargetShard)
@@ -507,6 +510,8 @@ namespace NActors {
             struct TRingSlot {
                 io_uring Ring{};
                 i64 ItemsToSubmit = 0;
+                bool FixedFilesEnabled = false;
+                std::vector<int> FreeIndices;
             };
 
             TUringEngine& Engine;
@@ -566,6 +571,9 @@ namespace NActors {
             NMonitoring::TDynamicCounters::TCounterPtr OutOfOrderCameIn;
             NMonitoring::TDynamicCounters::TCounterPtr OutOfOrderProcessed;
             NMonitoring::TDynamicCounters::TCounterPtr DeadPeersDetected;
+            NMonitoring::TDynamicCounters::TCounterPtr FixedFilesBound;
+            NMonitoring::TDynamicCounters::TCounterPtr FixedFilesUnbound;
+            NMonitoring::TDynamicCounters::TCounterPtr FixedFilesFallback;
 
             NMonitoring::TDynamicCounters::TCounterPtr OtherTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr CompleteWaitTotalTime;
@@ -644,6 +652,78 @@ namespace NActors {
                 }
             }
 
+            // Reserve a sparse fixed-file table on the ring before the worker starts. Prefer the 5.19+
+            // sparse helper; fall back to registering an array of -1 (supported since ~5.5, covers 5.13).
+            void InitFixedFiles(TRingSlot& slot, ui32 fixedFilesPerRing) {
+                if (!fixedFilesPerRing) {
+                    return;
+                }
+                const unsigned n = fixedFilesPerRing;
+                int ret = io_uring_register_files_sparse(&slot.Ring, n);
+                if (ret != 0) {
+                    std::vector<int> minusOnes(n, -1);
+                    ret = io_uring_register_files(&slot.Ring, minusOnes.data(), n);
+                }
+                if (ret != 0) {
+                    return;
+                }
+                slot.FixedFilesEnabled = true;
+                slot.FreeIndices.reserve(n);
+                for (int i = static_cast<int>(n) - 1; i >= 0; --i) {
+                    slot.FreeIndices.push_back(i);
+                }
+            }
+
+            // Bind fd into the preferred ring's fixed-file table. Returns the index, or -1 on fallback.
+            // Caller must only invoke this when slot.FixedFilesEnabled is true.
+            int BindFixedFile(TRingSlot& slot, int fd) {
+                Y_DEBUG_ABORT_UNLESS(slot.FixedFilesEnabled);
+                if (slot.FreeIndices.empty()) {
+                    ++*FixedFilesFallback;
+                    return -1;
+                }
+                const int index = slot.FreeIndices.back();
+                slot.FreeIndices.pop_back();
+                const int ret = io_uring_register_files_update(&slot.Ring, index, &fd, 1);
+                if (ret != 1) {
+                    slot.FreeIndices.push_back(index);
+                    ++*FixedFilesFallback;
+                    return -1;
+                }
+                ++*FixedFilesBound;
+                return index;
+            }
+
+            void UnbindFixedFile(TRingSlot& slot, int index) {
+                if (index < 0 || !slot.FixedFilesEnabled) {
+                    return;
+                }
+                const int clear = -1;
+                const int ret = io_uring_register_files_update(&slot.Ring, index, &clear, 1);
+                Y_ABORT_UNLESS(ret == 1, "io_uring_register_files_update(clear) failed: %s", strerror(-ret));
+                slot.FreeIndices.push_back(index);
+                ++*FixedFilesUnbound;
+            }
+
+            void BindSessionFixedFile(TSession& session) {
+                Y_DEBUG_ABORT_UNLESS(session.FixedFileIndex < 0);
+                Y_DEBUG_ABORT_UNLESS(session.PreferredRingIdx < Rings.size());
+                auto& slot = Rings[session.PreferredRingIdx];
+                if (!slot.FixedFilesEnabled) {
+                    return;
+                }
+                session.FixedFileIndex = BindFixedFile(slot, *session.Socket);
+            }
+
+            void UnbindSessionFixedFile(TSession& session) {
+                if (session.FixedFileIndex < 0) {
+                    return;
+                }
+                Y_DEBUG_ABORT_UNLESS(session.PreferredRingIdx < Rings.size());
+                UnbindFixedFile(Rings[session.PreferredRingIdx], session.FixedFileIndex);
+                session.FixedFileIndex = -1;
+            }
+
             void PublishLoadSample(ui64 busyDelta, ui64 totalDelta) {
                 // Keep a short EWMA-like window by decaying prior samples and adding the latest slice.
                 constexpr ui64 DecayNum = 3;
@@ -660,7 +740,8 @@ namespace NActors {
             }
 
             TShard(TUringEngine& engine, ui32 shardIdx, const NMonitoring::TDynamicCounterPtr& shardCounters, bool sqpoll,
-                    ui32 ringsPerShard, ui32 sqThreadIdleMs, TShardLoad& load, TShard *shareRingsWith)
+                    ui32 ringsPerShard, ui32 sqThreadIdleMs, TShardLoad& load, TShard *shareRingsWith,
+                    bool enableFixedFiles, ui32 fixedFilesPerRing)
 #define COUNTER(NAME, DERIV) NAME(shardCounters->GetCounter(#NAME, DERIV))
                 : Engine(engine)
                 , ShardIdx(shardIdx)
@@ -688,6 +769,9 @@ namespace NActors {
                 , COUNTER(OutOfOrderCameIn, true)
                 , COUNTER(OutOfOrderProcessed, true)
                 , COUNTER(DeadPeersDetected, true)
+                , COUNTER(FixedFilesBound, true)
+                , COUNTER(FixedFilesUnbound, true)
+                , COUNTER(FixedFilesFallback, true)
 #define TOTAL_TIME(NAME) NAME(shardCounters->GetCounter("TotalTime/" #NAME, true))
                 , TOTAL_TIME(OtherTotalTime)
                 , TOTAL_TIME(CompleteWaitTotalTime)
@@ -717,6 +801,11 @@ namespace NActors {
                 for (ui32 i = 0; i < Rings.size(); ++i) {
                     auto& slot = Rings[i];
                     InitRing(slot, sqpoll, sqThreadIdleMs, shareRingsWith ? &shareRingsWith->Rings[i] : nullptr);
+                    // Must run before Start(): io_uring_register waits for the ring to idle, which deadlocks
+                    // if a worker/SQPOLL thread already holds a ref inside io_uring_enter.
+                    if (enableFixedFiles) {
+                        InitFixedFiles(slot, fixedFilesPerRing);
+                    }
                     if (i > 0) {
                         if (int res = io_uring_register_eventfd(&slot.Ring, EventFd); res < 0) {
                             Y_ABORT("failed to register eventfd along with ring: %s", strerror(-res));
@@ -1129,6 +1218,7 @@ namespace NActors {
                         std::unique_ptr<TSession> session(reinterpret_cast<TSession*>(record->Conn));
                         session->PreferredRingIdx = OpShift++ % Rings.size();
                         session->OwnerShard.store(ShardIdx, std::memory_order_release);
+                        BindSessionFixedFile(*session);
                         const auto [it, inserted] = Sessions.emplace(std::move(session));
                         Y_ABORT_UNLESS(inserted);
                         TouchedSessions.PushBack(it->get());
@@ -1342,6 +1432,10 @@ namespace NActors {
                     return false;
                 }
 
+                // Drop the fixed-file binding on this shard before handing the session off; the destination
+                // rebinds in its EvRegisterSession handler. Safe: no ops are in flight.
+                UnbindSessionFixedFile(session);
+
                 auto it = Sessions.find(&session);
                 Y_DEBUG_ABORT_UNLESS(it != Sessions.end());
                 auto node = Sessions.extract(it);
@@ -1397,7 +1491,13 @@ namespace NActors {
                 TMutableContiguousSpan span = session.GetReadSpan();
                 io_uring_sqe *sqe = GetSQE(&session, kOpRead, session.PreferredRingIdx);
                 Y_ABORT_UNLESS(sqe);
-                io_uring_prep_read(sqe, *session.Socket, span.data(), span.size(), -1);
+                const int fdOrIndex = session.FixedFileIndex >= 0
+                    ? session.FixedFileIndex
+                    : static_cast<int>(*session.Socket);
+                io_uring_prep_read(sqe, fdOrIndex, span.data(), span.size(), -1);
+                if (session.FixedFileIndex >= 0) {
+                    sqe->flags |= IOSQE_FIXED_FILE;
+                }
                 session.ReadPending = true;
             }
 
@@ -1446,7 +1546,13 @@ namespace NActors {
                 if (session.PrepareIovec()) {
                     io_uring_sqe *sqe = GetSQE(&session, kOpWrite, session.PreferredRingIdx);
                     Y_ABORT_UNLESS(sqe);
-                    io_uring_prep_writev(sqe, *session.Socket, session.Iov, session.IovLen, -1);
+                    const int fdOrIndex = session.FixedFileIndex >= 0
+                        ? session.FixedFileIndex
+                        : static_cast<int>(*session.Socket);
+                    io_uring_prep_writev(sqe, fdOrIndex, session.Iov, session.IovLen, -1);
+                    if (session.FixedFileIndex >= 0) {
+                        sqe->flags |= IOSQE_FIXED_FILE;
+                    }
                     session.WritePending = true;
                 }
             }
@@ -1464,6 +1570,9 @@ namespace NActors {
             // erase earlier because any pending read/write completion references the session by raw pointer.
             void MaybeEraseSession(TSession& session) {
                 if (session.UnregisterRequested && !session.ReadPending && !session.WritePending) {
+                    // Release the fixed-file slot while the socket is still alive, then drop the session
+                    // (which closes the fd via TStreamSocket's destructor).
+                    UnbindSessionFixedFile(session);
                     auto it = Sessions.find(&session);
                     Y_ABORT_UNLESS(it != Sessions.end());
                     Sessions.erase(it);
@@ -1495,6 +1604,7 @@ namespace NActors {
             const ui32 sqThreadIdleMs = v2.UringEngineSqThreadIdleMs
                 ? v2.UringEngineSqThreadIdleMs
                 : TUringContext::SqThreadIdleMs;
+            const ui32 fixedFilesPerRing = v2.EnableFixedFiles ? Max<ui32>(1, v2.UringEngineFixedFilesPerRing) : 0;
 
             ShardLoads = std::vector<TShardLoad>(numShards);
             Shards.reserve(numShards);
@@ -1506,7 +1616,9 @@ namespace NActors {
                     ringsPerShard,
                     sqThreadIdleMs,
                     ShardLoads[i],
-                    v2.ShareRingsAmongThreads && !Shards.empty() ? Shards.front().get() : nullptr));
+                    v2.ShareRingsAmongThreads && !Shards.empty() ? Shards.front().get() : nullptr,
+                    v2.EnableFixedFiles,
+                    fixedFilesPerRing));
             }
             for (auto& shard : Shards) {
                 shard->Start();

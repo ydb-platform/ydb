@@ -575,6 +575,14 @@ message TInterconnectConfig {
         // If enabled, rings of different threads share same kernel thread pools and SQ pollers (effectively creating
         // UringEngineRingsPerShard threads instead of UringEngineRingsPerShard * UringEngineThreads).
         optional bool ShareRingsAmongThreads = 8 [default = false];
+
+        // Register session sockets into each ring's fixed-file table (IOSQE_FIXED_FILE) to avoid
+        // per-op process file-table refcount traffic. Falls back to plain fds if the kernel rejects
+        // the table or a ring runs out of slots. Requires sparse/update support (kernel >= 5.5; target 5.13+).
+        optional bool EnableFixedFiles = 9 [default = true];
+
+        // Size of the fixed-file table reserved per ring when EnableFixedFiles is on.
+        optional uint32 UringEngineFixedFilesPerRing = 10 [default = 4096];
     }
 
     optional TV2Config V2Config = 70;

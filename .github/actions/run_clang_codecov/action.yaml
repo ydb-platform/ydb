@@ -73,6 +73,7 @@ runs:
         echo "out_dir=$OUT" >> "$GITHUB_OUTPUT"
 
         BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
+        trap 'rm -f "$BAZEL_REMOTE_PASSWORD_FILE"' EXIT
         echo -n "${{ inputs.bazel_remote_password }}" > "$BAZEL_REMOTE_PASSWORD_FILE"
 
         REGEXP='${{ steps.suite.outputs.regexp }}'

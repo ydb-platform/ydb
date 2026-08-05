@@ -149,6 +149,26 @@
                 {"Index": 0, "Name": "Endpoint", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "TvmId", "Type": "TCoAtom"}
             ]
+        },
+        {
+            "Name": "TPqParsingWrap",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "PqParsingWrap"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"},
+                {"Index": 2, "Name": "MetadataColumns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TDqPqPhyParsingWrap",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "DqPqPhyParsingWrap"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"},
+                {"Index": 2, "Name": "MetadataColumns", "Type": "TCoAtomList"}
+            ]
         }
     ]
 }

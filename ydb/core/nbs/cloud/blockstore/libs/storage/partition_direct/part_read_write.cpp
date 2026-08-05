@@ -2,7 +2,7 @@
 #include "partition_direct_actor.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/public/api/protos/io.pb.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
@@ -20,6 +20,13 @@ void TPartitionActor::HandleWriteBlocksRequest(
     const TActorContext& ctx)
 {
     const auto* msg = ev->Get();
+
+    if (!FastPathService) {
+        auto response = std::make_unique<TEvService::TEvWriteBlocksResponse>(
+            MakeError(E_REJECTED, "partition not ready"));
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
 
     const ui64 startIndex = msg->Record.GetStartIndex();
     const auto& blocks = msg->Record.GetBlocks();
@@ -83,6 +90,13 @@ void TPartitionActor::HandleReadBlocksRequest(
     const TActorContext& ctx)
 {
     const auto* msg = ev->Get();
+
+    if (!FastPathService) {
+        auto response = std::make_unique<TEvService::TEvReadBlocksResponse>(
+            MakeError(E_REJECTED, "partition not ready"));
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
 
     const ui32 blocksCount = msg->Record.GetBlocksCount();
     Y_ABORT_UNLESS(blocksCount > 0);

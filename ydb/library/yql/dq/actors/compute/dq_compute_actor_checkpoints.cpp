@@ -2,6 +2,7 @@
 #include "dq_checkpoints.h"
 #include "dq_compute_actor_impl.h"
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
@@ -569,7 +570,7 @@ void TDqComputeActorCheckpoints::PassAway() {
 }
 
 static bool IsInfiniteSourceType(const TString& sourceType) {
-    return sourceType == "PqSource";
+    return sourceType == NYql::PqSource;
 }
 
 NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task) {

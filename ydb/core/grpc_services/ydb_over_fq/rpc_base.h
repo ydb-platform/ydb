@@ -240,22 +240,17 @@ protected:
     struct TLogCtx {
         TRpcBase& Owner_;
         TStringBuf QueryId_ = "";
+
+        NActors::NStructuredLog::TStructuredMessage ToStructuredMessage() const {
+            auto result = YDB_LOG_CREATE_MESSAGE({"actorId", Owner_.SelfId()});
+            if (!QueryId_.empty()) {
+                YDB_LOG_UPDATE_MESSAGE(result, {"queryId", QueryId_});
+            } else if (!Owner_.QueryId_.empty()) {
+                YDB_LOG_UPDATE_MESSAGE(result, {"queryId", Owner_.QueryId_});
+            }
+            return result;
+        }
     };
-
-    friend TStringBuilder& operator<<(TStringBuilder& out, const TLogCtx& ctx) {
-        if (ctx.Owner_.LogCtx_.empty()) {
-            ctx.Owner_.LogCtx_ = TStringBuilder{} << "YdbOverFq::" << TDerived::RpcName << " actorId: " << ctx.Owner_.SelfId().ToString();
-        }
-
-        out << ctx.Owner_.LogCtx_;
-        if (!ctx.QueryId_.empty()) {
-            out << " queryId: " << ctx.QueryId_;
-        } else if (!ctx.Owner_.QueryId_.empty()) {
-            out << " queryId: " << ctx.Owner_.QueryId_;
-        }
-        out << ' ';
-        return out;
-    }
 
 private:
     WaitRetryPolicy::IRetryState::TPtr WaitRetryState_;

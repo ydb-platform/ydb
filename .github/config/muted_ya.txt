@@ -75,6 +75,9 @@ ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.t
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_prestable-26-4_and_stable-26-3-1]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_stable-26-3-1]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_multi_output[rolling_stable-26-2-1_to_stable-26-3-1-False]
+ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_batch_written_with_topic_protocol_is_fetched_after_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
+ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_plain_and_batched_messages_survive_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
+ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_written_messages_are_read_after_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
 ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_write_and_read[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_stop_after_restart[kikimr0-True]

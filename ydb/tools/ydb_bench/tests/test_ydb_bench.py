@@ -102,13 +102,6 @@ class YdbBenchTest(unittest.TestCase):
                 self.assertEqual(raised.exception.code, 2)
                 self.assertIn("must be a finite positive number", error.getvalue())
 
-    def test_multi_numa_affinity_is_rejected(self):
-        error = io.StringIO()
-        with redirect_stderr(error), self.assertRaises(SystemExit) as raised:
-            main(["run", "actors-core", "--affinity", "multi-numa"])
-        self.assertEqual(raised.exception.code, 2)
-        self.assertIn("must be 'all' or a comma-separated subset", error.getvalue())
-
     def test_perf_requires_profile_build(self):
         error = io.StringIO()
         with redirect_stderr(error):

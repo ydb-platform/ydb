@@ -26,6 +26,17 @@ ALTER TABLE `<table_name>`
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
+<<<<<<< HEAD
+=======
+Parameters for all index types:
+
+* maximum number of `parallel` handlers based on [partitions](../../../../concepts/glossary.md#partition) involved in index building (an integer between `1` and `MaxBuildIndexShardsInFlight` from `SchemeShardConfig`).
+
+  - If the parameter is not specified, the default value `32` or `MaxBuildIndexShardsInFlight` is currently used, whichever is smaller. `MaxBuildIndexShardsInFlight` defaults to `1000`. In future versions, the default parallelism selection logic may change.
+  - You can set a lower limit to reduce the impact of index building on database performance.
+  - You can also set a higher limit to speed up index building if you have enough hardware resources.
+
+>>>>>>> 67315a90886 (Auto-translate docs from PR #44927 (#48812))
 Parameters specific to vector indexes:
 
 {% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
@@ -36,6 +47,23 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 {% endif %}
 
+<<<<<<< HEAD
+=======
+### Limitations
+
+The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), via `ADD INDEX`, [only local bloom indexes are supported](#local-bloom).
+
+Features of local Bloom indexes:
+
+{% include [bloom_skip_index_features.md](../_includes/bloom_skip_index_features.md) %}
+
+{% note info "Limitations" %}
+
+{% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
+
+{% endnote %}
+
+>>>>>>> 67315a90886 (Auto-translate docs from PR #44927 (#48812))
 ### Examples
 
 A regular secondary index:
@@ -63,6 +91,7 @@ ALTER TABLE `series`
 
 ## Altering an index {#alter-index}
 
+<<<<<<< HEAD
 Indexes have type-specific parameters that can be tuned. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and followers settings can be adjusted just like those of regular tables.
 
 {% note info %}
@@ -72,13 +101,83 @@ Currently, specifying secondary index partitioning settings during index creatio
 {% endnote %}
 
 ```sql
+=======
+Full-text index:
+
+
+```yql
+ALTER TABLE `series`
+  ADD INDEX ft_idx GLOBAL USING fulltext_plain
+  ON (title)
+  WITH (tokenizer=standard, use_filter_lowercase=true);
+```
+
+
+[JSON index](../../../../dev/json-indexes.md):
+
+
+```yql
+ALTER TABLE `series`
+  ADD INDEX json_idx GLOBAL USING json
+  ON (metadata);
+```
+
+
+[Bloom index](../../../../dev/bloom-skip-indexes.md):
+
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_bloom LOCAL USING bloom_filter
+  ON (resource_id)
+  WITH (false_positive_probability = 0.01);
+```
+
+
+Bloom n-gram index:
+
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+  ON (message)
+  WITH (
+    ngram_size = 3,
+    false_positive_probability = 0.01,
+    case_sensitive = true
+  );
+```
+
+
+## Changing index parameters {#alter-index}
+
+Indexes have type-dependent parameters that you can configure. Global indexes, [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and replica parameters can be adjusted in the same way as regular table settings.
+
+{% note info %}
+
+Currently, setting partitioning parameters for secondary indexes when creating an index is not supported either in the [`ALTER TABLE ADD INDEX`](#add-index) statement or in the [`CREATE TABLE INDEX`](../create_table/secondary_index.md) statement.
+
+{% endnote %}
+
+
+```yql
+>>>>>>> 67315a90886 (Auto-translate docs from PR #44927 (#48812))
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET <setting_name> <value>;
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value_1>, ...);
 ```
 
+<<<<<<< HEAD
 * `<table_name>`: The name of the table whose index is to be modified.
 * `<index_name>`: The name of the index to be modified.
 * `<setting_name>`: The name of the setting to be modified, which should be one of the following:
+=======
+
+* `<table_name>` - name of the table whose index needs to be changed.
+* `<index_name>` - name of the index to change.
+* `<setting_name>` - name of the parameter to change. The set of allowed parameters depends on the index type:
+
+  * For global secondary indexes:
+>>>>>>> 67315a90886 (Auto-translate docs from PR #44927 (#48812))
 
     * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
     * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
@@ -113,6 +212,22 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 );
 ```
 
+<<<<<<< HEAD
+=======
+
+For local Bloom indexes, you can also change parameters specific to them, for example:
+
+
+```yql
+ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (
+    ngram_size = 4,
+    false_positive_probability = 0.005,
+    case_sensitive = false
+);
+```
+
+
+>>>>>>> 67315a90886 (Auto-translate docs from PR #44927 (#48812))
 ## Deleting an index {#drop-index}
 
 `DROP INDEX`: Deletes the index with the specified name. The code below deletes the index named `title_index`.

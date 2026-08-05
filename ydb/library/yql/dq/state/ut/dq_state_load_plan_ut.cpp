@@ -90,7 +90,7 @@ struct TGraphBuilder {
 
 TTaskInputBuilder& TTaskInputBuilder::TopicSource(const TString& topic, ui64 partitionsCount, ui64 dqPartitionsCount, ui64 eachPartition) {
     auto* src = In->MutableSource();
-    src->SetType(NYql::PqSource);
+    src->SetType(TString(NYql::PqSource));
 
     NYql::NPq::NProto::TDqPqTopicSource topicSrcSettings;
     topicSrcSettings.SetDatabase("DB");

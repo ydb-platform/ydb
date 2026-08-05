@@ -1336,7 +1336,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
 }
 
 void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
-    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>(PqSource,
+    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>(TString(PqSource),
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod, enableStreamingQueriesCounters](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)

@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     class CheckpointsTestHelper : public TTestBootstrap
     {
     public:
-        CheckpointsTestHelper(ui64 graphFlags, ui64 snaphotRotationPeriod = 0, const TString& sourceType = NYql::PqSource)
+        CheckpointsTestHelper(ui64 graphFlags, ui64 snaphotRotationPeriod = 0, const TString& sourceType = TString(NYql::PqSource))
             : TTestBootstrap(graphFlags, snaphotRotationPeriod, sourceType) {
         }
         

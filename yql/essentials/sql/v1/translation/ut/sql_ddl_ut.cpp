@@ -2112,3 +2112,163 @@ Y_UNIT_TEST(DropStreamingQueryIfExists) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 } // Y_UNIT_TEST_SUITE(StreamingQuery)
+
+Y_UNIT_TEST_SUITE(Volume) {
+Y_UNIT_TEST(CreateVolumeWithLocalChannels) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE VOLUME MyVolume WITH (
+                    TYPE = "KEY_VALUE",
+                    PARTITION_COUNT = 4,
+                    CHANNELS = (
+                        (MEDIA = "ssd"),
+                        (MEDIA = "ssd"),
+                        (MEDIA = "hdd")
+                    )
+                );
+            )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"channel_0_media" '"ssd") '('"channel_1_media" '"ssd") '('"channel_2_media" '"hdd") '('"channel_count" '"3") '('"partition_count" (Int32 '"4")) '('"type" '"KEY_VALUE"))#");
+            UNIT_ASSERT_STRING_CONTAINS(line, "createObject");
+            UNIT_ASSERT_STRING_CONTAINS(line, "KEY_VALUE_VOLUME");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateVolumeWithObjectStorageChannel) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE VOLUME `/Root/MyVolume` WITH (
+                    TYPE = "KEY_VALUE",
+                    PARTITION_COUNT = 1,
+                    CHANNELS = (
+                        (MEDIA = ssd),
+                        (MEDIA = ssd),
+                        (DATA_SOURCE = `/Root/MyDataSource`,
+                         OBJECT_PREFIX = "kv/my_volume/",
+                         STORAGE_POOL = "virtual_ssd",
+                         SYNC_MODE = "ASYNC")
+                    )
+                );
+            )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"channel_0_media" '"ssd") '('"channel_1_media" '"ssd") '('"channel_2_data_source" '"/Root/MyDataSource") '('"channel_2_object_prefix" '"kv/my_volume/") '('"channel_2_storage_pool" '"virtual_ssd") '('"channel_2_sync_mode" '"ASYNC") '('"channel_count" '"3"))#");
+            UNIT_ASSERT_STRING_CONTAINS(line, "createObject");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateVolumeIfNotExists) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE VOLUME IF NOT EXISTS MyVolume WITH (
+                    TYPE = "KEY_VALUE",
+                    PARTITION_COUNT = 1,
+                    CHANNELS = ((MEDIA = "ssd"), (MEDIA = "ssd"), (MEDIA = "ssd"))
+                );
+            )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "createObjectIfNotExists");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateVolumeWithBadArguments) {
+    ExpectFailWithError(R"sql(
+            USE plato;
+            CREATE VOLUME MyVolume;
+        )sql", "<main>:3:34: Error: mismatched input ';' expecting WITH\n");
+
+    ExpectFailWithError(R"sql(
+            USE plato;
+            CREATE VOLUME MyVolume WITH (
+                TYPE = "KEY_VALUE",
+                TYPE = "KEY_VALUE"
+            );
+        )sql", "<main>:5:17: Error: TYPE duplicate keys\n");
+
+    ExpectFailWithError(R"sql(
+            USE plato;
+            CREATE VOLUME MyVolume WITH (
+                CHANNELS = ((MEDIA = "ssd", MEDIA = "hdd"))
+            );
+        )sql", "<main>:4:45: Error: MEDIA duplicate keys in channel 0\n");
+
+    ExpectFailWithError(R"sql(
+            USE plato;
+            CREATE VOLUME MyVolume WITH (
+                PARTITION_COUNT = ((MEDIA = "ssd"))
+            );
+        )sql", "<main>:4:17: Error: PARTITION_COUNT value should be a string literal or integer\n");
+}
+
+Y_UNIT_TEST(DropVolume) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                DROP VOLUME MyVolume;
+            )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropObject");
+            UNIT_ASSERT_STRING_CONTAINS(line, "KEY_VALUE_VOLUME");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(DropVolumeIfExists) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                DROP VOLUME IF EXISTS MyVolume;
+            )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropObjectIfExists");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+// VOLUME must stay usable as an ordinary identifier, otherwise the new keyword breaks existing queries.
+Y_UNIT_TEST(VolumeIsNotAReservedWord) {
+    NYql::TAstParseResult res = SqlToYql("USE plato; SELECT volume FROM volume;");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+} // Y_UNIT_TEST_SUITE(Volume)

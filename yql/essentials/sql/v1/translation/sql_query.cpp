@@ -2462,6 +2462,40 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             PushNamedNode(intoPos, varName, refNode);
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore71: {
+            // create_volume_stmt: CREATE VOLUME (IF NOT EXISTS)? object_ref with_volume_settings;
+            Ctx_.BodyPart();
+            const auto& node = core.GetAlt_sql_stmt_core71().GetRule_create_volume_stmt1();
+            TObjectOperatorContext context(Ctx_.Scoped);
+            const bool existingOk = node.HasBlock3();
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref4(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
+            }
+
+            std::map<TString, TDeferredAtom> kv;
+            if (!ParseVolumeSettings(kv, node.GetRule_with_volume_settings5())) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), *objectId, "KEY_VALUE_VOLUME", existingOk,
+                /*replaceIfExists=*/false, new TObjectFeatureNode(Ctx_.Pos(), kv), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore72: {
+            // drop_volume_stmt: DROP VOLUME (IF EXISTS)? object_ref;
+            Ctx_.BodyPart();
+            const auto& node = core.GetAlt_sql_stmt_core72().GetRule_drop_volume_stmt1();
+            TObjectOperatorContext context(Ctx_.Scoped);
+            const bool missingOk = node.HasBlock3();
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref4(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), *objectId, "KEY_VALUE_VOLUME", missingOk, {}, context));
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
     }

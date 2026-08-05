@@ -1752,6 +1752,66 @@ private:
         VisitAllFields(TRule_drop_resource_pool_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateVolume(const TRule_create_volume_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_create_volume_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropVolume(const TRule_drop_volume_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_drop_volume_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitWithVolumeSettings(const TRule_with_volume_settings& msg) {
+        VisitKeyword(msg.GetToken1());
+        Visit(msg.GetToken2());
+
+        const bool needIndent = msg.Block4Size() > 0; // more than one setting
+        if (needIndent) {
+            NewLine();
+            PushCurrentIndent();
+            Visit(msg.GetRule_volume_settings_entry3());
+            for (const auto& entry : msg.GetBlock4()) {
+                Visit(entry.GetToken1()); // comma
+                NewLine();
+                Visit(entry.GetRule_volume_settings_entry2());
+            }
+            PopCurrentIndent();
+            NewLine();
+        } else {
+            Visit(msg.GetRule_volume_settings_entry3());
+        }
+
+        if (msg.HasBlock5()) {
+            Visit(msg.GetBlock5().GetToken1());
+            NewLine();
+        }
+
+        Visit(msg.GetToken6());
+    }
+
+    void VisitVolumeChannels(const TRule_volume_channels& msg) {
+        Visit(msg.GetToken1());
+
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_volume_channel2());
+        for (const auto& channel : msg.GetBlock3()) {
+            Visit(channel.GetToken1()); // comma
+            NewLine();
+            Visit(channel.GetRule_volume_channel2());
+        }
+        PopCurrentIndent();
+        NewLine();
+
+        if (msg.HasBlock4()) {
+            Visit(msg.GetBlock4().GetToken1());
+            NewLine();
+        }
+
+        Visit(msg.GetToken5());
+    }
+
     void VisitCreateBackupCollection(const TRule_create_backup_collection_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_create_backup_collection_stmt::GetDescriptor(), msg);
@@ -3399,6 +3459,10 @@ TStaticData::TStaticData()
           {TRule_create_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateResourcePool)},
           {TRule_alter_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterResourcePool)},
           {TRule_drop_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePool)},
+          {TRule_create_volume_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateVolume)},
+          {TRule_drop_volume_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropVolume)},
+          {TRule_with_volume_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithVolumeSettings)},
+          {TRule_volume_channels::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitVolumeChannels)},
           {TRule_create_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateBackupCollection)},
           {TRule_alter_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterBackupCollection)},
           {TRule_drop_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropBackupCollection)},

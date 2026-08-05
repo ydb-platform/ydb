@@ -6141,6 +6141,112 @@ bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>
     return true;
 }
 
+namespace {
+
+// Volume channels are an ordered list of per-channel settings, while object features are a flat string map.
+// The list is flattened into channel_count plus channel_<index>_<setting> keys; the volume manager on the
+// other side reassembles it (see ydb/core/kqp/gateway/behaviour/keyvalue_volume).
+TString VolumeChannelKey(const size_t index, const TString& setting) {
+    return TStringBuilder() << "channel_" << index << '_' << setting;
+}
+
+}   // namespace
+
+bool TSqlTranslation::ParseVolumeSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_volume_settings& settingsNode) {
+    auto storeChannels = [&](const TString& key, const TRule_volume_channels& channels) -> bool {
+        if (key != "channels") {
+            Ctx_.Error() << to_upper(key) << " value should be a string literal or integer";
+            return false;
+        }
+
+        size_t index = 0;
+        auto storeChannel = [&](const TRule_volume_channel& channel) -> bool {
+            auto storeEntry = [&](const TRule_volume_channel_entry& entry) -> bool {
+                const TString name = to_lower(IdEx(entry.GetRule_an_id1(), *this).Name);
+                const TString channelKey = VolumeChannelKey(index, name);
+                if (result.contains(channelKey)) {
+                    Ctx_.Error() << to_upper(name) << " duplicate keys in channel " << index;
+                    return false;
+                }
+
+                const auto& value = entry.GetRule_table_setting_value3();
+                switch (value.Alt_case()) {
+                    // A backtick-quoted path, e.g. DATA_SOURCE = `/Root/my_source`.
+                    case TRule_table_setting_value::kAltTableSettingValue1:
+                        result[channelKey] = TDeferredAtom(
+                            Ctx_.Pos(), Id(value.GetAlt_table_setting_value1().GetRule_id1(), *this));
+                        return true;
+
+                    case TRule_table_setting_value::kAltTableSettingValue2:
+                        return StoreString(value, result[channelKey], Ctx_, to_upper(name));
+
+                    case TRule_table_setting_value::kAltTableSettingValue3:
+                        return StoreInt(value, result[channelKey], Ctx_, to_upper(name));
+
+                    default:
+                        Ctx_.Error() << to_upper(name) << " value should be a string literal or integer";
+                        return false;
+                }
+            };
+
+            if (!storeEntry(channel.GetRule_volume_channel_entry2())) {
+                return false;
+            }
+            for (const auto& block : channel.GetBlock3()) {
+                if (!storeEntry(block.GetRule_volume_channel_entry2())) {
+                    return false;
+                }
+            }
+            ++index;
+            return true;
+        };
+
+        if (!storeChannel(channels.GetRule_volume_channel2())) {
+            return false;
+        }
+        for (const auto& block : channels.GetBlock3()) {
+            if (!storeChannel(block.GetRule_volume_channel2())) {
+                return false;
+            }
+        }
+
+        result["channel_count"] = TDeferredAtom(Ctx_.Pos(), ToString(index));
+        return true;
+    };
+
+    auto storeEntry = [&](const TRule_volume_settings_entry& entry) -> bool {
+        const TString key = to_lower(IdEx(entry.GetRule_an_id1(), *this).Name);
+        if (result.contains(key) || (key == "channels" && result.contains("channel_count"))) {
+            Ctx_.Error() << to_upper(key) << " duplicate keys";
+            return false;
+        }
+
+        const auto& value = entry.GetRule_volume_setting_value3();
+        switch (value.Alt_case()) {
+            case TRule_volume_setting_value::kAltVolumeSettingValue1:
+                return StoreResourcePoolSettingsEntry(
+                    IdEx(entry.GetRule_an_id1(), *this), &value.GetAlt_volume_setting_value1().GetRule_table_setting_value1(), result);
+
+            case TRule_volume_setting_value::kAltVolumeSettingValue2:
+                return storeChannels(key, value.GetAlt_volume_setting_value2().GetRule_volume_channels1());
+
+            case TRule_volume_setting_value::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
+        return false;
+    };
+
+    if (!storeEntry(settingsNode.GetRule_volume_settings_entry3())) {
+        return false;
+    }
+    for (const auto& block : settingsNode.GetBlock4()) {
+        if (!storeEntry(block.GetRule_volume_settings_entry2())) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_action& alterAction) {
     switch (alterAction.Alt_case()) {
         case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction1: {

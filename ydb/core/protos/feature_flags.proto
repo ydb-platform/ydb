@@ -360,4 +360,7 @@ message TFeatureFlags {
     optional bool EnableKafkaServerlessTransactions = 307 [default = false];
     optional bool EnableGeneratedStored = 308 [default = false];
     optional bool EnableGeneratedVirtual = 309 [default = false];
+    // CREATE VOLUME / DROP VOLUME for KeyValue volumes. Volumes created this way are ordinary
+    // KeyValue volumes, so they stay usable through the KeyValue API when the flag is off again.
+    optional bool EnableKeyValueVolumeDdl = 310 [default = false];
 }

@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/gateway/actors
     ydb/core/kqp/gateway/behaviour/external_data_source
+    ydb/core/kqp/gateway/behaviour/keyvalue_volume
     ydb/services/workload_manager/metadata_subscription
     ydb/services/workload_manager/metadata_subscription/resource_pool_classifier
     ydb/services/workload_manager/service

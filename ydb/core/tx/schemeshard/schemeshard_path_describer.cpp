@@ -1006,6 +1006,8 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
         entry->MutableAuditSettings()->CopyFrom(*auditSettings);
     }
 
+    entry->SetTablesMetricsLevel(subDomainInfo->GetTablesMetricsLevel());
+
     if (const auto& serverlessComputeResourcesMode = subDomainInfo->GetServerlessComputeResourcesMode()) {
         entry->SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
     }

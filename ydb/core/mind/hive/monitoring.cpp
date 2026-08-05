@@ -4463,61 +4463,6 @@ public:
     }
 };
 
-class TCreateTabletActor : public TActorBootstrapped<TCreateTabletActor> {
-public:
-    TActorId Source;
-    TAutoPtr<TEvHive::TEvCreateTablet> Event;
-    THive* Hive;
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::HIVE_MON_REQUEST;
-    }
-
-    TCreateTabletActor(const TActorId& source, ui64 owner, ui64 ownerIdx, TTabletTypes::EType type, ui32 channelsProfile, ui32 followers, THive* hive)
-        : Source(source)
-        , Event(new TEvHive::TEvCreateTablet())
-        , Hive(hive)
-    {
-        Event->Record.SetOwner(owner);
-        Event->Record.SetOwnerIdx(ownerIdx);
-        Event->Record.SetTabletType(type);
-        Event->Record.SetChannelsProfile(channelsProfile);
-        Event->Record.SetFollowerCount(followers);
-    }
-
-    void HandleTimeout(const TActorContext& ctx) {
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Timeout"})"));
-        Die(ctx);
-    }
-
-    void Handle(TEvHive::TEvCreateTabletReply::TPtr& ptr, const TActorContext& ctx) {
-        TStringStream stream;
-        stream << ptr->Get()->Record.AsJSON();
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(stream.Str()));
-        Die(ctx);
-    }
-
-    void Handle(TEvHive::TEvTabletCreationResult::TPtr& ptr, const TActorContext& ctx) {
-        TStringStream stream;
-        stream << ptr->Get()->Record.AsJSON();
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(stream.Str()));
-        Die(ctx);
-    }
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvHive::TEvCreateTabletReply, Handle);
-            HFunc(TEvHive::TEvTabletCreationResult, Handle);
-            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-        }
-    }
-
-    void Bootstrap(const TActorContext& ctx) {
-        ctx.Send(Hive->SelfId(), Event.Release());
-        Become(&TThis::StateWork, ctx, TDuration::Seconds(30), new TEvents::TEvWakeup());
-    }
-};
-
 class TDeleteTabletActor : public TActorBootstrapped<TDeleteTabletActor> {
 private:
     ui64 FAKE_TXID = -1;
@@ -4979,7 +4924,6 @@ public:
                     <option>MoveTablet</option>
                     <option>StopTablet</option>
                     <option>ResumeTablet</option>
-                    <option>CreateTablet</option>
                     <option>ResetTablet</option>
                     <option>DeleteTablet</option>
                     <option>UpdateResources</option>
@@ -5200,15 +5144,6 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "ObjectStats") {
         return Execute(new TTxMonEvent_ObjectStats(ev->Sender, this), ctx);
-    }
-    if (page == "CreateTablet") {
-        ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0);
-        ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);
-        TTabletTypes::EType type = (TTabletTypes::EType)FromStringWithDefault<ui32>(cgi.Get("type"), 0);
-        ui32 channelsProfile = FromStringWithDefault<ui32>(cgi.Get("profile"), 0);
-        ui32 followers = FromStringWithDefault<ui32>(cgi.Get("followers"), 0);
-        ctx.RegisterWithSameMailbox(new TCreateTabletActor(ev->Sender, owner, ownerIdx, type, channelsProfile, followers, this));
-        return;
     }
     if (page == "ResetTablet") {
         if (IsSafeOperation(ev, ctx)) {

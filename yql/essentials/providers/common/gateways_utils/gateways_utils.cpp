@@ -84,6 +84,26 @@ void GetClusterMappingFromGateways(const NYql::TGatewaysConfig& gateways, THashM
                     TString{ClickHouseProviderName},
                     &clusterMapping);
     }
+    if (gateways.HasPostgresql()) {
+        AddClusters(gateways.GetPostgresql().GetClusterMapping(),
+                    TString{PgProviderName},
+                    &clusterMapping);
+    }
+    if (gateways.HasPq()) {
+        AddClusters(gateways.GetPq().GetClusterMapping(),
+                    TString{PqProviderName},
+                    &clusterMapping);
+    }
+    if (gateways.HasSolomon()) {
+        AddClusters(gateways.GetSolomon().GetClusterMapping(),
+                    TString{SolomonProviderName},
+                    &clusterMapping);
+    }
+    if (gateways.HasStat()) {
+        AddClusters(gateways.GetStat().GetClusterMapping(),
+                    TString{StatProviderName},
+                    &clusterMapping);
+    }
     if (gateways.HasS3()) {
         AddClusters(gateways.GetS3().GetClusterMapping(),
                     TString{S3ProviderName},

@@ -8,6 +8,9 @@
 #include <util/string/join.h>
 #include <util/string/split.h>
 
+#include <array>
+#include <list>
+
 namespace NYT {
 namespace {
 
@@ -344,6 +347,65 @@ TEST(TErrorTest, WrapRValue)
     auto triviallyWrapped = std::move(anotherErrorCopy).Wrap();
     EXPECT_TRUE(anotherErrorCopy.IsOK());
     EXPECT_EQ(triviallyWrapped, error);
+}
+
+TEST(TErrorTest, WithAttributes)
+{
+    const auto base = TError("Error").With("base", 1);
+
+    auto error = base
+        .With("added", 2)
+        .With(TErrorAttribute("direct", 3));
+
+    EXPECT_EQ(base.Attributes().Get<int>("base"), 1);
+    EXPECT_FALSE(base.Attributes().Contains("added"));
+    EXPECT_EQ(error.Attributes().Get<int>("base"), 1);
+    EXPECT_EQ(error.Attributes().Get<int>("added"), 2);
+    EXPECT_EQ(error.Attributes().Get<int>("direct"), 3);
+}
+
+TEST(TErrorTest, WithAttributeRange)
+{
+    std::array attributes{
+        TErrorAttribute("first", 1),
+        TErrorAttribute("second", 2),
+    };
+
+    auto error = TError("Error").With(attributes);
+
+    EXPECT_EQ(error.Attributes().Get<int>("first"), 1);
+    EXPECT_EQ(error.Attributes().Get<int>("second"), 2);
+}
+
+TEST(TErrorTest, WithInnerErrors)
+{
+    auto innerError = TError("Inner error");
+    const auto base = TError("Outer error");
+
+    auto error = base
+        .With(innerError)
+        .With(TError("Moved inner error"));
+
+    EXPECT_TRUE(base.InnerErrors().empty());
+    ASSERT_EQ(error.InnerErrors().size(), 2u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "Inner error");
+    EXPECT_EQ(error.InnerErrors()[1].GetMessage(), "Moved inner error");
+}
+
+TEST(TErrorTest, WithInnerErrorRange)
+{
+    std::list innerErrors{
+        TError("First inner error"),
+        TError("Second inner error"),
+    };
+
+    auto error = TError("Outer error").With(std::move(innerErrors));
+
+    ASSERT_EQ(error.InnerErrors().size(), 2u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "First inner error");
+    EXPECT_EQ(error.InnerErrors()[1].GetMessage(), "Second inner error");
+    EXPECT_TRUE(innerErrors.front().IsOK());
+    EXPECT_TRUE(innerErrors.back().IsOK());
 }
 
 TEST(TErrorTest, WrapOKError)

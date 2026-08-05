@@ -284,67 +284,6 @@ const std::vector<NScheme::TPermissions>& TTopicDescription::GetEffectivePermiss
     return EffectivePermissions_;
 }
 
-TPartitioningSettings::TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings)
-    : MinActivePartitions_(settings.min_active_partitions())
-    , MaxActivePartitions_(settings.max_active_partitions())
-    , PartitionCountLimit_(settings.partition_count_limit())
-    , AutoPartitioningSettings_(settings.auto_partitioning_settings())
-{}
-
-void TPartitioningSettings::SerializeTo(Ydb::Topic::PartitioningSettings& proto) const {
-    proto.set_min_active_partitions(MinActivePartitions_);
-    proto.set_max_active_partitions(MaxActivePartitions_);
-    proto.set_partition_count_limit(PartitionCountLimit_);
-    AutoPartitioningSettings_.SerializeTo(*proto.mutable_auto_partitioning_settings());
-}
-
-uint64_t TPartitioningSettings::GetMinActivePartitions() const {
-    return MinActivePartitions_;
-}
-
-uint64_t TPartitioningSettings::GetMaxActivePartitions() const {
-    return MaxActivePartitions_;
-}
-
-uint64_t TPartitioningSettings::GetPartitionCountLimit() const {
-    return PartitionCountLimit_;
-}
-
-TAutoPartitioningSettings TPartitioningSettings::GetAutoPartitioningSettings() const {
-    return AutoPartitioningSettings_;
-}
-
-TAutoPartitioningSettings::TAutoPartitioningSettings(const Ydb::Topic::AutoPartitioningSettings& settings)
-    : Strategy_(static_cast<EAutoPartitioningStrategy>(settings.strategy()))
-    , StabilizationWindow_(TDuration::Seconds(settings.partition_write_speed().stabilization_window().seconds()))
-    , DownUtilizationPercent_(settings.partition_write_speed().down_utilization_percent())
-    , UpUtilizationPercent_(settings.partition_write_speed().up_utilization_percent())
-{}
-
-void TAutoPartitioningSettings::SerializeTo(Ydb::Topic::AutoPartitioningSettings& proto) const {
-    proto.set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(Strategy_));
-    auto& writeSpeed = *proto.mutable_partition_write_speed();
-    writeSpeed.mutable_stabilization_window()->set_seconds(StabilizationWindow_.Seconds());
-    writeSpeed.set_down_utilization_percent(DownUtilizationPercent_);
-    writeSpeed.set_up_utilization_percent(UpUtilizationPercent_);
-}
-
-EAutoPartitioningStrategy TAutoPartitioningSettings::GetStrategy() const {
-    return Strategy_;
-}
-
-TDuration TAutoPartitioningSettings::GetStabilizationWindow() const {
-    return StabilizationWindow_;
-}
-
-uint32_t TAutoPartitioningSettings::GetUpUtilizationPercent() const {
-    return UpUtilizationPercent_;
-}
-
-uint32_t TAutoPartitioningSettings::GetDownUtilizationPercent() const {
-    return DownUtilizationPercent_;
-}
-
 TTopicStats::TTopicStats(const Ydb::Topic::DescribeTopicResult::TopicStats& topicStats)
     : StoreSizeBytes_(topicStats.store_size_bytes())
     , MinLastWriteTime_(TInstant::Seconds(topicStats.min_last_write_time().seconds()))

@@ -50,6 +50,13 @@ class LocalBloomFilterIndex;
 class LocalBloomNgramFilterIndex;
 
 } // namespace Table
+
+namespace Topic {
+
+class PartitioningSettings;
+class AutoPartitioningSettings;
+
+} // namespace Topic
 } // namespace Ydb
 
 namespace NYdb::inline Dev {
@@ -645,6 +652,90 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Auto partitioning settings of a topic (e.g. a changefeed's underlying topic).
+//! This type lives in the table client library (instead of the topic client library)
+//! because the topic client library depends on the table client library, and reusing the
+//! topic type here would introduce a reverse (circular) dependency. The topic client
+//! re-exports it as NTopic::TAutoPartitioningSettings.
+struct TTopicAutoPartitioningSettings {
+public:
+    TTopicAutoPartitioningSettings()
+        : Strategy_(ETopicAutoPartitioningStrategy::Disabled)
+        , StabilizationWindow_(TDuration::Seconds(0))
+        , DownUtilizationPercent_(0)
+        , UpUtilizationPercent_(0) {
+    }
+    explicit TTopicAutoPartitioningSettings(const Ydb::Topic::AutoPartitioningSettings& settings);
+    TTopicAutoPartitioningSettings(ETopicAutoPartitioningStrategy strategy, TDuration stabilizationWindow,
+        uint64_t downUtilizationPercent, uint64_t upUtilizationPercent)
+        : Strategy_(strategy)
+        , StabilizationWindow_(stabilizationWindow)
+        , DownUtilizationPercent_(downUtilizationPercent)
+        , UpUtilizationPercent_(upUtilizationPercent) {}
+
+    void SerializeTo(Ydb::Topic::AutoPartitioningSettings& proto) const;
+
+    ETopicAutoPartitioningStrategy GetStrategy() const;
+    TDuration GetStabilizationWindow() const;
+    uint32_t GetDownUtilizationPercent() const;
+    uint32_t GetUpUtilizationPercent() const;
+
+    void SetStrategy(ETopicAutoPartitioningStrategy value) { Strategy_ = value; }
+    void SetStabilizationWindow(TDuration value) { StabilizationWindow_ = value; }
+    void SetDownUtilizationPercent(uint32_t value) { DownUtilizationPercent_ = value; }
+    void SetUpUtilizationPercent(uint32_t value) { UpUtilizationPercent_ = value; }
+
+    bool operator==(const TTopicAutoPartitioningSettings& other) const = default;
+
+private:
+    ETopicAutoPartitioningStrategy Strategy_;
+    TDuration StabilizationWindow_;
+    uint32_t DownUtilizationPercent_;
+    uint32_t UpUtilizationPercent_;
+};
+
+//! Partitioning settings of a topic (e.g. a changefeed's underlying topic).
+//! Lives in the table client library for the same dependency reason as
+//! TTopicAutoPartitioningSettings. The topic client re-exports it as
+//! NTopic::TPartitioningSettings.
+class TTopicPartitioningSettings {
+public:
+    TTopicPartitioningSettings()
+        : MinActivePartitions_(0)
+        , MaxActivePartitions_(0)
+        , PartitionCountLimit_(0)
+        , AutoPartitioningSettings_() {}
+    explicit TTopicPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings);
+    TTopicPartitioningSettings(uint64_t minActivePartitions, uint64_t maxActivePartitions,
+        TTopicAutoPartitioningSettings autoPartitioning = {})
+        : MinActivePartitions_(minActivePartitions)
+        , MaxActivePartitions_(maxActivePartitions)
+        , PartitionCountLimit_(0)
+        , AutoPartitioningSettings_(autoPartitioning) {}
+
+    void SerializeTo(Ydb::Topic::PartitioningSettings& proto) const;
+
+    uint64_t GetMinActivePartitions() const;
+    uint64_t GetMaxActivePartitions() const;
+    uint64_t GetPartitionCountLimit() const;
+    TTopicAutoPartitioningSettings GetAutoPartitioningSettings() const;
+
+    void SetMinActivePartitions(uint64_t value) { MinActivePartitions_ = value; }
+    void SetMaxActivePartitions(uint64_t value) { MaxActivePartitions_ = value; }
+    void SetPartitionCountLimit(uint64_t value) { PartitionCountLimit_ = value; }
+    TTopicAutoPartitioningSettings& MutableAutoPartitioningSettings() { return AutoPartitioningSettings_; }
+
+    bool operator==(const TTopicPartitioningSettings& other) const = default;
+
+private:
+    uint64_t MinActivePartitions_;
+    uint64_t MaxActivePartitions_;
+    uint64_t PartitionCountLimit_;
+    TTopicAutoPartitioningSettings AutoPartitioningSettings_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Represents changefeed description
 class TChangefeedDescription {
     friend class NYdb::TProtoAccessor;
@@ -689,6 +780,8 @@ public:
     TChangefeedDescription& SetAttributes(std::unordered_map<std::string, std::string>&& attrs);
     // Value that will be emitted in the `awsRegion` field of the record in DynamoDBStreamsJson format
     TChangefeedDescription& WithAwsRegion(const std::string& value);
+    // Partitioning settings of the underlying topic (including auto partitioning strategy).
+    TChangefeedDescription& WithTopicPartitioningSettings(const TTopicPartitioningSettings& value);
 
     const std::string& GetName() const;
     EChangefeedMode GetMode() const;
@@ -703,6 +796,7 @@ public:
     const std::unordered_map<std::string, std::string>& GetAttributes() const;
     const std::string& GetAwsRegion() const;
     const std::optional<TInitialScanProgress>& GetInitialScanProgress() const;
+    const std::optional<TTopicPartitioningSettings>& GetTopicPartitioningSettings() const;
 
     void SerializeTo(Ydb::Table::Changefeed& proto) const;
     void SerializeTo(Ydb::Table::ChangefeedDescription& proto) const;
@@ -734,6 +828,7 @@ private:
     std::unordered_map<std::string, std::string> Attributes_;
     std::string AwsRegion_;
     std::optional<TInitialScanProgress> InitialScanProgress_;
+    std::optional<TTopicPartitioningSettings> TopicPartitioningSettings_;
 };
 
 bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs);

@@ -13,6 +13,7 @@
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/src/client/impl/stats/stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -3561,6 +3562,100 @@ float TChangefeedDescription::TInitialScanProgress::GetProgress() const {
     return 100 * float(PartsCompleted) / float(PartsTotal);
 }
 
+static ETopicAutoPartitioningStrategy AutoPartitioningStrategyFromProto(Ydb::Topic::AutoPartitioningStrategy strategy) {
+    switch (strategy) {
+    case Ydb::Topic::AUTO_PARTITIONING_STRATEGY_DISABLED:
+        return ETopicAutoPartitioningStrategy::Disabled;
+    case Ydb::Topic::AUTO_PARTITIONING_STRATEGY_SCALE_UP:
+        return ETopicAutoPartitioningStrategy::ScaleUp;
+    case Ydb::Topic::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN:
+        return ETopicAutoPartitioningStrategy::ScaleUpAndDown;
+    case Ydb::Topic::AUTO_PARTITIONING_STRATEGY_PAUSED:
+        return ETopicAutoPartitioningStrategy::Paused;
+    case Ydb::Topic::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED:
+        return ETopicAutoPartitioningStrategy::Unspecified;
+    default:
+        return ETopicAutoPartitioningStrategy::Unknown;
+    }
+}
+
+static Ydb::Topic::AutoPartitioningStrategy AutoPartitioningStrategyToProto(ETopicAutoPartitioningStrategy strategy) {
+    switch (strategy) {
+    case ETopicAutoPartitioningStrategy::Disabled:
+        return Ydb::Topic::AUTO_PARTITIONING_STRATEGY_DISABLED;
+    case ETopicAutoPartitioningStrategy::ScaleUp:
+        return Ydb::Topic::AUTO_PARTITIONING_STRATEGY_SCALE_UP;
+    case ETopicAutoPartitioningStrategy::ScaleUpAndDown:
+        return Ydb::Topic::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN;
+    case ETopicAutoPartitioningStrategy::Paused:
+        return Ydb::Topic::AUTO_PARTITIONING_STRATEGY_PAUSED;
+    case ETopicAutoPartitioningStrategy::Unspecified:
+    case ETopicAutoPartitioningStrategy::Unknown:
+        return Ydb::Topic::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED;
+    }
+}
+
+TTopicAutoPartitioningSettings::TTopicAutoPartitioningSettings(const Ydb::Topic::AutoPartitioningSettings& settings)
+    : Strategy_(AutoPartitioningStrategyFromProto(settings.strategy()))
+    , StabilizationWindow_(TDuration::Seconds(settings.partition_write_speed().stabilization_window().seconds()))
+    , DownUtilizationPercent_(settings.partition_write_speed().down_utilization_percent())
+    , UpUtilizationPercent_(settings.partition_write_speed().up_utilization_percent())
+{}
+
+void TTopicAutoPartitioningSettings::SerializeTo(Ydb::Topic::AutoPartitioningSettings& proto) const {
+    proto.set_strategy(AutoPartitioningStrategyToProto(Strategy_));
+    auto& writeSpeed = *proto.mutable_partition_write_speed();
+    writeSpeed.mutable_stabilization_window()->set_seconds(StabilizationWindow_.Seconds());
+    writeSpeed.set_down_utilization_percent(DownUtilizationPercent_);
+    writeSpeed.set_up_utilization_percent(UpUtilizationPercent_);
+}
+
+ETopicAutoPartitioningStrategy TTopicAutoPartitioningSettings::GetStrategy() const {
+    return Strategy_;
+}
+
+TDuration TTopicAutoPartitioningSettings::GetStabilizationWindow() const {
+    return StabilizationWindow_;
+}
+
+uint32_t TTopicAutoPartitioningSettings::GetUpUtilizationPercent() const {
+    return UpUtilizationPercent_;
+}
+
+uint32_t TTopicAutoPartitioningSettings::GetDownUtilizationPercent() const {
+    return DownUtilizationPercent_;
+}
+
+TTopicPartitioningSettings::TTopicPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings)
+    : MinActivePartitions_(settings.min_active_partitions())
+    , MaxActivePartitions_(settings.max_active_partitions())
+    , PartitionCountLimit_(settings.partition_count_limit())
+    , AutoPartitioningSettings_(settings.auto_partitioning_settings())
+{}
+
+void TTopicPartitioningSettings::SerializeTo(Ydb::Topic::PartitioningSettings& proto) const {
+    proto.set_min_active_partitions(MinActivePartitions_);
+    proto.set_max_active_partitions(MaxActivePartitions_);
+    proto.set_partition_count_limit(PartitionCountLimit_);
+    AutoPartitioningSettings_.SerializeTo(*proto.mutable_auto_partitioning_settings());
+}
+
+uint64_t TTopicPartitioningSettings::GetMinActivePartitions() const {
+    return MinActivePartitions_;
+}
+
+uint64_t TTopicPartitioningSettings::GetMaxActivePartitions() const {
+    return MaxActivePartitions_;
+}
+
+uint64_t TTopicPartitioningSettings::GetPartitionCountLimit() const {
+    return PartitionCountLimit_;
+}
+
+TTopicAutoPartitioningSettings TTopicPartitioningSettings::GetAutoPartitioningSettings() const {
+    return AutoPartitioningSettings_;
+}
+
 TChangefeedDescription& TChangefeedDescription::WithVirtualTimestamps() {
     VirtualTimestamps_ = true;
     return *this;
@@ -3616,6 +3711,11 @@ TChangefeedDescription& TChangefeedDescription::WithAwsRegion(const std::string&
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithTopicPartitioningSettings(const TTopicPartitioningSettings& value) {
+    TopicPartitioningSettings_ = value;
+    return *this;
+}
+
 const std::string& TChangefeedDescription::GetName() const {
     return Name_;
 }
@@ -3666,6 +3766,10 @@ const std::string& TChangefeedDescription::GetAwsRegion() const {
 
 const std::optional<TChangefeedDescription::TInitialScanProgress>& TChangefeedDescription::GetInitialScanProgress() const {
     return InitialScanProgress_;
+}
+
+const std::optional<TTopicPartitioningSettings>& TChangefeedDescription::GetTopicPartitioningSettings() const {
+    return TopicPartitioningSettings_;
 }
 
 template <typename TProto>
@@ -3727,6 +3831,12 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     }
     if (!proto.aws_region().empty()) {
         ret.WithAwsRegion(proto.aws_region());
+    }
+
+    if constexpr (std::is_same_v<TProto, Ydb::Table::Changefeed>) {
+        if (proto.has_topic_partitioning_settings()) {
+            ret.TopicPartitioningSettings_ = TTopicPartitioningSettings(proto.topic_partitioning_settings());
+        }
     }
 
     if constexpr (std::is_same_v<TProto, Ydb::Table::ChangefeedDescription>) {
@@ -3819,6 +3929,10 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
     if (RetentionPeriod_) {
         SetDuration(*RetentionPeriod_, *proto.mutable_retention_period());
     }
+
+    if (TopicPartitioningSettings_) {
+        TopicPartitioningSettings_->SerializeTo(*proto.mutable_topic_partitioning_settings());
+    }
 }
 
 void TChangefeedDescription::SerializeTo(Ydb::Table::ChangefeedDescription& proto) const {
@@ -3869,6 +3983,12 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
         o << ", initial_scan_progress: " << InitialScanProgress_->GetProgress() << "%";
     }
 
+    if (TopicPartitioningSettings_) {
+        o << ", topic_min_active_partitions: " << TopicPartitioningSettings_->GetMinActivePartitions()
+          << ", topic_max_active_partitions: " << TopicPartitioningSettings_->GetMaxActivePartitions()
+          << ", topic_auto_partitioning_strategy: " << TopicPartitioningSettings_->GetAutoPartitioningSettings().GetStrategy();
+    }
+
     o << " }";
 }
 
@@ -3879,7 +3999,8 @@ bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription&
         && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps()
         && lhs.GetSchemaChanges() == rhs.GetSchemaChanges()
         && lhs.GetResolvedTimestamps() == rhs.GetResolvedTimestamps()
-        && lhs.GetAwsRegion() == rhs.GetAwsRegion();
+        && lhs.GetAwsRegion() == rhs.GetAwsRegion()
+        && lhs.GetTopicPartitioningSettings() == rhs.GetTopicPartitioningSettings();
 }
 
 bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs) {

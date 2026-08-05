@@ -96,5 +96,16 @@ enum class EChangefeedState {
     Unknown = std::numeric_limits<int>::max()
 };
 
+//! Auto partitioning strategy of a changefeed's underlying topic
+enum class ETopicAutoPartitioningStrategy {
+    Unspecified /* "UNSPECIFIED" */,
+    Disabled /* "DISABLED" */,
+    ScaleUp /* "SCALE_UP" */,
+    ScaleUpAndDown /* "SCALE_UP_AND_DOWN" */,
+    Paused /* "PAUSED" */,
+
+    Unknown = std::numeric_limits<int>::max()
+};
+
 } // namespace NTable
 } // namespace NYdb

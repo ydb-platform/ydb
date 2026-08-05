@@ -3,6 +3,7 @@
 #include "codecs.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
@@ -28,13 +29,9 @@ enum class EMeteringMode : uint32_t {
     Unknown = std::numeric_limits<int>::max(),
 };
 
-enum class EAutoPartitioningStrategy: uint32_t {
-    Unspecified = 0,
-    Disabled = 1,
-    ScaleUp = 2,
-    ScaleUpAndDown = 3,
-    Paused = 4,
-};
+// The auto partitioning strategy enum lives in the table client library (see the note on
+// NTable::TTopicPartitioningSettings). It is re-exported here for backward compatibility.
+using EAutoPartitioningStrategy = ::NYdb::NTable::ETopicAutoPartitioningStrategy;
 
 enum class EConsumerType {
     Unspecified = 0,
@@ -231,34 +228,9 @@ private:
 struct TAlterPartitioningSettings;
 struct TAlterTopicSettings;
 
-struct TAutoPartitioningSettings {
-friend struct TAutoPartitioningSettingsBuilder;
-public:
-    TAutoPartitioningSettings()
-        : Strategy_(EAutoPartitioningStrategy::Disabled)
-        , StabilizationWindow_(TDuration::Seconds(0))
-        , DownUtilizationPercent_(0)
-        , UpUtilizationPercent_(0) {
-    }
-    TAutoPartitioningSettings(const Ydb::Topic::AutoPartitioningSettings& settings);
-    TAutoPartitioningSettings(EAutoPartitioningStrategy strategy, TDuration stabilizationWindow, ui64 downUtilizationPercent, ui64 upUtilizationPercent)
-        : Strategy_(strategy)
-        , StabilizationWindow_(stabilizationWindow)
-        , DownUtilizationPercent_(downUtilizationPercent)
-        , UpUtilizationPercent_(upUtilizationPercent) {}
-
-    void SerializeTo(Ydb::Topic::AutoPartitioningSettings& proto) const;
-
-    EAutoPartitioningStrategy GetStrategy() const;
-    TDuration GetStabilizationWindow() const;
-    ui32 GetDownUtilizationPercent() const;
-    ui32 GetUpUtilizationPercent() const;
-private:
-    EAutoPartitioningStrategy Strategy_;
-    TDuration StabilizationWindow_;
-    ui32 DownUtilizationPercent_;
-    ui32 UpUtilizationPercent_;
-};
+// TAutoPartitioningSettings lives in the table client library (see the note on
+// NTable::TTopicPartitioningSettings). It is re-exported here for backward compatibility.
+using TAutoPartitioningSettings = ::NYdb::NTable::TTopicAutoPartitioningSettings;
 
 struct TAlterAutoPartitioningSettings {
     using TSelf = TAlterAutoPartitioningSettings;
@@ -276,32 +248,9 @@ private:
     TAlterPartitioningSettings& Parent_;
 };
 
-class TPartitioningSettings {
-    using TSelf = TPartitioningSettings;
-    friend struct TPartitioningSettingsBuilder;
-public:
-    TPartitioningSettings() : MinActivePartitions_(0), MaxActivePartitions_(0), PartitionCountLimit_(0), AutoPartitioningSettings_(){}
-    TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings);
-    TPartitioningSettings(uint64_t minActivePartitions, uint64_t maxActivePartitions, TAutoPartitioningSettings autoPartitioning = {})
-        : MinActivePartitions_(minActivePartitions)
-        , MaxActivePartitions_(maxActivePartitions)
-        , PartitionCountLimit_(0)
-        , AutoPartitioningSettings_(autoPartitioning)
-    {
-    }
-
-    void SerializeTo(Ydb::Topic::PartitioningSettings& proto) const;
-
-    uint64_t GetMinActivePartitions() const;
-    uint64_t GetMaxActivePartitions() const;
-    uint64_t GetPartitionCountLimit() const;
-    TAutoPartitioningSettings GetAutoPartitioningSettings() const;
-private:
-    uint64_t MinActivePartitions_;
-    uint64_t MaxActivePartitions_;
-    uint64_t PartitionCountLimit_;
-    TAutoPartitioningSettings AutoPartitioningSettings_;
-};
+// TPartitioningSettings lives in the table client library (see the note on
+// NTable::TTopicPartitioningSettings). It is re-exported here for backward compatibility.
+using TPartitioningSettings = ::NYdb::NTable::TTopicPartitioningSettings;
 
 struct TAlterTopicSettings;
 
@@ -876,22 +825,22 @@ public:
     TAutoPartitioningSettingsBuilder(TPartitioningSettingsBuilder& parent, TAutoPartitioningSettings& settings): Parent_(parent), Settings_(settings) {}
 
     TSelf Strategy(EAutoPartitioningStrategy value) {
-        Settings_.Strategy_ = value;
+        Settings_.SetStrategy(value);
         return *this;
     }
 
     TSelf StabilizationWindow(TDuration value) {
-        Settings_.StabilizationWindow_ = value;
+        Settings_.SetStabilizationWindow(value);
         return *this;
     }
 
     TSelf DownUtilizationPercent(ui32 value) {
-        Settings_.DownUtilizationPercent_ = value;
+        Settings_.SetDownUtilizationPercent(value);
         return *this;
     }
 
     TSelf UpUtilizationPercent(ui32 value) {
-        Settings_.UpUtilizationPercent_ = value;
+        Settings_.SetUpUtilizationPercent(value);
         return *this;
     }
 
@@ -910,17 +859,17 @@ public:
     TPartitioningSettingsBuilder(TCreateTopicSettings& parent): Parent_(parent) {}
 
     TSelf MinActivePartitions(uint64_t value) {
-        Parent_.PartitioningSettings_.MinActivePartitions_ = value;
+        Parent_.PartitioningSettings_.SetMinActivePartitions(value);
         return *this;
     }
 
     TSelf MaxActivePartitions(uint64_t value) {
-        Parent_.PartitioningSettings_.MaxActivePartitions_ = value;
+        Parent_.PartitioningSettings_.SetMaxActivePartitions(value);
         return *this;
     }
 
     TAutoPartitioningSettingsBuilder BeginConfigureAutoPartitioningSettings() {
-        return {*this, Parent_.PartitioningSettings_.AutoPartitioningSettings_};
+        return {*this, Parent_.PartitioningSettings_.MutableAutoPartitioningSettings()};
     }
 
     TCreateTopicSettings& EndConfigurePartitioningSettings() {

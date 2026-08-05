@@ -322,11 +322,10 @@ private:
             }, issues), /* flags */ 0, request->Cookie);
         }
 
-        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Exit",
-            {"logPrefix", LogPrefix()},
-            {"finishStatus", FinishInfo.Status.value_or(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)},
-            {"issues", FinishInfo.Issues.ToOneLineString()},
-            {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
+        LOG_I("Exit"
+            << ", finish status: " << FinishInfo.Status.value_or(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)
+            << ", issues: " << FinishInfo.Issues.ToOneLineString()
+            << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString());
     }
 
     void Finish() {
@@ -399,15 +398,7 @@ private:
             Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
             WaitFinalizationRequest = true;
         } else {
-<<<<<<< HEAD
-            LOG_N("Skip finish with error " << *FinishInfo.Status << ", issues: " << FinishInfo.Issues.ToOneLineString() << ", already waiting finalization");
-=======
-            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Skipping finish with error because finalization is already in progress",
-                {"logPrefix", LogPrefix()},
-                {"finishStatus", *FinishInfo.Status},
-                {"issues", FinishInfo.Issues.ToOneLineString()},
-                {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
->>>>>>> f138e855b78 (YQ-5559 removed extra issues from script executions (#48872))
+            LOG_N("Skip finish with error " << *FinishInfo.Status << ", issues: " << FinishInfo.Issues.ToOneLineString() << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString() << ", already waiting finalization");
         }
     }
 

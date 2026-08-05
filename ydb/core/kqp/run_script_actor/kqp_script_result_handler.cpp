@@ -742,16 +742,11 @@ private:
             return;
         }
 
-<<<<<<< HEAD
-        LOG_I("Exit, send response to " << Owner);
-=======
-        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Exit, send response",
-            {"logPrefix", LogPrefix()},
-            {"finishStatus", *FinishInfo.Status},
-            {"issues", FinishInfo.Issues.ToOneLineString()},
-            {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
+        LOG_I("Exit, send response"
+            << ", finish status: " << *FinishInfo.Status
+            << ", issues: " << FinishInfo.Issues.ToOneLineString()
+            << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString());
 
->>>>>>> f138e855b78 (YQ-5559 removed extra issues from script executions (#48872))
         Send(Owner, new TEvRunScriptPrivate::TEvScriptResultHandlerFinished(*FinishInfo.Status, std::move(ExecutionInfo), std::move(FinishInfo.Issues)));
         PassAway();
     }

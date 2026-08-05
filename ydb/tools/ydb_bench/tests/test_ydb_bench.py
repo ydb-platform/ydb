@@ -102,6 +102,18 @@ class YdbBenchTest(unittest.TestCase):
                 self.assertEqual(raised.exception.code, 2)
                 self.assertIn("must be a finite positive number", error.getvalue())
 
+    def test_perf_requires_profile_build(self):
+        error = io.StringIO()
+        with redirect_stderr(error):
+            code = main(
+                ["run", "actors-core", "--perf", "--output", str(self.root / "non-profile")],
+                resource_loader=lambda _: b"fake",
+                tool_revision={"build_type": "relwithdebinfo", "commit_id": "test"},
+            )
+        self.assertEqual(code, 1)
+        self.assertIn("--build=profile", error.getvalue())
+        self.assertFalse((self.root / "non-profile").exists())
+
     def test_cli_exit_code_uses_interruption_error_type(self):
         def loader_for(error):
             def loader(_):
@@ -159,6 +171,80 @@ class YdbBenchTest(unittest.TestCase):
             self.assertTrue((repetition / "stdout.txt").is_file())
             self.assertTrue((repetition / "stderr.txt").is_file())
             self.assertTrue((repetition / "metrics.csv").is_file())
+
+    def test_perf_run_preserves_binary_data_report_and_buildids(self):
+        benchmark = self._script(
+            """
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,1,1000,1.0,900,1100"
+            echo "2,32,1,2000,1.0,1800,2200"
+            """
+        )
+        fake_perf = self._script(
+            """
+            subcommand="$1"
+            shift
+            case "$subcommand" in
+              record)
+                while [ "$1" != "--" ]; do
+                  if [ "$1" = "-o" ]; then
+                    shift
+                    output="$1"
+                  fi
+                  shift
+                done
+                shift
+                echo fake-perf-data > "$output"
+                exec "$@"
+                ;;
+              report)
+                echo "42.00% actors_core_ut_fat HotFunction"
+                ;;
+              buildid-list)
+                echo "0123456789abcdef actors_core_ut_fat"
+                ;;
+              *)
+                exit 90
+                ;;
+            esac
+            """,
+            name="perf",
+        )
+        output = self.root / "perf-output"
+        output.mkdir()
+        configuration = self._configuration()
+        configuration = RunConfiguration(
+            **{
+                **configuration.__dict__,
+                "perf_enabled": True,
+                "perf_frequency": 123,
+            }
+        )
+        path = os.environ.get("PATH", "")
+        with mock.patch.dict(os.environ, {"PATH": "{}{}{}".format(fake_perf.parent, os.pathsep, path)}):
+            manifest = run_actors_core(
+                self._binary(benchmark),
+                configuration,
+                output,
+                tool_revision={"build_type": "profile", "commit_id": "test"},
+                work_dir_hint=self.root,
+            )
+
+        self.assertEqual(manifest["status"], "completed")
+        self.assertEqual(manifest["profiler"]["event"], "cycles:u")
+        self.assertEqual(manifest["profiler"]["frequency_hz"], 123)
+        self.assertEqual(manifest["binary"]["artifact"], "profiler/actors_core_ut_fat")
+        self.assertEqual(
+            (output / manifest["binary"]["artifact"]).read_bytes(),
+            benchmark.read_bytes(),
+        )
+        repetition = output / "none" / "repeat-001"
+        self.assertTrue((repetition / "perf.data").is_file())
+        self.assertIn("HotFunction", (repetition / "perf-report.txt").read_text())
+        self.assertIn("0123456789abcdef", (repetition / "perf-buildids.txt").read_text())
+        run = manifest["runs"][0]
+        self.assertEqual(run["perf_data"], "none/repeat-001/perf.data")
+        self.assertEqual([record["name"] for record in run["perf_postprocessing"]], ["report", "buildid-list"])
 
     def test_empty_csv_fails_even_with_zero_exit_code(self):
         script = self._script(

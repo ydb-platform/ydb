@@ -12,6 +12,8 @@ RESOURCE(
     actors_core_ut_fat actors_core_ut_fat
 )
 
+RESOURCE(- ydb_bench/build_type=${BUILD_TYPE})
+
 PEERDIR(
     library/python/resource
     library/python/svn_version

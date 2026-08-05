@@ -15,6 +15,7 @@ def load_resource(name):
 
 def tool_revision():
     return {
+        "build_type": resource.find("ydb_bench/build_type").decode("ascii").lower(),
         "commit_id": svn_version.commit_id(),
         "hash": svn_version.hash(),
         "vcs": svn_version.vcs(),

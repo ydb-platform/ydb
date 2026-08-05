@@ -8,10 +8,13 @@ bundles the program variant of `ydb/library/actors/core/ut_fat` and runs only
 Build and inspect the tool:
 
 ```bash
-./ya make --build relwithdebinfo ydb/tools/ydb_bench
+./ya make --build=profile ydb/tools/ydb_bench
 ydb/tools/ydb_bench/ydb_bench list
 ydb/tools/ydb_bench/ydb_bench describe actors-core
 ```
+
+The profile build is required for profiler runs so the bundled benchmark ELF
+retains stable symbols, source information, and a build ID.
 
 Run a short check or the fixed comparison profile:
 
@@ -24,6 +27,24 @@ ydb/tools/ydb_bench/ydb_bench run actors-core \
     --profile baseline \
     --output ydb-bench-baseline
 ```
+
+Record a profiling run with the same `cycles:u`, 99 Hz, DWARF-call-stack setup
+used by the YDB platform investigation:
+
+```bash
+ydb/tools/ydb_bench/ydb_bench run actors-core \
+    --profile smoke \
+    --threads 16 \
+    --duration 20 \
+    --repetitions 1 \
+    --affinity one-whole-chiplet \
+    --perf \
+    --output ydb-bench-profile
+```
+
+`--perf` is rejected unless `ydb_bench` itself was built with
+`--build=profile`. Profiling changes both the build and runtime overhead, so its
+throughput must not be mixed with the non-profile baseline.
 
 Every scenario is run in five placement modes by default:
 
@@ -55,6 +76,11 @@ The output contains:
   output;
 - `summary.csv` with median, minimum, and maximum throughput per affinity mode
   across external repetitions.
+
+With `--perf`, the output also contains the exact bundled profile ELF and, for
+each repetition, raw `perf.data`, a symbolized flat `perf-report.txt`, and
+`perf-buildids.txt`. The report and build-ID list are generated before the
+temporary executable is removed.
 
 The run fails if the process exits unsuccessfully, times out, or produces an
 empty or parameter-mismatched CSV result. Timeout and interruption stop the

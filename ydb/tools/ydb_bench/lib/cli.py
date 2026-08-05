@@ -135,6 +135,17 @@ def _create_parser():
     run.add_argument("--repetitions", type=_positive_integer)
     run.add_argument("--timeout", type=_positive_float)
     run.add_argument(
+        "--perf",
+        action="store_true",
+        help="record cycles:u samples with perf; requires a --build=profile ydb_bench binary",
+    )
+    run.add_argument(
+        "--perf-frequency",
+        type=_positive_integer,
+        default=99,
+        help="sampling frequency for --perf (default: 99 Hz)",
+    )
+    run.add_argument(
         "--affinity",
         type=_affinity_modes,
         default=AFFINITY_MODES,
@@ -171,6 +182,8 @@ def _configuration(arguments):
         repetitions=repetitions,
         timeout_seconds=arguments.timeout or default_timeout,
         affinity_modes=arguments.affinity,
+        perf_enabled=arguments.perf,
+        perf_frequency=arguments.perf_frequency,
     )
 
 
@@ -186,6 +199,8 @@ def _prepare_output(path):
 def _run(arguments, resource_loader, tool_revision):
     if resource_loader is None:
         raise BenchmarkError("the benchmark executable resource loader is not configured")
+    if arguments.perf and str(tool_revision.get("build_type", "")).lower() != "profile":
+        raise BenchmarkError("--perf requires ydb_bench built with --build=profile")
 
     output_directory = _prepare_output(arguments.output)
     if arguments.work_dir is not None:

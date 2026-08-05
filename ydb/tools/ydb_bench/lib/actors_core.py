@@ -8,6 +8,7 @@ from pathlib import Path
 from ydb.tools.ydb_bench.lib.common import (
     BenchmarkError,
     BenchmarkInterrupted,
+    atomic_copy_file,
     atomic_write_json,
     atomic_write_text,
 )
@@ -39,6 +40,8 @@ class RunConfiguration:
     repetitions: int
     timeout_seconds: float
     affinity_modes: tuple = ("none",)
+    perf_enabled: bool = False
+    perf_frequency: int = 99
 
 
 def parse_metrics(stdout):
@@ -168,6 +171,78 @@ def _command_record(binary_path):
     return [str(binary_path), TEST_FILTER]
 
 
+def _perf_record_command(binary_path, perf_data_path, frequency):
+    return [
+        "perf",
+        "record",
+        "-o",
+        str(perf_data_path),
+        "-e",
+        "cycles:u",
+        "-F",
+        str(frequency),
+        "-g",
+        "--call-graph",
+        "dwarf",
+        "--",
+        *_command_record(binary_path),
+    ]
+
+
+def _run_perf_postprocessing(perf_data_path, repetition_directory, timeout_seconds, binary_name):
+    commands = (
+        (
+            "report",
+            [
+                "perf",
+                "report",
+                "--stdio",
+                "-i",
+                str(perf_data_path),
+                "--no-children",
+                "--call-graph",
+                "none",
+                "--percent-limit",
+                "0.5",
+            ],
+            repetition_directory / "perf-report.txt",
+            repetition_directory / "perf-report.stderr.txt",
+        ),
+        (
+            "buildid-list",
+            ["perf", "buildid-list", "-i", str(perf_data_path)],
+            repetition_directory / "perf-buildids.txt",
+            repetition_directory / "perf-buildids.stderr.txt",
+        ),
+    )
+    records = []
+    for name, command, stdout_path, stderr_path in commands:
+        result = run_command(command, {}, timeout_seconds)
+        atomic_write_text(stdout_path, result.stdout)
+        atomic_write_text(stderr_path, result.stderr)
+        records.append(
+            {
+                "name": name,
+                "command": list(result.command),
+                "exit_code": result.exit_code,
+                "timed_out": result.timed_out,
+                "stdout": stdout_path.name,
+                "stderr": stderr_path.name,
+            }
+        )
+        if result.interrupted:
+            raise BenchmarkInterrupted("perf {} was interrupted".format(name))
+        if result.timed_out:
+            raise BenchmarkError("perf {} timed out after {} seconds".format(name, timeout_seconds))
+        if result.exit_code != 0:
+            raise BenchmarkError("perf {} exited with code {}".format(name, result.exit_code))
+        if not result.stdout.strip():
+            raise BenchmarkError("perf {} produced empty output".format(name))
+        if name == "buildid-list" and binary_name not in result.stdout:
+            raise BenchmarkError("perf data does not contain a build ID for {}".format(binary_name))
+    return records
+
+
 def run_actors_core(binary, configuration, output_directory, tool_revision, work_dir_hint=None):
     output_directory = Path(output_directory)
     environment = _environment(configuration)
@@ -176,6 +251,16 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
         plan_affinity(mode, topology, max(configuration.threads))
         for mode in configuration.affinity_modes
     ]
+    binary_record = {
+        "name": binary.path.name,
+        "sha256": binary.sha256,
+        "size": binary.size,
+    }
+    if configuration.perf_enabled:
+        stored_binary = output_directory / "profiler" / binary.path.name
+        atomic_copy_file(binary.path, stored_binary, mode=0o755)
+        binary_record["artifact"] = str(stored_binary.relative_to(output_directory))
+
     manifest = {
         "schema_version": 2,
         "scenario": "actors-core",
@@ -183,11 +268,7 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
         "status": "running",
         "started_at": _utc_now(),
         "tool_revision": tool_revision,
-        "binary": {
-            "name": binary.path.name,
-            "sha256": binary.sha256,
-            "size": binary.size,
-        },
+        "binary": binary_record,
         "platform": collect_system_info(),
         "cpu_topology": topology_record(topology),
         "parameters": {
@@ -210,6 +291,16 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
         ],
         "environment": environment,
         "command": _command_record(binary.path),
+        "profiler": (
+            {
+                "type": "perf-record",
+                "event": "cycles:u",
+                "frequency_hz": configuration.perf_frequency,
+                "call_graph": "dwarf",
+            }
+            if configuration.perf_enabled
+            else None
+        ),
         "runs": [],
     }
     manifest_path = output_directory / "run.json"
@@ -237,7 +328,12 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
 
         for index in range(1, configuration.repetitions + 1):
             repetition_directory = mode_directory / "repeat-{:03d}".format(index)
-            command = _command_record(binary.path)
+            perf_data_path = repetition_directory / "perf.data"
+            if configuration.perf_enabled:
+                repetition_directory.mkdir()
+                command = _perf_record_command(binary.path, perf_data_path, configuration.perf_frequency)
+            else:
+                command = _command_record(binary.path)
             started_at = _utc_now()
             try:
                 result = run_command(
@@ -271,7 +367,8 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
                 atomic_write_json(manifest_path, manifest)
                 raise
 
-            repetition_directory.mkdir()
+            if not configuration.perf_enabled:
+                repetition_directory.mkdir()
             atomic_write_text(repetition_directory / "stdout.txt", result.stdout)
             atomic_write_text(repetition_directory / "stderr.txt", result.stderr)
             relative_directory = Path(placement.mode) / repetition_directory.name
@@ -289,9 +386,12 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
                 "stdout": str(relative_directory / "stdout.txt"),
                 "stderr": str(relative_directory / "stderr.txt"),
             }
+            if configuration.perf_enabled and perf_data_path.is_file():
+                run_record["perf_data"] = str(relative_directory / "perf.data")
             manifest["runs"].append(run_record)
 
             failure = None
+            postprocessing_interrupted = False
             if result.interrupted:
                 failure = "benchmark was interrupted"
             elif result.timed_out:
@@ -308,16 +408,34 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
                     atomic_write_text(repetition_directory / "metrics.csv", render_metrics(metrics))
                     run_record["metrics"] = str(relative_directory / "metrics.csv")
                     run_record["metric_rows"] = len(metrics)
-                    repetition_rows.append((placement.mode, metrics))
+                    if configuration.perf_enabled:
+                        try:
+                            postprocessing = _run_perf_postprocessing(
+                                perf_data_path,
+                                repetition_directory,
+                                configuration.timeout_seconds,
+                                binary.path.name,
+                            )
+                        except BenchmarkInterrupted as error:
+                            failure = str(error)
+                            postprocessing_interrupted = True
+                        except BenchmarkError as error:
+                            failure = str(error)
+                        else:
+                            run_record["perf_postprocessing"] = postprocessing
+                    if failure is None:
+                        repetition_rows.append((placement.mode, metrics))
 
             if failure is not None:
                 run_record["error"] = failure
                 affinity_record["status"] = "failed"
-                manifest["status"] = "interrupted" if result.interrupted else "failed"
+                interrupted = result.interrupted or postprocessing_interrupted
+                run_record["interrupted"] = interrupted
+                manifest["status"] = "interrupted" if interrupted else "failed"
                 manifest["finished_at"] = _utc_now()
                 manifest["error"] = failure
                 atomic_write_json(manifest_path, manifest)
-                if result.interrupted:
+                if interrupted:
                     raise BenchmarkInterrupted(failure)
                 raise BenchmarkError(failure)
             atomic_write_json(manifest_path, manifest)

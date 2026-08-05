@@ -376,7 +376,7 @@ TFuture<TIssues> TStateStorage::Init(const NACLib::TDiffACL& acl) {
         .AddNullableColumn("blob", EPrimitiveType::String)
         .AddNullableColumn("blob_seq_num", EPrimitiveType::Uint64)
         .AddNullableColumn("type", EPrimitiveType::Uint8)
-        .SetPrimaryKeyColumns({"graph_id", "task_id", "coordinator_generation", "seq_no", "blob_seq_num"})
+        .SetPrimaryKeyColumns({"graph_id", "coordinator_generation", "seq_no", "task_id", "blob_seq_num"})
         .Build();
 
     auto promise = NThreading::NewPromise<TIssues>();
@@ -640,8 +640,8 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                 SELECT task_id, coordinator_generation, seq_no, CAST(COUNT(*) as UINT64) as cnt
                 FROM %s
                 WHERE graph_id = $graph_id AND %s
-                GROUP by task_id, coordinator_generation, seq_no
-                ORDER BY task_id, coordinator_generation DESC, seq_no DESC;
+                GROUP by coordinator_generation, seq_no, task_id
+                ORDER BY coordinator_generation DESC, seq_no DESC, task_id;
             )", prefix.c_str(),
                 context->Tasks.size() == 1 ? "DECLARE $task_id AS Uint64" : "DECLARE $task_ids AS List<Uint64>",
                 StatesTable,

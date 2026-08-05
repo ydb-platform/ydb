@@ -307,8 +307,16 @@ def detect_issue_number(out_dir: Path) -> int | None:
         except (OSError, json.JSONDecodeError):
             continue
         items = []
-        if isinstance(data, dict):
-            items = list(data.get("items") or data.get("problems", {}).get("items") or [])
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            problems = data.get("problems")
+            if isinstance(problems, list):
+                items = list(problems)
+            elif isinstance(problems, dict):
+                items = list(problems.get("items") or [])
+            else:
+                items = list(data.get("items") or [])
             for key in ("related_issue", "issue", "ticket"):
                 n = _coerce_issue(data.get(key))
                 if n:

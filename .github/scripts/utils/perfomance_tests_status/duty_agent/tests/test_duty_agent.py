@@ -690,12 +690,13 @@ https://proxy.sandbox.yandex-team.ru/12927819679/index.html
             base = """# Perf duty — x
 
 ## Заключение
-- **Итог:** VERIFY на Query03; Query17/18 nodata — в отчёте тоже нет (следствие abort)
+- **Проблема:** Query03 VERIFY abort; хвост Query17/18 nodata
+- **Из‑за чего:** crash compaction AppendSlice; nodata — следствие cut-off
+- **Чинить:** уже [#48261](https://github.com/ydb-platform/ydb/issues/48261)
 - **Решение:** update_known
 - **Виновник:** unknown
 - **Уверенность:** высокая
 - **Давность:** на разбираемом прогоне
-- **Механика:** abort → suite cut-off → хвост nodata
 
 ## Проблемы
 ### P1 — crash
@@ -721,6 +722,16 @@ https://proxy.sandbox.yandex-team.ru/12927819679/index.html
 - Связанный issue: [#48261](https://github.com/ydb-platform/ydb/issues/48261)
 - Тикет: [#48261](https://github.com/ydb-platform/ydb/issues/48261)
 
+## Гипотезы происхождения
+- **H1** (подтверждена): crash в compaction AppendSlice / PoolBuffer — [`merged_column.cpp`](https://github.com/ydb-platform/ydb/blob/f88e100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/ydb/core/tx/columnshard/engines/changes/compaction/plain/merged_column.cpp#L8)
+- Issues (поиск): fingerprint AppendSlice — учёл [#48261](https://github.com/ydb-platform/ydb/issues/48261); иных совпадений нет.
+
+## Причины
+- Повтор [#48261](https://github.com/ydb-platform/ydb/issues/48261); давний дефект проявился на Query03, хвост suite — следствие abort.
+
+## Как починить
+1. Как в [#48261](https://github.com/ydb-platform/ydb/issues/48261): чинить AppendSlice/PoolBuffer path.
+
 ## Что дальше
 1. annotate-issue
 
@@ -742,12 +753,17 @@ Comment: AppendSlice matches #48261
 VERIFY; nodata хвост — следствие.
 #### К чему приводит
 - Abort; cut-off suite.
+#### Из‑за чего
+crash compaction AppendSlice; nodata — следствие cut-off.
+#### Чинить
+уже [#48261](https://github.com/ydb-platform/ydb/issues/48261)
 #### Детали ошибки
 ```
 VERIFY AppendSlice
 ```
 #### Код
 | Место падения | AppendSlice |
+| Связанный issue | [#48261](https://github.com/ydb-platform/ydb/issues/48261) |
 
 <!-- perf-duty-match
 kind: olap
@@ -787,12 +803,14 @@ affected:
             md = """# Perf duty — x
 
 ## Заключение
-- **Итог:** VERIFY Groups.end abort
+- **Проблема:** VERIFY Groups.end → abort ноды
+- **Из‑за чего:** в OnReadResult нет ожидаемой Groups entry
+- **Чинить:** уже [#29944](https://github.com/ydb-platform/ydb/issues/29944)
 - **Решение:** update_known
-- **Виновник:** unknown — bisect path unchanged; known issue
+- **Виновник:** unknown — known issue; evidence bar на новый PR не пройден
 - **Уверенность:** высокая
+- **Критичность:** HIGH
 - **Давность:** подтверждено на [`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100); [#29944](https://github.com/ydb-platform/ydb/issues/29944) с 2025-12
-- **Механика:** OnReadResult AFL_VERIFY → SIGABRT → соседи видят 2005
 
 ## Проблемы
 ### P1 — Groups.end
@@ -801,11 +819,21 @@ affected:
 - Почему / механика: OnReadResult missing Groups entry
 - Логи: kikimr__stderr VERIFY+signal 6; kikimr__logs connection lost after abort
 - Код ([`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)): `ydb/core/tx/columnshard/blobs_action/abstract/read.cpp`
-- Кто (если есть): unknown — evidence bisect unchanged
+- Кто (если есть): unknown
 - Давность: в прошлых прогонах был поверхностный 2005; VERIFY на разбираемом прогоне
 - Гипотеза проверена: yes — evidence in stderr
 - Связанный issue: [#29944](https://github.com/ydb-platform/ydb/issues/29944)
 - Тикет: комментарий в [#29944](https://github.com/ydb-platform/ydb/issues/29944)
+
+## Гипотезы происхождения
+- **H1** (подтверждена): в OnReadResult нет ожидаемого Groups entry — writer порции не положил группу до read — [`read.cpp`](https://github.com/ydb-platform/ydb/blob/f88e100ec2eabf78b51b8c09d234484ea1e3958c/ydb/core/tx/columnshard/blobs_action/abstract/read.cpp#L59)
+- Issues (поиск): keys `read.cpp:59` — учёл [#29944](https://github.com/ydb-platform/ydb/issues/29944); иных совпадений нет.
+
+## Причины
+- Тот же дефект, что [#29944](https://github.com/ydb-platform/ydb/issues/29944); повтор на разбираемом прогоне (давний дефект проявился снова под нагрузкой UploadTpch).
+
+## Как починить
+1. Как в [#29944](https://github.com/ydb-platform/ydb/issues/29944): гарантировать наличие Groups до OnReadResult / не ходить в end() без проверки.
 
 ## Что дальше
 1. Комментарий в [#29944](https://github.com/ydb-platform/ydb/issues/29944)
@@ -828,12 +856,17 @@ Comment: UploadTpch VERIFY Groups.end matches #29944
 VERIFY Groups.end на разбираемом прогоне — тот же [#29944](https://github.com/ydb-platform/ydb/issues/29944).
 #### К чему приводит
 - Abort ноды; в Allure — node down / connection lost.
+#### Из‑за чего
+в OnReadResult нет ожидаемой Groups entry.
+#### Чинить
+уже [#29944](https://github.com/ydb-platform/ydb/issues/29944)
 #### Детали ошибки
 ```
 VERIFY Groups.end
 ```
 #### Код
-| Место падения | [`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100) |
+| Место падения | [`read.cpp`](https://github.com/ydb-platform/ydb/blob/f88e100ec2eabf78b51b8c09d234484ea1e3958c/ydb/core/tx/columnshard/blobs_action/abstract/read.cpp#L59) |
+| Связанный issue | [#29944](https://github.com/ydb-platform/ydb/issues/29944) |
 
 <!-- perf-duty-match
 kind: olap
@@ -849,6 +882,153 @@ affected:
 """
             r = validate_analysis_md(md, out_dir=d)
             self.assertTrue(r["ok"], r["errors"])
+
+    def test_rca_rejects_unchanged_path_as_sole_cause(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(d / "detect_type.json", {"analysis_types": ["olap_fail"]})
+            write_json(d / "focus.json", {"fetched": True, "fatal": {"signals": ["verify"]}})
+            write_json(
+                d / "code_bisect.json",
+                {"introduced_in_window": False, "conclusion": "unchanged"},
+            )
+            write_json(d / "priors.json", {"prior_scans": []})
+            write_json(d / "dig_runs.json", {"kind": "olap", "summary": {"slice_count": 1}})
+            md = """# Perf duty — x
+
+## Заключение
+- **Итог:** VERIFY
+- **Решение:** investigate_further
+- **Виновник:** unknown
+- **Уверенность:** низкая
+- **Давность:** этот прогон
+- **Механика:** VERIFY
+
+## Проблемы
+### P1 — x
+- Тип: olap_fail
+- Логи: kikimr__stderr VERIFY; kikimr__logs empty
+- Код ([`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)): `ydb/core/x.cpp`
+- Гипотеза проверена: partial
+
+## Гипотезы происхождения
+- **H1** (открыта): assert в read — [`read.cpp`](https://github.com/ydb-platform/ydb/blob/f88e100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/ydb/core/tx/columnshard/blobs_action/abstract/read.cpp#L1)
+- Issues (поиск): по path read.cpp — совпадений нет.
+
+## Причины
+- path из трейса не менялся в окне; bisect unchanged.
+
+## Как починить
+1. разобраться дальше
+
+## Что дальше
+1. dig
+
+## Материалы для issue
+https://proxy.sandbox.yandex-team.ru/1/index.html
+[`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)
+"""
+            r = validate_analysis_md(md, out_dir=d)
+            self.assertFalse(r["ok"], r)
+            self.assertTrue(
+                any("path/file unchanged" in e or "не «path" in e or "writers" in e for e in r["errors"]),
+                r["errors"],
+            )
+
+    def test_rca_rejects_competing_hypotheses(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(d / "detect_type.json", {"analysis_types": ["olap_fail"]})
+            write_json(d / "focus.json", {"fetched": True, "fatal": {"signals": ["verify"]}})
+            write_json(
+                d / "code_bisect.json",
+                {"introduced_in_window": False, "conclusion": "unchanged"},
+            )
+            write_json(d / "priors.json", {"prior_scans": []})
+            write_json(d / "dig_runs.json", {"kind": "olap", "summary": {"slice_count": 1}})
+            md = """# Perf duty — x
+
+## Заключение
+- **Итог:** VERIFY
+- **Решение:** investigate_further
+- **Виновник:** unknown
+- **Уверенность:** низкая
+- **Давность:** этот прогон
+- **Механика:** VERIFY
+
+## Проблемы
+### P1 — x
+- Тип: olap_fail
+- Логи: kikimr__stderr VERIFY; kikimr__logs empty
+- Код ([`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)): `ydb/core/x.cpp`
+- Гипотеза проверена: partial
+
+## Гипотезы происхождения
+- **H1** (открыта): dangling key — [`scan.cpp`](https://github.com/ydb-platform/ydb/blob/f88e100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/ydb/core/tx/columnshard/counters/scan.cpp#L1)
+- **H2** (открыта): map corruption — [`scan.cpp`](https://github.com/ydb-platform/ydb/blob/f88e100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/ydb/core/tx/columnshard/counters/scan.cpp#L2)
+- Issues (поиск): CountersForStep — учёл [#47284](https://github.com/ydb-platform/ydb/issues/47284).
+
+## Причины
+- concurrent conveyor lookup по TStringBuf имени step.
+
+## Как починить
+1. owning TString / index-based counters.
+
+## Что дальше
+1. dig
+
+## Материалы для issue
+https://proxy.sandbox.yandex-team.ru/1/index.html
+[`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)
+"""
+            r = validate_analysis_md(md, out_dir=d)
+            self.assertFalse(r["ok"], r)
+            self.assertTrue(
+                any("one most-probable" in e for e in r["errors"]),
+                r["errors"],
+            )
+
+    def test_rca_requires_hypotheses_causes_fix(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(d / "detect_type.json", {"analysis_types": ["olap_fail"]})
+            write_json(d / "focus.json", {"fetched": True, "fatal": {"signals": ["verify"]}})
+            write_json(
+                d / "code_bisect.json",
+                {"introduced_in_window": False, "conclusion": "unchanged"},
+            )
+            write_json(d / "priors.json", {"prior_scans": []})
+            write_json(d / "dig_runs.json", {"kind": "olap", "summary": {"slice_count": 1}})
+            md = """# Perf duty — x
+
+## Заключение
+- **Итог:** VERIFY
+- **Решение:** investigate_further
+- **Виновник:** unknown
+- **Уверенность:** низкая
+- **Давность:** этот прогон
+- **Механика:** VERIFY
+
+## Проблемы
+### P1 — x
+- Тип: olap_fail
+- Логи: kikimr__stderr VERIFY; kikimr__logs empty
+- Код ([`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)): `ydb/core/x.cpp`
+- Гипотеза проверена: no
+
+## Что дальше
+1. dig
+
+## Материалы для issue
+https://proxy.sandbox.yandex-team.ru/1/index.html
+[`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)
+"""
+            r = validate_analysis_md(md, out_dir=d)
+            self.assertFalse(r["ok"], r)
+            blob = " ".join(r["errors"])
+            self.assertIn("Гипотезы происхождения", blob)
+            self.assertIn("Причины", blob)
+            self.assertIn("Как починить", blob)
 
     def test_update_known_requires_match_block(self):
         with tempfile.TemporaryDirectory() as td:
@@ -900,6 +1080,10 @@ Comment only
 x
 #### К чему приводит
 - x
+#### Из‑за чего
+x
+#### Чинить
+здесь
 #### Детали ошибки
 ```
 VERIFY
@@ -984,6 +1168,10 @@ OLAP: SIGSEGV RemainOnly (collection.cpp:262) on UploadTpch1000
 SIGSEGV в RemainOnly.
 #### К чему приводит
 - Crash ноды; node down / connection lost.
+#### Из‑за чего
+корень ещё не найден; RemainOnly — место падения.
+#### Чинить
+здесь; ASan / dig writers.
 #### Детали ошибки
 {details}
 #### Код
@@ -1592,19 +1780,31 @@ class DutyctlCliTests(unittest.TestCase):
                 """# Perf duty — t
 
 ## Заключение
-- **Итог:** test
+- **Проблема:** fail, стека пока нет
+- **Из‑за чего:** корень ещё не найден
+- **Чинить:** здесь; нужны stderr/logs
 - **Решение:** investigate_further
 - **Виновник:** unknown
 - **Уверенность:** низкая
+- **Критичность:** MEDIUM
 - **Давность:** неизвестно — нужны прошлые прогоны
-- **Механика:** unclear; stderr empty so far
 
 ## Проблемы
 ### P1 — x
 - Тип: olap_fail
 - Логи: kikimr__stderr empty; kikimr__logs empty
-- Код (sha неизвестен): путь в `ydb/core/` пока не найден
+- Код ([`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)): `ydb/core/tx/columnshard/x.cpp`
 - Гипотеза проверена: no
+
+## Гипотезы происхождения
+- **H1** (открыта): порча раньше детекции — смотреть writers вокруг CS read — [`read.cpp`](https://github.com/ydb-platform/ydb/blob/f88e100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/ydb/core/tx/columnshard/blobs_action/abstract/read.cpp#L1)
+- Issues (поиск): по `read.cpp` / Groups — соседних open нет.
+
+## Причины
+- Пока без suspect PR; нужен полный stderr — дефект может проявляться только под нагрузкой suite.
+
+## Как починить
+1. Скачать kikimr__stderr/logs и сузить H1 по стеку writers.
 
 ## Что дальше
 1. скачать больше логов

@@ -117,6 +117,177 @@ def _match_affected_queries(match: dict[str, Any] | None) -> set[str]:
     return out
 
 
+_UNCHANGED_PATH_BOILERPLATE = re.compile(
+    r"(?:path|файл|fline|crash\s*path|место\s*падени)\s*"
+    r"(?:из\s*трейс\w*\s*)?(?:не\s*менял|не\s*изменял|unchanged)|"
+    r"(?:не\s*менял(?:ся|ись)?|не\s*изменял(?:ся|ись)?)\s*"
+    r"(?:в\s*окне|в\s*pr[_\s-]?window|между)|"
+    r"bisect\s*(?:path\s*)?unchanged|"
+    r"introduced_in_window\s*[:=]\s*false",
+    re.I,
+)
+
+
+def _focus_has_crash_signals(out_dir: Path | None) -> bool:
+    if out_dir is None or not (out_dir / "focus.json").is_file():
+        return False
+    focus = read_json(out_dir / "focus.json")
+    sigs: set[str] = set()
+    for s in (focus.get("fatal") or {}).get("signals") or []:
+        sigs.add(str(s).lower())
+    for c in (focus.get("allure") or {}).get("cases") or []:
+        for s in ((c.get("attach_analysis") or {}).get("signals") or []):
+            sigs.add(str(s).lower())
+    crashish = {
+        "segfault",
+        "abort",
+        "verify",
+        "sigsegv",
+        "sigabrt",
+        "asan",
+        "gwp-asan",
+        "tsan",
+        "ubsan",
+    }
+    return bool(sigs & crashish)
+
+
+def _check_rca_sections(body: str) -> list[str]:
+    """Require one winning hypothesis + causes + how-to-fix; reject unchanged-path boilerplate."""
+    errs: list[str] = []
+    has_hyps = bool(
+        re.search(
+            r"гипотез\w*\s*происхожден|##\s*гипотез|origin\s*hypothes|"
+            r"\*\*H[123]\*\*|H1\s*\(|H1:",
+            body,
+            re.I,
+        )
+    )
+    # Competing open/confirmed H1..H3 in the final report — keep only the winner (RCA.md).
+    active_hs = re.findall(
+        r"\*\*H([123])\*\*\s*\((?:открыта|подтверждена|наиболее\s*вероятн\w*)\)",
+        body,
+        re.I,
+    )
+    if len(set(active_hs)) > 1:
+        errs.append(
+            "RCA: leave only one most-probable hypothesis in analysis "
+            "(discard competing H1/H2/H3) — see RCA.md"
+        )
+    has_blob = bool(
+        re.search(
+            r"github\.com/ydb-platform/ydb/blob/[0-9a-f]{7,40}/",
+            body,
+            re.I,
+        )
+    )
+    # blob OR path under ydb/ with commit link nearby is ok for origin code
+    has_code_link = has_blob or bool(
+        re.search(
+            r"ydb/(?:core|library)/[^\s\)]+"
+            r".{0,120}github\.com/ydb-platform/ydb/commit/",
+            body,
+            re.I | re.S,
+        )
+        or re.search(
+            r"github\.com/ydb-platform/ydb/commit/[0-9a-f]{7,40}"
+            r".{0,200}ydb/(?:core|library)/",
+            body,
+            re.I | re.S,
+        )
+    )
+    has_status = bool(
+        re.search(r"\*\*Проблема:\*\*", body)
+        and re.search(r"\*\*Из[‑-]за чего:\*\*", body)
+        and re.search(r"\*\*Чинить:\*\*", body)
+    )
+    if not has_status:
+        errs.append(
+            "RCA: missing human status «Проблема / Из‑за чего / Чинить» — see RCA.md"
+        )
+    if not has_hyps:
+        errs.append(
+            "RCA: missing «Гипотезы происхождения» (one winning H + origin code) — see RCA.md"
+        )
+    elif not has_code_link:
+        errs.append(
+            "RCA: hypothesis must link origin code at tested sha "
+            "(github …/blob/<sha>/… or path + commit link) — not detection frame alone"
+        )
+    has_issue_search = bool(
+        re.search(
+            r"(?:поиск|искал|search).{0,80}(?:issue|тикет|gh\s+search|known-issues)|"
+            r"Issues\s*\(поиск\)|"
+            r"уч[её]л\w*\s+(?:issue|тикет)|"
+            r"соседн\w+\s+issue",
+            body,
+            re.I | re.S,
+        )
+    )
+    if has_hyps and not has_issue_search:
+        errs.append(
+            "RCA: note GitHub issue search beyond Linked/related "
+            "(symbols / path / fingerprint / suite) — see RCA.md"
+        )
+
+    has_causes = bool(
+        re.search(
+            r"##\s*причин|\*\*причин|#\s*причин|"
+            r"suspect\s*pr|кандидат\w*\s*pr|цепочк\w*\s*изменен",
+            body,
+            re.I,
+        )
+    )
+    if not has_causes:
+        errs.append(
+            "RCA: missing «Причины» (suspect PR / change sequence / what exposed the defect) "
+            "— see RCA.md"
+        )
+    else:
+        # Causes section must not be only "path unchanged" boilerplate.
+        causes_m = re.search(
+            r"(?:##\s*Причины|\*\*Причины\*\*|Причины\s*:)(.*?)(?=^##\s|\Z)",
+            body,
+            re.I | re.M | re.S,
+        )
+        causes_text = causes_m.group(1) if causes_m else ""
+        # Also scan a short window after the heading word if section parse failed
+        if not causes_text.strip():
+            causes_text = body
+        only_boilerplate = bool(_UNCHANGED_PATH_BOILERPLATE.search(causes_text))
+        has_substance = bool(
+            re.search(
+                r"github\.com/ydb-platform/ydb/(?:pull|commit)/|"
+                r"\[\s*#\d+\s*\]\s*\(|"
+                r"прояви|давн\w*\s*дефект|ownership|writer|raw\s*ptr|"
+                r"гонка|data\s*race|переполн|use-after-free|UAF|"
+                r"snapshot|shared_ptr|lifetime|FillTask|producer",
+                causes_text,
+                re.I,
+            )
+        )
+        if only_boilerplate and not has_substance:
+            errs.append(
+                "RCA: «Причины» must not be only «path/file unchanged in window» — "
+                "dig writers/producers wider than the detection stack (RCA.md)"
+            )
+
+    has_fix = bool(
+        re.search(
+            r"##\s*как\s*починить|как\s*починить|suggested\s*fix|"
+            r"направлен\w*\s*фикс|чтобы\s*починить|fix-direction|"
+            r"решающ\w*\s*эксперимент",
+            body,
+            re.I,
+        )
+    )
+    if not has_fix:
+        errs.append(
+            "RCA: missing «Как починить» (fix direction or decisive experiment) — see RCA.md"
+        )
+    return errs
+
+
 def _check_issue_crash_paste(details: str, *, resolution: str) -> list[str]:
     """Quality gate for #### Детали ошибки in Materials (open_ticket / update_known).
 
@@ -271,9 +442,25 @@ def validate_analysis_md(
                 "run `dutyctl inject-trace` so the dig path is under the cut"
             )
 
-    # Заключение required fields
-    if not re.search(r"\*\*Итог:\*\*", body) and not re.search(r"\*\*Summary:\*\*", body, re.I):
-        errors.append("Заключение must include **Итог:** (or **Summary:**)")
+    # Заключение: human status (Проблема / Из‑за чего / Чинить) replaces Итог+Механика.
+    has_human_status = bool(
+        re.search(r"\*\*Проблема:\*\*", body)
+        and re.search(r"\*\*Из[‑-]за чего:\*\*", body)
+        and re.search(r"\*\*Чинить:\*\*", body)
+    )
+    if not has_human_status:
+        if not re.search(r"\*\*Итог:\*\*", body) and not re.search(
+            r"\*\*Summary:\*\*", body, re.I
+        ):
+            errors.append(
+                "Заключение must include **Проблема / Из‑за чего / Чинить** "
+                "(or legacy **Итог:**) — see RCA.md"
+            )
+        if not re.search(r"\*\*(?:Механика|Mechanism):\*\*", body, re.I):
+            errors.append(
+                "Заключение must include **Проблема / Из‑за чего / Чинить** "
+                "(or legacy **Механика:**) — see RCA.md"
+            )
     resolution_token: str | None = None
     res_m = re.search(
         r"\*\*(?:Решение|Resolution):\*\*\s*`?([a-z_]+)`?",
@@ -294,12 +481,6 @@ def validate_analysis_md(
     if not re.search(r"\*\*(?:Уверенность|Confidence):\*\*", body, re.I):
         errors.append("Заключение must include **Уверенность:** / **Confidence:**")
 
-    # Mechanism + since-when (all kinds)
-    if not re.search(r"\*\*(?:Механика|Mechanism):\*\*", body, re.I):
-        errors.append(
-            "Заключение must include **Механика:** — system behavior that led to the failure "
-            "(not only an error fingerprint)"
-        )
     if not re.search(r"\*\*(?:Давность|Since):\*\*", body, re.I):
         errors.append(
             "Заключение must include **Давность:** / **Since:** "
@@ -332,6 +513,7 @@ def validate_analysis_md(
                 "olap_fail: tie root cause to code at tested sha "
                 "(path/symbol under Код (sha …) or similar)"
             )
+        errors.extend(_check_rca_sections(body))
 
         # Artifacts quality gate
         if out_dir:
@@ -611,6 +793,9 @@ def validate_analysis_md(
 
     # TPC-C / OLAP: must dig mart history (pack suite_history alone is not enough)
     tpcc = any(str(t).startswith("tpcc_") for t in types)
+    # Crash-like TPC-C (fatal in focus) — same RCA gate as olap_fail (no sanitizer hardcode).
+    if tpcc and not olap_fail and _focus_has_crash_signals(out_dir):
+        errors.extend(_check_rca_sections(body))
     olap_needs_dig = any(t in ("olap_slow", "olap_fail", "olap_nodata") for t in types)
     if (tpcc or olap_needs_dig) and out_dir:
         if not (out_dir / "dig_runs.json").is_file():
@@ -896,12 +1081,24 @@ def validate_analysis_md(
                         "(see REPORT_TEMPLATE.md)"
                     )
                 if not re.search(r"^####\s+Что сломалось\s*$", body, re.I | re.M):
-                    warnings.append(
-                        f"{resolution}: ### Body should include #### Что сломалось"
+                    errors.append(
+                        f"{resolution}: ### Body must include #### Что сломалось"
                     )
                 if not re.search(r"^####\s+К чему приводит\s*$", body, re.I | re.M):
-                    warnings.append(
-                        f"{resolution}: ### Body should include #### К чему приводит"
+                    errors.append(
+                        f"{resolution}: ### Body must include #### К чему приводит"
+                    )
+                if not re.search(
+                    r"^####\s+Из[‑-]за чего\s*$", body, re.I | re.M
+                ):
+                    errors.append(
+                        f"{resolution}: ### Body must include #### Из‑за чего "
+                        "(root cause in plain Russian) — see REPORT_TEMPLATE.md"
+                    )
+                if not re.search(r"^####\s+Чинить\s*$", body, re.I | re.M):
+                    errors.append(
+                        f"{resolution}: ### Body must include #### Чинить "
+                        "(where/how to fix) — see REPORT_TEMPLATE.md"
                     )
                 if not re.search(r"^####\s+Детали ошибки\s*$", body, re.I | re.M):
                     warnings.append(
@@ -915,7 +1112,8 @@ def validate_analysis_md(
                     )
                 if not re.search(r"^####\s+Код\s*$", body, re.I | re.M):
                     warnings.append(
-                        f"{resolution}: ### Body should include #### Код"
+                        f"{resolution}: ### Body should include #### Код "
+                        "(detection path + related issue links)"
                     )
                 # Machine block for dashboard / cross-suite match
                 match = parse_match_block(body)

@@ -25,12 +25,14 @@ Read these fields **before** digging covered tickets:
 
 For each problem, answer **all** of:
 
-1. **What** broke (symptom vs root)  
-2. **Why / mechanism** — behavior of the system that led here (not just an error string)  
-3. **Who / what change** — PR or long-standing behavior, tied to **tested sha** codebase  
-4. **Since when** — how long this could have been showing (priors / first-fail / sticky metrics)  
-5. **Verify** hypothesis against logs + code; if falsified → new H (≤3)  
-6. If unclear → `investigate_further` / unknown. **Do not invent confidence.**
+1. **What** broke (detection vs origin — see [`RCA.md`](RCA.md))  
+2. **Why / mechanism** — behavior that led here (not just an error string / stack frame)  
+3. **Causes** — changes / sequence / what exposed the defect (not «path unchanged»)  
+4. **How to fix** — fix direction or decisive experiment  
+5. **Who** — PR/login only if evidence bar; else `unknown` (causes still required)  
+6. **Since when** — priors / first-fail / sticky metrics  
+7. **Verify** H against logs + code; falsified → new H (≤3)  
+8. If unclear → `investigate_further` / unknown culprit. **Do not invent confidence.**
 
 ## Setup
 
@@ -97,8 +99,11 @@ Extra digs: `gh search` / browse code at tested sha. Offline mart: `dig-runs --f
      dutyctl bisect …          # тот же интервал / crash path
      read hot PR diffs @ tested sha — filter by plan hints (join/scan/kqp/cs)
      В analysis «Кандидаты PR» укажи source окна (stable_streak_end / ydb_step / …).
-5) Form hypothesis H → verify against dig_runs + dig_prs + plans/logs/code
-     falsified → new H (≤3); culprit only if evidence bar met
+5) RCA (обязательно) — follow [`RCA.md`](RCA.md) after logs/plans + dig-runs/prs:
+     dig (issues search, one winning hypothesis) → в analysis/S3 детали;
+     **человеку и в Заключении только** три строки:
+     **Проблема / Из‑за чего / Чинить** (см. RCA.md). Не вываливать H1/стеки.
+     Culprit only if evidence bar met. Slow: same, axis = plan_compare.
 6) Self-check — if fail, dig more (do NOT jump to wait_next_wave early)
 7) Write analysis.md + problems.json
    Along the way: dutyctl trace-note -o $OUT --kind hypothesis -- "H1: …"
@@ -259,7 +264,7 @@ Put a clear line in the report: **Давность:** …
      - `plan_same` → runtime / CS execute / conveyor / memory / IC (или infra)  
      - `unstable_across_iterations` → stats/cache/planner nondeterminism  
    - `dutyctl bisect --path …` на подозрительный файл/директорию из diff.  
-7. **Hypothesis loop (≤3):** H1 из plan_compare → проверить diff@tested sha + логи; falsified → H2…  
+7. **Hypothesis loop (≤3 в работе → 1 в отчёте):** H1 из plan_compare → проверить diff@tested sha + логи + GH issues search; falsified → следующая; в analysis оставить только победителя.  
    Виновник = PR только при evidence bar (files ∩ path **или** path changed in window). Иначе `unknown` / candidate.  
 8. В `analysis.md`: механика — `plan_regressed` | `plan_same_runtime_regressed` | `unstable_across_iterations` | `infra/logs`;  
    кандидаты PR таблицей из `dig_prs.json`; **Гипотеза проверена:** yes|partial|no.
@@ -307,7 +312,9 @@ Put a clear line in the report: **Давность:** …
 5. If signals include `segfault` / `abort` / `verify`, or status is 2005+node-down: follow **Host journals + coredumps** (coredump URL / `/place/coredumps` / optional journalctl). Prefer stack over surface 2005.  
 6. `dig-runs` (~35d+, ydb_client) → related suites + **peer DbAlias**. Для nodata — Now vs mart SuccessCount/YdbSumMeans. Для slow — auto `baseline_focus` + ydb jump window for dig-prs.  
 7. Metrics + **dig-prs/bisect обязательны для slow/fail** (для «не доехали» — нет). dig-prs без `--base-sha` из пака — окно из mart.  
-8. Use harness paths above when mechanism depends on upload vs query suite.
+   Для fail: dig-prs / `git log` расширяй на пути из **гипотез происхождения** (producers), не только fline из стека.  
+8. Use harness paths above when mechanism depends on upload vs query suite.  
+9. **RCA.md** — гипотезы + причины + как починить (см. step 5). Запрещено закрыть причины фразой «файл из трейса не менялся».
 
 ## Evidence bar (culprit)
 
@@ -336,9 +343,12 @@ For each problem, you can answer yes:
 - [ ] После заведения тикета: `Тикет: [#N](url)` в analysis → `upload-report -o $OUT` → **[полный отчёт]** в body
 - [ ] Mechanism stated (not only fingerprint)  
 - [ ] Tied to code at **tested sha**  
+- [ ] RCA: в Заключении **только** статус **Проблема / Из‑за чего / Чинить** (по-русски; см. RCA.md)  
+- [ ] RCA: dig сделан (GH issues search + одна гипотеза в analysis/S3); человеку длинный разбор не дублировать  
+- [ ] RCA: **не** «path не менялся» как единственная причина  
 - [ ] Давность stated with dates/labels  
 - [ ] Hypothesis verified or explicitly `partial`/`no`  
-- [ ] Culprit only if evidence bar met  
+- [ ] Culprit only if evidence bar met (гипотеза/причина ≠ автоматический Виновник)  
 - [ ] Если только IC/disconnect и stderr empty → в Итоге разделены каскад vs причина; решение **не** `no_action` без причины close peer  
 - [ ] При IC DeadPeer: копнут **peer**-сторону (хост/node из YDBE/DeadPeer), не только клиентский disconnect  
 
@@ -395,7 +405,8 @@ If any checkbox fails → dig again (loop), do not polish a hollow report.
 - Следствия того же abort — не отдельный issue; в P1 перечисли затронутые query одной строкой.
 
 **Issue = copy-paste + findable:** при `open_ticket` / `update_known` обязательны `### Title` и `### Body`.  
-Body (порядок): короткая `#### Фактура` → `#### Что сломалось` → `#### К чему приводит` → `#### Детали ошибки` → `#### Код` → `<!-- perf-duty-match -->`.  
+Body (порядок): `#### Фактура` → `#### Что сломалось` → `#### К чему приводит` → `#### Из‑за чего` → `#### Чинить` → `#### Детали ошибки` → `#### Код` → `<!-- perf-duty-match -->`.  
+«Из‑за чего» / «Чинить» — тот же смысл, что статус в чате; **обязательны** при `open_ticket` / `update_known`.  
 **Не** писать в Body/отчёте: «Отчёты (соседи)», Search keys / `gh search` в первом экране,  
 и **запрещены** фразы «это не #N», «не путать с…», «не смешивать с…» — антипаттерн (fingerprint уже разделяет).  
 Keys — только в match-блоке. Для людей: **node down / connection lost**, не «просто 2005».  
@@ -439,25 +450,27 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
 # Perf duty — {suite} @ {db} — {focus_label}
 
 ## Заключение
-- **Итог:** …
-- **Решение:** токен + коротко по-русски:
-  - `investigate_further` — продолжить разбор
-  - `open_ticket` — завести issue (Title+Body ниже)
-  - `update_known` — уже известный тикет (Body = комментарий + та же Фактура)
-  - `wait_next_wave` / `no_action` — …
-- **Виновник:** unknown | @{login} / [PR #N](url) — …
+**Сначала — статус для человека (обязательно, см. RCA.md):**
+- **Проблема:** …
+- **Из‑за чего:** …
+- **Чинить:** …
+
+Затем служебное (токены duty; человеку в чате не повторять вместо статуса):
+- **Решение:** `investigate_further` | `open_ticket` | `update_known` | `wait_next_wave` | `no_action`
+- **Виновник:** unknown | @{login} / [PR #N](url)
 - **Уверенность:** высокая | средняя | низкая
-- **Давность:** подтверждено на …; suite красный с …; в коде с …
-- **Механика:** …
+- **Критичность:** HIGH | MEDIUM | LOW
+- **Давность:** …
 
 ## Проблемы
 ### P1 — …
-- … + Тикет: отдельный | тот же, что P1 | комментарий в #N
+- … + Тикет: …
+
+## Гипотезы происхождения / Причины / Как починить
+Только в analysis (S3); одна H; см. [`RCA.md`](RCA.md). **Не** копировать в чат человеку.
 
 ## Что дальше
-Только **для дежурного-человека** (1–3 пункта): куда смотреть дальше, какой тикет / coredump. Без «не смешивать с #N».
-**Запрещено** в отчёте: инструкции агенту (`gh search`, «Перед заведением», «скопировать Title/Body», «dutyctl …»).
-Поиск дубликатов / `gh search` — делай **сам до** `open_ticket`, в analysis не пиши.
+Опционально 1–3 пункта для дежурного. **Запрещено:** инструкции агенту (`gh search`, «dutyctl …»).
 
 ## Материалы для issue
 ### Title
@@ -478,6 +491,12 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
 #### К чему приводит
 - …
 
+#### Из‑за чего
+…
+
+#### Чинить
+уже [#N](…) / здесь; …
+
 #### Детали ошибки
 Host: `…`  
 Coredump: https://coredumps.yandex-team.ru/v3/cores?filter=…   ← из focus.fatal / host_dig
@@ -490,8 +509,8 @@ Backtrace:
 ~~~
 
 #### Код
-| Место падения | … |
-| … | … |
+| Место падения | path @ sha |
+| Связанный issue | нет / #N |
 
 <!-- perf-duty-match
 kind: olap

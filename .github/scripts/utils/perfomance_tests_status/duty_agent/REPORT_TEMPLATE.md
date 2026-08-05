@@ -104,10 +104,16 @@ Bucket `workload-log`, путь с `{stamp}` (immutable). Labels: **полный
 Без Kind / CI version / Fingerprint / Search keys в этой таблице — они в Title и в `perf-duty-match`.
 
 #### Что сломалось
-1–3 предложения: симптом → место в коде / механизм. Без списка «не путать с …».
+1–3 предложения: симптом → где упало (функция/путь). Без списка «не путать с …».
 
 #### К чему приводит
-Буллеты impact: crash/abort ноды; какие query fail; что видит Allure (**node down / connection lost**); suite/кластер до рестарта.
+Буллеты impact: crash/abort ноды; какие query fail; что видит Allure (**node down / connection lost**); suite FailCount.
+
+#### Из‑за чего
+По-русски: кто реально ломает. Если кадр стека — только место падения, так и скажи; корень ещё не найден — напиши прямо. **Не** «файл не менялся».
+
+#### Чинить
+Уже [#N](url) / [PR#M](url) — **или** здесь (этот issue); если фикс закроет ещё тикеты — перечисли. Одной–двумя фразами что делать.
 
 #### Детали ошибки
 Цитата VERIFY / `Received signal N` / backtrace **открытым** code-блоком (не под катом).
@@ -118,18 +124,15 @@ Bucket `workload-log`, путь с `{stamp}` (immutable). Labels: **полный
 - **запрещено:** «Coredump: filter URL в descriptionHtml» и другие плейсхолдеры без ссылки;
 - если URL реально нет — явно `coredump skipped` + почему (нет UUID / нет signal в stderr этого кейса).
 
-Host / node — строкой над или под code-блоком.  
-Следствия на том же прогоне (другие query без цитаты VERIFY) — здесь же одной-двумя строками.
-
-В секции P\* отчёта можно кратко (host + 1–2 frame + URL); в **Materials / GitHub Body** — полный стек.
+Host / node — строкой над или под code-блоком.
 
 #### Код
 | | |
 |--|--|
-| Место падения | [path:line @ sha](blob-url) — краткий контекст |
-| Менялся ли файл в окне | да/нет (+ окно sha…sha) |
-| Когда файл меняли последний раз | commit / PR — при unknown: «история кода, не виновник» |
+| Место падения | [path:line @ sha](blob-url) |
 | Связанный issue | нет / [#N](url) только если это **тот же** баг (`update_known`) |
+
+Подробности разбора — в Duty report (`analysis.md`). См. `RCA.md`.
 
 <!-- perf-duty-match
 kind: olap

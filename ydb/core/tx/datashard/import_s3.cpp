@@ -450,9 +450,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 NewData = true;
             }
             Last = last;
-            FeedUnprocessedBytes += portion.size();
             try {
                 Deserializer.AddData(TBuffer(portion.data(), portion.size()), last);
+                FeedUnprocessedBytes += portion.size();
             } catch (const std::exception& ex) {
                 FeedError = ex.what();
             }

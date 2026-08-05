@@ -7,6 +7,11 @@ PEERDIR(
     ydb/library/arrow_kernels
     ydb/library/formats/arrow/simple_builder
     ydb/core/formats/arrow/program
+<<<<<<< HEAD
+=======
+    ydb/core/formats/arrow/reader
+    ydb/core/formats/arrow/serializer
+>>>>>>> 4d8d933ec96 (fix use after free (#48987))
     ydb/core/base
     ydb/library/formats/arrow
 
@@ -29,6 +34,7 @@ CFLAGS(
 
 SRCS(
     ut_arrow.cpp
+    ut_buffer_over_string.cpp
     ut_column_filter.cpp
     ut_dictionary.cpp
     ut_hash.cpp

@@ -107,7 +107,7 @@ You will be asked several questions in interactive mode; answer them as follows:
 | --- | --- |
 | What account do you want to log into? | **GitHub.com** |
 | What is your preferred protocol for Git operations? | **SSH** |
-| Upload your SSH public key to your GitHub account? | Select the file with the public key ( extension) from those created in the step ["Create an SSH key pair"](#ssh_key_pair), for example **/home/user/.ssh/id_ed25519`.pub`** |
+| Upload your SSH public key to your GitHub account? | Select the file with the public key (extension `.pub`) from those created in the step ["Create an SSH key pair"](#ssh_key_pair), for example **/home/user/.ssh/id_ed25519.pub** |
 | Title for your SSH key | **GitHub CLI** (leave the default value) |
 | How would you like to authenticate GitHub CLI | **Paste your authentication token** |
 
@@ -301,7 +301,7 @@ When creating a Pull Request, the description will be filled with the text from 
 The message in the Changelog Entry must meet the following requirements:
 
 - Must be written in English.
-- Install and configure [GitHub CLI](../concepts/glossary.md).
+- Rely on the terms used in the [glossary](../concepts/glossary.md).
 - Describe what changed in the system's operation for the end user.
 
 ### Precommit checks {#precommit_checks}

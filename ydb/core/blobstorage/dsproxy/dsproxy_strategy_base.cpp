@@ -177,7 +177,7 @@ void TStrategyBase::LogDisintegrated(TLogContext &logCtx, const char *marker, co
             << " NodeId# " << actorId.NodeId()
             << " Queues# ";
         groupQueues->DisksByOrderNumber[orderNumber]->Queues.ForEachQueue([&](const auto& q) {
-            msg << (q.IsConnected ? '+' : '0');
+            msg << (q.IsConnected.load(std::memory_order_acquire) ? '+' : '0');
         });
         for (const auto& disk : state.Disks) {
             if (disk.OrderNumber == orderNumber) {

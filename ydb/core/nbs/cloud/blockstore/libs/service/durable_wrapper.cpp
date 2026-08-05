@@ -169,7 +169,7 @@ private:
 
             auto& request = it->second;
             if (generation != Generation) {
-                // Received response form outdated generation.
+                // Received response from outdated generation.
                 return;
             }
 
@@ -245,7 +245,7 @@ private:
             requestId,
             RequestName.c_str(),
             retryCount,
-            static_cast<size_t>(Generation));
+            static_cast<size_t>(generation));
 
         DoExecute(
             requestId,

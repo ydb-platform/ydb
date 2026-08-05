@@ -54,7 +54,7 @@ namespace NKikimr::NBlobDepot {
                 TEvUploadPartCopyRequest::RequestName,
             };
 
-            for (const TStringBuf method : methods) {
+            for (auto&& method : methods) {
                 auto sub = group->GetSubgroup("method", TString(method));
                 PerMethod.emplace(method, TMethodCounters{
                     .LatencyMs = sub->GetHistogram("LatencyMs", GetRequestLatencyCollector()),

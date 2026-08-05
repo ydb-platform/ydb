@@ -14,7 +14,7 @@ NProto::TError TranslateError(
     if (errorResponse == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN &&
         errorReason == CantAcquireDataErrorMessage)
     {
-        return MakeError(E_CANCELLED, errorReason);
+        return MakeCanNotAcquireDataError();
     }
     if (errorResponse == NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED) {
         return MakeError(

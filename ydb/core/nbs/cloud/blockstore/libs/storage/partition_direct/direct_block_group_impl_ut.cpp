@@ -313,8 +313,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             pendingRead.GetValue(WaitTimeout).GetValue(WaitTimeout);
 
         UNIT_ASSERT_VALUES_EQUAL(
-            E_CANCELLED,
-            readyReadResponse.Error.GetCode());
+            true,
+            IsCanNotAcquireDataError(readyReadResponse.Error));
 
         const auto& hostStat = dbg->GetOracle()->GetHostStatistics(ddiskHost);
         const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());

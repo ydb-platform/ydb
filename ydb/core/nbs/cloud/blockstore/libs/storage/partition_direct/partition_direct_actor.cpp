@@ -412,7 +412,8 @@ void TPartitionActor::HandleFastPathServiceReady(
             .StripeSize = StorageConfig->GetStripeSize(),
             .BlocksCount = blockCount,
             .VChunkSize = StorageConfig->GetVChunkSize(),
-            .VhostQueuesCount = StorageConfig->GetVhostQueuesCount()};
+            .VhostQueuesCount = StorageConfig->GetVhostQueuesCount(),
+            .Generation = Executor()->Generation()};
         service->VhostServer->StartEndpoint(
             GetSocketPath(),
             FastPathService,

@@ -184,9 +184,10 @@ EDiagnosticsErrorKind GetDiagnosticsErrorKind(const NProto::TError& e)
     return EDiagnosticsErrorKind::ErrorFatal;
 }
 
-bool IsCancelledError(const NProto::TError& e)
+bool IsCanNotAcquireDataError(const NProto::TError& e)
 {
-    return e.GetCode() == E_CANCELLED;
+    return e.GetCode() == E_REJECTED &&
+           e.GetMessage() == CantAcquireDataErrorMessage;
 }
 
 bool IsConnectionError(const NProto::TError& e)
@@ -297,6 +298,11 @@ NProto::TError MakeTabletIsDeadError(ui32 code, const TSourceLocation& location)
     TStringStream out;
     out << "Tablet is dead: " << location.File << ":" << location.Line;
     return MakeError(code, out.Str());
+}
+
+NProto::TError MakeCanNotAcquireDataError()
+{
+    return MakeError(E_REJECTED, TString(CantAcquireDataErrorMessage));
 }
 
 }   // namespace NYdb::NBS

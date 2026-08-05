@@ -163,6 +163,7 @@ private:
     TAppContext& AppCtx;
     // Single device handler shared by all vhost queues of this endpoint.
     const IDeviceHandlerPtr DeviceHandler;
+    const IDurableStoragePtr DurableStorage;
     const TStorageGatePtr StorageGate;
     const TString SocketPath;
     const TStorageOptions Options;
@@ -184,6 +185,7 @@ public:
     TEndpoint(
         TAppContext& appCtx,
         IDeviceHandlerPtr deviceHandler,
+        IDurableStoragePtr durableStorage,
         ITraceServicePtr traceService,
         TStorageGatePtr storageGate,
         TString socketPath,
@@ -192,6 +194,7 @@ public:
         TVector<IVhostQueuePtr> queues)
         : AppCtx(appCtx)
         , DeviceHandler(std::move(deviceHandler))
+        , DurableStorage(std::move(durableStorage))
         , StorageGate(std::move(storageGate))
         , SocketPath(std::move(socketPath))
         , Options(options)
@@ -300,10 +303,12 @@ public:
         return future;
     }
 
-    void Attach(ITraceServicePtr traceService, IStoragePtr storage)
+    void
+    Attach(ITraceServicePtr traceService, IStoragePtr storage, ui32 generation)
     {
         TraceServiceGate.Attach(std::move(traceService));
         StorageGate->Attach(std::move(storage));
+        DurableStorage->RestartRequests(generation);
     }
 
     void Detach()
@@ -680,7 +685,10 @@ TFuture<NProto::TError> TServer::StartEndpoint(
                                  << " has already been started");
 
             STORAGE_INFO("Reattach storage to " << options.DiskId.Quote());
-            (*endpoint)->Attach(std::move(traceService), std::move(storage));
+            (*endpoint)->Attach(
+                std::move(traceService),
+                std::move(storage),
+                options.Generation);
             return MakeFuture(error);
         }
 
@@ -695,13 +703,22 @@ TFuture<NProto::TError> TServer::StartEndpoint(
 
     TStorageGatePtr storageGate =
         std::make_shared<TStorageGate>(std::move(storage));
+
+    IDurableStoragePtr durableStorage = CreateDurableStorageWrapper(
+        Logging,
+        storageGate,
+        Timer,
+        Scheduler,
+        options.Generation);
+
     // Single device handler shared by all vhost queues of this endpoint.
     // The whole storage-wrapper chain is built once per endpoint.
-    auto deviceHandler = CreateDeviceHandler(options, storageGate);
+    auto deviceHandler = CreateDeviceHandler(options, durableStorage);
 
     auto endpoint = std::make_shared<TEndpoint>(
         *this,
         std::move(deviceHandler),
+        std::move(durableStorage),
         std::move(traceService),
         std::move(storageGate),
         socketPath,
@@ -913,11 +930,6 @@ IStoragePtr TServer::CreateWrappers(
         storage =
             CreateOverlappedRequestsGuardStorageWrapper(std::move(storage));
     }
-    storage = CreateDurableStorageWrapper(
-        Logging,
-        std::move(storage),
-        Timer,
-        Scheduler);
     return storage;
 }
 

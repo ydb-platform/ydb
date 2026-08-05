@@ -2,7 +2,10 @@
   "version":"2.0",
   "metadata":{
     "apiVersion":"2023-04-20",
-    "auth":["aws.auth#sigv4"],
+    "auth":[
+      "aws.auth#sigv4",
+      "smithy.api#httpBearerAuth"
+    ],
     "endpointPrefix":"bedrock",
     "protocol":"rest-json",
     "protocols":["rest-json"],
@@ -37,7 +40,7 @@
       "http":{
         "method":"POST",
         "requestUri":"/custom-models/create-custom-model",
-        "responseCode":200
+        "responseCode":202
       },
       "input":{"shape":"CreateCustomModelRequest"},
       "output":{"shape":"CreateCustomModelResponse"},
@@ -51,7 +54,29 @@
         {"shape":"ServiceQuotaExceededException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Creates a new custom model in Amazon Bedrock. After the model is active, you can use it for inference.</p> <p>To use the model for inference, you must purchase Provisioned Throughput for it. You can't use On-demand inference with these custom models. For more information about Provisioned Throughput, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/prov-throughput.html\">Provisioned Throughput</a>.</p> <p>The model appears in <code>ListCustomModels</code> with a <code>customizationType</code> of <code>imported</code>. To track the status of the new model, you use the <code>GetCustomModel</code> API operation. The model can be in the following states:</p> <ul> <li> <p> <code>Creating</code> - Initial state during validation and registration</p> </li> <li> <p> <code>Active</code> - Model is ready for use in inference</p> </li> <li> <p> <code>Failed</code> - Creation process encountered an error</p> </li> </ul> <p> <b>Related APIs</b> </p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_GetCustomModel.html\">GetCustomModel</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListCustomModels.html\">ListCustomModels</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_DeleteCustomModel.html\">DeleteCustomModel</a> </p> </li> </ul>"
+      "documentation":"<p>Creates a new custom model in Amazon Bedrock. After the model is active, you can use it for inference.</p> <p>To use the model for inference, you must purchase Provisioned Throughput for it. You can't use On-demand inference with these custom models. For more information about Provisioned Throughput, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/prov-throughput.html\">Provisioned Throughput</a>.</p> <p>The model appears in <code>ListCustomModels</code> with a <code>customizationType</code> of <code>imported</code>. To track the status of the new model, you use the <code>GetCustomModel</code> API operation. The model can be in the following states:</p> <ul> <li> <p> <code>Creating</code> - Initial state during validation and registration</p> </li> <li> <p> <code>Active</code> - Model is ready for use in inference</p> </li> <li> <p> <code>Failed</code> - Creation process encountered an error</p> </li> </ul> <p> <b>Related APIs</b> </p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_GetCustomModel.html\">GetCustomModel</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListCustomModels.html\">ListCustomModels</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_DeleteCustomModel.html\">DeleteCustomModel</a> </p> </li> </ul>",
+      "idempotent":true
+    },
+    "CreateCustomModelDeployment":{
+      "name":"CreateCustomModelDeployment",
+      "http":{
+        "method":"POST",
+        "requestUri":"/model-customization/custom-model-deployments",
+        "responseCode":202
+      },
+      "input":{"shape":"CreateCustomModelDeploymentRequest"},
+      "output":{"shape":"CreateCustomModelDeploymentResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"TooManyTagsException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Deploys a custom model for on-demand inference in Amazon Bedrock. After you deploy your custom model, you use the deployment's Amazon Resource Name (ARN) as the <code>modelId</code> parameter when you submit prompts and generate responses with model inference.</p> <p> For more information about setting up on-demand inference for custom models, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/model-customization-use.html\">Set up inference for a custom model</a>. </p> <p>The following actions are related to the <code>CreateCustomModelDeployment</code> operation:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_GetCustomModelDeployment.html\">GetCustomModelDeployment</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListCustomModelDeployments.html\">ListCustomModelDeployments</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_DeleteCustomModelDeployment.html\">DeleteCustomModelDeployment</a> </p> </li> </ul>",
+      "idempotent":true
     },
     "CreateEvaluationJob":{
       "name":"CreateEvaluationJob",
@@ -322,6 +347,26 @@
       "documentation":"<p>Deletes a custom model that you created earlier. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/custom-models.html\">Custom models</a> in the <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/what-is-service.html\">Amazon Bedrock User Guide</a>.</p>",
       "idempotent":true
     },
+    "DeleteCustomModelDeployment":{
+      "name":"DeleteCustomModelDeployment",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/model-customization/custom-model-deployments/{customModelDeploymentIdentifier}",
+        "responseCode":200
+      },
+      "input":{"shape":"DeleteCustomModelDeploymentRequest"},
+      "output":{"shape":"DeleteCustomModelDeploymentResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Deletes a custom model deployment. This operation stops the deployment and removes it from your account. After deletion, the deployment ARN can no longer be used for inference requests.</p> <p>The following actions are related to the <code>DeleteCustomModelDeployment</code> operation:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_CreateCustomModelDeployment.html\">CreateCustomModelDeployment</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_GetCustomModelDeployment.html\">GetCustomModelDeployment</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListCustomModelDeployments.html\">ListCustomModelDeployments</a> </p> </li> </ul>",
+      "idempotent":true
+    },
     "DeleteFoundationModelAgreement":{
       "name":"DeleteFoundationModelAgreement",
       "http":{
@@ -512,6 +557,24 @@
         {"shape":"ThrottlingException"}
       ],
       "documentation":"<p>Get the properties associated with a Amazon Bedrock custom model that you have created. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/custom-models.html\">Custom models</a> in the <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/what-is-service.html\">Amazon Bedrock User Guide</a>.</p>"
+    },
+    "GetCustomModelDeployment":{
+      "name":"GetCustomModelDeployment",
+      "http":{
+        "method":"GET",
+        "requestUri":"/model-customization/custom-model-deployments/{customModelDeploymentIdentifier}",
+        "responseCode":200
+      },
+      "input":{"shape":"GetCustomModelDeploymentRequest"},
+      "output":{"shape":"GetCustomModelDeploymentResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Retrieves information about a custom model deployment, including its status, configuration, and metadata. Use this operation to monitor the deployment status and retrieve details needed for inference requests.</p> <p>The following actions are related to the <code>GetCustomModelDeployment</code> operation:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_CreateCustomModelDeployment.html\">CreateCustomModelDeployment</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListCustomModelDeployments.html\">ListCustomModelDeployments</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_DeleteCustomModelDeployment.html\">DeleteCustomModelDeployment</a> </p> </li> </ul>"
     },
     "GetEvaluationJob":{
       "name":"GetEvaluationJob",
@@ -779,6 +842,23 @@
         {"shape":"ThrottlingException"}
       ],
       "documentation":"<p>Get usecase for model access.</p>"
+    },
+    "ListCustomModelDeployments":{
+      "name":"ListCustomModelDeployments",
+      "http":{
+        "method":"GET",
+        "requestUri":"/model-customization/custom-model-deployments",
+        "responseCode":200
+      },
+      "input":{"shape":"ListCustomModelDeploymentsRequest"},
+      "output":{"shape":"ListCustomModelDeploymentsResponse"},
+      "errors":[
+        {"shape":"AccessDeniedException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Lists custom model deployments in your account. You can filter the results by creation time, name, status, and associated model. Use this operation to manage and monitor your custom model deployments.</p> <p>We recommend using pagination to ensure that the operation returns quickly and successfully.</p> <p>The following actions are related to the <code>ListCustomModelDeployments</code> operation:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_CreateCustomModelDeployment.html\">CreateCustomModelDeployment</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_GetCustomModelDeployment.html\">GetCustomModelDeployment</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_DeleteCustomModelDeployment.html\">DeleteCustomModelDeployment</a> </p> </li> </ul>"
     },
     "ListCustomModels":{
       "name":"ListCustomModels",
@@ -1325,6 +1405,15 @@
       "max":2048,
       "min":0
     },
+    "AttributeType":{
+      "type":"string",
+      "enum":[
+        "STRING",
+        "NUMBER",
+        "BOOLEAN",
+        "STRING_LIST"
+      ]
+    },
     "AuthorizationStatus":{
       "type":"string",
       "enum":[
@@ -1498,6 +1587,12 @@
       "min":0,
       "pattern":"[a-z0-9-]{1,63}[.]{1}[a-z0-9-]{1,63}([a-z0-9-]{1,63}[.]){0,2}[a-z0-9-]{1,63}([:][a-z0-9-]{1,63}){0,2}(/[a-z0-9]{12}|)"
     },
+    "BedrockRerankingModelArn":{
+      "type":"string",
+      "max":2048,
+      "min":1,
+      "pattern":"(arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}::foundation-model/(.*))?"
+    },
     "Boolean":{
       "type":"boolean",
       "box":true
@@ -1586,6 +1681,46 @@
     "ContentType":{
       "type":"string",
       "pattern":".*[a-z]{1,20}/.{1,20}.*"
+    },
+    "CreateCustomModelDeploymentRequest":{
+      "type":"structure",
+      "required":[
+        "modelDeploymentName",
+        "modelArn"
+      ],
+      "members":{
+        "modelDeploymentName":{
+          "shape":"ModelDeploymentName",
+          "documentation":"<p>The name for the custom model deployment. The name must be unique within your Amazon Web Services account and Region.</p>"
+        },
+        "modelArn":{
+          "shape":"CustomModelArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the custom model to deploy for on-demand inference. The custom model must be in the <code>Active</code> state.</p>"
+        },
+        "description":{
+          "shape":"CustomModelDeploymentDescription",
+          "documentation":"<p>A description for the custom model deployment to help you identify its purpose.</p>"
+        },
+        "tags":{
+          "shape":"TagList",
+          "documentation":"<p>Tags to assign to the custom model deployment. You can use tags to organize and track your Amazon Web Services resources for cost allocation and management purposes.</p>"
+        },
+        "clientRequestToken":{
+          "shape":"IdempotencyToken",
+          "documentation":"<p>A unique, case-sensitive identifier to ensure that the operation completes no more than one time. If this token matches a previous request, Amazon Bedrock ignores the request, but does not return an error. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/model-customization-idempotency.html\">Ensuring idempotency</a>.</p>",
+          "idempotencyToken":true
+        }
+      }
+    },
+    "CreateCustomModelDeploymentResponse":{
+      "type":"structure",
+      "required":["customModelDeploymentArn"],
+      "members":{
+        "customModelDeploymentArn":{
+          "shape":"CustomModelDeploymentArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the custom model deployment. Use this ARN as the <code>modelId</code> parameter when invoking the model with the <code>InvokeModel</code> or <code>Converse</code> operations.</p>"
+        }
+      }
     },
     "CreateCustomModelRequest":{
       "type":"structure",
@@ -2334,6 +2469,77 @@
       "min":20,
       "pattern":"arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:custom-model/(imported|[a-z0-9-]{1,63}[.]{1}[a-z0-9-]{1,63}([a-z0-9-]{1,63}[.]){0,2}[a-z0-9-]{1,63}([:][a-z0-9-]{1,63}){0,2})/[a-z0-9]{12}"
     },
+    "CustomModelDeploymentArn":{
+      "type":"string",
+      "max":1011,
+      "min":0,
+      "pattern":"arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:custom-model-deployment/[a-z0-9]{12}"
+    },
+    "CustomModelDeploymentDescription":{
+      "type":"string",
+      "max":2048,
+      "min":1,
+      "pattern":".*"
+    },
+    "CustomModelDeploymentIdentifier":{
+      "type":"string",
+      "max":93,
+      "min":1,
+      "pattern":"(arn:aws(|-us-gov|-cn|-iso|-iso-b):bedrock:[a-z0-9-]{1,20}:[0-9]{12}:custom-model-deployment/[a-z0-9]{12})|^([0-9a-zA-Z][_-]?){1,63}"
+    },
+    "CustomModelDeploymentStatus":{
+      "type":"string",
+      "enum":[
+        "Creating",
+        "Active",
+        "Failed"
+      ]
+    },
+    "CustomModelDeploymentSummary":{
+      "type":"structure",
+      "required":[
+        "customModelDeploymentArn",
+        "customModelDeploymentName",
+        "modelArn",
+        "createdAt",
+        "status"
+      ],
+      "members":{
+        "customModelDeploymentArn":{
+          "shape":"CustomModelDeploymentArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the custom model deployment.</p>"
+        },
+        "customModelDeploymentName":{
+          "shape":"ModelDeploymentName",
+          "documentation":"<p>The name of the custom model deployment.</p>"
+        },
+        "modelArn":{
+          "shape":"ModelArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the custom model associated with this deployment.</p>"
+        },
+        "createdAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date and time when the custom model deployment was created.</p>"
+        },
+        "status":{
+          "shape":"CustomModelDeploymentStatus",
+          "documentation":"<p>The status of the custom model deployment. Possible values are <code>CREATING</code>, <code>ACTIVE</code>, and <code>FAILED</code>.</p>"
+        },
+        "lastUpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date and time when the custom model deployment was last modified.</p>"
+        },
+        "failureMessage":{
+          "shape":"ErrorMessage",
+          "documentation":"<p>If the deployment status is <code>FAILED</code>, this field contains a message describing the failure reason.</p>"
+        }
+      },
+      "documentation":"<p>Contains summary information about a custom model deployment, including its ARN, name, status, and associated custom model.</p>"
+    },
+    "CustomModelDeploymentSummaryList":{
+      "type":"list",
+      "member":{"shape":"CustomModelDeploymentSummary"}
+    },
     "CustomModelName":{
       "type":"string",
       "max":63,
@@ -2444,6 +2650,23 @@
         }
       },
       "documentation":"<p>For a Distillation job, the status details for the data processing sub-task of the job.</p>"
+    },
+    "DeleteCustomModelDeploymentRequest":{
+      "type":"structure",
+      "required":["customModelDeploymentIdentifier"],
+      "members":{
+        "customModelDeploymentIdentifier":{
+          "shape":"CustomModelDeploymentIdentifier",
+          "documentation":"<p>The Amazon Resource Name (ARN) or name of the custom model deployment to delete.</p>",
+          "location":"uri",
+          "locationName":"customModelDeploymentIdentifier"
+        }
+      }
+    },
+    "DeleteCustomModelDeploymentResponse":{
+      "type":"structure",
+      "members":{
+      }
     },
     "DeleteCustomModelRequest":{
       "type":"structure",
@@ -3228,6 +3451,29 @@
       },
       "documentation":"<p>The configuration of the external source wrapper object in the <code>retrieveAndGenerate</code> function.</p>"
     },
+    "FieldForReranking":{
+      "type":"structure",
+      "required":["fieldName"],
+      "members":{
+        "fieldName":{
+          "shape":"FieldForRerankingFieldNameString",
+          "documentation":"<p>The name of the metadata field to be used during the reranking process.</p>"
+        }
+      },
+      "documentation":"<p>Specifies a field to be used during the reranking process in a Knowledge Base vector search. This structure identifies metadata fields that should be considered when reordering search results to improve relevance.</p>"
+    },
+    "FieldForRerankingFieldNameString":{
+      "type":"string",
+      "max":2000,
+      "min":1
+    },
+    "FieldsForReranking":{
+      "type":"list",
+      "member":{"shape":"FieldForReranking"},
+      "max":100,
+      "min":1,
+      "sensitive":true
+    },
     "FilterAttribute":{
       "type":"structure",
       "required":[
@@ -3418,6 +3664,62 @@
         }
       },
       "documentation":"<p>The configuration details for response generation based on retrieved text chunks.</p>"
+    },
+    "GetCustomModelDeploymentRequest":{
+      "type":"structure",
+      "required":["customModelDeploymentIdentifier"],
+      "members":{
+        "customModelDeploymentIdentifier":{
+          "shape":"CustomModelDeploymentIdentifier",
+          "documentation":"<p>The Amazon Resource Name (ARN) or name of the custom model deployment to retrieve information about.</p>",
+          "location":"uri",
+          "locationName":"customModelDeploymentIdentifier"
+        }
+      }
+    },
+    "GetCustomModelDeploymentResponse":{
+      "type":"structure",
+      "required":[
+        "customModelDeploymentArn",
+        "modelDeploymentName",
+        "modelArn",
+        "createdAt",
+        "status"
+      ],
+      "members":{
+        "customModelDeploymentArn":{
+          "shape":"CustomModelDeploymentArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the custom model deployment.</p>"
+        },
+        "modelDeploymentName":{
+          "shape":"ModelDeploymentName",
+          "documentation":"<p>The name of the custom model deployment.</p>"
+        },
+        "modelArn":{
+          "shape":"CustomModelArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the custom model associated with this deployment.</p>"
+        },
+        "createdAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date and time when the custom model deployment was created.</p>"
+        },
+        "status":{
+          "shape":"CustomModelDeploymentStatus",
+          "documentation":"<p>The status of the custom model deployment. Possible values are:</p> <ul> <li> <p> <code>CREATING</code> - The deployment is being set up and prepared for inference.</p> </li> <li> <p> <code>ACTIVE</code> - The deployment is ready and available for inference requests.</p> </li> <li> <p> <code>FAILED</code> - The deployment failed to be created or became unavailable.</p> </li> </ul>"
+        },
+        "description":{
+          "shape":"CustomModelDeploymentDescription",
+          "documentation":"<p>The description of the custom model deployment.</p>"
+        },
+        "failureMessage":{
+          "shape":"ErrorMessage",
+          "documentation":"<p>If the deployment status is <code>FAILED</code>, this field contains a message describing the failure reason.</p>"
+        },
+        "lastUpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date and time when the custom model deployment was last updated.</p>"
+        }
+      }
     },
     "GetCustomModelRequest":{
       "type":"structure",
@@ -5687,6 +5989,24 @@
       "min":1,
       "sensitive":true
     },
+    "ImplicitFilterConfiguration":{
+      "type":"structure",
+      "required":[
+        "metadataAttributes",
+        "modelArn"
+      ],
+      "members":{
+        "metadataAttributes":{
+          "shape":"MetadataAttributeSchemaList",
+          "documentation":"<p>A list of metadata attribute schemas that define the structure and properties of metadata fields used for implicit filtering. Each attribute defines a key, type, and optional description.</p>"
+        },
+        "modelArn":{
+          "shape":"BedrockModelArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the foundation model used for implicit filtering. This model processes the query to extract relevant filtering criteria.</p>"
+        }
+      },
+      "documentation":"<p>Configuration for implicit filtering in Knowledge Base vector searches. Implicit filtering allows you to automatically filter search results based on metadata attributes without requiring explicit filter expressions in each query.</p>"
+    },
     "ImportedModelArn":{
       "type":"string",
       "max":1011,
@@ -6058,6 +6378,14 @@
         "filter":{
           "shape":"RetrievalFilter",
           "documentation":"<p>Specifies the filters to use on the metadata fields in the knowledge base data sources before returning results.</p>"
+        },
+        "implicitFilterConfiguration":{
+          "shape":"ImplicitFilterConfiguration",
+          "documentation":"<p>Configuration for implicit filtering in Knowledge Base vector searches. This allows the system to automatically apply filters based on the query context without requiring explicit filter expressions.</p>"
+        },
+        "rerankingConfiguration":{
+          "shape":"VectorSearchRerankingConfiguration",
+          "documentation":"<p>Configuration for reranking search results in Knowledge Base vector searches. Reranking improves search relevance by reordering initial vector search results using more sophisticated relevance models.</p>"
         }
       },
       "documentation":"<p>The configuration details for returning the results from the knowledge base vector search.</p>"
@@ -6077,6 +6405,78 @@
         }
       },
       "documentation":"<p>The legal term of the agreement.</p>"
+    },
+    "ListCustomModelDeploymentsRequest":{
+      "type":"structure",
+      "members":{
+        "createdBefore":{
+          "shape":"Timestamp",
+          "documentation":"<p>Filters deployments created before the specified date and time.</p>",
+          "location":"querystring",
+          "locationName":"createdBefore"
+        },
+        "createdAfter":{
+          "shape":"Timestamp",
+          "documentation":"<p>Filters deployments created after the specified date and time.</p>",
+          "location":"querystring",
+          "locationName":"createdAfter"
+        },
+        "nameContains":{
+          "shape":"ModelDeploymentName",
+          "documentation":"<p>Filters deployments whose names contain the specified string. </p>",
+          "location":"querystring",
+          "locationName":"nameContains"
+        },
+        "maxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of results to return in a single call.</p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        },
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The token for the next set of results. Use this token to retrieve additional results when the response is truncated.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        },
+        "sortBy":{
+          "shape":"SortModelsBy",
+          "documentation":"<p>The field to sort the results by. The only supported value is <code>CreationTime</code>.</p>",
+          "location":"querystring",
+          "locationName":"sortBy"
+        },
+        "sortOrder":{
+          "shape":"SortOrder",
+          "documentation":"<p>The sort order for the results. Valid values are <code>Ascending</code> and <code>Descending</code>. Default is <code>Descending</code>.</p>",
+          "location":"querystring",
+          "locationName":"sortOrder"
+        },
+        "statusEquals":{
+          "shape":"CustomModelDeploymentStatus",
+          "documentation":"<p>Filters deployments by status. Valid values are <code>CREATING</code>, <code>ACTIVE</code>, and <code>FAILED</code>.</p>",
+          "location":"querystring",
+          "locationName":"statusEquals"
+        },
+        "modelArnEquals":{
+          "shape":"CustomModelArn",
+          "documentation":"<p>Filters deployments by the Amazon Resource Name (ARN) of the associated custom model.</p>",
+          "location":"querystring",
+          "locationName":"modelArnEquals"
+        }
+      }
+    },
+    "ListCustomModelDeploymentsResponse":{
+      "type":"structure",
+      "members":{
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The token for the next set of results. This value is null when there are no more results to return.</p>"
+        },
+        "modelDeploymentSummaries":{
+          "shape":"CustomModelDeploymentSummaryList",
+          "documentation":"<p>A list of custom model deployment summaries.</p>"
+        }
+      }
     },
     "ListCustomModelsRequest":{
       "type":"structure",
@@ -7024,6 +7424,63 @@
       "min":0,
       "sensitive":true
     },
+    "MetadataAttributeSchema":{
+      "type":"structure",
+      "required":[
+        "key",
+        "type",
+        "description"
+      ],
+      "members":{
+        "key":{
+          "shape":"MetadataAttributeSchemaKeyString",
+          "documentation":"<p>The unique identifier for the metadata attribute. This key is used to reference the attribute in filter expressions and reranking configurations.</p>"
+        },
+        "type":{
+          "shape":"AttributeType",
+          "documentation":"<p>The data type of the metadata attribute. The type determines how the attribute can be used in filter expressions and reranking.</p>"
+        },
+        "description":{
+          "shape":"MetadataAttributeSchemaDescriptionString",
+          "documentation":"<p>An optional description of the metadata attribute that provides additional context about its purpose and usage.</p>"
+        }
+      },
+      "documentation":"<p>Defines the schema for a metadata attribute used in Knowledge Base vector searches. Metadata attributes provide additional context for documents and can be used for filtering and reranking search results.</p>",
+      "sensitive":true
+    },
+    "MetadataAttributeSchemaDescriptionString":{
+      "type":"string",
+      "max":1024,
+      "min":1,
+      "pattern":"[\\s\\S]+"
+    },
+    "MetadataAttributeSchemaKeyString":{
+      "type":"string",
+      "max":256,
+      "min":1,
+      "pattern":"[\\s\\S]+"
+    },
+    "MetadataAttributeSchemaList":{
+      "type":"list",
+      "member":{"shape":"MetadataAttributeSchema"},
+      "max":25,
+      "min":1
+    },
+    "MetadataConfigurationForReranking":{
+      "type":"structure",
+      "required":["selectionMode"],
+      "members":{
+        "selectionMode":{
+          "shape":"RerankingMetadataSelectionMode",
+          "documentation":"<p>The mode for selecting which metadata fields to include in the reranking process. Valid values are ALL (use all available metadata fields) or SELECTIVE (use only specified fields).</p>"
+        },
+        "selectiveModeConfiguration":{
+          "shape":"RerankingMetadataSelectiveModeConfiguration",
+          "documentation":"<p>Configuration for selective mode, which allows you to explicitly include or exclude specific metadata fields during reranking. This is only used when selectionMode is set to SELECTIVE.</p>"
+        }
+      },
+      "documentation":"<p>Configuration for how metadata should be used during the reranking process in Knowledge Base vector searches. This determines which metadata fields are included or excluded when reordering search results.</p>"
+    },
     "MetricFloat":{
       "type":"float",
       "box":true
@@ -7228,6 +7685,12 @@
       },
       "documentation":"<p>The data source of the model to import.</p>",
       "union":true
+    },
+    "ModelDeploymentName":{
+      "type":"string",
+      "max":63,
+      "min":1,
+      "pattern":"([0-9a-zA-Z][_-]?){1,63}"
     },
     "ModelId":{
       "type":"string",
@@ -8071,6 +8534,28 @@
       "min":0,
       "pattern":"[a-zA-Z0-9\\s._:/=+$@-]{0,256}"
     },
+    "RerankingMetadataSelectionMode":{
+      "type":"string",
+      "enum":[
+        "SELECTIVE",
+        "ALL"
+      ]
+    },
+    "RerankingMetadataSelectiveModeConfiguration":{
+      "type":"structure",
+      "members":{
+        "fieldsToInclude":{
+          "shape":"FieldsForReranking",
+          "documentation":"<p>A list of metadata field names to explicitly include in the reranking process. Only these fields will be considered when reordering search results. This parameter cannot be used together with fieldsToExclude.</p>"
+        },
+        "fieldsToExclude":{
+          "shape":"FieldsForReranking",
+          "documentation":"<p>A list of metadata field names to explicitly exclude from the reranking process. All metadata fields except these will be considered when reordering search results. This parameter cannot be used together with fieldsToInclude.</p>"
+        }
+      },
+      "documentation":"<p>Configuration for selectively including or excluding metadata fields during the reranking process. This allows you to control which metadata attributes are considered when reordering search results.</p>",
+      "union":true
+    },
     "ResourceNotFoundException":{
       "type":"structure",
       "members":{
@@ -8527,7 +9012,7 @@
       "type":"string",
       "max":1011,
       "min":20,
-      "pattern":".*(^[a-zA-Z0-9][a-zA-Z0-9\\-]*$)|(^arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:custom-model/([a-z0-9-]{1,63}[.][a-z0-9-]{1,63}(([:][a-z0-9-]{1,63}){0,2})?|imported)/[a-z0-9]{12}$)|(^arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:([0-9]{12}|)((:(fine-tuning-job|model-customization-job)/[a-z0-9-]{1,63}[.]{1}[a-z0-9-]{1,63}([a-z0-9-]{1,63}[.]){0,2}[a-z0-9-]{1,63}([:][a-z0-9-]{1,63}){0,2}(/[a-z0-9]{12})$)|(:guardrail/[a-z0-9]+$)|(:automated-reasoning-policy/[a-zA-Z0-9]+(:[a-zA-Z0-9]+)?$)|(:(inference-profile|application-inference-profile)/[a-zA-Z0-9-:.]+$)|(:(provisioned-model|model-invocation-job|model-evaluation-job|evaluation-job|model-import-job|imported-model|async-invoke|provisioned-model-v2|provisioned-model-reservation|prompt-router|custom-model-deployment)/[a-z0-9]{12}$))).*"
+      "pattern":".*(^[a-zA-Z0-9][a-zA-Z0-9\\-]*$)|(^arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:custom-model/(imported)/[a-z0-9]{12}$)|(^arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:([0-9]{12}|)((:(fine-tuning-job|model-customization-job|custom-model)/[a-z0-9-]{1,63}[.]{1}[a-z0-9-]{1,63}([a-z0-9-]{1,63}[.]){0,2}[a-z0-9-]{1,63}([:][a-z0-9-]{1,63}){0,2}(/[a-z0-9]{12})$)|(:guardrail/[a-z0-9]+$)|(:automated-reasoning-policy/[a-zA-Z0-9]+(:[a-zA-Z0-9]+)?$)|(:(inference-profile|application-inference-profile)/[a-zA-Z0-9-:.]+$)|(:(provisioned-model|model-invocation-job|model-evaluation-job|evaluation-job|model-import-job|imported-model|async-invoke|provisioned-model-v2|provisioned-model-reservation|prompt-router|custom-model-deployment)/[a-z0-9]{12}$))).*"
     },
     "TeacherModelConfig":{
       "type":"structure",
@@ -8937,6 +9422,65 @@
         }
       },
       "documentation":"<p>Describes the validity terms.</p>"
+    },
+    "VectorSearchBedrockRerankingConfiguration":{
+      "type":"structure",
+      "required":["modelConfiguration"],
+      "members":{
+        "modelConfiguration":{
+          "shape":"VectorSearchBedrockRerankingModelConfiguration",
+          "documentation":"<p>Configuration for the Amazon Bedrock foundation model used for reranking. This includes the model ARN and any additional request fields required by the model.</p>"
+        },
+        "numberOfRerankedResults":{
+          "shape":"VectorSearchBedrockRerankingConfigurationNumberOfRerankedResultsInteger",
+          "documentation":"<p>The maximum number of results to rerank. This limits how many of the initial vector search results will be processed by the reranking model. A smaller number improves performance but may exclude potentially relevant results.</p>"
+        },
+        "metadataConfiguration":{
+          "shape":"MetadataConfigurationForReranking",
+          "documentation":"<p>Configuration for how document metadata should be used during the reranking process. This determines which metadata fields are included when reordering search results.</p>"
+        }
+      },
+      "documentation":"<p>Configuration for using Amazon Bedrock foundation models to rerank Knowledge Base vector search results. This enables more sophisticated relevance ranking using large language models.</p>"
+    },
+    "VectorSearchBedrockRerankingConfigurationNumberOfRerankedResultsInteger":{
+      "type":"integer",
+      "box":true,
+      "max":100,
+      "min":1
+    },
+    "VectorSearchBedrockRerankingModelConfiguration":{
+      "type":"structure",
+      "required":["modelArn"],
+      "members":{
+        "modelArn":{
+          "shape":"BedrockRerankingModelArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the foundation model to use for reranking. This model processes the query and search results to determine a more relevant ordering.</p>"
+        },
+        "additionalModelRequestFields":{
+          "shape":"AdditionalModelRequestFields",
+          "documentation":"<p>A list of additional fields to include in the model request during reranking. These fields provide extra context or configuration options specific to the selected foundation model.</p>"
+        }
+      },
+      "documentation":"<p>Configuration for the Amazon Bedrock foundation model used for reranking vector search results. This specifies which model to use and any additional parameters required by the model.</p>"
+    },
+    "VectorSearchRerankingConfiguration":{
+      "type":"structure",
+      "required":["type"],
+      "members":{
+        "type":{
+          "shape":"VectorSearchRerankingConfigurationType",
+          "documentation":"<p>The type of reranking to apply to vector search results. Currently, the only supported value is BEDROCK, which uses Amazon Bedrock foundation models for reranking.</p>"
+        },
+        "bedrockRerankingConfiguration":{
+          "shape":"VectorSearchBedrockRerankingConfiguration",
+          "documentation":"<p>Configuration for using Amazon Bedrock foundation models to rerank search results. This is required when the reranking type is set to BEDROCK.</p>"
+        }
+      },
+      "documentation":"<p>Configuration for reranking vector search results to improve relevance. Reranking applies additional relevance models to reorder the initial vector search results based on more sophisticated criteria.</p>"
+    },
+    "VectorSearchRerankingConfigurationType":{
+      "type":"string",
+      "enum":["BEDROCK_RERANKING_MODEL"]
     },
     "VpcConfig":{
       "type":"structure",

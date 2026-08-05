@@ -4324,6 +4324,17 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         }
     }
 
+    // All-unknown PlanStep is allowed only for step <= PlanStep (retransmit after we already
+    // planned, executed and deleted the txs of this step; PlanStep was advanced then).
+    // All-unknown with step > PlanStep must not happen on the KQP path: a TxId reaches the
+    // coordinator only after PREPARED is persisted and is in Txs; cancel-before-plan is not
+    // sent to PQ; expire-before-own-PlanStep is blocked by MediatorTimeCast SafeStep.
+    // Hitting this means durable tx state / PlanStep is inconsistent with the mediator —
+    // fail the tablet rather than ack a future empty plan and silently move on.
+    PQ_ENSURE(step <= PlanStep || lastPlannedTxId.Defined())
+        ("step", step)
+        ("planStep", PlanStep);
+
     if ((step > PlanStep) && lastPlannedTxId.Defined()) {
         // если это план из будущего, то надо запомнить, последнюю запланированную транзакцию
         PlanStep = step;

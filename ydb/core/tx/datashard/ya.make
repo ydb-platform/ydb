@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/library/nmslib/include
+)
+
 SRCS(
     datashard.h
     datashard__engine_host.h
@@ -24,6 +28,9 @@ SRCS(
     execution_unit_ctors.h
     execution_unit_kind.h
     export_iface.h
+    hnsw_index.h
+    hnsw_index_build_actor.h
+    hnsw_index_build_unit.h
     key_conflicts.h
     multi_txids.h
     operation.h
@@ -296,6 +303,14 @@ JOIN_SRCS(
 )
 
 JOIN_SRCS(
+    all_hnsw.cpp
+    follower_edge.cpp
+    hnsw_index.cpp
+    hnsw_index_build_unit.cpp
+    hnsw_index_build_actor.cpp
+)
+
+JOIN_SRCS(
     all_incr.cpp
     incr_restore_helpers.cpp
     incr_restore_scan.cpp
@@ -476,6 +491,7 @@ PEERDIR(
     ydb/core/wrappers
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/nmslib
     ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/actors/http
@@ -526,6 +542,7 @@ RECURSE_FOR_TESTS(
     ut_export
     ut_external_blobs
     ut_followers
+    ut_hnsw_index
     ut_incremental_backup
     ut_incremental_restore_scan
     ut_init

@@ -8220,6 +8220,21 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
         proto->MutableDetailedMetricsSettings()->MutableConfigured()->CopyFrom(tableInfo->GetDetailedMetricsSettings());
     }
 
+    // Forwarded only for the alter that publishes a vector index posting table,
+    // so the shard can build its in-memory HNSW index (see FinalizeIndexImplTable).
+    if (alterData->TableDescriptionFull.Defined()
+        && alterData->TableDescriptionFull->HasVectorIndexKmeansTreeDescription())
+    {
+        proto->MutableVectorIndexKmeansTreeDescription()->CopyFrom(
+            alterData->TableDescriptionFull->GetVectorIndexKmeansTreeDescription());
+        proto->SetVectorIndexEmbeddingColumn(
+            alterData->TableDescriptionFull->GetVectorIndexEmbeddingColumn());
+        if (alterData->TableDescriptionFull->HasVectorIndexEmbeddingColumnId()) {
+            proto->SetVectorIndexEmbeddingColumnId(
+                alterData->TableDescriptionFull->GetVectorIndexEmbeddingColumnId());
+        }
+    }
+
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
     return txBody;

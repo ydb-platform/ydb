@@ -693,6 +693,24 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             del = ", ";
         }
 
+        const auto& vectorSettings = kMeansTreeSettings->settings();
+        if (vectorSettings.has_hnsw_min_rows()) {
+            Stream << del << "hnsw_min_rows=" << vectorSettings.hnsw_min_rows();
+            del = ", ";
+        }
+        if (vectorSettings.has_hnsw_connectivity()) {
+            Stream << del << "hnsw_connectivity=" << vectorSettings.hnsw_connectivity();
+            del = ", ";
+        }
+        if (vectorSettings.has_hnsw_construction_candidates()) {
+            Stream << del << "hnsw_construction_candidates=" << vectorSettings.hnsw_construction_candidates();
+            del = ", ";
+        }
+        if (vectorSettings.has_hnsw_search_candidates()) {
+            Stream << del << "hnsw_search_candidates=" << vectorSettings.hnsw_search_candidates();
+            del = ", ";
+        }
+
         Stream << ")";
     }
 

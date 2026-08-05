@@ -711,6 +711,13 @@ namespace {
             return false;
         }
 
+        if ((settings.has_hnsw_connectivity() && settings.hnsw_connectivity() == 0)
+            || (settings.has_hnsw_construction_candidates() && settings.hnsw_construction_candidates() == 0)
+            || (settings.has_hnsw_search_candidates() && settings.hnsw_search_candidates() == 0)) {
+            error = "HNSW connectivity and candidate counts should be greater than 0";
+            return false;
+        }
+
         if (partial) {
             if (settings.has_vector_type()) {
                 if (settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED) {
@@ -1109,6 +1116,18 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
         settings.set_overlap_ratio(ParseDouble(nameLower, value, error));
     } else if (nameLower == "adaptive_clusters") {
         settings.set_adaptive_clusters(ParseBool(nameLower, value, error));
+    } else if (nameLower == "hnsw_min_rows") {
+        settings.mutable_settings()->set_hnsw_min_rows(
+            ParseUInt32(nameLower, value, 0, Max<ui32>(), error));
+    } else if (nameLower == "hnsw_connectivity") {
+        settings.mutable_settings()->set_hnsw_connectivity(
+            ParseUInt32(nameLower, value, 1, Max<ui32>(), error));
+    } else if (nameLower == "hnsw_construction_candidates") {
+        settings.mutable_settings()->set_hnsw_construction_candidates(
+            ParseUInt32(nameLower, value, 1, Max<ui32>(), error));
+    } else if (nameLower == "hnsw_search_candidates") {
+        settings.mutable_settings()->set_hnsw_search_candidates(
+            ParseUInt32(nameLower, value, 1, Max<ui32>(), error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;

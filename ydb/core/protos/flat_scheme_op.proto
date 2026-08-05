@@ -424,6 +424,15 @@ message TTableDescription {
     // Multi-column statistics.
     repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 53;
     repeated string DropMultiColumnStatistics = 54;
+
+    // Set only on the ESchemeOpFinalizeBuildIndexImplTable alter of a vector
+    // index posting table, so the shard hosting it can build an in-memory HNSW
+    // index for accelerated top-K search. The embedding column keeps its
+    // original base table name, so it has to be named explicitly rather than
+    // derived from a well-known constant.
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 55;
+    optional string VectorIndexEmbeddingColumn = 56;
+    optional uint32 VectorIndexEmbeddingColumnId = 57;
 }
 
 message TCompressionOptions {

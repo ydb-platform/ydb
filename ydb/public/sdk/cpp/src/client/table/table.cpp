@@ -2931,6 +2931,10 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorInd
         .Metric = covertMetric(),
         .VectorType = convertVectorType(),
         .VectorDimension = proto.vector_dimension(),
+        .HnswMinRows = proto.has_hnsw_min_rows() ? proto.hnsw_min_rows() : 10000,
+        .HnswConnectivity = proto.has_hnsw_connectivity() ? proto.hnsw_connectivity() : 16,
+        .HnswConstructionCandidates = proto.has_hnsw_construction_candidates() ? proto.hnsw_construction_candidates() : 200,
+        .HnswSearchCandidates = proto.has_hnsw_search_candidates() ? proto.hnsw_search_candidates() : 15,
     };
 }
 
@@ -2970,6 +2974,10 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
     settings.set_metric(convertMetric());
     settings.set_vector_type(convertVectorType());
     settings.set_vector_dimension(VectorDimension);
+    settings.set_hnsw_min_rows(HnswMinRows);
+    settings.set_hnsw_connectivity(HnswConnectivity);
+    settings.set_hnsw_construction_candidates(HnswConstructionCandidates);
+    settings.set_hnsw_search_candidates(HnswSearchCandidates);
 }
 
 void TVectorIndexSettings::Out(IOutputStream& o) const {

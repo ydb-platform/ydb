@@ -799,6 +799,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::ReceiveSnapshotCleanup);
         plan.push_back(EExecutionUnitKind::AlterMoveShadow);
         plan.push_back(EExecutionUnitKind::AlterTable);
+        plan.push_back(EExecutionUnitKind::BuildHnswIndex);
         plan.push_back(EExecutionUnitKind::DropTable);
         plan.push_back(EExecutionUnitKind::PrepareIndexValidation);
         plan.push_back(EExecutionUnitKind::CreatePersistentSnapshot);

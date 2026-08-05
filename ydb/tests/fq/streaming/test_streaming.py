@@ -2201,4 +2201,3 @@ FROM `{table_name}`"""
         assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
-

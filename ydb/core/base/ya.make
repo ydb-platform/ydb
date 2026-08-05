@@ -56,6 +56,8 @@ SRCS(
     row_version.cpp
     row_version.h
     runtime_feature_flags.h
+    s3_object_key.cpp
+    s3_object_key.h
     services_assert.cpp
     shared_quota.h
     statestorage.cpp

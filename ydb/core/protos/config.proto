@@ -2823,7 +2823,6 @@ message TColumnShardConfig {
     optional bool CombineChunksInResult = 54 [default = true];
     optional bool EnableDiagnostics = 55 [default = true];
     optional bool EnableParallelCompaction = 56 [default = true];
-
     message TStatistics {
         optional uint32 ReportBaseStatisticsPeriodMs = 1 [default = 60000];
         optional uint32 ReportExecutorStatisticsPeriodMs = 2 [default = 60000];
@@ -2856,6 +2855,7 @@ message TColumnShardConfig {
     optional TReadRetryPolicy ReadRetryPolicy = 70;
     optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
     optional bool EnableBulkUpsertValidation = 72 [default = true];
+    optional bool EnableTieringObjectKeyTree = 73 [default = true];
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

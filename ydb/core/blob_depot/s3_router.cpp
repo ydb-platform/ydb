@@ -175,8 +175,7 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr IsUsingProxy;
         NMonitoring::THistogramPtr BalancerLatencyMs;
 
-        TIntrusivePtr<TRouteCounters> BalancerRouteCounters;
-        TIntrusivePtr<TRouteCounters> NonBalancerRouteCounters;
+        NMonitoring::TDynamicCounterPtr CountersGroup;
 
         TMonotonic BalancerRequestStartedAt;
 
@@ -200,20 +199,25 @@ namespace NKikimr::NBlobDepot {
 
         void SetupCounters() {
             if (auto counters = AppData()->Counters) {
-                auto group = GetServiceCounters(std::move(counters), "blob_depot")
+                CountersGroup = GetServiceCounters(std::move(counters), "blob_depot")
                     ->GetSubgroup("tablet", ::ToString(TabletId))
                     ->GetSubgroup("subsystem", "s3_router");
-                BalancerRequests      = group->GetCounter("BalancerRequests", true);
-                BalancerSuccesses     = group->GetCounter("BalancerSuccesses", true);
-                BalancerFailures      = group->GetCounter("BalancerFailures", true);
-                EndpointSwitches      = group->GetCounter("EndpointSwitches", true);
-                FiveXxRefreshTriggers = group->GetCounter("FiveXxRefreshTriggers", true);
-                IsUsingProxy          = group->GetCounter("IsUsingProxy", false);
-                BalancerLatencyMs     = group->GetHistogram("BalancerLatencyMs", GetRequestLatencyCollector());
-
-                BalancerRouteCounters = MakeIntrusive<TRouteCounters>(group->GetSubgroup("route", "balancer"));
-                NonBalancerRouteCounters = MakeIntrusive<TRouteCounters>(group->GetSubgroup("route", "non_balancer"));
+                BalancerRequests      = CountersGroup->GetCounter("BalancerRequests", true);
+                BalancerSuccesses     = CountersGroup->GetCounter("BalancerSuccesses", true);
+                BalancerFailures      = CountersGroup->GetCounter("BalancerFailures", true);
+                EndpointSwitches      = CountersGroup->GetCounter("EndpointSwitches", true);
+                FiveXxRefreshTriggers = CountersGroup->GetCounter("FiveXxRefreshTriggers", true);
+                IsUsingProxy          = CountersGroup->GetCounter("IsUsingProxy", false);
+                BalancerLatencyMs     = CountersGroup->GetHistogram("BalancerLatencyMs", GetRequestLatencyCollector());
             }
+        }
+
+        TIntrusivePtr<TRouteCounters> MakeRouteCounters(const TString& route, const TString& host) {
+            if (!CountersGroup) {
+                return nullptr;
+            }
+
+            return MakeIntrusive<TRouteCounters>(CountersGroup->GetSubgroup("route", route)->GetSubgroup("host", host));
         }
 
         ui16 BalancerProxyPort() const {
@@ -238,7 +242,8 @@ namespace NKikimr::NBlobDepot {
             auto* mutableSettings = Settings.MutableSettings();
             mutableSettings->SetEndpoint(endpoint);
             RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
-                AppData()->AwsClientConfig, *mutableSettings), BalancerRouteCounters);
+                AppData()->AwsClientConfig, *mutableSettings),
+                MakeRouteCounters("balancer", endpoint));
             CurrentEndpoint = endpoint;
 
             YDB_LOG_INFO("S3Router endpoint set (direct)",
@@ -258,9 +263,11 @@ namespace NKikimr::NBlobDepot {
             mutableSettings->SetProxyHost(host);
             mutableSettings->SetProxyPort(port);
             mutableSettings->SetProxyScheme(Settings.GetBalancerProxyScheme());
+            const TString proxyEndpoint = TStringBuilder() << host << ':' << port;
             RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
-                AppData()->AwsClientConfig, *mutableSettings), NonBalancerRouteCounters);
-            CurrentEndpoint = TStringBuilder() << host << ':' << port;
+                AppData()->AwsClientConfig, *mutableSettings),
+                MakeRouteCounters("non_balancer", proxyEndpoint));
+            CurrentEndpoint = proxyEndpoint;
 
             YDB_LOG_INFO("S3Router endpoint switch (via proxy)",
                 {"marker", "BDTS26"},

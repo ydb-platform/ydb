@@ -20,6 +20,7 @@ namespace {
 
 // Edge waits under injection: keep short so a dead dispatch fails into retry quickly.
 constexpr TDuration kDistThreePqEdgeTimeout = TDuration::Seconds(1);
+constexpr ui32 kDistThreePqMsgCount = 2;
 
 class TDistThreePqRetry : public yexception {
 };
@@ -31,6 +32,7 @@ struct TThreeRealPqEnv {
     TActorId Edge;
     TVector<ui64> TabletIds;
     THashMap<ui64, TActorId> Pipes;
+    THashMap<ui64, ui32> MsgSeqNo;
 
     TThreeRealPqEnv() {
         // Keep id=2 free (balancer id in TTestContext); use 1/3/4 for real PQ tablets.
@@ -66,6 +68,7 @@ struct TThreeRealPqEnv {
     {
         activeZone = false;
         ResetAllPipes();
+        MsgSeqNo.clear();
         Runtime.Reset(new TTestBasicRuntime());
         Runtime->SetScheduledLimit(5'000);
         TTestContext::SetupLogging(*Runtime, /*enableDetailedPQLog=*/false);
@@ -98,6 +101,7 @@ struct TThreeRealPqEnv {
                 *Runtime,
                 tabletId,
                 Edge);
+            MsgSeqNo[tabletId] = 0;
         }
     }
 
@@ -178,15 +182,77 @@ struct TThreeRealPqEnv {
         }
         ythrow TDistThreePqRetry() << "tablets not ready after reboot";
     }
+
+    ui64 GetEndOffset(ui64 tabletId) {
+        for (i32 retriesLeft = 5; retriesLeft > 0; --retriesLeft) {
+            try {
+                Runtime->ResetScheduledCount();
+                ResetPipe(tabletId);
+                auto request = MakeHolder<TEvPersQueue::TEvOffsets>();
+                SendToTablet(tabletId, request.Release());
+                auto result = Runtime->GrabEdgeEvent<TEvPersQueue::TEvOffsetsResponse>(
+                    kDistThreePqEdgeTimeout);
+                if (!result || result->Record.PartResultSize() == 0) {
+                    continue;
+                }
+                if (result->Record.GetPartResult(0).GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                    Runtime->DispatchEvents();
+                    retriesLeft = 5;
+                    continue;
+                }
+                return result->Record.GetPartResult(0).GetEndOffset();
+            } catch (const NActors::TSchedulingLimitReachedException&) {
+            } catch (const NActors::TEmptyEventQueueException&) {
+            }
+        }
+        ythrow TDistThreePqRetry() << "GetEndOffset failed for tablet " << tabletId;
+    }
+
+    i64 GetClientOffset(ui64 tabletId, const TString& user) {
+        for (i32 retriesLeft = 5; retriesLeft > 0; --retriesLeft) {
+            try {
+                Runtime->ResetScheduledCount();
+                ResetPipe(tabletId);
+                auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+                auto* req = request->Record.MutablePartitionRequest();
+                req->SetPartition(0);
+                req->MutableCmdGetClientOffset()->SetClientId(user);
+                SendToTablet(tabletId, request.Release());
+                auto result = Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(kDistThreePqEdgeTimeout);
+                if (!result) {
+                    continue;
+                }
+                if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                    Runtime->DispatchEvents();
+                    retriesLeft = 5;
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (int)result->Record.GetErrorCode(), (int)NPersQueue::NErrorCode::OK);
+                UNIT_ASSERT(result->Record.GetPartitionResponse().HasCmdGetClientOffsetResult());
+                return result->Record.GetPartitionResponse().GetCmdGetClientOffsetResult().GetOffset();
+            } catch (const NActors::TSchedulingLimitReachedException&) {
+            } catch (const NActors::TEmptyEventQueueException&) {
+            }
+        }
+        ythrow TDistThreePqRetry() << "GetClientOffset failed for tablet " << tabletId;
+    }
 };
 
-void ProposeDistributedOffsetTx(TThreeRealPqEnv& env, ui64 txId);
+void ProposeDistributedOffsetTx(TThreeRealPqEnv& env, ui64 txId, ui64 begin, ui64 end);
+
+void RecordOrigin(THashSet<ui64>& seenOrigins, const NKikimrPQ::TEvProposeTransactionResult& record) {
+    UNIT_ASSERT_C(record.HasOrigin(), record.ShortDebugString());
+    seenOrigins.insert(record.GetOrigin());
+}
 
 void WaitNProposeResults(
     TThreeRealPqEnv& env,
     ui64 txId,
     NKikimrPQ::TEvProposeTransactionResult::EStatus status,
-    ui32 expectedCount)
+    ui32 expectedCount,
+    ui64 begin,
+    ui64 end)
 {
     THashSet<ui64> seenOrigins;
     for (ui32 round = 0; round < 20 && seenOrigins.size() < expectedCount; ++round) {
@@ -199,7 +265,7 @@ void WaitNProposeResults(
                 env.ResetAllPipes();
                 env.WaitAllTabletsReady();
                 if (status == NKikimrPQ::TEvProposeTransactionResult::PREPARED) {
-                    ProposeDistributedOffsetTx(env, txId);
+                    ProposeDistributedOffsetTx(env, txId, begin, end);
                 }
                 continue;
             }
@@ -212,11 +278,7 @@ void WaitNProposeResults(
                 (gotStatus == NKikimrPQ::TEvProposeTransactionResult::PREPARED ||
                  gotStatus == NKikimrPQ::TEvProposeTransactionResult::COMPLETE))
             {
-                if (event->Record.HasOrigin()) {
-                    seenOrigins.insert(event->Record.GetOrigin());
-                } else {
-                    seenOrigins.insert(seenOrigins.size());
-                }
+                RecordOrigin(seenOrigins, event->Record);
                 continue;
             }
             if (gotStatus != status) {
@@ -225,11 +287,7 @@ void WaitNProposeResults(
                     << static_cast<int>(gotStatus)
                     << " expected=" << static_cast<int>(status);
             }
-            if (event->Record.HasOrigin()) {
-                seenOrigins.insert(event->Record.GetOrigin());
-            } else {
-                seenOrigins.insert(seenOrigins.size());
-            }
+            RecordOrigin(seenOrigins, event->Record);
         } catch (const NActors::TSchedulingLimitReachedException&) {
             env.Runtime->ResetScheduledCount();
         } catch (const NActors::TEmptyEventQueueException&) {
@@ -243,7 +301,7 @@ void WaitNProposeResults(
     }
 }
 
-void ProposeDistributedOffsetTx(TThreeRealPqEnv& env, ui64 txId) {
+void ProposeDistributedOffsetTx(TThreeRealPqEnv& env, ui64 txId, ui64 begin, ui64 end) {
     for (ui64 tabletId : env.TabletIds) {
         env.ResetPipe(tabletId);
         auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
@@ -252,8 +310,8 @@ void ProposeDistributedOffsetTx(TThreeRealPqEnv& env, ui64 txId) {
         auto* body = event->Record.MutableData();
         auto* operation = body->MutableOperations()->Add();
         operation->SetPartitionId(0);
-        operation->SetCommitOffsetsBegin(0);
-        operation->SetCommitOffsetsEnd(0);
+        operation->SetCommitOffsetsBegin(begin);
+        operation->SetCommitOffsetsEnd(end);
         operation->SetConsumer("user");
         operation->SetPath("/topic");
         // Peer shards only — self is the local participant; RS mesh is among the three tablets.
@@ -309,11 +367,7 @@ void WaitAllCompleteAfterPlan(TThreeRealPqEnv& env, ui64 txId, ui64 step) {
                 continue;
             }
             if (event->Record.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::COMPLETE) {
-                if (event->Record.HasOrigin()) {
-                    completedOrigins.insert(event->Record.GetOrigin());
-                } else {
-                    completedOrigins.insert(completedOrigins.size());
-                }
+                RecordOrigin(completedOrigins, event->Record);
                 continue;
             }
             if (event->Record.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::PREPARED) {
@@ -336,6 +390,57 @@ void WaitAllCompleteAfterPlan(TThreeRealPqEnv& env, ui64 txId, ui64 step) {
     }
 }
 
+bool AllConsumerOffsetsAt(TThreeRealPqEnv& env, i64 expected) {
+    for (ui64 tabletId : env.TabletIds) {
+        if (env.GetClientOffset(tabletId, "user") != expected) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void AssertAllConsumerOffsetsAt(TThreeRealPqEnv& env, i64 expected) {
+    for (ui64 tabletId : env.TabletIds) {
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            env.GetClientOffset(tabletId, "user"), expected,
+            "tabletId=" << tabletId);
+    }
+}
+
+// Seed each tablet partition so the distributed offset-commit has a real [0, msgCount) range.
+void EnsureMessagesWritten(TThreeRealPqEnv& env, ui32 attempt) {
+    for (ui64 tabletId : env.TabletIds) {
+        const ui64 endOffset = env.GetEndOffset(tabletId);
+        if (endOffset >= kDistThreePqMsgCount) {
+            continue;
+        }
+        TVector<std::pair<ui64, TString>> data;
+        data.reserve(kDistThreePqMsgCount - endOffset);
+        for (ui64 i = endOffset; i < kDistThreePqMsgCount; ++i) {
+            data.emplace_back(
+                i + 1,
+                TStringBuilder() << "d3-" << tabletId << "-" << attempt << "-" << i);
+        }
+        CmdWrite(
+            env.Runtime.Get(),
+            tabletId,
+            env.Edge,
+            /*partition=*/0,
+            TStringBuilder() << "src-" << tabletId,
+            env.MsgSeqNo[tabletId],
+            data,
+            /*error=*/false,
+            /*alreadyWrittenSeqNo=*/{},
+            /*isFirst=*/endOffset == 0,
+            /*ownerCookie=*/"",
+            /*msn=*/-1,
+            /*offset=*/-1,
+            /*treatWrongCookieAsError=*/false,
+            /*treatBadOffsetAsError=*/true,
+            /*disableDeduplication=*/true);
+    }
+}
+
 void DistributedThreePqTxScenario(TThreeRealPqEnv& env, bool& activeZone) {
     for (ui32 attempt = 0; attempt < 15; ++attempt) {
         try {
@@ -345,14 +450,23 @@ void DistributedThreePqTxScenario(TThreeRealPqEnv& env, bool& activeZone) {
             env.DrainEdgeProposeResults();
             env.WaitAllTabletsReady();
 
+            // Previous attempt may have committed while a later GrabEdgeEvent failed.
+            if (AllConsumerOffsetsAt(env, kDistThreePqMsgCount)) {
+                return;
+            }
+
+            EnsureMessagesWritten(env, attempt);
+
             const ui64 txId = 9400 + attempt;
             const ui64 step = 100 + txId;
+            constexpr ui64 begin = 0;
+            constexpr ui64 end = kDistThreePqMsgCount;
 
             // Propose outside the injection zone so the reboot/pipe matrix stays small.
-            ProposeDistributedOffsetTx(env, txId);
+            ProposeDistributedOffsetTx(env, txId, begin, end);
             WaitNProposeResults(
                 env, txId, NKikimrPQ::TEvProposeTransactionResult::PREPARED,
-                TThreeRealPqEnv::TabletCount);
+                TThreeRealPqEnv::TabletCount, begin, end);
 
             // Inject through PlanStep delivery and the following RS mesh / COMPLETE wait.
             // PlanDistributedTx only queues pipe sends; tablet events run while we wait.
@@ -363,6 +477,7 @@ void DistributedThreePqTxScenario(TThreeRealPqEnv& env, bool& activeZone) {
             activeZone = false;
 
             DrainPlanStepSideEffects(env);
+            AssertAllConsumerOffsetsAt(env, kDistThreePqMsgCount);
             return;
         } catch (const TDistThreePqRetry&) {
             activeZone = false;

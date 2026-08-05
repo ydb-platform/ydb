@@ -4598,6 +4598,25 @@ public:
         ythrow TTopicTxInjectionRetry() << "supportive partition id did not appear in _txinfo";
     }
 
+    void DrainEdgeProposeAndPlanResults() {
+        for (;;) {
+            auto event = Tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(
+                TDuration::MilliSeconds(1));
+            if (!event) {
+                break;
+            }
+        }
+        DrainPlanStepSideEffects();
+    }
+
+    // Best-effort: PlanStep may emit Ack/Accepted; under injection they can be dropped.
+    void DrainPlanStepSideEffects() {
+        for (ui32 i = 0; i < 4; ++i) {
+            Tc.Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(TDuration::MilliSeconds(1));
+            Tc.Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(TDuration::MilliSeconds(1));
+        }
+    }
+
     void CommitTopicTransaction(const TWriteId& writeId, ui32 supportivePartitionId, ui64 txId) {
         for (i32 retriesLeft = 5; retriesLeft > 0; --retriesLeft) {
             try {
@@ -4646,21 +4665,32 @@ public:
                     SendToPipe(event.Release());
                 }
 
-                {
+                bool gotComplete = false;
+                for (ui32 waitRound = 0; waitRound < 8 && !gotComplete; ++waitRound) {
                     auto event = Tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(
                         kTopicTxInjectionEdgeTimeout);
-                    if (!event || event->Record.GetTxId() != txId) {
-                        ythrow TTopicTxInjectionRetry() << "missing COMPLETE after PlanStep";
+                    if (!event) {
+                        break;
+                    }
+                    if (event->Record.GetTxId() != txId) {
+                        continue;
+                    }
+                    if (event->Record.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::PREPARED) {
+                        // Late PREPARED after PlanStep — ignore and keep waiting for COMPLETE.
+                        continue;
                     }
                     if (event->Record.GetStatus() != NKikimrPQ::TEvProposeTransactionResult::COMPLETE) {
                         ythrow TTopicTxInjectionRetry()
                             << "Propose COMPLETE status="
                             << static_cast<int>(event->Record.GetStatus());
                     }
+                    gotComplete = true;
+                }
+                if (!gotComplete) {
+                    ythrow TTopicTxInjectionRetry() << "missing COMPLETE after PlanStep";
                 }
 
-                Tc.Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(TDuration::Seconds(1));
-                Tc.Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(TDuration::Seconds(1));
+                DrainPlanStepSideEffects();
                 return;
             } catch (const NActors::TSchedulingLimitReachedException&) {
                 ResetPipe();
@@ -4676,8 +4706,8 @@ private:
     TActorId Pipe;
 };
 
-ui64 GetEndOffsetOrZero(TTestContext& tc) {
-    for (i32 retriesLeft = 3; retriesLeft > 0; --retriesLeft) {
+ui64 GetEndOffset(TTestContext& tc) {
+    for (i32 retriesLeft = 5; retriesLeft > 0; --retriesLeft) {
         try {
             tc.Runtime->ResetScheduledCount();
             auto request = MakeHolder<TEvPersQueue::TEvOffsets>();
@@ -4689,7 +4719,7 @@ ui64 GetEndOffsetOrZero(TTestContext& tc) {
             }
             if (result->Record.GetPartResult(0).GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
                 tc.Runtime->DispatchEvents();
-                retriesLeft = 3;
+                retriesLeft = 5;
                 continue;
             }
             return result->Record.GetPartResult(0).GetEndOffset();
@@ -4697,7 +4727,71 @@ ui64 GetEndOffsetOrZero(TTestContext& tc) {
         } catch (const NActors::TEmptyEventQueueException&) {
         }
     }
-    return 0;
+    ythrow TTopicTxInjectionRetry() << "GetEndOffset failed";
+}
+
+NKikimrClient::TCmdReadResult CaptureCmdReadResult(
+    TTestContext& tc, ui64 offset, ui32 count)
+{
+    for (i32 retriesLeft = 5; retriesLeft > 0; --retriesLeft) {
+        try {
+            tc.Runtime->ResetScheduledCount();
+            auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+            auto* req = request->Record.MutablePartitionRequest();
+            req->SetPartition(0);
+            req->SetCookie(123);
+            auto* read = req->MutableCmdRead();
+            read->SetClientId("user");
+            read->SetSessionId("");
+            read->SetOffset(offset);
+            read->SetCount(count);
+            read->SetBytes(16_MB);
+            read->SetReadToBlobEnd(true);
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+            auto response = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(
+                kTopicTxInjectionEdgeTimeout);
+            if (!response) {
+                continue;
+            }
+            if (response->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                tc.Runtime->DispatchEvents();
+                retriesLeft = 5;
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                (int)response->Record.GetErrorCode(), (int)NPersQueue::NErrorCode::OK);
+            UNIT_ASSERT(response->Record.GetPartitionResponse().HasCmdReadResult());
+            return response->Record.GetPartitionResponse().GetCmdReadResult();
+        } catch (const NActors::TSchedulingLimitReachedException&) {
+        } catch (const NActors::TEmptyEventQueueException&) {
+        }
+    }
+    ythrow TTopicTxInjectionRetry() << "CaptureCmdReadResult failed";
+}
+
+void AssertTopicTxCommittedPayloads(
+    TTestContext& tc,
+    ui64 readFrom,
+    ui32 txCount,
+    TMaybe<ui32> expectedAttempt)
+{
+    PQGetPartInfo(0, readFrom + txCount, tc);
+    const auto readResult = CaptureCmdReadResult(tc, readFrom, txCount);
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), txCount);
+    for (ui32 i = 0; i < txCount; ++i) {
+        const auto& row = readResult.GetResult(i);
+        UNIT_ASSERT_VALUES_EQUAL(row.GetOffset(), readFrom + i);
+        if (expectedAttempt.Defined()) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                row.GetData(),
+                TStringBuilder() << "topic-tx-reboot-" << *expectedAttempt << "-" << i);
+        } else {
+            UNIT_ASSERT_C(
+                row.GetData().StartsWith("topic-tx-reboot-"),
+                "unexpected payload=" << row.GetData());
+        }
+    }
 }
 
 void TopicTxWriteAndCommitScenario(TTestContext& tc, bool& activeZone) {
@@ -4710,20 +4804,14 @@ void TopicTxWriteAndCommitScenario(TTestContext& tc, bool& activeZone) {
         try {
             tc.Runtime->ResetScheduledCount();
             helper.ResetPipe();
+            helper.DrainEdgeProposeAndPlanResults();
             activeZone = false;
 
-            const ui64 endBefore = GetEndOffsetOrZero(tc);
+            const ui64 endBefore = GetEndOffset(tc);
             // Previous attempt may have committed while a later GrabEdgeEvent failed.
             if (endBefore >= txCount) {
-                const ui64 readFrom = endBefore - txCount;
-                TVector<i32> expectedOffsets;
-                expectedOffsets.reserve(txCount);
-                for (ui32 i = 0; i < txCount; ++i) {
-                    expectedOffsets.push_back(static_cast<i32>(readFrom + i));
-                }
-                PQGetPartInfo(0, endBefore, tc);
-                CmdRead(/*partition=*/0, /*offset=*/readFrom, /*count=*/txCount, /*size=*/16_MB,
-                        /*resCount=*/txCount, /*timeouted=*/false, tc, expectedOffsets);
+                AssertTopicTxCommittedPayloads(
+                    tc, endBefore - txCount, txCount, /*expectedAttempt=*/Nothing());
                 return;
             }
 
@@ -4745,14 +4833,7 @@ void TopicTxWriteAndCommitScenario(TTestContext& tc, bool& activeZone) {
             helper.CommitTopicTransaction(writeId, supportivePartitionId, txId);
             activeZone = false;
 
-            PQGetPartInfo(0, endBefore + txCount, tc);
-            TVector<i32> expectedOffsets;
-            expectedOffsets.reserve(txCount);
-            for (ui32 i = 0; i < txCount; ++i) {
-                expectedOffsets.push_back(static_cast<i32>(endBefore + i));
-            }
-            CmdRead(/*partition=*/0, /*offset=*/endBefore, /*count=*/txCount, /*size=*/16_MB,
-                    /*resCount=*/txCount, /*timeouted=*/false, tc, expectedOffsets);
+            AssertTopicTxCommittedPayloads(tc, endBefore, txCount, attempt);
             return;
         } catch (const TTopicTxInjectionRetry&) {
             activeZone = false;

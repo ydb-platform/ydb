@@ -157,6 +157,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageWithIAMWith
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageWithIAMWithoutFolderId_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_ContentBasedDeduplication_Compatibility
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility_TablesFormat0
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility_WithUserSettings
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_MigrationFinished_WithUserSettings
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_WithUserSettings
@@ -421,7 +422,9 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery20
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery22
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/proxy_service/ut ScriptExecutionsTest.GetOperationDuringAtomicUploadFinalization
+ydb/core/kqp/ut/batch_operations KqpBatchDelete.ManyPartitions_2
 ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
+ydb/core/kqp/ut/batch_operations unittest.[*/*] chunk
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateAndAlterStreamingQuery
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.OffsetsRecoveryAfterManualAndInternalRetry
@@ -543,6 +546,7 @@ ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.DescribeTest
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.UnauthorizedDescriber
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicNotExists
+ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithoutConsumer
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.UnauthorizedPurger
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.ReceiveAttemptIdPartitionRouting
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.Deduplicated_Reboot
@@ -617,6 +621,7 @@ ydb/core/tx/schemeshard/ut_set_column_constraint unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_acl_write
+ydb/core/viewer/tests test.py.TestViewer.test_viewer_peers
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_query_long_multipart
 ydb/core/viewer/ut Viewer.PutRecordViewer
 ydb/core/viewer/ut Viewer.QueryExecuteScript

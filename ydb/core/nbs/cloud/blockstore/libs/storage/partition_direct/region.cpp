@@ -1,10 +1,10 @@
 #include "region.h"
 
-#include "region_geometry.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 

@@ -22,7 +22,6 @@ SRCS(
     part_monitoring.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
-    region_geometry.cpp
     read_request_executor.cpp
     read_request_multiple_location.cpp
     read_request_single_location.cpp

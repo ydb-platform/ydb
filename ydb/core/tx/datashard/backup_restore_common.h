@@ -24,6 +24,13 @@ protected:
     virtual void ResetWaiting(TOperation::TPtr op) = 0;
     virtual bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) = 0;
 
+    // Most backup/restore Run() failures mean "nothing was started" and the
+    // unit is done. Units that perform flat-table reads may instead need the
+    // transaction restarted after a page fault.
+    virtual EExecutionStatus RunFailureStatus() const {
+        return EExecutionStatus::Executed;
+    }
+
     virtual bool HasResult(TOperation::TPtr op) const = 0;
     virtual bool ProcessResult(TOperation::TPtr op, const TActorContext& ctx) = 0;
 
@@ -100,7 +107,7 @@ public:
                 {"tabletId", DataShard.TabletID()});
 
             if (!Run(op, txc, ctx)) {
-                return EExecutionStatus::Executed;
+                return RunFailureStatus();
             }
 
             SetWaiting(op);

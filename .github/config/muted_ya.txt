@@ -91,6 +91,8 @@ ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[requ
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[3]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[4]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[7]
+ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test_batched_source
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[light-column]

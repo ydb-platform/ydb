@@ -273,6 +273,7 @@ namespace NKikimr::NBlobDepot {
             if (EndpointSwitches) {
                 ++*EndpointSwitches;
             }
+
             if (IsUsingProxy) {
                 *IsUsingProxy = 1;
             }
@@ -330,6 +331,7 @@ namespace NKikimr::NBlobDepot {
             if (FiveXxRefreshTriggers) {
                 ++*FiveXxRefreshTriggers;
             }
+
             if (!RefreshInFlight) {
                 IssueBalancerRequest();
             }

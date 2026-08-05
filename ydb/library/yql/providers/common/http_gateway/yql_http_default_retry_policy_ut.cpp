@@ -122,6 +122,29 @@ Y_UNIT_TEST_SUITE(THttpDefaultRetryPolicyTest) {
         UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_CONNECT, 0).Defined());
     }
 
+    Y_UNIT_TEST(FqPolicyDnsErrorBudgetRestartsAfterOtherError) {
+        auto state = GetFqHTTPRetryPolicy()->CreateRetryState();
+        UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_RESOLVE_HOST, 0).Defined());
+        Sleep(TDuration::Seconds(11));
+
+        // The host has been resolved in between, so the dns budget starts over and the dns
+        // error is retried even though the first dns error is more than 10 seconds old
+        UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_CONNECT, 0).Defined());
+        UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_RESOLVE_HOST, 0).Defined());
+    }
+
+    Y_UNIT_TEST(FqPolicyDnsErrorAfterOtherErrorsIsRetried) {
+        auto state = GetFqHTTPRetryPolicy()->CreateRetryState();
+        // Other errors use up more than the dns budget before the first dns error arrives
+        UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_CONNECT, 0).Defined());
+        Sleep(TDuration::Seconds(11));
+        UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_CONNECT, 0).Defined());
+
+        // The dns budget is counted from the first dns error, not from the start of the session
+        UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_RESOLVE_HOST, 0).Defined());
+        UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_RESOLVE_HOST, 0).Defined());
+    }
+
 }
 
 } // namespace NYql

@@ -43,8 +43,9 @@ std::unordered_set<CURLcode> YqlRetriedCurlCodes() {
 }
 
 // Wraps a standard policy to cut DNS resolution retries short: a host that does not resolve
-// is unlikely to start resolving within the full retry budget. Other errors keep the shared
-// backoff and the full budget of the wrapped policy.
+// is unlikely to start resolving within the full retry budget. The dns budget is counted from
+// the first dns error, so a dns error late in the session still gets its own retries. Other
+// errors keep the shared backoff and the full budget of the wrapped policy.
 class TFqRetryPolicy final: public IHTTPGateway::TRetryPolicy {
 public:
     explicit TFqRetryPolicy(IHTTPGateway::TRetryPolicy::TPtr policy)
@@ -64,14 +65,22 @@ private:
         }
 
         TMaybe<TDuration> GetNextRetryDelay(CURLcode curlCode, long httpCode) override {
-            if (curlCode == CURLE_COULDNT_RESOLVE_HOST && TInstant::Now() - StartTime >= DNS_ERROR_MAX_TIME) {
-                return Nothing();
+            if (curlCode != CURLE_COULDNT_RESOLVE_HOST) {
+                // The host has been resolved, so a later dns error starts a new budget
+                DnsErrorsStartTime.reset();
+            } else {
+                const TInstant now = TInstant::Now();
+                if (!DnsErrorsStartTime) {
+                    DnsErrorsStartTime = now;
+                } else if (now - *DnsErrorsStartTime >= DNS_ERROR_MAX_TIME) {
+                    return Nothing();
+                }
             }
             return State->GetNextRetryDelay(curlCode, httpCode);
         }
 
         const IRetryState::TPtr State;
-        const TInstant StartTime = TInstant::Now();
+        std::optional<TInstant> DnsErrorsStartTime; // start of the current run of dns errors
     };
 
     const IHTTPGateway::TRetryPolicy::TPtr Policy;

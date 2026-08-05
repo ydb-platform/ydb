@@ -83,7 +83,8 @@ namespace NKikimr {
         ui64 GetHugeDataSize() const { return HugeDataSize; }
 
         // put newly received item into fresh segment
-        void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer);
+        void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer,
+            std::optional<ui64> checksum);
         const TRope& GetLogoBlobData(const TMemPart& memPart) const;
         void Put(ui64 lsn, const TKey &key, const TMemRec &memRec);
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
@@ -242,8 +243,9 @@ namespace NKikimr {
         }
 
         // put newly received item into fresh segment
-        void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer) {
-            IndexAndData->PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer));
+        void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer,
+                std::optional<ui64> checksum) {
+            IndexAndData->PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer), checksum);
         }
         const TRope& GetLogoBlobData(const TMemPart& memPart) const { return IndexAndData->GetLogoBlobData(memPart); }
         void Put(ui64 lsn, const TKey &key, const TMemRec &memRec) { return IndexAndData->Put(lsn, key, memRec); }

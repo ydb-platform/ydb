@@ -236,7 +236,7 @@ namespace NKikimr {
         auto *msg = ev->Get();
         Y_ABORT_UNLESS(Topology);
         Sessions->QueueConnectUpdate(Topology->GetOrderNumber(msg->VDiskId), msg->QueueId, msg->IsConnected,
-            msg->ExtraBlockChecksSupport, msg->CostModel, *Topology);
+            msg->ExtraBlockChecksSupport, msg->Checksumming, msg->CostModel, *Topology);
         MinHugeBlobInBytes = Sessions->GetMinHugeBlobInBytes();
         if (msg->IsConnected && (CurrentStateFunc() == &TThis::StateEstablishingSessions ||
                 CurrentStateFunc() == &TThis::StateEstablishingSessionsTimeout)) {

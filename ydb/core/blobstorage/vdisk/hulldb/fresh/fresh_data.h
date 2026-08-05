@@ -51,7 +51,8 @@ namespace NKikimr {
 
         // Puts
         void Put(ui64 lsn, const TKey &key, const TMemRec &memRec);
-        void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer);
+        void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer,
+            std::optional<ui64> checksum);
         void PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn);
 
         // Compaction
@@ -93,14 +94,9 @@ namespace NKikimr {
     }
 
     template <class TKey, class TMemRec>
-    void TFreshData<TKey, TMemRec>::PutLogoBlobWithData(
-            ui64 lsn,
-            const TKey &key,
-            ui8 partId,
-            const TIngress &ingress,
-            TRope buffer)
-    {
-        Cur->PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer));
+    void TFreshData<TKey, TMemRec>::PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress,
+            TRope buffer, std::optional<ui64> checksum) {
+        Cur->PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer), checksum);
         SwapWithDregIfRequired();
     }
 

@@ -3490,4 +3490,48 @@ TNodePtr BuildSelectResult(TPosition pos, TSourcePtr source, bool writeResult, b
     return new TSelectResultNode(pos, std::move(source), writeResult, inSubquery, scoped);
 }
 
+class TWatermarkSource: public IProxySource {
+public:
+    TWatermarkSource(TPosition pos, TSourcePtr src, TNodePtr watermarkLambda, TNodePtr watermarkSettings)
+        : IProxySource(pos, src.Get())
+        , SourcePtr_(src)
+        , WatermarkLambda_(std::move(watermarkLambda))
+        , WatermarkSettings_(std::move(watermarkSettings))
+    {
+    }
+
+    TNodePtr Build(TContext& ctx) final {
+        return Y("WatermarkGenerator", SourcePtr_->Build(ctx), WatermarkLambda_, WatermarkSettings_);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        if (!SourcePtr_->Init(ctx, src)) {
+            return false;
+        }
+
+        if (!WatermarkLambda_->Init(ctx, this)) {
+            return false;
+        }
+
+        if (!WatermarkSettings_->Init(ctx, this)) {
+            return false;
+        }
+
+        return IProxySource::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return MakeIntrusive<TWatermarkSource>(Pos_, SourcePtr_->CloneSource(), WatermarkLambda_->Clone(), WatermarkSettings_->Clone());
+    }
+
+private:
+    TSourcePtr SourcePtr_;
+    TNodePtr WatermarkLambda_;
+    TNodePtr WatermarkSettings_;
+};
+
+TSourcePtr BuildWatermarkSource(TPosition pos, TSourcePtr src, TNodePtr watermarkLambda, TNodePtr watermarkSettings) {
+    return MakeIntrusive<TWatermarkSource>(pos, std::move(src), std::move(watermarkLambda), std::move(watermarkSettings));
+}
+
 } // namespace NSQLTranslationV1

@@ -2,7 +2,6 @@
 #include "sql_expression.h"
 #include "sql_call_expr.h"
 #include "sql_query.h"
-#include "sql_values.h"
 #include "sql_select_yql.h"
 #include "select_yql.h"
 #include "sql_select.h"
@@ -1329,12 +1328,12 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
     return true;
 }
 
-bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& result, bool unorderedSubquery) {
+bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& result, bool unorderedSubquery, TTableHints& tableHints, TMaybe<TString>& keyFunc, TString* effectiveProvider, bool* isAnonymous) {
     // table_ref:
     //   (cluster_expr DOT)? AT?
     //   (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)*)? RPAREN |
-    //    bind_parameter (LPAREN expr_list? RPAREN)? (VIEW an_id)?)
-    //   table_hints?;
+    //    bind_parameter (LPAREN expr_list? RPAREN)? (VIEW an_id)?);
+
     if (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW && node.HasBlock1()) {
         Ctx_.Error() << "Cluster should not be used in limited view";
         return false;
@@ -1353,10 +1352,6 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
 
     TTableRef tr(Context().MakeName("table"), service, cluster, nullptr);
     TPosition pos(Context().Pos());
-    TTableHints hints = GetContextHints(Ctx_);
-    TTableHints tableHints;
-
-    TMaybe<TString> keyFunc;
 
     auto& block = node.GetBlock3();
     switch (block.Alt_case()) {
@@ -1432,9 +1427,8 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                     return false;
                 }
 
-                if (node.HasBlock4()) {
-                    Ctx_.Error() << "Hints are not supported for anonymous tables";
-                    return false;
+                if (isAnonymous) {
+                    *isAnonymous = true;
                 }
 
                 auto namedNode = GetNamedNode(named);
@@ -1448,6 +1442,9 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                     return false;
                 }
 
+                if (effectiveProvider) {
+                    *effectiveProvider = service;
+                }
                 result.Source = source;
                 return true;
             }
@@ -1459,11 +1456,6 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
             if (alt.HasBlock2()) {
                 if (alt.HasBlock3()) {
                     Ctx_.Error() << "View is not supported for subqueries";
-                    return false;
-                }
-
-                if (node.HasBlock4()) {
-                    Ctx_.Error() << "Hints are not supported for subqueries";
                     return false;
                 }
 
@@ -1481,12 +1473,13 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                 if (unorderedSubquery && Ctx_.UnorderedSubqueries) {
                     apply = new TCallNodeImpl(Ctx_.Pos(), "UnorderedSubquery", {apply});
                 }
+                if (effectiveProvider) {
+                    *effectiveProvider = service;
+                }
                 result.Source = BuildNodeSource(Ctx_.Pos(), apply);
                 return true;
             }
 
-            TTableHints hints;
-            TTableHints contextHints = GetContextHints(Ctx_);
             auto ret = BuildInnerSource(Ctx_.Pos(), nodePtr, service, cluster);
             if (alt.HasBlock3()) {
                 auto view = Id(alt.GetBlock3().GetRule_view_name2(), *this);
@@ -1499,21 +1492,9 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                 }
             }
 
-            if (node.HasBlock4()) {
-                auto tmp = TableHintsImpl(node.GetBlock4().GetRule_table_hints1(), service, keyFunc.GetOrElse(""));
-                if (!tmp) {
-                    return false;
-                }
-
-                hints = *tmp;
+            if (effectiveProvider) {
+                *effectiveProvider = service;
             }
-
-            if (hints || contextHints) {
-                if (!ret->SetTableHints(Ctx_, Ctx_.Pos(), hints, contextHints)) {
-                    return false;
-                }
-            }
-
             result.Source = ret;
             return true;
         }
@@ -1521,24 +1502,12 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
             Y_UNREACHABLE();
     }
 
-    MergeHints(hints, tableHints);
-
-    if (node.HasBlock4()) {
-        auto tmp = TableHintsImpl(node.GetBlock4().GetRule_table_hints1(), service, keyFunc.GetOrElse(""));
-        if (!tmp) {
-            Ctx_.Error() << "Failed to parse table hints";
-            return false;
-        }
-
-        MergeHints(hints, *tmp);
-    }
-
-    if (!hints.empty()) {
-        tr.Options = BuildInputOptions(pos, hints);
-    }
-
     if (!tr.Keys) {
         return false;
+    }
+
+    if (effectiveProvider) {
+        *effectiveProvider = tr.Service;
     }
 
     result = tr;
@@ -1566,11 +1535,6 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
 
             if (!alt.HasBlock3() || !alt.GetBlock3().GetBlock2().empty()) {
                 Ctx_.Error() << "Expected single argument for AS_TABLE source";
-                return TMaybe<TSourcePtr>(nullptr);
-            }
-
-            if (node.HasBlock4()) {
-                Ctx_.Error() << "No hints expected for AS_TABLE source";
                 return TMaybe<TSourcePtr>(nullptr);
             }
 
@@ -3907,7 +3871,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
     //    | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
     //    | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
     //    | WATERMARK AS LPAREN expr RPAREN
-    //    | WATERMARK EQUALS expr
+    //    | WATERMARK EQUALS expr;
 
     switch (rule.Alt_case()) {
         case TRule_table_hint::kAltTableHint1: {

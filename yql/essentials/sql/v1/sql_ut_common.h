@@ -222,6 +222,39 @@ Y_UNIT_TEST(QualifiedAsteriskStripsConfiguredSystemColumnPrefixes) {
     UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 1);
 }
 
+Y_UNIT_TEST(TableHintsTableRef) {
+    ExpectFailWithError(
+        R"sql(
+            $input = SELECT 1 AS ts;
+            SELECT * FROM $input WITH XLOCK;
+        )sql",
+        "<main>:3:20: Error: Hint 'XLOCK' requires a table\n");
+
+    auto res = SqlToYql("$input = SELECT 1 AS ts; SELECT * FROM $input WITH WATERMARK = ts");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(TableHintsSelect) {
+    ExpectFailWithError(
+        R"sql(
+            SELECT * FROM (SELECT 1 AS ts) WITH XLOCK;
+        )sql",
+        "<main>:2:20: Error: Hint 'XLOCK' requires a table\n");
+
+    auto res = SqlToYql("SELECT * FROM (SELECT 1 AS ts) WITH WATERMARK = ts");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
 Y_UNIT_TEST(TableHintsValues) {
     ExpectFailWithError(
         R"sql(
@@ -236,6 +269,33 @@ Y_UNIT_TEST(TableHintsValues) {
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
     UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(TableRefAnonymousTableHintsRejected) {
+    ExpectFailWithError(
+        R"sql(
+            USE plato;
+            $input = SELECT 1 AS value;
+            SELECT * FROM @$input WITH XLOCK;
+        )sql",
+        "<main>:4:40: Error: Hints are not supported for anonymous tables\n");
+}
+
+Y_UNIT_TEST(TableRefSubqueryHintsRejected) {
+    ExpectFailWithError(
+        R"sql(
+            $input = SELECT 1 AS value;
+            SELECT * FROM $input WITH XLOCK;
+        )sql",
+        "<main>:3:20: Error: Hint 'XLOCK' requires a table\n");
+}
+
+Y_UNIT_TEST(AsTableHintsRejected) {
+    ExpectFailWithError(
+        R"sql(
+            SELECT * FROM AS_TABLE([<|value:1|>]) WITH XLOCK;
+        )sql",
+        "<main>:2:56: Error: Hint 'XLOCK' requires a table\n");
 }
 
 Y_UNIT_TEST(InNoHints) {
@@ -6204,8 +6264,8 @@ Y_UNIT_TEST(AsteriskWithSomethingBefore) {
 
 Y_UNIT_TEST(DuplicatedQualifiedAsterisk) {
     NYql::TAstParseResult res = SqlToYql("select in.*, key, in.* from plato.Input as in;");
-    UNIT_ASSERT(!res.Root);
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unable to use twice same quialified asterisk. Invalid source: in\n");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unable to use twice same qualified asterisk. Invalid source: in\n");
 }
 
 Y_UNIT_TEST(BrokenLabel) {
@@ -11220,80 +11280,213 @@ Y_UNIT_TEST(SingleArg) {
 
 Y_UNIT_TEST_SUITE(Watermarks) {
 Y_UNIT_TEST(InsertAs) {
-    const auto stmt = R"sql(
-USE plato;
+    auto res = SqlToYql(R"sql(
+        USE plato;
 
-INSERT INTO Output
-SELECT
-    *
-FROM Input
-WITH(
-    SCHEMA(
-        ts Timestamp,
-    ),
-    WATERMARK AS (CAST(ts AS TImestamp))
-);
-)sql";
-    const auto& res = SqlToYql(stmt);
-    Err2Str(res, EDebugOutput::ToCerr);
-    UNIT_ASSERT(res.IsOk());
+        INSERT INTO Output
+        SELECT * FROM Input
+        WITH WATERMARK AS (ts - Interval("PT1S"));
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 0);
 }
 
 Y_UNIT_TEST(SelectAs) {
-    const auto stmt = R"sql(
-USE plato;
+    auto res = SqlToYql(R"sql(
+        USE plato;
 
-SELECT
-    *
-FROM Input
-WITH(
-    SCHEMA(
-        ts Timestamp,
-    ),
-    WATERMARK AS (CAST(ts AS TImestamp))
-);
-)sql";
-    const auto& res = SqlToYql(stmt);
-    Err2Str(res, EDebugOutput::ToCerr);
-    UNIT_ASSERT(res.IsOk());
+        SELECT * FROM Input
+        WITH WATERMARK AS (ts - Interval("PT1S"));
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 0);
 }
-Y_UNIT_TEST(InsertEquals) {
-    const auto stmt = R"sql(
-USE plato;
 
-INSERT INTO Output
-SELECT
-    *
-FROM Input
-WITH(
-    SCHEMA(
-        ts Timestamp,
-    ),
-    WATERMARK = CAST(ts AS TImestamp)
-);
-)sql";
-    const auto& res = SqlToYql(stmt);
-    Err2Str(res, EDebugOutput::ToCerr);
-    UNIT_ASSERT(res.IsOk());
+Y_UNIT_TEST(InsertEquals) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        INSERT INTO Output
+        SELECT * FROM Input
+        WITH WATERMARK = ts - Interval("PT1S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 0);
 }
 
 Y_UNIT_TEST(SelectEquals) {
-    const auto stmt = R"sql(
-USE plato;
+    auto res = SqlToYql(R"sql(
+        USE plato;
 
-SELECT
-    *
-FROM Input
-WITH(
-    SCHEMA(
-        ts Timestamp,
-    ),
-    WATERMARK = CAST(ts AS TImestamp)
-);
-)sql";
-    const auto& res = SqlToYql(stmt);
-    Err2Str(res, EDebugOutput::ToCerr);
-    UNIT_ASSERT(res.IsOk());
+        SELECT * FROM Input
+        WITH WATERMARK = ts - Interval("PT1S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 0);
+}
+
+Y_UNIT_TEST(TopLevel) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT * FROM Input;
+
+        SELECT * FROM $input
+        WITH WATERMARK = ts - Interval("PT1S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(Multiple) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT * FROM Input
+        WITH WATERMARK = ts - Interval("PT1S");
+
+        $input = SELECT * FROM $input
+        WITH WATERMARK = ts - Interval("PT2S");
+
+        SELECT * FROM $input
+        WITH WATERMARK = ts - Interval("PT3S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 2);
+}
+
+Y_UNIT_TEST(NoSuchColumn) {
+    ExpectFailWithError(
+        R"sql(
+            USE plato;
+
+            $input = SELECT xxx FROM Input;
+
+            SELECT * FROM $input
+            WITH WATERMARK = ts - Interval("PT1S");
+        )sql",
+        "<main>:7:30: Error: Column ts is not in source column set\n");
+}
+
+Y_UNIT_TEST(GroupBy) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT * FROM Input
+        GROUP BY key, HoppingWindow(ts, "PT1S", "PT2S");
+
+        SELECT * FROM $input
+        WITH WATERMARK = ts - Interval("PT1S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(Join) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT * FROM Input AS lhs JOIN Input AS rhs ON lhs.ts == rhs.ts;
+
+        SELECT * FROM $input
+        WITH WATERMARK = ts - Interval("PT1S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(ParseProtoseq) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT Protobuf::Parse(records) AS event FROM Input
+        FLATTEN LIST BY (ChunksSplitters::Protoseq(Data).SplitRecords AS records);
+
+        SELECT * FROM $input
+        WITH WATERMARK = event.ts - Interval("PT1S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(ComplexParseWithOptions) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT Protobuf::Parse(records) AS event FROM Input
+        FLATTEN LIST BY (ChunksSplitters::Protoseq(Data).SplitRecords AS records);
+
+        SELECT * FROM $input
+        WITH (
+            WATERMARK = event.ts - Interval("PT1S"),
+            WATERMARK_GRANULARITY = "PT1S",
+            WATERMARK_IDLE_TIMEOUT = "PT1M"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {
+        "WatermarkGenerator",
+        "watermarkgranularity",
+        "watermarkidletimeout",
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermarkgranularity"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermarkidletimeout"], 1);
+}
+
+Y_UNIT_TEST(ExprList) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT * FROM Input;
+
+        SELECT * FROM $input
+        WITH WATERMARK = ("yin", "yang");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
 }
 } // Y_UNIT_TEST_SUITE(Watermarks)
 

@@ -87,6 +87,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(parse_metrics(stdout)[0]["msgs_per_sec"], 1000)
 
     def test_parse_star_metrics_uses_star_column(self):
+        """Parse the star CSV header first, then verify its benchmark-specific value column."""
         stdout = "\n".join([STAR_PING_BENCHMARK.csv_header, "1,32,4,1000,1.5,900,1100"])
         rows = parse_metrics(stdout, STAR_PING_BENCHMARK)
         self.assertEqual(rows[0]["star_multiply"], 4)
@@ -96,6 +97,7 @@ class YdbBenchTest(unittest.TestCase):
             parse_metrics(PING_BENCHMARK.csv_header + "\n[       OK ]")
 
     def test_list_describe_and_config_schema_expose_current_contract(self):
+        """List benchmarks, describe ping then star, and finally validate the printed schema."""
         output = io.StringIO()
         with redirect_stdout(output):
             self.assertEqual(main(["list"]), 0)
@@ -113,6 +115,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(set(CONFIG_SCHEMA["properties"]), {"ping-bench", "star-ping-bench"})
 
     def test_config_supports_multiple_benchmarks_and_profiles(self):
+        """Load ping baseline, ping focused, then star sweep while preserving YAML order."""
         config = self._config(
             """
             ping-bench:
@@ -154,6 +157,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertTrue(all(run.perf_frequency == 123 for run in loaded.runs))
 
     def test_config_rejects_empty_arrays_unknown_fields_and_unsafe_profile_names(self):
+        """Reject empty threads, then an unknown field, then an unsafe profile path."""
         cases = (
             (
                 "empty-threads.yaml",
@@ -198,6 +202,7 @@ class YdbBenchTest(unittest.TestCase):
                 load_config(self._config(body, name=name))
 
     def test_config_rejects_non_finite_timeout(self):
+        """Reject NaN, positive infinity, then negative infinity as profile timeouts."""
         for value in (".nan", ".inf", "-.inf"):
             with self.subTest(value=value), self.assertRaisesRegex(BenchmarkError, "finite positive number"):
                 load_config(
@@ -216,6 +221,7 @@ class YdbBenchTest(unittest.TestCase):
                 )
 
     def test_config_rejects_duplicate_yaml_keys(self):
+        """Parse a profile with duplicate threads keys and reject it before normalization."""
         config = self._config(
             """
             ping-bench:
@@ -260,6 +266,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertFalse((self.root / "non-profile").exists())
 
     def test_cli_runs_multiple_benchmarks_and_profiles(self):
+        """Run ping-bench/first, ping-bench/second, then star-ping-bench/star with separate summaries."""
         benchmark = self._script(
             """
             test "$ACTORSYSTEM_TEST_MODE" = "manual" || exit 10
@@ -309,24 +316,38 @@ class YdbBenchTest(unittest.TestCase):
             """
         )
         output = self.root / "multi-output"
-        self.assertEqual(
-            main(
+        console = io.StringIO()
+        with redirect_stdout(console):
+            code = main(
                 ["run", "--config", str(config), "--output", str(output)],
                 resource_loader=lambda _: benchmark.read_bytes(),
                 tool_revision={"build_type": "relwithdebinfo", "commit_id": "test"},
-            ),
-            0,
-        )
+            )
+        self.assertEqual(code, 0)
         manifest = json.loads((output / "run.json").read_text())
         self.assertEqual(manifest["status"], "completed")
         self.assertEqual(len(manifest["runs"]), 3)
         self.assertTrue(all(run["status"] == "completed" for run in manifest["runs"]))
-        self.assertTrue((output / "ping-bench" / "first" / "summary.csv").is_file())
-        self.assertTrue((output / "ping-bench" / "second" / "summary.csv").is_file())
-        self.assertTrue((output / "star-ping-bench" / "star" / "summary.csv").is_file())
-        summary = (output / "summary.csv").read_text()
-        self.assertIn("ping-bench,first,none,1,32,inflight,1,1,1000.0", summary)
-        self.assertIn("star-ping-bench,star,none,1,32,stars,2,1,2000.0", summary)
+        self.assertEqual(
+            [run["summary"] for run in manifest["runs"]],
+            [
+                "ping-bench/first/summary.csv",
+                "ping-bench/second/summary.csv",
+                "star-ping-bench/star/summary.csv",
+            ],
+        )
+        first = (output / "ping-bench" / "first" / "summary.csv").read_text()
+        second = (output / "ping-bench" / "second" / "summary.csv").read_text()
+        star = (output / "star-ping-bench" / "star" / "summary.csv").read_text()
+        self.assertIn("in_flight", first.splitlines()[0])
+        self.assertIn("none,1,32,1,1,1000.0", first)
+        self.assertEqual(first, second)
+        self.assertIn("star_multiply", star.splitlines()[0])
+        self.assertIn("none,1,32,2,1,2000.0", star)
+        self.assertFalse((output / "summary.csv").exists())
+        self.assertNotIn("summary", manifest)
+        self.assertIn("ping-bench/first: ping-bench/first/summary.csv", console.getvalue())
+        self.assertIn("star-ping-bench/star: star-ping-bench/star/summary.csv", console.getvalue())
 
     def test_cli_exit_code_uses_interruption_error_type(self):
         config = self._config(
@@ -403,6 +424,7 @@ class YdbBenchTest(unittest.TestCase):
             self.assertTrue((repetition / "metrics.csv").is_file())
 
     def test_star_run_selects_star_filter_environment_and_summary(self):
+        """Select the star filter, pass stars and duration, then render a star-specific summary."""
         script = self._script(
             """
             test "$1" = "HeavyActorBenchmark::StarSendActivateReceiveCSVManual" || exit 10

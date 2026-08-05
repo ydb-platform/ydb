@@ -96,10 +96,9 @@ profile's `run.json`; it is never silently replaced with another placement.
 The top-level output contains:
 
 - `run.json` with the config hash, tool revision, binary hash, and status of
-  every benchmark/profile pair;
-- `summary.csv` with normalized results from every benchmark and profile;
-- `<benchmark>/<profile>/run.json` and `summary.csv` with benchmark-specific
-  parameters;
+  every benchmark/profile pair and paths to their individual summaries;
+- `<benchmark>/<profile>/run.json` and `summary.csv` with the benchmark-specific
+  columns and parameters; results from different profiles are not combined;
 - `<benchmark>/<profile>/<affinity>/repeat-NNN/` with raw stdout, stderr, and
   extracted `metrics.csv`.
 

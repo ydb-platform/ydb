@@ -1,6 +1,4 @@
 import argparse
-import csv
-import io
 import json
 import sys
 import tempfile
@@ -13,7 +11,6 @@ from ydb.tools.ydb_bench.lib.common import (
     BenchmarkInterrupted,
     atomic_copy_file,
     atomic_write_json,
-    atomic_write_text,
     extract_executable,
 )
 from ydb.tools.ydb_bench.lib.config import CONFIG_SCHEMA, load_config
@@ -21,20 +18,6 @@ from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
 
 
 RESOURCE_NAME = "actors_core_ut_fat"
-COMBINED_SUMMARY_COLUMNS = (
-    "benchmark",
-    "profile",
-    "affinity_mode",
-    "threads",
-    "actorPairs",
-    "parameter",
-    "parameter_value",
-    "repetitions",
-    "median_msgs_per_sec",
-    "min_msgs_per_sec",
-    "max_msgs_per_sec",
-    "median_elapsed_seconds",
-)
 
 
 def _positive_integer(value):
@@ -100,49 +83,6 @@ def _utc_now():
     return datetime.now(timezone.utc).isoformat()
 
 
-def _combined_summary_rows(summary_path, configuration):
-    try:
-        with summary_path.open(newline="", encoding="utf-8") as stream:
-            rows = list(csv.DictReader(stream))
-    except (OSError, csv.Error) as error:
-        raise BenchmarkError("cannot read generated summary {}: {}".format(summary_path, error)) from error
-
-    result = []
-    parameter_column = configuration.benchmark.parameter_column
-    for row in rows:
-        try:
-            parameter_value = row.pop(parameter_column)
-            result.append(
-                {
-                    "benchmark": configuration.benchmark.name,
-                    "profile": configuration.profile,
-                    "affinity_mode": row["affinity_mode"],
-                    "threads": row["threads"],
-                    "actorPairs": row["actorPairs"],
-                    "parameter": configuration.benchmark.parameter_name,
-                    "parameter_value": parameter_value,
-                    "repetitions": row["repetitions"],
-                    "median_msgs_per_sec": row["median_msgs_per_sec"],
-                    "min_msgs_per_sec": row["min_msgs_per_sec"],
-                    "max_msgs_per_sec": row["max_msgs_per_sec"],
-                    "median_elapsed_seconds": row["median_elapsed_seconds"],
-                }
-            )
-        except KeyError as error:
-            raise BenchmarkError(
-                "generated summary {} is missing column {}".format(summary_path, error.args[0])
-            ) from error
-    return result
-
-
-def _render_combined_summary(rows):
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=COMBINED_SUMMARY_COLUMNS, lineterminator="\n")
-    writer.writeheader()
-    writer.writerows(rows)
-    return output.getvalue()
-
-
 def _run(arguments, resource_loader, tool_revision):
     if resource_loader is None:
         raise BenchmarkError("the benchmark executable resource loader is not configured")
@@ -185,7 +125,6 @@ def _run(arguments, resource_loader, tool_revision):
     manifest_path = output_directory / "run.json"
     atomic_write_json(manifest_path, manifest)
 
-    combined_summary = []
     try:
         with tempfile.TemporaryDirectory(prefix="ydb-bench-", dir=work_dir_parent) as temporary_directory:
             binary = extract_executable(resource_loader(RESOURCE_NAME), temporary_directory, RESOURCE_NAME)
@@ -233,9 +172,6 @@ def _run(arguments, resource_loader, tool_revision):
                     raise
                 run_record["status"] = "completed"
                 run_record["summary"] = str(relative_directory / profile_manifest["summary"])
-                combined_summary.extend(
-                    _combined_summary_rows(profile_directory / profile_manifest["summary"], configuration)
-                )
                 atomic_write_json(manifest_path, manifest)
     except BenchmarkInterrupted as error:
         manifest["status"] = "interrupted"
@@ -250,17 +186,13 @@ def _run(arguments, resource_loader, tool_revision):
         atomic_write_json(manifest_path, manifest)
         raise
 
-    atomic_write_text(output_directory / "summary.csv", _render_combined_summary(combined_summary))
     manifest["status"] = "completed"
     manifest["finished_at"] = _utc_now()
-    manifest["summary"] = "summary.csv"
-    manifest["summary_rows"] = len(combined_summary)
     atomic_write_json(manifest_path, manifest)
 
     print("completed {} benchmark profiles: {}".format(len(loaded_config.runs), output_directory))
     for record in manifest["runs"]:
         print("{}/{}: {}".format(record["benchmark"], record["profile"], record["summary"]))
-    print("summary: {}".format(output_directory / manifest["summary"]))
     return 0
 
 

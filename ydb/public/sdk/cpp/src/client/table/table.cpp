@@ -3833,12 +3833,6 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
         ret.WithAwsRegion(proto.aws_region());
     }
 
-    if constexpr (std::is_same_v<TProto, Ydb::Table::Changefeed>) {
-        if (proto.has_topic_partitioning_settings()) {
-            ret.TopicPartitioningSettings_ = TTopicPartitioningSettings(proto.topic_partitioning_settings());
-        }
-    }
-
     if constexpr (std::is_same_v<TProto, Ydb::Table::ChangefeedDescription>) {
         switch (proto.state()) {
         case Ydb::Table::ChangefeedDescription::STATE_ENABLED:

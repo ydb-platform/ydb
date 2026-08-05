@@ -250,9 +250,10 @@ jobs:
   finalize:
     name: Finalize PR labels
     needs: [detect, coverage]
+    # Also run when the run is cancelled (cancel-in-progress): one-shot labels must
+    # be cleared so coverage/* can be re-applied.
     if: >-
       always() &&
-      !cancelled() &&
       startsWith(github.event_name, 'pull_request') &&
       needs.detect.outputs.should_run == 'true'
     runs-on: ubuntu-latest

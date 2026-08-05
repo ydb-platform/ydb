@@ -54,12 +54,16 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        case "${{ inputs.suite }}" in
+          cpp_sdk|cli|cli_workload) ;;
+          *) echo "Unknown suite: ${{ inputs.suite }}" >&2; exit 1 ;;
+        esac
         CFG_FILE=$(mktemp)
+        trap 'rm -f "$CFG_FILE"' EXIT
         python3 .github/scripts/tests/codecov_suites.py json-suite "${{ inputs.suite }}" > "$CFG_FILE"
         EXCL=$(python3 .github/scripts/tests/codecov_suites.py exclude-regexp)
         echo "exclude_regexp=${EXCL}" >> "$GITHUB_OUTPUT"
         python3 -c 'import json,os,sys; cfg=json.load(open(sys.argv[1],encoding="utf-8")); open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8").write("regexp="+cfg["regexp"]+"\nflag="+cfg["flag"]+"\ntargets="+" ".join(cfg["targets"])+"\n")' "$CFG_FILE"
-        rm -f "$CFG_FILE"
 
     - name: Ya make with clang coverage
       id: ya
@@ -124,21 +128,28 @@ runs:
         SUITE: ${{ inputs.suite }}
         COMMIT_SHA: ${{ inputs.commit_sha }}
         BRANCH: ${{ inputs.branch }}
+        PR_NUMBER: ${{ inputs.pr_number }}
       run: |
         set -euxo pipefail
         # Prefer PyPI: self-hosted runners often cannot download cli.codecov.io (HTML instead of binary).
         pip3 install --user 'codecov-cli'
         export PATH="${HOME}/.local/bin:${PATH}"
-        codecovcli upload-coverage \
-          -t "${CODECOV_TOKEN}" \
-          --fail-on-error \
-          --git-service github \
-          --sha "${COMMIT_SHA}" \
-          --branch "${BRANCH}" \
-          --disable-search \
-          --file "${OUT}/coverage.lcov" \
-          --flag "${FLAG}" \
+        upload_args=(
+          -t "${CODECOV_TOKEN}"
+          --fail-on-error
+          --git-service github
+          --sha "${COMMIT_SHA}"
+          --branch "${BRANCH}"
+          --disable-search
+          --file "${OUT}/coverage.lcov"
+          --flag "${FLAG}"
           --name "${SUITE}"
+        )
+        # Needed so Codecov attaches the upload to the PR (statuses / comment), not only the commit.
+        if [ -n "${PR_NUMBER}" ]; then
+          upload_args+=(--pull-request-number "${PR_NUMBER}")
+        fi
+        codecovcli upload-coverage "${upload_args[@]}"
 
     - name: Publish HTML report to Object Storage
       # Still publish HTML if Codecov upload fails.
@@ -190,12 +201,13 @@ runs:
           "s3://${bucket}/${prefix}/${SUITE}/" \
           --delete
 
+        # Landing links are static (no per-suite meta) so parallel matrix jobs can
+        # overwrite the same key without racing on content.
         land_dir="${OUT}/landing"
         mkdir -p "$land_dir"
         python3 .github/scripts/tests/generate_coverage_landing.py \
           --output "${land_dir}/index.html" \
           --title "YDB C++ coverage" \
-          --meta-json "$meta" \
           --suite "cpp_sdk=./cpp_sdk/index.html" \
           --suite "cli=./cli/index.html" \
           --suite "cli_workload=./cli_workload/index.html"

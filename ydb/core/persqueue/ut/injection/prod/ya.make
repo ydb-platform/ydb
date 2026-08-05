@@ -5,21 +5,19 @@ YQL_LAST_ABI_VERSION()
 SIZE(MEDIUM)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(2)
+SPLIT_FACTOR(4)
 REQUIREMENTS(cpu:2)
 
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
+    ydb/core/tx
+    ydb/core/tx/schemeshard/ut_helpers
 )
 
 SRCS(
-    distributed_three_pq_tx_ut.cpp
-)
-
-RECURSE_FOR_TESTS(
-    prod
+    prod_pq_injection_ut.cpp
 )
 
 END()

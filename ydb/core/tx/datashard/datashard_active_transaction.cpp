@@ -877,7 +877,7 @@ bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) 
             auto result = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(
                     kind, self.TabletID(), GetTxId(), rejectStatus);
             result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectReason);
-            YDB_LOG_NOTICE_CTX(ctx, "",
+            YDB_LOG_NOTICE_CTX(ctx, "Reject tx",
                 {"rejectReason", rejectReason});
 
             ctx.Send(GetTarget(), result.release(), 0, GetCookie());

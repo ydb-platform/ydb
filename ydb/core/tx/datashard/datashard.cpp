@@ -203,8 +203,8 @@ TDataShard::~TDataShard() {
 
 void TDataShard::OnDetach(const TActorContext &ctx) {
     Cleanup(ctx);
-    YDB_LOG_INFO_CTX(ctx, "",
-        {"onDetach", TabletID()});
+    YDB_LOG_INFO_CTX(ctx, "OnDetach",
+        {"tabletId", TabletID()});
     return Die(ctx);
 }
 
@@ -276,8 +276,8 @@ void TDataShard::OnStopGuardComplete(const TActorContext &ctx) {
 
 void TDataShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
-    YDB_LOG_INFO_CTX(ctx, "",
-        {"onTabletDead", TabletID()});
+    YDB_LOG_INFO_CTX(ctx, "OnTabletDead",
+        {"tabletId", TabletID()});
     Cleanup(ctx);
     return Die(ctx);
 }
@@ -3240,7 +3240,7 @@ bool TDataShard::CheckDataTxRejectAndReply(const TEvDataShard::TEvProposeTransac
                                                             rejectStatus));
 
         result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectDescription);
-        YDB_LOG_NOTICE_CTX(ctx, "",
+        YDB_LOG_NOTICE_CTX(ctx, "Reject",
             {"rejectDescription", rejectDescription});
 
         ctx.Send(ev->Sender, result.Release());
@@ -3281,7 +3281,7 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
         }
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), msg->GetTxId(), status, rejectDescription);
 
-        YDB_LOG_NOTICE_CTX(ctx, "",
+        YDB_LOG_NOTICE_CTX(ctx, "Reject",
             {"rejectDescription", rejectDescription});
 
         if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED) {

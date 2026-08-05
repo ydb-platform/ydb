@@ -1086,8 +1086,10 @@ void TPipeline::PlanTxImpl(ui64 step, ui64 txId, TTransactionContext &txc, const
                                             << ", expected min step: " << SchemaTx->MinStep
                                             << ", actual step: " << step;
         Y_VERIFY_DEBUG_S(SchemaTx->MinStep <= step, explain);
-        YDB_LOG_ALERT_CTX(ctx, "",
-            {"explain", explain});
+        YDB_LOG_ALERT_CTX(ctx, "Scheme transaction has come too early, only after particular step this shema tx is allowed",
+            {"txId", txId},
+            {"minStep", SchemaTx->MinStep},
+            {"actualStep", step});
     }
 
     auto op = Self->TransQueue.FindTxInFly(txId);
@@ -1541,8 +1543,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             rec.GetTxKind(), Self->TabletID(), tx->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
         tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, error);
 
-        YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "",
-            {"error", error});
+        YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), error);
     };
 
     auto badRequest = [&](const TString& error) {
@@ -1551,8 +1552,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             rec.GetTxKind(), Self->TabletID(), tx->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST));
         tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, error);
 
-        YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "",
-            {"error", error});
+        YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), error);
     };
 
     if (tx->IsSchemeTx()) {
@@ -1739,8 +1739,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
 
     auto badRequest = [&](NKikimrDataEvents::TEvWriteResult::EStatus status, const TString& error) {
         writeOp->SetError(status, TStringBuilder() << error << " at tablet# " << Self->TabletID());
-        YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "",
-            {"error", error});
+        YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), error);
     };
 
     switch (rec.GetLockMode()) {

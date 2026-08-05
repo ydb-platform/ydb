@@ -618,7 +618,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
         auto issue = NYql::YqlIssue({}, issueCode, detailedReason);
         IssueToMessage(issue, ev->Record.MutableIssues()->Add());
         Send(scanComputeActor, ev.Release(), IEventHandle::FlagTrackDelivery);
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("Error",
             {"detailedReason", detailedReason});
     };
 
@@ -663,8 +663,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
     if (request.HasOlapProgram()) {
         auto msg = TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Unexpected process program in datashard scan at " << TabletID();
-        YDB_LOG_ERROR("",
-            {"msg", msg});
+        YDB_LOG_ERROR(msg);
 
         auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation, TabletID());
         ev->Record.SetStatus(Ydb::StatusIds::INTERNAL_ERROR);

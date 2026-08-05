@@ -58,8 +58,8 @@ private:
 };
 
 void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_DEBUG("",
-        {"event", "subdomain_found"});
+    YDB_LOG_DEBUG("Handle TEvSubDomainPathIdFound",
+        {"ev", ev->Get()->ToString()});
     const auto* msg = ev->Get();
 
     if (FindSubDomainPathIdActor == ev->Sender) {

@@ -755,7 +755,7 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
                                    << " is restarting";
 
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), rejectStatus, rejectReason);
-            YDB_LOG_NOTICE("",
+            YDB_LOG_NOTICE("Reject tx",
                 {"rejectReason", rejectReason});
 
             ctx.Send(GetTarget(), result.release(), 0, GetCookie());

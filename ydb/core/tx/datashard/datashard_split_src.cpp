@@ -199,8 +199,8 @@ public:
             if (isStrictCheck) { \
                 Y_ENSURE(str.empty(), #table " table is not empty when starting Split at tablet " << Self->TabletID() << " : \n" << str.Str()); \
             } else if (!str.empty()) { \
-                YDB_LOG_ERROR_CTX(ctx, "", \
-                    {"tableLabel", #table " table is not empty when starting Split at tablet "}, \
+                YDB_LOG_ERROR_CTX(ctx, "Table is not empty when starting Split at tablet", \
+                    {"tableName", #table}, \
                     {"tabletId", Self->TabletID()}, \
                     {"nonEmptyRows", str.Str()}); \
             } \

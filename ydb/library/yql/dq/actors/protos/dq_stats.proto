@@ -187,7 +187,7 @@ message TDqTableStats {
 
     uint32 AffectedPartitions = 8; // TODO: move it to the Extra
 
-    // Only for ReadCommittedRW. Affected row count (logical base-table rows only).
+    // Populated when collect_affected_rows is enabled. Affected row count (logical base-table rows only).
     uint64 AffectedRows = 9;
 
     google.protobuf.Any Extra = 100;

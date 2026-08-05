@@ -319,9 +319,14 @@ void TDataShardUserDb::EraseRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
+    // CollectAffectedRows only adds an extra read to determine whether the
+    // row existed; it must not affect writes, locks, or conflict checks.
+    const bool rowExists =
+        (LockMode == ELockMode::OptimisticSnapshotIsolation || CollectAffectedRows)
+        && RowExists(tableId, key);
 
-    if (LockMode == ELockMode::OptimisticSnapshotIsolation || CollectAffectedRows) {
-        if (!RowExists(tableId, key)) {
+    if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
+        if (!rowExists) {
             // Don't perform write for keys which don't exist, SnapshotRW
             // transaction may break otherwise even when not actually
             // performing operations from the user's viewpoint
@@ -336,7 +341,7 @@ void TDataShardUserDb::EraseRow(
     Counters.NEraseRow++;
     Counters.EraseRowBytes += keyBytes + 8;
 
-    if (CollectAffectedRows) {
+    if (CollectAffectedRows && rowExists) {
         Counters.NAffectedRows++;
     }
 }

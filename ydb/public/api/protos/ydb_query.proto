@@ -242,7 +242,7 @@ message ExecuteQueryRequest {
     // When true, the server counts logical base-table rows affected by DML
     // (INSERT, UPSERT, REPLACE, UPDATE, DELETE), excluding secondary-index
     // maintenance. Zero for read-only queries and non-matching DML.
-    // Enabling this setting can lead to additional reads for it's calculation.
+    // Enabling this setting can lead to additional reads for its calculation.
     bool collect_affected_rows = 15;
 }
 

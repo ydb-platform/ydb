@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
         }
 
         {
-            // Update does nothing
+            // UPDATE sets the same value (no-op at data level, but still counts as affected)
             auto result = session.ExecuteQuery(Q_(R"(
                 UPDATE `/Root/TestTable` SET Amount = 5000u WHERE Group = 1u;
             )"), BeginReadCommittedRW(), GetQuerySettingsBasic()).ExtractValueSync();

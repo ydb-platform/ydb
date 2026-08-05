@@ -1137,6 +1137,79 @@ TJoinTestData LeftJoinCommonFilterTestData() {
     return td;
 }
 
+// The same inputs as LeftJoinCommonFilterTestData: keys 1 and 3 have a match that passes
+// right[1] > left[1], key 2 has a match that the filter rejects, key 4 has no match at all.
+TJoinTestData SemiOrOnlyCommonFilterBaseData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4};
+    TVector<ui64> leftVals = {5, 60, 30, 7};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
+TJoinTestData LeftSemiCommonFilterTestData() {
+    auto td = SemiOrOnlyCommonFilterBaseData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expKeys = {1, 3};
+    TVector<ui64> expVals = {5, 30};
+    td.Result = ConvertVectorsToTuples(setup, expKeys, expVals);
+    td.Kind = EJoinKind::LeftSemi;
+    return td;
+}
+
+TJoinTestData LeftOnlyCommonFilterTestData() {
+    auto td = SemiOrOnlyCommonFilterBaseData();
+    auto& setup = *td.Setup;
+    // Key 2 is emitted even though it has a match on the key: the filter rejects the only pair it
+    // takes part in, so the row counts as unmatched.
+    TVector<ui64> expKeys = {2, 4};
+    TVector<ui64> expVals = {60, 7};
+    td.Result = ConvertVectorsToTuples(setup, expKeys, expVals);
+    td.Kind = EJoinKind::LeftOnly;
+    return td;
+}
+
+// Key 1 has a match on the key, but the left row itself does not pass left[1] > 10.
+TJoinTestData SemiOrOnlyLeftFilterBaseData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4};
+    TVector<ui64> leftVals = {5, 20, 30, 40};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    return td;
+}
+
+TJoinTestData LeftSemiLeftFilterTestData() {
+    auto td = SemiOrOnlyLeftFilterBaseData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expKeys = {2, 3};
+    TVector<ui64> expVals = {20, 30};
+    td.Result = ConvertVectorsToTuples(setup, expKeys, expVals);
+    td.Kind = EJoinKind::LeftSemi;
+    return td;
+}
+
+TJoinTestData LeftOnlyLeftFilterTestData() {
+    auto td = SemiOrOnlyLeftFilterBaseData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expKeys = {1, 4};
+    TVector<ui64> expVals = {5, 40};
+    td.Result = ConvertVectorsToTuples(setup, expKeys, expVals);
+    td.Kind = EJoinKind::LeftOnly;
+    return td;
+}
+
 TJoinDescription MakeJoinDescription(TJoinTestData& td) {
     FilterRenamesForSemiAndOnlyJoins(td);
     TJoinDescription descr;
@@ -1354,6 +1427,22 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestHashLeftJoinCommonFilter, BlockJoin) {
         Test(LeftJoinCommonFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinLeftFilter, BlockJoin) {
+        Test(LeftSemiLeftFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinCommonFilter, BlockJoin) {
+        Test(LeftSemiCommonFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinLeftFilter, BlockJoin) {
+        Test(LeftOnlyLeftFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinCommonFilter, BlockJoin) {
+        Test(LeftOnlyCommonFilterTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestBlockSpilling) { 

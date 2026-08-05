@@ -55,10 +55,8 @@ private:
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
     NActors::TActorId BSControllerPipeClient;
 
-    NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
     TFastPathServicePtr FastPathService;
-
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
 
     struct TAddHostInFlight
@@ -143,8 +141,15 @@ private:
         const NActors::TActorContext& ctx);
 
     void HandleGetLoadActorAdapterActorId(
-        const NYdb::NBS::NBlockStore::TEvService::
-            TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
+        const TEvService::TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleWriteBlocksRequest(
+        const TEvService::TEvWriteBlocksRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleReadBlocksRequest(
+        const TEvService::TEvReadBlocksRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleUpdateVolumeConfig(
@@ -176,8 +181,7 @@ private:
         const NActors::TActorContext& ctx);
 
     void HandleDeletePartition(
-        const NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionRequest::
-            TPtr& ev,
+        const TEvService::TEvDeletePartitionRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     // Rejects (logs + notifies the DBG) and returns false if the AddHost

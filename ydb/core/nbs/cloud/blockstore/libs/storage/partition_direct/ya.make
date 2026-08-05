@@ -11,21 +11,21 @@ SRCS(
     erase_request.cpp
     fast_path_service.cpp
     flush_request.cpp
-    load_actor_adapter.cpp
     part_add_host_to_dbg.cpp
     part_database.cpp
     part_initschema.cpp
     part_loadstate.cpp
+    part_monitoring.cpp
+    part_read_write.cpp
     part_storepartitionids.cpp
     part_storevolumeconfig.cpp
     part_updatevchunkconfig.cpp
-    part_monitoring.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
-    region_geometry.cpp
     read_request_executor.cpp
     read_request_multiple_location.cpp
     read_request_single_location.cpp
+    region_geometry.cpp
     region.cpp
     restore_request.cpp
     vchunk.cpp

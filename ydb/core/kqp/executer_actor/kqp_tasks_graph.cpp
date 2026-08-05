@@ -25,6 +25,7 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
 
 #include <algorithm>
 
@@ -2631,7 +2632,7 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
         FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
 
         AddQueryPathParam(task, GetMeta().UserRequestContext);
-        if (externalSource.GetType() == "PqSource" && i == 0) {   // Only first task will check partition count.
+        if (externalSource.GetType() == NYql::PqSource && i == 0) {   // Only first task will check partition count.
             task.Meta.TaskParams.emplace("partition_count_check_enabled", "true");
         }
         tasksIds.push_back(task.Id);

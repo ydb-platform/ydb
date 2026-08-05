@@ -2936,7 +2936,7 @@ value {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    size_t MakeBigEncryptedExport(TS3Mock& s3Mock, const TString& key, const NBackup::TEncryptionIV& iv, size_t encryptedBlockSize, size_t resultFileSize, bool compressed) {
+    std::pair<size_t, size_t> MakeBigEncryptedExport(TS3Mock& s3Mock, const TString& key, const NBackup::TEncryptionIV& iv, size_t encryptedBlockSize, size_t resultFileSize, bool compressed) {
         const TStringBuf exportPrefix = "/test_bucket/Export123/";
         NBackup::TEncryptionKey encryptionKey(key);
 
@@ -3029,7 +3029,7 @@ value {
             UNIT_ASSERT_VALUES_EQUAL(decodedLines, line);
         }
         UNIT_ASSERT(line > 0);
-        return line;
+        return {line, resultEncryptedData.size()};
     }
 
     TString PrintInProtoText(const NBackup::TEncryptionIV& iv) {
@@ -3058,7 +3058,8 @@ value {
         TS3Mock s3Mock(s3Settings);
         s3Mock.Start();
 
-        const size_t lines = MakeBigEncryptedExport(s3Mock, key, iv, encryptedBlockSize, resultFileSize, compressed);
+        const auto [lines, contentLength] = MakeBigEncryptedExport(s3Mock, key, iv, encryptedBlockSize, resultFileSize, compressed);
+        UNIT_ASSERT_GT(contentLength, 0);
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(false));
@@ -3084,13 +3085,15 @@ value {
         bool wholeFileRead = false;
         bool readyToReboot = false;
         if (rebootAfterLastPortion) {
-            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            runtime.SetObserverFunc([&, contentLength](TAutoPtr<IEventHandle>& ev) {
                 switch (ev->GetTypeRewrite()) {
-                case NWrappers::NExternalStorage::EvGetObjectResponse:
-                    if (ev->Get<NWrappers::NExternalStorage::TEvGetObjectResponse>()->Body.size() < readBatchSize) {
+                case NWrappers::NExternalStorage::EvGetObjectResponse: {
+                    const auto& interval = ev->Get<NWrappers::NExternalStorage::TEvGetObjectResponse>()->GetReadInterval();
+                    if (interval.second + 1 == contentLength) {
                         wholeFileRead = true;
                     }
                     break;
+                }
                 case TEvDataShard::EvS3UploadRowsResponse:
                     readyToReboot = wholeFileRead;
                     break;

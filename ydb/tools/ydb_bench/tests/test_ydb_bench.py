@@ -102,6 +102,13 @@ class YdbBenchTest(unittest.TestCase):
                 self.assertEqual(raised.exception.code, 2)
                 self.assertIn("must be a finite positive number", error.getvalue())
 
+    def test_multi_numa_affinity_is_rejected(self):
+        error = io.StringIO()
+        with redirect_stderr(error), self.assertRaises(SystemExit) as raised:
+            main(["run", "actors-core", "--affinity", "multi-numa"])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("must be 'all' or a comma-separated subset", error.getvalue())
+
     def test_perf_requires_profile_build(self):
         error = io.StringIO()
         with redirect_stderr(error):
@@ -355,7 +362,6 @@ class YdbBenchTest(unittest.TestCase):
             placements = {mode: plan_affinity(mode, topology, 2) for mode in AFFINITY_MODES}
         self.assertIsNone(placements["none"].cpus)
         self.assertEqual(placements["one-whole-numa"].cpus, (0, 1, 2, 3))
-        self.assertEqual(placements["multi-numa"].cpus, (0, 4))
         self.assertEqual(placements["one-whole-chiplet"].cpus, (0, 1))
         self.assertEqual(placements["multi-chiplet"].cpus, (0, 2))
 
@@ -378,9 +384,9 @@ class YdbBenchTest(unittest.TestCase):
             chiplets=((0, (0, 1)),),
         )
         with mock.patch.object(os, "sched_setaffinity", create=True):
-            placement = plan_affinity("multi-numa", topology, 2)
+            placement = plan_affinity("multi-chiplet", topology, 2)
         self.assertFalse(placement.supported)
-        self.assertIn("two NUMA nodes", placement.reason)
+        self.assertIn("two chiplets", placement.reason)
 
     def test_run_fails_when_all_affinity_modes_are_unsupported(self):
         script = self._script("exit 99")
@@ -399,7 +405,7 @@ class YdbBenchTest(unittest.TestCase):
             duration_seconds=1,
             repetitions=1,
             timeout_seconds=5,
-            affinity_modes=("multi-numa",),
+            affinity_modes=("multi-chiplet",),
         )
 
         with mock.patch(
@@ -417,7 +423,7 @@ class YdbBenchTest(unittest.TestCase):
         manifest = json.loads((output / "run.json").read_text())
         self.assertEqual(manifest["status"], "failed")
         self.assertIn("finished_at", manifest)
-        self.assertIn("multi-numa", manifest["error"])
+        self.assertIn("multi-chiplet", manifest["error"])
         self.assertEqual(manifest["runs"], [])
         self.assertEqual(manifest["affinity"][0]["status"], "unsupported")
         self.assertFalse((output / "summary.csv").exists())

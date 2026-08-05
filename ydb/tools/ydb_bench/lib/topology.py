@@ -7,7 +7,6 @@ from typing import Optional
 AFFINITY_MODES = (
     "none",
     "one-whole-numa",
-    "multi-numa",
     "one-whole-chiplet",
     "multi-chiplet",
 )
@@ -145,12 +144,6 @@ def plan_affinity(mode, topology, required_cpus):
         if node is None:
             return _unsupported(mode, "no NUMA node contains allowed CPUs")
         return AffinityPlacement(mode=mode, cpus=node)
-
-    if mode == "multi-numa":
-        groups = [cpus for _, cpus in topology.numa_nodes if cpus]
-        if required_cpus < 2 or len(groups) < 2 or sum(map(len, groups)) < required_cpus:
-            return _unsupported(mode, "at least two NUMA nodes and {} allowed CPUs are required".format(required_cpus))
-        return AffinityPlacement(mode=mode, cpus=_spread(groups, required_cpus))
 
     if mode == "one-whole-chiplet":
         chiplet = next((cpus for _, cpus in topology.chiplets if cpus), None)

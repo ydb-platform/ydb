@@ -46,20 +46,19 @@ ydb/tools/ydb_bench/ydb_bench run actors-core \
 `--build=profile`. Profiling changes both the build and runtime overhead, so its
 throughput must not be mixed with the non-profile baseline.
 
-Every scenario is run in five placement modes by default:
+Every scenario is run in four placement modes by default:
 
 - `none`: no explicit affinity;
 - `one-whole-numa`: all allowed CPUs from one NUMA node;
-- `multi-numa`: CPUs spread across NUMA nodes;
 - `one-whole-chiplet`: all allowed CPUs from one L3-cache group (chiplet);
 - `multi-chiplet`: CPUs spread across chiplets inside one NUMA node.
 
-The `one-whole-*` modes use the complete allowed CPU set of the selected topology
-group, independently of the largest requested thread count. The `multi-*` modes
-use the same number of CPUs as that thread count. Topology is read from Linux
-sysfs and intersected with the process's allowed CPU set. A mode that the machine
-cannot provide is recorded as `unsupported` in `run.json`; it is never silently
-replaced with a different placement. Use, for example,
+The `one-whole-*` modes use the complete allowed CPU set of the selected
+topology group, independently of the largest requested thread count. The
+`multi-chiplet` mode uses the same number of CPUs as that thread count. Topology
+is read from Linux sysfs and intersected with the process's allowed CPU set. A
+mode that the machine cannot provide is recorded as `unsupported` in `run.json`;
+it is never silently replaced with a different placement. Use, for example,
 `--affinity none,one-whole-numa` to run a subset.
 
 Use `--work-dir` when the system temporary directory is mounted with `noexec`.

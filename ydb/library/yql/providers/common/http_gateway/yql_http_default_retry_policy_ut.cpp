@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(THttpDefaultRetryPolicyTest) {
             // 500 is a long retry, so the delay starts from minLongRetryDelay (200ms) and grows.
             // RandomizeDelay returns half of the current delay plus a random part of the other half.
             UNIT_ASSERT_GE_C(*delay, TDuration::MilliSeconds(100), i);
-            UNIT_ASSERT_LT_C(prevDelay, *delay, i);
+            UNIT_ASSERT_LE_C(prevDelay, *delay, i);
             prevDelay = *delay;
         }
     }

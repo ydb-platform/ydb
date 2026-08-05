@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.38.46)
+VERSION(1.39.17)
 
 LICENSE(Apache-2.0)
 
@@ -71,6 +71,7 @@ PY_SRCS(
     botocore/monitoring.py
     botocore/paginate.py
     botocore/parsers.py
+    botocore/plugin.py
     botocore/regions.py
     botocore/response.py
     botocore/retries/__init__.py
@@ -221,6 +222,7 @@ RESOURCE_FILES(
     botocore/data/arc-zonal-shift/2022-10-30/endpoint-rule-set-1.json
     botocore/data/arc-zonal-shift/2022-10-30/paginators-1.json
     botocore/data/arc-zonal-shift/2022-10-30/service-2.json
+    botocore/data/arc-zonal-shift/2022-10-30/waiters-2.json
     botocore/data/artifact/2018-05-10/endpoint-rule-set-1.json
     botocore/data/artifact/2018-05-10/paginators-1.json
     botocore/data/artifact/2018-05-10/service-2.json
@@ -245,6 +247,7 @@ RESOURCE_FILES(
     botocore/data/b2bi/2022-06-23/endpoint-rule-set-1.json
     botocore/data/b2bi/2022-06-23/paginators-1.json
     botocore/data/b2bi/2022-06-23/service-2.json
+    botocore/data/b2bi/2022-06-23/waiters-2.json
     botocore/data/backup-gateway/2021-01-01/endpoint-rule-set-1.json
     botocore/data/backup-gateway/2021-01-01/examples-1.json
     botocore/data/backup-gateway/2021-01-01/paginators-1.json
@@ -275,6 +278,14 @@ RESOURCE_FILES(
     botocore/data/bedrock-agent/2023-06-05/endpoint-rule-set-1.json
     botocore/data/bedrock-agent/2023-06-05/paginators-1.json
     botocore/data/bedrock-agent/2023-06-05/service-2.json
+    botocore/data/bedrock-agentcore-control/2023-06-05/endpoint-rule-set-1.json
+    botocore/data/bedrock-agentcore-control/2023-06-05/paginators-1.json
+    botocore/data/bedrock-agentcore-control/2023-06-05/service-2.json
+    botocore/data/bedrock-agentcore-control/2023-06-05/waiters-2.json
+    botocore/data/bedrock-agentcore/2024-02-28/endpoint-rule-set-1.json
+    botocore/data/bedrock-agentcore/2024-02-28/paginators-1.json
+    botocore/data/bedrock-agentcore/2024-02-28/service-2.json
+    botocore/data/bedrock-agentcore/2024-02-28/waiters-2.json
     botocore/data/bedrock-data-automation-runtime/2024-06-13/endpoint-rule-set-1.json
     botocore/data/bedrock-data-automation-runtime/2024-06-13/paginators-1.json
     botocore/data/bedrock-data-automation-runtime/2024-06-13/service-2.json
@@ -683,6 +694,7 @@ RESOURCE_FILES(
     botocore/data/ds/2015-04-16/examples-1.json
     botocore/data/ds/2015-04-16/paginators-1.json
     botocore/data/ds/2015-04-16/service-2.json
+    botocore/data/ds/2015-04-16/waiters-2.json
     botocore/data/dsql/2018-05-10/endpoint-rule-set-1.json
     botocore/data/dsql/2018-05-10/paginators-1.json
     botocore/data/dsql/2018-05-10/service-2.json
@@ -869,6 +881,7 @@ RESOURCE_FILES(
     botocore/data/freetier/2023-09-07/endpoint-rule-set-1.json
     botocore/data/freetier/2023-09-07/paginators-1.json
     botocore/data/freetier/2023-09-07/service-2.json
+    botocore/data/freetier/2023-09-07/waiters-2.json
     botocore/data/fsx/2018-03-01/endpoint-rule-set-1.json
     botocore/data/fsx/2018-03-01/examples-1.json
     botocore/data/fsx/2018-03-01/paginators-1.json
@@ -1189,6 +1202,7 @@ RESOURCE_FILES(
     botocore/data/mailmanager/2023-10-17/endpoint-rule-set-1.json
     botocore/data/mailmanager/2023-10-17/paginators-1.json
     botocore/data/mailmanager/2023-10-17/service-2.json
+    botocore/data/mailmanager/2023-10-17/waiters-2.json
     botocore/data/managedblockchain-query/2023-05-04/endpoint-rule-set-1.json
     botocore/data/managedblockchain-query/2023-05-04/paginators-1.json
     botocore/data/managedblockchain-query/2023-05-04/service-2.json
@@ -1351,6 +1365,10 @@ RESOURCE_FILES(
     botocore/data/observabilityadmin/2018-05-10/paginators-1.json
     botocore/data/observabilityadmin/2018-05-10/service-2.json
     botocore/data/observabilityadmin/2018-05-10/waiters-2.json
+    botocore/data/odb/2024-08-20/endpoint-rule-set-1.json
+    botocore/data/odb/2024-08-20/paginators-1.json
+    botocore/data/odb/2024-08-20/service-2.json
+    botocore/data/odb/2024-08-20/waiters-2.json
     botocore/data/omics/2022-11-28/endpoint-rule-set-1.json
     botocore/data/omics/2022-11-28/paginators-1.json
     botocore/data/omics/2022-11-28/service-2.json
@@ -1531,6 +1549,7 @@ RESOURCE_FILES(
     botocore/data/repostspace/2022-05-13/endpoint-rule-set-1.json
     botocore/data/repostspace/2022-05-13/paginators-1.json
     botocore/data/repostspace/2022-05-13/service-2.json
+    botocore/data/repostspace/2022-05-13/waiters-2.json
     botocore/data/resiliencehub/2020-04-30/endpoint-rule-set-1.json
     botocore/data/resiliencehub/2020-04-30/examples-1.json
     botocore/data/resiliencehub/2020-04-30/paginators-1.json
@@ -1606,6 +1625,10 @@ RESOURCE_FILES(
     botocore/data/s3tables/2018-05-10/paginators-1.json
     botocore/data/s3tables/2018-05-10/service-2.json
     botocore/data/s3tables/2018-05-10/waiters-2.json
+    botocore/data/s3vectors/2025-07-15/endpoint-rule-set-1.json
+    botocore/data/s3vectors/2025-07-15/paginators-1.json
+    botocore/data/s3vectors/2025-07-15/service-2.json
+    botocore/data/s3vectors/2025-07-15/waiters-2.json
     botocore/data/sagemaker-a2i-runtime/2019-11-07/endpoint-rule-set-1.json
     botocore/data/sagemaker-a2i-runtime/2019-11-07/examples-1.json
     botocore/data/sagemaker-a2i-runtime/2019-11-07/paginators-1.json

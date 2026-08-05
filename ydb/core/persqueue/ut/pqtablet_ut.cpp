@@ -2871,13 +2871,38 @@ Y_UNIT_TEST_F(Duplicate_ReadSetAck_From_Same_Recipient, TPQTabletFixture)
         SendToPipe(Ctx->Edge, event.release());
     };
 
+    const TString deleteTxKeyFrom = GetTxKey(txId);
+    const TString deleteTxKeyTo = GetTxKey(txId + 1);
+    bool sawPrematureDelete = false;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                for (const auto& cmd : msg->Record.GetCmdDeleteRange()) {
+                    if (cmd.HasRange() &&
+                        cmd.GetRange().GetFrom() == deleteTxKeyFrom &&
+                        cmd.GetRange().GetTo() == deleteTxKeyTo)
+                    {
+                        sawPrematureDelete = true;
+                    }
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
     sendReadSetAck(tabletB);
     sendReadSetAck(tabletB);
 
     // Without dedup, two acks from B would satisfy HaveAllRecipientsReceive (2/2) even though C
-    // has not acked. DeleteTx must not run yet; give the write cycle a chance to flush if it were queued.
-    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(300));
+    // has not acked. DeleteTx must not run; give WRITE_TX a chance to flush if it were queued.
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return sawPrematureDelete;
+    };
+    Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(2));
+    UNIT_ASSERT(!sawPrematureDelete);
     AssertTransactionInKV(txId);
+    Ctx->Runtime->SetObserverFunc(prev);
 
     sendReadSetAck(tabletC);
 

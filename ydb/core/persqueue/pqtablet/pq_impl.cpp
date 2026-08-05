@@ -4285,11 +4285,18 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
     const NKikimrTx::TEvMediatorPlanStep& event = ev->Record;
     const ui64 step = event.GetStep();
     TMaybe<ui64> lastPlannedTxId;
+    ui32 knownTxCount = 0;
+    ui32 unknownTxCount = 0;
+    TStringBuilder transactionsDiag;
 
     for (const auto& tx : event.GetTransactions()) {
         PQ_ENSURE(tx.HasTxId());
         const ui64 txId = tx.GetTxId();
         PQ_ENSURE(!lastPlannedTxId.Defined() || (*lastPlannedTxId < txId));
+
+        if (!transactionsDiag.empty()) {
+            transactionsDiag << ',';
+        }
 
         if (auto p = Txs.find(txId); p != Txs.end()) {
             TDistributedTransaction& tx = p->second;
@@ -4307,33 +4314,53 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
 
                 tx.OnPlanStep(step);
                 TryExecuteTxs(ctx, tx);
+                transactionsDiag << txId << ":known:new";
             } else {
                 YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Transaction already planned for step",
                     {"logPrefix", LogPrefix()},
                     {"txStep", tx.Step},
                     {"step", step},
                     {"txId", txId});
+                transactionsDiag << txId << ":known:already_planned:" << tx.Step;
             }
 
+            ++knownTxCount;
             lastPlannedTxId = txId;
         } else {
             YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Unknown transaction TxId Step",
                 {"logPrefix", LogPrefix()},
                 {"txId", txId},
                 {"step", step});
+            ++unknownTxCount;
+            transactionsDiag << txId << ":unknown";
         }
     }
 
-    // All-unknown PlanStep is allowed only for step <= PlanStep (retransmit after we already
-    // planned, executed and deleted the txs of this step; PlanStep was advanced then).
-    // All-unknown with step > PlanStep must not happen on the KQP path: a TxId reaches the
-    // coordinator only after PREPARED is persisted and is in Txs; cancel-before-plan is not
-    // sent to PQ; expire-before-own-PlanStep is blocked by MediatorTimeCast SafeStep.
-    // Hitting this means durable tx state / PlanStep is inconsistent with the mediator —
-    // fail the tablet rather than ack a future empty plan and silently move on.
+    // ENSURE(step <= PlanStep || lastPlannedTxId) fails only when step > PlanStep and no TxId
+    // from this PlanStep is in Txs (including an empty Transactions list). Paths:
+    //
+    // | Path | How | Prod KQP? |
+    // |---|---|---|
+    // | Empty Transactions, step > PlanStep | Mediator anomaly / unexpected empty plan | Should not |
+    // | All TxIds unknown, step > PlanStep | Durable Txs/PlanStep lost or never restored; mediator retries | Disaster |
+    // | All TxIds unknown, step > PlanStep | Coordinator/mediator listed this tablet for txs never prepared here | Bug |
+    // | All TxIds unknown, step > PlanStep | UT CancelTransactionProposal deleted PREPARED before PlanStep | UT only |
+    // | All TxIds unknown, step > PlanStep | All PREPAREDs EXPIRED+deleted before own PlanStep | Blocked by SafeStep |
+    //
+    // Allowed: all unknown with step <= PlanStep (retransmit after planned/executed/deleted;
+    // PlanStep was advanced then). Mixed known+unknown does not fail (lastPlannedTxId set).
     PQ_ENSURE(step <= PlanStep || lastPlannedTxId.Defined())
         ("step", step)
-        ("planStep", PlanStep);
+        ("planStep", PlanStep)
+        ("planTxId", PlanTxId)
+        ("execStep", ExecStep)
+        ("execTxId", ExecTxId)
+        ("sender", sender.ToString())
+        ("txCount", event.TransactionsSize())
+        ("knownTxCount", knownTxCount)
+        ("unknownTxCount", unknownTxCount)
+        ("hasKnownTx", lastPlannedTxId.Defined())
+        ("transactions", transactionsDiag);
 
     if ((step > PlanStep) && lastPlannedTxId.Defined()) {
         // если это план из будущего, то надо запомнить, последнюю запланированную транзакцию

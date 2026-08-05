@@ -173,11 +173,8 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr EndpointSwitches;
         NMonitoring::TDynamicCounters::TCounterPtr FiveXxRefreshTriggers;
         NMonitoring::TDynamicCounters::TCounterPtr IsUsingProxy;
-        // How long it takes to resolve a new host through the balancer.
         NMonitoring::THistogramPtr BalancerLatencyMs;
 
-        // Per-request sensors of the endpoint we currently use: the balancer endpoint
-        // itself, or the concrete host the balancer has pointed us to.
         TIntrusivePtr<TRouteCounters> BalancerRouteCounters;
         TIntrusivePtr<TRouteCounters> NonBalancerRouteCounters;
 

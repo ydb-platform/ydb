@@ -228,7 +228,7 @@ private:
             return std::make_pair(lhsOrder, lhs.first) < std::make_pair(rhsOrder, rhs.first);
         };
 
-        std::stable_sort(sortedParts.begin(), sortedParts.end(), cmpToSort);
+        std::sort(sortedParts.begin(), sortedParts.end(), cmpToSort);
 
         for (auto& logBackends : LogBackends) {
             const auto builderIndex = static_cast<size_t>(logBackends.first);

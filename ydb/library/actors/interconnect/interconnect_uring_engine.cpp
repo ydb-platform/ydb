@@ -208,6 +208,7 @@ namespace NActors {
             TMutableContiguousSpan GetReadSpan() {
                 if (ReadBuffer.size() < MinReadBufferSize) {
                     ReadBuffer = TRcBuf::Uninitialized(ReadBufferSize);
+                    NSan::Poison(ReadBuffer.data(), ReadBuffer.size());
                 }
                 return ReadBuffer.UnsafeGetContiguousSpanMut();
             }
@@ -215,8 +216,13 @@ namespace NActors {
             void ApplyBytesRead(size_t num) {
                 BytesReceived += num;
                 LastInputActivityTimestamp = GetCycleCountFast();
-                TRcBuf chunk = {TRcBuf::Piece, ReadBuffer.data(), num, ReadBuffer};
-                Deserializer.Push(std::move(chunk), this, SessionId);
+                Y_DEBUG_ABORT_UNLESS(num <= ReadBuffer.size());
+                NSan::Unpoison(ReadBuffer.data(), num);
+                Deserializer.Push(num == ReadBuffer.size()
+                        ? std::move(ReadBuffer)
+                        : TRcBuf(TRcBuf::Piece, ReadBuffer.data(), num, ReadBuffer),
+                    this,
+                    SessionId);
                 Y_ABORT_UNLESS(num <= ReadBuffer.size());
                 const size_t remain = ReadBuffer.size() - num;
                 ReadBuffer.TrimFront(remain - remain % 64); // make only this number of bytes remaining in buffer
@@ -296,8 +302,10 @@ namespace NActors {
                 // Advance past exactly the bytes the kernel accepted. A writev can be short (e.g. under
                 // backpressure or on a real network), so drop only fully-sent spans and trim the span that
                 // straddles the boundary; the rest stay queued and are retried by the next writev.
-                for (auto& span : OutgoingSpans) {
-                    NSan::CheckMemIsInitialized(span.data(), span.size());
+                if constexpr (NSan::MSanIsOn()) {
+                    for (auto& span : OutgoingSpans) {
+                        NSan::CheckMemIsInitialized(span.data(), span.size());
+                    }
                 }
                 for (size_t remaining = num; remaining; OutgoingSpans.pop_front()) {
                     Y_DEBUG_ABORT_UNLESS(!OutgoingSpans.empty());
@@ -1361,6 +1369,7 @@ namespace NActors {
                     session.Disconnect(TDisconnectReason::EndOfStream());
                 } else {
                     *BytesReceived += res;
+
                     session.ReceiveCycles = 0;
                     session.EventsReceivedCallback = 0;
                     session.EventsReceivedActorSystem = 0;

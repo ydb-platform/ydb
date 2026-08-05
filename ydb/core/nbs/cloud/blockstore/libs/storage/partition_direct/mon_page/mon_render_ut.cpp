@@ -102,6 +102,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
     // slots — the "32 DBGs on 8 nodes" case in miniature.
     TDbgSnapshot MakeLatencyDbg(
         size_t index,
+        ui32 pdiskId,
         ui32 ddiskSlotId,
         ui32 pbufferSlotId,
         const TLatencyStats& writeStats,
@@ -121,11 +122,11 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .HostIndex = 0,
             .DDiskId = {
                 /*nodeId*/ 1,
-                /*pdiskId*/ 1000,
+                /*pdiskId*/ pdiskId,
                 /*ddiskSlotId*/ ddiskSlotId},
             .PBufferId =
                 {{/*nodeId*/ 1,
-                  /*pdiskId*/ 1000,
+                  /*pdiskId*/ pdiskId,
                   /*ddiskSlotId*/ pbufferSlotId}},
             .DDiskSession = "Locked",
             .PBufferConnected = true,
@@ -346,14 +347,17 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .Page = EMonPage::Latency,
             .TabletInfo = {.TabletId = 42},
             .Dbgs =
-                {MakeLatencyDbg(
+                {// Same node, two pdisks — exercises pdisk grouping.
+                 MakeLatencyDbg(
                      0,
+                     /*pdisk*/ 1000,
                      /*ddisk*/ 17,
                      /*pbuffer*/ 18,
                      writeStats,
                      readStats),
                  MakeLatencyDbg(
                      1,
+                     /*pdisk*/ 2000,
                      /*ddisk*/ 19,
                      /*pbuffer*/ 20,
                      writeStats,
@@ -362,36 +366,81 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         };
 
         const TString html = RenderMonPage(data);
-        UNIT_ASSERT_STRING_CONTAINS(html, "Latency");
+        // No top-level "Latency" section heading — only the three subsections.
+        UNIT_ASSERT(!html.Contains("<h3>Latency</h3>"));
         UNIT_ASSERT_STRING_CONTAINS(html, "Latency by node");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Slots by node");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Latency by slot");
         UNIT_ASSERT_STRING_CONTAINS(html, "Latency detail");
         UNIT_ASSERT_STRING_CONTAINS(html, "WriteToPBuffer");
         UNIT_ASSERT_STRING_CONTAINS(html, "ReadFromDDisk");
+        // Percentile selector lives under Latency by node.
+        UNIT_ASSERT_STRING_CONTAINS(html, "Percentile:");
+        // Operation selector lives under Latency by slot.
+        UNIT_ASSERT_STRING_CONTAINS(html, "Slot grid operation:");
+        // Auto refresh re-fetches live content (no full page reload).
+        UNIT_ASSERT_STRING_CONTAINS(html, "latencyAutoRefresh");
+        UNIT_ASSERT_STRING_CONTAINS(html, "latencyRefreshRate");
+        UNIT_ASSERT_STRING_CONTAINS(html, "latencyLiveContent");
+        UNIT_ASSERT_STRING_CONTAINS(html, "refreshLive");
+        UNIT_ASSERT(!html.Contains("location.reload("));
+        // Script must come after live content so Show slots / Show data bind
+        // on first paint (not only after an auto-refresh swap).
+        UNIT_ASSERT(
+            html.find("id='latencyLiveContent'") < html.find("refreshLive"));
+        // Slots / detail are hidden by default (checkboxes off).
+        UNIT_ASSERT_STRING_CONTAINS(html, "latShowSlots");
+        UNIT_ASSERT_STRING_CONTAINS(html, "latSlotNodeFilter");
+        UNIT_ASSERT_STRING_CONTAINS(html, "latShowDetail");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "id='latSlotsBody' style='display:none;");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "id='latDetailBody' style='display:none;");
         // Single node row for node 1 (both DBGs share it).
         UNIT_ASSERT_STRING_CONTAINS(html, "node 1");
-        // Pbuffer slots attributed for WriteToPBuffer.
+        // Pdisk groups labelled (each pdisk on its own row).
+        UNIT_ASSERT_STRING_CONTAINS(html, "pdisk 1000");
+        UNIT_ASSERT_STRING_CONTAINS(html, "pdisk 2000");
+        // Proportional bar (no cell background fill).
+        UNIT_ASSERT_STRING_CONTAINS(html, "height:4px; background:#eee");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "background:#90ee90");   // read <500us
+        UNIT_ASSERT_STRING_CONTAINS(html, "background:#ffd54f");   // write 4ms
+        // Pbuffer / ddisk actor links in the detail table.
         UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:18</a>");
-        UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:20</a>");
-        // DDisk slots attributed for ReadFromDDisk.
+        UNIT_ASSERT_STRING_CONTAINS(html, ">1:2000:20</a>");
         UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:17</a>");
-        UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:19</a>");
-        // Actor links for both kinds of slots.
+        UNIT_ASSERT_STRING_CONTAINS(html, ">1:2000:19</a>");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
             "/node/1/actors/ddisks/ddisk_p000001000_s000000017");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
             "/node/1/actors/persistent_buffer?pb=");
-        // Detail table shows Count / P50 / P99 columns.
-        UNIT_ASSERT_STRING_CONTAINS(html, "Count");
-        UNIT_ASSERT_STRING_CONTAINS(html, "P50");
-        UNIT_ASSERT_STRING_CONTAINS(html, "P99");
+        // Detail table: filters + sortable columns + PDisk column.
+        UNIT_ASSERT_STRING_CONTAINS(html, "latFilterNode");
+        UNIT_ASSERT_STRING_CONTAINS(html, "latFilterPdisk");
+        UNIT_ASSERT_STRING_CONTAINS(html, "latFilterType");
+        UNIT_ASSERT_STRING_CONTAINS(html, "latFilterOp");
+        UNIT_ASSERT_STRING_CONTAINS(html, "data-sort='count'");
+        UNIT_ASSERT_STRING_CONTAINS(html, "data-sort='p99'");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<th>PDisk</th>");
         // p99 of write (4.000ms) appears in the heatmap / detail table.
         UNIT_ASSERT_STRING_CONTAINS(html, "4.000ms");
-        // Percentile selector links.
+        // Percentile / operation selectors redraw client-side (no fetch).
+        UNIT_ASSERT_STRING_CONTAINS(html, "lat-nav");
+        UNIT_ASSERT_STRING_CONTAINS(html, "redrawViews");
+        UNIT_ASSERT_STRING_CONTAINS(html, "data-p50=");
+        UNIT_ASSERT_STRING_CONTAINS(html, "data-ops=");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=latency&p=50");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=latency&p=99");
+        UNIT_ASSERT_STRING_CONTAINS(html, "history.pushState");
+        // lat-nav must not trigger a data refetch.
+        UNIT_ASSERT(html.Contains("redrawViews();"));
+        UNIT_ASSERT(!html.Contains("history.pushState(null,'',href);"
+                                   "refreshLive();"));
     }
 
     Y_UNIT_TEST(LatencyPageSelectedPercentileAndOperation)
@@ -416,6 +465,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .TabletInfo = {.TabletId = 42},
             .Dbgs = {MakeLatencyDbg(
                 0,
+                /*pdisk*/ 1000,
                 /*ddisk*/ 17,
                 /*pbuffer*/ 18,
                 writeStats,
@@ -433,8 +483,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             "page=latency&p=50&op=" +
                 ToString(static_cast<size_t>(EOperation::WriteToPBuffer)));
         UNIT_ASSERT_STRING_CONTAINS(html, "for WriteToPBuffer");
-        // Slot grid still has the pbuffer square (write), and the detail
-        // table still lists ddisk rows for ReadFromDDisk.
         UNIT_ASSERT_STRING_CONTAINS(html, "pbuffer");
         UNIT_ASSERT_STRING_CONTAINS(html, "ddisk");
     }
@@ -443,6 +491,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
     {
         TDbgSnapshot dbg = MakeLatencyDbg(
             0,
+            /*pdisk*/ 1000,
             17,
             18,
             MakeStats(
@@ -464,7 +513,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         const TString html = RenderMonPage(data);
         UNIT_ASSERT_STRING_CONTAINS(html, "TimePredictionHistorySize");
         UNIT_ASSERT(!html.Contains("Latency by node"));
-        UNIT_ASSERT(!html.Contains("Slots by node"));
+        UNIT_ASSERT(!html.Contains("Latency by slot"));
     }
 
     Y_UNIT_TEST(LatencyPageShowsDashForEmptyOperation)
@@ -483,6 +532,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .TabletInfo = {.TabletId = 42},
             .Dbgs = {MakeLatencyDbg(
                 0,
+                /*pdisk*/ 1000,
                 /*ddisk*/ 17,
                 /*pbuffer*/ 18,
                 writeStats,
@@ -491,8 +541,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
 
         const TString html = RenderMonPage(data);
         UNIT_ASSERT_STRING_CONTAINS(html, "<span style='color:#999;'>-</span>");
-        // No fabricated zero duration for the empty operation in the detail
-        // table (only WriteToPBuffer rows).
         UNIT_ASSERT_STRING_CONTAINS(html, "WriteToPBuffer");
         // ReadFromDDisk appears as a heatmap column header, but not as a
         // detail-table cell value next to a count (no samples folded).

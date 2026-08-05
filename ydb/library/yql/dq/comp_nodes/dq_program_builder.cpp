@@ -146,6 +146,10 @@ void TDqProgramBuilder::AddJoinFilters(TCallableBuilder& callableBuilder, TRunti
                                        TRuntimeNode rightInput, EJoinKind joinKind,
                                        const TJoinFilterLambda& leftFilter, const TJoinFilterLambda& rightFilter,
                                        const TJoinCommonFilterLambda& commonFilter) {
+    if (!leftFilter && !rightFilter && !commonFilter) {
+        return;
+    }
+
     TRuntimeNode::TList leftArgs;
     if (leftFilter || commonFilter) {
         leftArgs = MakeRowArgs(leftInput, /*forceOptional=*/false);

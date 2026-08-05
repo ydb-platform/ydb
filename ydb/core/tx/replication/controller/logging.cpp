@@ -4,49 +4,36 @@
 
 namespace NKikimr::NReplication::NController {
 
-TTabletLogPrefix::TTabletLogPrefix(const TController* self)
-    : TabletId(self->TabletID())
+NActors::NStructuredLog::TStructuredMessage CreateTabletLogPrefix(const TController* self)
 {
+    NStructuredLog::TStructuredMessage result;
+    YDB_LOG_UPDATE_MESSAGE(result,
+        {"tabletId", self->TabletID()});
+    return result;
 }
 
-TTabletLogPrefix::TTabletLogPrefix(const TController* self, const TString& txName)
-    : TabletId(self->TabletID())
-    , TxName(txName)
+NActors::NStructuredLog::TStructuredMessage CreateTabletLogPrefix(const TController* self, const TString& txName)
 {
+    NStructuredLog::TStructuredMessage result;
+    YDB_LOG_UPDATE_MESSAGE(result,
+        {"tabletId", self->TabletID()},
+        {"txName", txName});
+    return result;
 }
 
-void TTabletLogPrefix::Out(IOutputStream& output) const {
-    output << "[controller " << TabletId << "]";
-    if (TxName) {
-        output << "[" << TxName << "]";
-    }
-    output << " ";
-}
-
-TActorLogPrefix::TActorLogPrefix(const TString& activity, ui64 rid, ui64 tid)
-    : Activity(activity)
-    , ReplicationId(rid)
-    , TargetId(tid)
+NActors::NStructuredLog::TStructuredMessage CreateActorLogPrefix(const TString& activity, ui64 rid, ui64 tid)
 {
-}
-
-void TActorLogPrefix::Out(IOutputStream& output) const {
-    output << "[" << Activity << "]";
-    if (ReplicationId) {
-        output << "[rid " << ReplicationId << "]";
+    NStructuredLog::TStructuredMessage result;
+    YDB_LOG_UPDATE_MESSAGE(result,
+        {"activity", activity});
+    if (rid) {
+        YDB_LOG_UPDATE_MESSAGE(result,
+            {"replicationId", rid});
     }
-    if (TargetId) {
-        output << "[tid " << TargetId << "]";
+    if (tid) {
+        YDB_LOG_UPDATE_MESSAGE(result,
+            {"targetId", tid});
     }
-    output << " ";
+    return result;
 }
-
-}
-
-Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TTabletLogPrefix, output, value) {
-    value.Out(output);
-}
-
-Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TActorLogPrefix, output, value) {
-    value.Out(output);
 }

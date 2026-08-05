@@ -148,7 +148,8 @@ namespace NActors {
             std::unique_ptr<IEventBase> Event;
             TRcBuf Scratch;
             size_t ScratchBytesUsed = 0;
-            ui64 EventReceivedTimestamp;
+            ui64 EventReceivedTimestamp = 0;
+            std::vector<y_absl::Cord> Cords; // keeping ownership of the following cords referring the data
         };
         std::deque<TRefcountItem> RefcountItems;
         size_t NumBytesInScratchBuffers = 0;

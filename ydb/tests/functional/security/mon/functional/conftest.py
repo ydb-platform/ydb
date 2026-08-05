@@ -102,6 +102,24 @@ def ydb_cluster_with_extra_sids_controls(certificates):
     cluster.stop()
 
 
+@pytest.fixture
+def mon_base_url_without_extra_sids_control(ydb_cluster_without_extra_sids_controls):
+    return get_mon_base_url(ydb_cluster_without_extra_sids_controls)
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_without_extra_sids_controls(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+    )
+    configurator.yaml_config.setdefault('feature_flags', {})['enable_extra_sids_control_for_http_viewer'] = False
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield cluster
+    cluster.stop()
+
+
 @pytest.fixture(scope='module')
 def ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag(certificates):
     configurator = create_ydb_configurator(

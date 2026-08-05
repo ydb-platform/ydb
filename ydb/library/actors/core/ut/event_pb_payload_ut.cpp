@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
 
         TString chunkerRes;
         TCoroutineChunkSerializer chunker;
-        chunker.SetSerializingEvent(&msg, true);
+        chunker.SetSerializingEvent(&msg, true, false);
         while (!chunker.IsComplete()) {
             char buffer[4096];
             auto range = chunker.FeedBuf(buffer, sizeof(buffer));
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         for (size_t chunkSize = 1; chunkSize <= 32; ++chunkSize) {
             TString actual;
             TCoroutineChunkSerializer chunker;
-            chunker.SetSerializingEvent(&msg, true);
+            chunker.SetSerializingEvent(&msg, true, false);
             while (!chunker.IsComplete()) {
                 TString buffer(chunkSize, '\0');
                 for (const auto& chunk : chunker.FeedBuf(buffer.begin(), buffer.size())) {

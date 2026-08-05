@@ -3805,7 +3805,7 @@
       "members":{
         "ConfigurationRecorderNames":{
           "shape":"ConfigurationRecorderNameList",
-          "documentation":"<p>The name of the configuration recorder. If the name is not specified, the opertation returns the status for the customer managed configuration recorder configured for the account, if applicable.</p> <note> <p>When making a request to this operation, you can only specify one configuration recorder.</p> </note>"
+          "documentation":"<p>The name of the configuration recorder. If the name is not specified, the operation returns the status for the customer managed configuration recorder configured for the account, if applicable.</p> <note> <p>When making a request to this operation, you can only specify one configuration recorder.</p> </note>"
         },
         "ServicePrincipal":{
           "shape":"ServicePrincipal",
@@ -3833,7 +3833,7 @@
       "members":{
         "ConfigurationRecorderNames":{
           "shape":"ConfigurationRecorderNameList",
-          "documentation":"<p>A list of names of the configuration recorders that you want to specify.</p>"
+          "documentation":"<p>A list of names of the configuration recorders that you want to specify.</p> <note> <p>When making a request to this operation, you can only specify one configuration recorder.</p> </note>"
         },
         "ServicePrincipal":{
           "shape":"ServicePrincipal",
@@ -7983,7 +7983,42 @@
         "AWS::RDS::OptionGroup",
         "AWS::Redshift::EndpointAccess",
         "AWS::Route53Resolver::FirewallRuleGroup",
-        "AWS::SSM::Document"
+        "AWS::SSM::Document",
+        "AWS::AppConfig::ExtensionAssociation",
+        "AWS::AppIntegrations::Application",
+        "AWS::AppSync::ApiCache",
+        "AWS::Bedrock::Guardrail",
+        "AWS::Bedrock::KnowledgeBase",
+        "AWS::Cognito::IdentityPool",
+        "AWS::Connect::Rule",
+        "AWS::Connect::User",
+        "AWS::EC2::ClientVpnTargetNetworkAssociation",
+        "AWS::EC2::EIPAssociation",
+        "AWS::EC2::IPAMResourceDiscovery",
+        "AWS::EC2::IPAMResourceDiscoveryAssociation",
+        "AWS::EC2::InstanceConnectEndpoint",
+        "AWS::EC2::SnapshotBlockPublicAccess",
+        "AWS::EC2::VPCBlockPublicAccessExclusion",
+        "AWS::EC2::VPCBlockPublicAccessOptions",
+        "AWS::EC2::VPCEndpointConnectionNotification",
+        "AWS::EC2::VPNConnectionRoute",
+        "AWS::Evidently::Segment",
+        "AWS::IAM::OIDCProvider",
+        "AWS::InspectorV2::Activation",
+        "AWS::MSK::ClusterPolicy",
+        "AWS::MSK::VpcConnection",
+        "AWS::MediaConnect::Gateway",
+        "AWS::MemoryDB::SubnetGroup",
+        "AWS::OpenSearchServerless::Collection",
+        "AWS::OpenSearchServerless::VpcEndpoint",
+        "AWS::Redshift::EndpointAuthorization",
+        "AWS::Route53Profiles::Profile",
+        "AWS::S3::StorageLensGroup",
+        "AWS::S3Express::BucketPolicy",
+        "AWS::S3Express::DirectoryBucket",
+        "AWS::SageMaker::InferenceExperiment",
+        "AWS::SecurityHub::Standard",
+        "AWS::Transfer::Profile"
       ]
     },
     "ResourceTypeList":{
@@ -8360,7 +8395,7 @@
         },
         "EvaluationMode":{
           "shape":"EvaluationMode",
-          "documentation":"<p>The mode of an evaluation. The valid values for this API are <code>DETECTIVE</code> and <code>PROACTIVE</code>.</p>"
+          "documentation":"<p>The mode of an evaluation.</p> <note> <p>The only valid value for this API is <code>PROACTIVE</code>.</p> </note>"
         },
         "EvaluationTimeout":{
           "shape":"EvaluationTimeout",

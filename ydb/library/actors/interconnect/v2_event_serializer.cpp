@@ -148,18 +148,13 @@ namespace NActors {
 
             bool fromBuffer = span.data() >= bufferSpan.data() && span.data() + span.size() <= bufferSpan.data() + bufferSpan.size();
 
-            if (span.size() <= 64 && !fromBuffer) {
+            if (!fromBuffer && (reinterpret_cast<uintptr_t>(span.data()) & 63) + span.size() <= 64 && buffer.size() >= span.size()) {
                 // we got span referenced outside original buffer; check if we can copy it into the buffer, if it is
                 // small enough and buffer has the space to do it
-                const uintptr_t spanBegin = reinterpret_cast<uintptr_t>(span.data());
-                const uintptr_t spanEnd = reinterpret_cast<uintptr_t>(span.data() + span.size() - 1);
-                const uintptr_t mask = ~uintptr_t(63); // check if it fits the same cacheline
-                if (buffer.size() >= span.size() && (spanBegin & mask) == (spanEnd & mask)) {
-                    memcpy(buffer.UnsafeGetDataMut(), span.data(), span.size());
-                    span = {buffer.data(), span.size()};
-                    buffer.TrimFront(buffer.size() - span.size());
-                    fromBuffer = true;
-                }
+                memcpy(buffer.UnsafeGetDataMut(), span.data(), span.size());
+                span = {buffer.data(), span.size()};
+                buffer.TrimFront(buffer.size() - span.size());
+                fromBuffer = true;
             }
 
             Y_ABORT_UNLESS(span.size() <= maxBytesToProduce);
@@ -168,19 +163,14 @@ namespace NActors {
             CumulativeProduced += span.size();
             if (lastSpanEnd != span.data()) {
                 out->push_back(span);
-                lastSpanEnd = span.data() + span.size();
             } else {
                 Y_DEBUG_ABORT_UNLESS(!out->empty());
                 TContiguousSpan& lastSpan = out->back();
                 lastSpan = {lastSpan.data(), lastSpan.size() + span.size()};
-                lastSpanEnd += span.size();
             }
+            lastSpanEnd = span.data() + span.size();
 
-            if (span.data() + span.size() <= bufferSpan.data() || span.data() >= bufferSpan.data() + bufferSpan.size()) {
-                BytesAliased += span.size();
-            } else {
-                BytesCopied += span.size();
-            }
+            (fromBuffer ? BytesCopied : BytesAliased) += span.size();
 
             if (fromBuffer) {
                 Y_DEBUG_ABORT_UNLESS(*bufferProduced < CumulativeProduced);
@@ -221,8 +211,7 @@ namespace NActors {
             IEventHandle& ev = *queue.Events.Peek();
 
             TChunkHeader *header = nullptr;
-            auto addEventChunkBytes = [&](const char *ptr, size_t numBytes) {
-                Y_DEBUG_ABORT_UNLESS(numBytes);
+            auto ensureHeader = [&] {
                 if (!header) {
                     header = static_cast<TChunkHeader*>(takeInBuffer(sizeof(TChunkHeader)));
                     *header = {
@@ -230,9 +219,20 @@ namespace NActors {
                         .TypeChannel = static_cast<ui16>(channel | TChunkHeader::kEventChunk),
                     };
                 }
+            };
+            auto addEventChunkBytes = [&](const char *ptr, size_t numBytes) {
+                ensureHeader();
+                Y_DEBUG_ABORT_UNLESS(numBytes);
                 Y_DEBUG_ABORT_UNLESS(header->Length + numBytes <= Max<ui16>());
                 header->Length += numBytes;
                 produceOutputSpan({ptr, numBytes}, Checksumming);
+
+                Y_ABORT_UNLESS(numBytes <= queue.SerializedBytesPending, "Type# 0x%08" PRIx32
+                    " SerializedBytesPending# %zu CalculateSerializedSize# %zu CalculateSerializedSizeCached# %zu",
+                    ev.Type, queue.SerializedBytesPending, ev.GetBase()->CalculateSerializedSize(),
+                    ev.GetBase()->CalculateSerializedSizeCached());
+
+                queue.SerializedBytesPending -= numBytes;
             };
 
             switch (queue.SerializeStage) {
@@ -247,7 +247,8 @@ namespace NActors {
                     } else if (ev.HasEvent()) {
                         IEventBase *event = ev.GetBase();
                         queue.SerializeStage = ESerializeStage::kChunkSerializer;
-                        queue.CoroutineChunkSerializer.SetSerializingEvent(event, /*withCachedSizes=*/ false);
+                        queue.CoroutineChunkSerializer.SetSerializingEvent(event, /*withCachedSizes=*/ true,
+                            /*withCords=*/ true);
                         queue.EvSerInfoHolder = event->CreateSerializationInfo(true);
                         queue.EvSerInfo = &queue.EvSerInfoHolder;
                         queue.SerializedBytesPending = event->CalculateSerializedSizeCached();
@@ -279,8 +280,6 @@ namespace NActors {
                             queue.Iter.ContiguousSize());
                         addEventChunkBytes(queue.Iter.ContiguousData(), numBytes);
                         queue.Iter += numBytes;
-                        Y_ABORT_UNLESS(numBytes <= queue.SerializedBytesPending);
-                        queue.SerializedBytesPending -= numBytes;
                     }
                     if (!queue.Iter.Valid()) {
                         queue.SerializeStage = ESerializeStage::kHeader;
@@ -295,16 +294,22 @@ namespace NActors {
                     // serialize as much as we can
                     TMutableContiguousSpan span = buffer.UnsafeGetContiguousSpanMut().SubSpan(sizeof(TChunkHeader),
                         Max<size_t>()); // reserve space for TChunkHeader which we write first thing if we have some data
-                    for (const auto& chunk : queue.CoroutineChunkSerializer.FeedBuf(&span,
-                            maxBytesToProduce - sizeof(TChunkHeader))) {
-                        addEventChunkBytes(chunk.Buf, chunk.Size);
-                        Y_ABORT_UNLESS(chunk.Size <= queue.SerializedBytesPending);
-                        queue.SerializedBytesPending -= chunk.Size;
-                    }
+                    auto chunks = queue.CoroutineChunkSerializer.FeedBuf(&span, maxBytesToProduce - sizeof(TChunkHeader));
                     Y_DEBUG_ABORT_UNLESS(buffer.data() + buffer.size() == span.data() + span.size());
                     Y_DEBUG_ABORT_UNLESS(span.size() <= buffer.size()); // ensure span did not reduce
-                    if (header) {
+                    if (!chunks.empty()) {
+                        ensureHeader();
                         buffer.TrimFront(span.size());
+                    }
+                    for (const auto& chunk : chunks) {
+                        addEventChunkBytes(chunk.Buf, chunk.Size);
+                    }
+                    if (auto& cords = queue.CoroutineChunkSerializer.GetCords(); !cords.empty()) {
+                        // retain ownership of cords provided for this serialization
+                        RefcountItems.push_back({
+                            .EndOffset = CumulativeProduced,
+                            .Cords = std::exchange(cords, {}),
+                        });
                     }
 
                     // check if we have finished serializing this event

@@ -167,6 +167,20 @@ While healthcheck data is stale or no endpoint answers, the probe is *blind*: re
 - `GET /api/problems` — nemesis-side problems: faults that never recovered (budget still held), a blind recovery probe (no fresh healthcheck data), and a degraded inventory (harness unavailable → synthesized node ids, no slot chaos). `ydb/tests/stability/tests` fetches this when disabling nemesis and attaches it to the Allure report
 - The UI's Nemesis Scheduler card shows run state, profile, both budgets, the recovery probe and the problem list; the per-type schedule toggles in the accordion belong to the legacy loop
 
+**Metrics (orchestrator):**
+
+Chaos lifecycle and failure-budget leases are emitted on the orchestrator (not on agents). Scraped via monlib `/sensors` on `nemesis_mon_port` (default 8666); each transition is also logged as `nemesis_metric {json}`.
+
+| Event | Meaning |
+|---|---|
+| `fault.started` / `fault.extract_dispatched` / `fault.ended` / `fault.stuck` | What was shaken, where, and when the fault opened/closed |
+| `budget.acquired` / `budget.released` | When an identity entered / left the failure-model budget |
+| `budget.acquire_rejected` | `reserve` refused (budget full) |
+
+Useful sensors: `NemesisFaultActive`, `NemesisFaultActiveTotal`, `NemesisBudgetHeld`, `NemesisBudgetImpairedRacks`, `NemesisBudgetImpairedSlots`, `NemesisBudgetMaxSlots`, counters `NemesisFaultStarted` / `Ended` / `Stuck`, `NemesisBudgetAcquired` / `Released`, `NemesisFaultHoldSecondsSum` + `NemesisFaultHoldCount`. All series carry a `nemesis` label (chaos class name, or `unknown`) so Monium legends like `{{nemesis}}` resolve. Agent-side legacy counters (`InjectCompleted`, …) remain execution health only.
+
+Each transition logs two lines on the orchestrator: a human-readable summary (`budget acquired: …`, `fault started: …`, …) and a machine-readable `nemesis_metric {json}` payload.
+
 ## Extending Nemesis
 
 ### Adding a New Fault Type

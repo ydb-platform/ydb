@@ -25,26 +25,26 @@ class NetworkClient(object):
 
     def drop_incoming_packets(self, probability=0.01):
         drop_incoming_command = [
-            'sudo', self._iptables_bin, '-A', 'INPUT', '-p', 'tcp', '--sport', self._port,
+            'sudo', self._iptables_bin, '-A', 'YDB_FW', '-p', 'tcp', '--sport', self._port,
             '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP'
         ]
         return self._exec_command(drop_incoming_command)
 
     def drop_outgoing_packets(self, probability=0.01):
         drop_outgoing_command = [
-            'sudo', self._iptables_bin, '-A', 'INPUT', '-p', 'tcp', '--dport', self._port,
+            'sudo', self._iptables_bin, '-A', 'YDB_FW', '-p', 'tcp', '--dport', self._port,
             '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP'
         ]
         return self._exec_command(drop_outgoing_command)
 
     def isolate_dns(self, probability=1.0):
         drop_input = [
-            'sudo', self._iptables_bin, '-A', 'INPUT', '-p', 'udp', '--sport', '53',
+            'sudo', self._iptables_bin, '-A', 'YDB_FW', '-p', 'udp', '--sport', '53',
             '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP'
         ]
 
         drop_outout = [
-            'sudo', self._iptables_bin, '-A', 'OUTPUT', '-p', 'udp', '--sport', '1024:65535', '--dport', '53',
+            'sudo', self._iptables_bin, '-A', 'YDB_FW', '-p', 'udp', '--sport', '1024:65535', '--dport', '53',
             '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP'
         ]
 

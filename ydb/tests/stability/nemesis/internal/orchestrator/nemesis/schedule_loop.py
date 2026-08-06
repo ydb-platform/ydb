@@ -61,6 +61,7 @@ class OrchestratorNemesisSchedule:
         inventory=None,
         predicate_for: Callable = hc_predicate_for,
         stuck_timeout_for: Callable[[str], float] = stuck_timeout_for,
+        metrics=None,
     ) -> None:
         self._lock = threading.RLock()
         self._tasks: dict[str, dict] = {}
@@ -75,6 +76,10 @@ class OrchestratorNemesisSchedule:
         self._inventory = inventory
         self._predicate_for = predicate_for
         self._stuck_timeout_for = stuck_timeout_for
+        self._metrics = metrics
+
+    def set_metrics(self, metrics) -> None:
+        self._metrics = metrics
 
     @property
     def lock(self) -> threading.RLock:
@@ -208,6 +213,9 @@ class OrchestratorNemesisSchedule:
 
     def dispatch_command(self, cmd: DispatchCommand, *, track_history: bool) -> None:
         """POST (or local helper) to start one execution on cmd.host."""
+        metrics = self._metrics
+        mode = guard_mode_for(cmd.nemesis_type)
+        guard_mode_val = mode.value if mode is not None else None
         try:
             payload = dict(cmd.payload or {})
             payload["host"] = cmd.host
@@ -250,8 +258,39 @@ class OrchestratorNemesisSchedule:
                         "timestamp": datetime.utcnow().isoformat() + "Z",
                     }
                 )
+            if metrics is not None:
+                lease_id = cmd.lease_id or cmd.execution_id
+                if cmd.action == "inject":
+                    metrics.fault_started(
+                        target=cmd.target,
+                        nemesis_type=cmd.nemesis_type,
+                        execution_id=cmd.execution_id,
+                        scenario_id=cmd.scenario_id,
+                        lease_id=lease_id,
+                        source="dispatch",
+                        guard_mode=guard_mode_val,
+                    )
+                elif cmd.action == "extract":
+                    metrics.fault_extract_dispatched(
+                        target=cmd.target,
+                        nemesis_type=cmd.nemesis_type,
+                        execution_id=cmd.execution_id,
+                        scenario_id=cmd.scenario_id,
+                        lease_id=lease_id,
+                        source="dispatch",
+                    )
         except Exception as e:
             logger.error("Failed to dispatch %s to %s: %s", cmd.nemesis_type, cmd.host, e)
+            if metrics is not None:
+                metrics.fault_dispatch_failed(
+                    target=cmd.target,
+                    nemesis_type=cmd.nemesis_type,
+                    action=cmd.action,
+                    execution_id=cmd.execution_id,
+                    scenario_id=cmd.scenario_id,
+                    source="dispatch",
+                    error=str(e),
+                )
 
     def flush_disable_extracts(self, process_type: str) -> None:
         """Plan and run extract on all tracked hosts when schedule is turned off."""
@@ -295,12 +334,35 @@ class OrchestratorNemesisSchedule:
         if not full:
             return
         if cmd.action == "extract":
-            guard.record_extract(cmd.execution_id, cmd.target, scope)
+            guard.record_extract(
+                cmd.execution_id,
+                cmd.target,
+                scope,
+                nemesis_type=cmd.nemesis_type,
+                source="legacy",
+            )
             if probe is not None:
                 probe.untrack_identity(cmd.target.identity_key())
+            metrics = self._metrics
+            if metrics is not None:
+                metrics.fault_ended(
+                    target=cmd.target,
+                    nemesis_type=cmd.nemesis_type,
+                    reason="extract",
+                    lease_id=cmd.execution_id,
+                    execution_id=cmd.execution_id,
+                    source="legacy",
+                    guard_mode="full",
+                )
         elif cmd.action == "inject":
             # Held until HC confirms; toggle also gets a timed extract via the probe.
-            guard.record_inject(cmd.execution_id, cmd.target, scope)
+            guard.record_inject(
+                cmd.execution_id,
+                cmd.target,
+                scope,
+                nemesis_type=cmd.nemesis_type,
+                source="legacy",
+            )
             if probe is not None:
                 track_kwargs: dict = {}
                 if recovery_mode_for(cmd.nemesis_type) == "extract":

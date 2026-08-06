@@ -146,6 +146,12 @@ class TestFilterSafeAndRecording:
         safe = guard.filter_safe(candidates, ImpactScope.NODE)
         assert {t.host for t in safe} == {"h1", "h2"}, "the budget is 2 domains"
 
+    def test_filter_safe_independent_keeps_all_individually_ok(self, block42_topology):
+        guard = FailureModelGuard(block42_topology)
+        candidates = [ChaosTarget.for_node(f"h{i}", node_id=i) for i in (1, 2, 3)]
+        safe = guard.filter_safe(candidates, ImpactScope.NODE, jointly=False)
+        assert {t.host for t in safe} == {"h1", "h2", "h3"}
+
     def test_filter_safe_mirror3dc_one_realm_plus_one_domain(self, mirror3dc_topology):
         guard = FailureModelGuard(mirror3dc_topology)
         for i, host in enumerate(("dc1-a", "dc1-b"), start=1):  # sacrifice dc1 entirely

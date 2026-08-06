@@ -6,6 +6,7 @@ Create one instance per app and pass it to OrchestratorNemesisSchedule / wire fr
 from __future__ import annotations
 
 import logging
+import random
 import threading
 
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
@@ -80,7 +81,8 @@ class ChaosOrchestratorStore:
 
         if self._failure_guard is not None and guard_mode_for(nemesis_type) is GuardMode.FULL:
             scope = impact_scope_for(nemesis_type)
-            filtered = self._failure_guard.filter_safe(candidates, scope)
+            # One inject per tick → independent fit, not a greedy packing of the first hosts.
+            filtered = self._failure_guard.filter_safe(candidates, scope, jointly=False)
             if len(filtered) != len(candidates):
                 logger.info(
                     "Failure model pre-filter: %s %d -> %d safe candidate(s) (kind=%s)",
@@ -94,7 +96,16 @@ class ChaosOrchestratorStore:
         if not candidates:
             logger.info("No safe candidates for %s (kind=%s)", nemesis_type, kind.value)
             return []
-        return planner.scheduled_tick(candidates)
+        # Toggle faults: probe owns extract. Planner sets like NetworkNemesis.isolated_hosts
+        # would stay populated after a probe extract and permanently starve later injects.
+        if recovery_mode_for(nemesis_type) == "extract":
+            target = random.choice(candidates)
+            return self._direct_commands(nemesis_type, target, "inject")
+        # Non-toggle planners also pick one target; shuffle so greedy planners cannot stick
+        # to inventory order either.
+        shuffled = list(candidates)
+        random.shuffle(shuffled)
+        return planner.scheduled_tick(shuffled)
 
     def plan_inject_target(
         self, nemesis_type: str, target: ChaosTarget

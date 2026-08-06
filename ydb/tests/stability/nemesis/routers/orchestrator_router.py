@@ -53,6 +53,7 @@ cluster_inventory: ClusterInventory | None = None
 chaos_problems: ChaosProblemStore | None = None
 healthcheck_reporter: Any = None
 recovery_probe: Any = None
+nemesis_metrics: Any = None
 
 
 def get_app_port() -> int:
@@ -256,12 +257,34 @@ def create_host_process():
             nemesis_schedule.dispatch_command(cmd, track_history=False)
             if full:
                 if cmd.action == "extract":
-                    failure_guard.record_extract(cmd.execution_id, cmd.target, record_scope)
+                    failure_guard.record_extract(
+                        cmd.execution_id,
+                        cmd.target,
+                        record_scope,
+                        nemesis_type=cmd.nemesis_type,
+                        source="manual",
+                    )
                     if recovery_probe is not None:
                         recovery_probe.untrack_identity(cmd.target.identity_key())
+                    if nemesis_metrics is not None:
+                        nemesis_metrics.fault_ended(
+                            target=cmd.target,
+                            nemesis_type=cmd.nemesis_type,
+                            reason="extract",
+                            lease_id=cmd.execution_id,
+                            execution_id=cmd.execution_id,
+                            source="manual",
+                            guard_mode="full",
+                        )
                 elif cmd.action == "inject":
                     # Held until HC confirms (or a manual extract); never on a timer.
-                    failure_guard.record_inject(cmd.execution_id, cmd.target, record_scope)
+                    failure_guard.record_inject(
+                        cmd.execution_id,
+                        cmd.target,
+                        record_scope,
+                        nemesis_type=cmd.nemesis_type,
+                        source="manual",
+                    )
                     if recovery_probe is not None:
                         recovery_probe.track(
                             cmd.execution_id,

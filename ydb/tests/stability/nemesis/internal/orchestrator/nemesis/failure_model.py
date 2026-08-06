@@ -291,10 +291,12 @@ class FailureModelGuard:
         *,
         total_slots: int = 0,
         slot_fraction: float = DEFAULT_SLOT_FRACTION,
+        metrics=None,
     ) -> None:
         self._topology = topology
         self._lock = threading.Lock()
         self._impairments: list[_Impairment] = []
+        self._metrics = metrics
         slots = max(0, int(total_slots))
         self._total_slots = slots
         # ≥1 on small clusters; 0 (unknown) never blocks.
@@ -304,6 +306,10 @@ class FailureModelGuard:
     def enabled(self) -> bool:
         """Always True — an unusable topology raises at construction. Reported in :meth:`snapshot`."""
         return self._topology.guards
+
+    def set_metrics(self, metrics) -> None:
+        """Attach orchestrator metrics emitter (late bind from app init)."""
+        self._metrics = metrics
 
     # -- rack resolution ----------------------------------------------------
 
@@ -397,11 +403,20 @@ class FailureModelGuard:
         self,
         candidates: Iterable[ChaosTarget],
         scope: ImpactScope,
+        *,
+        jointly: bool = True,
     ) -> list[ChaosTarget]:
-        """Jointly safe subset of ``candidates``: each admission narrows the budget for the next.
+        """Safe subset of ``candidates`` against the current fail-domain budget.
 
         Skips already-impaired identities. Fail domains only — a slot candidate has none, so it is
         always admitted here and :meth:`reserve` is what refuses it.
+
+        ``jointly=True`` (default): each admission narrows the budget for the next — a maximal
+        packing in candidate order (first hosts win). Use when a planner may act on several
+        returned targets in one step.
+
+        ``jointly=False``: each candidate is checked only against the current impairments — for
+        single-inject ticks that then ``random.choice`` among the result.
         """
         candidates = list(candidates)
         safe: list[ChaosTarget] = []
@@ -419,32 +434,81 @@ class FailureModelGuard:
                 hypothetical = active | racks
                 if self._is_tolerable(hypothetical):
                     safe.append(target)
-                    active = hypothetical
+                    if jointly:
+                        active = hypothetical
         return safe
 
     # -- lease-based budget API ---------------------------------------------
+
+    def _snapshot_unlocked(self) -> dict:
+        active = sorted(self._active_racks())
+        return {
+            "enabled": self.enabled,
+            "erasure": self._topology.tolerance.erasure,
+            "impaired_racks": active,
+            "impaired_slots": self._active_slots(),
+            "total_slots": self._total_slots,
+            "max_slots": self._max_slots,
+            "tracked_executions": len(self._impairments),
+        }
 
     def reserve(
         self,
         footprint: Footprint,
         identity_key: str | None = None,
+        *,
+        target: ChaosTarget | None = None,
+        nemesis_type: str | None = None,
+        source: str | None = None,
     ) -> str | None:
         """Claim ``footprint``; return lease id or None. Held until :meth:`release`."""
+        metrics = self._metrics
         with self._lock:
             if not self._is_tolerable(self._active_racks() | set(footprint.racks)):
-                return None
-            if not self._slots_ok(footprint.slots):
-                return None
-            lease_id = uuid.uuid4().hex
-            self._impairments.append(
-                _Impairment(
-                    execution_id=lease_id,
-                    racks=set(footprint.racks),
-                    identity_key=identity_key or f"lease:{lease_id}",
-                    slots=footprint.slots,
+                snap = self._snapshot_unlocked() if metrics is not None else None
+                rejected = True
+                lease_id = None
+                key = identity_key
+            elif not self._slots_ok(footprint.slots):
+                snap = self._snapshot_unlocked() if metrics is not None else None
+                rejected = True
+                lease_id = None
+                key = identity_key
+            else:
+                rejected = False
+                lease_id = uuid.uuid4().hex
+                key = identity_key or f"lease:{lease_id}"
+                self._impairments.append(
+                    _Impairment(
+                        execution_id=lease_id,
+                        racks=set(footprint.racks),
+                        identity_key=key,
+                        slots=footprint.slots,
+                    )
                 )
-            )
+                snap = self._snapshot_unlocked() if metrics is not None else None
+        if metrics is None:
             return lease_id
+        if rejected:
+            metrics.budget_acquire_rejected(
+                footprint=footprint,
+                identity_key=key,
+                budget_after=snap,
+                target=target,
+                nemesis_type=nemesis_type,
+                source=source,
+            )
+            return None
+        metrics.budget_acquired(
+            lease_id=lease_id,
+            footprint=footprint,
+            identity_key=key,
+            budget_after=snap,
+            target=target,
+            nemesis_type=nemesis_type,
+            source=source,
+        )
+        return lease_id
 
     def budget_view(self) -> BudgetView:
         """Snapshot both budgets and the impaired identities under one lock."""
@@ -457,21 +521,51 @@ class FailureModelGuard:
                 max_slots=self._max_slots,
             )
 
-    def release(self, lease_id: str | None) -> bool:
+    def release(
+        self,
+        lease_id: str | None,
+        *,
+        reason: str = "released",
+        target: ChaosTarget | None = None,
+        nemesis_type: str | None = None,
+        source: str | None = None,
+    ) -> bool:
         if not lease_id:
             return False
+        metrics = self._metrics
+        removed: _Impairment | None = None
         with self._lock:
-            before = len(self._impairments)
-            self._impairments = [
-                imp for imp in self._impairments if imp.execution_id != lease_id
-            ]
-            return len(self._impairments) != before
+            kept: list[_Impairment] = []
+            for imp in self._impairments:
+                if imp.execution_id == lease_id and removed is None:
+                    removed = imp
+                    continue
+                kept.append(imp)
+            self._impairments = kept
+            snap = self._snapshot_unlocked() if (metrics is not None and removed is not None) else None
+        if removed is None:
+            return False
+        if metrics is not None:
+            metrics.budget_released(
+                lease_id=lease_id,
+                footprint=Footprint(racks=frozenset(removed.racks), slots=removed.slots),
+                identity_key=removed.identity_key,
+                budget_after=snap,
+                reason=reason,
+                target=target,
+                nemesis_type=nemesis_type,
+                source=source,
+            )
+        return True
 
     def record_inject(
         self,
         execution_id: str,
         target: ChaosTarget | str,
         scope: ImpactScope,
+        *,
+        nemesis_type: str | None = None,
+        source: str | None = None,
     ) -> None:
         """Account for an already-dispatched fault; held until extract / probe release."""
         chaos_target = (
@@ -480,6 +574,8 @@ class FailureModelGuard:
         footprint = self.footprint_for(chaos_target, scope)
         if not footprint:
             return
+        metrics = self._metrics
+        identity = chaos_target.identity_key()
         with self._lock:
             self._impairments = [
                 imp for imp in self._impairments if imp.execution_id != execution_id
@@ -488,9 +584,20 @@ class FailureModelGuard:
                 _Impairment(
                     execution_id=execution_id,
                     racks=set(footprint.racks),
-                    identity_key=chaos_target.identity_key(),
+                    identity_key=identity,
                     slots=footprint.slots,
                 )
+            )
+            snap = self._snapshot_unlocked() if metrics is not None else None
+        if metrics is not None:
+            metrics.budget_acquired(
+                lease_id=execution_id,
+                footprint=footprint,
+                identity_key=identity,
+                budget_after=snap,
+                target=chaos_target,
+                nemesis_type=nemesis_type,
+                source=source,
             )
 
     def record_extract(
@@ -498,35 +605,53 @@ class FailureModelGuard:
         execution_id: str,
         target: ChaosTarget | str,
         scope: ImpactScope,
+        *,
+        reason: str = "extract",
+        nemesis_type: str | None = None,
+        source: str | None = None,
     ) -> None:
         """Drop impairment by ``execution_id``, else by identity."""
         chaos_target = (
             target if isinstance(target, ChaosTarget) else ChaosTarget.for_host(str(target))
         )
+        metrics = self._metrics
+        removed: _Impairment | None = None
         with self._lock:
-            before = len(self._impairments)
+            before = list(self._impairments)
             self._impairments = [
                 imp for imp in self._impairments if imp.execution_id != execution_id
             ]
-            if len(self._impairments) == before:
+            if len(self._impairments) == len(before):
                 # Identity fallback: one domain can hold unrelated impairments.
                 key = chaos_target.identity_key()
-                self._impairments = [
-                    imp for imp in self._impairments if imp.identity_key != key
-                ]
+                kept: list[_Impairment] = []
+                for imp in self._impairments:
+                    if removed is None and imp.identity_key == key:
+                        removed = imp
+                        continue
+                    kept.append(imp)
+                self._impairments = kept
+            else:
+                for imp in before:
+                    if imp.execution_id == execution_id:
+                        removed = imp
+                        break
+            snap = self._snapshot_unlocked() if (metrics is not None and removed is not None) else None
+        if removed is not None and metrics is not None:
+            metrics.budget_released(
+                lease_id=removed.execution_id,
+                footprint=Footprint(racks=frozenset(removed.racks), slots=removed.slots),
+                identity_key=removed.identity_key,
+                budget_after=snap,
+                reason=reason,
+                target=chaos_target,
+                nemesis_type=nemesis_type,
+                source=source,
+            )
 
     def snapshot(self) -> dict:
         with self._lock:
-            active = sorted(self._active_racks())
-            return {
-                "enabled": self.enabled,
-                "erasure": self._topology.tolerance.erasure,
-                "impaired_racks": active,
-                "impaired_slots": self._active_slots(),
-                "total_slots": self._total_slots,
-                "max_slots": self._max_slots,
-                "tracked_executions": len(self._impairments),
-            }
+            return self._snapshot_unlocked()
 
 
 __all__ = [

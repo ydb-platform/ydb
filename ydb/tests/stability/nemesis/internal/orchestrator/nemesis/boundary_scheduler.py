@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import random
 import threading
+from dataclasses import replace
 from typing import Callable, Sequence
 
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
@@ -46,6 +47,8 @@ _STABILITY_PROFILE: tuple[str, ...] = (
     "StopStartNodeNemesis",
     "SafelyBreakDiskNemesis",
     "SafelyCleanupDisksNemesis",
+    "NetworkNemesis",
+    "DnsNemesis",
     "TimeSkewNemesis",
     "KillHiveNemesis",
     "KillCoordinatorNemesis",
@@ -254,7 +257,13 @@ class BoundaryNemesisScheduler:
                         )
                     paused.add(nemesis_type)
                     continue
-            lease = self._guard.reserve(footprint, identity_key=target.identity_key())
+            lease = self._guard.reserve(
+                footprint,
+                identity_key=target.identity_key(),
+                target=target,
+                nemesis_type=nemesis_type,
+                source="boundary",
+            )
             if lease is None:
                 break
             # Release only if nothing landed; partial fanout must keep the budget + stay tracked.
@@ -265,14 +274,20 @@ class BoundaryNemesisScheduler:
                     target, kind=kind, scope=scope, inventory=self._inventory, baseline=baseline
                 )
                 for cmd in self._plan_inject(nemesis_type, target):
-                    self._dispatch(cmd)
+                    self._dispatch(replace(cmd, lease_id=lease))
                     dispatched_any = True
                 self._track_reserved(
                     lease, target, nemesis_type, recovered=recovered, by_extract=by_extract
                 )
             except Exception:
                 if not dispatched_any:
-                    self._guard.release(lease)
+                    self._guard.release(
+                        lease,
+                        reason="abort",
+                        target=target,
+                        nemesis_type=nemesis_type,
+                        source="boundary",
+                    )
                     raise
                 logger.exception(
                     "dispatch/track failed after applying %s on %s; holding budget",
@@ -309,7 +324,7 @@ class BoundaryNemesisScheduler:
                 lease, target, nemesis_type,
                 recovered=recovered,
                 stuck_timeout_sec=self._stuck_timeout_for(nemesis_type),
-                recover_action=self._extract_action(nemesis_type, target),
+                recover_action=self._extract_action(nemesis_type, target, lease),
                 extract_after_sec=self._extract_after_sec(nemesis_type),
                 confirm_timeout_sec=self._confirm_timeout_for(nemesis_type),
             )
@@ -324,10 +339,10 @@ class BoundaryNemesisScheduler:
         recovery = self._recovery_sec_for(nemesis_type)
         return float(recovery) if recovery is not None else DEFAULT_RECOVERY_SEC
 
-    def _extract_action(self, nemesis_type: str, target: ChaosTarget) -> Callable[[], None]:
+    def _extract_action(self, nemesis_type: str, target: ChaosTarget, lease: str) -> Callable[[], None]:
         def _recover() -> None:
             for cmd in self._plan_extract(nemesis_type, target):
-                self._dispatch(cmd)
+                self._dispatch(replace(cmd, lease_id=lease))
         return _recover
 
     # -- loop ---------------------------------------------------------------

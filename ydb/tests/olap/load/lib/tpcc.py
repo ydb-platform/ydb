@@ -163,7 +163,7 @@ class TpccSuiteBase(LoadSuiteBase):
             'time_warmup': time_interval_str(result.start_time, measure_start_time),
             'time_measure': time_interval_str(measure_start_time, end_time),
             'compaction_mode': str(self.compaction_mode),
-            'deploy_method': getenv('CI_DEPLOY_METHOD', get_external_param('deploy-method', '')),
+            'deploy_method': getenv('CI_DEPLOY_METHOD') or get_external_param('deploy-method', ''),
             'max_sessions': summary.get('max_sessions', ''),
             'threads': summary.get('threads', ''),
             'warmup_seconds': summary.get('warmup_seconds', ''),

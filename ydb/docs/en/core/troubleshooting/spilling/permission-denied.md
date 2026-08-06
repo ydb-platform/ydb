@@ -10,13 +10,14 @@ Check if the spilling directory exists and has proper permissions:
 - Ensure the directory has read and write permissions for the user under which `ydbd` is running
 - Check access permissions to the spilling directory
 - Verify that the user under which `ydbd` runs can read and write to the directory
+- If [static](../../concepts/glossary.md#static-node) and [dynamic](../../concepts/glossary.md#dynamic) nodes run under different OS users and share the same `root`, ensure that both users have read and write access to the directory
 
 ## Recommendations
 
 If permissions are incorrect:
 
 1. Change the directory owner to the user under which `ydbd` runs.
-2. Ensure read/write permissions are set for the directory owner.
+2. Ensure read/write permissions are set for the directory owner. If [static](../../concepts/glossary.md#static-node) and [dynamic](../../concepts/glossary.md#dynamic) nodes run under different OS users, grant both users read and write access (for example, `chmod 1777`).
 3. Restart the `ydbd` process to apply the changes.
 
 {% note info %}

@@ -435,6 +435,9 @@ bool TKqpQueryState::ProcessingLastStatementPart() {
 }
 
 bool TKqpQueryState::PrepareNextStatementPart() {
+    if (QueryTextForLogging.empty() && PreparedQuery) {
+        QueryTextForLogging = PreparedQuery->GetText();
+    }
     QueryData = {};
     PreparedQuery = {};
     CompileResult = {};

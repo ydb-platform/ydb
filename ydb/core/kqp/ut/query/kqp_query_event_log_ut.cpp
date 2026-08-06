@@ -221,6 +221,83 @@ Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
     UNIT_ASSERT_C(req.Has("started_at_us"), "started_at_us field");
 }
 
+Y_UNIT_TEST(ExecutePreparedLogsOriginalQueryText) {
+    constexpr TStringBuf queryText = "SELECT 42 AS prepared_query_log_marker";
+
+    TStringStream logStream;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto prepareResult = session.PrepareDataQuery(TString(queryText)).GetValueSync();
+        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+
+        auto result = prepareResult.GetQuery()
+            .Execute(NYdb::NTable::TTxControl::BeginTx().CommitTx())
+            .GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(fullLog);
+    DumpEntries("ExecutePreparedLogsOriginalQueryText", entries, fullLog);
+
+    bool found = false;
+    for (const auto& e : entries) {
+        if (e.Event != "completed" || e.Part != 1) {
+            continue;
+        }
+        const auto& req = e.Json["request"];
+        if (req["action"].GetStringSafe("") != "QUERY_ACTION_EXECUTE_PREPARED") {
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(req["data"].GetStringSafe(""), queryText, e.RawLine);
+        UNIT_ASSERT_VALUES_EQUAL_C(req["query_len"].GetUIntegerSafe(0), queryText.size(), e.RawLine);
+        found = true;
+    }
+    UNIT_ASSERT_C(found, "expected completed EXECUTE_PREPARED log entry");
+}
+
+Y_UNIT_TEST(TransactionControlMarksQueryTextAsNotApplicable) {
+    TStringStream logStream;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto beginResult = session.BeginTransaction(NYdb::NTable::TTxSettings::SerializableRW())
+            .GetValueSync();
+        UNIT_ASSERT_C(beginResult.IsSuccess(), beginResult.GetIssues().ToString());
+        auto tx = beginResult.GetTransaction();
+        auto rollbackResult = tx.Rollback().GetValueSync();
+        UNIT_ASSERT_C(rollbackResult.IsSuccess(), rollbackResult.GetIssues().ToString());
+    }
+
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(fullLog);
+    DumpEntries("TransactionControlMarksQueryTextAsNotApplicable", entries, fullLog);
+
+    size_t found = 0;
+    for (const auto& e : entries) {
+        if (e.Event != "completed" || e.Part != 1) {
+            continue;
+        }
+        const auto& req = e.Json["request"];
+        const auto action = req["action"].GetStringSafe("");
+        if (action != "QUERY_ACTION_BEGIN_TX" && action != "QUERY_ACTION_ROLLBACK_TX") {
+            continue;
+        }
+        UNIT_ASSERT_C(!req.Has("data"), e.RawLine);
+        UNIT_ASSERT_C(req.Has("query_text_expected"), e.RawLine);
+        UNIT_ASSERT_VALUES_EQUAL_C(req["query_text_expected"].GetBooleanSafe(true), false, e.RawLine);
+        ++found;
+    }
+    UNIT_ASSERT_VALUES_EQUAL_C(found, 2, "expected BEGIN_TX and ROLLBACK_TX log entries");
+}
+
 // At KQP_REQUEST=WARN successful completed is silent but failures still
 // emit the full envelope at WARN.
 Y_UNIT_TEST(SuccessSilentAtWarnButFailureLogged) {

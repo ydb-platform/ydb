@@ -1,6 +1,7 @@
 #include "channel_storage_actor.h"
 
 #include "spilling.h"
+#include "spilling_ddisk.h"
 #include "spilling_file.h"
 
 #include <yql/essentials/utils/yql_panic.h>
@@ -65,7 +66,7 @@ public:
     {}
 
     void Bootstrap() {
-        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, TStringBuilder() << "ChannelId: " << ChannelId_ << "_" << CreateGuidAsString(),
+        auto spillingActor = CreateDqSpillingActor(TxId_, TStringBuilder() << "ChannelId: " << ChannelId_ << "_" << CreateGuidAsString(),
             SelfId(), true, ESpillingType::Channel);
         SpillingActorId_ = Register(spillingActor);
         Become(&TDqChannelStorageActor::WorkState);

@@ -1,6 +1,7 @@
 #include "compute_storage_actor.h"
 
 #include "spilling.h"
+#include "spilling_ddisk.h"
 #include "spilling_file.h"
 
 #include <ydb/library/services/services.pb.h>
@@ -59,7 +60,7 @@ public:
     }
 
     void Bootstrap() {
-        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, SpillerName_,
+        auto spillingActor = CreateDqSpillingActor(TxId_, SpillerName_,
             SelfId(), false, ESpillingType::Compute);
         SpillingActorId_ = Register(spillingActor);
         Become(&TDqComputeStorageActor::WorkState);

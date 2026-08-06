@@ -6,11 +6,15 @@ SRCS(
     compute_storage_actor.cpp
     compute_storage.cpp
     spilling_counters.cpp
+    spilling_ddisk.cpp
     spilling_file.cpp
     spilling.cpp
 )
 
 PEERDIR(
+    ydb/core/base
+    ydb/core/blobstorage/ddisk
+    ydb/core/protos
     ydb/library/services
     ydb/library/yql/dq/common
     ydb/library/yql/dq/actors

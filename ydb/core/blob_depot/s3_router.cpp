@@ -192,8 +192,6 @@ namespace NKikimr::NBlobDepot {
         TActorId HttpProxyId;
         TActorId PipeId;
         bool PipeConnected = false;
-        bool RefreshInFlight = false;
-        bool RefreshScheduled = false;
 
         TRouterStats Stats;
 
@@ -356,9 +354,6 @@ namespace NKikimr::NBlobDepot {
         }
 
         void IssueBalancerRequest() {
-            if (RefreshInFlight || !BalancerEnabled()) {
-                return;
-            }
             if (!HttpProxyId) {
                 HttpProxyId = Register(NHttp::CreateHttpProxy());
             }
@@ -372,22 +367,16 @@ namespace NKikimr::NBlobDepot {
             Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
                 NHttp::THttpOutgoingRequest::CreateRequestGet(url),
                 TDuration::Seconds(10)));
-            RefreshInFlight = true;
             BalancerRequestStartedAt = TActivationContext::Monotonic();
             ++Stats.BalancerResolveRequests;
         }
 
         void ScheduleNextRefresh() {
-            if (!RefreshScheduled && BalancerEnabled()) {
-                TActivationContext::Schedule(NextRefreshDelay(),
-                    new IEventHandle(TEvPrivate::EvBalancerTick, 0, SelfId(), SelfId(), nullptr, 0));
-                RefreshScheduled = true;
-            }
+            TActivationContext::Schedule(NextRefreshDelay(),
+                new IEventHandle(TEvPrivate::EvBalancerTick, 0, SelfId(), SelfId(), nullptr, 0));
         }
 
         void HandleBalancerTick() {
-            RefreshScheduled = false;
-            RefreshInFlight = false;
             IssueBalancerRequest();
             ScheduleNextRefresh();
         }
@@ -399,14 +388,10 @@ namespace NKikimr::NBlobDepot {
                 {"currentEndpoint", CurrentEndpoint});
 
             ++Stats.FiveXxRefreshTriggers;
-
-            if (!RefreshInFlight) {
-                IssueBalancerRequest();
-            }
+            IssueBalancerRequest();
         }
 
         void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev) {
-            RefreshInFlight = false;
             const TDuration latency = TActivationContext::Monotonic() - BalancerRequestStartedAt;
             Stats.BalancerResolveLatency.Record(latency.MilliSeconds());
 
@@ -446,14 +431,17 @@ namespace NKikimr::NBlobDepot {
 
                 ++Stats.BalancerResolveFailures;
             }
-            ScheduleNextRefresh();
         }
 
         void Forward(STATEFN_SIG) {
             if (!InnerWrapperId) {
                 return;
             }
+
             TActivationContext::Send(ev->Forward(InnerWrapperId));
+            if (BalancerEnabled()) {
+                IssueBalancerRequest();
+            }
         }
 
     public:
@@ -468,10 +456,8 @@ namespace NKikimr::NBlobDepot {
         {}
 
         void Bootstrap() {
-            const TString& endpoint = Settings.GetSettings().GetEndpoint();
-            OriginalEndpoint = endpoint;
+            OriginalEndpoint = Settings.GetSettings().GetEndpoint();
             CreatePipe();
-            BuildInnerWrapper(endpoint);
             SchedulePushMetrics();
 
             YDB_LOG_INFO("S3Router bootstrap",
@@ -484,7 +470,10 @@ namespace NKikimr::NBlobDepot {
             if (BalancerEnabled()) {
                 IssueBalancerRequest();
                 ScheduleNextRefresh();
+            } else {
+                BuildInnerWrapper(OriginalEndpoint);
             }
+
             Become(&TThis::StateWork);
         }
 

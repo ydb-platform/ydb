@@ -195,6 +195,37 @@ TEST(TTaggedApiTest, WithFormat)
     EXPECT_EQ(decoded.Tags[1], std::pair(std::string("Arg1"), std::string("123")));
 }
 
+TEST(TTaggedApiTest, WithIf)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+    YT_TLOG_INFO("Message")
+        .WithIf(true, "Kept", 1)
+        .WithIf(false, "Dropped", 2)
+        .With("After", 3);
+
+    auto decoded = DecodeSingleEvent(manager);
+    EXPECT_EQ(decoded.Message, "Message");
+    ASSERT_EQ(decoded.Tags.size(), 2u);
+    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Kept"), std::string("1")));
+    EXPECT_EQ(decoded.Tags[1], std::pair(std::string("After"), std::string("3")));
+}
+
+TEST(TTaggedApiTest, WithFormatIf)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+    YT_TLOG_INFO("Message")
+        .WithFormatIf(true, "Kept", "%v.%v", "MyService", "MyMethod")
+        .WithFormatIf(false, "Dropped", "%v.%v", "Other", "Method")
+        .With("After", 3);
+
+    auto decoded = DecodeSingleEvent(manager);
+    ASSERT_EQ(decoded.Tags.size(), 2u);
+    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Kept"), std::string("MyService.MyMethod")));
+    EXPECT_EQ(decoded.Tags[1], std::pair(std::string("After"), std::string("3")));
+}
+
 TEST(TTaggedApiTest, TagList)
 {
     TMockLogManager manager;

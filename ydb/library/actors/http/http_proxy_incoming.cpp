@@ -156,10 +156,10 @@ protected:
                     }
                     return; // wait for further notifications
                 } else {
-                    YDB_LOG_ERROR("Connection closed - error",
+                    YDB_LOG_ERROR("Connection closed - error in Accept",
                         {"socket", TSocketImpl::GetRawSocket()},
                         {"address", Address},
-                        {"inAccept", strerror(-res)});
+                        {"strerror", strerror(-res)});
                     return PassAway();
                 }
             }

@@ -1696,7 +1696,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
     }
 
     Y_UNIT_TEST(UntrustedClientCertificate) {
-        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("connection closed - error in Accept"));
+        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("Connection closed - error in Accept"));
         auto* signalingBackend = dynamic_cast<TSignalingLogBackend*>(backend.Get());
         bool expectedMessageLogged = false;
 
@@ -1710,7 +1710,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
             });
             clientThread.join();
 
-            signalingBackend->WaitFor(TDuration::Seconds(10));
+            signalingBackend->WaitFor(TDuration::Seconds(2));
             expectedMessageLogged = signalingBackend->Seen();
         }
 
@@ -1737,7 +1737,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
     }
 
     Y_UNIT_TEST(RequiredNoClientCertificate) {
-        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("connection closed - error in Accept"));
+        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("Connection closed - error in Accept"));
         auto* signalingBackend = dynamic_cast<TSignalingLogBackend*>(backend.Get());
         bool expectedMessageLogged = false;
 
@@ -1750,7 +1750,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
             });
             clientThread.join();
 
-            signalingBackend->WaitFor(TDuration::Seconds(10));
+            signalingBackend->WaitFor(TDuration::Seconds(2));
             expectedMessageLogged = signalingBackend->Seen();
         }
 

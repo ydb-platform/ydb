@@ -12,10 +12,6 @@ using namespace NActors::NStructuredLog;
 namespace NKikimr {
 namespace NDataIntegrity {
 
-inline void LogKeyValue(const TStringBuf key, const TStringBuf value, TStringStream& ss, bool last = false) {
-    ss << key << ": " << (value.empty() ? "Empty" : value) << (last ? "" : ", ");
-}
-
 template <class TransactionSettings>
 inline TStructuredMessage LogTxSettings(const TransactionSettings& txSettings) {
     TStructuredMessage message;

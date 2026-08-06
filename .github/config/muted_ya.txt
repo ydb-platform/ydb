@@ -11,6 +11,10 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.LargePayloadRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.PeerStopTriggersDisconnect
 ydb/services/persqueue_v1/ut PersQueueV1Gaps_EmptyDatabase.StreamReadRejectsEmptyAndMissingDatabase
 ydb/services/persqueue_v1/ut PersQueueV1Gaps_EmptyDatabase.StreamWriteRejectsEmptyAndMissingDatabase
+ydb/tests/compatibility/common test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_setup_in_blob_storage_config[restart_stable-26-2-1_to_stable-26-3-1]
+ydb/tests/compatibility/common test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_setup_in_blob_storage_config[restart_stable-26-3-1_to_prestable-26-4]
+ydb/tests/compatibility/common test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_setup_slot_size_manually[restart_stable-26-2-1_to_stable-26-3-1]
+ydb/tests/compatibility/common test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_setup_slot_size_manually[restart_stable-26-3-1_to_prestable-26-4]
 ydb/tests/compatibility/result_set_format py3test.[test_result_set_arrow.py */*] chunk
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_prestable-26-4_to_prestable-26-4-1-False-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_prestable-26-4_to_prestable-26-4-1-True-2048-ROW]
@@ -75,6 +79,7 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_prestable-26-4]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_prestable-26-4_and_stable-26-3-1]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_stable-26-3-1]
+ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_stable-26-3-1_and_stable-26-2-1]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_multi_output[rolling_stable-26-2-1_to_stable-26-3-1-False]
 ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_batch_written_with_topic_protocol_is_fetched_after_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
 ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_plain_and_batched_messages_survive_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]

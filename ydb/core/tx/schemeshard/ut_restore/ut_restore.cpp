@@ -2964,9 +2964,6 @@ value {
     // - downloaded blocks size
     // - decrypted blocks size
     // - compression blocks size
-<<<<<<< HEAD
-    void ImportBigEncryptedFile(size_t encryptedBlockSize, size_t resultFileSize, size_t readBatchSize, bool compressed) {
-=======
     void ImportBigEncryptedFile(
             size_t encryptedBlockSize,
             size_t resultFileSize,
@@ -2975,7 +2972,6 @@ value {
             bool enableDataShardDirectPartImport,
             EEncryptedImportRebootMode rebootMode = EEncryptedImportRebootMode::None)
     {
->>>>>>> 3fb7c6c2ca7 (Fix file is corrupted & stream finished during encrypted restore (#48986))
         TString key = "Cool very very secret rand key!!";
         NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
 
@@ -3102,9 +3098,6 @@ value {
         UNIT_ASSERT_VALUES_EQUAL(rows, lines);
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(ImportBigEncryptedFile) {
-=======
     Y_UNIT_TEST(ImportBigEncryptedFileWithRebootAfterLastPortion) {
         ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false, false, EEncryptedImportRebootMode::AfterLastPortion);
         ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true, false, EEncryptedImportRebootMode::AfterLastPortion);
@@ -3115,8 +3108,7 @@ value {
         ImportBigEncryptedFile(555_B, 70_KB, 8_KB, true, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
     }
 
-    Y_UNIT_TEST_FLAG(ImportBigEncryptedFile, EnableDataShardDirectPartImport) {
->>>>>>> 3fb7c6c2ca7 (Fix file is corrupted & stream finished during encrypted restore (#48986))
+    Y_UNIT_TEST(ImportBigEncryptedFile) {
         // Read big parts (8 KB), decode small parts
         ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false);
 

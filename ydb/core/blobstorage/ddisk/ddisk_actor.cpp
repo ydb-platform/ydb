@@ -15,6 +15,50 @@
 
 namespace NKikimr::NDDisk {
 
+    template<typename TEventPtr>
+    void TDDiskActor::HandlePersistentBufferWriteRequest(TEventPtr& ev) {
+        Y_ABORT_UNLESS(IsPersistentBufferActor);
+        auto& record = ev->Get()->Record;
+        TQueryCredentials requestCreds(record.GetCredentials());
+        TQueryCredentials creds;
+        EConnectionResolution resolution = ResolveConnection(requestCreds, &creds);
+
+        if (resolution != EConnectionResolution::Resolved) {
+            YDB_LOG_DEBUG("TDDiskActor::HandlePersistentBufferWriteRequest token validation failed",
+                {"reason", DescribeConnectionFailure(requestCreds, resolution)},
+                {"DDiskId", DDiskId},
+                {"evType", ev->GetTypeRewrite()},
+                {"sender", ev->Sender},
+                {"cookie", ev->Cookie},
+                {"ICSession", ev->InterconnectSession});
+
+            auto result = std::make_unique<TEvWritePersistentBuffersResult>();
+            const TStringBuf errorReason = ConnectionErrorReason(resolution);
+
+            for (const auto& id : record.GetPersistentBufferIds()) {
+                auto* item = result->Record.AddResult();
+                item->MutablePersistentBufferId()->CopyFrom(id);
+                item->MutableResult()->SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH);
+                item->MutableResult()->SetErrorReason(errorReason.data(), errorReason.size());
+            }
+
+            SendReply(*ev, std::move(result));
+            return;
+        }
+
+        creds.SerializeResolvedForRequest(record.MutableCredentials());
+        Y_ABORT_UNLESS(WritePersistentBuffersActor);
+        TActivationContext::Send(ev->Forward(WritePersistentBuffersActor));
+    }
+
+    void TDDiskActor::Handle(TEvReadThenWritePersistentBuffers::TPtr ev) {
+        HandlePersistentBufferWriteRequest(ev);
+    }
+
+    void TDDiskActor::Handle(TEvWritePersistentBuffers::TPtr ev) {
+        HandlePersistentBufferWriteRequest(ev);
+    }
+
 namespace {
     const TVector<double> WriteBatchSizeBounds = {
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 24, 32, 40, 48, 64, 128
@@ -352,12 +396,8 @@ namespace {
             hFunc(TEvents::TEvWakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway)
 
-            case TEvReadThenWritePersistentBuffers::EventType:
-            case TEvWritePersistentBuffers::EventType: {
-                Y_ABORT_UNLESS(WritePersistentBuffersActor);
-                TActivationContext::Forward(ev, WritePersistentBuffersActor);
-                break;
-            }
+            hFunc(TEvReadThenWritePersistentBuffers, Handle)
+            hFunc(TEvWritePersistentBuffers, Handle)
         )
     }
 

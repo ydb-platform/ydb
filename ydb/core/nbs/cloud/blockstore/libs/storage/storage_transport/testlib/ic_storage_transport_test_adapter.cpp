@@ -99,6 +99,13 @@ void TICStorageTransportTestAdapter::RegisterStub(
                 ddiskId.NodeId,
                 ddiskId.PDiskId,
                 ddiskId.DDiskSlotId);
+            Runtime->RegisterService(
+                MakeBlobStorageDDiskId(
+                    ddiskId.NodeId,
+                    ddiskId.PDiskId,
+                    ddiskId.DDiskSlotId),
+                actorId,
+                0);
             break;
     }
 

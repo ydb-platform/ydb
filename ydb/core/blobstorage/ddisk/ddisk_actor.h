@@ -27,6 +27,7 @@
 
 #include <ydb/core/util/spsc_circular_queue.h>
 
+#include <array>
 #include <atomic>
 #include <queue>
 
@@ -533,20 +534,58 @@ namespace NKikimr::NDDisk {
         // Connection management
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        struct TConnectionInfo {
-            ui64 TabletId;
-            ui32 Generation;
-            ui64 DDiskSessionSeqNo;
-            ui32 NodeId;
-            TActorId InterconnectSessionId;
+        enum class EConnectionTokenInvalidationReason : ui8 {
+            Reconnect,
+            Disconnect,
         };
-        THashMap<ui64, TConnectionInfo> Connections;
+
+        struct TPreviousConnectionTokenInfo {
+            TConnectionToken Token;
+            ui64 TabletId = 0;
+            ui32 Generation = 0;
+            ui32 DirectBlockGroupIndex = 0;
+            ui64 DDiskSessionSeqNo = 0;
+            EConnectionTokenInvalidationReason InvalidationReason = EConnectionTokenInvalidationReason::Reconnect;
+            bool Valid = false;
+        };
+
+        struct TConnectionInfo {
+            ui64 TabletId = 0;
+            ui32 Generation = 0;
+            ui32 DirectBlockGroupIndex = 0;
+            ui64 DDiskSessionSeqNo = 0;
+            ui32 NodeId = 0;
+            TActorId InterconnectSessionId;
+            TConnectionToken Token;
+            ui8 TokenSequenceNo = 0;
+            std::array<TPreviousConnectionTokenInfo, 2> PreviousTokens;
+            ui32 NextPreviousTokenIndex = 0;
+            bool Active = false;
+        };
+
+        using TConnectionKey = std::pair<ui64, ui32>;
+        TVector<TConnectionInfo> Connections;
+        THashMap<TConnectionKey, ui32> ConnectionIndexBySession;
+        TVector<ui32> FreeConnectionIndices;
 
         void Handle(TEvConnect::TPtr ev);
         void Handle(TEvDisconnect::TPtr ev);
 
-        // validate query credentials against registered connections
-        bool ValidateConnection(const IEventHandle& ev, const TQueryCredentials& creds) const;
+        TConnectionToken IssueConnectionToken(ui32 connectionIndex, TConnectionInfo& connection) const;
+
+        void RememberConnectionToken(TConnectionInfo& connection, EConnectionTokenInvalidationReason reason) const;
+
+        enum class EConnectionResolution : ui8 {
+            Resolved,
+            StaleToken,
+            InvalidToken,
+        };
+
+        // validate query credentials and restore token-backed connection data
+        EConnectionResolution ResolveConnection(const TQueryCredentials& requestCreds, TQueryCredentials* resolvedCreds) const;
+        static TStringBuf ConnectionErrorReason(EConnectionResolution resolution);
+        static TStringBuf ConnectionInvalidationReason(EConnectionTokenInvalidationReason reason);
+        TString DescribeConnectionFailure(const TQueryCredentials& requestCreds, EConnectionResolution resolution) const;
 
         // a general way to send reply to any incoming message
         void SendReply(const IEventHandle& queryEv, std::unique_ptr<IEventBase> replyEv) const;
@@ -554,7 +593,7 @@ namespace NKikimr::NDDisk {
         // common function to validate any incoming event's credentials
         template<typename TEvent, typename TCountersPtr>
         bool CheckQuery(TEventHandle<TEvent>& ev, TCountersPtr counters) const {
-            const auto& record = ev.Get()->Record;
+            auto& record = ev.Get()->Record;
             using TEventType = std::decay_t<TEvent>;
 
             auto registerError = [&] {
@@ -574,27 +613,24 @@ namespace NKikimr::NDDisk {
                     {"ICSession", ev.InterconnectSession});
             };
 
-            const TQueryCredentials creds(record.GetCredentials());
-            if (!ValidateConnection(ev, creds)) {
-                TStringBuilder mismatchReason;
-                mismatchReason << "session mismatch"
-                    << " tabletId# " << creds.TabletId
-                    << " generation# " << creds.Generation;
-                const auto connIt = Connections.find(creds.TabletId);
-                if (connIt != Connections.end()) {
-                    mismatchReason
-                        << " storedGeneration# " << connIt->second.Generation
-                        << " storedNodeId# "     << connIt->second.NodeId
-                        << " storedICSession# "  << connIt->second.InterconnectSessionId;
-                } else {
-                    mismatchReason << " (no stored session for tabletId)";
-                }
-                logError(mismatchReason);
-                SendReply(ev, std::make_unique<typename TEvent::TResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH));
+            const TQueryCredentials requestCreds(record.GetCredentials());
+            TQueryCredentials creds;
+            const EConnectionResolution resolution = ResolveConnection(requestCreds, &creds);
+
+            if (resolution != EConnectionResolution::Resolved) {
+                logError(DescribeConnectionFailure(requestCreds, resolution));
+                auto result = std::make_unique<typename TEvent::TResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH
+                );
+                const TStringBuf errorReason = ConnectionErrorReason(resolution);
+                result->Record.SetErrorReason(errorReason.data(), errorReason.size());
+
+                SendReply(ev, std::move(result));
                 registerError();
                 return false;
             }
+
+            creds.SerializeResolvedForRequest(record.MutableCredentials());
 
             using TRecord = std::decay_t<decltype(record)>;
 
@@ -870,6 +906,10 @@ namespace NKikimr::NDDisk {
         void Handle(TEvPrivate::TEvDeallocatePersistentBufferChunkResult::TPtr ev);
         void Handle(TEvGetPersistentBufferInfo::TPtr ev);
 
+        template<typename TEventPtr>
+        void HandlePersistentBufferWriteRequest(TEventPtr& ev);
+
+        void Handle(TEvReadThenWritePersistentBuffers::TPtr ev);
         void Handle(TEvWritePersistentBuffers::TPtr ev);
 
         void Handle(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);

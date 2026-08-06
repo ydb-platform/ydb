@@ -346,6 +346,7 @@ NDDisk::TQueryCredentials Connect(TTestContext& ctx, ui64 tabletId, ui32 generat
     auto connectResult = ctx.SendAndGrab<NDDisk::TEvConnectResult>(new NDDisk::TEvConnect(creds));
     AssertStatus<NDDisk::TEvConnectResult>(connectResult, TReplyStatus::OK);
     creds.DDiskInstanceGuid = connectResult->Get()->Record.GetDDiskInstanceGuid();
+    creds.ConnectionToken.emplace(connectResult->Get()->Record.GetConnectionToken());
 
     return creds;
 }
@@ -358,6 +359,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     auto connectResult = ctx.SendToAndGrab<NDDisk::TEvConnectResult>(diskIdx, new NDDisk::TEvConnect(creds));
     AssertStatus<NDDisk::TEvConnectResult>(connectResult, TReplyStatus::OK);
     creds.DDiskInstanceGuid = connectResult->Get()->Record.GetDDiskInstanceGuid();
+    creds.ConnectionToken.emplace(connectResult->Get()->Record.GetConnectionToken());
 
     return creds;
 }
@@ -938,6 +940,35 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), data);
     }
+}
+
+[[maybe_unused]] void TestConnectionTokenAcrossRestart() {
+    TTestContext ctx;
+    NDDisk::TQueryCredentials creds = Connect(ctx, 702, 1);
+    const ui64 oldDDiskInstanceGuid = *creds.DDiskInstanceGuid;
+    const NDDisk::TConnectionToken oldToken = *creds.ConnectionToken;
+
+    ctx.RestartDDisk(0);
+
+    auto staleRead = ctx.SendAndGrab<NDDisk::TEvReadResult>(new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
+    AssertStatus<NDDisk::TEvReadResult>(staleRead, TReplyStatus::SESSION_MISMATCH);
+
+    auto connectResult = ctx.SendAndGrab<NDDisk::TEvConnectResult>(new NDDisk::TEvConnect(creds));
+    AssertStatus<NDDisk::TEvConnectResult>(connectResult, TReplyStatus::OK);
+
+    creds.DDiskInstanceGuid = connectResult->Get()->Record.GetDDiskInstanceGuid();
+    creds.ConnectionToken.emplace(connectResult->Get()->Record.GetConnectionToken());
+    UNIT_ASSERT_VALUES_UNEQUAL(*creds.DDiskInstanceGuid, oldDDiskInstanceGuid);
+    UNIT_ASSERT(*creds.ConnectionToken != oldToken);
+
+    auto currentRead = ctx.SendAndGrab<NDDisk::TEvReadResult>(new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
+    AssertStatus<NDDisk::TEvReadResult>(currentRead, TReplyStatus::OK);
+
+    NDDisk::TQueryCredentials staleCreds = creds;
+    staleCreds.ConnectionToken = oldToken;
+    staleRead = ctx.SendAndGrab<NDDisk::TEvReadResult>(
+        new NDDisk::TEvRead(staleCreds, {0, 0, MinBlockSize}, {true}));
+    AssertStatus<NDDisk::TEvReadResult>(staleRead, TReplyStatus::SESSION_MISMATCH);
 }
 
 [[maybe_unused]] void TestRestartAfterCutLog(NDDisk::TDDiskConfig ddiskConfig) {

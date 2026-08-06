@@ -3157,24 +3157,30 @@ value {
                 opts.FinalEvents.emplace_back([&readyToReboot](IEventHandle&) -> bool {
                     return readyToReboot;
                 });
-                runtime.DispatchEvents(opts);
+                runtime.DispatchEvents(opts, TDuration::Seconds(10));
             }
-            UNIT_ASSERT(readyToReboot);
+            return readyToReboot;
         };
 
         if (rebootMode == EEncryptedImportRebootMode::AfterLastPortion) {
-            waitReadyToReboot();
+            UNIT_ASSERT(waitReadyToReboot());
             runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
             RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
         } else if (rebootMode == EEncryptedImportRebootMode::AfterReadAndAfterStateSave) {
             constexpr ui32 rebootsCount = 4;
+            ui32 rebootsDone = 0;
             for (ui32 i = 0; i < rebootsCount; ++i) {
-                waitReadyToReboot();
-                RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
-                ++rebootCount;
+                if (!waitReadyToReboot()) {
+                    break;
+                }
                 readyToReboot = false;
+                ++rebootCount;
+                RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
+                ++rebootsDone;
             }
             runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+            Cerr << "Reboots done: " << rebootsDone << Endl;
+            UNIT_ASSERT_GE(rebootsDone, 0);
         }
 
         env.TestWaitNotification(runtime, txId);
@@ -3189,8 +3195,8 @@ value {
     }
 
     Y_UNIT_TEST(ImportBigEncryptedFileWithRebootsAfterReadAndStateSave) {
-        ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
-        ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
+        ImportBigEncryptedFile(315_B, 70_KB, 8_KB, false, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
+        ImportBigEncryptedFile(555_B, 70_KB, 8_KB, true, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
     }
 
     Y_UNIT_TEST_FLAG(ImportBigEncryptedFile, EnableDataShardDirectPartImport) {

@@ -1234,14 +1234,13 @@ actor_system_config:
   - name: BlobStorage
     type: PLACEMENT
     placement_groups: 2
-  blob_storage_executor:
-  - 0
+  blob_storage_executor: 0
 )");
 
         const auto config = NYamlConfig::YamlToProto(doc.Root(), false, false);
 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetActorSystemConfig().BlobStorageExecutorSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(config.GetActorSystemConfig().GetBlobStorageExecutor(0), 0);
+        UNIT_ASSERT(config.GetActorSystemConfig().HasBlobStorageExecutor());
+        UNIT_ASSERT_VALUES_EQUAL(config.GetActorSystemConfig().GetBlobStorageExecutor(), 0);
     }
 
     Y_UNIT_TEST(CollectLabels) {

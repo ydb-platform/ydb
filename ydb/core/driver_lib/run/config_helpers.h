@@ -20,7 +20,7 @@ void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfi
 // Aborts if executorId is out of range.
 ui32 GetExpandedExecutorPoolId(const NKikimrConfig::TActorSystemConfig& systemConfig, ui32 executorId);
 
-// Returns pool ids expanded from executor definitions explicitly referenced by BlobStorageExecutor.
+// Returns pool ids expanded from the executor definition referenced by BlobStorageExecutor.
 TVector<ui32> GetBlobStorageExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig);
 
 NActors::TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemConfig::TScheduler& config);

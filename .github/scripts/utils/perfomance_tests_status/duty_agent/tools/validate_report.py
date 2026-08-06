@@ -1224,6 +1224,15 @@ def validate_analysis_md(
                 "(or put Тикет: [#N](url) in analysis and re-run without --issue)"
             )
 
+    # wait_next_wave: report must be on S3 so the dashboard can show a wait-next badge.
+    if resolution_token == "wait_next_wave" and out_dir is not None:
+        if not (out_dir / "s3_report.json").is_file():
+            errors.append(
+                "wait_next_wave: s3_report.json missing — "
+                "run `dutyctl upload-report -o $OUT --no-issue` "
+                "(publishes report + duty_decision for the dashboard badge)"
+            )
+
     # Bare #123 / unlinked issue|PR — require markdown links
     # (skip fenced code: Title paste often has "#29944" as plain GitHub title text)
     no_fences = re.sub(r"```.*?```", "", body, flags=re.S)

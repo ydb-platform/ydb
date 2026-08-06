@@ -27,6 +27,21 @@ DEFAULT_ENDPOINT = "https://storage.yandexcloud.net"
 DEFAULT_REGION = "ru-central1"
 DEFAULT_PREFIX_ROOT = "perfomance_tests_status/duty_artifacts"
 
+# PTS root (parent of duty_agent) for shared duty_decisions helpers.
+_PTS = Path(__file__).resolve().parents[2]
+if str(_PTS) not in sys.path:
+    sys.path.insert(0, str(_PTS))
+
+from common.duty_decisions import (  # noqa: E402
+    DECISIONS_PREFIX,
+    INDEX_KEY,
+    by_focus_key,
+    empty_index,
+    focus_key,
+    merge_decision_into_index,
+    normalize_index,
+)
+
 # Local filenames → S3 object names (unchanged) + human labels for GitHub.
 DEFAULT_FILES = ("analysis.md", "result.json", "problems.json")
 FILE_LABELS = {
@@ -129,6 +144,50 @@ def put_object(
         else:
             raise S3UploadError(f"PutObject failed s3://{bucket}/{key}: {e}") from e
     return f"{ep}/{bucket}/{key}"
+
+
+def get_object_bytes(
+    *,
+    bucket: str,
+    key: str,
+    endpoint: str | None = None,
+    region: str = DEFAULT_REGION,
+) -> bytes | None:
+    """GET object body, or None if missing."""
+    client = _boto3_client(endpoint=endpoint, region=region)
+    try:
+        resp = client.get_object(Bucket=bucket, Key=key)
+    except Exception as e:
+        err = str(e)
+        if "NoSuchKey" in err or "404" in err or "Not Found" in err:
+            return None
+        # botocore ClientError code
+        code = getattr(e, "response", None)
+        if isinstance(code, dict):
+            err_code = (code.get("Error") or {}).get("Code")
+            if err_code in ("NoSuchKey", "404", "NotFound"):
+                return None
+        raise S3UploadError(f"GetObject failed s3://{bucket}/{key}: {e}") from e
+    body = resp.get("Body")
+    if body is None:
+        return None
+    return body.read()
+
+
+def get_object_json(
+    *,
+    bucket: str,
+    key: str,
+    endpoint: str | None = None,
+    region: str = DEFAULT_REGION,
+) -> Any | None:
+    raw = get_object_bytes(bucket=bucket, key=key, endpoint=endpoint, region=region)
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
+        raise S3UploadError(f"invalid JSON at s3://{bucket}/{key}: {e}") from e
 
 
 def content_type_for(path: Path) -> str:
@@ -378,3 +437,195 @@ def has_human_duty_report_links(body: str) -> bool:
         return False
     cell = m.group(1)
     return bool(re.search(r"\[полный отчёт\]\([^)]+\)", cell))
+
+
+def _read_json_file(path: Path) -> Any | None:
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def resolution_from_out_dir(out_dir: Path) -> str | None:
+    """Prefer result.json.resolution, else **Решение:** in analysis.md."""
+    out_dir = Path(out_dir)
+    result = _read_json_file(out_dir / "result.json")
+    if isinstance(result, dict):
+        res = str(result.get("resolution") or "").strip().lower()
+        if res:
+            return res
+    analysis = out_dir / "analysis.md"
+    if analysis.is_file():
+        try:
+            text = analysis.read_text(encoding="utf-8")
+        except OSError:
+            return None
+        m = re.search(
+            r"\*\*(?:Решение|Resolution):\*\*\s*`?([a-z_]+)`?",
+            text,
+            re.I,
+        )
+        if m:
+            return m.group(1).lower()
+    return None
+
+
+def _focus_context_from_out_dir(out_dir: Path) -> dict[str, str]:
+    """kind/branch/db/suite/label from context.json or result.context."""
+    out_dir = Path(out_dir)
+    kind = branch = db = suite = label = ""
+    ctx = _read_json_file(out_dir / "context.json")
+    if isinstance(ctx, dict):
+        sel = ctx.get("selection") or {}
+        fr = sel.get("focus_run") or {}
+        kind = str((ctx.get("report") or {}).get("kind") or "")
+        branch = str(sel.get("branch") or "")
+        db = str(sel.get("db") or "")
+        suite = str(sel.get("suite") or "")
+        label = str(fr.get("label") or fr.get("day") or fr.get("sha") or "")
+    if not all([kind, branch, db, suite, label]):
+        result = _read_json_file(out_dir / "result.json")
+        if isinstance(result, dict):
+            stub = result.get("context") or {}
+            if isinstance(stub, dict):
+                kind = kind or str(stub.get("kind") or "")
+                branch = branch or str(stub.get("branch") or "")
+                db = db or str(stub.get("db") or "")
+                suite = suite or str(stub.get("suite") or "")
+                label = label or str(stub.get("focus_label") or "")
+    return {
+        "kind": kind.strip().lower(),
+        "branch": branch.strip(),
+        "db": db.strip(),
+        "suite": suite.strip(),
+        "label": label.strip(),
+    }
+
+
+def _summary_from_out_dir(out_dir: Path, *, max_len: int = 180) -> str:
+    result = _read_json_file(Path(out_dir) / "result.json")
+    if isinstance(result, dict):
+        s = str(result.get("summary") or "").strip()
+        if s:
+            return s[:max_len]
+    analysis = Path(out_dir) / "analysis.md"
+    if analysis.is_file():
+        try:
+            text = analysis.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+        for pat in (
+            r"\*\*Проблема:\*\*\s*(.+)",
+            r"\*\*Итог:\*\*\s*(.+)",
+            r"\*\*Summary:\*\*\s*(.+)",
+        ):
+            m = re.search(pat, text, re.I)
+            if m:
+                return m.group(1).strip()[:max_len]
+    return ""
+
+
+def build_wait_next_wave_decision(
+    out_dir: Path,
+    meta: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build decision record for dashboard badge, or None if focus incomplete."""
+    focus = _focus_context_from_out_dir(out_dir)
+    if not all(focus.get(k) for k in ("kind", "branch", "db", "suite", "label")):
+        return None
+    files = list(meta.get("files") or [])
+    analysis_url = str(meta.get("analysis_url") or "")
+    result_url = next(
+        (str(f.get("url") or "") for f in files if f.get("file") == "result.json"),
+        "",
+    )
+    problems_url = next(
+        (str(f.get("url") or "") for f in files if f.get("file") == "problems.json"),
+        "",
+    )
+    fk = focus_key(**focus)
+    updated = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return {
+        "schema": "perf-duty-decision/v1",
+        "focus_key": fk,
+        "resolution": "wait_next_wave",
+        "kind": focus["kind"],
+        "branch": focus["branch"],
+        "db": focus["db"],
+        "suite": focus["suite"],
+        "label": focus["label"],
+        "run_id": str(meta.get("run_id") or Path(out_dir).name),
+        "stamp": str(meta.get("stamp") or ""),
+        "analysis_url": analysis_url,
+        "result_url": result_url,
+        "problems_url": problems_url,
+        "summary": _summary_from_out_dir(out_dir),
+        "updated_at": updated,
+        "pointer_key": by_focus_key(**focus),
+    }
+
+
+def publish_wait_next_wave_decision(
+    out_dir: Path,
+    meta: dict[str, Any],
+    *,
+    bucket: str = DEFAULT_BUCKET,
+) -> dict[str, Any]:
+    """Write by_focus pointer + merge into public decisions index.
+
+    Raises ``S3UploadError`` on failure. Returns the decision record.
+    """
+    decision = build_wait_next_wave_decision(out_dir, meta)
+    if not decision:
+        raise S3UploadError(
+            "wait_next_wave decision needs kind/branch/db/suite/label "
+            "in context.json (selection) or result.json context stub"
+        )
+    if not decision.get("analysis_url"):
+        raise S3UploadError("wait_next_wave decision missing analysis_url from upload meta")
+
+    pointer_key = str(decision["pointer_key"])
+    body = (json.dumps(decision, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    pointer_url = put_object(
+        bucket=bucket,
+        key=pointer_key,
+        body=body,
+        content_type="application/json",
+    )
+
+    existing = get_object_json(bucket=bucket, key=INDEX_KEY)
+    index = merge_decision_into_index(
+        normalize_index(existing) if existing is not None else empty_index(),
+        decision,
+        updated_at=str(decision.get("updated_at") or ""),
+    )
+    index_body = (json.dumps(index, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    index_url = put_object(
+        bucket=bucket,
+        key=INDEX_KEY,
+        body=index_body,
+        content_type="application/json",
+    )
+    decision = {
+        **decision,
+        "pointer_url": pointer_url,
+        "index_url": index_url,
+        "decisions_prefix": DECISIONS_PREFIX,
+    }
+    out_path = Path(out_dir) / "duty_decision.json"
+    out_path.write_text(json.dumps(decision, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return decision
+
+
+def maybe_publish_wait_next_wave_decision(
+    out_dir: Path,
+    meta: dict[str, Any],
+    *,
+    bucket: str = DEFAULT_BUCKET,
+) -> dict[str, Any] | None:
+    """If resolution is wait_next_wave, publish decision; else None."""
+    if resolution_from_out_dir(out_dir) != "wait_next_wave":
+        return None
+    return publish_wait_next_wave_decision(out_dir, meta, bucket=bucket)

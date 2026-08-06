@@ -91,3 +91,4 @@ Now classification stays in `generate.py` (`classify_slice`).
 3. **History** — tpmC + lat by run/commit date
 4. **Duty context** — dive **Save context** / **Copy context** → `perf-duty-context/v1` for [`../duty_agent/`](../duty_agent/) (shared with OLAP)
 5. **Known tickets** — open + closed issues with `<!-- perf-duty-match -->` in body (no label) joined to inbox by `affected`; open pills blue `#N · title`, closed grey `#N · closed · title`. Expand via `dutyctl annotate-issue`.
+6. **wait_next_wave reports** — `generate.py` fetches public `duty_decisions/index.json` (from `dutyctl upload-report --no-issue`); matching suites show a **wait next** pill → analysis.md.

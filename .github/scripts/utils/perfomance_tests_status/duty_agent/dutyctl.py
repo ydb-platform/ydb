@@ -73,7 +73,9 @@ from tools.s3_upload import (  # noqa: E402
     detect_issue_number,
     duty_report_run_id_in_body,
     format_duty_report_links,
+    maybe_publish_wait_next_wave_decision,
     put_object,
+    resolution_from_out_dir,
     upload_duty_report,
     upsert_duty_report_in_body,
 )
@@ -1335,8 +1337,26 @@ def cmd_upload_report(args: argparse.Namespace) -> int:
     except (OSError, S3UploadError) as e:
         print(f"upload-report: warn — could not patch/re-upload analysis.md: {e}", file=sys.stderr)
 
+    # wait_next_wave: publish public decision pointer + index for dashboard badge
+    try:
+        decision = maybe_publish_wait_next_wave_decision(
+            out_dir, meta, bucket=str(args.bucket or "workload-log")
+        )
+        if decision:
+            print(
+                f"duty_decision: wait_next_wave → {decision.get('focus_key')} "
+                f"({decision.get('analysis_url')})"
+            )
+            print(f"duty_decision: index={decision.get('index_url')}")
+    except S3UploadError as e:
+        print(f"upload-report: duty_decision failed: {e}", file=sys.stderr)
+        return 1
+
+    resolution = resolution_from_out_dir(out_dir)
+    skip_issue = bool(args.no_issue) or resolution == "wait_next_wave"
+
     issue_n = args.issue
-    if issue_n is None and not args.no_issue:
+    if issue_n is None and not skip_issue:
         issue_n = detect_issue_number(out_dir)
         if issue_n:
             print(f"issue: auto-detected #{issue_n} from analysis/problems")
@@ -1344,6 +1364,8 @@ def cmd_upload_report(args: argparse.Namespace) -> int:
     if issue_n is None:
         if args.no_issue:
             print("issue: skipped (--no-issue)")
+        elif resolution == "wait_next_wave":
+            print("issue: skipped (wait_next_wave — dashboard uses duty_decision badge)")
         else:
             print(
                 "issue: not linked — pass --issue N after creating the ticket "

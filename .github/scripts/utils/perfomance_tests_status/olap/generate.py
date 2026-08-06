@@ -42,6 +42,10 @@ PTS = ROOT.parent
 if str(PTS) not in sys.path:
     sys.path.insert(0, str(PTS))
 
+from common.duty_decisions import (  # noqa: E402
+    attach_duty_decisions_to_report,
+    fetch_duty_decisions_index,
+)
 from common.duty_issues import (  # noqa: E402
     attach_tickets_to_report,
     fetch_duty_issues,
@@ -1769,6 +1773,15 @@ def main():
         f"open={sum(1 for i in (data.get('known_issues') or []) if i.get('state') != 'closed')} "
         f"closed≤14d={sum(1 for i in (data.get('known_issues') or []) if i.get('state') == 'closed')} "
         f"suites_with_tickets={n_tick}",
+        flush=True,
+    )
+    decisions, dec_warn = fetch_duty_decisions_index()
+    if dec_warn:
+        print(f"duty_decisions: {dec_warn}", flush=True)
+    n_dec = attach_duty_decisions_to_report(data, decisions, kind="olap")
+    print(
+        f"duty_decisions: index_items={len((decisions.get('items') or {}))} "
+        f"suites_with_decision={n_dec}",
         flush=True,
     )
 

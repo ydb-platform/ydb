@@ -61,7 +61,7 @@ Mart access goes through [`../common/ydb_client.py`](../common/ydb_client.py) (Y
 | `trace-note -o $OUT "…"` | append hypothesis/dig/decision node to the action tree |
 | `validate -o $OUT` | **quality gate** (+ refreshes action tree under the cut) |
 | `write-result -c CONTEXT -o $OUT` | final `result.json` only after validate OK |
-| `upload-report -o $OUT [--issue N]` | put report to S3 (immutable stamp dir) + upsert **[полный отчёт]** into issue body; issue# from `--issue` or `Тикет: #N` in analysis |
+| `upload-report -o $OUT [--issue N]` | put report to S3 (immutable stamp dir) + upsert **[полный отчёт]** into issue body; issue# from `--issue` or `Тикет: #N` in analysis. For `wait_next_wave`: `--no-issue` (publishes `duty_decision` index for dashboard **wait next** badge) |
 
 Extra digs: `gh search` / browse code at tested sha. Offline mart: `dig-runs --from-json`. SQL only: `--sql-only`.
 
@@ -115,6 +115,16 @@ Extra digs: `gh search` / browse code at tested sha. Offline mart: `dig-runs --f
 Note: `metrics_delta.json` is produced for slow/tpcc (or `prepare --metrics`); pure `olap_fail` may omit it.
 
 **`wait_next_wave` only after** dig-runs + dig-prs (or explicit skip reason) and no remaining dig that could pin mechanism.
+
+После `wait_next_wave` **обязательно** залить разбор (иначе validate упадёт и на дашборде останется `no ticket`):
+
+```text
+dutyctl upload-report -o $OUT --no-issue
+dutyctl validate -o $OUT
+dutyctl write-result …
+```
+
+`upload-report` кладёт `analysis.md` в S3 и пишет публичный `duty_decisions` pointer/index → generate рисует бейдж **wait next** со ссылкой на отчёт.
 
 **Final validation:** do not call `write-result` with `completed` until `validate` exits 0.
 

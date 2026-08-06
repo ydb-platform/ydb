@@ -595,6 +595,14 @@ https://proxy.sandbox.yandex-team.ru/12927819679/index.html
                 },
             )
             write_json(d / "dig_runs.json", {"kind": "olap", "summary": {"slice_count": 1}})
+            write_json(
+                d / "s3_report.json",
+                {
+                    "run_id": "x",
+                    "stamp": "20260101T000000Z",
+                    "analysis_url": "https://storage.yandexcloud.net/workload-log/x/analysis.md",
+                },
+            )
             md = """# Perf duty — x
 
 ## Заключение
@@ -1197,6 +1205,79 @@ affected:
     queries: [Query06]
 -->
 """
+
+    def test_wait_next_wave_requires_s3_report(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(d / "detect_type.json", {"analysis_types": ["olap_fail"]})
+            write_json(d / "focus.json", {"fetched": True, "fatal": {"signals": []}})
+            write_json(d / "code_bisect.json", {"introduced_in_window": False})
+            write_json(d / "dig_runs.json", {"kind": "olap", "summary": {"slice_count": 2}})
+            write_json(d / "dig_prs.json", {"prs": []})
+            write_json(d / "priors.json", {"prior_scans": []})
+            md = """# Perf duty — x
+
+## Заключение
+- **Проблема:** IC cascade; peer close unknown
+- **Из‑за чего:** DeadPeer / YDBE-02001; abort на peer не найден
+- **Чинить:** ждать повтор с core на peer
+- **Решение:** wait_next_wave
+- **Виновник:** unknown
+- **Уверенность:** средняя
+- **Критичность:** MEDIUM
+- **Давность:** на разбираемом прогоне
+
+## Проблемы
+### P1 — IC cascade
+- Тип: olap_fail
+- Что сломалось: Query13 node lost
+- Почему / механика: каскад после DeadPeer; причина close peer неизвестна
+- Логи: kikimr__stderr empty; kikimr__logs DeadPeer YDBE-02001
+- Код ([`c460199`](https://github.com/ydb-platform/ydb/commit/c460199)): n/a
+- Кто (если есть): unknown
+- Давность: этот прогон
+- Гипотеза проверена: partial
+- Связанный issue: нет
+- Тикет: нет
+
+## Гипотезы происхождения
+- **H1** (partial): peer closed IC; нужен abort/core на peer
+- Issues (поиск): ExtractBlobsData ticket — fingerprint не совпал
+
+## Причины
+- Каскад понятен; root peer close — нет
+
+## Как починить
+1. Ждать повтор с evidence на peer
+
+## Что дальше
+1. Следующая волна
+
+## Материалы для issue
+https://proxy.sandbox.yandex-team.ru/13000000000/index.html
+[`c460199`](https://github.com/ydb-platform/ydb/commit/c460199)
+"""
+            r = validate_analysis_md(md, out_dir=d)
+            self.assertTrue(
+                any("s3_report.json" in e and "wait_next_wave" in e for e in r["errors"]),
+                r["errors"],
+            )
+            write_json(
+                d / "s3_report.json",
+                {
+                    "run_id": "olap-UploadTpch1000-c460199",
+                    "stamp": "20260806T000000Z",
+                    "analysis_url": (
+                        "https://storage.yandexcloud.net/workload-log/"
+                        "perfomance_tests_status/duty_artifacts/x/analysis.md"
+                    ),
+                },
+            )
+            r2 = validate_analysis_md(md, out_dir=d)
+            self.assertFalse(
+                any("s3_report.json" in e for e in r2["errors"]),
+                r2["errors"],
+            )
 
     def test_open_ticket_rejects_faktura_without_gfm_header(self):
         md = self._open_ticket_sigsegv_md(
@@ -1871,6 +1952,66 @@ class S3UploadHelpersTests(unittest.TestCase):
         )
         self.assertIn("workload-log", url)
         self.assertTrue(url.endswith("analysis.md"))
+
+    def test_build_wait_next_wave_decision_and_index_merge(self):
+        from common.duty_decisions import (
+            empty_index,
+            focus_key,
+            merge_decision_into_index,
+        )
+        from tools.s3_upload import build_wait_next_wave_decision
+
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(
+                d / "context.json",
+                {
+                    "report": {"kind": "olap"},
+                    "selection": {
+                        "branch": "stable-26-3-1",
+                        "db": "sas_small_column",
+                        "suite": "UploadTpch1000",
+                        "focus_run": {"label": "2026-08-05_c460199", "sha": "c460199"},
+                    },
+                },
+            )
+            write_json(
+                d / "result.json",
+                {"resolution": "wait_next_wave", "summary": "IC cascade; wait peer abort"},
+            )
+            meta = {
+                "run_id": "olap-UploadTpch1000-c460199",
+                "stamp": "20260806T135942Z",
+                "analysis_url": "https://example/analysis.md",
+                "files": [
+                    {"file": "analysis.md", "url": "https://example/analysis.md"},
+                    {"file": "result.json", "url": "https://example/result.json"},
+                ],
+            }
+            dec = build_wait_next_wave_decision(d, meta)
+            self.assertIsNotNone(dec)
+            assert dec is not None
+            self.assertEqual(dec["resolution"], "wait_next_wave")
+            self.assertEqual(dec["label"], "2026-08-05_c460199")
+            self.assertEqual(
+                dec["focus_key"],
+                focus_key(
+                    kind="olap",
+                    branch="stable-26-3-1",
+                    db="sas_small_column",
+                    suite="UploadTpch1000",
+                    label="2026-08-05_c460199",
+                ),
+            )
+            self.assertIn("by_focus/olap/stable-26-3-1/", dec["pointer_key"])
+            idx = merge_decision_into_index(empty_index(), dec, updated_at="t0")
+            self.assertIn(dec["focus_key"], idx["items"])
+            self.assertEqual(idx["items"][dec["focus_key"]]["analysis_url"], meta["analysis_url"])
+            # second merge overwrites same key
+            dec2 = {**dec, "analysis_url": "https://example/v2.md", "stamp": "later"}
+            idx2 = merge_decision_into_index(idx, dec2, updated_at="t1")
+            self.assertEqual(len(idx2["items"]), 1)
+            self.assertEqual(idx2["items"][dec["focus_key"]]["analysis_url"], "https://example/v2.md")
 
     def test_human_links_body_upsert_and_issue_detect(self):
         from tools.s3_upload import (

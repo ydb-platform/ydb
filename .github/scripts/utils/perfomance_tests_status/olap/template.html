@@ -83,6 +83,10 @@
   .pill.ticket.needs-branch { background: #fff8c5; color: #9a6700; }
   .pill.ticket.closed { background: #f6f8fa; color: #656d76; box-shadow: inset 0 0 0 1px #d0d7de; }
   .pill.ticket.no-ticket { background: var(--broken-bg); color: var(--broken); }
+  a.pill.ticket.wait-next {
+    background: #ddf4ff; color: #0550ae; box-shadow: inset 0 0 0 1px #0969da44;
+  }
+  a.pill.ticket.wait-next:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #0969da66; }
   .run-card .run-tickets {
     margin-top: 3px; font-size: 10px; line-height: 1.35;
     display: flex; flex-wrap: wrap; gap: 2px; max-width: 100%;
@@ -1359,14 +1363,26 @@ function runCoverageForDisplay(item, run) {
     uncovered_queries: agg.uncovered_queries,
   };
 }
+function dutyDecisionPillHtml(dec) {
+  if (!dec || String(dec.resolution || '') !== 'wait_next_wave') return '';
+  const url = dec.analysis_url || dec.result_url || '';
+  if (!url) return '';
+  const tip = dec.summary
+    ? `wait next wave · ${dec.summary}`
+    : 'wait next wave — duty report (no new ticket)';
+  return `<a class="pill ticket wait-next" href="${esc(url)}" target="_blank" rel="noopener" ` +
+    `title="${esc(tip)}" onclick="event.stopPropagation()">wait next</a>`;
+}
+
 function runTicketsHtml(run) {
   if (!run) return '';
   const cov = run.ticket_coverage;
   const tickets = run.tickets || [];
   const failN = Number(run.fail || 0);
   const gapN = (run.uncovered_queries || []).length;
-  // Show on fails, nodata gaps, or explicit coverage annotation.
-  if ((!cov || cov === 'ok') && !tickets.length && failN <= 0 && gapN <= 0) return '';
+  const waitPill = dutyDecisionPillHtml(run.duty_decision);
+  // Show on fails, nodata gaps, explicit coverage, or wait_next_wave decision.
+  if ((!cov || cov === 'ok') && !tickets.length && failN <= 0 && gapN <= 0 && !waitPill) return '';
   const parts = [];
   if (tickets.length) {
     const shown = tickets.slice(0, 3);
@@ -1375,7 +1391,9 @@ function runTicketsHtml(run) {
       parts.push(`<span class="pill" title="${esc(tickets.slice(3).map(t => '#' + t.number).join(', '))}">+${tickets.length - 3}</span>`);
     }
   }
-  if (cov === 'uncovered' || (gapN > 0 && cov !== 'covered' && cov !== 'wrong_branch')
+  if (waitPill) {
+    parts.push(waitPill);
+  } else if (cov === 'uncovered' || (gapN > 0 && cov !== 'covered' && cov !== 'wrong_branch')
       || (failN > 0 && !tickets.length && cov !== 'covered' && cov !== 'wrong_branch')) {
     const uq = (run.uncovered_queries || []).slice(0, 4).join(', ');
     parts.push(

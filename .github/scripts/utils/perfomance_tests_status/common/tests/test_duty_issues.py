@@ -12,6 +12,12 @@ sys.path.insert(0, str(PTS))
 
 from datetime import datetime, timedelta, timezone  # noqa: E402
 
+from common.duty_decisions import (  # noqa: E402
+    attach_duty_decisions_to_report,
+    empty_index,
+    focus_key,
+    merge_decision_into_index,
+)
 from common.duty_issues import (  # noqa: E402
     CLOSED_ISSUES_MAX_AGE_DAYS,
     affected_would_expand,
@@ -718,6 +724,58 @@ class RecentlyClosedFilterTests(unittest.TestCase):
                 now=now,
             )
         )
+
+
+class DutyDecisionsAttachTests(unittest.TestCase):
+    def test_attach_wait_next_wave_on_matching_label(self):
+        label = "2026-08-05_c460199"
+        fk = focus_key(
+            kind="olap",
+            branch="stable-26-3-1",
+            db="sas_small_column",
+            suite="UploadTpch1000",
+            label=label,
+        )
+        decision = {
+            "focus_key": fk,
+            "resolution": "wait_next_wave",
+            "kind": "olap",
+            "branch": "stable-26-3-1",
+            "db": "sas_small_column",
+            "suite": "UploadTpch1000",
+            "label": label,
+            "analysis_url": "https://example/analysis.md",
+            "summary": "IC cascade",
+        }
+        index = merge_decision_into_index(empty_index(), decision)
+        data = {
+            "inbox": [
+                {
+                    "suite": "UploadTpch1000",
+                    "db": "sas_small_column",
+                    "branch": "stable-26-3-1",
+                    "now_runs": [
+                        {"label": "2026-08-04_old", "fail": 1},
+                        {"label": label, "fail": 1},
+                    ],
+                },
+                {
+                    "suite": "UploadTpch1000",
+                    "db": "vla_small_column",
+                    "branch": "main",
+                    "now_runs": [{"label": label, "fail": 1}],
+                },
+            ]
+        }
+        n = attach_duty_decisions_to_report(data, index, kind="olap")
+        self.assertEqual(n, 1)
+        run = data["inbox"][0]["now_runs"][1]
+        self.assertEqual(run["duty_decision"]["analysis_url"], "https://example/analysis.md")
+        self.assertEqual(
+            data["inbox"][0]["duty_decision"]["resolution"], "wait_next_wave"
+        )
+        self.assertNotIn("duty_decision", data["inbox"][1]["now_runs"][0])
+        self.assertEqual(len(data.get("duty_decisions") or []), 1)
 
 
 if __name__ == "__main__":

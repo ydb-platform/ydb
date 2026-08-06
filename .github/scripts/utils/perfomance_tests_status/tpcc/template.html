@@ -59,6 +59,10 @@
     background: #f6f8fa; color: #656d76; box-shadow: inset 0 0 0 1px #d0d7de;
   }
   a.pill.ticket.closed:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #8c959f66; }
+  a.pill.ticket.wait-next {
+    background: #ddf4ff; color: #0550ae; box-shadow: inset 0 0 0 1px #0969da44;
+  }
+  a.pill.ticket.wait-next:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #0969da66; }
   .counters {
     display: flex; flex-wrap: nowrap; gap: 10px; margin: 0 0 16px;
     max-width: 100%; min-width: 0;
@@ -805,6 +809,17 @@ function ticketPillsHtml(tickets, { maxTitle = 72 } = {}) {
       `title="${esc(tip)}" onclick="event.stopPropagation()">` +
       `${esc(label)}</a>`;
   }).join(' ');
+}
+
+function dutyDecisionPillHtml(dec) {
+  if (!dec || String(dec.resolution || '') !== 'wait_next_wave') return '';
+  const url = dec.analysis_url || dec.result_url || '';
+  if (!url) return '';
+  const tip = dec.summary
+    ? `wait next wave · ${dec.summary}`
+    : 'wait next wave — duty report (no new ticket)';
+  return `<a class="pill ticket wait-next" href="${esc(url)}" target="_blank" rel="noopener" ` +
+    `title="${esc(tip)}" onclick="event.stopPropagation()">wait next</a>`;
 }
 
 function esc(s) {
@@ -2399,10 +2414,12 @@ function diveHtml(r, id) {
   ].filter(Boolean).join(' · ');
 
   const ticketsHtml = ticketPillsHtml(r.tickets);
+  const waitPill = dutyDecisionPillHtml(r.duty_decision);
+  const ticketRow = [ticketsHtml, waitPill].filter(Boolean).join(' ');
   return `<div class="dive" data-dive-branch="${esc(r.branch || '')}" data-dive-db="${esc(r.db || '')}" data-dive-latest-day="${esc(latestDay)}">
     ${waveNote}
     ${reasonHtml}
-    ${ticketsHtml ? `<div style="margin:0 0 8px">${ticketsHtml}</div>` : ''}
+    ${ticketRow ? `<div style="margin:0 0 8px">${ticketRow}</div>` : ''}
     <div class="muted" style="margin-bottom:6px">${linksRow}</div>
     <div>
       <div class="muted" style="margin-bottom:6px"><b>Compare runs</b> (${nCmp} + now · ${nDays}d; клик = day-baseline; now очищает)${fin ? ' <span class="pill">finished</span>' : ''}</div>

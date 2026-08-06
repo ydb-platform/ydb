@@ -5,6 +5,7 @@
 
 - **Итог:** <симптом → механизм одной фразой>
 - **Решение:** `open_ticket` | `update_known` | `investigate_further` | `wait_next_wave` | `no_action` — <что сделать>
+  - при `wait_next_wave`: после analysis → `dutyctl upload-report -o $OUT --no-issue` (S3 + dashboard badge **wait next**), затем `validate`
 - **Виновник:** `unknown` | `@{login}` / [PR #N](https://github.com/ydb-platform/ydb/pull/N) — <доказательство>
   - При `unknown` авторов истории файла **не** пиши как виновников; если упоминаешь PR введения строки — пометь «история кода, не виновник»
 - **Уверенность:** высокая | средняя | низкая — <на чём высокая / где только следствие>

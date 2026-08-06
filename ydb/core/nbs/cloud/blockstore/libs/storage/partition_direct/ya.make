@@ -64,6 +64,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    benchmark
     partition_ut
     ut
 )

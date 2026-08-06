@@ -168,8 +168,8 @@ NActors::TBasicExecutorPoolConfig BuildBasicExecutorPoolConfig(
     return basic;
 }
 
-ui32 GetExecutorPoolCount(const NKikimrConfig::TActorSystemConfig& systemConfig) {
-    ui32 poolCount = 0;
+ui64 GetExecutorPoolCount(const NKikimrConfig::TActorSystemConfig& systemConfig) {
+    ui64 poolCount = 0;
     for (const auto& poolConfig : systemConfig.GetExecutor()) {
         poolCount += GetExpandedExecutorPoolCount(poolConfig);
     }
@@ -191,16 +191,10 @@ ui32 GetExpandedExecutorPoolId(const NKikimrConfig::TActorSystemConfig& systemCo
         executorId, systemConfig.ExecutorSize());
 }
 
-TVector<ui32> GetBlobStorageExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig) {
-    if (!systemConfig.HasBlobStorageExecutor()) {
-        return {};
-    }
+namespace {
 
-    const ui32 executorId = systemConfig.GetBlobStorageExecutor();
-    Y_ABORT_UNLESS(executorId < static_cast<ui32>(systemConfig.ExecutorSize()),
-        "BlobStorageExecutor id %" PRIu32 " is out of range; executor count is %d",
-        executorId, systemConfig.ExecutorSize());
-
+TVector<ui32> ExpandExecutorPoolIds(
+        const NKikimrConfig::TActorSystemConfig& systemConfig, ui32 executorId) {
     const auto& poolConfig = systemConfig.GetExecutor(executorId);
     const ui32 firstPoolId = GetExpandedExecutorPoolId(systemConfig, executorId);
     const ui32 poolCount = GetExpandedExecutorPoolCount(poolConfig);
@@ -213,12 +207,49 @@ TVector<ui32> GetBlobStorageExecutorPoolIds(const NKikimrConfig::TActorSystemCon
     return executorPoolIds;
 }
 
+}  // anonymous namespace
+
+TVector<ui32> GetBlobStorageExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig) {
+    if (!systemConfig.HasBlobStorageExecutor()) {
+        return {};
+    }
+
+    const ui32 executorId = systemConfig.GetBlobStorageExecutor();
+    Y_ABORT_UNLESS(executorId < static_cast<ui32>(systemConfig.ExecutorSize()),
+        "BlobStorageExecutor id %" PRIu32 " is out of range; executor count is %d",
+        executorId, systemConfig.ExecutorSize());
+
+    return ExpandExecutorPoolIds(systemConfig, executorId);
+}
+
+TVector<ui32> GetInterconnectSessionExecutorPoolIds(
+        const NKikimrConfig::TActorSystemConfig& systemConfig) {
+    if (!systemConfig.HasInterconnectSessionExecutor()) {
+        return {};
+    }
+
+    const ui32 executorId = systemConfig.GetInterconnectSessionExecutor();
+    Y_ABORT_UNLESS(executorId < static_cast<ui32>(systemConfig.ExecutorSize()),
+        "InterconnectSessionExecutor id %" PRIu32 " is out of range; executor count is %d",
+        executorId, systemConfig.ExecutorSize());
+
+    const auto& poolConfig = systemConfig.GetExecutor(executorId);
+    Y_ABORT_UNLESS(poolConfig.GetType() == TExecutorConfig::PLACEMENT,
+        "InterconnectSessionExecutor id %" PRIu32 " must reference a PLACEMENT executor", executorId);
+
+    return ExpandExecutorPoolIds(systemConfig, executorId);
+}
+
 namespace {
 
 void AddExecutorPoolsImpl(NActors::TCpuManagerConfig& cpuManager,
         const NKikimrConfig::TActorSystemConfig& systemConfig, NMonitoring::TDynamicCounterPtr counters,
         const TCpuTopology* suppliedCpuTopology) {
-    cpuManager.PingInfoByPool.resize(GetExecutorPoolCount(systemConfig));
+    const ui64 executorPoolCount = GetExecutorPoolCount(systemConfig);
+    Y_ABORT_UNLESS(executorPoolCount <= NActors::MaxPools,
+        "Actor system executor pool count %" PRIu64 " exceeds the maximum of %u",
+        executorPoolCount, static_cast<ui32>(NActors::MaxPools));
+    cpuManager.PingInfoByPool.resize(executorPoolCount);
 
     std::optional<TCpuTopology> parsedCpuTopology;
     const TCpuTopology* cpuTopology = suppliedCpuTopology;

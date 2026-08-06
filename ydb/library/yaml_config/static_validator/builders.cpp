@@ -162,6 +162,9 @@ TMapBuilder ActorSystemConfigBuilder() {
     .Bool("use_auto_config", [](auto& useAutoConfig){
       useAutoConfig.Optional();
     })
+    .Bool("use_shared_threads", [](auto& useSharedThreads){
+      useSharedThreads.Optional();
+    })
     .Enum("node_type", [](auto& nodeType){
       nodeType
       .SetItems({"STORAGE", "COMPUTE", "HYBRID"})
@@ -177,7 +180,7 @@ TMapBuilder ActorSystemConfigBuilder() {
       .Optional()
       .MapItem([](auto& executorItem){
         executorItem
-        .Enum("name", {"System", "User", "Batch", "IO", "IC", "BlobStorage"})
+        .Enum("name", {"System", "User", "Batch", "IO", "IC", "BlobStorage", "ICSession"})
         .Int64("spin_threshold", [](auto& spinThreshold){
           spinThreshold
           .Min(0)
@@ -253,6 +256,25 @@ TMapBuilder ActorSystemConfigBuilder() {
       .Optional()
       .Min(0);
     })
+    .Int64("sys_executor", [](auto& sysExecutor){
+      sysExecutor
+      .Optional()
+      .Min(0);
+    })
+    .Int64("interconnect_session_executor", [](auto& interconnectSessionExecutor){
+      interconnectSessionExecutor
+      .Optional()
+      .Min(0);
+    })
+    .Array("service_executor", [](auto& serviceExecutor){
+      serviceExecutor
+      .Optional()
+      .MapItem([](auto& serviceExecutorItem){
+        serviceExecutorItem
+        .String("service_name")
+        .Int64("executor_id", nonNegative());
+      });
+    })
     .Map("scheduler", [](auto& scheduler){
       scheduler
       .Optional()
@@ -287,6 +309,7 @@ TMapBuilder ActorSystemConfigBuilder() {
 
         actorSystemContext.Expect(!node["executor"].Exists(), "executor must not exist when using auto congfig");
         actorSystemContext.Expect(!node["blob_storage_executor"].Exists(), "blob_storage_executor must not exist when using auto congfig");
+        actorSystemContext.Expect(!node["interconnect_session_executor"].Exists(), "interconnect_session_executor must not exist when using auto congfig");
         actorSystemContext.Expect(!node["scheduler"].Exists(), "scheduler must not exist when using auto congfig");
       } else {
         actorSystemContext.Expect(node["executor"].Exists(), "executor must exist when not using auto congfig");

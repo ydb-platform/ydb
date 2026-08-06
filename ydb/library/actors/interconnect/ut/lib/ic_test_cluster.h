@@ -46,7 +46,8 @@ public:
                    TTrafficInterrupterSettings* tiSettings = nullptr, TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, Flags flags = EMPTY,
                    TCheckerFactory checkerFactory = {}, TDuration deadPeerTimeout = TDuration::Seconds(2), ui32 inflight = TNode::DefaultInflight(),
                    std::function<void(ui32, NActors::TInterconnectSettings&)> settingsCustomizer = {},
-                   TNode::TLogBackendFactory logBackendFactory = {})
+                   TNode::TLogBackendFactory logBackendFactory = {},
+                   TVector<ui32> interconnectSessionPoolIds = {0})
         : NumNodes(numNodes)
         , DeadPeerTimeout(deadPeerTimeout)
         , Counters(new NMonitoring::TDynamicCounters)
@@ -88,7 +89,8 @@ public:
                 flags & USE_TLS, checkerFactory, flags & RDMA_POLLING_CQ ? NInterconnect::NRdma::ECqMode::POLLING : NInterconnect::NRdma::ECqMode::EVENT,
                 !(flags & DISABLE_RDMA),
                 settingsCustomizer,
-                LogBackendFactory));
+                LogBackendFactory,
+                interconnectSessionPoolIds));
         }
     }
 

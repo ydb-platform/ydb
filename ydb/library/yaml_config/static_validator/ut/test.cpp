@@ -424,6 +424,40 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
             "    placement_group_threads: 1\n"
             "    type: IO\n")).Ok());
     }
+
+    Y_UNIT_TEST(InterconnectSessionExecutor) {
+        auto validator = TMapBuilder()
+            .Field("actor_system_config", ActorSystemConfigBuilder())
+            .CreateValidator();
+        auto makeManualConfig = [](TStringBuf actorSystemFields) {
+            return ::TStringBuilder()
+                << "actor_system_config:\n"
+                << actorSystemFields
+                << "  scheduler:\n"
+                << "    progress_threshold: 10000\n"
+                << "    resolution: 64\n"
+                << "    spin_threshold: 0\n";
+        };
+
+        UNIT_ASSERT(Valid(validator.Validate(makeManualConfig(
+            "  executor:\n"
+            "  - name: System\n"
+            "    threads: 1\n"
+            "    type: BASIC\n"
+            "  - name: ICSession\n"
+            "    placement_groups: 2\n"
+            "    type: PLACEMENT\n"
+            "  sys_executor: 0\n"
+            "  use_shared_threads: false\n"
+            "  interconnect_session_executor: 1\n"))));
+
+        UNIT_ASSERT(!validator.Validate(
+            "actor_system_config:\n"
+            "  use_auto_config: true\n"
+            "  node_type: STORAGE\n"
+            "  cpu_count: 4\n"
+            "  interconnect_session_executor: 0\n").Ok());
+    }
 }
 
 } // namesapce NKikimr

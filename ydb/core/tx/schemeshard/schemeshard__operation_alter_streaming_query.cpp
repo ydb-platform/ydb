@@ -26,8 +26,10 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterStreamingQuery);
 
-        if (RunDelta != 0) {
+        if (RunDelta > 0) {
             context.SS->TabletCounters->Simple()[COUNTER_RUNNING_STREAMING_QUERY_COUNT].Add(RunDelta);
+        } else if (RunDelta < 0) {
+            context.SS->TabletCounters->Simple()[COUNTER_RUNNING_STREAMING_QUERY_COUNT].Sub(-RunDelta);
         }
 
         const TPathId& pathId = txState->TargetPathId;

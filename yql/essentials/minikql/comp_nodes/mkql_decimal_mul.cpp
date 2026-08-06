@@ -13,27 +13,26 @@ extern "C" NYql::NDecimal::TInt128 DecimalMul(NYql::NDecimal::TInt128 a, NYql::N
     return NYql::NDecimal::Mul(a, b);
 }
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsLeftOptional, bool IsRightOptional>
 class TDecimalMulWrapper: public TMutableCodegeneratorNode<TDecimalMulWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalMultiplicator<NYql::NDecimal::TInt128> {
-    typedef TMutableCodegeneratorNode<TDecimalMulWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TDecimalMulWrapper<IsLeftOptional, IsRightOptional>>;
 
 public:
     TDecimalMulWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , NYql::NDecimal::TDecimalMultiplicator<NYql::NDecimal::TInt128>(precision, scale)
-        , Left(left)
-        , Right(right)
+        , Left_(left)
+        , Right_(right)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        const auto& left = Left->GetValue(compCtx);
-        const auto& right = Right->GetValue(compCtx);
+        const auto& left = Left_->GetValue(compCtx);
+        const auto& right = Right_->GetValue(compCtx);
 
         if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
@@ -59,8 +58,8 @@ public:
         ctx.Codegen.AddGlobalMapping(name, useMulAddDiv ? reinterpret_cast<const void*>(&DecimalMulAndDivNormalDivider) : reinterpret_cast<const void*>(&DecimalMul));
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
-        const auto left = GetNodeValue(Left, ctx, block);
-        const auto right = GetNodeValue(Right, ctx, block);
+        const auto left = GetNodeValue(Left_, ctx, block);
+        const auto right = GetNodeValue(Right_, ctx, block);
 
         if constexpr (IsLeftOptional || IsRightOptional) {
             const auto test = IsLeftOptional && IsRightOptional ? BinaryOperator::CreateAnd(left, right, "test", block) : IsLeftOptional ? left
@@ -119,31 +118,31 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Left);
-        this->DependsOn(Right);
+        this->DependsOn(Left_);
+        this->DependsOn(Right_);
     }
 
-    IComputationNode* const Left;
-    IComputationNode* const Right;
+    IComputationNode* const Left_;
+    IComputationNode* const Right_;
 };
 
 template <bool IsLeftOptional, bool IsRightOptional, typename TRight>
 class TDecimalMulIntegralWrapper: public TMutableCodegeneratorNode<TDecimalMulIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalMultiplicator<TRight> {
-    typedef TMutableCodegeneratorNode<TDecimalMulIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TDecimalMulIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>;
     using NYql::NDecimal::TDecimalMultiplicator<TRight>::Bound_;
 
 public:
     TDecimalMulIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , NYql::NDecimal::TDecimalMultiplicator<TRight>(precision)
-        , Left(left)
-        , Right(right)
+        , Left_(left)
+        , Right_(right)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        const auto& left = Left->GetValue(compCtx);
-        const auto& right = Right->GetValue(compCtx);
+        const auto& left = Left_->GetValue(compCtx);
+        const auto& right = Right_->GetValue(compCtx);
 
         if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
@@ -168,8 +167,8 @@ public:
             FunctionType::get(valType, {valType, valType}, false);
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
-        const auto left = GetNodeValue(Left, ctx, block);
-        const auto right = GetNodeValue(Right, ctx, block);
+        const auto left = GetNodeValue(Left_, ctx, block);
+        const auto right = GetNodeValue(Right_, ctx, block);
 
         if constexpr (IsLeftOptional || IsRightOptional) {
             const auto test = IsLeftOptional && IsRightOptional ? BinaryOperator::CreateAnd(left, right, "test", block) : IsLeftOptional ? left
@@ -219,12 +218,12 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Left);
-        this->DependsOn(Right);
+        this->DependsOn(Left_);
+        this->DependsOn(Right_);
     }
 
-    IComputationNode* const Left;
-    IComputationNode* const Right;
+    IComputationNode* const Left_;
+    IComputationNode* const Right_;
 };
 
 } // namespace
@@ -232,7 +231,8 @@ private:
 IComputationNode* WrapDecimalMul(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
 
-    bool isOptionalLeft, isOptionalRight;
+    bool isOptionalLeft;
+    bool isOptionalRight;
 
     const auto leftType = static_cast<TDataDecimalType*>(UnpackOptionalData(callable.GetInput(0), isOptionalLeft));
     const auto rightType = UnpackOptionalData(callable.GetInput(1), isOptionalRight);
@@ -262,5 +262,4 @@ IComputationNode* WrapDecimalMul(TCallable& callable, const TComputationNodeFact
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

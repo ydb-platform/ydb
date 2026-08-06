@@ -2,8 +2,7 @@
 #include "mkql_program_builder_test_utils.h"
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLMutDicttest) {
 template <bool IsSet>
@@ -14,7 +13,7 @@ TType* MakeTestDictType(TProgramBuilder& pb) {
     return pb.NewDictType(
         NTest::ConvertToMinikqlType<TStringBuf>(pb),
         IsSet ? NTest::ConvertToMinikqlType<NTest::TSingularVoid>(pb) : NTest::ConvertToMinikqlType<i32>(pb),
-        false);
+        /*multi=*/false);
 }
 
 template <bool IsSet>
@@ -22,7 +21,7 @@ TRuntimeNode MakeTestDict(TProgramBuilder& pb) {
     const auto dictType = pb.NewDictType(
         NTest::ConvertToMinikqlType<TStringBuf>(pb),
         IsSet ? NTest::ConvertToMinikqlType<NTest::TSingularVoid>(pb) : NTest::ConvertToMinikqlType<i32>(pb),
-        false);
+        /*multi=*/false);
     const auto dict = pb.NewDict(dictType, {{NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")), IsSet ? NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pb, i32(1))},
                                             {NTest::ConvertValueToLiteralNode(pb, TStringBuf("bar")), IsSet ? NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pb, i32(2))}});
 
@@ -48,7 +47,8 @@ void CheckExpectedDict(const NUdf::TUnboxedValue& dict, const TTestDictStorage<f
     UNIT_ASSERT_VALUES_EQUAL(dict.GetDictLength(), expected.size());
     TTestDictStorage<IsSet> d;
     const auto it = dict.GetDictIterator();
-    NUdf::TUnboxedValue key, value;
+    NUdf::TUnboxedValue key;
+    NUdf::TUnboxedValue value;
     for (ui32 i = 0; i < expected.size(); ++i) {
         UNIT_ASSERT(it.NextPair(key, value));
         if constexpr (IsSet) {
@@ -69,7 +69,7 @@ Y_UNIT_TEST_LLVM_SET(TestCreateEmpty) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dictType = MakeTestDictType<IsSet>(pb);
     const auto pgmReturn = pb.MutDictCreate(dictType, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -80,7 +80,7 @@ Y_UNIT_TEST_LLVM_SET(TestCreateCopy) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto pgmReturn = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -91,7 +91,7 @@ Y_UNIT_TEST_LLVM_SET(TestCreateCopyAndBack) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto pgmReturn = pb.FromMutDict(dict.GetStaticType(), pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))}));
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -119,7 +119,11 @@ Y_UNIT_TEST_LLVM_SET(TestCreateCopyAndBack) {
     const auto bazLookup = value.Lookup(bazStr);
     UNIT_ASSERT(!bazLookup);
 
-    NUdf::TUnboxedValue key1, key2, value1, value2, tmp;
+    NUdf::TUnboxedValue key1;
+    NUdf::TUnboxedValue key2;
+    NUdf::TUnboxedValue value1;
+    NUdf::TUnboxedValue value2;
+    NUdf::TUnboxedValue tmp;
     const auto keyIt = value.GetKeysIterator();
     UNIT_ASSERT(keyIt.Next(key1));
     UNIT_ASSERT(keyIt.Next(key2));
@@ -148,7 +152,7 @@ Y_UNIT_TEST_LLVM_SET(TestInsert) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dictType = MakeTestDictType<IsSet>(pb);
     auto mdict = pb.MutDictCreate(dictType, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     mdict = pb.MutDictInsert(dictType, mdict,
@@ -164,7 +168,7 @@ Y_UNIT_TEST_LLVM_SET(TestInsertTwice) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dictType = MakeTestDictType<IsSet>(pb);
     auto mdict = pb.MutDictCreate(dictType, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     mdict = pb.MutDictInsert(dictType, mdict,
@@ -183,7 +187,7 @@ Y_UNIT_TEST_LLVM_SET(TestUpsert) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dictType = MakeTestDictType<IsSet>(pb);
     auto mdict = pb.MutDictCreate(dictType, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     mdict = pb.MutDictUpsert(dictType, mdict,
@@ -199,7 +203,7 @@ Y_UNIT_TEST_LLVM_SET(TestUpsertTwice) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dictType = MakeTestDictType<IsSet>(pb);
     auto mdict = pb.MutDictCreate(dictType, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     mdict = pb.MutDictUpsert(dictType, mdict,
@@ -218,7 +222,7 @@ Y_UNIT_TEST_LLVM_SET(TestUpdateMissing) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dictType = MakeTestDictType<IsSet>(pb);
     auto mdict = pb.MutDictCreate(dictType, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     mdict = pb.MutDictUpdate(dictType, mdict,
@@ -234,7 +238,7 @@ Y_UNIT_TEST_LLVM_SET(TestUpdateExisting) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -251,7 +255,7 @@ Y_UNIT_TEST_LLVM_SET(TestRemoveMissing) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -266,7 +270,7 @@ Y_UNIT_TEST_LLVM_SET(TestRemoveExisting) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -281,7 +285,7 @@ Y_UNIT_TEST_LLVM_SET(TestPopMissing) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -301,7 +305,7 @@ Y_UNIT_TEST_LLVM_SET(TestPopExisting) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -326,7 +330,7 @@ Y_UNIT_TEST_LLVM_SET(TestContainsMissing) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -346,7 +350,7 @@ Y_UNIT_TEST_LLVM_SET(TestContainsExisting) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -366,7 +370,7 @@ Y_UNIT_TEST_LLVM_SET(TestLookupMissing) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -386,7 +390,7 @@ Y_UNIT_TEST_LLVM_SET(TestLookupExisting) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -412,7 +416,7 @@ Y_UNIT_TEST_LLVM_SET(TestHasItems) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -432,7 +436,7 @@ Y_UNIT_TEST_LLVM_SET(TestLength) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -452,7 +456,7 @@ Y_UNIT_TEST_LLVM_SET(TestItems) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -486,7 +490,7 @@ Y_UNIT_TEST_LLVM_SET(TestKeys) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -514,7 +518,7 @@ Y_UNIT_TEST_LLVM_SET(TestPayloads) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto res = pb.NewResourceType("mdict");
-    const auto mdictType = pb.NewLinearType(res, false);
+    const auto mdictType = pb.NewLinearType(res, /*isDynamic=*/false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
     auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -550,5 +554,4 @@ Y_UNIT_TEST_LLVM_SET(TestPayloads) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLMutDicttest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

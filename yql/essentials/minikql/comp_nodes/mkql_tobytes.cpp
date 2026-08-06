@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/swap_bytes.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -15,7 +14,7 @@ class TToBytesPrimitiveTypeWrapper: public TDecoratorCodegeneratorNode<TToBytesP
     using TBaseComputation = TDecoratorCodegeneratorNode<TToBytesPrimitiveTypeWrapper<IsOptional, Type>>;
 
 public:
-    TToBytesPrimitiveTypeWrapper(IComputationNode* data)
+    explicit TToBytesPrimitiveTypeWrapper(IComputationNode* data)
         : TBaseComputation(data)
     {
     }
@@ -76,7 +75,7 @@ class TToBytesTzTypeWrapper: public TDecoratorComputationNode<TToBytesTzTypeWrap
     using TBaseComputation = TDecoratorComputationNode<TToBytesTzTypeWrapper<IsOptional, Type>>;
 
 public:
-    TToBytesTzTypeWrapper(IComputationNode* data)
+    explicit TToBytesTzTypeWrapper(IComputationNode* data)
         : TBaseComputation(data)
     {
     }
@@ -99,7 +98,7 @@ class TToBytesWrapper: public TDecoratorCodegeneratorNode<TToBytesWrapper> {
     using TBaseComputation = TDecoratorCodegeneratorNode<TToBytesWrapper>;
 
 public:
-    TToBytesWrapper(IComputationNode* optional)
+    explicit TToBytesWrapper(IComputationNode* optional)
         : TBaseComputation(optional)
     {
     }
@@ -160,5 +159,4 @@ IComputationNode* WrapToBytes(TCallable& callable, const TComputationNodeFactory
     return new TToBytesWrapper(data);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

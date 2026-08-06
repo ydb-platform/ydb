@@ -6548,7 +6548,7 @@ TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& 
 }
 
 bool IsSystemMember(const TStringBuf& memberName) {
-    return memberName.StartsWith(TStringBuf("_yql_"));
+    return memberName.StartsWith(SystemMemberPrefix);
 }
 
 template<bool Deduplicte, ui8 OrListsOfAtomsDepth>

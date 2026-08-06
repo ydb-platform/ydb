@@ -208,8 +208,8 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before(';'), ' ') == "application/x-www-form-urlencoded") {
         BuildParamsFromFormData(Event->Get()->Request.GetPostContent());
     }
-    if (auto db = Event->Get()->Database; db) {
-        Database = db;
+    if (!Event->Get()->Database.empty()) {
+        Database = Event->Get()->Database;
     }
     InitConfig(Params);
     SetupTracing(handlerName);

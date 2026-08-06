@@ -5,15 +5,15 @@
 #include <ydb/library/query_actor/query_actor.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/string/builder.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 namespace NKikimr::NSysView {
 
 namespace {
-
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "[UdfModules] " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "[UdfModules] " << stream)
 
 struct TEvPrivate {
     enum EEv : ui32 {
@@ -195,13 +195,15 @@ private:
         const TString modulesTablePath = TStringBuilder()
             << DatabaseName << "/.metadata/udf_store/modules";
 
-        LOG_D("Start fetch from " << modulesTablePath);
+        YDB_LOG_DEBUG("UdfModules: start fetch from modules table",
+            {"path", modulesTablePath});
         Register(TUdfModulesFetcherActor::MakeRetry(SelfId(), DatabaseName, modulesTablePath, Reverse_));
     }
 
     void Handle(TEvPrivate::TEvFetchUdfModulesResult::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            LOG_E("Fetch failed: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("UdfModules: fetch failed",
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             ReplyErrorAndDie(ev->Get()->Status, ev->Get()->Issues);
             return;
         }

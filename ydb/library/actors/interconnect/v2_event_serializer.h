@@ -156,7 +156,7 @@ namespace NActors {
         ui64 CumulativeProduced = 0; // total bytes ever produced into the output stream
         ui64 CumulativeCommitted = 0; // total bytes ever reported as sent via CommitProducedBytes
 
-        ui64 Timestamp;
+        ui64 Timestamp = 0;
         ui64 SerializeEventTime = 0;
         ui64 BytesCopied = 0;
         ui64 BytesAliased = 0;

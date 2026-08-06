@@ -72,12 +72,11 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
             const int batchSize = 10;
             bool first = true;
             for (size_t offset = 0; offset < keys.Keys.size(); offset += batchSize) {
-                TStringStream ss;
-
-                LogKeyValue("Component", "DataShard", ss);
-                LogKeyValue("Type", "Keys", ss);
-                LogKeyValue("TabletId", ToString(tabletId), ss);
-                LogKeyValue("PhyTxId", ToString(txId), ss);
+                auto message = YDB_LOG_CREATE_MESSAGE(
+                    {"component", "DataShard"},
+                    {"type", "Keys"},
+                    {"tabletId", ToString(tabletId)},
+                    {"phyTxId", ToString(txId)});
 
                 for (size_t i = offset, j = 0; i < keys.Keys.size() && j < batchSize; i++, j++) {
                     auto& keyDef = keys.Keys[i].Key;
@@ -87,7 +86,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                     }
 
                     if (first) {
-                        LogKeyValue("TableId", ToString(keyDef->TableId), ss);
+                        YDB_LOG_UPDATE_MESSAGE(message, {"tableId", ToString(keyDef->TableId)});
                         first = false;
                     }
 
@@ -111,17 +110,14 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                             break;
                     }
 
-                    LogKeyValue("Op", rowOp, ss);
+                    TStringStream keysStr;
+                    WriteTableRange(range, keyDef->KeyColumnTypes, keysStr);
 
-                    ss << "Key: ";
-                    WriteTableRange(range, keyDef->KeyColumnTypes, ss);
-
-                    if (i + 1 < keys.Keys.size() && j + 1 < batchSize) {
-                        ss << ",";
-                    }
+                    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+                        message,
+                        {"op", ToString(keyDef->TableId)},
+                        {"keys", keysStr.Str()});
                 }
-
-                LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
             }
         }
     }
@@ -132,43 +128,28 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
         return;
     }
 
-    auto logFn = [&]() {
-        TStringStream ss;
+    TStringStream brokenLocks;
+    for (const auto& lock : locks) {
+        brokenLocks << lock << " ";
+    }
 
-        LogKeyValue("Component", "DataShard", ss);
-        LogKeyValue("Type", "Locks", ss);
-        LogKeyValue("TabletId", ToString(tabletId), ss);
-        LogKeyValue("PhyTxId", ToString(txId), ss);
-
-        ss << "BrokenLocks: [";
-        for (const auto& lock : locks) {
-            ss << lock << " ";
-        }
-        ss << "]";
-
-        return ss.Str();
-    };
-
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "DataShard"},
+        {"type", "Locks"},
+        {"tabletId", ToString(tabletId)},
+        {"phyTxId", ToString(txId)},
+        {"brokenLocks", brokenLocks.Str()});
 }
 
 template <typename TxResult>
 inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const typename TxResult::EStatus status) {
-    auto logFn = [&]() {
-        TString statusString = TxResult::EStatus_descriptor()->FindValueByNumber(status)->name();
-
-        TStringStream ss;
-
-        LogKeyValue("Component", "DataShard", ss);
-        LogKeyValue("Type", "Finished", ss);
-        LogKeyValue("TabletId", ToString(tabletId), ss);
-        LogKeyValue("PhyTxId", ToString(txId), ss);
-        LogKeyValue("Status", statusString, ss, true);
-
-        return ss.Str();
-    };
-
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+    TString statusString = TxResult::EStatus_descriptor()->FindValueByNumber(status)->name();
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "DataShard"},
+        {"type", "Finished"},
+        {"tabletId", ToString(tabletId)},
+        {"phyTxId", ToString(txId)},
+        {"status", statusString});
 }
 
 }

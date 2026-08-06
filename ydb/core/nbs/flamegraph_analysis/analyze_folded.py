@@ -48,7 +48,8 @@ def main():
     ap.add_argument("--grep", default=None, help="only stacks containing this substring")
     ap.add_argument("--exclude", action="append", default=[],
                     help="drop stacks containing this substring (repeatable)")
-    ap.add_argument("--thread", default=None, help="only stacks whose root frame matches")
+    ap.add_argument("--thread", default=None,
+                    help="only stacks whose root frame equals this value exactly")
     args = ap.parse_args()
 
     stacks = load(args.path)
@@ -57,7 +58,7 @@ def main():
     for ex in args.exclude:
         stacks = [(s, c) for s, c in stacks if not any(ex in f for f in s)]
     if args.thread:
-        stacks = [(s, c) for s, c in stacks if args.thread in s[0]]
+        stacks = [(s, c) for s, c in stacks if s[0] == args.thread]
 
     total = sum(c for _, c in stacks)
     if not total:

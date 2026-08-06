@@ -9,7 +9,6 @@ from ydb.tests.olap.lib.utils import (
     external_param_is_true,
     get_external_param,
     get_ci_version,
-    get_self_version,
     get_test_tools_git_info,
     get_test_tools_version,
 )

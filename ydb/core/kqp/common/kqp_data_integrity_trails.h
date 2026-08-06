@@ -15,9 +15,10 @@
 namespace NKikimr {
 namespace NDataIntegrity {
 
-inline void LogQueryTextImpl(TStringStream& ss, const TString& queryText, bool hashed) {
+inline void LogQueryTextImpl(TStructuredMessage& message, const TString& queryText, bool hashed) {
     if (!hashed) {
-        LogKeyValue("QueryText", EscapeC(queryText), ss);
+        YDB_LOG_UPDATE_CONTEXT(message,
+            {"QueryText", EscapeC(queryText)});
         return;
     }
 
@@ -34,12 +35,16 @@ inline void LogQueryTextImpl(TStringStream& ss, const TString& queryText, bool h
         return;
     }
     std::string hashedQueryText(reinterpret_cast<char*>(hash), SHA256_DIGEST_LENGTH);
-    LogKeyValue("QueryText", Base64Encode(hashedQueryText), ss);
+
+    YDB_LOG_UPDATE_CONTEXT(message,
+        {"QueryText", Base64Encode(hashedQueryText)});
 }
 
-inline void LogQueryText(TStringStream& ss, const TString& queryText) {
+inline TStructuredMessage LogQueryText(const TString& queryText) {
+    TStructuredMessage message;
     const auto& config = AppData()->DataIntegrityTrailsConfig;
-    LogQueryTextImpl(ss, queryText, config.GetQueryTextLogMode() == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED);
+    LogQueryTextImpl(message, queryText, config.GetQueryTextLogMode() == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED);
+    return message;
 }
 
 inline bool ShouldBeLogged(NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type) {
@@ -69,30 +74,15 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
     if (!ShouldBeLogged(request->Get()->GetAction(), request->Get()->GetType())) {
         return;
     }
-
-    auto log = [](const auto& request) {
-        TStringStream ss;
-        LogKeyValue("Component", "SessionActor", ss);
-        LogKeyValue("SessionId", request->Get()->GetSessionId(), ss);
-
-        if (!request->Get()->GetTraceId().empty()) {
-            LogKeyValue("TraceId", request->Get()->GetTraceId(), ss);
-        }
-
-        LogKeyValue("Type", "Request", ss);
-        LogKeyValue("QueryAction", ToString(request->Get()->GetAction()), ss);
-        LogKeyValue("QueryType", ToString(request->Get()->GetType()), ss);
-
-        LogQueryText(ss, request->Get()->GetQuery());
-
-        if (request->Get()->HasTxControl()) {
-            // @todo: LogTxControl(request->Get()->GetTxControl(), ss);
-        }
-
-        return ss.Str();
-    };
-
-    LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, log(request));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "SessionActor"},
+        {"sessionId", request->Get()->GetSessionId()},
+        {"traceId", request->Get()->GetTraceId()},
+        {"type", "Request"},
+        {"QueryAction", ToString(request->Get()->GetAction())},
+        {"QueryType", ToString(request->Get()->GetType())},
+        LogQueryText(request->Get()->GetQuery())
+    );
 }
 
 inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type, const std::unique_ptr<NKqp::TEvKqp::TEvQueryResponse>& response, const TActorContext& ctx) {
@@ -100,168 +90,100 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
         return;
     }
 
-    auto log = [](const auto& traceId, const auto& response) {
-        auto& record = response->Record;
-
-        TStringStream ss;
-        LogKeyValue("Component", "SessionActor", ss);
-        LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
-
-        if (!traceId.empty()) {
-            LogKeyValue("TraceId", traceId, ss);
-        }
-
-        LogKeyValue("Type", "Response", ss);
-        LogKeyValue("TxId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty", ss);
-        LogKeyValue("Status", ToString(record.GetYdbStatus()), ss);
-        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, true);
-
-        return ss.Str();
-    };
-
-    LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
+    auto& record = response->Record;
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "SessionActor"},
+        {"sessionId", record.GetResponse().GetSessionId()},
+        {"traceId", traceId},
+        {"type", "Response"},
+        {"txId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty"},
+        {"status", record.GetYdbStatus()},
+        {"issues", record.GetResponse().GetQueryIssues()});
 }
 
 // DataExecuter
 inline void LogIntegrityTrails(const TString& txType, const TString& txLocksDebugStr, const TString& traceId, ui64 txId, TMaybe<ui64> shardId, const TActorContext& ctx) {
-    auto log = [](const auto& type, const auto& txLocksDebugStr, const auto& traceId, const auto& txId, const auto& shardId) {
-        TStringStream ss;
-        LogKeyValue("Component", "Executer", ss);
-        LogKeyValue("Type", "Request", ss);
-
-        if (!traceId.empty()) {
-            LogKeyValue("TraceId", traceId, ss);
-        }
-
-        LogKeyValue("PhyTxId", ToString(txId), ss);
-        LogKeyValue("Locks", "[" + txLocksDebugStr + "]", ss);
-
-        if (shardId) {
-            LogKeyValue("ShardId", ToString(*shardId), ss);
-        }
-
-        LogKeyValue("TxType", type, ss, /*last*/ true);
-
-        return ss.Str();
-    };
-
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(txType, txLocksDebugStr, traceId, txId, shardId));
+    auto message = YDB_LOG_CREATE_MESSAGE(
+        {"component", "Executer"},
+        {"type", "Request"},
+        {"traceId", traceId},
+        {"phyTxId", ToString(txId)},
+        {"locks", txLocksDebugStr},
+        {"txType", txType});
+    if (shardId) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"ShardId", ToString(*shardId)});
+    }
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
 }
 
 inline void LogIntegrityTrails(const TString& state, const TString& traceId, const NEvents::TDataEvents::TEvWriteResult::TPtr& ev, const TActorContext& ctx) {
-    auto log = [](const auto& state, const auto& traceId, const auto& ev) {
-        const auto& record = ev->Get()->Record;
+    const auto& record = ev->Get()->Record;
+    TStringBuilder locksDebugStr;
+    for (const auto& lock : record.GetTxLocks()) {
+        locksDebugStr << lock.ShortDebugString() << " ";
+    }
 
-        TStringStream ss;
-        LogKeyValue("Component", "Executer", ss);
-        LogKeyValue("Type", "Response", ss);
-        LogKeyValue("State", state, ss);
+    NYql::TIssues issues;
+    NYql::IssuesFromMessage(record.GetIssues(), issues);
 
-        if (!traceId.empty()) {
-            LogKeyValue("TraceId", traceId, ss);
-        }
-
-        LogKeyValue("PhyTxId", ToString(record.GetTxId()), ss);
-        LogKeyValue("ShardId", ToString(record.GetOrigin()), ss);
-
-        TStringBuilder locksDebugStr;
-        locksDebugStr << "[";
-        for (const auto& lock : record.GetTxLocks()) {
-            locksDebugStr << lock.ShortDebugString() << " ";
-        }
-        locksDebugStr << "]";
-
-        LogKeyValue("Locks", locksDebugStr, ss);
-        LogKeyValue("Status",  NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus()), ss);
-
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(record.GetIssues(), issues);
-        LogKeyValue("Issues", issues.ToString(), ss, /*last*/ true);
-
-        return ss.Str();
-    };
-
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(state, traceId, ev));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Executer"},
+        {"type", "Request"},
+        {"state", state},
+        {"traceId", traceId},
+        {"phyTxId", ToString(record.GetTxId())},
+        {"shardId", ToString(record.GetOrigin())},
+        {"locks", locksDebugStr},
+        {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
+        {"issues", issues.ToString()});
 }
 
 inline void LogIntegrityTrails(const TString& state, const TString& traceId, const TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
-    auto log = [](const auto& state, const auto& traceId, const auto& ev) {
-        const auto& record = ev->Get()->Record;
+    const auto& record = ev->Get()->Record;
+    TStringBuilder locksDebugStr;
+    for (const auto& lock : record.GetTxLocks()) {
+        locksDebugStr << lock.ShortDebugString() << " ";
+    }
 
-        TStringStream ss;
-        LogKeyValue("Component", "Executer", ss);
-        LogKeyValue("Type", "Response", ss);
-        LogKeyValue("State", state, ss);
-
-        if (!traceId.empty()) {
-            LogKeyValue("TraceId", traceId, ss);
-        }
-
-        LogKeyValue("PhyTxId", ToString(record.GetTxId()), ss);
-        LogKeyValue("ShardId", ToString(record.GetOrigin()), ss);
-
-        TStringBuilder locksDebugStr;
-        locksDebugStr << "[";
-        for (const auto& lock : record.GetTxLocks()) {
-            locksDebugStr << lock.ShortDebugString() << " ";
-        }
-        locksDebugStr << "]";
-
-        LogKeyValue("Locks", locksDebugStr, ss);
-        LogKeyValue("Status",  NKikimrTxDataShard::TEvProposeTransactionResult_EStatus_Name(ev->Get()->GetStatus()), ss);
-        LogKeyValue("Issues", ev->Get()->GetError(), ss, /*last*/ true);
-
-        return ss.Str();
-    };
-
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(state, traceId, ev));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Executer"},
+        {"type", "Response"},
+        {"state", state},
+        {"traceId", traceId},
+        {"phyTxId", ToString(record.GetTxId())},
+        {"shardId", ToString(record.GetOrigin())},
+        {"locks", locksDebugStr},
+        {"status", NKikimrTxDataShard::TEvProposeTransactionResult_EStatus_Name(ev->Get()->GetStatus())},
+        {"issues", ev->Get()->GetError()});
 }
 
 template <typename TActorResultInfo>
 inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64 txId, const TActorResultInfo& info, const TActorContext& ctx) {
-    auto log = [](const auto& type, const auto& traceId, const auto& txId, const auto& info) {
-        TStringStream ss;
-        LogKeyValue("Component", "Executer", ss);
-        LogKeyValue("Type", type, ss);
+    TStringBuilder locksDebugStr;
+    for (const auto& lock : info.GetLocks()) {
+        locksDebugStr << lock.ShortDebugString() << " ";
+    }
 
-        if (!traceId.empty()) {
-            LogKeyValue("TraceId", traceId, ss);
-        }
-
-        LogKeyValue("PhyTxId", ToString(txId), ss);
-
-        TStringBuilder locksDebugStr;
-        locksDebugStr << "[";
-        for (const auto& lock : info.GetLocks()) {
-            locksDebugStr << lock.ShortDebugString() << " ";
-        }
-        locksDebugStr << "]";
-
-        LogKeyValue("Locks", locksDebugStr, ss, true);
-
-        return ss.Str();
-    };
-
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(type, traceId, txId, info));
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "Executer"},
+        {"type", type},
+        {"traceId", traceId},
+        {"phyTxId", ToString(txId)},
+        {"locks", locksDebugStr});
 }
 
 // WriteActor,BufferActor
 inline void LogIntegrityTrails(const TString& txType, ui64 txId, TMaybe<ui64> shardId, const TActorContext& ctx, const TStringBuf component) {
-    auto log = [](const auto& type, const auto& txId, const auto& shardId, const auto component) {
-        TStringStream ss;
-        LogKeyValue("Component", component, ss);
-        LogKeyValue("PhyTxId", ToString(txId), ss);
-
-        if (shardId) {
-            LogKeyValue("ShardId", ToString(*shardId), ss);
-        }
-
-        LogKeyValue("Type", type, ss, true);
-
-        return ss.Str();
-    };
-
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(txType, txId, shardId, component));
+    auto message = YDB_LOG_CREATE_MESSAGE(
+        {"component", component},
+        {"type", txType},
+        {"phyTxId", ToString(txId)});
+    if (shardId) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"shardId", ToString(*shardId)});
+    }
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
 }
 
 }

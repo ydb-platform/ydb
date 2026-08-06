@@ -61,12 +61,16 @@ public:
                 hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle) cFunc(NActors::TEvents::TEvPoisonPill::EventType, HandlePoisonPill))
 
     void HandlePoisonPill() {
+        Counters.OnActorDead();
+        PassAway();
+    }
+
+    void PassAway() override {
         if (DownloaderActorId) {
             Send(DownloaderActorId, new NActors::TEvents::TEvPoisonPill());
             DownloaderActorId = {};
         }
-        Counters.OnActorDead();
-        PassAway();
+        TActorBootstrapped<TImportDownloader>::PassAway();
     }
 
     void Handle(TEvPrivate::TEvBackupImportRecordBatchResult::TPtr&) {

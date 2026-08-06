@@ -47,9 +47,10 @@ TKqpComputeActor::TKqpComputeActor(
 void TKqpComputeActor::DoBootstrap() {
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 
-    if (GetTask().GetProgram().GetSettings().WasmUdfModulesSize() > 0) {
+    const auto& settings = GetTask().GetProgram().GetSettings();
+    if (settings.WasmUdfModulesSize() > 0) {
         try {
-            WasmQueryCompartment_.emplace(GetTask().GetProgram().GetSettings());
+            WasmQueryCompartment_.emplace(settings);
         } catch (const std::exception& e) {
             ErrorFromIssue(TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                 << "Failed to acquire WASM query compartment: " << e.what());

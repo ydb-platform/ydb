@@ -269,9 +269,10 @@ void TKqpScanComputeActor::DoBootstrap() {
     YDB_LOG_DEBUG("Starting KQP scan compute actor bootstrap",
         {"logPrefix", this->LogPrefix});
 
-    if (GetTask().GetProgram().GetSettings().WasmUdfModulesSize() > 0) {
+    const auto& settings = GetTask().GetProgram().GetSettings();
+    if (settings.WasmUdfModulesSize() > 0) {
         try {
-            WasmQueryCompartment_.emplace(GetTask().GetProgram().GetSettings());
+            WasmQueryCompartment_.emplace(settings);
         } catch (const std::exception& e) {
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, NYql::TIssuesIds::DEFAULT_ERROR,
                 TStringBuilder() << "Failed to acquire WASM query compartment: " << e.what());

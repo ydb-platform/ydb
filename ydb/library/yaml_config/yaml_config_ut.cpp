@@ -1231,9 +1231,10 @@ Y_UNIT_TEST_SUITE(YamlConfig) {
         auto doc = NFyaml::TDocument::Parse(R"(
 actor_system_config:
   executor:
-  - name: BlobStorage
+  - name: BS
     type: PLACEMENT
-    placement_groups: 2
+    placement_group_count: 2
+    placement_groups: [1, 3]
   blob_storage_executor: 0
 )");
 
@@ -1241,6 +1242,11 @@ actor_system_config:
 
         UNIT_ASSERT(config.GetActorSystemConfig().HasBlobStorageExecutor());
         UNIT_ASSERT_VALUES_EQUAL(config.GetActorSystemConfig().GetBlobStorageExecutor(), 0);
+        const auto& executor = config.GetActorSystemConfig().GetExecutor(0);
+        UNIT_ASSERT_VALUES_EQUAL(executor.GetPlacementGroupCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(executor.PlacementGroupsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(executor.GetPlacementGroups(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(executor.GetPlacementGroups(1), 3);
     }
 
     Y_UNIT_TEST(InterconnectSessionExecutorIsConvertedToProto) {
@@ -1249,7 +1255,8 @@ actor_system_config:
   executor:
   - name: ICSession
     type: PLACEMENT
-    placement_groups: 2
+    placement_group_count: 2
+    placement_groups: [0, 1]
   interconnect_session_executor: 0
 )");
 

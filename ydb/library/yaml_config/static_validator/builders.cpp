@@ -180,7 +180,7 @@ TMapBuilder ActorSystemConfigBuilder() {
       .Optional()
       .MapItem([](auto& executorItem){
         executorItem
-        .Enum("name", {"System", "User", "Batch", "IO", "IC", "BlobStorage", "ICSession"})
+        .Enum("name", {"System", "User", "Batch", "IO", "IC", "BS", "ICSession"})
         .Int64("spin_threshold", [](auto& spinThreshold){
           spinThreshold
           .Min(0)
@@ -191,10 +191,15 @@ TMapBuilder ActorSystemConfigBuilder() {
           .Optional()
           .Min(0);
         })
-        .Int64("placement_groups", [](auto& placementGroups){
-          placementGroups
+        .Int64("placement_group_count", [](auto& placementGroupCount){
+          placementGroupCount
           .Optional()
           .Min(1);
+        })
+        .Array("placement_groups", [](auto& placementGroups){
+          placementGroups
+          .Optional()
+          .Int64Item(nonNegative());
         })
         .Int64("placement_group_threads", [](auto& placementGroupThreads){
           placementGroupThreads
@@ -222,23 +227,40 @@ TMapBuilder ActorSystemConfigBuilder() {
           .Min(0);
         })
         .Enum("type", {"IO", "BASIC", "PLACEMENT"})
-        .AddCheck("threads and placement_groups usage must match executor type", [](auto& executorContext) {
+        .AddCheck("threads and placement group settings must match executor type", [](auto& executorContext) {
           auto node = executorContext.Node();
           const bool isPlacement = node["type"].Enum().Value() == "PLACEMENT";
           const bool hasThreads = node["threads"].Exists();
+          const bool hasPlacementGroupCount = node["placement_group_count"].Exists();
           const bool hasPlacementGroups = node["placement_groups"].Exists();
           const bool hasPlacementGroupThreads = node["placement_group_threads"].Exists();
+
+          if (hasPlacementGroups) {
+            auto placementGroups = node["placement_groups"].Array();
+            executorContext.Expect(placementGroups.Length() > 0,
+              "placement_groups must not be empty");
+            THashSet<i64> seenPlacementGroups;
+            for (int i = 0; i < placementGroups.Length(); ++i) {
+              executorContext.Expect(seenPlacementGroups.insert(placementGroups[i].Int64()).second,
+                "placement_groups entries must be unique");
+            }
+          }
 
           if (isPlacement) {
             executorContext.Expect(!hasThreads,
               "PLACEMENT executor must not define threads");
-            executorContext.Expect(hasPlacementGroups,
-              "PLACEMENT executor must define placement_groups");
+            executorContext.Expect(hasPlacementGroupCount,
+              "PLACEMENT executor must define placement_group_count");
+            if (hasPlacementGroupCount && hasPlacementGroups) {
+              executorContext.Expect(
+                node["placement_groups"].Array().Length() == node["placement_group_count"].Int64(),
+                "PLACEMENT executor placement_groups length must equal placement_group_count");
+            }
           } else {
             executorContext.Expect(hasThreads,
               "non-PLACEMENT executor must define threads");
-            executorContext.Expect(!hasPlacementGroups,
-              "placement_groups can only be defined for PLACEMENT executor");
+            executorContext.Expect(!hasPlacementGroupCount,
+              "placement_group_count can only be defined for PLACEMENT executor");
             executorContext.Expect(!hasPlacementGroupThreads,
               "placement_group_threads can only be defined for PLACEMENT executor");
           }

@@ -125,7 +125,7 @@ Y_UNIT_TEST(GetManualPoolsWithPlacementExecutorBeforeNamedPools) {
 
     auto* placement = config.AddExecutor();
     placement->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::PLACEMENT);
-    placement->SetPlacementGroups(2);
+    placement->SetPlacementGroupCount(2);
 
     auto* system = config.AddExecutor();
     system->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);

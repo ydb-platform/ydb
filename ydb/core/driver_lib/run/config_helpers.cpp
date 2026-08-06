@@ -51,9 +51,9 @@ ui32 GetExpandedExecutorPoolCount(const TExecutorConfig& poolConfig) {
         return 1;
     }
 
-    const ui32 placementGroups = poolConfig.GetPlacementGroups();
-    Y_ABORT_UNLESS(placementGroups, "PLACEMENT executor must have non-zero placement group count");
-    return placementGroups;
+    const ui32 placementGroupCount = poolConfig.GetPlacementGroupCount();
+    Y_ABORT_UNLESS(placementGroupCount, "PLACEMENT executor must have non-zero placement group count");
+    return placementGroupCount;
 }
 
 TDuration GetSelfPingInterval(const NKikimrConfig::TActorSystemConfig& systemConfig) {
@@ -79,20 +79,13 @@ NActors::TIOExecutorPoolConfig BuildIoExecutorPoolConfig(
     const ui32 poolId,
     const TExecutorConfig& poolConfig,
     const NKikimrConfig::TActorSystemConfig& systemConfig,
-    const std::optional<TCpuMask>& defaultAffinity)
+    const TCpuMask& affinity)
 {
     NActors::TIOExecutorPoolConfig io;
     io.PoolId = poolId;
     io.PoolName = poolName;
     io.Threads = poolConfig.GetThreads();
-    if (!poolConfig.HasAffinity() && defaultAffinity) {
-        Y_ABORT_UNLESS(defaultAffinity->CpuCount(),
-            "PLACEMENT executors consume all CPUs; executor pool '%s' has no CPUs left and no explicit Affinity",
-            poolName.c_str());
-        io.Affinity = *defaultAffinity;
-    } else {
-        io.Affinity = ParseAffinity(poolConfig.GetAffinity());
-    }
+    io.Affinity = affinity;
     io.UseRingQueue = systemConfig.HasUseRingQueue() && systemConfig.GetUseRingQueue();
     return io;
 }
@@ -207,6 +200,35 @@ TVector<ui32> ExpandExecutorPoolIds(
     return executorPoolIds;
 }
 
+TVector<ui32> ValidateAndCopyPlacementGroups(
+        const TExecutorConfig& poolConfig, const TCpuTopology& cpuTopology, ui32 executorId) {
+    TVector<ui32> groupIndices;
+    groupIndices.reserve(poolConfig.PlacementGroupsSize());
+
+    for (const ui32 groupIndex : poolConfig.GetPlacementGroups()) {
+        Y_ABORT_UNLESS(groupIndex < cpuTopology.PlacementGroups.size(),
+            "Executor id %" PRIu32 " ('%s') placement group index %" PRIu32
+            " is out of range; available placement groups: %zu",
+            executorId, poolConfig.GetName().c_str(), groupIndex, cpuTopology.PlacementGroups.size());
+        groupIndices.push_back(groupIndex);
+    }
+    return groupIndices;
+}
+
+TCpuMask ResolvePlacementGroupAffinity(
+        const TExecutorConfig& poolConfig, const TCpuTopology& cpuTopology, ui32 executorId) {
+    const TVector<ui32> groupIndices = ValidateAndCopyPlacementGroups(poolConfig, cpuTopology, executorId);
+
+    TCpuMask affinity;
+    for (const ui32 groupIndex : groupIndices) {
+        affinity = affinity | cpuTopology.PlacementGroups[groupIndex].Cpus;
+    }
+    Y_ABORT_UNLESS(affinity.CpuCount(),
+        "Executor id %" PRIu32 " ('%s') placement groups resolve to an empty CPU affinity",
+        executorId, poolConfig.GetName().c_str());
+    return affinity;
+}
+
 }  // anonymous namespace
 
 TVector<ui32> GetBlobStorageExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig) {
@@ -251,44 +273,103 @@ void AddExecutorPoolsImpl(NActors::TCpuManagerConfig& cpuManager,
         executorPoolCount, static_cast<ui32>(NActors::MaxPools));
     cpuManager.PingInfoByPool.resize(executorPoolCount);
 
+    bool needsCpuTopology = false;
+    bool hasPlacementExecutors = false;
+    bool hasExplicitPlacementExecutors = false;
+    bool hasImplicitPlacementExecutors = false;
+    for (ui32 executorId = 0; executorId < static_cast<ui32>(systemConfig.ExecutorSize()); ++executorId) {
+        const auto& poolConfig = systemConfig.GetExecutor(executorId);
+        const bool hasExplicitPlacementGroups = poolConfig.PlacementGroupsSize() != 0;
+
+        Y_ABORT_UNLESS(!hasExplicitPlacementGroups || !poolConfig.HasAffinity(),
+            "Executor id %" PRIu32 " ('%s') must not define both Affinity and PlacementGroups",
+            executorId, poolConfig.GetName().c_str());
+
+        if (poolConfig.GetType() == TExecutorConfig::PLACEMENT) {
+            hasPlacementExecutors = true;
+            needsCpuTopology = true;
+            const ui32 placementGroupCount = poolConfig.GetPlacementGroupCount();
+            Y_ABORT_UNLESS(!poolConfig.HasAffinity(),
+                "PLACEMENT executor id %" PRIu32 " ('%s') must not define Affinity",
+                executorId, poolConfig.GetName().c_str());
+
+            if (hasExplicitPlacementGroups) {
+                hasExplicitPlacementExecutors = true;
+                Y_ABORT_UNLESS(static_cast<ui32>(poolConfig.PlacementGroupsSize()) == placementGroupCount,
+                    "PLACEMENT executor id %" PRIu32 " ('%s') has PlacementGroupCount %" PRIu32
+                    ", but specifies %d PlacementGroups",
+                    executorId, poolConfig.GetName().c_str(), placementGroupCount, poolConfig.PlacementGroupsSize());
+            } else {
+                hasImplicitPlacementExecutors = true;
+            }
+        } else {
+            Y_ABORT_UNLESS(!poolConfig.HasPlacementGroupCount(),
+                "Non-PLACEMENT executor id %" PRIu32 " ('%s') must not define PlacementGroupCount",
+                executorId, poolConfig.GetName().c_str());
+            Y_ABORT_UNLESS(!poolConfig.HasPlacementGroupThreads(),
+                "Non-PLACEMENT executor id %" PRIu32 " ('%s') must not define PlacementGroupThreads",
+                executorId, poolConfig.GetName().c_str());
+            needsCpuTopology |= hasExplicitPlacementGroups;
+        }
+    }
+
+    Y_ABORT_UNLESS(!(hasExplicitPlacementExecutors && hasImplicitPlacementExecutors),
+        "Actor system config must not mix PLACEMENT executors with explicit and implicit PlacementGroups");
+
     std::optional<TCpuTopology> parsedCpuTopology;
     const TCpuTopology* cpuTopology = suppliedCpuTopology;
-    std::optional<TCpuMask> remainingCpus;
-    TCpuMask usedPlacementCpus;
-    ui32 placementGroupOffset = 0;
-    for (const auto& poolConfig : systemConfig.GetExecutor()) {
-        if (poolConfig.GetType() != TExecutorConfig::PLACEMENT) {
-            continue;
-        }
-
-        const ui32 placementGroups = poolConfig.GetPlacementGroups();
-        Y_ABORT_UNLESS(placementGroups, "PLACEMENT executor must have non-zero placement group count");
-        Y_ABORT_UNLESS(!poolConfig.HasAffinity(), "PLACEMENT executor must not define Affinity together with PlacementGroups");
-
-        if (!cpuTopology) {
-            auto result = ParseCpuTopology();
-            Y_ABORT_UNLESS(result, "Failed to parse CPU topology for PLACEMENT executors: %s", result.error().c_str());
-            parsedCpuTopology.emplace(std::move(*result));
-            cpuTopology = &*parsedCpuTopology;
-        }
-
-        Y_ABORT_UNLESS(placementGroupOffset + placementGroups <= cpuTopology->PlacementGroups.size(),
-            "PLACEMENT executors requested %" PRIu32 " placement groups, but CPU topology has only %zu placement groups",
-            placementGroupOffset + placementGroups, cpuTopology->PlacementGroups.size());
-
-        for (ui32 group = 0; group < placementGroups; ++group) {
-            usedPlacementCpus = usedPlacementCpus | cpuTopology->PlacementGroups[placementGroupOffset + group].Cpus;
-        }
-        placementGroupOffset += placementGroups;
+    if (needsCpuTopology && !cpuTopology) {
+        auto result = ParseCpuTopology();
+        Y_ABORT_UNLESS(result, "Failed to parse CPU topology for executor placement: %s", result.error().c_str());
+        parsedCpuTopology.emplace(std::move(*result));
+        cpuTopology = &*parsedCpuTopology;
     }
-    if (placementGroupOffset) {
+
+    TVector<TVector<ui32>> resolvedPlacementGroups(systemConfig.ExecutorSize());
+    TCpuMask usedPlacementCpus;
+    ui32 implicitPlacementGroupOffset = 0;
+    if (hasPlacementExecutors) {
+        Y_ABORT_UNLESS(cpuTopology);
+        for (ui32 executorId = 0; executorId < static_cast<ui32>(systemConfig.ExecutorSize()); ++executorId) {
+            const auto& poolConfig = systemConfig.GetExecutor(executorId);
+            if (poolConfig.GetType() != TExecutorConfig::PLACEMENT) {
+                continue;
+            }
+
+            auto& groupIndices = resolvedPlacementGroups[executorId];
+            const ui32 placementGroupCount = poolConfig.GetPlacementGroupCount();
+            if (poolConfig.PlacementGroupsSize()) {
+                groupIndices = ValidateAndCopyPlacementGroups(poolConfig, *cpuTopology, executorId);
+            } else {
+                Y_ABORT_UNLESS(implicitPlacementGroupOffset + placementGroupCount <= cpuTopology->PlacementGroups.size(),
+                    "PLACEMENT executors requested %" PRIu32
+                    " placement groups, but CPU topology has only %zu placement groups",
+                    implicitPlacementGroupOffset + placementGroupCount, cpuTopology->PlacementGroups.size());
+                groupIndices.reserve(placementGroupCount);
+                for (ui32 offset = 0; offset < placementGroupCount; ++offset) {
+                    const ui32 groupIndex = implicitPlacementGroupOffset + offset;
+                    Y_ABORT_UNLESS(cpuTopology->PlacementGroups[groupIndex].Cpus.CpuCount(),
+                        "PLACEMENT executor id %" PRIu32 " ('%s') placement group index %" PRIu32 " has no CPUs",
+                        executorId, poolConfig.GetName().c_str(), groupIndex);
+                    groupIndices.push_back(groupIndex);
+                }
+                implicitPlacementGroupOffset += placementGroupCount;
+            }
+
+            for (const ui32 groupIndex : groupIndices) {
+                usedPlacementCpus = usedPlacementCpus | cpuTopology->PlacementGroups[groupIndex].Cpus;
+            }
+        }
+    }
+
+    std::optional<TCpuMask> remainingCpus;
+    if (hasPlacementExecutors) {
         remainingCpus = cpuTopology->AllCpus - usedPlacementCpus;
     }
 
     // Counters are grouped by pool name, so expanded PLACEMENT pool names must not collide
     // with each other or with other pools. Only enforced for configs that use PLACEMENT
     // executors to avoid breaking pre-existing configs.
-    const bool hasPlacementExecutors = placementGroupOffset != 0;
     THashSet<TString> poolNames;
     auto checkPoolName = [&](const TString& poolName) {
         if (hasPlacementExecutors) {
@@ -298,9 +379,23 @@ void AddExecutorPoolsImpl(NActors::TCpuManagerConfig& cpuManager,
         }
     };
 
+    auto resolveRegularPoolAffinity = [&](const TExecutorConfig& poolConfig, ui32 executorId) {
+        if (poolConfig.PlacementGroupsSize()) {
+            Y_ABORT_UNLESS(cpuTopology);
+            return ResolvePlacementGroupAffinity(poolConfig, *cpuTopology, executorId);
+        }
+        if (!poolConfig.HasAffinity() && remainingCpus) {
+            Y_ABORT_UNLESS(remainingCpus->CpuCount(),
+                "PLACEMENT executors consume all CPUs; executor pool '%s' has no CPUs left and no explicit affinity",
+                poolConfig.GetName().c_str());
+            return *remainingCpus;
+        }
+        return ParseAffinity(poolConfig.GetAffinity());
+    };
+
     ui32 poolId = 0;
-    placementGroupOffset = 0;
-    for (const auto& poolConfig : systemConfig.GetExecutor()) {
+    for (ui32 executorId = 0; executorId < static_cast<ui32>(systemConfig.ExecutorSize()); ++executorId) {
+        const auto& poolConfig = systemConfig.GetExecutor(executorId);
         Y_ABORT_UNLESS(!poolConfig.HasHarmonizerNeedyCpuWindowSeconds()
             || poolConfig.GetType() == TExecutorConfig::BASIC,
             "HarmonizerNeedyCpuWindowSeconds is supported only for BASIC executors");
@@ -314,15 +409,7 @@ void AddExecutorPoolsImpl(NActors::TCpuManagerConfig& cpuManager,
                 ui32 maxThreadCount = poolConfig.GetMaxThreads();
                 ui32 defaultThreadCount = poolConfig.GetThreads();
 
-                TCpuMask affinity;
-                if (!poolConfig.HasAffinity() && remainingCpus) {
-                    Y_ABORT_UNLESS(remainingCpus->CpuCount(),
-                        "PLACEMENT executors consume all CPUs; executor pool '%s' has no CPUs left and no explicit Affinity",
-                        poolName.c_str());
-                    affinity = *remainingCpus;
-                } else {
-                    affinity = ParseAffinity(poolConfig.GetAffinity());
-                }
+                const TCpuMask affinity = resolveRegularPoolAffinity(poolConfig, executorId);
 
                 cpuManager.Basic.emplace_back(BuildBasicExecutorPoolConfig(poolName, poolId, poolConfig, systemConfig, cpuManager,
                     counters, affinity, threads, minThreadCount, maxThreadCount, defaultThreadCount));
@@ -334,19 +421,21 @@ void AddExecutorPoolsImpl(NActors::TCpuManagerConfig& cpuManager,
             case TExecutorConfig::IO: {
                 const TString poolName = poolConfig.GetName();
                 checkPoolName(poolName);
-                cpuManager.IO.emplace_back(BuildIoExecutorPoolConfig(poolName, poolId, poolConfig, systemConfig, remainingCpus));
+                const TCpuMask affinity = resolveRegularPoolAffinity(poolConfig, executorId);
+                cpuManager.IO.emplace_back(BuildIoExecutorPoolConfig(poolName, poolId, poolConfig, systemConfig, affinity));
                 ++poolId;
                 break;
             }
 
             case TExecutorConfig::PLACEMENT: {
                 Y_ABORT_UNLESS(cpuTopology);
-                const ui32 placementGroups = poolConfig.GetPlacementGroups();
-                for (ui32 group = 0; group < placementGroups; ++group) {
-                    const TString poolName = GetPlacementExecutorPoolName(poolConfig, group, placementGroups);
+                const ui32 placementGroupCount = poolConfig.GetPlacementGroupCount();
+                const auto& groupIndices = resolvedPlacementGroups[executorId];
+                Y_ABORT_UNLESS(groupIndices.size() == placementGroupCount);
+                for (ui32 group = 0; group < placementGroupCount; ++group) {
+                    const TString poolName = GetPlacementExecutorPoolName(poolConfig, group, placementGroupCount);
                     checkPoolName(poolName);
-                    const TCpuTopologyGroup& placementGroup = cpuTopology->PlacementGroups[placementGroupOffset + group];
-                    Y_ABORT_UNLESS(!poolConfig.HasAffinity(), "PLACEMENT executor must not define Affinity");
+                    const TCpuTopologyGroup& placementGroup = cpuTopology->PlacementGroups[groupIndices[group]];
                     Y_ABORT_UNLESS(placementGroup.Cpus.CpuCount(), "PLACEMENT executor placement group %" PRIu32 " has no CPUs", placementGroup.Id);
                     TCpuMask affinity = placementGroup.Cpus;
                     ui32 threads = poolConfig.HasPlacementGroupThreads()
@@ -362,7 +451,6 @@ void AddExecutorPoolsImpl(NActors::TCpuManagerConfig& cpuManager,
 
                     ++poolId;
                 }
-                placementGroupOffset += placementGroups;
                 break;
             }
 

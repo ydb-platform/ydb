@@ -163,6 +163,8 @@ SRCS(
     follower_edge.cpp
     hnsw_index.cpp
     hnsw_index.h
+    hnsw_index_build_actor.cpp
+    hnsw_index_build_actor.h
     incr_restore_helpers.cpp
     incr_restore_scan.cpp
     incremental_restore_src_actor.cpp

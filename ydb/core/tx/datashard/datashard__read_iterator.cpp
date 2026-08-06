@@ -2,6 +2,7 @@
 #include "datashard_impl.h"
 #include "datashard_read_operation.h"
 #include "hnsw_index.h"
+#include "hnsw_index_build_actor.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
 #include "probes.h"
@@ -330,12 +331,16 @@ struct TShortTableInfo {
 // and builds an in-memory HNSW index from them. Returns nullptr (and sets
 // hasPageFault) if the scan needs to page-fault and retry; the caller should
 // then bail out of the current transaction without marking the build as done.
-std::unique_ptr<NDataShard::THnswIndex> BuildHnswIndexFromTable(
-    TDataShard* self,
+// Scans the full local table partition for (primary key, vector column) pairs.
+// Returns false (and sets hasPageFault) if the scan needs to page-fault and
+// retry; the caller should then bail out of the current transaction. This is
+// the only part of the HNSW build that touches txc.DB, so it must stay on the
+// tablet's transaction executor thread; the (CPU-only) graph construction
+// itself is done later, off-thread, by THnswIndexBuildActor.
+std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
     TTransactionContext& txc,
     const TShortTableInfo& tableInfo,
     ui32 vectorColumn,
-    const Ydb::Table::VectorIndexSettings& settings,
     bool& hasPageFault)
 {
     hasPageFault = false;
@@ -352,7 +357,7 @@ std::unique_ptr<NDataShard::THnswIndex> BuildHnswIndexFromTable(
         tableInfo.LocalTid, {}, {}, columns, 0, 0, 0, NTable::EDirection::Forward, TRowVersion::Max());
     if (!precharge.Ready) {
         hasPageFault = true;
-        return nullptr;
+        return {};
     }
 
     std::vector<std::pair<TString, TString>> keysAndVectors;
@@ -363,7 +368,7 @@ std::unique_ptr<NDataShard::THnswIndex> BuildHnswIndexFromTable(
         auto ready = iter->Next(NTable::ENext::All);
         if (ready == NTable::EReady::Page) {
             hasPageFault = true;
-            return nullptr;
+            return {};
         }
         if (ready == NTable::EReady::Gone) {
             break;
@@ -381,14 +386,7 @@ std::unique_ptr<NDataShard::THnswIndex> BuildHnswIndexFromTable(
         }
     }
 
-    TString error;
-    auto index = NDataShard::THnswIndex::Build(settings, keysAndVectors, EffectiveHnswMaxMemoryBytes(settings), error);
-    if (!index) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-            self->TabletID() << " HNSW: skipped building index for local table " << tableInfo.LocalTid
-            << ": " << error);
-    }
-    return index;
+    return keysAndVectors;
 }
 
 std::unique_ptr<IBlockBuilder> CreateBlockBuilder(
@@ -2537,6 +2535,9 @@ public:
             const ui32 localTid = TableInfo.LocalTid;
             const auto& settings = topK.GetSettings();
             if (auto cached = Self->GetHnswIndex(localTid)) {
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    Self->TabletID() << " HNSW: cache hit for localTid=" << localTid
+                    << " size=" << cached->Size());
                 topState->HnswIndex = std::move(cached);
             } else if (settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
                     && !Self->IsHnswIndexBuilding(localTid))
@@ -2546,21 +2547,33 @@ public:
                     rowCount = userTable->Stats.DataStats.RowCount;
                 }
                 if (rowCount >= EffectiveHnswMinRows(settings)) {
+                    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+                        Self->TabletID() << " HNSW: triggering build for localTid=" << localTid
+                        << " rowCount=" << rowCount);
                     Self->SetHnswIndexBuilding(localTid, true);
                     bool hasPageFault = false;
                     const ui32 vectorColumnTag = record.GetColumns(topK.GetColumn());
-                    auto built = BuildHnswIndexFromTable(Self, txc, TableInfo, vectorColumnTag, settings, hasPageFault);
+                    auto keysAndVectors = ScanVectorColumnForHnsw(txc, TableInfo, vectorColumnTag, hasPageFault);
                     if (hasPageFault) {
+                        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+                            Self->TabletID() << " HNSW: scan page fault for localTid=" << localTid);
                         // CheckRequestAndInit (TCheckReadUnit) does not retry on page
                         // faults, so we simply give up on this attempt; a later read
-                        // request will retry once the required pages are resident.
-                        Self->SetHnswIndexBuilding(localTid, false);
-                    } else if (built) {
-                        auto shared = std::shared_ptr<NDataShard::THnswIndex>(std::move(built));
-                        Self->SetHnswIndex(localTid, shared, rowCount);
-                        topState->HnswIndex = std::move(shared);
+                        // request will retry once the required pages are resident and
+                        // a short cooldown has passed (avoids a tight retry loop).
+                        Self->RegisterHnswScanPageFault(localTid);
                     } else {
-                        Self->SetHnswIndexBuilding(localTid, false);
+                        // The scan is done; hand the collected vectors to a background
+                        // actor to build the (CPU-only, potentially many-seconds-long)
+                        // HNSW graph off the tablet's transaction executor thread, so
+                        // this and other reads on the shard are not blocked. This
+                        // request itself falls back to brute-force search below; a
+                        // later request will pick up the cached index once ready.
+                        auto* actor = NDataShard::CreateHnswIndexBuildActor(
+                            ctx.SelfID, localTid, rowCount, settings,
+                            std::move(keysAndVectors), EffectiveHnswMaxMemoryBytes(settings));
+                        TActorId actorId = ctx.Register(actor, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
+                        Self->Actors.insert(actorId);
                     }
                 }
             }

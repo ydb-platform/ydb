@@ -1,8 +1,8 @@
-#include "../erase_request.h"
-#include "../flush_request.h"
-#include "../read_request_executor.h"
-#include "../restore_request.h"
-#include "../write_request_test_fixture.h"
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/erase_request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/flush_request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/read_request_executor.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/restore_request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_request_test_fixture.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>

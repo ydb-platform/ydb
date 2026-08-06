@@ -39,7 +39,7 @@ public:
         TString serialized;
         if (!response.SerializeToString(&serialized)) {
             YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Couldn't serialize response",
-                {"ydbOverFq", TDerived::RpcName},
+                {"rpcName", TDerived::RpcName},
                 {"actorId", TActorBootstrapped<TDerived>::SelfId()},
                 {"status", Ydb::StatusIds::StatusCode_Name(status)},
                 {"issues", issues.ToOneLineString()});
@@ -161,9 +161,9 @@ protected:
         resp.operation().result().UnpackTo(&result);
 
         if (!NFq::IsTerminalStatus(result.status())) {
-            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Still waiting for current",
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Still waiting for query",
                 {"logContext", TLogCtx{.Owner_ = *this}},
-                {"query", QueryId_},
+                {"queryId", QueryId_},
                 {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(result.status())});
             auto delay = WaitRetryState_->GetNextRetryDelay(result.status());
             if (!delay) {

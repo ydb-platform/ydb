@@ -386,7 +386,7 @@ private:
         const auto& partition = volumeDescription.GetPartitions(0);
         ui64 tabletId = partition.GetTabletId();
 
-        YDB_LOG_DEBUG_CTX(ctx, "GetLoadActorAdapterActorId: extracted partition tablet id creating pipe",
+        YDB_LOG_DEBUG_CTX(ctx, "GetLoadActorAdapterActorId: extracted partition tablet id, creating pipe",
             {"tabletId", tabletId});
 
         Become(&TThis::StateWork);

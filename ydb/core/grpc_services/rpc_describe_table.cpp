@@ -173,8 +173,8 @@ private:
                 StatusIds::StatusCode code = StatusIds::SUCCESS;
                 TString error;
                 if (!FillSequenceDescription(describeTableResult, tableDescription, code, error)) {
-                    YDB_LOG_ERROR_CTX(ctx, "Unable to fill sequence",
-                        {"description", error});
+                    YDB_LOG_ERROR_CTX(ctx, "Unable to fill sequence description",
+                        {"error", error});
                     Request_->RaiseIssue(NYql::TIssue(error));
                     return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
                 }
@@ -301,7 +301,7 @@ private:
         auto& ctx = TlsActivationContext->AsActorContext();
         YDB_LOG_ERROR_CTX(ctx, "Reply on exception",
             {"logPrefix", logPrefix},
-            {"ex", ex.what()});
+            {"exception", ex.what()});
         Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
         return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
     }

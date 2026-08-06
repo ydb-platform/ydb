@@ -171,7 +171,7 @@ void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
 void TGRpcRequestProxySimple::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
     switch (ev->Get()->SourceType) {
         default:
-            YDB_LOG_ERROR_CTX(*TlsActivationContext, "Undelivered event with unexpected source",
+            YDB_LOG_ERROR_CTX(*TlsActivationContext, "Undelivered event with unexpected source type",
                 {"type", ev->Get()->SourceType});
             break;
     }

@@ -212,7 +212,7 @@ private:
             auto* toSchemaPreset = create->AddSchemaPresets();
             toSchemaPreset->SetName(schemaPreset.name());
             if (!ConvertSchemaFromPublicToInternal(schemaPreset.schema(), *toSchemaPreset->MutableSchema(), status, error)) {
-                YDB_LOG_DEBUG_CTX(ctx, "LogStore schema",
+                YDB_LOG_DEBUG_CTX(ctx, "LogStore schema error",
                     {"error", error});
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
@@ -270,7 +270,7 @@ private:
                     Ydb::StatusIds::StatusCode status;
                     TString error;
                     if (!ConvertSchemaFromInternalToPublic(schemaPreset.GetSchema(), *toSchemaPreset->mutable_schema(), status, error)) {
-                        YDB_LOG_DEBUG_CTX(ctx, "LogStore schema",
+                        YDB_LOG_DEBUG_CTX(ctx, "LogStore schema error",
                             {"error", error});
                         return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                     }
@@ -430,7 +430,7 @@ private:
         }
         if (req->has_schema()) {
             if (!ConvertSchemaFromPublicToInternal(req->schema(), *create->MutableSchema(), status, error)) {
-                YDB_LOG_DEBUG_CTX(ctx, "LogTable schema",
+                YDB_LOG_DEBUG_CTX(ctx, "LogTable schema error",
                     {"error", error});
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
@@ -504,7 +504,7 @@ private:
                 Ydb::StatusIds::StatusCode status;
                 TString error;
                 if (!ConvertSchemaFromInternalToPublic(tableDescription.GetSchema(), *describeLogTableResult.mutable_schema(), status, error)) {
-                    YDB_LOG_DEBUG_CTX(ctx, "LogTable schema",
+                    YDB_LOG_DEBUG_CTX(ctx, "LogTable schema error",
                         {"error", error});
                     return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 }

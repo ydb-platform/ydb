@@ -48,9 +48,9 @@ public:
         const auto& deadline = Request->GetDeadline();
 
         if (deadline <= now) {
-            YDB_LOG_WARN("Request deadline has expired for seconds",
+            YDB_LOG_WARN("Request deadline has expired",
                 {"selfId", SelfId()},
-                {"expiredTime", now - deadline});
+                {"expiredTimeSeconds", now - deadline});
 
             Reply(Ydb::StatusIds::TIMEOUT);
             return;
@@ -114,7 +114,7 @@ private:
         auto actorId = NRpcService::DoLocalRpcSameMailbox<TEvDeleteSessionRequest>(
             std::move(request), std::move(cb), database, Request->GetSerializedToken(), ctx);
 
-        YDB_LOG_NOTICE("Client lost, session will be closed by",
+        YDB_LOG_NOTICE("Client lost, session will be closed by actor",
             {"selfId", SelfId()},
             {"sessionId", sessionId},
             {"actorId", actorId});

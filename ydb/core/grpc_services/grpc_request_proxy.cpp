@@ -365,9 +365,9 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
 
     if (AppData()->DynamicNameserviceConfig) {
         DynamicNode = nodeID > AppData()->DynamicNameserviceConfig->MaxStaticNodeId;
-        YDB_LOG_NOTICE_CTX(ctx, "Grpc request proxy started, serve as node",
+        YDB_LOG_NOTICE_CTX(ctx, "Grpc request proxy started",
             {"nodeId", nodeID},
-            {"type", (DynamicNode ? "dynamic" : "static")});
+            {"nodeType", (DynamicNode ? "dynamic" : "static")});
     }
 
     Counters = CreateGRpcProxyCounters(AppData()->Counters);
@@ -431,7 +431,7 @@ void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) 
             YDB_LOG_ERROR_CTX(*TlsActivationContext, "Failed to deliver config notification response");
             break;
         default:
-            YDB_LOG_ERROR_CTX(*TlsActivationContext, "Undelivered event with unexpected source",
+            YDB_LOG_ERROR_CTX(*TlsActivationContext, "Undelivered event with unexpected source type",
                 {"type", ev->Get()->SourceType});
             break;
     }
@@ -551,15 +551,15 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdat
         if (securityState.PublicKeysSize() > 0) {
             Send(MakeTicketParserID(), new TEvTicketParser::TEvUpdateLoginSecurityState(securityState));
         } else {
-            YDB_LOG_DEBUG("Can't update SecurityState for - no PublicKeys",
+            YDB_LOG_DEBUG("Can't update SecurityState for database - no PublicKeys",
                 {"databaseName", databaseName});
         }
     } else {
         if (!describeScheme.GetPathDescription().HasDomainDescription()) {
-            YDB_LOG_DEBUG("Can't update SecurityState for - no DomainDescription",
+            YDB_LOG_DEBUG("Can't update SecurityState for database - no DomainDescription",
                 {"databaseName", databaseName});
         } else if (!describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) {
-            YDB_LOG_DEBUG("Can't update SecurityState for - no SecurityState",
+            YDB_LOG_DEBUG("Can't update SecurityState for database - no SecurityState",
                 {"databaseName", databaseName});
         }
     }

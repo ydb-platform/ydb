@@ -406,7 +406,7 @@ public:
 
         auto& resolveNamesResult = ev->Get()->Request;
 
-        YDB_LOG_DEBUG("TReadRowsRPC going to create keys to read",
+        YDB_LOG_DEBUG("TReadRowsRPC going to create keys to read from proto",
             {"proto", GetProto()->DebugString()});
 
         TString errorMessage;
@@ -509,7 +509,7 @@ public:
 
         YDB_LOG_DEBUG("TReadRowsRPC send TEvRead shardId",
             {"shardId", shardId},
-            {"keys", keys.size()});
+            {"keysSize", keys.size()});
         Send(PipeCache, new TEvPipeCache::TEvForward(request.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
         ++ReadsInFlight;
     }

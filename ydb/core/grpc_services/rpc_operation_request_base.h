@@ -52,7 +52,7 @@ protected:
             {"logPrefix", GetLogPrefix()},
             {"selfId", this->SelfId()},
             {"txId", this->TxId},
-            {"name", this->GetDatabaseName()});
+            {"databaseName", this->GetDatabaseName()});
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = this->GetDatabaseName();

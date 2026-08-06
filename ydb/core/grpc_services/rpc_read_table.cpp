@@ -337,7 +337,7 @@ private:
     }
 
     void ProcessRlSendAllowed(const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Success rate limiter response, we got",
+        YDB_LOG_DEBUG_CTX(ctx, "Success rate limiter response",
             {"selfId", SelfId()},
             {"sendBufferSize", SendBuffer_.size()},
             {"success", HasPendingSuccess});
@@ -546,7 +546,7 @@ private:
             response->Record.SetMessageRowsLimit(MessageRowsLimit);
             response->Record.SetReservedMessages(0);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Send zero quota to Shard TxId",
+            YDB_LOG_DEBUG_CTX(ctx, "Send zero quota to shard",
                 {"selfId", SelfId()},
                 {"shardId", rec.GetShardId()},
                 {"txId", rec.GetTxId()});
@@ -556,7 +556,7 @@ private:
         for (const auto& id : StreamSubscribers_) {
             YDB_LOG_DEBUG_CTX(ctx, "Send dead stream notification to subscriber",
                 {"selfId", SelfId()},
-                {"id", id});
+                {"subscriberId", id});
             ctx.Send(id, new TEvTxProcessing::TEvStreamIsDead);
         }
 
@@ -564,7 +564,7 @@ private:
     }
 
     void StartInactivityTimer(TActorId& timer, TDuration timeout, EWakeupTag tag, const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Starting inactivity timer for with tag",
+        YDB_LOG_DEBUG_CTX(ctx, "Starting inactivity timer",
             {"selfId", SelfId()},
             {"timeout", timeout},
             {"tag", int(tag)});
@@ -629,7 +629,7 @@ private:
         response->Record.SetMessageRowsLimit(MessageRowsLimit);
         response->Record.SetReservedMessages(quotaSize);
 
-        YDB_LOG_DEBUG("Assign stream quota to Shard Quota TxId of",
+        YDB_LOG_DEBUG("Assign stream quota to shard",
             {"selfId", SelfId()},
             {"shardId", rec.GetShardId()},
             {"quotaSize", quotaSize},
@@ -655,7 +655,7 @@ private:
         YDB_LOG_DEBUG_CTX(ctx, "Got stream part, RU",
             {"selfId", SelfId()},
             {"size", data.size()},
-            {"required", ru},
+            {"requestUnits", ru},
             {"getRlPath", getRlPAth()});
 
         TString out;
@@ -695,7 +695,7 @@ private:
                 QuotaByShard_.erase(it);
             --QuotaReserved_;
         } else {
-            YDB_LOG_ERROR("Response out of quota from Shard TxId",
+            YDB_LOG_ERROR("Response out of quota from Shard",
                 {"selfId", SelfId()},
                 {"shardId", shardId},
                 {"txId", txId});

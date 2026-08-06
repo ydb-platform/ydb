@@ -732,7 +732,7 @@ private:
         }
 
         const TString error = "No permission to connect to the database";
-        YDB_LOG_INFO_COMP(NKikimrServices::GRPC_SERVER, "No permission to connect to the database",
+        YDB_LOG_INFO_COMP(NKikimrServices::GRPC_SERVER, error,
             {"checkedDatabaseName", CheckedDatabaseName_},
             {"user", TBase::GetUserSID()},
             {"ip", GrpcRequestBaseCtx_->GetPeerName()});

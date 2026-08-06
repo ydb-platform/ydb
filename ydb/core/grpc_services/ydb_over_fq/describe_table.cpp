@@ -78,9 +78,9 @@ public:
         FederatedQuery::DescribeBindingRequest req;
         req.set_binding_id(bindingId);
 
-        YDB_LOG_TRACE_CTX(ctx, "Describing",
+        YDB_LOG_TRACE_CTX(ctx, "Describing binding",
             {"logContext", TLogCtx{.Owner_ = *this}},
-            {"binding", bindingId});
+            {"bindingId", bindingId});
 
         Become(&DescribeTableRPC::DescribeBindingState);
         MakeLocalCall(std::move(req), ctx);

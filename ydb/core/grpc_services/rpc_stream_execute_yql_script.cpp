@@ -280,8 +280,8 @@ private:
         YDB_LOG_DEBUG_CTX(ctx, "Send stream data ack",
             {"selfId", this->SelfId()},
             {"seqNo", ev->Get()->Record.GetSeqNo()},
-            {"freeSpace", freeSpaceBytes},
-            {"to", ev->Sender},
+            {"freeSpaceBytes", freeSpaceBytes},
+            {"actorId", ev->Sender},
             {"queue", FlowControl_.QueueSize()});
 
         auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
@@ -323,8 +323,8 @@ private:
                 YDB_LOG_DEBUG_CTX(ctx, "Send stream data ack",
                     {"selfId", this->SelfId()},
                     {"seqNo", *LastSeqNo_},
-                    {"freeSpace", freeSpaceBytes},
-                    {"to", GatewayRequestHandlerActorId_});
+                    {"freeSpaceBytes", freeSpaceBytes},
+                    {"actorId", GatewayRequestHandlerActorId_});
 
                 auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo_, 0);
                 resp->Record.SetFreeSpace(freeSpaceBytes);

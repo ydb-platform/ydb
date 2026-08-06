@@ -54,7 +54,7 @@ public:
         // Send event to partition actor
         ctx.Send(new IEventHandle(tabletId, ctx.SelfID, request.release()));
 
-        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: sent WriteBlocksRequest",
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: sent WriteBlocksRequest to partition",
             {"partition", diskIdStr.data()});
     }
 
@@ -66,7 +66,7 @@ private:
     }
 
     void Handle(NYdb::NBS::NBlockStore::TEvService::TEvWriteBlocksResponse::TPtr& ev) {
-        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: received WriteBlocksResponse",
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: received WriteBlocksResponse from partition",
             {"partition", ev->Sender});
         ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record, ActorContext());
     }
@@ -101,7 +101,7 @@ public:
         // Send event to partition actor
         ctx.Send(new IEventHandle(tabletId, ctx.SelfID, request.release()));
 
-        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: sent ReadBlocksRequest",
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: sent ReadBlocksRequest to partition",
             {"partition", diskIdStr.data()});
     }
 
@@ -113,7 +113,7 @@ private:
     }
 
     void Handle(NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksResponse::TPtr& ev) {
-        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: received ReadBlocksResponse",
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: received ReadBlocksResponse from partition",
             {"partition", ev->Sender});
 
         // Convert from NYdb::NBS::NProto::TReadBlocksResponse to Ydb::Nbs::ReadBlocksResult

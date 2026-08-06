@@ -80,7 +80,7 @@ private:
 
     void UpdateActiveNode() {
         ActiveNode = PickActiveNode(BoardInfo);
-        YDB_LOG_DEBUG_CTX_COMP(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Active node is",
+        YDB_LOG_DEBUG_CTX_COMP(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Active node",
             {"activeNode", ActiveNode});
         bool areWeActive = (ActiveNode == SelfId().NodeId());
         if (areWeActive && CurrentStateFunc() != &TThis::StateActive) {

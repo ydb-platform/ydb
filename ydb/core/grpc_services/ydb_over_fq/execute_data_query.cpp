@@ -53,7 +53,7 @@ public:
     void Handle(const FederatedQuery::CreateQueryResult& result, const TActorContext& ctx) {
         YDB_LOG_TRACE_CTX(ctx, "Created query",
             {"logContext", TLogCtx{.Owner_ = *this}},
-            {"query", result.query_id()});
+            {"queryId", result.query_id()});
 
         TBase::WaitForTermination(result.query_id(), ctx);
     }
@@ -61,7 +61,7 @@ public:
     // WaitForExecutionImpl
 
     void OnQueryTermination(const TString& queryId, FederatedQuery::QueryMeta_ComputeStatus status, const TActorContext& ctx) {
-        YDB_LOG_INFO_CTX(ctx, "Finished query execution with status",
+        YDB_LOG_INFO_CTX(ctx, "Finished query execution",
             {"logContext", (TLogCtx{.Owner_ = *this, .QueryId_ = queryId})},
             {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(status)});
 

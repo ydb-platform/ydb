@@ -41,6 +41,7 @@ bool IsScanMemoryLimiterEnabled(EScanGroupedMemoryLimiterOperator operatorType) 
         case EScanGroupedMemoryLimiterOperator::Scan:
             return NGroupedMemoryManager::TScanMemoryLimiterOperator::IsEnabled();
     }
+    Y_ABORT("Unexpected EScanGroupedMemoryLimiterOperator");
 }
 
 }   // namespace NKikimr::NOlap::NReader

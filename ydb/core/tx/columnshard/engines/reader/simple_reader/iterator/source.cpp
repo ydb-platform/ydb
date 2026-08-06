@@ -507,13 +507,29 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
     const ui64 sizeToReserve = policy->GetReserveMemorySize(
         result.GetBlobsSize(), result.GetRawSize(), GetContext()->GetReadMetadata()->GetLimitRobustOptional(), GetRecordsCount());
 
+    const auto limiterOperator =
+        GetContext()->GetCommonContext()->GetReadMetadataPtrVerifiedAs<NCommon::TReadMetadata>()->GetGroupedMemoryLimiterOperator();
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("mr"));
+
+    // Decide sync vs async once. scheduleContinuation must match that decision so we neither race with a
+    // concurrent TStepAction (inline path) nor stall without a continuation (async path).
+    if (IsScanMemoryLimiterEnabled(limiterOperator)) {
+        auto allocation = std::make_shared<NCommon::TAllocateMemoryStep::TFetchingStepAllocation>(
+            source, sizeToReserve, GetExecutionContext().GetCursorStep(), policy->GetStage(), false /*needNextStep*/,
+            true /*scheduleContinuation*/);
+        const bool async = GetContext()->SendToGroupedMemoryAllocation(GetMemoryGroupId(), { allocation }, (ui32)policy->GetStage());
+        // If the limiter was disabled between the check and Send, allocation ran inline and already scheduled a
+        // continuation (scheduleContinuation=true). Always wait for that continuation — do not also continue here.
+        Y_UNUSED(async);
+        return true;
+    }
+
     auto allocation = std::make_shared<NCommon::TAllocateMemoryStep::TFetchingStepAllocation>(
         source, sizeToReserve, GetExecutionContext().GetCursorStep(), policy->GetStage(), false /*needNextStep*/,
-        IsScanMemoryLimiterEnabled(GetContext()->GetCommonContext()->GetReadMetadataPtrVerifiedAs<NCommon::TReadMetadata>()->GetGroupedMemoryLimiterOperator()) /*scheduleContinuation*/);
-    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("mr"));
-    // When the limiter is disabled, OnAllocated runs inline and only registers the guard (no nested TStepAction).
-    // Return false so the program continues on this stack instead of racing with a concurrent continuation.
-    return GetContext()->SendToGroupedMemoryAllocation(GetMemoryGroupId(), { allocation }, (ui32)policy->GetStage());
+        false /*scheduleContinuation*/);
+    AFL_VERIFY(allocation->OnAllocated(
+        std::make_shared<NGroupedMemoryManager::TAllocationGuard>(0, 0, 0, NActors::TActorId(), allocation->GetMemory(), nullptr), allocation));
+    return false;
 }
 
 bool TPortionDataSource::DoAddTxConflict() {

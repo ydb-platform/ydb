@@ -213,11 +213,13 @@ private:
 
         // Column stats: navigate succeeded, now load pre-computed stats from the
         // statistics table. The statistics table lives at the database level
-        // (.metadata/statistics_v2). For non-serverless databases, the database
-        // path is the table path minus the last component (the table name).
-        // For serverless databases, the statistics table is in the shared
-        // database, so we need a second navigate round to resolve the
-        // ResourcesDomainKey to the shared database path.
+        // (.metadata/statistics_v2). The database path must be resolved from the
+        // table's domain, because the table may be nested in subdirectories
+        // (e.g. /Root/Database/subdir/Table1 -> database is /Root/Database, not
+        // /Root/Database/subdir). For serverless databases the statistics table
+        // is in the shared database, so we resolve ResourcesDomainKey; for
+        // non-serverless databases we resolve DomainKey. Both cases require a
+        // second navigate round to obtain the absolute database path.
         if (ev->Cookie != 0 && ev->Cookie != ResolveDatabaseCookie) {
             auto entry = std::find_if(navigate->ResultSet.begin(), navigate->ResultSet.end(), [](const TNavigate::TEntry& entry){
                 return entry.Status == TNavigate::EStatus::Ok;
@@ -237,41 +239,36 @@ private:
                 return;
             }
 
+            // Resolve the database path via a second navigate round.
             // For serverless databases, the statistics table is in the shared
-            // database. Do a second navigate round to resolve the
-            // ResourcesDomainKey to the shared database path.
-            if (entry->DomainInfo && entry->DomainInfo->IsServerless()) {
-                auto resolveNavigate = std::make_unique<TNavigate>();
-                resolveNavigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
-                auto& resolveEntry = resolveNavigate->ResultSet.emplace_back();
-                resolveEntry.TableId = TTableId(
-                    entry->DomainInfo->ResourcesDomainKey.OwnerId,
-                    entry->DomainInfo->ResourcesDomainKey.LocalPathId);
-                resolveEntry.Operation = TNavigate::EOp::OpPath;
-                resolveEntry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
-                resolveEntry.RedirectRequired = false;
+            // database, so resolve ResourcesDomainKey. For non-serverless
+            // databases, resolve DomainKey. This correctly handles tables
+            // nested in subdirectories, where stripping path components would
+            // yield the wrong database path.
+            const auto domainInfo = entry->DomainInfo;
+            const auto& domainKey = domainInfo->IsServerless()
+                ? domainInfo->ResourcesDomainKey
+                : domainInfo->DomainKey;
 
-                ui64 resolveCookie = NextResolveDatabaseCookie++;
-                resolveNavigate->Cookie = resolveCookie;
-                ResolveDatabaseInFlight[resolveCookie] = requestId;
-                Send(MakeSchemeCacheID(),
-                    new TEvTxProxySchemeCache::TEvNavigateKeySet(resolveNavigate.release()),
-                    0, ResolveDatabaseCookie);
-                return;
-            }
+            auto resolveNavigate = std::make_unique<TNavigate>();
+            resolveNavigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
+            auto& resolveEntry = resolveNavigate->ResultSet.emplace_back();
+            resolveEntry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
+            resolveEntry.Operation = TNavigate::EOp::OpPath;
+            resolveEntry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+            resolveEntry.RedirectRequired = false;
 
-            // Non-serverless: derive the database path from the table path.
-            TString database;
-            if (entry->Path.size() > 1) {
-                auto dbPath = entry->Path;
-                dbPath.pop_back();
-                database = CanonizePath(dbPath);
-            }
-            QueryStatistics(database, requestId);
+            ui64 resolveCookie = NextResolveDatabaseCookie++;
+            resolveNavigate->Cookie = resolveCookie;
+            ResolveDatabaseInFlight[resolveCookie] = requestId;
+            Send(MakeSchemeCacheID(),
+                new TEvTxProxySchemeCache::TEvNavigateKeySet(resolveNavigate.release()),
+                0, ResolveDatabaseCookie);
             return;
         }
 
-        // Second navigate round for serverless: resolve the shared database path.
+        // Second navigate round: resolve the database path (DomainKey for
+        // non-serverless, ResourcesDomainKey for serverless) to an absolute path.
         if (ev->Cookie == ResolveDatabaseCookie) {
             auto itResolve = ResolveDatabaseInFlight.find(navigate->Cookie);
             if (itResolve == ResolveDatabaseInFlight.end()) {

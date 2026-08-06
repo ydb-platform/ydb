@@ -54,6 +54,10 @@ public:
 
         switch (status) {
             case TEvTxUserProxy::TResultStatus::ExecInProgress: {
+                if (!response.GetIssues().empty()) {
+                    NYql::IssuesFromMessage(response.GetIssues(), Issues);
+                }
+
                 ui64 schemeShardTabletId = response.GetSchemeShardTabletId();
                 IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, schemeShardTabletId);
                 Y_ABORT_UNLESS(pipeActor);
@@ -231,7 +235,11 @@ public:
             {"txId", response.GetTxId()});
 
         TResult result;
-        result.SetSuccess();
+        if (Issues.Empty()) {
+            result.SetSuccess();
+        } else {
+            result = NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::SUCCESS, "", Issues);
+        }
         if (!OperationId.empty()) {
             result.OperationId = OperationId;
         }
@@ -257,6 +265,7 @@ public:
 private:
     TActorId ShemePipeActorId;
     TString OperationId;
+    NYql::TIssues Issues;
     bool FailedOnAlreadyExists = false;
     bool SuccessOnNotExist = false;
 };

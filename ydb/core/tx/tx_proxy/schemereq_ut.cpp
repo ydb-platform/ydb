@@ -17,6 +17,7 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -331,8 +332,12 @@ void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& nam
         auto event = runtime->GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransactionStatus>(handle);
         Cerr << __FUNCTION__ << " grab tx-proxy result" << Endl;
 
-        UNIT_ASSERT_C(event->Status(), TEvTxUserProxy::TResultStatus::ExecComplete);
-        UNIT_ASSERT_VALUES_EQUAL(NKikimrScheme::EStatus(event->Record.GetSchemeShardStatus()), NKikimrScheme::EStatus::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL(event->Status(), TEvTxUserProxy::TResultStatus::ExecInProgress);
+        UNIT_ASSERT_VALUES_EQUAL(NKikimrScheme::EStatus(event->Record.GetSchemeShardStatus()), NKikimrScheme::EStatus::StatusAccepted);
+
+        auto notify = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(event->Record.GetTxId());
+        runtime->SendToPipe(event->Record.GetSchemeShardTabletId(), edge, notify.Release());
+        runtime->GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
     }
 }
 
@@ -378,8 +383,12 @@ void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& na
         auto event = runtime->GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransactionStatus>(handle);
         Cerr << __FUNCTION__ << " grab tx-proxy result" << Endl;
 
-        UNIT_ASSERT_C(event->Status(), TEvTxUserProxy::TResultStatus::ExecComplete);
-        UNIT_ASSERT_VALUES_EQUAL(NKikimrScheme::EStatus(event->Record.GetSchemeShardStatus()), NKikimrScheme::EStatus::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL(event->Status(), TEvTxUserProxy::TResultStatus::ExecInProgress);
+        UNIT_ASSERT_VALUES_EQUAL(NKikimrScheme::EStatus(event->Record.GetSchemeShardStatus()), NKikimrScheme::EStatus::StatusAccepted);
+
+        auto notify = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(event->Record.GetTxId());
+        runtime->SendToPipe(event->Record.GetSchemeShardTabletId(), edge, notify.Release());
+        runtime->GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
     }
 }
 

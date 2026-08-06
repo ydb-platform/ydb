@@ -53,12 +53,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const bool deduplicationEnabled = [&]() {
         const bool defGlobal = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled();
         if (Self->HasIndex()) {
-            return Self->GetIndexAs<TColumnEngineForLogs>()
-                .GetVersionedIndex()
-                .GetLastSchema()
-                ->GetIndexInfo()
-                .GetDeduplicationEnabled()
-                .value_or(defGlobal);
+            const auto& vIndex = Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
+            const auto schema = vIndex.GetSchemaVerified(snapshot);
+            return schema->GetIndexInfo().GetDeduplicationEnabled().value_or(defGlobal);
         } else {
             return defGlobal;
         }

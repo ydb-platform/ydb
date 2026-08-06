@@ -259,6 +259,7 @@ class ResultsProcessor:
                     report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
             # Enrich payload stored in `json` with resolved run knobs / CI context.
             # Keep original CLI summary fields (max_sessions/threads/warmup_seconds when present).
+            new_order = results.get('transactions', {}).get('NewOrder', {})
             payload = dict(results)
             payload['meta'] = {
                 'run_type': run_type,
@@ -276,6 +277,9 @@ class ResultsProcessor:
                 'threads': summary.get('threads'),
                 'warmup_seconds': summary.get('warmup_seconds'),
                 'report_url': report_url,
+                # Full stays in column newOrderLatency90; Ms/Pure for BenchBase-like compare.
+                'newOrderLatency90_ms': new_order.get('percentiles_ms', {}).get('90'),
+                'newOrderLatency90_pure': new_order.get('percentiles_pure', {}).get('90'),
             }
             json_string = json.dumps(payload, separators=(',', ':'))
             data = {

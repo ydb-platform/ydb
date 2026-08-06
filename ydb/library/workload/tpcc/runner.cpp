@@ -365,7 +365,8 @@ void TPCCRunner::RunSync() {
             warmupSeconds = 5 * 60;
         } else if (Config.WarehouseCount <= 1000) {
             warmupSeconds = 10 * 60;
-        } else if (Config.WarehouseCount <= 1000) {
+        } else {
+            // Large scales need a long warmup so terminals finish ramping before measure.
             warmupSeconds = 30 * 60;
         }
         warmupSeconds = std::max(warmupSeconds, minWarmupSeconds);
@@ -823,6 +824,17 @@ void TPCCRunner::PrintFinalResultJson() {
     NJson::TJsonValue transactions;
     transactions.SetType(NJson::JSON_MAP);
 
+    auto fillPercentiles = [](const THistogram& histogram) {
+        NJson::TJsonValue percentiles;
+        percentiles.SetType(NJson::JSON_MAP);
+        percentiles.InsertValue("50", histogram.GetValueAtPercentile(50));
+        percentiles.InsertValue("90", histogram.GetValueAtPercentile(90));
+        percentiles.InsertValue("95", histogram.GetValueAtPercentile(95));
+        percentiles.InsertValue("99", histogram.GetValueAtPercentile(99));
+        percentiles.InsertValue("99.9", histogram.GetValueAtPercentile(99.9));
+        return percentiles;
+    };
+
     for (size_t i = 0; i < GetEnumItemsCount<ETransactionType>(); ++i) {
         auto type = static_cast<ETransactionType>(i);
         auto typeStr = ToString(type);
@@ -835,15 +847,12 @@ void TPCCRunner::PrintFinalResultJson() {
         txData.InsertValue("ok_count", static_cast<long long>(ok));
         txData.InsertValue("failed_count", static_cast<long long>(failed));
 
-        NJson::TJsonValue percentiles;
-        percentiles.SetType(NJson::JSON_MAP);
-        percentiles.InsertValue("50", stats.LatencyHistogramFullMs.GetValueAtPercentile(50));
-        percentiles.InsertValue("90", stats.LatencyHistogramFullMs.GetValueAtPercentile(90));
-        percentiles.InsertValue("95", stats.LatencyHistogramFullMs.GetValueAtPercentile(95));
-        percentiles.InsertValue("99", stats.LatencyHistogramFullMs.GetValueAtPercentile(99));
-        percentiles.InsertValue("99.9", stats.LatencyHistogramFullMs.GetValueAtPercentile(99.9));
-
-        txData.InsertValue("percentiles", std::move(percentiles));
+        // percentiles: Full (= +inflight queue wait). Kept for backward compatibility.
+        // percentiles_ms: no queue wait (closer to BenchBase).
+        // percentiles_pure: in-transaction query time only.
+        txData.InsertValue("percentiles", fillPercentiles(stats.LatencyHistogramFullMs));
+        txData.InsertValue("percentiles_ms", fillPercentiles(stats.LatencyHistogramMs));
+        txData.InsertValue("percentiles_pure", fillPercentiles(stats.LatencyHistogramPure));
         transactions.InsertValue(typeStr, std::move(txData));
     }
 

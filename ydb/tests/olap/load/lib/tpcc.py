@@ -112,22 +112,34 @@ class TpccSuiteBase(LoadSuiteBase):
             LoadSuiteBase.KeyMeasurement('tpcc_tpmc', 'TPC-C TPMC', [
                 LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
             ], 'Transactions per minute C of TPC-C'),
-            LoadSuiteBase.KeyMeasurement('tpcc_NewOrder_perc_90', 'TPC-C NewOrder p90', [
-                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
-            ], '90 percentile of NewOrder transactions in ms'),
-            LoadSuiteBase.KeyMeasurement('tpcc_Delivery_perc_90', 'TPC-C Delivery p90', [
-                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
-            ], '90 percentile of Delivery transactions in ms'),
-            LoadSuiteBase.KeyMeasurement('tpcc_Payment_perc_90', 'TPC-C Payment p90', [
-                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
-            ], '90 percentile of Payment transactions in ms'),
-            LoadSuiteBase.KeyMeasurement('tpcc_StockLevel_perc_90', 'TPC-C StockLevel p90', [
-                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
-            ], '90 percentile of StockLevel transactions in ms'),
-            LoadSuiteBase.KeyMeasurement('tpcc_OrderStatus_perc_90', 'TPC-C OrderStatus p90', [
-                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
-            ], '90 percentile of OrderStatus transactions in ms'),
+            *cls._tpcc_latency_key_measurements(),
         ], ''
+
+    @classmethod
+    def _tpcc_latency_key_measurements(cls) -> list[LoadSuiteBase.KeyMeasurement]:
+        measurements = []
+        for tx in ('NewOrder', 'Delivery', 'Payment', 'StockLevel', 'OrderStatus'):
+            measurements.extend([
+                LoadSuiteBase.KeyMeasurement(
+                    f'tpcc_{tx}_perc_90',
+                    f'TPC-C {tx} p90 (full)',
+                    [LoadSuiteBase.KeyMeasurement.Interval('#ccffcc')],
+                    f'90 percentile Full (+inflight queue) of {tx} transactions in ms',
+                ),
+                LoadSuiteBase.KeyMeasurement(
+                    f'tpcc_{tx}_ms_perc_90',
+                    f'TPC-C {tx} p90 (ms)',
+                    [LoadSuiteBase.KeyMeasurement.Interval('#ccffcc')],
+                    f'90 percentile Ms (no queue wait) of {tx} transactions in ms',
+                ),
+                LoadSuiteBase.KeyMeasurement(
+                    f'tpcc_{tx}_pure_perc_90',
+                    f'TPC-C {tx} p90 (pure)',
+                    [LoadSuiteBase.KeyMeasurement.Interval('#ccffcc')],
+                    f'90 percentile Pure (in-tx queries) of {tx} transactions in ms',
+                ),
+            ])
+        return measurements
 
     def test(self):
         assert len(self.get_users()) == 1, 'multiuser TPC-C not supported'

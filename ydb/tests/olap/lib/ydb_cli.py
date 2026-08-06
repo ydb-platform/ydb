@@ -513,6 +513,10 @@ class YdbCliHelper:
                     res.add_stat('test', f'tpcc_{tr}_failed_count', stats.get('failed_count', 0))
                     for p, t in stats.get('percentiles', {}).items():
                         res.add_stat('test', f'tpcc_{tr}_perc_{p.replace(".", "_")}', t)
+                    for p, t in stats.get('percentiles_ms', {}).items():
+                        res.add_stat('test', f'tpcc_{tr}_ms_perc_{p.replace(".", "_")}', t)
+                    for p, t in stats.get('percentiles_pure', {}).items():
+                        res.add_stat('test', f'tpcc_{tr}_pure_perc_{p.replace(".", "_")}', t)
             except BaseException as e:
                 res.add_error(str(e))
                 res.traceback = e.__traceback__

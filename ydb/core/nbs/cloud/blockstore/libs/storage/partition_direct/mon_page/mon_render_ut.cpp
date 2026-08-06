@@ -315,9 +315,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         // Long proto dumps are collapsed; the summary is styled to look
         // clickable (fold triangle + pointer).
         UNIT_ASSERT_STRING_CONTAINS(html, "<details");
-        UNIT_ASSERT_STRING_CONTAINS(
-            html,
-            "<summary style='display:list-item; cursor:pointer;");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<summary class='pd-summary'");
         UNIT_ASSERT_STRING_CONTAINS(html, "DiskId: vol-1");
         // DirectBlockGroupsConnections / AddHostInProgress not persisted.
         UNIT_ASSERT_STRING_CONTAINS(html, "(none)");
@@ -393,17 +391,18 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "latShowDetail");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
-            "id='latSlotsBody' style='display:none;");
+            "id='latSlotsBody' class='lat-hidden'");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
-            "id='latDetailBody' style='display:none;");
+            "id='latDetailBody' class='lat-hidden'");
         // Single node row for node 1 (both DBGs share it).
         UNIT_ASSERT_STRING_CONTAINS(html, "node 1");
         // Pdisk groups labelled (each pdisk on its own row).
         UNIT_ASSERT_STRING_CONTAINS(html, "pdisk 1000");
         UNIT_ASSERT_STRING_CONTAINS(html, "pdisk 2000");
-        // Proportional bar (no cell background fill).
-        UNIT_ASSERT_STRING_CONTAINS(html, "height:4px; background:#eee");
+        // Proportional bar track comes from the stylesheet; fill colour stays
+        // inline (data-driven).
+        UNIT_ASSERT_STRING_CONTAINS(html, "lat-bar-track");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
             "background:#90ee90");   // read <500us
@@ -434,6 +433,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "redrawViews");
         UNIT_ASSERT_STRING_CONTAINS(html, "data-p50=");
         UNIT_ASSERT_STRING_CONTAINS(html, "data-ops=");
+        UNIT_ASSERT_STRING_CONTAINS(html, "data-op-names=");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=latency&p=50");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=latency&p=99");
         UNIT_ASSERT_STRING_CONTAINS(html, "history.pushState");
@@ -442,6 +442,11 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT(
             !html.Contains("history.pushState(null,'',href);"
                            "refreshLive();"));
+        // JS/CSS resources resolved (inlined into the page).
+        UNIT_ASSERT(
+            html.Contains("<style>") && html.Contains(".lat-bar-track"));
+        UNIT_ASSERT(html.Contains("<script>") && html.Contains("refreshLive"));
+        UNIT_ASSERT(!html.Contains("<!-- resource "));
     }
 
     Y_UNIT_TEST(LatencyPageSelectedPercentileAndOperation)
@@ -541,7 +546,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         };
 
         const TString html = RenderMonPage(data);
-        UNIT_ASSERT_STRING_CONTAINS(html, "<span style='color:#999;'>-</span>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<span class='lat-none'>-</span>");
         UNIT_ASSERT_STRING_CONTAINS(html, "WriteToPBuffer");
         // ReadFromDDisk appears as a heatmap column header, but not as a
         // detail-table cell value next to a count (no samples folded).

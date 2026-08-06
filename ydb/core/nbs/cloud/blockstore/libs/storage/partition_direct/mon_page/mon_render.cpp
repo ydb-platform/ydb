@@ -5,6 +5,7 @@
 #include <ydb/core/base/services/blobstorage_service_id.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/generic/hash.h>
@@ -20,6 +21,26 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void AddResource(IOutputStream& str, TStringBuf tag, TStringBuf resourceName)
+{
+    TString content;
+    if (!NResource::FindExact(resourceName, &content)) {
+        str << "<!-- resource " << resourceName << " not found -->";
+        return;
+    }
+    str << "<" << tag << ">" << content << "</" << tag << ">";
+}
+
+void AddScript(IOutputStream& str, TStringBuf resourceName)
+{
+    AddResource(str, "script", resourceName);
+}
+
+void AddStyle(IOutputStream& str, TStringBuf resourceName)
+{
+    AddResource(str, "style", resourceName);
+}
 
 TString HtmlEscape(TStringBuf in)
 {
@@ -180,15 +201,13 @@ void RenderMenu(
         EMonPage::VChunk,
         EMonPage::Latency,
     };
-    str << "<div style='margin:0.5em 0 1em;'>";
+    str << "<div class='pd-menu'>";
     for (EMonPage page: pages) {
         const char* btnClass =
             (page == current) ? "btn btn-primary" : "btn btn-default";
         str << "<a class='" << btnClass
-            << "' style='margin-right:0.4em;'"
-               " href='?TabletID="
-            << tabletInfo.TabletId << "&page=" << PageParam(page) << "'>"
-            << PageTitle(page) << "</a>";
+            << " pd-menu-btn' href='?TabletID=" << tabletInfo.TabletId
+            << "&page=" << PageParam(page) << "'>" << PageTitle(page) << "</a>";
     }
     str << "</div>";
 }
@@ -330,8 +349,8 @@ void RenderDbgDetail(
     const TTabletInfo& tabletInfo,
     const TDbgSnapshot& dbg)
 {
-    str << "<div style='margin-bottom:0.5em;'><a href='?TabletID="
-        << tabletInfo.TabletId << "&page=dbg'>&larr; back to DBGs</a></div>";
+    str << "<div class='pd-block'><a href='?TabletID=" << tabletInfo.TabletId
+        << "&page=dbg'>&larr; back to DBGs</a></div>";
     // POST, not a link: link prefetching must not add hosts.
     //
     // The same parameters go into both the action URL and the hidden fields
@@ -340,7 +359,7 @@ void RenderDbgDetail(
     // tablet's Cgi() reads the URL query.
     str << "<form method='post' action='?TabletID=" << tabletInfo.TabletId
         << "&page=dbg&dbg=" << dbg.Index
-        << "&action=addhost' style='margin-bottom:0.5em;'>"
+        << "&action=addhost' class='pd-block'>"
            "<input type='hidden' name='TabletID' value='"
         << tabletInfo.TabletId
         << "'/>"
@@ -473,13 +492,13 @@ void RenderProtoDump(
     const std::optional<TString>& dump)
 {
     if (!dump) {
-        str << "<div style='margin-bottom:0.5em;'>" << name << " (none)</div>";
+        str << "<div class='pd-block'>" << name << " (none)</div>";
         return;
     }
     // display:list-item brings back the fold triangle that the page CSS
     // hides; the pointer marks the line as clickable.
-    str << "<details style='margin-bottom:0.5em;'>"
-           "<summary style='display:list-item; cursor:pointer;'>"
+    str << "<details class='pd-details'>"
+           "<summary class='pd-summary'>"
         << name << "</summary><pre>" << HtmlEscape(*dump) << "</pre></details>";
 }
 
@@ -533,7 +552,7 @@ void RenderVChunk(IOutputStream& str, const TMonPageData& data)
     // current one - so TabletID and page (which live in the URL as
     // ?TabletID=..&page=vchunk) must be repeated as hidden fields, otherwise
     // the submit lands on ?vchunk=N with no tablet and no page.
-    str << "<form method='get' action='' style='margin-bottom:1em;'>"
+    str << "<form method='get' action='' class='pd-form'>"
            "<input type='hidden' name='TabletID' value='"
         << data.TabletInfo.TabletId
         << "'/>"
@@ -641,8 +660,8 @@ void RenderVChunk(IOutputStream& str, const TMonPageData& data)
                 }
             }
         }
-        str << "<details style='margin-bottom:0.5em;'>"
-               "<summary style='display:list-item; cursor:pointer;'>"
+        str << "<details class='pd-details'>"
+               "<summary class='pd-summary'>"
                "Dirty map dump</summary><pre>"
             << HtmlEscape(vchunk.DirtyMapDump) << "</pre></details>";
     }
@@ -793,7 +812,7 @@ void RenderLatencyValueBar(
 {
     const TDuration value = SelectedLatencyValue(stats, percentile);
     const ui32 width = LatencyBarWidthPct(value);
-    str << "<div class='lat-bar' style='min-width:4.5em;'"
+    str << "<div class='lat-bar'"
            " data-count='"
         << stats.Count << "' data-min='" << stats.Min.MicroSeconds()
         << "' data-p50='" << stats.P50.MicroSeconds() << "' data-p90='"
@@ -805,8 +824,8 @@ void RenderLatencyValueBar(
            "<div class='lat-bar-text'>"
         << FormatDuration(value)
         << "</div>"
-           "<div style='height:4px; background:#eee; margin-top:2px;'>"
-           "<div class='lat-bar-fill' style='height:100%; width:"
+           "<div class='lat-bar-track'>"
+           "<div class='lat-bar-fill' style='width:"
         << width << "%; background:" << LatencyColor(value)
         << ";'></div>"
            "</div></div>";
@@ -945,7 +964,7 @@ TLatencyStats SlotDisplayStats(
 
 void RenderLatencyLegend(IOutputStream& str)
 {
-    str << "<div style='margin-bottom:0.5em; font-size:0.9em;'>";
+    str << "<div class='lat-legend'>";
 
     struct TBucket
     {
@@ -961,19 +980,15 @@ void RenderLatencyLegend(IOutputStream& str)
         {"&ge;20ms", "#8b0000"},
     };
     for (const auto& bucket: buckets) {
-        str << "<span style='display:inline-block; width:1.2em; height:1.2em;"
-               " background:"
-            << bucket.Color
-            << "; border:1px solid #ccc; margin-right:0.2em;"
-               " vertical-align:middle;'></span>"
-            << bucket.Label << "&nbsp;&nbsp;";
+        str << "<span class='lat-legend-swatch' style='background:"
+            << bucket.Color << ";'></span>" << bucket.Label << "&nbsp;&nbsp;";
     }
     str << "</div>";
 }
 
 void RenderPercentileSelector(IOutputStream& str, const TMonPageData& data)
 {
-    str << "<div style='margin:0.5em 0;'>Percentile: ";
+    str << "<div class='lat-controls'>Percentile: ";
     static const ELatencyPercentile percentiles[] = {
         ELatencyPercentile::P50,
         ELatencyPercentile::P90,
@@ -981,12 +996,12 @@ void RenderPercentileSelector(IOutputStream& str, const TMonPageData& data)
         ELatencyPercentile::Max,
     };
     for (ELatencyPercentile p: percentiles) {
-        const char* btnClass = (p == data.SelectedPercentile)
-                                   ? "btn btn-primary btn-sm lat-nav"
-                                   : "btn btn-default btn-sm lat-nav";
+        const char* btnClass =
+            (p == data.SelectedPercentile)
+                ? "btn btn-primary btn-sm lat-nav lat-nav-btn"
+                : "btn btn-default btn-sm lat-nav lat-nav-btn";
         str << "<a class='" << btnClass << "' data-p='" << PercentileParam(p)
-            << "' style='margin-right:0.3em;'"
-               " href='"
+            << "' href='"
             << LatencyPageHref(data, p, data.SelectedLatencyOperation) << "'>"
             << PercentileTitle(p) << "</a>";
     }
@@ -995,14 +1010,13 @@ void RenderPercentileSelector(IOutputStream& str, const TMonPageData& data)
 
 void RenderSlotOperationSelector(IOutputStream& str, const TMonPageData& data)
 {
-    str << "<div style='margin:0.5em 0;'>Slot grid operation: ";
+    str << "<div class='lat-controls'>Slot grid operation: ";
     {
-        const char* btnClass = !data.SelectedLatencyOperation
-                                   ? "btn btn-primary btn-sm lat-nav"
-                                   : "btn btn-default btn-sm lat-nav";
-        str << "<a class='" << btnClass
-            << "' data-op='' style='margin-right:0.3em;'"
-               " href='"
+        const char* btnClass =
+            !data.SelectedLatencyOperation
+                ? "btn btn-primary btn-sm lat-nav lat-nav-btn"
+                : "btn btn-default btn-sm lat-nav lat-nav-btn";
+        str << "<a class='" << btnClass << "' data-op='' href='"
             << LatencyPageHref(data, data.SelectedPercentile, std::nullopt)
             << "'>worst</a>";
     }
@@ -1010,25 +1024,24 @@ void RenderSlotOperationSelector(IOutputStream& str, const TMonPageData& data)
         const auto op = static_cast<EOperation>(operation);
         const bool selected = data.SelectedLatencyOperation &&
                               *data.SelectedLatencyOperation == op;
-        const char* btnClass = selected ? "btn btn-primary btn-sm lat-nav"
-                                        : "btn btn-default btn-sm lat-nav";
+        const char* btnClass =
+            selected ? "btn btn-primary btn-sm lat-nav lat-nav-btn"
+                     : "btn btn-default btn-sm lat-nav lat-nav-btn";
         str << "<a class='" << btnClass << "' data-op='" << operation
-            << "' style='margin-right:0.3em;'"
-               " href='"
-            << LatencyPageHref(data, data.SelectedPercentile, op) << "'>"
-            << ToString(op) << "</a>";
+            << "' href='" << LatencyPageHref(data, data.SelectedPercentile, op)
+            << "'>" << ToString(op) << "</a>";
     }
     str << "</div>";
 }
 
 void RenderLatencyAutoRefreshControls(IOutputStream& str)
 {
-    str << "<div style='margin:0.5em 0;'>"
-           "<label style='margin-right:0.6em;'>"
+    str << "<div class='lat-controls'>"
+           "<label class='lat-label'>"
            "<input type='checkbox' id='latencyAutoRefresh'/> Auto refresh"
            "</label>"
            "<label>every <input type='number' id='latencyRefreshRate' "
-           "min='1' value='1' style='width:4em;'/> sec</label>"
+           "min='1' value='1' class='lat-refresh-rate'/> sec</label>"
            "</div>";
 }
 
@@ -1036,322 +1049,9 @@ void RenderLatencyClientScript(IOutputStream& str)
 {
     // Must run AFTER #latencyLiveContent is in the DOM so bindUi can find
     // Show slots / Show data. Auto-refresh swaps only the live region's
-    // innerHTML; binders live here so they survive that swap.
+    // innerHTML; binders live in the script so they survive that swap.
     // Percentile / Slot grid operation only redraw client-side (no fetch).
-    TStringBuilder opNamesJs;
-    for (size_t operation = 0; operation < OperationCount; ++operation) {
-        if (operation != 0) {
-            opNamesJs << ",";
-        }
-        opNamesJs << "'" << ToString(static_cast<EOperation>(operation)) << "'";
-    }
-
-    str << "<script>"
-           "(function(){"
-           "var cb=document.getElementById('latencyAutoRefresh');"
-           "var inp=document.getElementById('latencyRefreshRate');"
-           "var key='pdLatencyAutoRefresh';"
-           "var rateKey='pdLatencyRefreshRate';"
-           "var uiKey='pdLatencyUiState';"
-           "var timer=null;"
-           "var refreshing=false;"
-           "var opNames=["
-        << opNamesJs
-        << "];"
-           "function val(id){var el=document.getElementById(id);return "
-           "el?el.value:'';}"
-           "function checked(id){var el=document.getElementById(id);return "
-           "!!(el&&el.checked);}"
-           "function setChecked(id,v){var "
-           "el=document.getElementById(id);if(el)el.checked=!!v;}"
-           "function setVal(id,v){var el=document.getElementById(id);if(el){"
-           "for(var "
-           "i=0;i<el.options.length;i++){if(el.options[i].value===v){el.value="
-           "v;return;}}"
-           "}}"
-           "function saveUi(){"
-           "var "
-           "s={showSlots:checked('latShowSlots'),slotNode:val('"
-           "latSlotNodeFilter'),"
-           "showDetail:checked('latShowDetail'),fNode:val('latFilterNode'),"
-           "fPdisk:val('latFilterPdisk'),fType:val('latFilterType'),fOp:val('"
-           "latFilterOp')};"
-           "sessionStorage.setItem(uiKey,JSON.stringify(s));"
-           "return s;"
-           "}"
-           "function loadUi(){"
-           "try{return "
-           "JSON.parse(sessionStorage.getItem(uiKey)||'{}');}catch(e){return "
-           "{};}"
-           "}"
-           "function restoreUi(s){"
-           "if(!s)s=loadUi();"
-           "setChecked('latShowSlots',s.showSlots);"
-           "setVal('latSlotNodeFilter',s.slotNode||'');"
-           "setChecked('latShowDetail',s.showDetail);"
-           "setVal('latFilterNode',s.fNode||'');"
-           "setVal('latFilterPdisk',s.fPdisk||'');"
-           "setVal('latFilterType',s.fType||'');"
-           "setVal('latFilterOp',s.fOp||'');"
-           "}"
-           "function applySlots(){"
-           "var show=document.getElementById('latShowSlots');"
-           "var body=document.getElementById('latSlotsBody');"
-           "var nodeSel=document.getElementById('latSlotNodeFilter');"
-           "if(!show||!body||!nodeSel)return;"
-           "body.style.display=show.checked?'':'none';"
-           "var filter=nodeSel.value;"
-           "var nodes=body.querySelectorAll('.lat-slot-node');"
-           "for(var i=0;i<nodes.length;i++){"
-           "var n=nodes[i];"
-           "n.style.display=(!filter||n.dataset.node===filter)?'':'none';"
-           "}"
-           "}"
-           "function applyDetail(){"
-           "var show=document.getElementById('latShowDetail');"
-           "var body=document.getElementById('latDetailBody');"
-           "var table=document.getElementById('latencyDetailTable');"
-           "if(!show||!body)return;"
-           "body.style.display=show.checked?'':'none';"
-           "if(!show.checked||!table)return;"
-           "var tbody=table.tBodies[0];"
-           "var fNode=document.getElementById('latFilterNode');"
-           "var fPdisk=document.getElementById('latFilterPdisk');"
-           "var fType=document.getElementById('latFilterType');"
-           "var fOp=document.getElementById('latFilterOp');"
-           "var rows=tbody.rows;"
-           "for(var i=0;i<rows.length;i++){"
-           "var r=rows[i];"
-           "var ok=(!fNode.value||r.dataset.node===fNode.value)"
-           "&&(!fPdisk.value||r.dataset.pdisk===fPdisk.value)"
-           "&&(!fType.value||r.dataset.type===fType.value)"
-           "&&(!fOp.value||r.dataset.op===fOp.value);"
-           "r.style.display=ok?'':'none';"
-           "}"
-           "}"
-           "function bindUi(){"
-           "var showSlots=document.getElementById('latShowSlots');"
-           "var slotNode=document.getElementById('latSlotNodeFilter');"
-           "var showDetail=document.getElementById('latShowDetail');"
-           "var table=document.getElementById('latencyDetailTable');"
-           "if(showSlots){showSlots.onchange=function(){saveUi();applySlots();}"
-           ";}"
-           "if(slotNode){slotNode.onchange=function(){saveUi();applySlots();};}"
-           "if(showDetail){showDetail.onchange=function(){saveUi();applyDetail("
-           ");};}"
-           "['latFilterNode','latFilterPdisk','latFilterType','latFilterOp']."
-           "forEach(function(id){"
-           "var el=document.getElementById(id);"
-           "if(el){el.onchange=function(){saveUi();applyDetail();};}"
-           "});"
-           "if(table){"
-           "table.tHead.rows[0].onclick=function(ev){"
-           "var th=ev.target.closest('th[data-sort]');"
-           "if(!th)return;"
-           "var key=th.getAttribute('data-sort');"
-           "var asc=th.getAttribute('data-asc')!=='1';"
-           "th.setAttribute('data-asc',asc?'1':'0');"
-           "var tbody=table.tBodies[0];"
-           "var rows=Array.prototype.slice.call(tbody.rows);"
-           "rows.sort(function(a,b){"
-           "var av=Number(a.dataset[key]||0),bv=Number(b.dataset[key]||0);"
-           "return asc?av-bv:bv-av;"
-           "});"
-           "rows.forEach(function(r){tbody.appendChild(r);});"
-           "};"
-           "}"
-           "applySlots();"
-           "applyDetail();"
-           "}"
-           "function selectedP(){"
-           "var a=document.querySelector('a.lat-nav[data-p].btn-primary');"
-           "return a?a.getAttribute('data-p'):'99';"
-           "}"
-           "function selectedOp(){"
-           "var a=document.querySelector('a.lat-nav[data-op].btn-primary');"
-           "return a?a.getAttribute('data-op'):'';"
-           "}"
-           "function pTitle(p){"
-           "return p==='max'?'max':('p'+p);"
-           "}"
-           "function fmtUs(us){"
-           "us=Number(us)||0;"
-           "if(us===0)return '0';"
-           "if(us<1000)return us+'us';"
-           "if(us<1000000)return (us/1000).toFixed(3)+'ms';"
-           "return (us/1000000).toFixed(3)+'s';"
-           "}"
-           "function latColor(us){"
-           "us=Number(us)||0;"
-           "if(us===0)return '#f0f0f0';"
-           "if(us<500)return '#90ee90';"
-           "if(us<1000)return '#228b22';"
-           "if(us<5000)return '#ffd54f';"
-           "if(us<20000)return '#e74c3c';"
-           "return '#8b0000';"
-           "}"
-           "function latWidth(us){"
-           "us=Number(us)||0;"
-           "if(us===0)return 0;"
-           "return Math.min(100,Math.max(4,Math.floor(us*100/20000)));"
-           "}"
-           "function pickUs(stats,p){"
-           "if(p==='50')return Number(stats.p50);"
-           "if(p==='90')return Number(stats.p90);"
-           "if(p==='max')return Number(stats.max);"
-           "return Number(stats.p99);"
-           "}"
-           "function paintBar(el,p){"
-           "var stats={p50:el.dataset.p50,p90:el.dataset.p90,"
-           "p99:el.dataset.p99,max:el.dataset.max};"
-           "var us=pickUs(stats,p);"
-           "var text=el.querySelector('.lat-bar-text');"
-           "var fill=el.querySelector('.lat-bar-fill');"
-           "if(text)text.textContent=fmtUs(us);"
-           "if(fill){fill.style.width=latWidth(us)+'%';"
-           "fill.style.background=latColor(us);}"
-           "}"
-           "function barHtml(stats,p){"
-           "var us=pickUs(stats,p);"
-           "var title='n='+stats.c+' min='+fmtUs(stats.min)"
-           "+' p50='+fmtUs(stats.p50)+' p90='+fmtUs(stats.p90)"
-           "+' p99='+fmtUs(stats.p99)+' max='+fmtUs(stats.max);"
-           "return \"<div class='lat-bar' style='min-width:4.5em;'\"+"
-           "\" data-count='\"+stats.c+\"' data-min='\"+stats.min+\"'\"+"
-           "\" data-p50='\"+stats.p50+\"' data-p90='\"+stats.p90+\"'\"+"
-           "\" data-p99='\"+stats.p99+\"' data-max='\"+stats.max+\"'\"+"
-           "\" title='\"+title+\"'>\"+"
-           "\"<div class='lat-bar-text'>\"+fmtUs(us)+\"</div>\"+"
-           "\"<div style='height:4px; background:#eee; margin-top:2px;'>\"+"
-           "\"<div class='lat-bar-fill' style='height:100%; width:\"+"
-           "latWidth(us)+\"%; background:\"+latColor(us)+\";'></div>\"+"
-           "\"</div></div>\";"
-           "}"
-           "function slotStats(ops,op){"
-           "if(op!==''&&op!=null){"
-           "var i=Number(op);"
-           "return (ops&&ops[i])?ops[i]:null;"
-           "}"
-           "var worst=null;"
-           "for(var i=0;i<(ops||[]).length;i++){"
-           "var s=ops[i];if(!s)continue;"
-           "if(!worst||Number(s.p99)>Number(worst.p99))worst=s;"
-           "}"
-           "return worst;"
-           "}"
-           "function redrawViews(){"
-           "var p=selectedP();"
-           "var op=selectedOp();"
-           "var title=document.getElementById('latHeatmapTitle');"
-           "if(title)title.textContent='Latency by node ('+pTitle(p)+')';"
-           "var desc=document.getElementById('latSlotDesc');"
-           "if(desc){"
-           "var opPart=(op==='')?' (worst op by p99)':"
-           "(' for '+(opNames[Number(op)]||op));"
-           "desc.textContent='Each cell is one ddisk / pbuffer actor slot "
-           "(node:pdisk:slot), one pdisk per row. Uses the selected percentile'"
-           "+opPart+'.';"
-           "}"
-           "var heat=document.getElementById('latHeatmapTable');"
-           "if(heat){"
-           "var bars=heat.querySelectorAll('.lat-bar');"
-           "for(var i=0;i<bars.length;i++)paintBar(bars[i],p);"
-           "}"
-           "var slots=document.querySelectorAll('a.lat-slot');"
-           "for(var i=0;i<slots.length;i++){"
-           "var a=slots[i];"
-           "var ops=[];"
-           "try{ops=JSON.parse(a.getAttribute('data-ops')||'[]');}"
-           "catch(e){ops=[];}"
-           "var stats=slotStats(ops,op);"
-           "var box=a.querySelector('.lat-slot-val');"
-           "if(!box)continue;"
-           "if(!stats){box.innerHTML=\"<span style='color:#999;'>-</span>\";}"
-           "else{box.innerHTML=barHtml(stats,p);}"
-           "}"
-           "}"
-           "function setNavActive(a){"
-           "if(a.hasAttribute('data-p')){"
-           "document.querySelectorAll('a.lat-nav[data-p]').forEach("
-           "function(el){el.className=el===a?"
-           "'btn btn-primary btn-sm lat-nav':'btn btn-default btn-sm lat-nav';"
-           "});"
-           "}else if(a.hasAttribute('data-op')){"
-           "document.querySelectorAll('a.lat-nav[data-op]').forEach("
-           "function(el){el.className=el===a?"
-           "'btn btn-primary btn-sm lat-nav':'btn btn-default btn-sm lat-nav';"
-           "});"
-           "}"
-           "}"
-           "function syncNavFromUrl(){"
-           "var q=new URLSearchParams(location.search);"
-           "var p=q.get('p')||'99';"
-           "var op=q.has('op')?q.get('op'):'';"
-           "document.querySelectorAll('a.lat-nav[data-p]').forEach("
-           "function(el){el.className=(el.getAttribute('data-p')===p)?"
-           "'btn btn-primary btn-sm lat-nav':'btn btn-default btn-sm lat-nav';"
-           "});"
-           "document.querySelectorAll('a.lat-nav[data-op]').forEach("
-           "function(el){"
-           "var v=el.getAttribute('data-op');"
-           "el.className=(v===op)?"
-           "'btn btn-primary btn-sm lat-nav':'btn btn-default btn-sm lat-nav';"
-           "});"
-           "redrawViews();"
-           "}"
-           "function refreshLive(){"
-           "if(refreshing)return;"
-           "refreshing=true;"
-           "var ui=saveUi();"
-           "fetch(location.href,{credentials:'same-origin',cache:'no-store'})"
-           ".then(function(r){if(!r.ok)throw new Error('http "
-           "'+r.status);return r.text();})"
-           ".then(function(html){"
-           "var doc=new DOMParser().parseFromString(html,'text/html');"
-           "var next=doc.getElementById('latencyLiveContent');"
-           "var cur=document.getElementById('latencyLiveContent');"
-           "if(next&&cur){cur.innerHTML=next.innerHTML;}"
-           "restoreUi(ui);"
-           "bindUi();"
-           "})"
-           ".catch(function(){})"
-           ".then(function(){refreshing=false;});"
-           "}"
-           "function schedule(){"
-           "if(timer){clearInterval(timer);timer=null;}"
-           "if(!cb.checked){return;}"
-           "var sec=parseInt(inp.value,10);if(!(sec>0))sec=1;"
-           "timer=setInterval(refreshLive,sec*1000);"
-           "}"
-           // Percentile / Slot grid operation: pushState + client redraw only.
-           "document.addEventListener('click',function(ev){"
-           "var a=ev.target.closest('a.lat-nav');"
-           "if(!a)return;"
-           "var live=document.getElementById('latencyLiveContent');"
-           "if(!live||!live.contains(a))return;"
-           "ev.preventDefault();"
-           "var href=a.getAttribute('href');"
-           "if(!href)return;"
-           "setNavActive(a);"
-           "if(href!==location.pathname+location.search){"
-           "history.pushState(null,'',href);"
-           "}"
-           "redrawViews();"
-           "});"
-           "window.addEventListener('popstate',function(){syncNavFromUrl();});"
-           "cb.checked=sessionStorage.getItem(key)==='1';"
-           "var saved=sessionStorage.getItem(rateKey);"
-           "if(saved){inp.value=saved;}"
-           "cb.addEventListener('change',function(){"
-           "sessionStorage.setItem(key,cb.checked?'1':'0');"
-           "if(cb.checked){refreshLive();}schedule();});"
-           "inp.addEventListener('change',function(){"
-           "sessionStorage.setItem(rateKey,inp.value);schedule();});"
-           "restoreUi(loadUi());"
-           "bindUi();"
-           "schedule();"
-           "})();"
-           "</script>";
+    AddScript(str, "partition_direct/mon_page/latency.js");
 }
 
 void RenderLatencyHeatmap(
@@ -1361,7 +1061,7 @@ void RenderLatencyHeatmap(
 {
     str << "<h3 id='latHeatmapTitle'>Latency by node ("
         << PercentileTitle(data.SelectedPercentile) << ")</h3>";
-    str << "<p style='font-size:0.9em; color:#666;'>"
+    str << "<p class='lat-hint'>"
            "Node-level p50/p90/p99 is the max across contributing slots "
            "(worst-slot indicator); samples stay on each DBG executor."
            "</p>";
@@ -1381,7 +1081,7 @@ void RenderLatencyHeatmap(
             const auto& stats = node.ByOperation[operation];
             str << "<td>";
             if (stats.Count == 0) {
-                str << "<span style='color:#999;'>-</span>";
+                str << "<span class='lat-none'>-</span>";
             } else {
                 RenderLatencyValueBar(str, stats, data.SelectedPercentile);
             }
@@ -1402,7 +1102,7 @@ void RenderLatencySlotGrid(
             str << "Latency by slot";
         }
     }
-    str << "<p id='latSlotDesc' style='font-size:0.9em; color:#666;'>"
+    str << "<p id='latSlotDesc' class='lat-hint'>"
            "Each cell is one ddisk / pbuffer actor slot (node:pdisk:slot), "
            "one pdisk per row. Uses the selected percentile"
         << (data.SelectedLatencyOperation
@@ -1414,8 +1114,8 @@ void RenderLatencySlotGrid(
     RenderLatencyLegend(str);
 
     // Show-slots checkbox (off by default) + node filter (all / one node).
-    str << "<div style='margin:0.5em 0;'>"
-           "<label style='margin-right:0.8em;'>"
+    str << "<div class='lat-controls'>"
+           "<label class='lat-label-wide'>"
            "<input type='checkbox' id='latShowSlots'/> Show slots</label>"
            "<label>Node <select id='latSlotNodeFilter'>"
            "<option value=''>all</option>";
@@ -1424,11 +1124,11 @@ void RenderLatencySlotGrid(
     }
     str << "</select></label></div>";
 
-    str << "<div id='latSlotsBody' style='display:none;'>";
+    str << "<div id='latSlotsBody' class='lat-hidden'>";
     for (const auto& [nodeId, node]: nodes) {
         str << "<div class='lat-slot-node' data-node='" << nodeId
-            << "' style='margin-bottom:0.8em;'>"
-               "<div style='font-weight:bold; margin-bottom:0.3em;'>node "
+            << "'>"
+               "<div class='lat-node-title'>node "
             << nodeId << "</div>";
 
         // One row per pdisk.
@@ -1445,9 +1145,8 @@ void RenderLatencySlotGrid(
         for (const auto& [slotId, slot]: node.Slots) {
             if (!currentPDisk || *currentPDisk != slotId.PDiskId) {
                 closeRow();
-                str << "<div style='margin:0.2em 0 0.4em 1em;'>"
-                       "<span style='display:inline-block; color:#666; "
-                       "font-size:0.85em; margin-right:0.5em; min-width:5em;'>"
+                str << "<div class='lat-pdisk-row'>"
+                       "<span class='lat-pdisk-label'>"
                        "pdisk "
                     << slotId.PDiskId << "</span>";
                 currentPDisk = slotId.PDiskId;
@@ -1462,15 +1161,12 @@ void RenderLatencySlotGrid(
             // data-ops holds every operation's stats so Slot grid operation /
             // Percentile can redraw without a server round-trip.
             str << "<a class='lat-slot' href='" << url << "' data-ops='"
-                << SlotOpsJson(slot)
-                << "' style='display:inline-block; vertical-align:top;"
-                   " margin:0 0.25em 0.2em 0; text-decoration:none;"
-                   " color:inherit; min-width:5em;'>";
-            str << "<div style='font-size:0.75em; color:#666;'>"
-                << slot.SlotId.DDiskSlotId << "</div>";
+                << SlotOpsJson(slot) << "'>";
+            str << "<div class='lat-slot-id'>" << slot.SlotId.DDiskSlotId
+                << "</div>";
             str << "<div class='lat-slot-val'>";
             if (stats.Count == 0) {
-                str << "<span style='color:#999;'>-</span>";
+                str << "<span class='lat-none'>-</span>";
             } else {
                 RenderLatencyValueBar(str, stats, data.SelectedPercentile);
             }
@@ -1492,7 +1188,7 @@ void RenderLatencyDetailTable(
         }
     }
 
-    str << "<div style='margin:0.5em 0;'>"
+    str << "<div class='lat-controls'>"
            "<label><input type='checkbox' id='latShowDetail'/> Show data"
            "</label></div>";
 
@@ -1516,28 +1212,28 @@ void RenderLatencyDetailTable(
         }
     }
 
-    str << "<div id='latDetailBody' style='display:none;'>";
+    str << "<div id='latDetailBody' class='lat-hidden'>";
 
-    str << "<div style='margin-bottom:0.5em;'>"
-           "<label style='margin-right:0.8em;'>Node "
+    str << "<div class='lat-filter-row'>"
+           "<label class='lat-label-wide'>Node "
            "<select id='latFilterNode'><option value=''>all</option>";
     for (const auto& [nodeId, _]: nodesFilter) {
         str << "<option value='" << nodeId << "'>" << nodeId << "</option>";
     }
     str << "</select></label>"
-           "<label style='margin-right:0.8em;'>PDisk "
+           "<label class='lat-label-wide'>PDisk "
            "<select id='latFilterPdisk'><option value=''>all</option>";
     for (const auto& [pdiskId, _]: pdisksFilter) {
         str << "<option value='" << pdiskId << "'>" << pdiskId << "</option>";
     }
     str << "</select></label>"
-           "<label style='margin-right:0.8em;'>Type "
+           "<label class='lat-label-wide'>Type "
            "<select id='latFilterType'><option value=''>all</option>";
     for (const auto& [type, _]: typesFilter) {
         str << "<option value='" << type << "'>" << type << "</option>";
     }
     str << "</select></label>"
-           "<label style='margin-right:0.8em;'>Operation "
+           "<label class='lat-label-wide'>Operation "
            "<select id='latFilterOp'><option value=''>all</option>";
     for (const auto& [op, _]: opsFilter) {
         str << "<option value='" << op << "'>" << op << "</option>";
@@ -1551,12 +1247,12 @@ void RenderLatencyDetailTable(
            "<th>Slot</th>"
            "<th>Type</th>"
            "<th>Operation</th>"
-           "<th style='cursor:pointer;' data-sort='count'>Count</th>"
-           "<th style='cursor:pointer;' data-sort='min'>Min</th>"
-           "<th style='cursor:pointer;' data-sort='p50'>P50</th>"
-           "<th style='cursor:pointer;' data-sort='p90'>P90</th>"
-           "<th style='cursor:pointer;' data-sort='p99'>P99</th>"
-           "<th style='cursor:pointer;' data-sort='max'>Max</th>"
+           "<th class='lat-sortable' data-sort='count'>Count</th>"
+           "<th class='lat-sortable' data-sort='min'>Min</th>"
+           "<th class='lat-sortable' data-sort='p50'>P50</th>"
+           "<th class='lat-sortable' data-sort='p90'>P90</th>"
+           "<th class='lat-sortable' data-sort='p99'>P99</th>"
+           "<th class='lat-sortable' data-sort='max'>Max</th>"
            "</tr></thead><tbody>";
 
     for (const auto& [nodeId, node]: nodes) {
@@ -1637,8 +1333,22 @@ void RenderLatency(IOutputStream& str, const TMonPageData& data)
     // Auto-refresh controls at the top; live data in #latencyLiveContent;
     // client script AFTER the live region so bindUi sees Show slots / Show
     // data on first paint (not only after an auto-refresh swap).
+    // opNames are exposed via data-op-names so the static JS resource can
+    // read them; auto-refresh only swaps innerHTML, so the attribute stays.
+    TStringBuilder opNamesJson;
+    opNamesJson << "[";
+    for (size_t operation = 0; operation < OperationCount; ++operation) {
+        if (operation != 0) {
+            opNamesJson << ",";
+        }
+        opNamesJson << "\"" << ToString(static_cast<EOperation>(operation))
+                    << "\"";
+    }
+    opNamesJson << "]";
+
     RenderLatencyAutoRefreshControls(str);
-    str << "<div id='latencyLiveContent'>";
+    str << "<div id='latencyLiveContent' data-op-names='" << opNamesJson
+        << "'>";
     RenderLatencyHeatmap(str, data, nodes);
     RenderLatencySlotGrid(str, data, nodes);
     RenderLatencyDetailTable(str, nodes);
@@ -1654,6 +1364,7 @@ TString RenderMonPage(const TMonPageData& data)
 {
     TStringStream str;
 
+    AddStyle(str, "partition_direct/mon_page/mon_page.css");
     RenderHeader(str, data.TabletInfo);
     RenderMenu(str, data.TabletInfo, data.Page);
 

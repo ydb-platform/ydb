@@ -1162,7 +1162,7 @@ public:
             ui64 totalFreq = 0;
             for (const auto& [docId, freq]: docFreqs) {
                 docIds.push_back(docId);
-                totalFreq += freq;
+                totalFreq++;
             }
             std::sort(docIds.begin(), docIds.end(), [](ui64 a, ui64 b) {
                 return (TDocId)a < TDocId(b);

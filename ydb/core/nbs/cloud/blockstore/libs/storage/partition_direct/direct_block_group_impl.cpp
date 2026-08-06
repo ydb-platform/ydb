@@ -1510,7 +1510,7 @@ void TDirectBlockGroup::DoEstablishConnection(
     if (connectionType == EConnectionType::DDisk) {
         actualSeqNo++;
 
-        LOG_WARN(
+        LOG_INFO(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "%s %s starting session: new seq_no: %lu",
@@ -1555,7 +1555,7 @@ void TDirectBlockGroup::DoEstablishConnection(
                 () mutable
                 {
                     if (auto self = weakSelf.lock()) {
-                        self->OnConnectionEstablished(
+                        self->OnConnectResponse(
                             connectionType,
                             hostIndex,
                             actualSeqNo,
@@ -1565,7 +1565,7 @@ void TDirectBlockGroup::DoEstablishConnection(
         });
 }
 
-void TDirectBlockGroup::OnConnectionEstablished(
+void TDirectBlockGroup::OnConnectResponse(
     EConnectionType connectionType,
     THostIndex hostIndex,
     ui64 seqNo,
@@ -1581,9 +1581,9 @@ void TDirectBlockGroup::OnConnectionEstablished(
 
     LOG_LOG(
         *ActorSystem,
-        HasError(error) ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_NOTICE,
+        HasError(error) ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO,
         NKikimrServices::NBS_PARTITION,
-        "%s OnConnectionEstablished: %s %s",
+        "%s OnConnectResponse: %s %s",
         LogTitle.GetWithTime().c_str(),
         PrintHostAndNode(hostIndex).c_str(),
         FormatError(error).Quote().c_str());

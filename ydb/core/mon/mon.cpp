@@ -6,6 +6,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/http_database_param.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -55,27 +56,9 @@ struct TIssueInfo {
     }
 };
 
-bool HasJsonContent(const NHttp::THttpIncomingRequest* request) {
-    if (request->Method == "POST") {
-        const TStringBuf header = request->ContentType.Before(';');
-        return header.empty() || AsciiEqualsIgnoreCase(header, "application/json"); // by default we will try to parse json, no error will be generated if parsing fails
-    }
-    return false;
-}
-
-TString GetDatabase(const NHttp::THttpIncomingRequest* request) {
-    NHttp::TUrlParameters urlParams(request->URL);
-    TString database = urlParams["database"];
-    if (database) {
-        return database;
-    }
-    if (HasJsonContent(request)) {
-        NJson::TJsonValue requestData;
-        if (NJson::ReadJsonTree(request->Body, &requestData)) {
-            return requestData["database"].GetString(); // empty if not string or no such key
-        }
-    }
-    return {};
+TString ExtractMonDatabaseParam(const NHttp::THttpIncomingRequest* request) {
+    NHttp::THeaders headers(request->Headers);
+    return ExtractHttpDatabaseParamFromUrl(request->URL, request->Method, request->Body, headers.Get("Content-Type"));
 }
 
 void LogAuthorizedHttpRequest(
@@ -87,7 +70,7 @@ void LogAuthorizedHttpRequest(
     const TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
     const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
     const TString accessLevel = ToString(GetHighestAccessLevel(appData, userToken));
-    const TString database = result ? result->Database : GetDatabase(&request);
+    const TString database = ExtractMonDatabaseParam(&request);
     YDB_LOG_NOTICE(
         "Send request"
             << " [" << address << "]"
@@ -221,11 +204,14 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
     TStringBuf ydbSessionId = cookies["ydb_session_id"];
     TStringBuf authorization = headers["Authorization"];
     if (!authorization.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(request));
+        const TString database = ExtractMonDatabaseParam(request);
+        return GetRequestAuthAndCheckHandle(owner, database, TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else if (!ydbSessionId.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request));
+        const TString database = ExtractMonDatabaseParam(request);
+        return GetRequestAuthAndCheckHandle(owner, database, TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else if (!request->MTlsClientCertificate.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
+        const TString database = ExtractMonDatabaseParam(request);
+        return GetRequestAuthAndCheckHandle(owner, database, request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else {
         return nullptr;
     }
@@ -300,7 +286,7 @@ NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, N
         return eventHandle;
     }
 
-    return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), "", NMonitoring::NAudit::ExtractRemoteAddress(request));
+    return GetRequestAuthAndCheckHandle(owner, ExtractMonDatabaseParam(request), "", NMonitoring::NAudit::ExtractRemoteAddress(request));
 }
 
 // compatibility layer
@@ -623,8 +609,9 @@ public:
             LogAuthorizedHttpRequest(AppData(), result, *request);
         }
         TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
+        const TString database = ExtractMonDatabaseParam(request.Get());
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
-            Container, serializedToken), IEventHandle::FlagTrackDelivery);
+            Container, serializedToken, database), IEventHandle::FlagTrackDelivery);
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
@@ -660,6 +647,7 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        Event->Get()->Database = ExtractMonDatabaseParam(Event->Get()->Request.Get());
         AuditCtx.LogOnReceived();
         TString forbiddenReason;
         if (ActorMonPage->AuthMode == TMon::EAuthMode::Relaxed) {
@@ -1297,6 +1285,7 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        Event->Get()->Database = ExtractMonDatabaseParam(Request.Get());
         AuditCtx.LogOnReceived();
         TString forbiddenReason;
         if (Fields.AuthMode == TMon::EAuthMode::Enforce) {
@@ -1499,6 +1488,7 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        Event->Get()->Database = ExtractMonDatabaseParam(Event->Get()->Request.Get());
         AuditCtx.LogOnReceived();
         TString forbiddenReason;
         if (AuthMode == TMon::EAuthMode::Enforce) {

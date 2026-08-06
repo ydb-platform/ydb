@@ -27,46 +27,26 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
 TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) {
     auto result = Merger->AddExistsDataOrdered(data);
     if (result.IsFail()) {
-<<<<<<< HEAD
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "merge_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
-            "tablet_id", GetTabletId())("message", result.GetErrorMessage());
-        SendErrorMessage(result.GetErrorMessage(), result.GetStatus() == Ydb::StatusIds::PRECONDITION_FAILED
-                                                       ? NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::ConstraintViolation
-                                                       : NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
-=======
         OnError(result.GetErrorMessage(),
             result.GetStatus() == Ydb::StatusIds::PRECONDITION_FAILED ? EErrorClass::ConstraintViolation : EErrorClass::Request);
->>>>>>> 6c010edf5c3 (fix on update crash (#48690))
         return TConclusionStatus::Fail(result.GetErrorMessage());
     }
     return TConclusionStatus::Success();
 }
 
 void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
-<<<<<<< HEAD
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
-        "tablet_id", GetTabletId())("message", errorMessage);
-    SendErrorMessage(errorMessage, NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
-=======
     OnError(errorMessage, EErrorClass::Internal);
 }
 
 void TModificationRestoreTask::OnError(const TString& errorMessage, const EErrorClass errorClass) {
     if (errorClass == EErrorClass::Internal) {
-        YDB_LOG_ERROR("",
-            {"event", "restore_data_problems"},
-            {"writeId", WriteData.GetWriteMeta().GetWriteId()},
-            {"tabletId", GetTabletId()},
-            {"message", errorMessage});
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
+            "tablet_id", GetTabletId())("message", errorMessage);
     } else {
-        YDB_LOG_WARN("",
-            {"event", "merge_data_problems"},
-            {"writeId", WriteData.GetWriteMeta().GetWriteId()},
-            {"tabletId", GetTabletId()},
-            {"message", errorMessage});
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "merge_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
+            "tablet_id", GetTabletId())("message", errorMessage);
     }
     SendErrorMessage(errorMessage, errorClass);
->>>>>>> 6c010edf5c3 (fix on update crash (#48690))
 }
 
 NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {

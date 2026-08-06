@@ -7,8 +7,7 @@
 
 #include <util/random/random.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -201,5 +200,4 @@ Y_UNIT_TEST_LLVM(CompressNestedTuplesWithRandomWithFilter) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockCompressTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

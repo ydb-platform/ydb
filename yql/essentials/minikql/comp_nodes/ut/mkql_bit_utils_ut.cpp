@@ -2,8 +2,7 @@
 
 #include <yql/essentials/minikql/arrow/mkql_bit_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -44,7 +43,7 @@ Y_UNIT_TEST(CompressAligned) {
     auto res = CompressBitmap(data, 0, mask, 0, result, 0, 24);
     UNIT_ASSERT_EQUAL(res, 15);
     UNIT_ASSERT_EQUAL(result[0], 0b11001101);
-    UNIT_ASSERT_EQUAL(result[1] & 0x7fu, 0b00101110);
+    UNIT_ASSERT_EQUAL(result[1] & 0x7fU, 0b00101110);
 }
 
 Y_UNIT_TEST(CompressUnalignedOutput) {
@@ -61,5 +60,4 @@ Y_UNIT_TEST(CompressUnalignedOutput) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBitUtilsTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

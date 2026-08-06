@@ -49,16 +49,31 @@ Choose the narrowest affected module first. Tests already include compilation.
 # Repeat a suspected flake
 ./ya make --build relwithdebinfo -DUSER_CXXFLAGS=-Werror -tA <folder> -F '*test-filter*' --test-retries N 2>&1 | tail
 
-# Run clang-tidy with this SDK's configuration
-./ya make --build relwithdebinfo -DUSER_CXXFLAGS=-Werror -tA \
-  -DTIDY=yes -DTIDY_CONFIG=ydb/public/sdk/cpp/.clang-tidy <folder> 2>&1 | tail
+# Dump production compile commands; `ya dump` does not build or run targets
+mkdir -p ydb/public/sdk/cpp/build/clang-tidy
+./ya dump compile-commands --build relwithdebinfo --no-generated \
+  --files-in=<folder> \
+  --cmd-build-root="$PWD/ydb/public/sdk/cpp/build/clang-tidy/generated" \
+  --output-file=ydb/public/sdk/cpp/build/clang-tidy/compile_commands.json \
+  <folder>
+
+# Analyze each changed translation unit directly
+clang-tidy -p ydb/public/sdk/cpp/build/clang-tidy \
+  --config-file=ydb/public/sdk/cpp/.clang-tidy \
+  --extra-arg=-Werror <changed.cpp>
+
+# Only if clang-tidy reports a missing generated header, build the narrow target
+./ya make --build relwithdebinfo -DUSER_CXXFLAGS=-Werror \
+  --replace-result --add-result=.h \
+  --add-protobuf-result --add-flatbuf-result \
+  -o ydb/public/sdk/cpp/build/clang-tidy/generated <folder>
 
 # Validate standalone-SDK production dependencies
 python3 ydb/public/sdk/cpp/scripts/check_peerdirs.py
 ```
 
 - Always pass `-DUSER_CXXFLAGS=-Werror`; `ya make` does not accept a standalone `-werror` option. Do not pass `-j` and do not force rebuilds.
-- Run clang-tidy on every changed C++ module. Start with the narrowest target; broaden to the affected client/subtree for shared headers or common code. The SDK `.clang-tidy` deliberately enables expensive analyzer and bug-finding checks, so do not run it over the entire SDK unless the change is cross-cutting.
+- Lint production translation units only. Run clang-tidy directly; never pass `-A`, lint test paths, or invoke it through `ya make`, `-tA`, or a test recipe. Compile commands are sufficient, so build only the narrow changed target if a generated header is actually missing. Broaden analysis to affected production consumers for shared headers or common code. The SDK `.clang-tidy` deliberately enables expensive analyzer and bug-finding checks, so do not run it over the entire SDK unless the change is cross-cutting.
 - Unit-test pure mapping, validation, settings, result parsing, retry decisions, and lifecycle behavior. Follow the target's existing GoogleTest or `Y_UNIT_TEST` framework.
 - Use integration tests when correctness depends on a real YDB service, discovery, sessions, transactions, streaming, auth, or topic behavior. Keep recipe resource/timeout declarations in `ya.make` consistent with neighboring tests.
 - For concurrency or shutdown fixes, add a deterministic regression test and use `--test-retries` to probe flakiness. Do not replace synchronization with sleeps.

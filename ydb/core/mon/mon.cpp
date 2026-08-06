@@ -61,16 +61,20 @@ TString ExtractMonDatabaseParam(const NHttp::THttpIncomingRequest* request) {
     return ExtractHttpDatabaseParamFromUrl(request->URL, request->Method, request->Body, headers.Get("Content-Type"));
 }
 
+void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
+    event->Database = ExtractMonDatabaseParam(event->Request.Get());
+}
+
 void LogAuthorizedHttpRequest(
     const TAppData* appData,
     const NGRpcService::TEvRequestAuthAndCheckResult* result,
-    const NHttp::THttpIncomingRequest& request)
+    const NHttp::THttpIncomingRequest& request,
+    const TString& database)
 {
     const TString address = request.Address ? request.Address->ToString() : "";
     const TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
     const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
     const TString accessLevel = ToString(GetHighestAccessLevel(appData, userToken));
-    const TString database = ExtractMonDatabaseParam(&request);
     YDB_LOG_NOTICE(
         "Send request"
             << " [" << address << "]"
@@ -198,19 +202,20 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
     );
 }
 
-NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
+NActors::IEventHandle* SelectAuthorizationScheme(
+    const NActors::TActorId& owner,
+    const TString& database,
+    NHttp::THttpIncomingRequest* request)
+{
     NHttp::THeaders headers(request->Headers);
     NHttp::TCookies cookies(headers["Cookie"]);
     TStringBuf ydbSessionId = cookies["ydb_session_id"];
     TStringBuf authorization = headers["Authorization"];
     if (!authorization.empty()) {
-        const TString database = ExtractMonDatabaseParam(request);
         return GetRequestAuthAndCheckHandle(owner, database, TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else if (!ydbSessionId.empty()) {
-        const TString database = ExtractMonDatabaseParam(request);
         return GetRequestAuthAndCheckHandle(owner, database, TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else if (!request->MTlsClientCertificate.empty()) {
-        const TString database = ExtractMonDatabaseParam(request);
         return GetRequestAuthAndCheckHandle(owner, database, request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else {
         return nullptr;
@@ -280,13 +285,14 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
     });
 }
 
-NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
-    NActors::IEventHandle* eventHandle = SelectAuthorizationScheme(owner, request);
+NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
+    NHttp::THttpIncomingRequest* request = event->Request.Get();
+    NActors::IEventHandle* eventHandle = SelectAuthorizationScheme(owner, event->Database, request);
     if (eventHandle != nullptr) {
         return eventHandle;
     }
 
-    return GetRequestAuthAndCheckHandle(owner, ExtractMonDatabaseParam(request), "", NMonitoring::NAudit::ExtractRemoteAddress(request));
+    return GetRequestAuthAndCheckHandle(owner, event->Database, "", NMonitoring::NAudit::ExtractRemoteAddress(request));
 }
 
 // compatibility layer
@@ -452,10 +458,11 @@ public:
         if (Event->Get()->Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
         }
+        InitMonHttpIncomingRequest(Event->Get());
         AuditCtx.InitAudit(Event);
         Become(&THttpMonLegacyActorRequest::StateFunc);
         if (ActorMonPage->Authorizer) {
-            NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Event->Get()->Request.Get());
+            NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Event->Get());
             if (handle) {
                 TActivationContext::Send(handle);
                 return;
@@ -606,12 +613,11 @@ public:
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (ActorMonPage->Authorizer) {
-            LogAuthorizedHttpRequest(AppData(), result, *request);
+            LogAuthorizedHttpRequest(AppData(), result, *request, Event->Get()->Database);
         }
         TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
-        const TString database = ExtractMonDatabaseParam(request.Get());
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
-            Container, serializedToken, database), IEventHandle::FlagTrackDelivery);
+            Container, serializedToken, Event->Get()->Database), IEventHandle::FlagTrackDelivery);
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
@@ -647,7 +653,6 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        Event->Get()->Database = ExtractMonDatabaseParam(Event->Get()->Request.Get());
         AuditCtx.LogOnReceived();
         TString forbiddenReason;
         if (ActorMonPage->AuthMode == TMon::EAuthMode::Relaxed) {
@@ -1141,10 +1146,11 @@ public:
     }
 
     void Bootstrap() {
+        InitMonHttpIncomingRequest(Event->Get());
         AuditCtx.InitAudit(Event);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         if (Fields.AuthMode != TMon::EAuthMode::Disabled && Authorizer) {
-            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
+            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get());
             if (handle) {
                 Send(handle);
                 Become(&THttpMonAuthorizedActorRequest::StateWork);
@@ -1257,7 +1263,7 @@ public:
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         if (Authorizer) {
-            LogAuthorizedHttpRequest(AppData(), result, *Request);
+            LogAuthorizedHttpRequest(AppData(), result, *Request, Event->Get()->Database);
         }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
@@ -1285,7 +1291,6 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        Event->Get()->Database = ExtractMonDatabaseParam(Request.Get());
         AuditCtx.LogOnReceived();
         TString forbiddenReason;
         if (Fields.AuthMode == TMon::EAuthMode::Enforce) {
@@ -1369,9 +1374,10 @@ public:
     }
 
     void Bootstrap() {
+        InitMonHttpIncomingRequest(Event->Get());
         AuditCtx.InitAudit(Event, NeedAudit);
         if (Authorizer) {
-            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
+            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get());
             if (handle) {
                 Send(handle);
                 Become(&THttpMonAuthorizedPageRequest::StateWork);
@@ -1488,7 +1494,6 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        Event->Get()->Database = ExtractMonDatabaseParam(Event->Get()->Request.Get());
         AuditCtx.LogOnReceived();
         TString forbiddenReason;
         if (AuthMode == TMon::EAuthMode::Enforce) {

@@ -373,7 +373,7 @@ Recommendations for choosing the number of IO pool threads when using NFS export
 
 - Start with `2` threads and monitor the load.
 - Keep in mind that the IO pool handles not only NFS operations but also other blocking tasks (e.g., writing logs).
-- Monitor the pool load via the [Embedded UI](../../reference/embedded-ui/ydb-monitoring.md#node_list_page).
+- Monitor the pool load via the [YDB UI](../../reference/ydb-ui/ydb-monitoring.md#node_list_page).
 
 {% endnote %}
 

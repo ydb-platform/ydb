@@ -16,9 +16,9 @@ Data on video game sales.
 
     {% list tabs %}
 
-    - Embedded UI
+    - YDB UI
 
-      For more information on [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
+      For more information on [YDB UI](../../reference/ydb-ui/ydb-monitoring).
 
       ```sql
       CREATE TABLE `vgsales` (
@@ -77,7 +77,7 @@ To identify the publisher with the highest average game sales in North America, 
 
 {% list tabs %}
 
-- Embedded UI
+- YDB UI
 
   ```sql
   SELECT

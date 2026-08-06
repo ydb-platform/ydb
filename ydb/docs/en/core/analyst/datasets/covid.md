@@ -22,9 +22,9 @@ An open dataset of COVID-19 research.
 
     {% list tabs %}
 
-    - Embedded UI
+    - YDB UI
 
-      For more information on [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
+      For more information on [YDB UI](../../reference/ydb-ui/ydb-monitoring).
 
       ```sql
       CREATE TABLE `covid_research` (
@@ -101,7 +101,7 @@ Run a query to determine the journals with the highest number of publications:
 
 {% list tabs %}
 
-- Embedded UI
+- YDB UI
 
   ```sql
   SELECT

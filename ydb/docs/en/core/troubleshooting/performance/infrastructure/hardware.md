@@ -6,7 +6,7 @@ Malfunctioning storage drives and network cards, until replaced, significantly i
 
 Use the hardware monitoring tools that your operating system and data center provide to diagnose hardware issues.
 
-You can also use the **Healthcheck** in [Embedded UI](../../../reference/embedded-ui/index.md) to diagnose some hardware issues:
+You can also use the **Healthcheck** in [YDB UI](../../../reference/ydb-ui/index.md) to diagnose some hardware issues:
 
 - **Storage issues**
 

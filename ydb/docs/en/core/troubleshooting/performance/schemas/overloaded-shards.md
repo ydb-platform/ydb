@@ -29,7 +29,7 @@ Consider the following solutions to address shard overload:
 
     {% note tip %}
 
-    A table is not partitioned by load, if you see the `Partitioning by load: false` line on the **Diagnostics > Info** tab in the **Embedded UI** or the  `ydb scheme describe` command output.
+    A table is not partitioned by load, if you see the `Partitioning by load: false` line on the **Diagnostics > Info** tab in the **YDB UI** or the  `ydb scheme describe` command output.
 
     {% endnote %}
 
@@ -37,7 +37,7 @@ Consider the following solutions to address shard overload:
 
     {% note tip %}
 
-    To determine the number of partitions in the table, see the `PartCount` value on the **Diagnostics > Info** tab in the **Embedded UI**.
+    To determine the number of partitions in the table, see the `PartCount` value on the **Diagnostics > Info** tab in the **YDB UI**.
 
     {% endnote %}
 

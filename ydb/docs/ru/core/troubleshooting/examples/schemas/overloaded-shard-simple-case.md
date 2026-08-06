@@ -4,7 +4,7 @@
 
 Дополнительную информацию о перегруженных шардах и причинах их перегрузки см. в статье [{#T}](../../performance/schemas/overloaded-shards.md).
 
-Статья начинается с [описания возникшей проблемы](#initial-issue). Затем мы проанализируем графики в Grafana и информацию на вкладке **Diagnostics** в [Embedded UI](../../../reference/embedded-ui/index.md), чтобы [найти решение](#solution), и проверим [его эффективность](#aftermath).
+Статья начинается с [описания возникшей проблемы](#initial-issue). Затем мы проанализируем графики в Grafana и информацию на вкладке **Diagnostics** в [YDB UI](../../../reference/ydb-ui/index.md), чтобы [найти решение](#solution), и проверим [его эффективность](#aftermath).
 
 В конце статьи приводятся шаги по [воспроизведению проблемы](#testbed).
 
@@ -64,7 +64,7 @@
 
 {% endcut %}
 
-Мы также можем взглянуть на общее использование CPU на вкладке **Diagnostics** в [Embedded UI](../../../reference/embedded-ui/index.md):
+Мы также можем взглянуть на общее использование CPU на вкладке **Diagnostics** в [YDB UI](../../../reference/ydb-ui/index.md):
 
 ![CPU diagnostics](./_assets/overloaded-shard-simple-case/incident-ui-cpu-usage.png)
 
@@ -100,7 +100,7 @@
 
 {% endcut %}
 
-Чтобы определить, какую таблицу обслуживает перегруженный data shard, откроем вкладку **Diagnostics > Top shards** во встроенном UI:
+Чтобы определить, какую таблицу обслуживает перегруженный data shard, откроем вкладку **Diagnostics > Top shards** в YDB UI:
 
 ![Diagnostics > shards](./_assets/overloaded-shard-simple-case/incident-ui-top-shards.png)
 
@@ -122,7 +122,7 @@
 
 Нам необходимо включить партиционирование по нагрузке для таблицы `kv_test`:
 
-1. Во встроенном UI выберите базу данных.
+1. В YDB UI выберите базу данных.
 2. Откройте вкладку **Query**.
 3. Выполните следующий запрос:
 

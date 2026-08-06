@@ -1,4 +1,4 @@
-1. Используйте Встроенный UI или Grafana, чтобы проверить, не перегружены ли узлы {{ ydb-short-name }}:
+1. Используйте YDB UI или Grafana, чтобы проверить, не перегружены ли узлы {{ ydb-short-name }}:
 
     - На панели мониторинга Grafana **[DB overview](../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** проанализируйте диаграмму **Overloaded shard count**.
 
@@ -12,7 +12,7 @@
 
         {% endnote %}
 
-    - Во [Встроенном UI](../../../../reference/embedded-ui/index.md):
+    - В [YDB UI](../../../../reference/ydb-ui/index.md):
 
         1. Перейдите на вкладку **Databases** и выберите базу данных.
 
@@ -28,9 +28,9 @@
 
         Кроме того, информация о перегруженных таблетках представлена в виде системной таблицы. Дополнительные сведения см. в разделе [{#T}](../../../../dev/system-views.md#top-overload-partitions).
 
-1. Чтобы точно определить проблему со схемой, используйте [Встроенный UI](../../../../reference/embedded-ui/index.md) или [{{ ydb-short-name }} CLI](../../../../reference/ydb-cli/index.md):
+1. Чтобы точно определить проблему со схемой, используйте [YDB UI](../../../../reference/ydb-ui/index.md) или [{{ ydb-short-name }} CLI](../../../../reference/ydb-cli/index.md):
 
-    - Во [Встроенном UI](../../../../reference/embedded-ui/index.md):
+    - В [YDB UI](../../../../reference/ydb-ui/index.md):
 
         1. На вкладке **Databases** нажмите на базу данных.
 

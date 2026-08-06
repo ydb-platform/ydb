@@ -28,9 +28,9 @@ A catalog of items from the popular game Animal Crossing: New Horizons.
 
     {% list tabs %}
 
-    - Embedded UI
+    - YDB UI
 
-      For more information on [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
+      For more information on [YDB UI](../../reference/ydb-ui/ydb-monitoring).
 
       ```sql
       CREATE TABLE `accessories` (
@@ -111,7 +111,7 @@ Identify the top five most popular primary colors of accessories:
 
 {% list tabs %}
 
-- Embedded UI
+- YDB UI
 
   ```sql
   SELECT

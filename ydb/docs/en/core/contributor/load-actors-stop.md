@@ -6,7 +6,7 @@ Using this command, you can stop either entire load or only the specified part o
 
 | Parameter       | Description                                                                     |
 |-----------------|---------------------------------------------------------------------------------|
-| `Tag`           | Tag of the load actor to stop. You can view the tag in the cluster Embedded UI. |
+| `Tag`           | Tag of the load actor to stop. You can view the tag in the cluster YDB UI. |
 | `RemoveAllTags` | If this parameter value is set to `True`, all the load actors are stopped.      |
 
 ## Examples {#examples}

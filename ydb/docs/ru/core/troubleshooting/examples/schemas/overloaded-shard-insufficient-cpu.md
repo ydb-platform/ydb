@@ -7,7 +7,7 @@
 - [{#T}](../../performance/schemas/overloaded-shards.md);
 - [{#T}](../../performance/hardware/cpu-bottleneck.md).
 
-Статья начинается с [описания возникшей проблемы](#initial-issue). Затем мы проанализируем графики в Grafana и информацию на вкладке **Diagnostics** в [Embedded UI](../../../reference/embedded-ui/index.md), чтобы [найти решение](#solution), и проверим [его эффективность](#aftermath).
+Статья начинается с [описания возникшей проблемы](#initial-issue). Затем мы проанализируем графики в Grafana и информацию на вкладке **Diagnostics** в [YDB UI](../../../reference/ydb-ui/index.md), чтобы [найти решение](#solution), и проверим [его эффективность](#aftermath).
 
 В конце статьи приводятся шаги по [воспроизведению проблемы](#testbed).
 
@@ -75,7 +75,7 @@
 
 Мы видим рост нагрузки на CPU [в пуле ресурсов пользователей (красный) и интерконнекта (жёлтый)](../../../concepts/glossary.md#actor-system-pool).
 
-Мы также можем взглянуть на общее использование CPU на вкладке **Diagnostics** в [Embedded UI](../../../reference/embedded-ui/index.md):
+Мы также можем взглянуть на общее использование CPU на вкладке **Diagnostics** в [YDB UI](../../../reference/ydb-ui/index.md):
 
 ![CPU diagnostics](./_assets/overloaded-shard-insufficient-cpu/incident-embeddedui-diagnostics.png)
 

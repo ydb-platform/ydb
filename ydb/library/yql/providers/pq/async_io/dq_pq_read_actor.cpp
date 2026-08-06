@@ -700,7 +700,7 @@ private:
 
     void ScheduleStatusRequest() {
         if (!StatusRequestScheduled
-            && SourceParams.GetStopAtCurrentEndOffsets()
+            && !FinishedByOffsets && SourceParams.GetStopAtCurrentEndOffsets()
             && (BeginWriteTime || EndWriteTime)) {
             StatusRequestScheduled = true;
             Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRequestPartitionStatus());

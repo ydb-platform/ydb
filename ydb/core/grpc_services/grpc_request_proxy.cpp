@@ -635,12 +635,10 @@ void LogRequest(const TEvent& event) {
     };
 
     if constexpr (std::is_same_v<TEvListEndpointsRequest::TPtr, TEvent>) {
-        YDB_LOG_INFO_CTX(*TlsActivationContext, "Request",
-            {"ev", getDebugString()});
+        YDB_LOG_INFO_CTX(*TlsActivationContext, getDebugString());
     }
     else {
-        YDB_LOG_DEBUG_CTX(*TlsActivationContext, "Dump request",
-            {"ev", getDebugString()});
+        YDB_LOG_DEBUG_CTX(*TlsActivationContext, getDebugString());
     }
 }
 

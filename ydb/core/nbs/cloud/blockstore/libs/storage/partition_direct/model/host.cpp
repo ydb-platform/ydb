@@ -42,7 +42,12 @@ TString PrintNodeId(ui32 nodeId)
 TString PrintHostAndNodeId(THostIndex hostIndex, ui32 nodeId)
 {
     TStringBuilder result;
-    result << PrintHostIndex(hostIndex) << "#" << nodeId;
+    result << PrintHostIndex(hostIndex) << "#";
+    if (nodeId == Max<ui32>()) {
+        result << "??";
+    } else {
+        result << nodeId;
+    }
     return result;
 }
 

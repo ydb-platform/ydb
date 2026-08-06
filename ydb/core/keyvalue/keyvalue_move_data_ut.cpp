@@ -131,16 +131,33 @@ struct TTestContext {
         Runtime->DispatchEvents(options);
     }
 
-    void SendMoveData() {
-        auto moveData = std::make_unique<TEvTablet::TEvMoveData>(std::vector<ui32>{2181038080});
+    void SendMoveData(const std::vector<ui32>& groups) {
+        auto moveData = std::make_unique<TEvTablet::TEvMoveData>(groups);
         Runtime->SendToPipe(TabletId, Edge, moveData.release(), 0, GetPipeConfigWithRetries());
+    }
+
+    void SendMoveData() {
+        SendMoveData({2181038080});
     }
 
     void WaitMoveData() {
         TAutoPtr<IEventHandle> handle;
         TEvTablet::TEvMoveDataResponse *result;
         result = Runtime->GrabEdgeEvent<TEvTablet::TEvMoveDataResponse>(handle);
+
         UNIT_ASSERT(result);
+        UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NKikimrTabletBase::TEvMoveDataResponse::Success);
+        UNIT_ASSERT_EQUAL(result->Record.GetErrorReason(), "");
+    }
+
+    void WaitMoveDataError(NKikimrTabletBase::TEvMoveDataResponse::EStatus status) {
+        TAutoPtr<IEventHandle> handle;
+        TEvTablet::TEvMoveDataResponse *result;
+        result = Runtime->GrabEdgeEvent<TEvTablet::TEvMoveDataResponse>(handle);
+
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_EQUAL(result->Record.GetStatus(), status);
+        Cerr << "MoveData error: " << result->Record.GetErrorReason() << Endl;
     }
 
     void ExecuteMoveData() {
@@ -716,5 +733,70 @@ Y_UNIT_TEST(MoveDataBlobMovedButThenDeleted) {
     }
 }
 
+Y_UNIT_TEST(MoveDataGroupIdMismatch) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare([](TTestActorRuntime &){});
+
+    CmdWrite("key", tc.Value, NKikimrClient::TKeyValueRequest::MAIN, NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    tc.PoisonTablet();
+    tc.StartReassignedTablet();
+
+    tc.SendMoveData({2181038081});
+    tc.WaitMoveDataError(NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch);
+
+    CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, {tc.Value}, {}, tc);
+}
+
+Y_UNIT_TEST(MoveDataSecondPass) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+
+    TAutoPtr<IEventHandle> eventBlobCopied;
+    bool stop = false;
+    bool caughtRepeat = false;
+    auto setup = [&] (TTestActorRuntime& runtime) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (!stop && event->GetTypeRewrite() == TEvKeyValue::TEvBlobCopied::EventType) {
+                eventBlobCopied = event;
+                stop = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (event->GetTypeRewrite() == TEvKeyValue::TEvAdvanceMoveDataResult::EventType) {
+                auto* evAdvanceMoveDataResult = event->Get<TEvKeyValue::TEvAdvanceMoveDataResult>();
+                if (evAdvanceMoveDataResult->Result == TEvKeyValue::TEvAdvanceMoveDataResult::EResult::REPEAT) {
+                    caughtRepeat = true;
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+    };
+
+    tc.Prepare(setup);
+
+    CmdWrite("key", tc.Value, NKikimrClient::TKeyValueRequest::MAIN, NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    tc.PoisonTablet();
+    tc.StartReassignedTablet();
+
+    tc.SendMoveData();
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] {
+        return stop;
+    };
+    tc.Runtime->DispatchEvents(options);
+
+    CmdCopyRange("key", true, "key", true, "a", "", tc);
+
+    UNIT_ASSERT(eventBlobCopied);
+    tc.Runtime->Send(eventBlobCopied.Release());
+
+    tc.WaitMoveData();
+
+    UNIT_ASSERT(caughtRepeat);
+}
 } // TKeyValueMoveDataTest
 } // NKikimr

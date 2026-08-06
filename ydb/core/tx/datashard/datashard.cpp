@@ -4091,7 +4091,8 @@ void TDataShard::SendTableInfoToCountersAggregator(const TActorContext &ctx) {
             FollowerId(),
             TPathId(GetPathOwnerId(), localPathId),
             table->Path,
-            table->GetTableSchemaVersion()));
+            table->GetTableSchemaVersion(),
+            static_cast<ui32>(GetEffectiveMetricsLevel(*table))));
 }
 
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {

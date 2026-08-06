@@ -9,7 +9,7 @@ namespace NKeyValue {
 void TKeyValueState::ClearMoveDataBlobMovingStage() {
     MoveDataBlobMovingIsInProgress = false;
     MoveDataBlobMovingNeedsAnotherPass = false;
-    MoveDataKey.clear();
+    MoveDataKey = {};
     MoveDataBlobId = TLogoBlobID();
     MoveDataChainIndex = 0;
     MoveDataRecordTouched = false;
@@ -58,13 +58,13 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::AdvanceMo
     }
 
     TIndex::iterator itIndex;
-    if (MoveDataKey.empty()) {
+    if (!MoveDataKey.has_value()) {
         itIndex = Index.begin();
         MoveDataChainIndex = 0;
     } else {
-        itIndex = Index.find(MoveDataKey);
+        itIndex = Index.find(*MoveDataKey);
         if (itIndex == Index.end()) {
-            itIndex = Index.upper_bound(MoveDataKey);
+            itIndex = Index.upper_bound(*MoveDataKey);
             MoveDataChainIndex = 0;
             if (itIndex == Index.end()) {
                 return TryCheckTrash();
@@ -95,7 +95,8 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::AdvanceMo
                 {"keyValue", TabletId},
                 {"marker", "KV96"},
                 {"blobId", blobId.ToString()},
-                {"key", MoveDataKey});
+                {"key", *MoveDataKey},
+                {"chainIndex", MoveDataChainIndex});
 
             if (!MoveDataBlobIdToNewBlobId.contains(blobId)) {
                 MoveDataBlobId = blobId;
@@ -113,20 +114,13 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::AdvanceMo
                 return TEvKeyValue::TEvAdvanceMoveDataResult::CopyBlob(blobId, NextRequestUid++);
             }
 
-            auto itRefCounts = RefCounts.find(blobId);
-            Y_ABORT_UNLESS(itRefCounts != RefCounts.end());
-
-            if (itRefCounts->second > 1) {
-                --itRefCounts->second;
-            } else {
-                Dereference(blobId, db, false);
-            }
+            Dereference(blobId, db, false);
 
             item.LogoBlobId = newBlobId;
             ++RefCounts[newBlobId];
 
             MoveDataBlobMovingIsInProgress = false;
-            UpdateKeyValue(MoveDataKey, record, db);
+            UpdateKeyValue(*MoveDataKey, record, db);
             MoveDataBlobMovingIsInProgress = true;
         }
 
@@ -142,43 +136,77 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
         const TLogoBlobID& newBlobId,
         ISimpleDb& db)
 {
+    Y_ABORT_UNLESS(MoveDataBlobMovingIsInProgress);
+    Y_ABORT_UNLESS(MoveDataKey.has_value());
+    Y_ABORT_UNLESS(blobId == MoveDataBlobId);
+
     YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied",
         {"keyValue", TabletId},
         {"marker", "KV94"},
         {"blobId", blobId.ToString()},
         {"newBlobId", newBlobId.ToString()},
-        {"moveDataKey", MoveDataKey},
+        {"moveDataKey", *MoveDataKey},
         {"moveDataChainIndex", MoveDataChainIndex});
-
-    Y_ABORT_UNLESS(MoveDataBlobMovingIsInProgress);
-    Y_ABORT_UNLESS(!MoveDataKey.empty());
-    Y_ABORT_UNLESS(blobId == MoveDataBlobId);
 
     MoveDataBlobId = TLogoBlobID();
 
     if (result == TEvKeyValue::TEvBlobCopied::EResult::NODATA) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: NODATA",
+        YDB_LOG_NOTICE_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: NODATA",
             {"keyValue", TabletId},
             {"marker", "KV100"});
-        Y_ABORT_UNLESS(MoveDataRecordTouched);
-        Y_ABORT_UNLESS(RefCounts.find(blobId) == RefCounts.end());
+
+        if (!MoveDataRecordTouched || RefCounts.find(blobId) != RefCounts.end()) {
+            // possible data loss, kill tablet
+            YDB_LOG_CRIT_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: possible data loss",
+                {"keyValue", TabletId},
+                {"marker", "KV103"});
+            CancelMoveData();
+            return TEvKeyValue::TEvAdvanceMoveDataResult::Error();
+        }
     }
 
     if (MoveDataRecordTouched) {
+        // ignore the blob we just copied, advance again from the start of the record
+        // blob will be eventually garbage collected later
         YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: MoveDataRecordTouched",
             {"keyValue", TabletId},
             {"marker", "KV95"});
+
         MoveDataRecordTouched = false;
         MoveDataChainIndex = 0;
         return AdvanceMoveData(db);
     }
 
-    auto itIndex = Index.find(MoveDataKey);
-    Y_ABORT_UNLESS(itIndex != Index.end());
+    auto itIndex = Index.find(*MoveDataKey);
+    if (itIndex == Index.end()) {
+        // this should never happen
+        YDB_LOG_CRIT_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: key not found in index",
+            {"keyValue", TabletId},
+            {"marker", "KV104"});
+        CancelMoveData();
+        return TEvKeyValue::TEvAdvanceMoveDataResult::Error();
+    }
+
     auto& record = itIndex->second;
-    Y_ABORT_UNLESS(MoveDataChainIndex < record.Chain.size());
+    if (MoveDataChainIndex >= record.Chain.size()) {
+        // this should never happen
+        YDB_LOG_CRIT_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: chain index out of range",
+            {"keyValue", TabletId},
+            {"marker", "KV105"});
+        CancelMoveData();
+        return TEvKeyValue::TEvAdvanceMoveDataResult::Error();
+    }
+
     auto& item = record.Chain[MoveDataChainIndex];
-    Y_ABORT_UNLESS(item.LogoBlobId == blobId);
+    if (item.LogoBlobId != blobId) {
+        // this should never happen
+        YDB_LOG_CRIT_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: blob id mismatch",
+            {"keyValue", TabletId},
+            {"marker", "KV106"});
+        CancelMoveData();
+        return TEvKeyValue::TEvAdvanceMoveDataResult::Error();
+    }
+
     auto itRefCounts = RefCounts.find(blobId);
     Y_ABORT_UNLESS(itRefCounts != RefCounts.end());
 
@@ -193,19 +221,18 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
     RefCounts[newBlobId] = 1;
 
     MoveDataBlobMovingIsInProgress = false;
-    UpdateKeyValue(MoveDataKey, record, db);
+    UpdateKeyValue(*MoveDataKey, record, db);
     MoveDataBlobMovingIsInProgress = true;
 
     ++MoveDataChainIndex;
     if (MoveDataChainIndex >= record.Chain.size()) {
         MoveDataChainIndex = 0;
         ++itIndex;
-        if (itIndex != Index.end()) {
-            MoveDataKey = itIndex->first;
-            return AdvanceMoveData(db);
-        } else {
+        if (itIndex == Index.end()) {
             return TryCheckTrash();
         }
+        MoveDataKey = itIndex->first;
+        return AdvanceMoveData(db);
     }
 
     return AdvanceMoveData(db);
@@ -257,7 +284,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::CheckTras
         if (itTrashBin == TrashForVacuum.end()) {
             nextTrashBin();
             if (finished) {
-                return TEvKeyValue::TEvAdvanceMoveDataResult::Finish();
+                return TEvKeyValue::TEvAdvanceMoveDataResult::Success();
             }
         } else {
             trashBin = itTrashBin->second;
@@ -287,11 +314,25 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::CheckTras
         nextTrashBin();
     }
 
-    return TEvKeyValue::TEvAdvanceMoveDataResult::Finish();
+    return TEvKeyValue::TEvAdvanceMoveDataResult::Success();
 }
 
 void TKeyValueState::FinishMoveData(const TActorContext& ctx) {
-    ctx.Send(MoveDataRequestSender, new TEvTablet::TEvMoveDataResponse(TabletId));
+    ctx.Send(MoveDataRequestSender, new TEvTablet::TEvMoveDataResponse(
+        TabletId,
+        NKikimrTabletBase::TEvMoveDataResponse::Success));
+
+    ClearMoveDataBlobMovingStage();
+    ClearMoveDataTrashCheckingStage();
+
+    MoveDataIsInProgress = false;
+    MoveDataGroups.clear();
+    MoveDataRequestSender = {};
+}
+
+void TKeyValueState::CancelMoveData() {
+    ClearMoveDataBlobMovingStage();
+    ClearMoveDataTrashCheckingStage();
 
     MoveDataIsInProgress = false;
     MoveDataGroups.clear();

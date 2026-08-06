@@ -11,6 +11,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/scope.h>
+#include <util/string/builder.h>
 #include <util/system/env.h>
 #include <util/system/mutex.h>
 
@@ -136,7 +137,26 @@ namespace {
         std::atomic<size_t> Count = 0;
     };
 
+    // Deterministic payload content derived from the sequence number so the receiver can validate
+    // that the bytes survived the v2 wire format intact (unlike a fill of '*', which hides corruption
+    // that preserves size).
+    TString MakeLoadPayload(ui64 seq, size_t size) {
+        TString result = TString::Uninitialized(size);
+        char* p = result.Detach();
+        for (size_t i = 0; i < size; ++i) {
+            p[i] = static_cast<char>((seq * 131u + i * 17u + 0x5Au) & 0xff);
+        }
+        return result;
+    }
+
+    // Short inline protobuf payload (Record.Payload) used when UseInlinePayload is set.
+    TString MakeLoadInlinePayload(ui64 seq) {
+        return TStringBuilder() << "inl-" << seq;
+    }
+
     // Echoes each TEvTest back to its sender as a TEvTestResponse, preserving channel and cookie.
+    // Validates sequence number, rope payload, and optional inline protobuf payload before replying
+    // so sustained load exercises content correctness, not just delivery.
     class TLoadEchoActor: public TActor<TLoadEchoActor> {
     public:
         TLoadEchoActor()
@@ -149,23 +169,44 @@ namespace {
         )
 
         void Handle(TEvTest::TPtr& ev) {
-            Send(ev->Sender, new TEvTestResponse(ev->Get()->Record.GetSequenceNumber()),
+            auto* msg = ev->Get();
+            const ui64 seq = msg->Record.GetSequenceNumber();
+            Y_ABORT_UNLESS(seq == ev->Cookie,
+                "corrupted request: seq# %" PRIu64 " cookie# %" PRIu64, seq, ev->Cookie);
+
+            if (msg->GetPayloadCount() > 0) {
+                Y_ABORT_UNLESS(msg->GetPayloadCount() == 1,
+                    "unexpected payload count# %" PRIu32 " seq# %" PRIu64, msg->GetPayloadCount(), seq);
+                const TString got = msg->GetPayload(0).ConvertToString();
+                const TString expected = MakeLoadPayload(seq, got.size());
+                Y_ABORT_UNLESS(got == expected,
+                    "rope payload mismatch seq# %" PRIu64 " size# %zu", seq, got.size());
+            }
+            if (msg->Record.HasPayload()) {
+                const TString& got = msg->Record.GetPayload();
+                const TString expected = MakeLoadInlinePayload(seq);
+                Y_ABORT_UNLESS(got == expected,
+                    "inline payload mismatch seq# %" PRIu64, seq);
+            }
+
+            Send(ev->Sender, new TEvTestResponse(seq),
                 IEventHandle::MakeFlags(ev->GetChannel(), 0), ev->Cookie);
         }
     };
 
-    // Mimics the interconnect load test: keeps up to InFlyMax messages (each carrying a rope payload on
-    // a given channel) in flight and only generates more as responses return; fulfils the promise once
-    // Total responses have been received.
+    // Mimics the interconnect load test: keeps up to InFlyMax messages (each carrying a deterministic
+    // rope and/or inline protobuf payload on a given channel) in flight and only generates more as
+    // responses return; fulfils the promise once Total responses have been received.
     class TLoadDriverActor: public TActorBootstrapped<TLoadDriverActor> {
     public:
         TLoadDriverActor(const TActorId& responder, ui32 total, ui32 inFlyMax, ui32 payloadSize, ui16 channel,
-                NThreading::TPromise<ui32> done)
+                NThreading::TPromise<ui32> done, bool useInlinePayload = false)
             : Responder(responder)
             , Total(total)
             , InFlyMax(inFlyMax)
             , PayloadSize(payloadSize)
             , Channel(channel)
+            , UseInlinePayload(useInlinePayload)
             , Done(std::move(done))
         {}
 
@@ -182,10 +223,11 @@ namespace {
 
         void SendOne(ui64 seq) {
             auto ev = MakeHolder<TEvTest>(seq);
+            if (UseInlinePayload) {
+                ev->Record.SetPayload(MakeLoadInlinePayload(seq));
+            }
             if (PayloadSize) {
-                TString payload = TString::Uninitialized(PayloadSize);
-                memset(payload.Detach(), '*', payload.size());
-                ev->AddPayload(TRope(std::move(payload)));
+                ev->AddPayload(TRope(MakeLoadPayload(seq, PayloadSize)));
             }
             Send(Responder, ev.Release(), IEventHandle::MakeFlags(Channel, 0) | IEventHandle::FlagTrackDelivery, seq);
             ++InFly;
@@ -227,6 +269,7 @@ namespace {
         const ui32 InFlyMax;
         const ui32 PayloadSize;
         const ui16 Channel;
+        const bool UseInlinePayload;
         NThreading::TPromise<ui32> Done;
         ui32 Sent = 0;
         ui32 Received = 0;
@@ -462,6 +505,35 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
 
         UNIT_ASSERT_C(future.Wait(TDuration::Seconds(60)), "load-like round trip stalled");
         UNIT_ASSERT_VALUES_EQUAL(future.GetValueSync(), kTotal);
+        AssertV2InUse(*cluster, 1, 2);
+    }
+
+    // Sustained multi-channel load with mixed rope sizes and inline protobuf payloads; the echo actor
+    // byte-validates every message so framing/serialization corruption fails the test (unlike ic_bench,
+    // which only measures throughput).
+    Y_UNIT_TEST(ValidatingLoadVariedPayloads) {
+        if (!TUringContext::IsAvailable()) {
+            Cerr << "io_uring not available; skipping" << Endl;
+            return;
+        }
+        auto cluster = MakeV2Cluster();
+        const TActorId responder = cluster->RegisterActor(new TLoadEchoActor, 2);
+
+        constexpr ui32 kChannels = 6;
+        constexpr ui32 kPerChannel = 5000;
+        std::vector<NThreading::TFuture<ui32>> futures;
+        for (ui16 ch = 0; ch < kChannels; ++ch) {
+            auto promise = NThreading::NewPromise<ui32>();
+            futures.push_back(promise.GetFuture());
+            const ui32 payload = (ch % 3 == 0) ? 40 : (ch % 3 == 1 ? 4096 : 20000);
+            const bool useInline = (ch % 2 == 0);
+            cluster->RegisterActor(new TLoadDriverActor(responder, kPerChannel, /*inFlyMax=*/8, payload,
+                /*channel=*/ch, promise, useInline), 1);
+        }
+        for (ui16 ch = 0; ch < kChannels; ++ch) {
+            UNIT_ASSERT_C(futures[ch].Wait(TDuration::Seconds(90)), "validating load stalled");
+            UNIT_ASSERT_VALUES_EQUAL(futures[ch].GetValueSync(), kPerChannel);
+        }
         AssertV2InUse(*cluster, 1, 2);
     }
 

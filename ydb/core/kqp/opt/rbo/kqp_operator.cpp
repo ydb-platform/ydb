@@ -1045,7 +1045,7 @@ TOpTableLookup::TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle p
     , Strategy(ELookupStrategy::LookupJoinRows) {
     Y_ENSURE(LookupKeys.size() == LookupKeyColumns.size(), "Lookup join keys must be paired with table key columns");
     Y_ENSURE(!LookupKeys.empty(), "Lookup join needs at least one key");
-    Y_ENSURE(JoinOutputsLeft(JoinKind) && JoinOutputsRight(JoinKind), "Lookup join must output both sides");
+    Y_ENSURE(JoinKind == "Inner" || JoinKind == "Left" || JoinKind == "LeftSemi" || JoinKind == "LeftOnly", "Unsupported lookup join kind");
     if (Prefix) {
         Y_ENSURE(Prefix->Points, "Lookup key prefix needs a points expression");
         Y_ENSURE(Prefix->PointsItemType, "Lookup key prefix needs a typed points expression");
@@ -1166,6 +1166,10 @@ TIntrusivePtr<TOpTableLookup> TOpIndexLookupJoin::GetTableLookup() {
 }
 
 void TOpIndexLookupJoin::ComputeOutputIUs() {
+    if (!JoinOutputsRight(JoinKind)) {
+        Props.OutputIUs = GetTableLookup()->GetInput()->GetOutputIUs();
+        return;
+    }
     Props.OutputIUs = GetInput()->GetOutputIUs();
 }
 

@@ -1,4 +1,4 @@
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.apps.dstool.lib.common as common
 import sys
 
@@ -8,11 +8,11 @@ description = 'Set pdisk properties. It may impact respective vdisks'
 def add_options(p):
     common.add_pdisk_ids_option(p, required=True)
     g = p.add_mutually_exclusive_group(required=True)
-    statuses = kikimr_bsconfig.EDriveStatus.keys()
+    statuses = kikimr_bs3.EDriveStatus.keys()
     g.add_argument('--status', type=str, choices=statuses, help='Set status')
-    decommit_statuses = kikimr_bsconfig.EDecommitStatus.keys()
+    decommit_statuses = kikimr_bs3.EDecommitStatus.keys()
     g.add_argument('--decommit-status', type=str, choices=decommit_statuses, help='Set decomission status')
-    maintenance_statuses = kikimr_bsconfig.TMaintenanceStatus.E.keys()
+    maintenance_statuses = kikimr_bs3.TMaintenanceStatus.E.keys()
     g.add_argument('--maintenance-status', type=str, choices=maintenance_statuses, help='Set maintenance status')
     common.add_allow_unusable_pdisks_option(p)
     p.add_argument('--allow-working-disks', action='store_true', help='Allow settlement even if any of enlisted PDisks is still working')
@@ -33,11 +33,11 @@ def create_request(args, pdisks, node_id_to_host):
         else:
             _, cmd.PDiskId = pdisk_id
         if args.status is not None:
-            cmd.Status = kikimr_bsconfig.EDriveStatus.Value(args.status)
+            cmd.Status = kikimr_bs3.EDriveStatus.Value(args.status)
         if args.decommit_status is not None:
-            cmd.DecommitStatus = kikimr_bsconfig.EDecommitStatus.Value(args.decommit_status)
+            cmd.DecommitStatus = kikimr_bs3.EDecommitStatus.Value(args.decommit_status)
         if args.maintenance_status is not None:
-            cmd.MaintenanceStatus = kikimr_bsconfig.TMaintenanceStatus.E.Value(args.maintenance_status)
+            cmd.MaintenanceStatus = kikimr_bs3.TMaintenanceStatus.E.Value(args.maintenance_status)
 
     return request
 

@@ -276,18 +276,20 @@ class RecoveryProbe:
     # -- internals ----------------------------------------------------------------
 
     def _release(self, p: _Pending, held: float) -> None:
-        # Lease may already be gone (manual extract raced us); drop the pending either way.
-        self._guard.release(
+        # Skip if manual extract already untracked us (avoids double fault_ended).
+        with self._lock:
+            if self._pending.get(p.lease_id) is not p:
+                return
+            self._pending.pop(p.lease_id, None)
+        released = self._guard.release(
             p.lease_id,
             reason="recovered",
             target=p.target,
             nemesis_type=p.nemesis_type,
             source="probe",
         )
-        with self._lock:
-            self._pending.pop(p.lease_id, None)
         metrics = self._metrics
-        if metrics is not None:
+        if metrics is not None and released:
             metrics.fault_ended(
                 target=p.target,
                 nemesis_type=p.nemesis_type,

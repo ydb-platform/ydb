@@ -264,7 +264,10 @@ def create_host_process():
                             ),
                         }
                     ), 503
-            nemesis_schedule.dispatch_command(cmd, track_history=False)
+            if not nemesis_schedule.dispatch_command(cmd, track_history=False):
+                return jsonify(
+                    {"status": "error", "message": f"dispatch failed for {process_type}"},
+                ), 502
             if full:
                 if cmd.action == "extract":
                     failure_guard.record_extract(
@@ -306,6 +309,7 @@ def create_host_process():
                                 scope=record_scope,
                                 inventory=cluster_inventory,
                                 baseline=baseline,
+                                nemesis_type=cmd.nemesis_type,
                             ),
                             stuck_timeout_sec=stuck_timeout_for(cmd.nemesis_type),
                         )

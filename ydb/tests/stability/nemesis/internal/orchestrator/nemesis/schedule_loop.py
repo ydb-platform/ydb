@@ -213,8 +213,8 @@ class OrchestratorNemesisSchedule:
             stopped.append(process_type)
         return stopped
 
-    def dispatch_command(self, cmd: DispatchCommand, *, track_history: bool) -> None:
-        """POST (or local helper) to start one execution on cmd.host."""
+    def dispatch_command(self, cmd: DispatchCommand, *, track_history: bool) -> bool:
+        """POST (or local helper) to start one execution on cmd.host. Returns False on failure."""
         metrics = self._metrics
         mode = guard_mode_for(cmd.nemesis_type)
         guard_mode_val = mode.value if mode is not None else None
@@ -243,11 +243,12 @@ class OrchestratorNemesisSchedule:
             else:
                 port = self._get_app_port()
                 http_host = self._resolve_http_host(cmd.host)
-                requests.post(
+                resp = requests.post(
                     f"http://{http_host}:{port}/api/processes",
                     json=body,
                     timeout=5,
                 )
+                resp.raise_for_status()
 
             if track_history:
                 self.append_executions_history(
@@ -263,7 +264,7 @@ class OrchestratorNemesisSchedule:
                 )
             if metrics is not None:
                 lease_id = cmd.lease_id or cmd.execution_id
-                if cmd.action == "inject":
+                if cmd.action == "inject" and mode is not GuardMode.BYPASS:
                     metrics.fault_started(
                         target=cmd.target,
                         nemesis_type=cmd.nemesis_type,
@@ -282,6 +283,7 @@ class OrchestratorNemesisSchedule:
                         lease_id=lease_id,
                         source="dispatch",
                     )
+            return True
         except Exception as e:
             logger.error("Failed to dispatch %s to %s: %s", cmd.nemesis_type, cmd.host, e)
             if metrics is not None:
@@ -294,6 +296,7 @@ class OrchestratorNemesisSchedule:
                     source="dispatch",
                     error=str(e),
                 )
+            return False
 
     def flush_disable_extracts(self, process_type: str) -> None:
         """Extract still-held faults when schedule is turned off.
@@ -325,7 +328,10 @@ class OrchestratorNemesisSchedule:
 
         def _recover() -> None:
             for extract_cmd in self._chaos_store.plan_extract_target(nemesis_type, target):
-                self.dispatch_command(extract_cmd, track_history=True)
+                if not self.dispatch_command(extract_cmd, track_history=True):
+                    raise RuntimeError(
+                        f"extract dispatch failed for {nemesis_type} on {target.identity_key()}"
+                    )
 
         return _recover
 
@@ -346,7 +352,8 @@ class OrchestratorNemesisSchedule:
                     cmd.nemesis_type, cmd.target.identity_key(),
                 )
                 return
-        self.dispatch_command(cmd, track_history=True)
+        if not self.dispatch_command(cmd, track_history=True):
+            return
         if not full:
             return
         if cmd.action == "extract":
@@ -394,6 +401,7 @@ class OrchestratorNemesisSchedule:
                     recovered=self._predicate_for(
                         cmd.target, kind=kind, scope=scope,
                         inventory=self._inventory, baseline=baseline,
+                        nemesis_type=cmd.nemesis_type,
                     ),
                     stuck_timeout_sec=self._stuck_timeout_for(cmd.nemesis_type),
                     **track_kwargs,

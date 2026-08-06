@@ -271,7 +271,12 @@ class BoundaryNemesisScheduler:
             recovered = None
             try:
                 recovered = self._predicate_for(
-                    target, kind=kind, scope=scope, inventory=self._inventory, baseline=baseline
+                    target,
+                    kind=kind,
+                    scope=scope,
+                    inventory=self._inventory,
+                    baseline=baseline,
+                    nemesis_type=nemesis_type,
                 )
                 for cmd in self._plan_inject(nemesis_type, target):
                     self._dispatch(replace(cmd, lease_id=lease))
@@ -342,7 +347,11 @@ class BoundaryNemesisScheduler:
     def _extract_action(self, nemesis_type: str, target: ChaosTarget, lease: str) -> Callable[[], None]:
         def _recover() -> None:
             for cmd in self._plan_extract(nemesis_type, target):
-                self._dispatch(replace(cmd, lease_id=lease))
+                ok = self._dispatch(replace(cmd, lease_id=lease))
+                if ok is False:
+                    raise RuntimeError(
+                        f"extract dispatch failed for {nemesis_type} on {target.identity_key()}"
+                    )
         return _recover
 
     # -- loop ---------------------------------------------------------------

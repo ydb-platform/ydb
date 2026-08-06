@@ -78,11 +78,18 @@ class ChaosOrchestratorStore:
         else:
             # Fallback: host-only candidates from the agent host list.
             candidates = [ChaosTarget.for_host(h) for h in (hosts or [])]
+        candidates = list(candidates)
+        extract_mode = recovery_mode_for(nemesis_type) == "extract"
+        # Shuffle before joint packing so multi-inject planners do not always take inventory order.
+        if not extract_mode:
+            random.shuffle(candidates)
 
         if self._failure_guard is not None and guard_mode_for(nemesis_type) is GuardMode.FULL:
             scope = impact_scope_for(nemesis_type)
-            # One inject per tick → independent fit, not a greedy packing of the first hosts.
-            filtered = self._failure_guard.filter_safe(candidates, scope, jointly=False)
+            # jointly=False only for single-pick extract ticks; multi-inject planners need packing.
+            filtered = self._failure_guard.filter_safe(
+                candidates, scope, jointly=not extract_mode
+            )
             if len(filtered) != len(candidates):
                 logger.info(
                     "Failure model pre-filter: %s %d -> %d safe candidate(s) (kind=%s)",
@@ -98,14 +105,10 @@ class ChaosOrchestratorStore:
             return []
         # Toggle faults: probe owns extract. Planner sets like NetworkNemesis.isolated_hosts
         # would stay populated after a probe extract and permanently starve later injects.
-        if recovery_mode_for(nemesis_type) == "extract":
+        if extract_mode:
             target = random.choice(candidates)
             return self._direct_commands(nemesis_type, target, "inject")
-        # Non-toggle planners also pick one target; shuffle so greedy planners cannot stick
-        # to inventory order either.
-        shuffled = list(candidates)
-        random.shuffle(shuffled)
-        return planner.scheduled_tick(shuffled)
+        return planner.scheduled_tick(candidates)
 
     def plan_inject_target(
         self, nemesis_type: str, target: ChaosTarget

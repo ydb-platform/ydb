@@ -69,7 +69,7 @@ class HcSnapshot:
         """Per-host clock skew.
 
         YDB often omits ``compute.clock_skew`` when there is nothing to report — that must not
-        block TimeSkew/Dns confirm. Explicit non-GREEN still fails.
+        block TimeSkew confirm. Explicit non-GREEN still fails.
         """
         return self.clock_skew_green_by_host.get(host, True)
 
@@ -259,8 +259,12 @@ def hc_predicate_for(
     scope: ImpactScope,
     inventory=None,
     baseline: int | None = None,
+    nemesis_type: str | None = None,
 ) -> Callable[[HcSnapshot], bool]:
-    """Per-kind recovery predicate. Slot without baseline / DC without node ids → never recovers."""
+    """Per-kind recovery predicate. Slot without baseline / DC without node ids → never recovers.
+
+    ``TargetKind.HOST`` is shared by TimeSkew / Network / Dns — only TimeSkew waits on clock_skew.
+    """
     if needs_baseline(kind, scope):
         if baseline is None:
             logger.error(
@@ -300,7 +304,9 @@ def hc_predicate_for(
     if kind is TargetKind.DISK or scope is ImpactScope.DISK:
         return disk_predicate(target)
     if kind is TargetKind.HOST:
-        return host_predicate(target)
+        if nemesis_type == "TimeSkewNemesis" or nemesis_type is None:
+            return host_predicate(target)
+        return endpoint_predicate(target)
     if kind is TargetKind.NODE:
         return node_predicate(target)
     return endpoint_predicate(target)

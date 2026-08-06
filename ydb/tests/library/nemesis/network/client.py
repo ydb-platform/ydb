@@ -38,6 +38,7 @@ class NetworkClient(object):
         return self._exec_command(drop_outgoing_command)
 
     def isolate_dns(self, probability=1.0):
+        # Must stay on YDB_FW: cluster machinery reverts iptables changes outside that chain.
         drop_input = [
             'sudo', self._iptables_bin, '-A', 'YDB_FW', '-p', 'udp', '--sport', '53',
             '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP'
@@ -66,15 +67,19 @@ class NetworkClient(object):
         self.drop_outgoing_packets(probability)
         return
 
-    def clear_all_drops(self):
+    def clear_all_drops(self, match=None):
         """
-        $IP6TABLES_SAVE | grep -e statistic -e probability | sed -e "s/-A/-D/g" | while read line; do
-            $IP6TABLES $line
-        done
+        $IP6TABLES_SAVE | grep -e statistic -e probability [| grep -F match] | sed ... | while ...
+
+        Pass ``match`` (e.g. port or ``dport 53``) so Network extract does not wipe Dns rules.
         """
         clear_all_drops_command = [
             'sudo', self._iptables_save_bin,
             '|', 'grep', '-e', 'statistic', '-e', 'probability',
+        ]
+        if match:
+            clear_all_drops_command += ['|', 'grep', '-F', '--', str(match)]
+        clear_all_drops_command += [
             '|', 'sed', '-e', '"s/-A/-D/g"',
             '|', 'while', 'read', 'line', ';',
             'do',

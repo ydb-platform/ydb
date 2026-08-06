@@ -28,7 +28,7 @@ class NetworkNemesis(MonitoredAgentActor):
         self._logger.info("Extracting fault (network)")
         client = LocalNetworkClient(port=19001)
         self._logger.info("Restoring node...")
-        client.clear_all_drops()
+        client.clear_all_drops(match="19001")
         self.on_success_extract_fault()
 
 
@@ -50,7 +50,7 @@ class DnsNemesis(MonitoredAgentActor):
         del payload
         self._logger.info("Extracting DNS isolation")
         client = LocalNetworkClient(port=19001)
-        client.clear_all_drops()
+        client.clear_all_drops(match="53")
         self.on_success_extract_fault()
 
 
@@ -73,10 +73,7 @@ class TimeSkewNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None):
         del payload
-        # Do not reverse a remembered delta: ask NTP for the truth, then *step*.
-        # Plain `set-ntp true` + bare `makestep` usually fails for a multi-minute jump:
-        # chronyd defaults to slewing (~few ppm), and `makestep` without `makestep 0.1 -1`
-        # is often limited to the first few updates after daemon start — already spent.
+        # Force chrony to *step* (not slew) after NTP is re-enabled.
         self._logger.info("Restoring time sync (TimeSkewNemesis) via forced NTP step")
         subprocess.run(
             "sudo timedatectl set-ntp true 2>/dev/null; "

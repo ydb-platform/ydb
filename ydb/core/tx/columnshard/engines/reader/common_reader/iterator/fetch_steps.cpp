@@ -117,8 +117,7 @@ TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(const std:
     , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
     , StageIndex(stageIndex)
     , NeedNextStep(needNextStep)
-    , ScheduleContinuation(scheduleContinuation)
-{
+    , ScheduleContinuation(scheduleContinuation) {
 }
 
 void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
@@ -173,9 +172,10 @@ NKikimr::TConclusion<bool> TBuildStageResultStep::DoExecuteInplace(
     return true;
 }
 
-TConclusion<bool> StartProgramStepReserveMemory(const std::shared_ptr<IDataSource>& source, const ui64 sizeToReserve,
-    const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {
-    const auto limiterOperator = source->GetContext()->GetCommonContext()->GetReadMetadataPtrVerifiedAs<TReadMetadata>()->GetGroupedMemoryLimiterOperator();
+TConclusion<bool> StartProgramStepReserveMemory(
+    const std::shared_ptr<IDataSource>& source, const ui64 sizeToReserve, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {
+    const auto limiterOperator =
+        source->GetContext()->GetCommonContext()->GetReadMetadataPtrVerifiedAs<TReadMetadata>()->GetGroupedMemoryLimiterOperator();
 
     // Decide sync vs async once. scheduleContinuation must match that decision so we neither race with a
     // concurrent TStepAction (inline path) nor stall without a continuation (async path).

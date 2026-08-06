@@ -77,7 +77,7 @@
 
 Мы также можем взглянуть на общее использование CPU на вкладке **Diagnostics** в [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md):
 
-![CPU diagnostics](./_assets/overloaded-shard-insufficient-cpu/incident-embeddedui-diagnostics.png)
+![CPU diagnostics](./_assets/overloaded-shard-insufficient-cpu/incident-ydb-ui-diagnostics.png)
 
 Кластер {{ ydb-short-name }} не использует все ресурсы CPU.
 
@@ -95,13 +95,13 @@
 
 Чтобы определить, какую таблицу обслуживает перегруженный data shard, откроем вкладку **Diagnostics > Top shards** в {{ ydb-ui-name }}:
 
-![Diagnostics > shards](./_assets/overloaded-shard-insufficient-cpu/incident-embeddedui-top-shards.png)
+![Diagnostics > shards](./_assets/overloaded-shard-insufficient-cpu/incident-ydb-ui-top-shards.png)
 
 Мы видим, что один из data shard'ов, обслуживающих таблицу `kv_test`, нагружен на 73%.
 
 Далее давайте взглянем на информацию о таблице `kv_test` на вкладке **Info**:
 
-![stock table info](./_assets/overloaded-shard-insufficient-cpu/incident-embeddedui-table-info.png)
+![stock table info](./_assets/overloaded-shard-insufficient-cpu/incident-ydb-ui-table-info.png)
 
 {% note warning %}
 
@@ -139,7 +139,7 @@
 
 Теперь шесть data shard'ов обрабатывают запросы к таблице `kv_test`, и ни один из них не перегружен:
 
-![Overloaded shard count](./_assets/overloaded-shard-insufficient-cpu/fixed-embeddedui-top-shards.png)
+![Overloaded shard count](./_assets/overloaded-shard-insufficient-cpu/fixed-ydb-ui-top-shards.png)
 
 Давайте убедимся, что задержки транзакций вернулись к прежним значениям:
 
@@ -173,7 +173,7 @@
 
 Однако, если мы откроем диагностику в {{ ydb-ui-name }}, то мы увидим предупреждение о том, что кластеру {{ ydb-short-name }} не хватает ресурсов процессора в пользовательском пуле:
 
-![CPU diagnostics](./_assets/overloaded-shard-insufficient-cpu/fixed-embeddedui-diagnostics-cpu.png)
+![CPU diagnostics](./_assets/overloaded-shard-insufficient-cpu/fixed-ydb-ui-diagnostics-cpu.png)
 
 Загрузка CPU еще раз увеличилась, что видно на графике **CPU by execution pool**.
 

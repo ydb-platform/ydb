@@ -352,6 +352,10 @@ common:
     to: /reference/ydb-ui/charts.md
   - from: /maintenance/embedded_monitoring/index.md
     to: /reference/ydb-ui/index.md
+  - from: /reference/embedded-ui$
+    to: /reference/ydb-ui/index.md
+  - from: /reference/embedded-ui/$
+    to: /reference/ydb-ui/index.md
   - from: /reference/embedded-ui/(.*)$
     to: /reference/ydb-ui/$1
 

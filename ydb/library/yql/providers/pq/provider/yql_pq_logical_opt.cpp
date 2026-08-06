@@ -417,15 +417,8 @@ public:
                             .Lambda(newLambda)
                             .Done();
                     }
-                    const auto& federatedTopics = *(topicMeta->FederatedTopic);
-                    TInstant minWriteTime = TInstant::Max();
-                    for (const auto& topic : federatedTopics) {
-                        for (auto [p, time] : topic.MaxWriteTime) {
-                            minWriteTime = std::min(minWriteTime, time);
-                        }
-                    }
                     auto [offsetProto, emptyRangeByOffsets] = SerializePredicateForFields({"_yql_sys_offset", "__ydb_offset"}, flatmap.Lambda(), ctx);
-                    auto [writeTimeProto, emptyRangeByWriteTime] = SerializePredicateForFields({"_yql_sys_write_time", "__ydb_write_time"}, flatmap.Lambda(), ctx, minWriteTime.MicroSeconds());
+                    auto [writeTimeProto, emptyRangeByWriteTime] = SerializePredicateForFields({"_yql_sys_write_time", "__ydb_write_time"}, flatmap.Lambda(), ctx);
                     if (emptyRangeByOffsets || emptyRangeByWriteTime) {
                         YQL_CLOG(INFO, ProviderPq) << "Empty range by offsets or write time, replace node to List";
                         return ctx.NewCallable(node.Pos(), "List", { ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx) });
@@ -647,8 +640,7 @@ private:
     std::pair<TString, bool> SerializePredicate(
         const TString& memberName,
         const NNodes::TCoLambda& lambda,
-        TExprContext& ctx,
-        std::optional<ui64> min = std::nullopt
+        TExprContext& ctx
     ) const {
         if (!State_->EnableTopicsPredicatePushdown) {
             return {{}, false};
@@ -685,7 +677,7 @@ private:
             auto* item = proto.AddItem();
             if (tree.Min() != Min<i64>()) {
                 ui64 treeMin = std::max(tree.Min(), (i64)0);
-                item->SetBegin(!min ? treeMin : std::min(treeMin, *min));
+                item->SetBegin(treeMin);
             }
             if (tree.Max() != Max<i64>()) {
                 ui64 treeMax = std::max(tree.Max(), (i64)0);
@@ -702,11 +694,10 @@ private:
     std::pair<TString, bool> SerializePredicateForFields(
         const std::vector<TString>& memberNames,
         const NNodes::TCoLambda& lambda,
-        TExprContext& ctx,
-        std::optional<ui64> min = std::nullopt
+        TExprContext& ctx
     ) const {
         for (const auto& memberName : memberNames) {
-            auto result = SerializePredicate(memberName, lambda, ctx, min);
+            auto result = SerializePredicate(memberName, lambda, ctx);
             if (!result.first.empty() || result.second) {
                 return result;
             }

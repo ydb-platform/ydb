@@ -1,4 +1,4 @@
-G_BENCHMARK(nbs_partition_direct_write_request_benchmark)
+G_BENCHMARK(nbs_partition_direct_requests_creation_benchmark)
 
 SIZE(SMALL)
 

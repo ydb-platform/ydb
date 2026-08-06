@@ -71,17 +71,30 @@ void InitFixture(TWriteRequestTestFixture& f)
         NKikimrServices::NBS_PARTITION,
         NActors::NLog::PRI_ERROR);
 
+    // Zero every delay/timeout so hedging/timeout Schedule paths are skipped
+    // (executors early-return on zero) and flush cooldown calls DoRun() inline.
     f.HedgeDelay = TDuration::Zero();
     f.Timeout = TDuration::Zero();
-    f.DirectBlockGroup->Oracle.WriteHedgingDelay = f.HedgeDelay;
-    f.DirectBlockGroup->Oracle.WriteRequestTimeout = f.Timeout;
+    f.PBufferReplyTimeout = TDuration::Zero();
+    f.DirectBlockGroup->Oracle.ReadHedgingDelay = TDuration::Zero();
+    f.DirectBlockGroup->Oracle.ReadRequestTimeout = TDuration::Zero();
+    f.DirectBlockGroup->Oracle.WriteHedgingDelay = TDuration::Zero();
+    f.DirectBlockGroup->Oracle.WriteRequestTimeout = TDuration::Zero();
+    f.DirectBlockGroup->Oracle.PBufferReplyTimeout = TDuration::Zero();
+    f.DirectBlockGroup->Oracle.FlushRequestCooldown = TDuration::Zero();
+    f.DirectBlockGroup->Oracle.FlushRequestTimeout = TDuration::Zero();
+    f.DirectBlockGroup->Oracle.EraseRequestTimeout = TDuration::Zero();
     f.DirectBlockGroup->Oracle.WriteMode = EWriteMode::IndirectWrite;
 
     // Run() must complete synchronously so drained executors can be destroyed.
+    // With the zeros above, Schedule is not used on the happy path. Still run
+    // the callback immediately if something does schedule (e.g. a non-zero
+    // flush cooldown), so previous->Run() cannot leave an unreplied executor.
     f.DirectBlockGroup->ScheduleHandler =
         [](TDuration delay, TCallback callback)
     {
-        Y_UNUSED(delay, callback);
+        Y_UNUSED(delay);
+        callback();
     };
     f.DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
         f.GetManyPBuffersHandlerWithImmediateOkResponse();

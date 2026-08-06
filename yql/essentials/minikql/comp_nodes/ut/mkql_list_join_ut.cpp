@@ -99,7 +99,7 @@ TComputationNodeFactory GetUnreachableFactory() {
 
 TRuntimeNode Unreachable(TProgramBuilder& pb) {
     TCallableBuilder callableBuilder(pb.GetTypeEnvironment(), "Unreachable", pb.NewVoidType());
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TComputationNodeFactory GetFactoryWithPg() {

@@ -56,6 +56,8 @@ struct TKeyMatch {
     TVector<TLookupKey> PrefixKeys;
     // Represents a lookup keys.
     TVector<TLookupKey> LookupKeys;
+    // Represents a join keys which are not present in the right side index.
+    TVector<TLookupKey> ResidualKeys;
 };
 
 std::optional<TKeyMatch> MatchKeyPrefix(const TOpJoin& join, const TOpRead& read, const TVector<TString>& keyColumnNames,
@@ -78,31 +80,34 @@ std::optional<TKeyMatch> MatchKeyPrefix(const TOpJoin& join, const TOpRead& read
     }
 
     TKeyMatch match;
-    size_t matchedJoinKeys = 0;
+    THashSet<TString> takenKeys;
+    const auto end = keyByColumn.end();
     for (size_t i = 0; i < keyColumnNames.size(); ++i) {
         const auto it = keyByColumn.find(keyColumnNames[i]);
         if (i < pointPrefixLen) {
-            if (it != keyByColumn.end()) {
-                match.PrefixKeys.push_back(it->second);
-                ++matchedJoinKeys;
+            if (it != end) {
+                const auto key = it->second;
+                match.PrefixKeys.push_back(key);
+                takenKeys.insert(key.Column);
             }
             continue;
         }
 
-        if (it == keyByColumn.end()) {
+        if (it == end) {
             break;
         }
 
-        match.LookupKeys.push_back(it->second);
-        ++matchedJoinKeys;
+        const auto key = it->second;
+        match.LookupKeys.push_back(key);
+        takenKeys.insert(key.Column);
     }
 
-    // TODO: Support filtering after streamlookup connection, we can apply a filter on join keys which are not.
-    if (matchedJoinKeys != keyByColumn.size()) {
-        return std::nullopt;
+    for (const auto& [column, key] : keyByColumn) {
+        if (!takenKeys.contains(column)) {
+            match.ResidualKeys.push_back(key);
+        }
     }
 
-    // Lookup keys cannot be empty.
     if (match.LookupKeys.empty()) {
         return std::nullopt;
     }
@@ -123,7 +128,8 @@ bool KeyTypesMatch(IOperator& leftInput, IOperator& rightInput, const TVector<TL
 }
 
 bool KeyTypesMatch(IOperator& leftInput, IOperator& rightInput, const TKeyMatch& keys) {
-    return KeyTypesMatch(leftInput, rightInput, keys.LookupKeys) && KeyTypesMatch(leftInput, rightInput, keys.PrefixKeys);
+    return KeyTypesMatch(leftInput, rightInput, keys.LookupKeys) && KeyTypesMatch(leftInput, rightInput, keys.PrefixKeys)
+        && KeyTypesMatch(leftInput, rightInput, keys.ResidualKeys);
 }
 
 bool IsUsablePointPrefix(const TOpRead::TRangeInfo& ranges, const TVector<TString>& keyColumnNames, const TString& joinKind,
@@ -142,10 +148,11 @@ bool IsUsablePointPrefix(const TOpRead::TRangeInfo& ranges, const TVector<TStrin
         }
     }
 
-    // For left join we cannot support more than 1 point lookup.
-    if (joinKind == "Left") {
+    // For left, left only, left semi joins we cannot support more than 1 point lookup.
+    if (joinKind != "Inner") {
         pointsLimit = std::min<size_t>(pointsLimit, 1);
     }
+
     return ranges.ExpectedMaxPoints.Defined() && *ranges.ExpectedMaxPoints <= pointsLimit;
 }
 
@@ -168,9 +175,9 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
 
     // TODO: Add check for join algo specified by CBO.
     auto join = CastOperator<TOpJoin>(input);
-    // TODO: Add support for other join kind.
+
     const auto joinKind = GetValidJoinKind(join->JoinKind);
-    if (joinKind != "Inner" && joinKind != "Left") {
+    if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly") {
         return input;
     }
 
@@ -265,11 +272,17 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         prefix = std::move(keyPrefix);
     }
 
+    TVector<std::pair<TInfoUnit, TInfoUnit>> residualJoinKeys;
+    residualJoinKeys.reserve(keys->ResidualKeys.size());
+    for (const auto& key : keys->ResidualKeys) {
+        residualJoinKeys.emplace_back(key.LeftIU, key.RightIU);
+    }
+
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Rewriting a " << joinKind << " join into an index lookup join of "
                                  << table.Path().StringValue();
 
     auto lookup = MakeIntrusive<TOpTableLookup>(join->GetLeftInput(), join->Pos, read->GetTable(), read->Columns, read->OutputIUs,
-                                                lookupKeys, lookupKeyColumns, joinKind, fetchedRowFilter, prefix);
+                                                lookupKeys, lookupKeyColumns, joinKind, fetchedRowFilter, prefix, residualJoinKeys);
     return MakeIntrusive<TOpIndexLookupJoin>(lookup, join->Pos, joinKind, join->JoinKeys);
 }
 

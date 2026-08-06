@@ -84,6 +84,19 @@ def topic_created(mon_base_url_with_extra_sids_control):
         yield
 
 
+# The capabilities handler is used to discover capabilities, including whether authentication
+# is required at all, so it must be available without authentication regardless of the
+# enable_extra_sids_control_for_http_viewer feature flag.
+def test_capabilities_available_without_auth(
+    mon_base_url_with_extra_sids_control,
+    mon_base_url_without_extra_sids_control,
+):
+    for base_url in (mon_base_url_with_extra_sids_control, mon_base_url_without_extra_sids_control):
+        for ep in ['/viewer/capabilities', '/viewer/json/capabilities']:
+            _assert_status(base_url, ep, None, 200)
+            _assert_status(base_url, ep, 'user@builtin', 200)
+
+
 # External viewer access controls move these endpoints to viewer-level access.
 def test_viewer_config_access_controls(mon_base_url_with_extra_sids_control):
     for ep in ['/viewer/config', '/viewer/json/config']:

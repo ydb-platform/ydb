@@ -3780,6 +3780,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 b String,
                 PRIMARY KEY (a)
             );
+
+            CREATE TABLE `/Root/t5` (
+                a Int32,
+                b Int32,
+                c Int32,
+                d String,
+                PRIMARY KEY (a)
+            );
         )";
 
         struct TCase {
@@ -3913,7 +3921,64 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
              R"([[[1];["p1a"]];[[1];["p2a"]];[[2];["p1b"]];[[3];["p1a"]];[[3];["p2a"]];[[4];["p1a"]];)"
              R"([[4];["p2a"]];[[5];["p1a"]];[[5];["p2a"]];[[6];["p1a"]];[[6];["p2a"]];[[7];["p1a"]];[[7];["p2a"]]])"},
 
-             // Cannot use index lookup because cannot match index prefix.
+            {"semi join from an in subplan", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.c IN (SELECT a FROM `/Root/t3`)
+                ORDER BY a;
+            )", 1},
+
+            {"left only join from subselect", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.a NOT IN (SELECT a FROM `/Root/t2`)
+                ORDER BY a;
+            )", 1},
+
+            {"semi join with a filtered probed side", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.c IN (SELECT a FROM `/Root/t3` WHERE d >= 30)
+                ORDER BY a;
+            )", 1},
+
+            {"left only join with a filtered probed side", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.a NOT IN (SELECT a FROM `/Root/t3` WHERE d >= 30 AND d <= 50)
+                ORDER BY a;
+            )", 1},
+
+            {"semi join with a point predicate ahead of the join key", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.d IN (SELECT b FROM `/Root/t3` WHERE a = 2)
+                ORDER BY a;
+            )", 1},
+
+            {"left only join with a point predicate ahead of the join key", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.d NOT IN (SELECT b FROM `/Root/t3` WHERE a = 2)
+                ORDER BY a;
+            )", 1},
+
+            {"semi join with several point predicates ahead of the join key", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.d IN (SELECT b FROM `/Root/t3` WHERE a IN (1, 2))
+                ORDER BY a;
+            )", 0,
+             R"([[[1]];[[2]];[[3]];[[4]];[[5]];[[6]];[[7]]])"},
+
+            {"left only join with several point predicates ahead of the join key", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.d NOT IN (SELECT b FROM `/Root/t3` WHERE a IN (1, 2))
+                ORDER BY a;
+            )", 0,
+             R"([])"},
+
             {"join key is not a key prefix", R"(
                 SELECT t1.a AS a, t3.c AS t3c
                 FROM `/Root/t1` AS t1
@@ -3928,6 +3993,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                     INNER JOIN `/Root/t2` AS t2 ON t1.f = t2.a
                 ORDER BY a;
             )", 0},
+
+            {"inner join with a residual non-key join key", R"(
+                SELECT t1.a AS a, t5.d AS t5d
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t5` AS t5 ON t1.b = t5.a AND t1.c = t5.b
+                ORDER BY a, t5d;
+            )", 1},
+
+            {"left join with a residual non-key join key", R"(
+                SELECT t1.a AS a, t5.d AS t5d
+                FROM `/Root/t1` AS t1
+                    LEFT JOIN `/Root/t5` AS t5 ON t1.b = t5.a AND t1.c = t5.b
+                ORDER BY a, t5d;
+            )", 1},
         };
 
         struct TQueryResult {
@@ -3954,7 +4033,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 auto result = db.BulkUpsert(table, rows.Build()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             };
-
+            // For debugging.
             const bool enableAstDump = false;
 
             {
@@ -3983,6 +4062,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 }
                 rows.EndList();
                 bulkUpsert("/Root/t4", rows);
+            }
+
+            {
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                for (const auto& [a, b, c, d] : TVector<std::tuple<i32, i32, i32, TString>>{
+                         {1, 1, 10, "m1"}, {1, 2, 20, "m2"}, {2, 2, 30, "m3"}, {3, 4, 40, "m4"}}) {
+                    rows.AddListItem().BeginStruct()
+                        .AddMember("a").OptionalInt32(a)
+                        .AddMember("b").OptionalInt32(b)
+                        .AddMember("c").OptionalInt32(c)
+                        .AddMember("d").OptionalString(d)
+                        .EndStruct();
+                }
+                rows.EndList();
+                bulkUpsert("/Root/t5", rows);
             }
 
             {

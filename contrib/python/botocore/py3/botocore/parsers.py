@@ -210,6 +210,11 @@ class ResponseParser:
 
     DEFAULT_ENCODING = 'utf-8'
     EVENT_STREAM_PARSER_CLS = None
+    # This is a list of known values for the 'location' key  in the
+    # serialization dict. The location key tells us where in the response
+    # to parse the value. Members with locations that aren't in this list
+    # will be parsed from the body.
+    KNOWN_LOCATIONS = ('header', 'headers', 'statusCode')
 
     def __init__(self, timestamp_parser=None, blob_parser=None):
         if timestamp_parser is None:
@@ -458,11 +463,12 @@ class BaseXMLResponseParser(ResponseParser):
             return self._handle_unknown_tagged_union_member(tag)
         for member_name in members:
             member_shape = members[member_name]
+            location = member_shape.serialization.get('location')
             if (
-                'location' in member_shape.serialization
+                location in self.KNOWN_LOCATIONS
                 or member_shape.serialization.get('eventheader')
             ):
-                # All members with locations have already been handled,
+                # All members with known locations have already been handled,
                 # so we don't need to parse these members.
                 continue
             xml_name = self._member_key_name(member_shape, member_name)

@@ -49,6 +49,9 @@ namespace NActors {
 
         // Issue monitoring request.
         virtual void IssueMonRequest(ui64 conn, NMon::TEvHttpInfoRes::TPtr ev) = 0;
+
+        // Get total output queue size (in bytes).
+        virtual ui64 GetTotalOutputQueueSize(ui64 conn) = 0;
     };
 
     using TUringEnginePtr = TIntrusivePtr<IUringEngine>;
@@ -65,6 +68,9 @@ namespace NActors {
     // When the kernel SQPOLL thread is saturated while shard workers still have headroom, try
     // EnableSQPOLL=false (submit from the underutilized worker) or raise UringEngineRingsPerShard. When
     // workers are the bottleneck, raise UringEngineThreads / lower UringEngineRingsPerShard.
+    // With EnableFixedFiles, each ring reserves UringEngineFixedFilesPerRing slots via
+    // io_uring_register_files (sparse); session sockets are bound with register_files_update and
+    // submitted with IOSQE_FIXED_FILE. Unsupported kernels or a full table fall back to plain fds.
     //
     // Common holds the engine via an intrusive pointer too; the resulting cycle is broken by Stop().
     TUringEnginePtr CreateUringEngine(TIntrusivePtr<TInterconnectProxyCommon> common);

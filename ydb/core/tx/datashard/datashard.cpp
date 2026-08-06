@@ -2364,12 +2364,17 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvRemoteHttpInfo: %s", ev->Get()->Query.data());
 
     auto cgi = ev->Get()->Cgi();
-    const bool securePathMode = AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath();
-    if (securePathMode) {
-        if (!(IsTabletDevUiSecurePath(ev->Get()->PathInfo()) && IsAdministrator(AppData(ctx), ev->Get()->GetUserToken()))) {
-            ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-            return true;
-        }
+    // DataShard exposes no non-admin handlers, so nothing is whitelisted here. Must stay ahead of
+    // the action/page dispatch below, otherwise a CGI parameter would pick a handler before the
+    // access check runs.
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(ctx),
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            /*isMonitoringDevUiRequest=*/false))
+    {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+        return true;
     }
 
     {
@@ -4091,7 +4096,8 @@ void TDataShard::SendTableInfoToCountersAggregator(const TActorContext &ctx) {
             FollowerId(),
             TPathId(GetPathOwnerId(), localPathId),
             table->Path,
-            table->GetTableSchemaVersion()));
+            table->GetTableSchemaVersion(),
+            static_cast<ui32>(GetEffectiveMetricsLevel(*table))));
 }
 
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {

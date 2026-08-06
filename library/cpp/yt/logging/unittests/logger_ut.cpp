@@ -180,18 +180,6 @@ TEST(TTaggedApiTest, Tags)
     EXPECT_EQ(decoded.Tags[1], std::pair(std::string("Arg2"), std::string("test")));
 }
 
-TEST(TTaggedApiTest, CustomSpec)
-{
-    TMockLogManager manager;
-    TLogger Logger(&manager, "Test");
-    YT_TLOG_INFO("Message")
-        .With("Arg1", 256, "%x");
-
-    auto decoded = DecodeSingleEvent(manager);
-    ASSERT_EQ(decoded.Tags.size(), 1u);
-    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Arg1"), std::string("100")));
-}
-
 TEST(TTaggedApiTest, WithFormat)
 {
     TMockLogManager manager;
@@ -215,7 +203,7 @@ TEST(TTaggedApiTest, TagList)
     auto tags = TLoggingTagList()
         .With("Address", "localhost:1234")
         .With("ConnectionId", 42)
-        .With("Flags", 256, "%x")
+        .WithFormat("Flags", "%x", 256)
         .WithFormat("Method", "%v.%v", "MyService", "MyMethod");
 
     YT_TLOG_INFO("Message")

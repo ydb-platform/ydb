@@ -9,8 +9,7 @@
 
 #include <arrow/compute/cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -59,5 +58,4 @@ IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFacto
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

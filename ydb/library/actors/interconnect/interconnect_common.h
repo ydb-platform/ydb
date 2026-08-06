@@ -111,6 +111,12 @@ namespace NActors {
             ui32 UringEngineSqThreadIdleMs = 2000;
             // Enable kernel threads sharing among different worker threads.
             bool ShareRingsAmongThreads = false;
+            // Register session sockets into each ring's fixed-file table (IOSQE_FIXED_FILE) to avoid
+            // per-op process file-table refcount traffic. Falls back to plain fds if the kernel rejects
+            // the table or a ring runs out of slots. Requires sparse/update support (kernel >= 5.5; target 5.13+).
+            bool EnableFixedFiles = true;
+            // Size of the fixed-file table reserved per ring when EnableFixedFiles is on.
+            ui32 UringEngineFixedFilesPerRing = 4096;
         } V2;
     };
 

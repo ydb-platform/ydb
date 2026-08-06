@@ -1,5 +1,6 @@
 #include "flat_page_btree_index.h"
 #include "flat_page_btree_index_writer.h"
+#include "flat_part_walker.h"
 #include "flat_table_part.h"
 #include "test/libs/table/test_writer.h"
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
@@ -2182,5 +2183,551 @@ Y_UNIT_TEST_SUITE(TBtreeIndexReadFlags) {
     }
 
 }
+
+// ========================================================================
+// Section 5.4: Feature flag propagation tests
+// ========================================================================
+
+Y_UNIT_TEST_SUITE(TBtreeIndexFeaturePropagation) {
+    using namespace NTest;
+
+    Y_UNIT_TEST(Executor_WiresWriteFlag) {
+        // Tests that WriteBTreeIndexV2=true in TConf produces a V2 part
+        // with byte-offset root, resolvable through GetBTreeRootLocation,
+        // and fully iterable — mirroring the executor's compact→write→load path.
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        {
+            // V2-only: WriteBTreeIndexV2=true, KeepBTreeIndexV1Shadow=false
+            NPage::TConf conf{ true, 7 * 1024 };
+            conf.WriteBTreeIndex = true;
+            conf.WriteBTreeIndexV2 = true;
+            conf.WriteFlatIndex = false;
+            conf.BTreeIndexV2KeepV1Shadow = false;
+
+            TPartCook cook(lay, conf);
+            for (ui32 i : xrange(25)) {
+                cook.Add(*TSchemedCookRow(*lay).Col(i, TString(512, 'x') + ToString(i)));
+            }
+            TPartEggs eggs = cook.Finish();
+            const auto part = eggs.Lone();
+
+            // Verify V2 root with byte offset
+            AssertV2Root(part->IndexPages.BTreeGroups[0], "V2-only part from WriteBTreeIndexV2=true");
+
+            // Verify root resolves via byte offset
+            auto rootLoc = NTable::GetBTreeRootLocation(part->IndexPages.BTreeGroups[0],
+                part->GetPageCollection(0), part->GetPageCollection(0));
+            UNIT_ASSERT_C(rootLoc.Offset.IsByteOffset(), "V2 root must be byte offset");
+
+            // Verify full iteration works
+            UNIT_ASSERT_VALUES_EQUAL(CountAllRows(*part), 25);
+        }
+        {
+            // Dual-write: WriteBTreeIndexV2=true, KeepBTreeIndexV1Shadow=true
+            NPage::TConf conf{ true, 7 * 1024 };
+            conf.WriteBTreeIndex = true;
+            conf.WriteBTreeIndexV2 = true;
+            conf.WriteFlatIndex = false;
+            conf.BTreeIndexV2KeepV1Shadow = true;
+
+            TPartCook cook(lay, conf);
+            for (ui32 i : xrange(25)) {
+                cook.Add(*TSchemedCookRow(*lay).Col(i, TString(512, 'x') + ToString(i)));
+            }
+            TPartEggs eggs = cook.Finish();
+            const auto part = eggs.Lone();
+
+            // Verify both roots present
+            const auto& meta = part->IndexPages.BTreeGroups[0];
+            UNIT_ASSERT_C(meta.HasRootV1() && meta.HasRootV2(), "Dual-write part must have both V1 and V2 roots");
+
+            // Verify V2 root is byte offset, V1 root is page index
+            UNIT_ASSERT_C(meta.RootV2.Offset.IsByteOffset(), "Dual-write V2 root must be byte offset");
+            UNIT_ASSERT_C(meta.HasRootV1(), "Dual-write must have V1 root");
+            UNIT_ASSERT_C(meta.RootV1PageId() != Max<TPageId>(), "Dual-write V1 root must have valid page id");
+
+            // Verify iteration works
+            UNIT_ASSERT_VALUES_EQUAL(CountAllRows(*part), 25);
+        }
+    }
+
+}
+
+// ========================================================================
+Y_UNIT_TEST_SUITE(TBTreePartWalker) {
+    using namespace NTest;
+
+    Y_UNIT_TEST(WalkMultiLevelBTree) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        UNIT_ASSERT(meta.HasRootV2());
+        UNIT_ASSERT_C(meta.LevelCount() > 0, "Expected multi-level b-tree");
+
+        TBTreePartWalker walker;
+        walker.Start(meta);
+
+        TTestEnv env;
+        UNIT_ASSERT_C(walker.Step(part.Get(), &env, TGroupId{}),
+            "Walker should complete in one pass when all pages are resident");
+    }
+
+    Y_UNIT_TEST(WalkSingleDataPage) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 7 * 1024;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(5)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i, TString(10, 'x') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        UNIT_ASSERT(meta.HasRootV2());
+        UNIT_ASSERT_VALUES_EQUAL_C(meta.LevelCount(), 0u,
+            "Expected LevelCount == 0 for a single data page root");
+
+        TBTreePartWalker walker;
+        walker.Start(meta);
+
+        TTestEnv env;
+        UNIT_ASSERT_C(walker.Step(part.Get(), &env, TGroupId{}),
+            "Single data page walker should complete in one pass");
+    }
+
+    Y_UNIT_TEST(WalkNonMainGroupSkipDataPages) {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0, NScheme::NTypeIds::Uint32)
+            .Col(0, 1, NScheme::NTypeIds::String)
+            .Col(1, 2, NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+        conf.Group(1).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(1).BTreeIndexNodeKeysMin = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay)
+                .Col(i, TString(512, 'a') + ToString(i))
+                .Col(TString(512, 'b') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        UNIT_ASSERT(part->IndexPages.BTreeGroups.size() > 1);
+        const auto& meta = part->IndexPages.BTreeGroups[1];
+        UNIT_ASSERT(meta.HasRootV2());
+        UNIT_ASSERT_C(meta.LevelCount() > 0,
+            "Non-main group must have multi-level B-tree, got LevelCount="
+            + ToString(meta.LevelCount()));
+
+        TBTreePartWalker walker;
+        walker.Start(meta);
+
+        TTestEnv env;
+        // Walk group 1 with skipDataPages=true — traverse index pages
+        // in room 0, skip data pages in room 1.
+        UNIT_ASSERT_C(walker.Step(part.Get(), &env, TGroupId{1}, true),
+            "Non-main group walker should complete with skipDataPages=true");
+    }
+
+    Y_UNIT_TEST(ResumableWalkAcrossRounds) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        UNIT_ASSERT(meta.LevelCount() > 0);
+
+        struct TMockPages : public IPages {
+            const TPartStore* Part;
+            THashSet<ui64>& Loaded;
+            TVector<TPageLocation> Missed;
+
+            TMockPages(const TPartStore* part, THashSet<ui64>& loaded)
+                : Part(part), Loaded(loaded) {}
+
+            TResult Locate(const TMemTable*, ui64, ui32) override {
+                Y_TABLET_ERROR("Unused");
+            }
+            TResult Locate(const TPart*, ui64, ELargeObj) override {
+                Y_TABLET_ERROR("Unused");
+            }
+            const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
+                Y_UNUSED(part);
+                if (Loaded.count(location.GetByteOffset())) {
+                    return Part->Store->GetPage(groupId.Index, location.Offset);
+                }
+                Missed.push_back(location);
+                return nullptr;
+            }
+        };
+
+        THashSet<ui64> loadedOffsets;
+        TMockPages mockPages(part.Get(), loadedOffsets);
+        TBTreePartWalker walker;
+        walker.Start(meta);
+
+        // Round 1: nothing loaded — miss root.
+        {
+            UNIT_ASSERT(!walker.Step(part.Get(), &mockPages, TGroupId{}));
+            UNIT_ASSERT(!mockPages.Missed.empty());
+            for (auto& loc : mockPages.Missed) {
+                loadedOffsets.insert(loc.GetByteOffset());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(mockPages.Missed.size(), 1);
+        }
+
+        // Round 2: root loaded — discover level-1 children.
+        mockPages.Missed.clear();
+        {
+            UNIT_ASSERT(!walker.Step(part.Get(), &mockPages, TGroupId{}));
+            UNIT_ASSERT(!mockPages.Missed.empty());
+            for (auto& loc : mockPages.Missed) {
+                loadedOffsets.insert(loc.GetByteOffset());
+            }
+            UNIT_ASSERT_C(mockPages.Missed.size() > 0, "Level-1 children should be discovered");
+        }
+
+        // Rounds 3+: drive until done.
+        for (int round = 0; round < 10; round++) {
+            mockPages.Missed.clear();
+            if (walker.Step(part.Get(), &mockPages, TGroupId{})) {
+                UNIT_ASSERT(mockPages.Missed.empty());
+                return;
+            }
+            for (auto& loc : mockPages.Missed) {
+                loadedOffsets.insert(loc.GetByteOffset());
+            }
+        }
+        UNIT_ASSERT_C(false, "Walker did not complete within 10 fetch rounds");
+    }
+
+    Y_UNIT_TEST(StagePreloadDataMultiGroup) {
+        // Tests the exact multi-group preload loop that StagePreloadData uses,
+        // but with a TLoaderEnv-like IPages that tracks missed/fetched pages
+        // by byte offset across multiple column groups.
+        TLayoutCook lay;
+        lay
+            .Col(0, 0, NScheme::NTypeIds::Uint32)
+            .Col(0, 1, NScheme::NTypeIds::String)
+            .Col(1, 2, NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+        conf.Group(1).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(1).BTreeIndexNodeKeysMin = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay)
+                .Col(i, TString(512, 'a') + ToString(i))
+                .Col(TString(512, 'b') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+        const auto* store = part->Store.Get();
+
+        UNIT_ASSERT(part->IndexPages.BTreeGroups.size() > 1);
+
+        // TLoaderEnv-mimicking IPages: tracks missed pages by byte offset,
+        // supports per-group room lookups via TStore.
+        struct TPreloadMockPages : public IPages {
+            const TStore* Store;
+            THashSet<TPageLocation, NPage::TPageLocationByOffsetHash> Needs;
+            THashMap<TPageOffset, TSharedData> Cache;
+
+            TPreloadMockPages(const TStore* store)
+                : Store(store) {}
+
+            TResult Locate(const TMemTable*, ui64, ui32) override {
+                Y_TABLET_ERROR("Unused");
+            }
+            TResult Locate(const TPart*, ui64, ELargeObj) override {
+                Y_TABLET_ERROR("Unused");
+            }
+            const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
+                Y_UNUSED(part);
+                // Index pages for all groups are in room 0.
+                // Data pages for group i are in room i.
+                // With skipDataPages=true only index pages are fetched.
+                auto it = Cache.find(location.Offset);
+                if (it != Cache.end()) {
+                    return &it->second;
+                }
+                // Check if the page is available (simulating cold cache miss)
+                if (Store->GetPage(groupId.Index, location.Offset)) {
+                    // Page exists but not in our local cache — treat as miss
+                    // (this triggers the fetch-save cycle)
+                    Needs.insert(location);
+                    return nullptr;
+                }
+                Needs.insert(location);
+                return nullptr;
+            }
+
+            void Save(const TPageLocation& loc, TSharedData data) {
+                Needs.erase(loc);
+                Cache[loc.Offset] = std::move(data);
+            }
+
+            void EnsureNoNeeds() const {
+                UNIT_ASSERT_C(Needs.empty(),
+                    "Unresolved needs: " << Needs.size() << " pages remaining");
+            }
+        };
+
+        TPreloadMockPages mockPages(store);
+
+        // StagePreloadData-style setup: one walker per group with V2 root
+        TVector<THolder<TBTreePartWalker>> walkers;
+        walkers.resize(part->IndexPages.BTreeGroups.size());
+        for (ui32 i = 0; i < walkers.size(); i++) {
+            const auto& meta = part->IndexPages.BTreeGroups[i];
+            UNIT_ASSERT_C(meta.HasRootV2(),
+                "Group " << i << " must have V2 root");
+            UNIT_ASSERT_C(meta.LevelCount() > 0,
+                "Group " << i << " must have multi-level B-tree");
+            walkers[i] = MakeHolder<TBTreePartWalker>();
+            walkers[i]->Start(meta);
+        }
+
+        // StagePreloadData fetch loop: step all walkers, fetch misses, repeat
+        for (int round = 0; round < 20; round++) {
+            bool anyMissed = false;
+            for (ui32 i = 0; i < walkers.size(); i++) {
+                auto& w = walkers[i];
+                if (!w) continue;
+
+                bool skipData = (i != 0);
+                if (w->Step(part.Get(), &mockPages, TGroupId(i), skipData)) {
+                    w.Reset();
+                } else {
+                    anyMissed = true;
+                }
+            }
+
+            if (!anyMissed) {
+                break;
+            }
+
+            // Fetch-save cycle: resolve all missed pages (simulating TLoader's
+            // fetch → save → retry loop).
+            auto missed = mockPages.Needs; // copy
+            for (auto& loc : missed) {
+                // Index pages are in room 0 regardless of which group they
+                // belong to (the walker uses TGroupId{} for index pages).
+                auto* data = store->GetPage(0, loc.Offset);
+                UNIT_ASSERT_C(data, "Missing page at byte offset " << loc.GetByteOffset());
+                mockPages.Save(loc, TSharedData::Copy(*data));
+            }
+
+            UNIT_ASSERT_C(round < 19,
+                "Multi-group preload did not complete within 20 fetch rounds");
+        }
+
+        // All walkers must be reset (completed)
+        for (ui32 i = 0; i < walkers.size(); i++) {
+            UNIT_ASSERT_C(!walkers[i],
+                "Walker for group " << i << " did not complete");
+        }
+
+        // No unresolved needs
+        mockPages.EnsureNoNeeds();
+    }
+
+    Y_UNIT_TEST(StickyPreloadDataMultiGroup) {
+        // Mirrors StagePreloadDataMultiGroup but exercises the STICKY preload
+        // access pattern: one walker per group, Step with skipData=false for ALL
+        // groups (the sticky path pins reachable data pages, including non-main
+        // groups — the load the loader deliberately defers to
+        // RequestStickyPagesForPartStore; see flat_part_loader.cpp:421-422).
+        // Validates the invariant restored by the per-part composite state:
+        // each group's walker completes independently and stepping/fetching
+        // for one group never disturbs another group's walker cursor.
+        TLayoutCook lay;
+        lay
+            .Col(0, 0, NScheme::NTypeIds::Uint32)
+            .Col(0, 1, NScheme::NTypeIds::String)
+            .Col(1, 2, NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+        conf.Group(1).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(1).BTreeIndexNodeKeysMin = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay)
+                .Col(i, TString(512, 'a') + ToString(i))
+                .Col(TString(512, 'b') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+        const auto* store = part->Store.Get();
+
+        UNIT_ASSERT(part->IndexPages.BTreeGroups.size() > 1);
+
+        // Sticky-path mock: like the loader mock, but buckets cache and misses
+        // by room (page collection), mirroring production TStickyPreloadEnv which
+        // keys misses by pageCollection->Id. The same byte offset can name a
+        // page in room 0 (index) and a different page in room i (data); a flat
+        // offset-keyed map would collapse them, so we key by room.
+        struct TStickyMockPages : public IPages {
+            const TStore* Store;
+            // room -> cached page bodies keyed by byte offset within that room
+            THashMap<ui32, THashMap<TPageOffset, TSharedData>> Cache;
+            // room -> outstanding misses in that room
+            THashMap<ui32, THashSet<TPageLocation, NPage::TPageLocationByOffsetHash>> Needs;
+
+            TStickyMockPages(const TStore* store)
+                : Store(store) {}
+
+            TResult Locate(const TMemTable*, ui64, ui32) override {
+                Y_TABLET_ERROR("Unused");
+            }
+            TResult Locate(const TPart*, ui64, ELargeObj) override {
+                Y_TABLET_ERROR("Unused");
+            }
+            const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
+                Y_UNUSED(part);
+                auto& cache = Cache[groupId.Index];
+                auto it = cache.find(location.Offset);
+                if (it != cache.end()) {
+                    return &it->second;
+                }
+                Needs[groupId.Index].insert(location);
+                return nullptr;
+            }
+
+            void Save(ui32 room, const TPageLocation& loc, TSharedData data) {
+                Needs[room].erase(loc);
+                Cache[room][loc.Offset] = std::move(data);
+            }
+
+            // Total outstanding misses across all rooms (for diagnostics).
+            size_t TotalNeeds() const {
+                size_t n = 0;
+                for (const auto& [room, set] : Needs) {
+                    n += set.size();
+                }
+                return n;
+            }
+        };
+
+        TStickyMockPages mockPages(store);
+
+        // One walker per group, started from each group's V2 meta — exactly
+        // what StartStickyBTreePreload now builds inside one composite state.
+        TVector<THolder<TBTreePartWalker>> walkers;
+        walkers.resize(part->IndexPages.BTreeGroups.size());
+        for (ui32 i = 0; i < walkers.size(); i++) {
+            const auto& meta = part->IndexPages.BTreeGroups[i];
+            UNIT_ASSERT_C(meta.HasRootV2(),
+                "Group " << i << " must have V2 root");
+            UNIT_ASSERT_C(meta.LevelCount() > 0,
+                "Group " << i << " must have multi-level B-tree");
+            walkers[i] = MakeHolder<TBTreePartWalker>();
+            walkers[i]->Start(meta);
+        }
+
+        // Sticky-path drive loop: step every walker with skipData=false, fetch
+        // misses from the room each miss belongs to, repeat. This is the
+        // DriveStickyBTreePreload + StickyPages reply re-drive cycle.
+        for (int round = 0; round < 20; round++) {
+            bool anyMissed = false;
+            for (ui32 i = 0; i < walkers.size(); i++) {
+                auto& w = walkers[i];
+                if (!w) continue;
+
+                // skipData=false: pin reachable data pages for this group too.
+                if (w->Step(part.Get(), &mockPages, TGroupId(i), /*skipDataPages=*/false)) {
+                    w.Reset();
+                } else {
+                    anyMissed = true;
+                }
+            }
+
+            if (!anyMissed) {
+                break;
+            }
+
+            // Fetch-save cycle: resolve each room's misses from that room.
+            // Index pages (room 0) feed every group's walker; data pages
+            // (room i) feed only group i's walker. Saving one room's page does
+            // not disturb another room's outstanding misses.
+            for (auto& [room, locs] : mockPages.Needs) {
+                auto missed = locs; // copy — Save mutates locs
+                for (auto& loc : missed) {
+                    const auto* data = store->GetPage(room, loc.Offset);
+                    UNIT_ASSERT_C(data, "Missing page at byte offset " << loc.GetByteOffset()
+                        << " (room " << room << ")");
+                    mockPages.Save(room, loc, TSharedData::Copy(*data));
+                }
+            }
+
+            UNIT_ASSERT_C(round < 19,
+                "Sticky multi-group preload did not complete within 20 fetch rounds");
+        }
+
+        // Every group's walker must have completed independently.
+        for (ui32 i = 0; i < walkers.size(); i++) {
+            UNIT_ASSERT_C(!walkers[i],
+                "Walker for group " << i << " did not complete");
+        }
+
+        UNIT_ASSERT_C(mockPages.TotalNeeds() == 0,
+            "Unresolved needs: " << mockPages.TotalNeeds() << " pages remaining");
+    }
+} // Y_UNIT_TEST_SUITE(TBTreePartWalker)
 
 } // namespace NKikimr::NTable::NPage

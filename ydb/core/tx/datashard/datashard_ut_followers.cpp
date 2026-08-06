@@ -426,7 +426,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             Cerr << "Captured pages request" << Endl;
             for (auto& location : msg->Pages) {
                 auto type = location.Type;
-                UNIT_ASSERT_C(type != NTable::EPage::BTreeIndex && type != NTable::EPage::FlatIndex, "Index pages should be preload during a part switch");
+                UNIT_ASSERT_C(type != NTable::EPage::BTreeIndex && type != NTable::EPage::FlatIndex && type != NTable::NPage::EPage::BTreeIndexV2, "Index pages should be preload during a part switch");
             }
         });
 

@@ -879,6 +879,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TPage* page = collection.PageSet.FindPage(location.Offset);
 
         if (!page) {
+            Y_ENSURE(collection.PageSet.size() < collection.TotalPages);
             page = new TPage(location.Offset, location.Size, location.Type, location.Crc32, &collection);
             Y_ENSURE(collection.PageSet.emplace(page).second);
             page->CacheMode = initialMode;
@@ -1286,7 +1287,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         TVector<TPage*> loadedPages;
         auto& pagesToLoad = PendingInMemoryPages[collection.Id];
-        for (const auto& pageId : xrange(pageCollection->Total())) {
+        auto skipBTreeIndexV1Shadow = pageCollection->SkipBTreeIndexV1Shadow();
+        /* Walk structural pages (MetaPages), skipping absorbed Skip entries
+           and dead V1 BTreeIndex pages when V2 pages exist */
+        for (const auto& pageId : xrange(pageCollection->MetaPages())) {
+            auto type = pageCollection->Page(pageId).Type;
+            if (type == ui32(NTable::NPage::EPage::Skip))
+                continue;
+            if (skipBTreeIndexV1Shadow && type == ui32(NTable::NPage::EPage::BTreeIndex))
+                continue;
+
             auto location = pageCollection->GetLocation(pageId);
             auto* page = collection.PageSet.FindPage(location.Offset);
             if (!page) {
@@ -1351,6 +1361,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 auto* page = EnsurePage(*collection, *locationIt, ECacheMode::TryKeepInMemory);
                 if (page->State == PageStateNo) {
                     if (TPageTraits::GetSize(page) > remainBytes) {
+                        RemoveAlivePage(page);
                         collection->PageSet.ErasePage(page->Offset);
                         break;
                     }

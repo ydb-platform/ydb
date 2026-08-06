@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "flat_part_store.h"
+#include "flat_part_walker.h"
 #include "flat_sausagecache.h"
 #include "shared_cache_events.h"
 #include "util_fmt_abort.h"
@@ -149,33 +150,7 @@ namespace NTable {
             bool PreloadData = false;
         };
 
-        TLoader(TPartComponents ou)
-            : Legacy(std::move(ou.Legacy))
-            , Opaque(std::move(ou.Opaque))
-            , Epoch(ou.Epoch)
-        {
-            auto components = std::move(ou.PageCollectionComponents);
-
-            if (components.size() < 1) {
-                Y_TABLET_ERROR("Cannot load TPart from " << components.size() << " page collections");
-            }
-
-            PageCollections.reserve(components.size());
-
-            // Wrap slot 0 immediately — needed for LoaderEnv and scheme parsing in StageParseMeta
-            PageCollections.emplace_back(new TPageCollection(std::move(components[0].PageCollection)));
-            LoaderEnv = MakeHolder<TLoaderEnv>(PageCollections[0]);
-
-            // Store remaining raw components — wrapped in StageParseMeta after we know SmallId/GroupsCount
-            RawComponents.reserve(components.size() - 1);
-            for (ui32 i = 1; i < components.size(); i++) {
-                RawComponents.emplace_back(std::move(components[i]));
-            }
-        }
-
-        TLoader(TVector<TIntrusivePtr<TPageCollection>> pageCollections, TString legacy, TString opaque,
-                TVector<TString> deltas = { },
-                TEpoch epoch = NTable::TEpoch::Max());
+        TLoader(TPartComponents components, TVector<TIntrusivePtr<TPageCollection>> prebuiltPageCollections = {});
         ~TLoader();
 
         TFetch Run(TRunOptions options)
@@ -239,9 +214,10 @@ namespace NTable {
         static TEpoch GrabEpoch(const TPartComponents &pc)
         {
             Y_ENSURE(pc.PageCollectionComponents, "PartComponents should have at least one pageCollectionComponent");
-            Y_ENSURE(pc.PageCollectionComponents[0].PageCollection, "PartComponents should have a parsed meta pageCollectionComponent");
+            Y_ENSURE(pc.PageCollectionComponents[0].RawMeta, "PartComponents should have raw meta data");
 
-            const auto &meta = pc.PageCollectionComponents[0].PageCollection->Meta;
+            const auto &comp = pc.PageCollectionComponents[0];
+            NPageCollection::TMeta meta(TSharedData(comp.RawMeta), comp.LargeGlobId.Group);
 
             for (ui32 page = meta.TotalPages(); page--;) {
                 if (meta.GetPageType(page) == ui32(EPage::Schem2)
@@ -295,7 +271,7 @@ namespace NTable {
 
     private:
         TVector<TIntrusivePtr<TPageCollection>> PageCollections;
-        TVector<TPageCollectionComponents> RawComponents;
+        TPartComponents Components;
         const TString Legacy;
         const TString Opaque;
         const TVector<TString> Deltas;
@@ -323,5 +299,6 @@ namespace NTable {
         NProto::TRoot Root;
         TPartView PartView;
         THolder<TLoaderEnv> LoaderEnv;
+        TVector<THolder<TBTreePartWalker>> PreloadBTreeWalkers;
     };
 }}

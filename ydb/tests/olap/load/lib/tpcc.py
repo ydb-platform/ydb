@@ -167,7 +167,6 @@ class TpccSuiteBase(LoadSuiteBase):
             'max_sessions': summary.get('max_sessions', ''),
             'threads': summary.get('threads', ''),
             'warmup_seconds': summary.get('warmup_seconds', ''),
-            'ci_launch_url': getenv('CI_LAUNCH_URL') or '',
         }
         self.process_query_result(result, 'test', True, allure_table_strings=allure_table_strings, node_errors=node_errors, verify_errors=verify_errors)
         if result.success and 'tpcc_json' in stats:

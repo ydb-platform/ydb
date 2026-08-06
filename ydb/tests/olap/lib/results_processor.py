@@ -5,7 +5,14 @@ import ydb
 import os
 import logging
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param, get_ci_version, get_self_version
+from ydb.tests.olap.lib.utils import (
+    external_param_is_true,
+    get_external_param,
+    get_ci_version,
+    get_self_version,
+    get_test_tools_git_info,
+    get_test_tools_version,
+)
 from time import time_ns
 from datetime import datetime
 
@@ -211,7 +218,12 @@ class ResultsProcessor:
                 info['ci_sanitizer'] = ci_sanitizer
             info['ignore_stderr_content'] = cls.ignore_stderr_content
 
-            info['test_tools_version'] = get_self_version()
+            info['test_tools_version'] = get_test_tools_version()
+            test_git_info = get_test_tools_git_info()
+            if test_git_info:
+                info['test_tools_git'] = test_git_info
+            if os.getenv('CI_TEST_VERSION'):
+                info['test_version'] = os.getenv('CI_TEST_VERSION')
 
             data = {
                 'Db': cls.get_cluster_id(),
@@ -279,6 +291,9 @@ class ResultsProcessor:
                 'report_url': report_url,
                 'ci_launch_id': os.getenv('CI_LAUNCH_ID') or None,
                 'ci_launch_url': os.getenv('CI_LAUNCH_URL') or None,
+                'test_tools_version': get_test_tools_version(),
+                'test_tools_git': get_test_tools_git_info() or None,
+                'test_version': os.getenv('CI_TEST_VERSION') or None,
                 # Full stays in column newOrderLatency90; Ms/Pure for BenchBase-like compare.
                 'newOrderLatency90_ms': new_order.get('percentiles_ms', {}).get('90'),
                 'newOrderLatency90_pure': new_order.get('percentiles_pure', {}).get('90'),

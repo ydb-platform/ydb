@@ -1044,8 +1044,8 @@ namespace NActors {
         auto& ctx = TActivationContext::AsActorContext();
         const auto makeNotice = [&] {
             const TStringBuf directionName = direction == EHandshakeStatusDirection::Incoming
-                                                        ? TStringBuf("incoming")
-                                                        : TStringBuf("outgoing");
+                                                        ? TStringBuf("Incoming")
+                                                        : TStringBuf("Outgoing");
 
             TStringBuilder notice;
             notice << FormatHandshakeFailNotice(handshakeFail.Explanation, handshakeFail);

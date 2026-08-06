@@ -34,7 +34,7 @@ public:
         if (TabletsDone >= TabletsTotal) {
             YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Complete continuing migration",
                 {"logPrefix", GetLogPrefix()});
-            Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter));
+            Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter), true);
             PassAway();
         }
     }
@@ -44,7 +44,7 @@ public:
         if (TabletsTotal == 0) {
             YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Complete continuing migration",
                 {"logPrefix", GetLogPrefix()});
-            Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter));
+            Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter), true);
             PassAway();
         }
     }
@@ -122,7 +122,7 @@ public:
                 {"logPrefix", GetLogPrefix()});
             return; // waiting for tablets
         } else {
-            Self->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Self->MigrationFilter));
+            Self->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Self->MigrationFilter), true);
         }
     }
 };

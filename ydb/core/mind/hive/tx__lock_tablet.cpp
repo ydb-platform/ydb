@@ -132,7 +132,7 @@ public:
                 {"tabletId", TabletId},
                 {"sideEffects", SideEffects});
         }
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 
 private:

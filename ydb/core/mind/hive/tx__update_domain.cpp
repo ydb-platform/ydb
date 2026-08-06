@@ -62,7 +62,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxUpdateDomain::Complete",
             {"logPrefix", GetLogPrefix()},
             {"subdomainKey", SubdomainKey});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 

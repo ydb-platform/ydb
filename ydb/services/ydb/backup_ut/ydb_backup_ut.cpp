@@ -2374,10 +2374,16 @@ void TestOlapColumnEncodingsPreservedThroughBackup(
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
-    auto CreateBackupLambda(const TDriver& driver, const TFsPath& fsPath, const TString& dbPath = "/Root", const TString& db = "/Root") {
+    auto CreateBackupLambda(
+        const TDriver& driver,
+        const TFsPath& fsPath,
+        const TString& dbPath = "/Root",
+        const TString& db = "/Root",
+        NDump::TDumpSettings settings = NDump::TDumpSettings()
+    ) {
         return [=, &driver]() {
             NDump::TClient backupClient(driver);
-            const auto result = backupClient.Dump(dbPath, fsPath, NDump::TDumpSettings().Database(db));
+            const auto result = backupClient.Dump(dbPath, fsPath, NDump::TDumpSettings(settings).Database(db));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
     }
@@ -2892,8 +2898,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestTableBackupRestore() {
-        TKikimrWithGrpcAndRootSchema server;
+    void TestTableBackupRestore(bool isOlap = false) {
+        NKikimrConfig::TAppConfig appConfig;
+        if (isOlap) {
+            appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        }
+        TKikimrWithGrpcAndRootSchema server(appConfig);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = CreateSession(queryClient);
@@ -2902,12 +2912,19 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         constexpr const char* table = "/Root/table";
 
+        auto dumpSettings = NDump::TDumpSettings();
+        auto restoreSettings = NDump::TRestoreSettings();
+        if (isOlap) {
+            dumpSettings.AvoidCopy(true); // 
+            restoreSettings.Mode(NDump::TRestoreSettings::EMode::BulkUpsert); // Table Service YQL does not support column-oriented DML.
+        }
+
         TestTableContentIsPreserved(
             table,
             session,
-            CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup),
-            false
+            CreateBackupLambda(driver, pathToBackup, "/Root", "/Root", dumpSettings),
+            CreateRestoreLambda(driver, pathToBackup, "/Root", restoreSettings),
+            isOlap
         );
     }
 
@@ -3410,8 +3427,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeKesus:
                 return TestKesusBackupRestore();
             case EPathTypeColumnStore:
-            case EPathTypeColumnTable:
                 break; // https://github.com/ydb-platform/ydb/issues/10459
+            case EPathTypeColumnTable:
+                return TestTableBackupRestore(/* isOlap */ true);
             case EPathTypeSysView:
                 return TestSystemViewBackupRestore();
             case EPathTypeSecret:
@@ -3461,7 +3479,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST_TWIN(TestReplaceRestoreOption, IsOlap) {
         if (IsOlap) {
-            // TODO
+            // TODO: replace restore for column tables still needs work
             // https://github.com/ydb-platform/ydb/issues/36786
             return;
         }
@@ -3676,23 +3694,52 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
     }
 
-    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllPrimitiveTypes, Ydb::Type::PrimitiveTypeId) {
-        if (DontTestThisType(Value)) {
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES_WITH_FLAG(TestAllPrimitiveTypes, Ydb::Type::PrimitiveTypeId, IsOlap) {
+        if (DontTestThisType(Value, IsOlap)) {
             return;
         }
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig appConfig;
+        TKikimrWithGrpcAndRootSchema server(appConfig);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
+        auto dumpSettings = NDump::TDumpSettings();
+        auto restoreSettings = NDump::TRestoreSettings();
+        if (IsOlap) {
+            dumpSettings.AvoidCopy(true);
+            restoreSettings.Mode(NDump::TRestoreSettings::EMode::BulkUpsert);
+        }
+
         TestPrimitiveType(
             Value,
             session,
-            CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup),
-            false
+            CreateBackupLambda(driver, pathToBackup, "/Root", "/Root", dumpSettings),
+            CreateRestoreLambda(driver, pathToBackup, "/Root", restoreSettings),
+            IsOlap
+        );
+    }
+
+    Y_UNIT_TEST(OlapColumnTableContentPreservedThroughFsBackupRestore) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        constexpr const char* table = "/Root/olap_table";
+
+        TestTableContentIsPreserved(
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup, "/Root", "/Root", NDump::TDumpSettings().AvoidCopy(true)),
+            CreateRestoreLambda(driver, pathToBackup, "/Root",
+                NDump::TRestoreSettings().Mode(NDump::TRestoreSettings::EMode::BulkUpsert)),
+            /* isOlap */ true
         );
     }
 

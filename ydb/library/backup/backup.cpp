@@ -7,6 +7,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -395,6 +396,148 @@ void ReadTable(TDriver driver, const NTable::TTableDescription& desc, const TStr
             << READ_TABLE_RETRIES << " retries");
 }
 
+namespace {
+
+TString BuildQuotedColumnList(const NTable::TTableDescription& desc) {
+    TStringStream columns;
+    bool needsComma = false;
+    for (const auto& col : desc.GetColumns()) {
+        if (needsComma) {
+            columns << ", ";
+        } else {
+            needsComma = true;
+        }
+        columns << '`' << col.Name << '`';
+    }
+    return columns.Str();
+}
+
+TString BuildQuotedPkList(const NTable::TTableDescription& desc) {
+    TStringStream columns;
+    bool needsComma = false;
+    for (const auto& col : desc.GetPrimaryKeyColumns()) {
+        if (needsComma) {
+            columns << ", ";
+        } else {
+            needsComma = true;
+        }
+        columns << '`' << col << '`';
+    }
+    return columns.Str();
+}
+
+std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescription& desc,
+        const TString& fullTablePath, TMaybe<TValue> lastWrittenPK, bool ordered)
+{
+    TParamsBuilder paramsBuilder;
+    TStringStream query;
+
+    if (lastWrittenPK) {
+        query << "DECLARE $pk AS " << FormatType(lastWrittenPK->GetType()) << ";\n";
+        paramsBuilder.AddParam("$pk", *lastWrittenPK);
+    }
+
+    query << "SELECT " << BuildQuotedColumnList(desc)
+        << " FROM `" << fullTablePath << '`';
+    if (lastWrittenPK) {
+        query << " WHERE (" << BuildQuotedPkList(desc) << ") > $pk";
+    }
+    if (ordered || lastWrittenPK) {
+        query << " ORDER BY " << BuildQuotedPkList(desc);
+    }
+    query << ';';
+    return {query.Str(), paramsBuilder.Build()};
+}
+
+TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::TTableDescription& desc,
+        const TString& fullTablePath, const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32* fileCounter, bool ordered)
+{
+    const auto [query, params] = BuildSelectQueryAndParams(desc, fullTablePath, lastWrittenPK, ordered);
+    LOG_D("Execute query for column table " << fullTablePath.Quote() << ": " << query.Quote());
+
+    const auto tx = NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SnapshotRO()).CommitTx();
+    const auto settings = NQuery::TExecuteQuerySettings()
+        .StatsMode(NQuery::EStatsMode::None)
+        .Syntax(NQuery::ESyntax::YqlV1);
+
+    auto iter = client.StreamExecuteQuery(query, tx, params, settings).GetValueSync();
+    VerifyStatus(iter, TStringBuilder() << "ExecuteQuery for column table " << fullTablePath.Quote() << " failed");
+
+    auto tmpFile = TFile(folderPath.Child(NDump::NFiles::IncompleteData().FileName), CreateAlways | WrOnly);
+    TStringStream ss;
+    ss.Reserve(IO_BUFFER_SIZE);
+
+    TMaybe<TValue> lastReadPK;
+    bool hasRows = false;
+
+    while (true) {
+        auto part = iter.ReadNext().GetValueSync();
+        if (!part.IsSuccess()) {
+            if (part.EOS()) {
+                break;
+            }
+            // Permanent/non-resumable failure before any progress — do not pretend success with empty dump.
+            if (!lastWrittenPK && !hasRows) {
+                VerifyStatus(part, TStringBuilder() << "ExecuteQuery for column table " << fullTablePath.Quote() << " failed");
+            }
+            LOG_D("ExecuteQuery stream was closed unexpectedly: " << part.GetIssues().ToOneLineString());
+            if (ss.Data()) {
+                Flush(tmpFile, ss, lastWrittenPK, lastReadPK);
+            }
+            CloseAndRename(tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
+            return lastWrittenPK;
+        }
+
+        if (!part.HasResultSet()) {
+            continue;
+        }
+
+        hasRows = true;
+        auto resultSet = part.ExtractResultSet();
+        auto resultSetParser = TResultSetParser(resultSet);
+        lastReadPK = ProcessResultSet(ss, resultSetParser, &tmpFile, &desc);
+
+        if (ss.Size() > IO_BUFFER_SIZE) {
+            Flush(tmpFile, ss, lastWrittenPK, lastReadPK);
+        }
+        if (tmpFile.GetLength() > FILE_SPLIT_THRESHOLD) {
+            CloseAndRename(tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
+            tmpFile = TFile(folderPath.Child(NDump::NFiles::IncompleteData().FileName), CreateAlways | WrOnly);
+        }
+    }
+
+    if (!hasRows && !lastWrittenPK) {
+        TFile dataFile(folderPath.Child(CreateDataFileName((*fileCounter)++)), CreateAlways | WrOnly);
+        return {};
+    }
+
+    Flush(tmpFile, ss, lastWrittenPK, lastReadPK);
+    CloseAndRename(tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
+    return {};
+}
+
+} // anonymous namespace
+
+void ReadColumnTable(TDriver driver, const NTable::TTableDescription& desc, const TString& fullTablePath,
+        const TFsPath& folderPath, bool ordered) {
+    LOG_D("Read column table via ExecuteQuery " << fullTablePath.Quote());
+
+    NQuery::TQueryClient client(driver);
+    TMaybe<TValue> lastWrittenPK;
+
+    i64 retries = READ_TABLE_RETRIES;
+    ui32 fileCounter = 0;
+    do {
+        lastWrittenPK = TryExecuteQueryRead(client, desc, fullTablePath, folderPath, lastWrittenPK, &fileCounter, ordered);
+        if (lastWrittenPK && retries) {
+            LOG_D("Retry ExecuteQuery read from key: " << TString{FormatValueYson(*lastWrittenPK)}.Quote());
+        }
+    } while (lastWrittenPK && retries--);
+
+    Y_ENSURE(!lastWrittenPK, "For column table " << fullTablePath.Quote() << " ExecuteQuery hasn't finished successfully after "
+            << READ_TABLE_RETRIES << " retries");
+}
+
 NTable::TTableDescription DescribeTable(TDriver driver, const TString& fullTablePath) {
     LOG_D("Describe table " << fullTablePath.Quote());
 
@@ -474,11 +617,16 @@ TAsyncStatus CopyTableAsyncStart(TDriver driver, const TString& src, const TStri
     });
 }
 
-void CopyTableAsyncFinish(const TAsyncStatus& status, const TString& src) {
-    VerifyStatus(status.GetValueSync(), TStringBuilder() << "Copy table " << src.Quote() << " failed");
+TStatus CopyTableAsyncFinish(const TAsyncStatus& status, const TString& src, bool allowFailure = false) {
+    auto result = status.GetValueSync();
+    if (allowFailure && !result.IsSuccess()) {
+        return result;
+    }
+    VerifyStatus(result, TStringBuilder() << "Copy table " << src.Quote() << " failed");
+    return result;
 }
 
-void CopyTables(TDriver driver, const TVector<NTable::TCopyItem>& tablesToCopy) {
+TStatus CopyTables(TDriver driver, const TVector<NTable::TCopyItem>& tablesToCopy, bool allowFailure = false) {
     LOG_I("Copy tables: " << JoinSeq(", ", tablesToCopy));
 
     NTable::TTableClient client(driver);
@@ -487,7 +635,11 @@ void CopyTables(TDriver driver, const TVector<NTable::TCopyItem>& tablesToCopy) 
         return result;
     });
 
+    if (allowFailure && !status.IsSuccess()) {
+        return status;
+    }
     VerifyStatus(status, "Copy tables failed");
+    return status;
 }
 
 void DropTable(TDriver driver, const TString& path) {
@@ -569,7 +721,7 @@ void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& 
 }
 
 void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, const TString& path,
-        const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered) {
+        const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered, bool isColumnTable) {
     Y_ENSURE(!path.empty());
     Y_ENSURE(path.back() != '/', path.Quote() << " path contains / in the end");
 
@@ -599,7 +751,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     const auto& fullPath = schemaOnly ? originalTablePath : copyTablePath;
     const auto& desc = schemaOnly ? originalTableDesc : *copyTableDesc;
 
-    LOG_I("Backup table " << fullPath.Quote() << " to " << folderPath.GetPath().Quote());
+    LOG_I("Backup " << (isColumnTable ? "column table " : "table ") << fullPath.Quote() << " to " << folderPath.GetPath().Quote());
 
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::TableScheme());
@@ -608,7 +760,11 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     BackupPermissions(driver, originalTablePath, folderPath);
 
     if (!schemaOnly) {
-        ReadTable(driver, desc, fullPath, folderPath, ordered);
+        if (isColumnTable) {
+            ReadColumnTable(driver, desc, fullPath, folderPath, ordered);
+        } else {
+            ReadTable(driver, desc, fullPath, folderPath, ordered);
+        }
     }
 }
 
@@ -924,6 +1080,15 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     // Track items seen during first iteration to skip the new ones created after
     THashSet<TString> seenItems;
     TVector<NTable::TCopyItem> tablesToCopy;
+    THashSet<TString> columnTablePaths;
+    // Column tables that could not be copied — fall back to pre-ColumnTable dump behavior (skip them).
+    THashSet<TString> skippedColumnTables;
+
+    auto skipColumnTable = [&](const TString& path, const TString& reason) {
+        LOG_W("Skipping column table " << path.Quote() << ": " << reason
+                << "; dumping column tables requires CopyTable support or --avoid-copy");
+        skippedColumnTables.insert(path);
+    };
 
     // Copy all tables to temporal folder and backup other scheme objects along the way.
     {
@@ -939,14 +1104,17 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             auto childFolderPath = CreateDirectory(folderPath, dbIt.GetRelPath());
             TFile(childFolderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
             if (schemaOnly) {
-                if (dbIt.IsTable()) {
+                if (dbIt.IsBackupTable()) {
                     BackupTable(driver, dbIt.GetTraverseRoot(), backupPrefix, dbIt.GetRelPath(),
-                            childFolderPath, schemaOnly, preservePoolKinds, ordered);
+                            childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable());
                     childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
                 }
             } else if (!avoidCopy) {
-                if (dbIt.IsTable()) {
+                if (dbIt.IsBackupTable()) {
                     const TString tmpTablePath = JoinDatabasePath(backupPrefix, dbIt.GetRelPath());
+                    if (dbIt.IsColumnTable()) {
+                        columnTablePaths.insert(dbIt.GetFullPath());
+                    }
                     if (useConsistentCopyTable) {
                         tablesToCopy.emplace_back(dbIt.GetFullPath(), tmpTablePath);
                     } else {
@@ -975,7 +1143,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                     BackupSystemView(driver, dbIt.GetFullPath(), childFolderPath);
                 } else if (dbIt.IsTransfer()) {
                     BackupTransfer(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-                } else if (!dbIt.IsTable() && !dbIt.IsDir()) {
+                } else if (!dbIt.IsBackupTable() && !dbIt.IsDir()) {
                     throw TSkipException() << "dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported";
                 }
             } catch (const TSkipException& ex) {
@@ -995,7 +1163,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             }
 
             TFsPath childFolderPath = folderPath.Child(dbIt.GetRelPath());
-            if (dbIt.IsTable()) {
+            if (dbIt.IsBackupTable()) {
                 // If table backup was not successful exception should be thrown,
                 // so control flow can't reach this line. Check it just to be sure
                 Y_ENSURE(!childFolderPath.Child(NDump::NFiles::Incomplete().FileName).Exists());
@@ -1012,7 +1180,24 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     }
 
     if (useConsistentCopyTable && !avoidCopy && tablesToCopy) {
-        CopyTables(driver, tablesToCopy);
+        auto status = CopyTables(driver, tablesToCopy, /* allowFailure */ !columnTablePaths.empty());
+        if (!status.IsSuccess()) {
+            // CopyTables failed — likely because column tables are not supported for copy on this cluster.
+            // Retry without column tables (legacy dump behavior) and skip them.
+            TVector<NTable::TCopyItem> rowTablesOnly;
+            rowTablesOnly.reserve(tablesToCopy.size());
+            for (const auto& item : tablesToCopy) {
+                const TString src{item.SourcePath()};
+                if (columnTablePaths.contains(src)) {
+                    skipColumnTable(src, status.GetIssues().ToOneLineString());
+                } else {
+                    rowTablesOnly.push_back(item);
+                }
+            }
+            if (rowTablesOnly) {
+                CopyTables(driver, rowTablesOnly);
+            }
+        }
     }
     // Read all tables from temporal folder and delete them
     {
@@ -1025,16 +1210,34 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             TFsPath childFolderPath = folderPath.Child(dbIt.GetRelPath());
             const TString tmpTablePath = JoinDatabasePath(backupPrefix, dbIt.GetRelPath());
 
-            if (dbIt.IsTable()) {
+            if (dbIt.IsBackupTable()) {
+                if (skippedColumnTables.contains(dbIt.GetFullPath())) {
+                    childFolderPath.ForceDelete();
+                    dbIt.Next();
+                    continue;
+                }
+
+                bool tableWasCopied = !avoidCopy;
                 if (!useConsistentCopyTable && !avoidCopy) {
                     Y_ENSURE(copiedTablesStatuses.contains(dbIt.GetFullPath()),
                             "Table was not copied but going to be backuped, path# " << dbIt.GetFullPath().Quote());
-                    CopyTableAsyncFinish(copiedTablesStatuses[dbIt.GetFullPath()], dbIt.GetFullPath());
+                    const bool isColumnTable = dbIt.IsColumnTable();
+                    auto copyStatus = CopyTableAsyncFinish(
+                        copiedTablesStatuses[dbIt.GetFullPath()],
+                        dbIt.GetFullPath(),
+                        /* allowFailure */ isColumnTable
+                    );
                     copiedTablesStatuses.erase(dbIt.GetFullPath());
+                    if (isColumnTable && !copyStatus.IsSuccess()) {
+                        skipColumnTable(dbIt.GetFullPath(), copyStatus.GetIssues().ToOneLineString());
+                        childFolderPath.ForceDelete();
+                        dbIt.Next();
+                        continue;
+                    }
                 }
                 BackupTable(driver, dbIt.GetTraverseRoot(), avoidCopy ? dbIt.GetTraverseRoot() : backupPrefix, dbIt.GetRelPath(),
-                        childFolderPath, schemaOnly, preservePoolKinds, ordered);
-                if (!avoidCopy) {
+                        childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable());
+                if (tableWasCopied) {
                     DropTable(driver, tmpTablePath);
                 }
             } else if (dbIt.IsDir()) {

@@ -43,6 +43,7 @@ private:
     static const TVector<NScheme::ESchemeEntryType>& SupportedEntryTypes() {
         static const TVector<NScheme::ESchemeEntryType> values = {
             NScheme::ESchemeEntryType::Table,
+            NScheme::ESchemeEntryType::ColumnTable,
             NScheme::ESchemeEntryType::View,
             NScheme::ESchemeEntryType::Topic,
             NScheme::ESchemeEntryType::CoordinationNode,
@@ -141,6 +142,14 @@ public:
 
     bool IsTable() const {
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Table;
+    }
+
+    bool IsColumnTable() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::ColumnTable;
+    }
+
+    bool IsBackupTable() const {
+        return IsTable() || IsColumnTable();
     }
 
     bool IsView() const {

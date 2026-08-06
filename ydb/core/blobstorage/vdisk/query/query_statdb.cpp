@@ -1,7 +1,10 @@
 #include "query_statdb.h"
 #include "query_statalgo.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap_events.h>
 #include <ydb/core/util/format.h>
+
+#include <concepts>
 
 using namespace NKikimrServices;
 
@@ -249,9 +252,173 @@ namespace NKikimr {
         };
     }
 
+    template <class TKey, class TMemRec>
+    concept CLogoBlobsDb = std::same_as<TKey, TKeyLogoBlob> && std::same_as<TMemRec, TMemRecLogoBlob>;
+
+    template <class TKey, class TMemRec>
+    concept CBlocksDb = std::same_as<TKey, TKeyBlock> && std::same_as<TMemRec, TMemRecBlock>;
+
+    template <class TKey, class TMemRec>
+    concept CBarriersDb = std::same_as<TKey, TKeyBarrier> && std::same_as<TMemRec, TMemRecBarrier>;
+
+    template <class TKey, class TMemRec>
+    concept CStatDb = CLogoBlobsDb<TKey, TMemRec> || CBlocksDb<TKey, TMemRec> || CBarriersDb<TKey, TMemRec>;
+
+    template <class TKey, class TMemRec>
+        requires CLogoBlobsDb<TKey, TMemRec>
+    void EmplaceSnapshot(
+            std::optional<TLevelIndexSnapshot<TKey, TMemRec>>& snapshot,
+            THullDsSnap& fullSnapshot)
+    {
+        snapshot.emplace(std::move(fullSnapshot.LogoBlobsSnap));
+    }
+
+    template <class TKey, class TMemRec>
+        requires CBlocksDb<TKey, TMemRec>
+    void EmplaceSnapshot(
+            std::optional<TLevelIndexSnapshot<TKey, TMemRec>>& snapshot,
+            THullDsSnap& fullSnapshot)
+    {
+        snapshot.emplace(std::move(fullSnapshot.BlocksSnap));
+    }
+
+    template <class TKey, class TMemRec>
+        requires CBarriersDb<TKey, TMemRec>
+    void EmplaceSnapshot(
+            std::optional<TLevelIndexSnapshot<TKey, TMemRec>>& snapshot,
+            THullDsSnap& fullSnapshot)
+    {
+        snapshot.emplace(std::move(fullSnapshot.BarriersSnap));
+    }
+
+    template <
+        class TKey,
+        class TMemRec,
+        class TRequest = TEvBlobStorage::TEvVDbStat,
+        class TResponse = TEvBlobStorage::TEvVDbStatResult>
+        requires CStatDb<TKey, TMemRec>
+    class TLevelIndexStatActor
+        : public TActorBootstrapped<TLevelIndexStatActor<TKey, TMemRec, TRequest, TResponse>>
+    {
+        using TThis = TLevelIndexStatActor<TKey, TMemRec, TRequest, TResponse>;
+        using TBase = TActorBootstrapped<TThis>;
+        using TLevelIndexSnapshot = ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>;
+        using TYieldedState = TDbStatYieldedState<TKey, TMemRec>;
+        using TTraversal = std::function<std::optional<TYieldedState>(
+            const TLevelIndexSnapshot&, std::optional<TYieldedState>)>;
+
+        friend class TActorBootstrapped<TThis>;
+
+        void Bootstrap() {
+            if constexpr (std::same_as<TRequest, TEvBlobStorage::TEvVDbStat>) {
+                PrepareStat(Output, Ev->Get()->Record.GetPrettyPrint());
+            } else {
+                PrepareStat(Result);
+            }
+            TThis::Become(&TThis::StateFunc);
+            ContinueTraversal();
+        }
+
+        void PrepareStat(IOutputStream& str, bool pretty);
+
+        void PrepareStat(std::unique_ptr<TResponse>& result);
+
+        template <class TAggr>
+        void SetAggregator(std::shared_ptr<TAggr> aggr) {
+            Traversal = [this, aggr = std::move(aggr)](
+                    const TLevelIndexSnapshot& snapshot,
+                    std::optional<TYieldedState> yieldedState) {
+                return TraverseDbWithoutMerge(
+                    HullCtx,
+                    aggr.get(),
+                    snapshot,
+                    std::move(yieldedState),
+                    YieldPolicy);
+            };
+        }
+
+        void ContinueTraversal() {
+            Y_ABORT_UNLESS(Snapshot);
+            YieldedState = Traversal(*Snapshot, std::move(YieldedState));
+            ReleaseSnapshot();
+
+            if (YieldedState) {
+                TThis::Schedule(YieldPolicy.DelayBetweenQuanta, new TEvents::TEvWakeup);
+            } else {
+                ReplyAndDie();
+            }
+        }
+
+        void ReleaseSnapshot() {
+            if (Snapshot) {
+                Snapshot->Destroy();
+                Snapshot.reset();
+            }
+        }
+
+        void HandleWakeup() {
+            TThis::Send(ParentId, new TEvTakeHullSnapshot(true));
+        }
+
+        void Handle(TEvTakeHullSnapshotResult::TPtr& ev) {
+            EmplaceSnapshot<TKey, TMemRec>(Snapshot, ev->Get()->Snap);
+            ContinueTraversal();
+        }
+
+        void ReplyAndDie() {
+            if constexpr (std::same_as<TRequest, TEvBlobStorage::TEvVDbStat>) {
+                Result->SetResult(Output.Str());
+            }
+            SendVDiskResponse(TActivationContext::AsActorContext(), Ev->Sender, Result.release(),
+                    Ev->Cookie, HullCtx->VCtx, {});
+            TThis::Send(ParentId, new TEvents::TEvGone);
+            TThis::PassAway();
+        }
+
+        void PassAway() override {
+            ReleaseSnapshot();
+            TBase::PassAway();
+        }
+
+        STRICT_STFUNC(StateFunc, {
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            cFunc(TEvents::TSystem::PoisonPill, PassAway);
+            hFunc(TEvTakeHullSnapshotResult, Handle);
+        })
+
+    public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_LEVEL_INDEX_STAT_QUERY;
+        }
+
+        TLevelIndexStatActor(
+                const TIntrusivePtr<THullCtx>& hullCtx,
+                const TActorId& parentId,
+                TLevelIndexSnapshot&& snapshot,
+                typename TRequest::TPtr& ev,
+                std::unique_ptr<TResponse> result)
+            : HullCtx(hullCtx)
+            , ParentId(parentId)
+            , Snapshot(std::in_place, std::move(snapshot))
+            , Ev(ev)
+            , Result(std::move(result))
+        {}
+
+    private:
+        TIntrusivePtr<THullCtx> HullCtx;
+        const TActorId ParentId;
+        std::optional<TLevelIndexSnapshot> Snapshot;
+        typename TRequest::TPtr Ev;
+        std::unique_ptr<TResponse> Result;
+        const TDbStatYieldPolicy YieldPolicy;
+        TStringStream Output;
+        TTraversal Traversal;
+        std::optional<TYieldedState> YieldedState;
+    };
+
     template <>
-    void TLevelIndexStatActor<TKeyLogoBlob, TMemRecLogoBlob>::CalculateStat(IOutputStream &str,
-                                                                            bool pretty) {
+    void TLevelIndexStatActor<TKeyLogoBlob, TMemRecLogoBlob>::PrepareStat(IOutputStream& str,
+                                                                          bool pretty) {
         // aggregation class
         struct TAggr {
             using TLevelSegment = ::NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
@@ -266,13 +433,17 @@ namespace NKikimr {
                              const TKeyLogoBlob &key,
                              const TMemRecLogoBlob &memRec) {
                 Y_UNUSED(segName);
-                Tablets.Update(key.LogoBlobID(), memRec);
+                Update(key, memRec);
             }
 
             void UpdateLevel(const TLevelSstPtr &sstPtr,
                              const TKeyLogoBlob &key,
                              const TMemRecLogoBlob &memRec) {
                 Y_UNUSED(sstPtr);
+                Update(key, memRec);
+            }
+
+            void Update(const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec) {
                 Tablets.Update(key.LogoBlobID(), memRec);
             }
 
@@ -285,15 +456,13 @@ namespace NKikimr {
             bool Pretty;
         };
 
-        // run aggregation
-        TAggr aggr(str, pretty);
-        TraverseDbWithoutMerge(HullCtx, &aggr, Snapshot);
+        SetAggregator(std::make_shared<TAggr>(str, pretty));
     }
 
     template <>
     void TLevelIndexStatActor<TKeyLogoBlob, TMemRecLogoBlob,
             TEvGetLogoBlobIndexStatRequest, TEvGetLogoBlobIndexStatResponse
-    >::CalculateStat(std::unique_ptr<TEvGetLogoBlobIndexStatResponse> &result) {
+    >::PrepareStat(std::unique_ptr<TEvGetLogoBlobIndexStatResponse>& result) {
         // aggregation class
         struct TAggr {
             using TLevelSegment = ::NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
@@ -307,13 +476,17 @@ namespace NKikimr {
                              const TKeyLogoBlob &key,
                              const TMemRecLogoBlob &memRec) {
                 Y_UNUSED(segName);
-                Tablets.Update(key.LogoBlobID(), memRec);
+                Update(key, memRec);
             }
 
             void UpdateLevel(const TLevelSstPtr &sstPtr,
                              const TKeyLogoBlob &key,
                              const TMemRecLogoBlob &memRec) {
                 Y_UNUSED(sstPtr);
+                Update(key, memRec);
+            }
+
+            void Update(const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec) {
                 Tablets.Update(key.LogoBlobID(), memRec);
             }
 
@@ -326,14 +499,12 @@ namespace NKikimr {
             std::unique_ptr<TEvGetLogoBlobIndexStatResponse> &Result;
         };
 
-        // run aggregation
-        TAggr aggr(result);
-        TraverseDbWithoutMerge(HullCtx, &aggr, Snapshot);
+        SetAggregator(std::make_shared<TAggr>(result));
     }
 
     template <>
-    void TLevelIndexStatActor<TKeyBlock, TMemRecBlock>::CalculateStat(IOutputStream &str,
-                                                                      bool pretty) {
+    void TLevelIndexStatActor<TKeyBlock, TMemRecBlock>::PrepareStat(IOutputStream& str,
+                                                                    bool pretty) {
         // aggregation class
         struct TAggr {
             using TLevelSegment = ::NKikimr::TLevelSegment<TKeyBlock, TMemRecBlock>;
@@ -412,14 +583,12 @@ namespace NKikimr {
         };
 
 
-        // run aggregation
-        TAggr aggr(str, pretty);
-        TraverseDbWithoutMerge(HullCtx, &aggr, Snapshot);
+        SetAggregator(std::make_shared<TAggr>(str, pretty));
     }
 
     template <>
-    void TLevelIndexStatActor<TKeyBarrier, TMemRecBarrier>::CalculateStat(IOutputStream &str,
-                                                                          bool pretty) {
+    void TLevelIndexStatActor<TKeyBarrier, TMemRecBarrier>::PrepareStat(IOutputStream& str,
+                                                                        bool pretty) {
         // aggregation class
         struct TAggr {
             using TLevelSegment = ::NKikimr::TLevelSegment<TKeyBarrier, TMemRecBarrier>;
@@ -513,9 +682,80 @@ namespace NKikimr {
         };
 
 
-        // run aggregation
-        TAggr aggr(str, pretty);
-        TraverseDbWithoutMerge(HullCtx, &aggr, Snapshot);
+        SetAggregator(std::make_shared<TAggr>(str, pretty));
+    }
+
+    template <class TKey, class TMemRec, class TRequest, class TResponse>
+        requires CStatDb<TKey, TMemRec>
+    IActor* CreateLevelIndexStatActorImpl(
+            const TIntrusivePtr<THullCtx>& hullCtx,
+            const TActorId& parentId,
+            TLevelIndexSnapshot<TKey, TMemRec>&& snapshot,
+            typename TRequest::TPtr& ev,
+            std::unique_ptr<TResponse> result)
+    {
+        using TActor = TLevelIndexStatActor<TKey, TMemRec, TRequest, TResponse>;
+        return new TActor(hullCtx, parentId, std::move(snapshot), ev, std::move(result));
+    }
+
+    IActor* CreateLevelIndexStatActor(
+            const TIntrusivePtr<THullCtx>& hullCtx,
+            const TActorId& parentId,
+            TLogoBlobsSnapshot&& snapshot,
+            TEvBlobStorage::TEvVDbStat::TPtr& ev,
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
+    {
+        return CreateLevelIndexStatActorImpl<
+            TKeyLogoBlob,
+            TMemRecLogoBlob,
+            TEvBlobStorage::TEvVDbStat,
+            TEvBlobStorage::TEvVDbStatResult>(
+            hullCtx, parentId, std::move(snapshot), ev, std::move(result));
+    }
+
+    IActor* CreateLevelIndexStatActor(
+            const TIntrusivePtr<THullCtx>& hullCtx,
+            const TActorId& parentId,
+            TBlocksSnapshot&& snapshot,
+            TEvBlobStorage::TEvVDbStat::TPtr& ev,
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
+    {
+        return CreateLevelIndexStatActorImpl<
+            TKeyBlock,
+            TMemRecBlock,
+            TEvBlobStorage::TEvVDbStat,
+            TEvBlobStorage::TEvVDbStatResult>(
+            hullCtx, parentId, std::move(snapshot), ev, std::move(result));
+    }
+
+    IActor* CreateLevelIndexStatActor(
+            const TIntrusivePtr<THullCtx>& hullCtx,
+            const TActorId& parentId,
+            TLevelIndexSnapshot<TKeyBarrier, TMemRecBarrier>&& snapshot,
+            TEvBlobStorage::TEvVDbStat::TPtr& ev,
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
+    {
+        return CreateLevelIndexStatActorImpl<
+            TKeyBarrier,
+            TMemRecBarrier,
+            TEvBlobStorage::TEvVDbStat,
+            TEvBlobStorage::TEvVDbStatResult>(
+            hullCtx, parentId, std::move(snapshot), ev, std::move(result));
+    }
+
+    IActor* CreateLevelIndexStatActor(
+            const TIntrusivePtr<THullCtx>& hullCtx,
+            const TActorId& parentId,
+            TLogoBlobsSnapshot&& snapshot,
+            TEvGetLogoBlobIndexStatRequest::TPtr& ev,
+            std::unique_ptr<TEvGetLogoBlobIndexStatResponse> result)
+    {
+        return CreateLevelIndexStatActorImpl<
+            TKeyLogoBlob,
+            TMemRecLogoBlob,
+            TEvGetLogoBlobIndexStatRequest,
+            TEvGetLogoBlobIndexStatResponse>(
+                hullCtx, parentId, std::move(snapshot), ev, std::move(result));
     }
 
 } // NKikimr

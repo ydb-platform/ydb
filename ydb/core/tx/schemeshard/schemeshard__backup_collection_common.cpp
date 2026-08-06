@@ -130,6 +130,65 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
         }
     }
 
+    // Add index backup metadata directories if incremental backup is enabled
+    bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
+    
+    // Check OmitIndexes from two possible locations:
+    // 1. Top-level OmitIndexes field (for full backups)
+    // 2. IncrementalBackupConfig.OmitIndexes (for incremental backups)
+    bool omitIndexes = bc->Description.GetOmitIndexes() || 
+                       (incrBackupEnabled && bc->Description.GetIncrementalBackupConfig().GetOmitIndexes());
+    
+    if (incrBackupEnabled && !omitIndexes) {
+        for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+            const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
+            
+            // Skip if path is not resolved or not a table
+            auto checks = tablePath.Check();
+            checks.IsResolved().IsTable();
+            if (!checks) {
+                continue;
+            }
+
+            std::pair<TString, TString> paths;
+            TString err;
+            if (!TrySplitPathByDb(item.GetPath(), tx.GetWorkingDir(), paths, err)) {
+                continue;
+            }
+            auto& relativeItemPath = paths.second;
+
+            // Check if table has indexes
+            for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+                auto childPath = context.SS->PathsById.at(childPathId);
+                
+                if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
+                    continue;
+                }
+                
+                // Skip deleted indexes
+                if (childPath->Dropped()) {
+                    continue;
+                }
+
+                auto indexInfo = context.SS->Indexes.at(childPathId);
+                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
+                    continue;
+                }
+
+                // Add required PARENT directory path for index backup:
+                // {targetDir}/__ydb_backup_meta/indexes/{table_path}
+                // The index name will be the table name created within this directory
+                TString indexBackupParentPath = JoinPath({
+                    targetDir,
+                    "__ydb_backup_meta",
+                    "indexes",
+                    relativeItemPath
+                });
+                collectionPaths.emplace(indexBackupParentPath);
+            }
+        }
+    }
+
     return paths;
 }
 

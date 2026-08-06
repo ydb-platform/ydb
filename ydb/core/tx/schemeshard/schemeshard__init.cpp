@@ -1856,6 +1856,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     bool parseOk = ParseFromStringNoSizeLimit(tableDesc, alterTabletFull);
                     Y_ABORT_UNLESS(parseOk);
 
+                    // Load CoordinatedSchemaVersion from proto (for crash recovery)
+                    if (tableDesc.HasCoordinatedSchemaVersion()) {
+                        tableInfo->AlterData->CoordinatedSchemaVersion = tableDesc.GetCoordinatedSchemaVersion();
+                    }
+
                     if (tableDesc.HasPartitionConfig() &&
                         tableDesc.GetPartitionConfig().ColumnFamiliesSize() > 1)
                     {
@@ -2049,6 +2054,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 backupCollection->AlterVersion = rowset.GetValue<Schema::BackupCollection::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD backupCollection->Description.ParseFromString(rowset.GetValue<Schema::BackupCollection::Description>());
                 Self->IncrementPathDbRefCount(pathId);
+                Self->RegisterBackupCollectionTables(backupCollection);
 
                 if (!rowset.Next()) {
                     return false;
@@ -3667,6 +3673,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         }
                     }
                 } else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
+                    if (!extraData.empty()) {
+                        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+                        bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
+                        Y_ABORT_UNLESS(deserializeRes);
+                        txState.CdcPathId = TPathId::FromProto(proto.GetTxCopyTableExtraData().GetCdcPathId());
+                    }
+                } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTable ||
+                           txState.TxType == TTxState::TxCreateCdcStreamAtTableWithInitialScan ||
+                           txState.TxType == TTxState::TxAlterCdcStreamAtTable ||
+                           txState.TxType == TTxState::TxAlterCdcStreamAtTableDropSnapshot ||
+                           txState.TxType == TTxState::TxDropCdcStreamAtTable ||
+                           txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
                     if (!extraData.empty()) {
                         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
                         bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);

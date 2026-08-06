@@ -91,9 +91,17 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
             std::decay_t<decltype(tablePath.Base()->GetChildren())>> == true,
         "Assume path children list is lexicographically sorted");
 
-    for (auto& [child, _] : tablePath.Base()->GetChildren()) {
-        if (child.EndsWith("_continuousBackupImpl")) {
-            lastStreamName = child;
+    for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+        if (childName.EndsWith("_continuousBackupImpl")) {
+            TPath childPath = tablePath.Child(childName);
+            if (!childPath.IsDeleted() && childPath.IsCdcStream()) {
+                if (context.SS->CdcStreams.contains(childPathId)) {
+                    const auto& streamInfo = context.SS->CdcStreams.at(childPathId);
+                    if (streamInfo->Format == NKikimrSchemeOp::ECdcStreamFormatProto) {
+                        lastStreamName = childName;
+                    }
+                }
+            }
         }
     }
 

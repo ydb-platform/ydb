@@ -1767,7 +1767,7 @@ def main():
     print(
         f"known_issues: total={len(data.get('known_issues') or [])} "
         f"open={sum(1 for i in (data.get('known_issues') or []) if i.get('state') != 'closed')} "
-        f"closed={sum(1 for i in (data.get('known_issues') or []) if i.get('state') == 'closed')} "
+        f"closed≤14d={sum(1 for i in (data.get('known_issues') or []) if i.get('state') == 'closed')} "
         f"suites_with_tickets={n_tick}",
         flush=True,
     )

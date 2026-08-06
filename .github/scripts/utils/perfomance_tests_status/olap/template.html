@@ -1379,7 +1379,7 @@ function runTicketsHtml(run) {
       || (failN > 0 && !tickets.length && cov !== 'covered' && cov !== 'wrong_branch')) {
     const uq = (run.uncovered_queries || []).slice(0, 4).join(', ');
     parts.push(
-      `<span class="pill ticket no-ticket" title="${esc('no matching issue (open or closed) for: ' + (uq || 'failed / no-data queries'))}">no ticket</span>`
+      `<span class="pill ticket no-ticket" title="${esc('no matching issue (open or closed ≤14d) for: ' + (uq || 'failed / no-data queries'))}">no ticket</span>`
     );
   }
   if (!parts.length && cov === 'wrong_branch') {
@@ -2301,7 +2301,7 @@ function renderHeader() {
     <div class="counter regress"><div class="n">${fmtNM(s.slower, total.slower, !!sel)}</div><div class="lbl">Hard slow</div></div>
     ${fifth}
     <div class="counter ok"><div class="n">${fmtNM(s.ok_slices, total.ok_slices, !!sel)}</div><div class="lbl">OK slices</div></div>
-    <div class="counter ticket" title="GitHub issues with perf-duty-match (kind=olap): ${nOpen} open + ${nClosed} closed. Suites = inbox/ok rows with matched tickets. Closed pills are grey.">
+    <div class="counter ticket" title="GitHub issues with perf-duty-match (kind=olap): ${nOpen} open + ${nClosed} closed ≤14d. Suites = inbox/ok rows with matched tickets. Closed pills are grey.">
       <div class="n">${nIssues}<span class="sel">/${nSuitesTick}</span></div>
       <div class="lbl">Issues / suites</div>
     </div>

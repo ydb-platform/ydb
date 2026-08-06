@@ -10,16 +10,22 @@ from pathlib import Path
 PTS = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PTS))
 
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
 from common.duty_issues import (  # noqa: E402
+    CLOSED_ISSUES_MAX_AGE_DAYS,
     affected_would_expand,
     aggregate_run_coverage,
     attach_tickets_to_report,
     branch_label_match,
     classify_fail_coverage,
+    closed_issues_since_date,
+    is_recently_closed,
     keys_overlap,
     merge_affected,
     norm_branch_label,
     norm_query_name,
+    parse_github_ts,
     parse_match_block,
     render_match_block,
     tickets_for_suite,
@@ -227,6 +233,26 @@ class JoinTests(unittest.TestCase):
         attach_tickets_to_report(data, issues, kind="olap")
         self.assertEqual(data["known_issues"][0]["state"], "closed")
         self.assertEqual(data["inbox"][0]["tickets"][0]["state"], "closed")
+
+    def test_attach_passes_closed_at(self):
+        issues = [
+            {
+                "number": 99,
+                "title": "recent closed",
+                "url": "https://example/99",
+                "kind": "olap",
+                "state": "closed",
+                "closed_at": "2026-08-01T12:00:00Z",
+                "fingerprint": "x",
+                "keys": ["x"],
+                "affected": [
+                    {"suite": "UploadTpch100", "db": "sas_small_column", "queries": ["Query06"]}
+                ],
+            }
+        ]
+        data = {"inbox": [], "ok": []}
+        attach_tickets_to_report(data, issues, kind="olap")
+        self.assertEqual(data["known_issues"][0]["closed_at"], "2026-08-01T12:00:00Z")
 
     def test_attach_to_report(self):
         data = {
@@ -649,6 +675,49 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(r1["ticket_coverage"], "uncovered")
         self.assertIn("Query21", r1["uncovered_queries"])
         self.assertIn("Query22", r1["uncovered_queries"])
+
+
+class RecentlyClosedFilterTests(unittest.TestCase):
+    def test_closed_issues_since_date(self):
+        now = datetime(2026, 8, 6, 15, 0, 0, tzinfo=timezone.utc)
+        self.assertEqual(closed_issues_since_date(now=now, max_age_days=14), "2026-07-23")
+        self.assertEqual(CLOSED_ISSUES_MAX_AGE_DAYS, 14)
+
+    def test_parse_github_ts(self):
+        dt = parse_github_ts("2026-08-01T12:00:00Z")
+        self.assertIsNotNone(dt)
+        self.assertEqual(dt.tzinfo, timezone.utc)
+        self.assertEqual(dt.day, 1)
+        self.assertIsNone(parse_github_ts(None))
+        self.assertIsNone(parse_github_ts("not-a-date"))
+
+    def test_is_recently_closed_keeps_fresh(self):
+        now = datetime(2026, 8, 6, 12, 0, 0, tzinfo=timezone.utc)
+        iss = {
+            "state": "closed",
+            "closed_at": (now - timedelta(days=3)).isoformat().replace("+00:00", "Z"),
+        }
+        self.assertTrue(is_recently_closed(iss, now=now))
+
+    def test_is_recently_closed_drops_old(self):
+        now = datetime(2026, 8, 6, 12, 0, 0, tzinfo=timezone.utc)
+        iss = {
+            "state": "closed",
+            "closed_at": (now - timedelta(days=20)).isoformat().replace("+00:00", "Z"),
+        }
+        self.assertFalse(is_recently_closed(iss, now=now))
+
+    def test_is_recently_closed_drops_missing_closed_at(self):
+        self.assertFalse(is_recently_closed({"state": "closed"}, now=datetime.now(timezone.utc)))
+
+    def test_open_never_recently_closed(self):
+        now = datetime(2026, 8, 6, 12, 0, 0, tzinfo=timezone.utc)
+        self.assertFalse(
+            is_recently_closed(
+                {"state": "open", "closed_at": now.isoformat()},
+                now=now,
+            )
+        )
 
 
 if __name__ == "__main__":

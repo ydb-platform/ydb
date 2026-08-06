@@ -14,9 +14,10 @@ affected:
     queries: [Query12, Query04]
 -->
 
-Dashboard joins open **and closed** issues to suite rows via ``affected``
-(not Title/suite alone). Closed tickets render as grey pills. Duty-agent
-duplicate search still uses open-only (``fetch_open_duty_issues``).
+Dashboard joins open **and recently closed** issues to suite rows via ``affected``
+(not Title/suite alone). Closed pills = issues closed within
+``CLOSED_ISSUES_MAX_AGE_DAYS`` (grey). Duty-agent duplicate search still uses
+open-only (``fetch_open_duty_issues``).
 Agent expands ``affected`` when the same fingerprint appears on another suite/query.
 """
 
@@ -30,12 +31,14 @@ import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 DEFAULT_REPO = "ydb-platform/ydb"
 # Search token in issue body (HTML comment). No GitHub label required.
 MATCH_SEARCH_QUERY = "perf-duty-match"
+# Closed duty issues older than this are omitted from Now reports.
+CLOSED_ISSUES_MAX_AGE_DAYS = 14
 GITHUB_API = "https://api.github.com"
 BLOCK_START = "<!-- perf-duty-match"
 BLOCK_END = "-->"
@@ -629,6 +632,7 @@ def attach_tickets_to_report(
             "kind": i.get("kind"),
             "labels": list(i.get("labels") or []),
             "state": _norm_issue_state(i.get("state")),
+            **({"closed_at": i["closed_at"]} if i.get("closed_at") else {}),
         }
         for i in issues
         if not kind or not i.get("kind") or str(i.get("kind")).lower() == kind.lower()
@@ -896,15 +900,72 @@ def _norm_issue_state(raw: Any) -> str:
     return "closed" if s == "closed" else "open"
 
 
+def closed_issues_since_date(
+    *,
+    now: datetime | None = None,
+    max_age_days: int = CLOSED_ISSUES_MAX_AGE_DAYS,
+) -> str:
+    """UTC calendar date (YYYY-MM-DD) for GitHub ``closed:>=`` search."""
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    since = now.astimezone(timezone.utc) - timedelta(days=int(max_age_days))
+    return since.date().isoformat()
+
+
+def parse_github_ts(raw: Any) -> datetime | None:
+    """Parse GitHub ISO timestamps (``closedAt`` / ``closed_at``)."""
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+    s = str(raw).strip()
+    if not s:
+        return None
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def is_recently_closed(
+    iss: dict[str, Any],
+    *,
+    now: datetime | None = None,
+    max_age_days: int = CLOSED_ISSUES_MAX_AGE_DAYS,
+) -> bool:
+    """True if issue is closed and ``closed_at`` is within ``max_age_days``.
+
+    Missing / unparseable ``closed_at`` → False (do not show ancient unknowns).
+    """
+    if _norm_issue_state(iss.get("state")) != "closed":
+        return False
+    closed = parse_github_ts(iss.get("closed_at") or iss.get("closedAt"))
+    if closed is None:
+        return False
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    return closed >= now.astimezone(timezone.utc) - timedelta(days=int(max_age_days))
+
+
 def _search_issues_via_api(
     repo: str,
     *,
     limit: int,
     state: str = "open",
+    closed_since: str | None = None,
 ) -> list[dict[str, Any]]:
     """Search + re-fetch each issue so match-block at end of body is not truncated."""
     state_q = "is:closed" if _norm_issue_state(state) == "closed" else "is:open"
     q = f"repo:{repo} is:issue {state_q} {MATCH_SEARCH_QUERY}"
+    if _norm_issue_state(state) == "closed" and closed_since:
+        q = f"{q} closed:>={closed_since}"
     qs = urllib.parse.urlencode({"q": q, "per_page": min(limit, 100)})
     data = _github_api_json(f"/search/issues?{qs}")
     items = data.get("items") if isinstance(data, dict) else None
@@ -922,16 +983,18 @@ def _search_issues_via_api(
         if not isinstance(full, dict):
             continue
         labels = _label_names(full.get("labels") or it.get("labels"))
-        out.append(
-            {
-                "number": full.get("number") or num,
-                "title": full.get("title") or it.get("title"),
-                "url": full.get("html_url") or it.get("html_url") or it.get("url"),
-                "body": full.get("body") or "",
-                "labels": labels,
-                "state": _norm_issue_state(full.get("state") or it.get("state") or state),
-            }
-        )
+        closed_at = full.get("closed_at") or it.get("closed_at")
+        row: dict[str, Any] = {
+            "number": full.get("number") or num,
+            "title": full.get("title") or it.get("title"),
+            "url": full.get("html_url") or it.get("html_url") or it.get("url"),
+            "body": full.get("body") or "",
+            "labels": labels,
+            "state": _norm_issue_state(full.get("state") or it.get("state") or state),
+        }
+        if closed_at:
+            row["closed_at"] = closed_at
+        out.append(row)
     return out
 
 
@@ -965,7 +1028,9 @@ def _issue_from_gh(raw: dict[str, Any]) -> dict[str, Any] | None:
     url = raw.get("url") or raw.get("html_url")
     if not url and num:
         url = f"https://github.com/{DEFAULT_REPO}/issues/{num}"
-    return {
+    closed_raw = raw.get("closedAt") or raw.get("closed_at")
+    closed_dt = parse_github_ts(closed_raw)
+    out: dict[str, Any] = {
         "number": num,
         "title": raw.get("title"),
         "url": url,
@@ -977,6 +1042,11 @@ def _issue_from_gh(raw: dict[str, Any]) -> dict[str, Any] | None:
         "labels": _label_names(raw.get("labels")),
         "state": _norm_issue_state(raw.get("state")),
     }
+    if closed_dt is not None:
+        out["closed_at"] = closed_dt.isoformat().replace("+00:00", "Z")
+    elif closed_raw:
+        out["closed_at"] = str(closed_raw)
+    return out
 
 
 def _fetch_duty_issues_state(
@@ -985,11 +1055,15 @@ def _fetch_duty_issues_state(
     kind: str | None,
     repo: str,
     limit: int,
+    closed_since: str | None = None,
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Fetch duty issues in one GitHub state (open|closed)."""
     state = _norm_issue_state(state)
     warning: str | None = None
     raw_list: list[dict[str, Any]] = []
+    search_terms = [MATCH_SEARCH_QUERY]
+    if state == "closed" and closed_since:
+        search_terms.append(f"closed:>={closed_since}")
     try:
         found = _gh_json(
             [
@@ -997,20 +1071,25 @@ def _fetch_duty_issues_state(
                 "issues",
                 "--repo",
                 repo,
-                MATCH_SEARCH_QUERY,
+                *search_terms,
                 "--state",
                 state,
                 "--limit",
                 str(min(limit, 100)),
                 "--json",
-                "number,title,url,body,labels,state",
+                "number,title,url,body,labels,state,closedAt",
             ]
         )
         if isinstance(found, list):
             raw_list = found
     except Exception as e_gh:  # noqa: BLE001
         try:
-            raw_list = _search_issues_via_api(repo, limit=min(limit, 100), state=state)
+            raw_list = _search_issues_via_api(
+                repo,
+                limit=min(limit, 100),
+                state=state,
+                closed_since=closed_since if state == "closed" else None,
+            )
             warning = f"gh unavailable ({e_gh}); used GitHub REST API ({state})"
         except Exception as e_api:  # noqa: BLE001
             warning = (
@@ -1031,6 +1110,8 @@ def _fetch_duty_issues_state(
             continue
         if kind and iss.get("kind") and str(iss["kind"]).lower() != kind.lower():
             continue
+        if state == "closed" and not is_recently_closed(iss):
+            continue
         out.append(iss)
     return out, warning
 
@@ -1042,10 +1123,11 @@ def fetch_duty_issues(
     limit: int = 100,
     include_closed: bool = True,
 ) -> tuple[list[dict[str, Any]], str | None]:
-    """Fetch issues with ``<!-- perf-duty-match`` (open, and closed if requested).
+    """Fetch issues with ``<!-- perf-duty-match`` (open, and recent closed if requested).
 
-    Closed issues are included for report pills (different color). Duty-agent
-    duplicate search should use ``fetch_open_duty_issues`` (open only).
+    Closed issues are included for report pills only when closed within
+    ``CLOSED_ISSUES_MAX_AGE_DAYS``. Duty-agent duplicate search should use
+    ``fetch_open_duty_issues`` (open only).
     """
     open_list, warn_open = _fetch_duty_issues_state(
         state="open", kind=kind, repo=repo, limit=limit
@@ -1053,8 +1135,13 @@ def fetch_duty_issues(
     by_num: dict[Any, dict[str, Any]] = {i.get("number"): i for i in open_list if i.get("number")}
     warns = [w for w in (warn_open,) if w]
     if include_closed:
+        since = closed_issues_since_date()
         closed_list, warn_closed = _fetch_duty_issues_state(
-            state="closed", kind=kind, repo=repo, limit=limit
+            state="closed",
+            kind=kind,
+            repo=repo,
+            limit=limit,
+            closed_since=since,
         )
         if warn_closed:
             warns.append(warn_closed)

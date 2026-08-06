@@ -22,9 +22,9 @@ User behavior data from a multi-category online store.
 
     {% list tabs %}
 
-    - Embedded UI
+    - {{ ydb-ui-name }}
 
-      For more information on [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
+      For more information on [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
 
       ```sql
       CREATE TABLE `ecommerce_table` (
@@ -83,7 +83,7 @@ Identify the most popular product categories on November 1, 2019:
 
 {% list tabs %}
 
-- Embedded UI
+- {{ ydb-ui-name }}
 
   ```sql
   SELECT

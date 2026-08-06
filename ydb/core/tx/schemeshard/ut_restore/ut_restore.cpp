@@ -7191,6 +7191,55 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(pqGroup.GetPartitionPerTablet(), 3);
     }
 
+    Y_UNIT_TEST(ImportCancelledWithIssueOnInvalidDestinationPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: "/MyRoot"
+              destination_prefix: "BackupPrefix"
+              items {
+                source_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_prefix: "BackupPrefix"
+              destination_path: "Restored"
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto issues = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+                        .GetResponse().GetEntry().GetIssues();
+        UNIT_ASSERT(!issues.empty());
+        Cerr << NYql::IssuesFromMessageAsString(issues) << Endl;
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(issues), "Restored");
+    }
+
     Y_UNIT_TEST(UnknownSchemeObjectImport) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

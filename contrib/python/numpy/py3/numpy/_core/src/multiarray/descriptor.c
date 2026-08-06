@@ -22,7 +22,8 @@
 #include "conversion_utils.h"  /* for PyArray_TypestrConvert */
 #include "templ_common.h" /* for npy_mul_sizes_with_overflow */
 #include "descriptor.h"
-#include "multiarraymodule.h"
+#include "npy_static_data.h"
+#include "multiarraymodule.h"  // for thread unsafe state access
 #include "alloc.h"
 #include "assert.h"
 #include "npy_buffer.h"
@@ -724,13 +725,13 @@ _convert_from_commastring(PyObject *obj, int align)
 {
     PyObject *parsed;
     PyArray_Descr *res;
-    static PyObject *_commastring = NULL;
     assert(PyUnicode_Check(obj));
-    npy_cache_import("numpy._core._internal", "_commastring", &_commastring);
-    if (_commastring == NULL) {
+    if (npy_cache_import_runtime(
+            "numpy._core._internal", "_commastring",
+            &npy_runtime_imports._commastring) == -1) {
         return NULL;
     }
-    parsed = PyObject_CallOneArg(_commastring, obj);
+    parsed = PyObject_CallOneArg(npy_runtime_imports._commastring, obj);
     if (parsed == NULL) {
         return NULL;
     }
@@ -2038,6 +2039,7 @@ arraydescr_dealloc(PyArray_Descr *self)
 {
     Py_XDECREF(self->typeobj);
     if (!PyDataType_ISLEGACY(self)) {
+        /* non legacy dtypes must not have fields, etc. */
         Py_TYPE(self)->tp_free((PyObject *)self);
         return;
     }
@@ -2716,7 +2718,7 @@ arraydescr_reduce(PyArray_Descr *self, PyObject *NPY_UNUSED(args))
         Py_DECREF(ret);
         return NULL;
     }
-    obj = PyObject_GetAttr(mod, npy_ma_str_dtype);
+    obj = PyObject_GetAttr(mod, npy_interned_str.dtype);
     Py_DECREF(mod);
     if (obj == NULL) {
         Py_DECREF(ret);

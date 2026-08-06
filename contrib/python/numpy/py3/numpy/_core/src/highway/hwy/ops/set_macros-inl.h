@@ -287,10 +287,9 @@
 
 #define HWY_HAVE_SCALABLE 0
 #define HWY_HAVE_INTEGER64 1
-#if HWY_TARGET == HWY_AVX3_SPR && HWY_COMPILER_GCC_ACTUAL && \
+#if HWY_TARGET == HWY_AVX3_SPR &&                              \
+    (HWY_COMPILER_GCC_ACTUAL || HWY_COMPILER_CLANG >= 1901) && \
     HWY_HAVE_SCALAR_F16_TYPE
-// TODO: enable F16 for AVX3_SPR target with Clang once compilation issues are
-// fixed
 #define HWY_HAVE_FLOAT16 1
 #else
 #define HWY_HAVE_FLOAT16 0
@@ -586,7 +585,7 @@
 #define HWY_HAVE_SCALABLE 0
 #define HWY_HAVE_INTEGER64 1
 #define HWY_HAVE_FLOAT16 0
-#define HWY_HAVE_FLOAT64 0
+#define HWY_HAVE_FLOAT64 1
 #define HWY_MEM_OPS_MIGHT_FAULT 1
 #define HWY_NATIVE_FMA 0
 #define HWY_NATIVE_DOT_BF16 0
@@ -629,8 +628,12 @@
 
 #define HWY_NAMESPACE N_RVV
 
+#if HWY_COMPILER_CLANG >= 1900
+// https://github.com/riscv/riscv-v-spec/blob/master/v-spec.adoc#181-zvl-minimum-vector-length-standard-extensions
+#define HWY_TARGET_STR "Zvl128b,Zve64d"
+#else
 // HWY_TARGET_STR remains undefined so HWY_ATTR is a no-op.
-// (rv64gcv is not a valid target)
+#endif
 
 //-----------------------------------------------------------------------------
 // EMU128

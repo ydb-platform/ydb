@@ -380,6 +380,8 @@ private:
     THashMap<TSchemeShardLocalPathId, TInternalPathId> CopyingLocalToInternal;   // Paths that are being copied
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
+    // Ordered ascending by drop snapshot. Callers rely on this to stop early once
+    // minSnapshotForNewReads < dropSnapshot (see SetupCleanupTables).
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
     TSet<NOlap::TSnapshot> ReadOnlyTablesSnapshots;
     TTtlVersions Ttl;

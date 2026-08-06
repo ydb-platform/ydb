@@ -2,6 +2,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -1027,6 +1028,66 @@ void TestIsDroppedAtExactDropSnapshot() {
     }
 }
 
+// Empty dropped tables have no portions for ScanSnapshotGuard to pin, so physical metadata drop must
+// wait until minSnapshotForNewReads >= dropSnapshot. Otherwise a new pre-drop read would miss the table.
+void TestEmptyDroppedTableCleanupWaitsForReadWindow() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    runtime.GetAppData().FeatureFlags.SetEnableSnapshotsLocking(false);
+
+    constexpr auto maxReadStaleness = TDuration::Seconds(5);
+    auto controller = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    controller->SetOverrideMaxReadStaleness(maxReadStaleness);
+    controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+    controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+    {
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+    }
+
+    const ui64 tableId = 1;
+    ui64 txId = 100;
+    Y_UNUSED(SetupSchema(runtime, sender, tableId, TestTableDescription(), "none", ++txId));
+
+    const auto dropTxId = ++txId;
+    const auto dropPlanStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), dropTxId);
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(dropPlanStep, dropTxId));
+
+    const auto pathId =
+        *controller->GetTheOnlyShard()->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(tableId), false);
+    auto isPendingDrop = [&] {
+        for (const auto& [_, pathIds] : controller->GetTheOnlyShard()->GetTablesManager().GetPathsToDrop()) {
+            if (pathIds.contains(pathId)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    UNIT_ASSERT(isPendingDrop());
+
+    controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+    for (ui32 i = 0; i < 3; ++i) {
+        PlanCommit(runtime, sender, TPlanStep{ dropPlanStep.Val() + 1 }, TSet<ui64>{});
+        Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
+    UNIT_ASSERT(isPendingDrop());
+
+    // LastPlannedStep (not wall clock) drives minSnapshotForNewReads = step - MaxReadStaleness.
+    // Advance the plan step past the drop so cleanup is allowed to erase the empty table.
+    PlanCommit(runtime, sender, TPlanStep{ dropPlanStep.Val() + maxReadStaleness.MilliSeconds() + 1 }, TSet<ui64>{});
+    for (ui32 i = 0; i < 60 && isPendingDrop(); ++i) {
+        Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
+    UNIT_ASSERT(!isPendingDrop());
+    UNIT_ASSERT(!controller->GetTheOnlyShard()->GetTablesManager().HasTable(pathId, /*withDeleted=*/true));
+}
+
 void TestCompaction(std::optional<ui32> numWrites = {}) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -1351,6 +1412,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
     Y_UNIT_TEST(IsDroppedAtExactDropSnapshot) {
         TestIsDroppedAtExactDropSnapshot();
+    }
+    Y_UNIT_TEST(EmptyDroppedTableCleanupWaitsForReadWindow) {
+        TestEmptyDroppedTableCleanupWaitsForReadWindow();
     }
 }
 

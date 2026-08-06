@@ -968,12 +968,20 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
-    THashSet<TInternalPathId> pathIdsEmptyInInsertTable;
-    for (const auto& [_, pathIds] : TablesManager.GetPathsToDrop()) {
-        pathIdsEmptyInInsertTable.insert(pathIds.begin(), pathIds.end());
+    // An empty dropped table must stay until minSnapshotForNewReads >= dropSnapshot; otherwise a new
+    // read at a valid pre-drop snapshot would find the table metadata already gone. Tables with
+    // portions are protected implicitly: HasDataInPathId stays true until portions are physically
+    // erased (gated by ScanSnapshotGuard).
+    const auto minSnapshotForNewReads = GetMinSnapshotForNewReads();
+    THashSet<TInternalPathId> pathIdsToCleanup;
+    for (const auto& [dropSnapshot, pathIds] : TablesManager.GetPathsToDrop()) {
+        if (minSnapshotForNewReads < dropSnapshot) {
+            break;
+        }
+        pathIdsToCleanup.insert(pathIds.begin(), pathIds.end());
     }
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable, DataLocksManager);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsToCleanup, DataLocksManager);
     if (!changes) {
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
             {"background", "cleanup"},

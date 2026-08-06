@@ -16,7 +16,7 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
         LogKeyValue("Component", "Grpc", ss);
         LogKeyValue("SessionId", request.session_id(), ss);
         LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogTxControl(request.tx_control(), ss);
+        // @todo: LogTxControl(request.tx_control(), ss);
         LogKeyValue("Type", "ExecuteDataQueryRequest", ss, /*last*/ true);
         return ss.Str();
     };
@@ -53,7 +53,7 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
         LogKeyValue("Component", "Grpc", ss);
         LogKeyValue("SessionId", request.session_id(), ss);
         LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogTxSettings(request.tx_settings(), ss);
+        // @todo: LogTxSettings(request.tx_settings(), ss);
         LogKeyValue("Type", "BeginTransactionRequest", ss, /*last*/ true);
         return ss.Str();
     };
@@ -192,7 +192,7 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query:
         LogKeyValue("Component", "Grpc", ss);
         LogKeyValue("SessionId", request.session_id(), ss);
         LogKeyValue("TraceId", traceId ? *traceId : "Empty", ss);
-        LogTxControl(request.tx_control(), ss);
+        // @todo: LogTxControl(request.tx_control(), ss);
         LogKeyValue("Type", "ExecuteQueryRequest", ss, /*last*/ true);
         return ss.Str();
     };

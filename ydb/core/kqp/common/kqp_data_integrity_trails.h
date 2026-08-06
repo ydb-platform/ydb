@@ -86,7 +86,7 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
         LogQueryText(ss, request->Get()->GetQuery());
 
         if (request->Get()->HasTxControl()) {
-            LogTxControl(request->Get()->GetTxControl(), ss);
+            // @todo: LogTxControl(request->Get()->GetTxControl(), ss);
         }
 
         return ss.Str();

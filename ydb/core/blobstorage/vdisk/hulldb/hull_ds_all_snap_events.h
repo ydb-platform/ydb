@@ -15,7 +15,7 @@ namespace NKikimr {
     };
 
     struct TEvTakeHullSnapshotResult :
-        public TEventLocal<TEvTakeHullSnapshotResult, TEvBlobStorage::EvTakeHullSnapshot>
+        public TEventLocal<TEvTakeHullSnapshotResult, TEvBlobStorage::EvTakeHullSnapshotResult>
     {
         THullDsSnap Snap;
 

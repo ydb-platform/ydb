@@ -53,7 +53,7 @@ kafka_proxy_config:
 
 ### HTTP
 
-{{ ydb-short-name }} открывает отдельный HTTP-порт для работы [встроенного интерфейса](../../reference/ydb-ui/index.md), отображения [метрик](../../devops/observability/monitoring.md) и других вспомогательных команд.
+{{ ydb-short-name }} открывает отдельный HTTP-порт для работы [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md), отображения [метрик](../../devops/observability/monitoring.md) и других вспомогательных команд.
 
 Пример включения TLS на HTTP-порту, что делает его использования HTTPS:
 

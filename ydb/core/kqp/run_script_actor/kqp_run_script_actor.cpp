@@ -321,6 +321,11 @@ private:
                 .AlreadyStopped = alreadyStopped,
             }, issues), /* flags */ 0, request->Cookie);
         }
+
+        LOG_I("Exit"
+            << ", finish status: " << FinishInfo.Status.value_or(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)
+            << ", issues: " << FinishInfo.Issues.ToOneLineString()
+            << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString());
     }
 
     void Finish() {
@@ -393,7 +398,7 @@ private:
             Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
             WaitFinalizationRequest = true;
         } else {
-            LOG_N("Skip finish with error " << *FinishInfo.Status << ", issues: " << FinishInfo.Issues.ToOneLineString() << ", already waiting finalization");
+            LOG_N("Skip finish with error " << *FinishInfo.Status << ", issues: " << FinishInfo.Issues.ToOneLineString() << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString() << ", already waiting finalization");
         }
     }
 

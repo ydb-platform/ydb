@@ -44,7 +44,30 @@ def _issue_body_section(body: str, heading: str) -> str:
 
 
 def _fenced_blocks(text: str) -> list[str]:
-    return re.findall(r"```(?:[^\n]*)\n(.*?)```", text or "", flags=re.S)
+    # GitHub accepts ``` and ~~~; agents sometimes use either.
+    return re.findall(
+        r"(?:```|~~~)(?:[^\n]*)\n(.*?)(?:```|~~~)",
+        text or "",
+        flags=re.S,
+    )
+
+
+# GFM accepts "|--|--|" (2+ dashes); do not require ---.
+_GFM_TABLE_SEP = re.compile(
+    r"^\|[ \t]*:?-{2,}:?[ \t]*\|[ \t]*:?-{2,}:?[ \t]*\|",
+    re.M,
+)
+_PIPE_DATA_ROW = re.compile(
+    r"^\|(?!\s*:?-+:?\s*\|)[^|\n]+\|[^|\n]+\|\s*$",
+    re.M,
+)
+
+
+def _section_needs_gfm_table_header(section: str) -> bool:
+    """True when section has pipe rows but no GFM separator (GitHub won't render)."""
+    if not section or not _PIPE_DATA_ROW.search(section):
+        return False
+    return not _GFM_TABLE_SEP.search(section)
 
 
 def _nodata_query_names(out_dir: Path | None) -> set[str]:
@@ -1048,6 +1071,13 @@ def validate_analysis_md(
                 else:
                     facts = _issue_body_section(body, "Фактура")
                     fl = facts.lower()
+                    if _section_needs_gfm_table_header(facts):
+                        errors.append(
+                            f"{resolution}: Фактура table needs GFM header "
+                            "`| | |` + `|--|--|` before data rows "
+                            "(without separator GitHub does not render a table) "
+                            "— see REPORT_TEMPLATE.md"
+                        )
                     if not re.search(r"\bbranch\b|ветк", fl):
                         errors.append(
                             f"{resolution}: Фактура must include Branch / ветка запуска"
@@ -1115,6 +1145,15 @@ def validate_analysis_md(
                         f"{resolution}: ### Body should include #### Код "
                         "(detection path + related issue links)"
                     )
+                else:
+                    code_sec = _issue_body_section(body, "Код")
+                    if _section_needs_gfm_table_header(code_sec):
+                        errors.append(
+                            f"{resolution}: #### Код table needs GFM header "
+                            "`| | |` + `|--|--|` before data rows "
+                            "(without separator GitHub does not render a table) "
+                            "— see REPORT_TEMPLATE.md"
+                        )
                 # Machine block for dashboard / cross-suite match
                 match = parse_match_block(body)
                 if not match:

@@ -762,6 +762,8 @@ crash compaction AppendSlice; nodata — следствие cut-off.
 VERIFY AppendSlice
 ```
 #### Код
+| | |
+|--|--|
 | Место падения | AppendSlice |
 | Связанный issue | [#48261](https://github.com/ydb-platform/ydb/issues/48261) |
 
@@ -865,6 +867,8 @@ VERIFY Groups.end на разбираемом прогоне — тот же [#2
 VERIFY Groups.end
 ```
 #### Код
+| | |
+|--|--|
 | Место падения | [`read.cpp`](https://github.com/ydb-platform/ydb/blob/f88e100ec2eabf78b51b8c09d234484ea1e3958c/ydb/core/tx/columnshard/blobs_action/abstract/read.cpp#L59) |
 | Связанный issue | [#29944](https://github.com/ydb-platform/ydb/issues/29944) |
 
@@ -1089,6 +1093,8 @@ x
 VERIFY
 ```
 #### Код
+| | |
+|--|--|
 | Место падения | x |
 """
             r = validate_analysis_md(md, out_dir=d)
@@ -1175,6 +1181,8 @@ SIGSEGV в RemainOnly.
 #### Детали ошибки
 {details}
 #### Код
+| | |
+|--|--|
 | Место падения | [`collection.cpp`](https://github.com/ydb-platform/ydb/blob/d6dd620/ydb/core/formats/arrow/program/collection.cpp#L256) |
 
 <!-- perf-duty-match
@@ -1189,6 +1197,27 @@ affected:
     queries: [Query06]
 -->
 """
+
+    def test_open_ticket_rejects_faktura_without_gfm_header(self):
+        md = self._open_ticket_sigsegv_md(
+            """
+Host: `sas9-1593`
+Coredump: https://coredumps.yandex-team.ru/v3/cores/abc
+```
+Received signal 11
+Backtrace:
+"""
+            + "\n".join(f"#{i} frame at x.cpp:{i}" for i in range(12))
+            + "\n```\n"
+        )
+        # Strip GFM header from Фактура — GitHub would not render the table.
+        md = md.replace("| | |\n|--|--|\n", "", 1)
+        r = validate_analysis_md(md)
+        self.assertFalse(r["ok"], r)
+        self.assertTrue(
+            any("GFM header" in e and "Фактура" in e for e in r["errors"]),
+            r["errors"],
+        )
 
     def test_open_ticket_rejects_truncated_backtrace(self):
         details = """

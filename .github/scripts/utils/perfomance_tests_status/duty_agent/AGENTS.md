@@ -478,12 +478,17 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
 
 ### Body
 #### Фактура
+
+| | |
+|--|--|
 | Suite / DB | … / … |
 | Branch · Version | main · [`sha`](…) |
 | Run | label · ts UTC |
 | Allure | https://proxy.sandbox… |
 | Duty report | [полный отчёт](https://storage.yandexcloud.net/workload-log/…/analysis.md) · [result](…) · [problems](…) |
 | Failed | Query… |
+
+**Обязательно** строки `| | |` и `|--|--|` перед данными — без них GitHub **не** рисует таблицу. То же для `#### Код`.
 
 #### Что сломалось
 …
@@ -500,15 +505,18 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
 #### Детали ошибки
 Host: `…`  
 Coredump: https://coredumps.yandex-team.ru/v3/cores?filter=…   ← из focus.fatal / host_dig
-~~~
+```
 Received signal 11
 Backtrace:
 #0 …
 …
 #N …   ← полный стек из kikimr__stderr, без «…» между кадрами
-~~~
+```
 
 #### Код
+
+| | |
+|--|--|
 | Место падения | path @ sha |
 | Связанный issue | нет / #N |
 

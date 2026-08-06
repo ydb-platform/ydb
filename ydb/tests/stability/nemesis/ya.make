@@ -29,6 +29,7 @@ PY_SRCS(
     internal/agent/agent_warden_checker.py
     internal/agent/nemesis/runner.py
     internal/orchestrator/install.py
+    internal/orchestrator/agent_endpoints.py
     internal/orchestrator/orchestrator_warden_execution.py
     internal/orchestrator/unified_agent_verify_failed_aggregated.py
     internal/orchestrator/orchestrator_warden_checker.py

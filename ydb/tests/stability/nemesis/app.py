@@ -20,6 +20,7 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.metrics import NemesisMetrics
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import cluster_yaml_path
 from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml
+from ydb.tests.stability.nemesis.internal.orchestrator.agent_endpoints import resolve_agent_endpoints
 from ydb.tests.stability.nemesis.internal.config import AgentSettings
 from ydb.tests.stability.nemesis.internal.agent.agent_warden_checker import AgentWardenChecker
 from ydb.tests.stability.nemesis.internal import config
@@ -88,6 +89,8 @@ def initialize_app():
         print(f"Loaded hosts: {loaded_hosts}")
 
         orchestrator_router.hosts = loaded_hosts
+        # Resolve once at boot: agent HTTP must not depend on live DNS (DnsNemesis).
+        orchestrator_router.host_endpoints = resolve_agent_endpoints(loaded_hosts)
         orchestrator_router.healthcheck_reporter = HealthCheckReporter(loaded_hosts, store_results=True)
         orchestrator_router.healthcheck_reporter.start_healthchecks()
 
@@ -150,6 +153,7 @@ def initialize_app():
             get_hosts=lambda: orchestrator_router.hosts,
             is_local_host=orchestrator_router.is_local_host,
             get_app_port=orchestrator_router.get_app_port,
+            resolve_http_host=orchestrator_router.agent_http_host,
             failure_guard=failure_guard,
             recovery_probe=probe,
             inventory=inventory,

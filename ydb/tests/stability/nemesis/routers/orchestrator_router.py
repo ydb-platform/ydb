@@ -43,6 +43,8 @@ blueprint = Blueprint('orchestrator', __name__)
 
 # Module-level state (orchestrator wiring; see app.initialize_app)
 hosts: list[str] = []
+# Logical hostname → HTTP host (IP, IPv6 bracketed). Empty → fall back to hostname.
+host_endpoints: dict[str, str] = {}
 mon_port = 8765  # Default monitoring port
 orchestrator_warden_checker: OrchestratorWardenChecker | None = None
 nemesis_schedule: OrchestratorNemesisSchedule | None = None
@@ -59,6 +61,17 @@ nemesis_metrics: Any = None
 def get_app_port() -> int:
     """Get the configured app port from settings"""
     return Settings().app_port
+
+
+def agent_http_host(host: str) -> str:
+    """Address used in orchestrator→agent HTTP URLs (cached IP when available)."""
+    return host_endpoints.get(host) or host
+
+
+def agent_url(host: str, path: str = "") -> str:
+    """``http://<endpoint>:<port><path>`` for an agent identified by logical ``host``."""
+    p = path if not path or path.startswith("/") else f"/{path}"
+    return f"http://{agent_http_host(host)}:{get_app_port()}{p}"
 
 
 def is_local_host(host: str) -> bool:
@@ -85,8 +98,7 @@ def fetch_agent_warden_result(host: str) -> dict[str, Any]:
             if wc is None:
                 return {"status": "error", "error_message": "warden_checker not initialized"}
             return wc.get_last_result()
-        port = get_app_port()
-        resp = requests.get(f"http://{host}:{port}/api/warden/result", timeout=10)
+        resp = requests.get(agent_url(host, "/api/warden/result"), timeout=10)
         return resp.json()
     except Exception as e:
         logger.error(f"Failed to get warden result from {host}: {e}")
@@ -99,8 +111,7 @@ def get_all_host_processes(host: str):
         # Direct call to avoid HTTP deadlock
         return jsonify(agent_router.get_all_processes_helper())
     else:
-        port = get_app_port()
-        resp = requests.get(f"http://{host}:{port}/api/processes", timeout=5)
+        resp = requests.get(agent_url(host, "/api/processes"), timeout=5)
         return jsonify(resp.json())
 
 
@@ -110,8 +121,7 @@ def fetch_host_processes(host):
             # Direct call to avoid HTTP deadlock
             return host, agent_router.get_all_processes_helper()
         else:
-            port = get_app_port()
-            resp = requests.get(f"http://{host}:{port}/api/processes", timeout=5)
+            resp = requests.get(agent_url(host, "/api/processes"), timeout=5)
             return host, resp.json()
     except Exception as e:
         print(f"Failed to fetch processes from {host}: {e}")
@@ -380,8 +390,7 @@ def get_hosts_health():
                 # Direct response for local host
                 aggregated_health[host] = {"status": "ok"}
             else:
-                port = get_app_port()
-                resp = requests.get(f"http://{host}:{port}/health", timeout=5)
+                resp = requests.get(agent_url(host, "/health"), timeout=5)
                 aggregated_health[host] = resp.json()
         except Exception as e:
             aggregated_health[host] = {"status": "error", "message": str(e)}
@@ -633,8 +642,7 @@ def start_warden_checks_on_all_hosts():
                 logger.debug(f"Agent {host} (local): {result.get('status', 'unknown')}")
                 return host, result
             else:
-                port = get_app_port()
-                resp = requests.post(f"http://{host}:{port}/api/warden/start", timeout=10)
+                resp = requests.post(agent_url(host, "/api/warden/start"), timeout=10)
                 result = resp.json()
                 logger.debug(f"Agent {host} (remote): {result.get('status', 'unknown')}")
                 return host, result
@@ -686,8 +694,7 @@ def get_warden_results_from_all_hosts():
                 logger.debug(f"Agent {host} (local): status={result.get('status', 'unknown')}, checks={len(result.get('safety_checks', []))}")
                 return host, result
             else:
-                port = get_app_port()
-                resp = requests.get(f"http://{host}:{port}/api/warden/result", timeout=10)
+                resp = requests.get(agent_url(host, "/api/warden/result"), timeout=10)
                 return host, resp.json()
         except Exception as e:
             logger.error(f"Failed to get warden result from {host}: {e}")

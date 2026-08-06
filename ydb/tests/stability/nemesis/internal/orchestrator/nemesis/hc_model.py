@@ -55,12 +55,23 @@ class HcSnapshot:
     storage_by_node: dict[int, dict[str, str]] = field(default_factory=dict)
     alive_compute: int = 0
     clock_skew_green: bool = True
+    # host → compute.clock_skew.overall is GREEN (and any node-level skew on that report).
+    # Hosts with no clock_skew section are omitted; see host_clock_skew_green.
+    clock_skew_green_by_host: dict[str, bool] = field(default_factory=dict)
 
     def storage_green(self, node_id: int | None) -> bool:
         """True if every observed pdisk/vdisk of ``node_id`` is GREEN (empty → green)."""
         if node_id is None:
             return True
         return all(overall == GREEN for overall in self.storage_by_node.get(node_id, {}).values())
+
+    def host_clock_skew_green(self, host: str) -> bool:
+        """Per-host clock skew.
+
+        YDB often omits ``compute.clock_skew`` when there is nothing to report — that must not
+        block TimeSkew/Dns confirm. Explicit non-GREEN still fails.
+        """
+        return self.clock_skew_green_by_host.get(host, True)
 
     def storage_blockers(self, node_id: int | None) -> list[str]:
         """Non-GREEN entities of the node (for stuck reports / UI)."""
@@ -86,6 +97,7 @@ def build_snapshot(
     storage: dict[int, dict[str, str]] = {}
     alive_by_host: list[set[int]] = []
     skew_green = True
+    skew_by_host: dict[str, bool] = {}
 
     for host, entry in (last_results or {}).items():
         if not isinstance(entry, dict):
@@ -94,6 +106,8 @@ def build_snapshot(
             continue
         answering.add(host)
         host_alive: set[int] = set()
+        seen_skew = False
+        host_skew_ok = True
         for db in entry.get("database_status") or []:
             if not isinstance(db, dict):
                 continue
@@ -109,10 +123,20 @@ def build_snapshot(
                             host_alive.add(int(node.get("id")))
                         except (TypeError, ValueError):
                             pass
+                    node_skew = node.get("clock_skew")
+                    if isinstance(node_skew, dict) and node_skew.get("overall") is not None:
+                        seen_skew = True
+                        if node_skew.get("overall") != GREEN:
+                            host_skew_ok = False
                 skew = compute.get("clock_skew")
                 if isinstance(skew, dict) and skew.get("overall") is not None:
+                    seen_skew = True
                     if skew.get("overall") != GREEN:
-                        skew_green = False
+                        host_skew_ok = False
+        if seen_skew:
+            skew_by_host[host] = host_skew_ok
+            if not host_skew_ok:
+                skew_green = False
         alive_by_host.append(host_alive)
 
     if not answering:
@@ -126,6 +150,7 @@ def build_snapshot(
         storage_by_node=storage,
         alive_compute=alive_compute,
         clock_skew_green=skew_green,
+        clock_skew_green_by_host=skew_by_host,
     )
 
 
@@ -190,10 +215,10 @@ def slot_predicate(baseline: int) -> Callable[[HcSnapshot], bool]:
 
 
 def host_predicate(target: ChaosTarget) -> Callable[[HcSnapshot], bool]:
-    """Endpoint answers and compute.clock_skew is GREEN."""
+    """Endpoint answers and this host's compute.clock_skew is GREEN."""
 
     def recovered(snap: HcSnapshot) -> bool:
-        return target.host in snap.answering and snap.clock_skew_green
+        return target.host in snap.answering and snap.host_clock_skew_green(target.host)
 
     return recovered
 

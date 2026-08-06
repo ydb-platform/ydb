@@ -206,18 +206,26 @@ class RecoveryProbe:
                     logger.exception("on_stuck callback raised")
         return stuck
 
-    def drain_extracts(self) -> int:
-        """Extract toggles still needing it (HOLD, or CONFIRM after a failed recover_action)."""
+    def drain_extracts(self, nemesis_type: str | None = None) -> int:
+        """Extract toggles still needing it (HOLD, or CONFIRM after a failed recover_action).
+
+        If ``nemesis_type`` is set, only that type is drained (legacy per-type schedule disable).
+        """
         with self._lock:
             pending = [
                 p
                 for p in self._pending.values()
                 if p.recover_action is not None
+                and (nemesis_type is None or p.nemesis_type == nemesis_type)
                 and (p.phase == PHASE_HOLD or (p.phase == PHASE_CONFIRM and not p.extract_ok))
             ]
         if not pending:
             return 0
-        logger.info("draining %d pending extract(s) on shutdown", len(pending))
+        logger.info(
+            "draining %d pending extract(s)%s",
+            len(pending),
+            f" for {nemesis_type}" if nemesis_type else " on shutdown",
+        )
         now = self._clock()
         for p in pending:
             self._dispatch_extract(p, now, reason="drained on shutdown")
@@ -242,12 +250,27 @@ class RecoveryProbe:
             return list(self._pending.values())
 
     def snapshot(self) -> dict:
+        now = self._clock()
         with self._lock:
+            faults = [
+                {
+                    "nemesis_type": p.nemesis_type,
+                    "host": p.target.host,
+                    "identity_key": p.target.identity_key(),
+                    "phase": p.phase,
+                    "held_sec": round(now - p.reserved_at, 1),
+                    "stuck": p.stuck_reported,
+                    "toggle": p.recover_action is not None,
+                }
+                for p in self._pending.values()
+            ]
+            faults.sort(key=lambda f: (-f["held_sec"], f["nemesis_type"], f["identity_key"]))
             return {
                 "tracked": len(self._pending),
                 "stuck": sum(1 for p in self._pending.values() if p.stuck_reported),
                 "confirming": sum(1 for p in self._pending.values() if p.phase == PHASE_CONFIRM),
                 "blind": self._blind,
+                "faults": faults,
             }
 
     # -- internals ----------------------------------------------------------------

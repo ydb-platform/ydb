@@ -55,7 +55,7 @@ class DnsNemesis(MonitoredAgentActor):
 
 
 class TimeSkewNemesis(MonitoredAgentActor):
-    """Step local system time forward; extract re-enables NTP sync (best-effort)."""
+    """Step local system time forward; extract re-enables NTP and forces an immediate step."""
 
     def __init__(self) -> None:
         super().__init__(scope="node")
@@ -73,11 +73,22 @@ class TimeSkewNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None):
         del payload
-        self._logger.info("Restoring time sync (TimeSkewNemesis)")
+        # Do not reverse a remembered delta: ask NTP for the truth, then *step*.
+        # Plain `set-ntp true` + bare `makestep` usually fails for a multi-minute jump:
+        # chronyd defaults to slewing (~few ppm), and `makestep` without `makestep 0.1 -1`
+        # is often limited to the first few updates after daemon start — already spent.
+        self._logger.info("Restoring time sync (TimeSkewNemesis) via forced NTP step")
         subprocess.run(
             "sudo timedatectl set-ntp true 2>/dev/null; "
-            "sleep 5; "
-            "(command -v chronyc >/dev/null && sudo chronyc -a makestep 2>/dev/null) || true",
+            "sudo systemctl try-restart chronyd 2>/dev/null || "
+            "sudo systemctl try-restart chrony 2>/dev/null || true; "
+            "sleep 2; "
+            "if command -v chronyc >/dev/null; then "
+            "  sudo chronyc -a 'makestep 0.1 -1' 2>/dev/null; "
+            "  sudo chronyc -a 'burst 4/4' 2>/dev/null; "
+            "  sudo chronyc -a makestep 2>/dev/null; "
+            "  sudo chronyc -a 'waitsync 30 0.1' 2>/dev/null || true; "
+            "fi",
             shell=True,
             check=False,
         )

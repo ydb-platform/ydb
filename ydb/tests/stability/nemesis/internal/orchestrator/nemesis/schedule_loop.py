@@ -62,6 +62,7 @@ class OrchestratorNemesisSchedule:
         predicate_for: Callable = hc_predicate_for,
         stuck_timeout_for: Callable[[str], float] = stuck_timeout_for,
         metrics=None,
+        resolve_http_host: Callable[[str], str] | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self._tasks: dict[str, dict] = {}
@@ -77,6 +78,7 @@ class OrchestratorNemesisSchedule:
         self._predicate_for = predicate_for
         self._stuck_timeout_for = stuck_timeout_for
         self._metrics = metrics
+        self._resolve_http_host = resolve_http_host or (lambda h: h)
 
     def set_metrics(self, metrics) -> None:
         self._metrics = metrics
@@ -240,8 +242,9 @@ class OrchestratorNemesisSchedule:
                 )
             else:
                 port = self._get_app_port()
+                http_host = self._resolve_http_host(cmd.host)
                 requests.post(
-                    f"http://{cmd.host}:{port}/api/processes",
+                    f"http://{http_host}:{port}/api/processes",
                     json=body,
                     timeout=5,
                 )
@@ -293,15 +296,28 @@ class OrchestratorNemesisSchedule:
                 )
 
     def flush_disable_extracts(self, process_type: str) -> None:
-        """Plan and run extract on all tracked hosts when schedule is turned off."""
+        """Extract still-held faults when schedule is turned off.
+
+        Planner ``extract_all_on_disable`` covers types that bookkeep hosts themselves.
+        Extract-mode toggles (Network/Dns/TimeSkew) inject via ``_direct_commands`` and never
+        fill that set — the recovery probe is the source of truth for those.
+        """
         if process_type not in NEMESIS_TYPES:
             return
         cmds = self._chaos_store.plan_disable_schedule(process_type)
-        if not cmds:
-            return
-        logger.info("Disable schedule: %d extract dispatch(es) for %s", len(cmds), process_type)
-        for cmd in cmds:
-            self._dispatch_and_record(cmd)
+        if cmds:
+            logger.info("Disable schedule: %d extract dispatch(es) for %s", len(cmds), process_type)
+            for cmd in cmds:
+                self._dispatch_and_record(cmd)
+        probe = self._recovery_probe
+        if probe is not None:
+            drained = probe.drain_extracts(nemesis_type=process_type)
+            if drained:
+                logger.info(
+                    "Disable schedule: drained %d probe toggle(s) for %s",
+                    drained,
+                    process_type,
+                )
 
     def _extract_action(self, nemesis_type: str, cmd: DispatchCommand) -> Callable[[], None]:
         """Probe-driven extract for toggle faults (lease blocks planner toggle-back)."""

@@ -33,6 +33,7 @@ ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine3
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine4
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine5
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine6
+ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine7
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.BadRequestUnknownMethod
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStream
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStreamWithConsumer
@@ -594,6 +595,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.EmptyEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BuildTable+WithForeign
+ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToBuild
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardValidateUniqueIndexScan.RunScan
@@ -625,6 +627,7 @@ ydb/core/tx/schemeshard/ut_restore TRestoreTests.ShouldHandleOverloadedShard-Ena
 ydb/core/tx/schemeshard/ut_set_column_constraint unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
+ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_acl_write
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_peers
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_query_long_multipart

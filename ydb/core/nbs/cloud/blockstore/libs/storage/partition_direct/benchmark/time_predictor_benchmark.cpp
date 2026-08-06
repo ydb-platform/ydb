@@ -64,10 +64,11 @@ static void BM_TimePredictorAdd(benchmark::State& state)
     }
 
     size_t index = 0;
+    auto* predictorPtr = &predictor;
     for (auto _: state) {
         const auto& sample = samples[index++ & (SampleCount - 1)];
         predictor.Add(sample.Host, sample.Time);
-        benchmark::DoNotOptimize(predictor);
+        benchmark::DoNotOptimize(predictorPtr);
     }
 }
 

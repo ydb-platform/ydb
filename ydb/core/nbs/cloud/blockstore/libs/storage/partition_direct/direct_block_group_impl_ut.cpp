@@ -1405,29 +1405,36 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         const auto& ddisks = transportPtr->GetDDiskIds();
         const auto& pbuffers = transportPtr->GetPBufferIds();
 
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), DirectBlockGroupIndex);
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::move(transport),
+            DirectBlockGroupIndex);
         auto initialReady = RunAndGetInitialReady(dbg);
 
         WaitReady(initialReady);
 
         // DDisks
-        for (const auto& ddiskId: ddisks) {
+        for (const auto& ddiskId : ddisks) {
             const auto credentials = transportPtr->GetConnectCredentials(
                 EConnectionType::DDisk,
                 ddiskId);
             UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
             UNIT_ASSERT_VALUES_EQUAL(1, credentials[0].DDiskSessionSeqNo);
-            UNIT_ASSERT_VALUES_EQUAL(DirectBlockGroupIndex, credentials[0].DirectBlockGroupIndex);
+            UNIT_ASSERT_VALUES_EQUAL(
+                DirectBlockGroupIndex,
+                credentials[0].DirectBlockGroupIndex);
         }
 
         // PBuffers
-        for (const auto& pbufferId: pbuffers) {
+        for (const auto& pbufferId : pbuffers) {
             const auto credentials = transportPtr->GetConnectCredentials(
                 EConnectionType::PBuffer,
                 pbufferId);
             UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
             UNIT_ASSERT_VALUES_EQUAL(0, credentials[0].DDiskSessionSeqNo);
-            UNIT_ASSERT_VALUES_EQUAL(DirectBlockGroupIndex, credentials[0].DirectBlockGroupIndex);
+            UNIT_ASSERT_VALUES_EQUAL(
+                DirectBlockGroupIndex,
+                credentials[0].DirectBlockGroupIndex);
         }
     }
 

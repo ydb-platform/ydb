@@ -1601,12 +1601,13 @@ void TDirectBlockGroup::OnConnectionEstablished(
             result.GetDDiskInstanceGuid();
         if (result.HasConnectionToken()) {
             auto creds = connectionType == EConnectionType::DDisk
-                ? NDDisk::TQueryCredentials::ToDDisk(result.GetConnectionToken())
-                : NDDisk::TQueryCredentials::ToPersistentBuffer(result.GetConnectionToken());
+                             ? NDDisk::TQueryCredentials::ToDDisk(result.GetConnectionToken())
+                             : NDDisk::TQueryCredentials::ToPersistentBuffer(result.GetConnectionToken());
             connection.HostConnection.Credentials.ConnectionToken =
                 creds.ConnectionToken;
         } else {
-            connection.HostConnection.Credentials.ConnectionToken = std::nullopt;
+            connection.HostConnection.Credentials.ConnectionToken =
+                std::nullopt;
         }
 
         if (connectionType == EConnectionType::DDisk) {

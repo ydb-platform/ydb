@@ -27,7 +27,7 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        ui8  = connection.NextPreviousTokenIndex;
+        ui8 nextIdx = connection.NextPreviousTokenIndex;
         auto& prevTokens = connection.PreviousTokens;
         TPreviousConnectionTokenInfo& previous = prevTokens[nextIdx];
         previous.Token = connection.Token;
@@ -140,7 +140,7 @@ namespace NKikimr::NDDisk {
         auto &connectionDict = ConnectionIndexBySession;
 
         if (auto it = connectionDict.find(connectionKey); it != connectionDict.end()) {
-            TConnectionInfo& connection = connectionDict[it->second];
+            TConnectionInfo& connection = Connections[it->second];
             RememberConnectionToken( connection, EConnectionTokenInvalidationReason::Disconnect);
             connection.Active = false;
             connection.Token = {};
@@ -157,7 +157,7 @@ namespace NKikimr::NDDisk {
                 return EConnectionResolution::InvalidToken;
             }
 
-            TConnectionInfo* connection = &Connections[index];
+            const TConnectionInfo* connection = &Connections[index];
             if (!connection->Active || connection->Token != *requestCreds.ConnectionToken) {
                 for (const auto& previous : connection->PreviousTokens) {
                     if (previous.Valid && previous.Token == *requestCreds.ConnectionToken) {
@@ -197,7 +197,7 @@ namespace NKikimr::NDDisk {
                 // connection. If the slot exists, preserve the old generation
                 // and instance checks.
                 if (it != ConnectionIndexBySession.end()) {
-                    TConnectionInfo& connection = Connections[it->second];
+                    const TConnectionInfo& connection = Connections[it->second];
                     bool isValid = connection.Active &&
                         connection.Generation == requestCreds.Generation &&
                         (!requestCreds.DDiskInstanceGuid || requestCreds.DDiskInstanceGuid == DDiskInstanceGuid);
@@ -223,8 +223,8 @@ namespace NKikimr::NDDisk {
                 const TConnectionInfo& connection = Connections[it->second];
                 bool isValid = connection.Active &&
                     connection.Generation == requestCreds.Generation &&
-                    connection.DDiskSessionSeqNo == equestCreds.DDiskSessionSeqNo &&
-                    (!requestCreds.DDiskInstanceGuid || equestCreds.DDiskInstanceGuid == DDiskInstanceGuid);
+                    connection.DDiskSessionSeqNo == requestCreds.DDiskSessionSeqNo &&
+                    (!requestCreds.DDiskInstanceGuid || requestCreds.DDiskInstanceGuid == DDiskInstanceGuid);
 
                 if (!isValid) {
                     return EConnectionResolution::InvalidToken;

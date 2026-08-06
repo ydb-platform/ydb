@@ -505,6 +505,9 @@ class YdbCliHelper:
                 res.add_stat('test', 'tpcc_warehouses', summary.get('warehouses', 0))
                 res.add_stat('test', 'tpcc_efficiency', summary.get('efficiency', 0))
                 res.add_stat('test', 'tpcc_time_seconds', summary.get('time_seconds', 0))
+                res.add_stat('test', 'tpcc_max_sessions', summary.get('max_sessions', 0))
+                res.add_stat('test', 'tpcc_threads', summary.get('threads', 0))
+                res.add_stat('test', 'tpcc_warmup_seconds', summary.get('warmup_seconds', 0))
                 for tr, stats in ans.get('transactions', {}).items():
                     res.add_stat('test', f'tpcc_{tr}_ok_count', stats.get('ok_count', 0))
                     res.add_stat('test', f'tpcc_{tr}_failed_count', stats.get('failed_count', 0))

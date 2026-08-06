@@ -186,6 +186,9 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             << ". It might affect benchmark results");
     }
 
+    // Persist resolved value (may differ from user-provided/auto default) for JSON/status output.
+    Config.ThreadCount = threadCount;
+
     // The number of terminals might be hundreds of thousands.
     // For now, we don't have more than 32 network threads (check TClientCommand::TConfig::GetNetworkThreadNum()),
     // so that maxTerminalThreads will be around more or less around 100.
@@ -374,6 +377,9 @@ void TPCCRunner::RunSync() {
             warmupSeconds = minWarmupSeconds;
         }
     }
+
+    // Persist resolved warmup for JSON/status output (includes auto/min-floor adjustments).
+    Config.WarmupDuration = TDuration::Seconds(warmupSeconds);
 
     WarmupStartTs = Clock::now();
     WarmupStopDeadline = WarmupStartTs + std::chrono::seconds(warmupSeconds);
@@ -806,6 +812,9 @@ void TPCCRunner::PrintFinalResultJson() {
     summary.InsertValue("new_orders", static_cast<long long>(newOrdersCount));
     summary.InsertValue("tpmc", DataToDisplay->StatusData.Tpmc);
     summary.InsertValue("efficiency", DataToDisplay->StatusData.Efficiency);
+    summary.InsertValue("max_sessions", static_cast<long long>(Config.MaxInflight));
+    summary.InsertValue("threads", static_cast<long long>(Config.ThreadCount));
+    summary.InsertValue("warmup_seconds", static_cast<long long>(Config.WarmupDuration.Seconds()));
 
     root.InsertValue("summary", std::move(summary));
 

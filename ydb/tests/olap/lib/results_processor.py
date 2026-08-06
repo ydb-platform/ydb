@@ -252,7 +252,32 @@ class ResultsProcessor:
             branch = f'origin/{branch}' if branch else ''
 
             summary = results.get('summary', {})
-            json_string = json.dumps(results, separators=(',', ':'))
+            report_url = os.getenv('ALLURE_RESOURCE_URL', None)
+            if report_url is None:
+                sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
+                if sandbox_task_id is not None:
+                    report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
+            # Enrich payload stored in `json` with resolved run knobs / CI context.
+            # Keep original CLI summary fields (max_sessions/threads/warmup_seconds when present).
+            payload = dict(results)
+            payload['meta'] = {
+                'run_type': run_type,
+                'compaction_mode': get_external_param(
+                    'tpcc-compaction-mode',
+                    os.getenv('TPCC_COMPACTION_MODE', 'none'),
+                ),
+                'deploy_method': (
+                    os.getenv('CI_DEPLOY_METHOD')
+                    or get_external_param('deploy-method', '')
+                ),
+                'cluster': cluster_name,
+                'client_host': get_external_param('client-host', os.getenv('CLIENT_HOST', '')),
+                'max_sessions': summary.get('max_sessions'),
+                'threads': summary.get('threads'),
+                'warmup_seconds': summary.get('warmup_seconds'),
+                'report_url': report_url,
+            }
+            json_string = json.dumps(payload, separators=(',', ':'))
             data = {
                 'timestamp': int(1000000 * warmup_start_ts),
                 'cluster': cluster_name,

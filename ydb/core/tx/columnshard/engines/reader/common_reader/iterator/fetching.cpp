@@ -77,7 +77,7 @@ TStepAction::TStepAction(
 NO_SANITIZE_THREAD
 void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs,
     const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
-    const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor) const {
+    const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, const ui64 reservedMemory) const {
     if (!processor) {
         return;
     }
@@ -98,11 +98,11 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
     const auto processorType = processor->GetProcessorType();
     const TString details = processor->DebugJson().GetStringRobust();
     const auto& resources = source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().GetResources();
-    const ui32 filteredRows = resources.GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
+    const ui32 filteredRows = resources.GetRecordsCountActualOptional().value_or(source->GetRecordsCountOptional().value_or(0));
 #define PROGRAM_PROBE_ARGS                                                                                                            \
     source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(), source->GetDeprecatedPortionId(), \
         step.GetStepIndex(), tracingName, nodeId, finishDurationMs, executionDurationMs, filteredRows
-#define PROGRAM_PROBE_RESERVED source->GetReservedMemory()
+#define PROGRAM_PROBE_RESERVED reservedMemory
 #define PROGRAM_PROBE_TAIL tracingExecutionResult, details
     switch (processorType) {
         case NArrow::NSSA::EProcessorType::Const:
@@ -173,7 +173,8 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
             break;
         case NArrow::NSSA::EProcessorType::CheckIndexData: {
             TString indexStatus = "Unknown";
-            ui32 indexFilteredRows = source->GetRecordsCount();
+            const ui32 recordsCountFallback = source->GetRecordsCountOptional().value_or(filteredRows);
+            ui32 indexFilteredRows = recordsCountFallback;
             auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
             if (indexProcessor && source->GetSourceSchemaOptional()) {
                 const auto& idxCtx = indexProcessor->GetIndexContext();
@@ -189,7 +190,7 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                 }
                 if (skipIndexes.empty() || !hasActualIndexData) {
                     indexStatus = "NoIndex";
-                    indexFilteredRows = source->GetRecordsCount();
+                    indexFilteredRows = recordsCountFallback;
                 } else {
                     // After DoExecute in index.cpp:
                     // - AllDenied/AllAccepted: output column stored, filter NOT modified
@@ -206,16 +207,16 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                                 indexFilteredRows = 0;
                             } else {
                                 indexStatus = "AllAccepted";
-                                indexFilteredRows = source->GetRecordsCount();
+                                indexFilteredRows = recordsCountFallback;
                             }
                         } else {
                             indexStatus = "AllAccepted";
-                            indexFilteredRows = source->GetRecordsCount();
+                            indexFilteredRows = recordsCountFallback;
                         }
                     } else {
                         // No output column → Partial (filter was applied via AddFilter)
                         indexStatus = "Partial";
-                        indexFilteredRows = resources.GetFilter().GetFilteredCount().value_or(source->GetRecordsCount());
+                        indexFilteredRows = resources.GetFilter().GetFilteredCount().value_or(recordsCountFallback);
                     }
                 }
             }
@@ -228,7 +229,7 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
             LWTRACK(ProgramStreamLogic, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::ReserveMemory:
-            LWTRACK(ProgramReserveMemory, PROGRAM_PROBE_ARGS, source->GetReservedMemory(), PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+            LWTRACK(ProgramReserveMemory, PROGRAM_PROBE_ARGS, reservedMemory, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Unknown:
             break;
@@ -272,6 +273,7 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         source->MutableExecutionContext().OnStartProgramStepExecution(tracingNodeId, GetSignals(tracingNodeId));
         auto signals = GetSignals(tracingNodeId);
 
+        const ui64 reservedMemory = source->GetReservedMemory();
         const TMonotonic start = TMonotonic::Now();
         auto conclusion = source->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
         const TDuration executionDurationMs = TMonotonic::Now() - start;
@@ -280,7 +282,7 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         source->AddExecutionDuration(executionDurationMs);
 
         const TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
-        ReportTracing(source, executionDurationMs, currentExecutionResult, tracingNodeId, tracingCategoryName, tracingProcessor);
+        ReportTracing(source, executionDurationMs, currentExecutionResult, tracingNodeId, tracingCategoryName, tracingProcessor, reservedMemory);
         if (conclusion.IsFail()) {
             source->MutableExecutionContext().OnFailedProgramStepExecution();
             return conclusion;

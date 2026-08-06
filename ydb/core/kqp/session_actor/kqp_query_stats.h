@@ -1,6 +1,7 @@
 #pragma  once
 
 #include <ydb/core/kqp/common/compilation/result.h>
+#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
@@ -19,6 +20,10 @@ struct TKqpQueryStats {
     ui64 LocksBrokenAsVictim = 0;
 
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
+    // User-facing trace source data, one entry per execution (empty when the executer didn't
+    // trace it); self-contained — the renderer never reads Executions for stage detail, those
+    // are capped at the client-requested stats mode.
+    std::vector<TUserFacingTraceExecutionData> UserFacingTraces;
 
     const TVector<NYql::NDqProto::TDqExecutionStats>& GetExecutions() const;
     ui64 GetWorkerCpuTimeUs() const;

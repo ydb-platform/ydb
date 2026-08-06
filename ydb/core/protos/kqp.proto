@@ -262,6 +262,8 @@ message TEvQueryRequest {
     repeated Ydb.Issue.IssueMessage QueryIssues = 7;
     optional Ydb.StatusIds.StatusCode YdbStatus = 8;
     optional NActorsProto.TActorId CancelationActor = 9;
+    // Trace id of the independent user-facing tracing channel (survives interconnect).
+    optional NActorsProto.TTraceId UserFacingTraceId = 10;
 }
 
 message TParameterBinding {

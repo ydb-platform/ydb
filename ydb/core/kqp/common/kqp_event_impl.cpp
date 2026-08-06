@@ -57,6 +57,12 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
         builder.WithUserTraceId(ctx->GetWilsonTraceId());
     }
 
+    // Carry the user-facing trace id (decided at the proxy) in the serialized Record so it
+    // survives the interconnect to a session actor on another node.
+    if (NWilson::TTraceId userFacingTraceId = ctx->GetUserFacingWilsonTraceId()) {
+        userFacingTraceId.Serialize(Record.MutableUserFacingTraceId());
+    }
+
     UserCtx = builder.Build();
 }
 

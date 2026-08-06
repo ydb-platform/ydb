@@ -166,6 +166,10 @@ public:
 
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
+        // != NONE => the user-facing channel sampled this query: collect stats at least this deep
+        // and record trace source data (TUserFacingTraceExecutionData). Collection-only — the client's
+        // response stats keep honoring StatsMode, sampling must not change the response.
+        Ydb::Table::QueryStatsCollection::Mode UserFacingTraceCollectionMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
         TString UserTraceId;
         ui64 QuerySpanId = 0;  // QuerySpanId of the current query being executed
 

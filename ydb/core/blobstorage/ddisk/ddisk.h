@@ -131,16 +131,15 @@ namespace NKikimr::NDDisk {
     };
 
     struct TQueryCredentials {
-        using TQueryCredentials = NKikimrBlobStorage::NDDisk::TQueryCredentials;
         using TRequestCredentials = NKikimrBlobStorage::NDDisk::TRequestCredentials;
-        using ERequestKind = TQueryCredentials::ERequestKind;
+        using ERequestKind = NKikimrBlobStorage::NDDisk::TQueryCredentials::ERequestKind;
 
         ui64 TabletId = 0;
         ui32 Generation = 0;
         ui32 DirectBlockGroupIndex = 0;
         std::optional<ui64> DDiskInstanceGuid;
         ui64 DDiskSessionSeqNo = 0;
-        ERequestKind RequestKind = TQueryCredentials::REQUEST_KIND_TO_DDISK;
+        ERequestKind RequestKind = NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_DDISK;
         std::optional<TConnectionToken> ConnectionToken;
         bool ServerContext = false;
 
@@ -175,7 +174,7 @@ namespace NKikimr::NDDisk {
                 generation,
                 ddiskSessionSeqNo,
                 ddiskInstanceGuid,
-                TQueryCredentials::REQUEST_KIND_TO_DDISK,
+                NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_DDISK,
                 directBlockGroupIndex);
         }
 
@@ -192,7 +191,7 @@ namespace NKikimr::NDDisk {
                 generation,
                 0,
                 ddiskInstanceGuid,
-                TQueryCredentials::REQUEST_KIND_TO_PERSISTENT_BUFFER,
+                NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_PERSISTENT_BUFFER,
                 directBlockGroupIndex);
         }
 
@@ -211,7 +210,7 @@ namespace NKikimr::NDDisk {
                 generation,
                 0,
                 ddiskInstanceGuid,
-                TQueryCredentials::REQUEST_KIND_INTERNAL,
+                NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_INTERNAL,
                 directBlockGroupIndex);
         }
 
@@ -233,7 +232,8 @@ namespace NKikimr::NDDisk {
             return ToDDisk(connectionToken);
         }
 
-        TQueryCredentials(const TQueryCredentials& pb)
+
+        TQueryCredentials(const NKikimrBlobStorage::NDDisk::TQueryCredentials& pb)
             : TabletId(pb.GetTabletId())
             , Generation(pb.GetGeneration())
             , DirectBlockGroupIndex(pb.GetDirectBlockGroupIndex())
@@ -242,11 +242,11 @@ namespace NKikimr::NDDisk {
             , RequestKind(pb.GetRequestKind())
         {}
 
-        TQueryCredentials(const TQueryCredentials& pb)
+        TQueryCredentials(const TRequestCredentials& pb)
         {
             if (pb.HasInternal()) {
                 ServerContext = true;
-                auto& internal = pb.GetInternal();
+                const auto& internal = pb.GetInternal();
                 TabletId = internal.GetTabletId();
                 Generation = internal.GetGeneration();
                 DirectBlockGroupIndex = internal.GetDirectBlockGroupIndex();

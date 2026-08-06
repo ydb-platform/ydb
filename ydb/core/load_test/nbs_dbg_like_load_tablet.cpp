@@ -1890,7 +1890,8 @@ void TNbsDbgLikeActor::DisconnectAllPeers() {
     const ui32 hostsPerDbg = HostsPerDbg();
     for (ui32 k = 0; k < hostsPerDbg; ++k) {
         if (PB[k].Connected) {
-            auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(PB[k].Token);
+            Y_ABORT_UNLESS(PB[k].Token);
+            auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(*PB[k].Token);
             auto ev = std::make_unique<NDDisk::TEvDisconnect>();
             creds.SerializeForRequest(ev->Record.MutableCredentials());
             const auto& id = DbgInfo.PBIds[k];
@@ -1902,7 +1903,8 @@ void TNbsDbgLikeActor::DisconnectAllPeers() {
             PB[k].Token.reset();
         }
         if (DD[k].Connected) {
-            auto creds = NDDisk::TQueryCredentials::ToDDisk(DD[k].Token)
+            Y_ABORT_UNLESS(DD[k].Token);
+            auto creds = NDDisk::TQueryCredentials::ToDDisk(*DD[k].Token);
             auto ev = std::make_unique<NDDisk::TEvDisconnect>();
             creds.SerializeForRequest(ev->Record.MutableCredentials());
             const auto& id = DbgInfo.DDiskIds[k];
@@ -2266,7 +2268,8 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
     ++LsnsTotalAll;
     dbg.InflightLsnAtSlot[vChunkIndex][offset / IoSizeBytes] = lsn;
 
-    auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(dbg.PBToken[coord]);
+    Y_ABORT_UNLESS(dbg.PBToken[coord]);
+    auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(*dbg.PBToken[coord]);
     NDDisk::TBlockSelector selector(vChunkIndex, offset, IoSizeBytes);
     std::vector<NKikimrBlobStorage::NDDisk::TDDiskId> pbIds;
     if (TabletConfig.GetDisableReplication()) {
@@ -2325,11 +2328,12 @@ bool TNbsDbgLikeActor::SendPbRead(TPerDbgState& dbg, ui32 dbgIndex, ui64 lsn,
         return false;
     }
     const ui32 k = PickRandomSetBit(info.WriteConfirmed, Rng.GenRand());
-    auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(dbg.PBToken[k]);
+    Y_ABORT_UNLESS(dbg.PBToken[k]);
+    auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(*dbg.PBToken[k]);
     NDDisk::TBlockSelector selector(info.VChunkIndex,
         static_cast<ui32>(info.OffsetInVChunk), info.Size);
     auto ev = std::make_unique<NDDisk::TEvReadPersistentBuffer>(
-        creds, selector, lsn, generation, NDDisk::TReadInstruction(true));
+        creds, selector, lsn, Generation_, NDDisk::TReadInstruction(true));
     const ui64 cookie = NextBatchCookie++;
     TReadInflight ri;
     ri.DbgIndex = dbgIndex;
@@ -2357,7 +2361,8 @@ bool TNbsDbgLikeActor::SendDDiskRead(TPerDbgState& dbg, ui32 dbgIndex,
 {
     const TPeerBitset& effectiveMask = flushMask.any() ? flushMask : kAllPrimaryHostsMask;
     const ui32 k = PickRandomSetBit(effectiveMask, Rng.GenRand());
-    auto creds = NDDisk::TQueryCredentials::ToDDisk(dbg.DDToken[k]);
+        Y_ABORT_UNLESS(dbg.DDToken[k]);
+        auto creds = NDDisk::TQueryCredentials::ToDDisk(*dbg.DDToken[k]);
     NDDisk::TBlockSelector selector(vChunkIndex, static_cast<ui32>(offset), size);
     auto ev = std::make_unique<NDDisk::TEvRead>(
         creds, selector, NDDisk::TReadInstruction(true));
@@ -2719,7 +2724,8 @@ void TNbsDbgLikeActor::DoFlush(TPerDbgState& dbg) {
         if (pending[k].empty()) {
             continue;
         }
-        auto creds = NDDisk::TQueryCredentials::ToDDisk(dbg.DDToken[k]);
+        Y_ABORT_UNLESS(dbg.DDToken[k]);
+        auto creds = NDDisk::TQueryCredentials::ToDDisk(*dbg.DDToken[k]);
         std::tuple<ui32, ui32, ui32> srcId{
             dbg.PBIdsPb[k].GetNodeId(),
             dbg.PBIdsPb[k].GetPDiskId(),
@@ -2731,7 +2737,7 @@ void TNbsDbgLikeActor::DoFlush(TPerDbgState& dbg) {
         batchInfo.Lsns.reserve(pending[k].size());
         batchInfo.SentAt = MonotonicNow();
         for (auto& [lsn, sel] : pending[k]) {
-            ev->AddSegmentFromPB(srcId, dbg.PBGuid[k], sel, lsn, generation);
+            ev->AddSegmentFromPB(srcId, dbg.PBGuid[k], sel, lsn, Generation_);
             batchInfo.Lsns.push_back(lsn);
         }
         const ui64 cookie = NextBatchCookie++;
@@ -2974,7 +2980,8 @@ void TNbsDbgLikeActor::DoErase(TPerDbgState& dbg) {
         if (pending[k].empty()) {
             continue;
         }
-        auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(dbg.PBToken[k]);
+        Y_ABORT_UNLESS(dbg.PBToken[k]);
+        auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(*dbg.PBToken[k]);
         auto ev = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(creds);
         TEraseBatch batchInfo;
         batchInfo.DbgIndex = dbg.DbgIndex;
@@ -2982,7 +2989,7 @@ void TNbsDbgLikeActor::DoErase(TPerDbgState& dbg) {
         batchInfo.Lsns.reserve(pending[k].size());
         batchInfo.SentAt = MonotonicNow();
         for (ui64 lsn : pending[k]) {
-            ev->AddErase(lsn, generation);
+            ev->AddErase(lsn, Generation_);
             batchInfo.Lsns.push_back(lsn);
         }
         const ui64 cookie = NextBatchCookie++;
@@ -3181,14 +3188,15 @@ void TNbsDbgLikeActor::BestEffortEraseAll(TPerDbgState& dbg) {
         if (pending[k].empty()) {
             continue;
         }
-        auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(dbg.PBToken[k]);
+        Y_ABORT_UNLESS(dbg.PBToken[k]);
+        auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(*dbg.PBToken[k]);
         auto ev = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(creds);
         TEraseBatch batchInfo;
         batchInfo.DbgIndex = dbg.DbgIndex;
         batchInfo.Sink = static_cast<ui8>(k);
         batchInfo.Lsns = pending[k];
         batchInfo.SentAt = MonotonicNow();
-        for (ui64 lsn : pending[k]) ev->AddErase(lsn, generation);
+        for (ui64 lsn : pending[k]) ev->AddErase(lsn, Generation_);
         const ui64 cookie = NextBatchCookie++;
         EraseInflight.emplace(cookie, std::move(batchInfo));
         Send(dbg.PBActor[k], ev.release(), 0, cookie);

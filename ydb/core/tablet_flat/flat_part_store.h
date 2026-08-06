@@ -169,21 +169,6 @@ public:
         return pages;
     }
 
-    /// TOuterPageCollection for the outer blob slot
-    static void Construct(TVector<TIntrusivePtr<TPageCollection>>& pageCollections, TVector<TPageCollectionComponents> components, ui32 outerIdx = Max<ui32>())
-    {
-        for (ui32 i = 0; i < components.size(); i++) {
-            if (i == outerIdx) {
-                auto outerColl = MakeIntrusiveConst<NPageCollection::TOuterPageCollection>(
-                    components[i].PageCollection->LargeGlobId,
-                    TSharedData(components[i].PageCollection->Meta.Raw));
-                pageCollections.emplace_back(new TPageCollection(std::move(outerColl)));
-            } else {
-                pageCollections.emplace_back(new TPageCollection(std::move(components[i].PageCollection)));
-            }
-        }
-    }
-
     static TArrayRef<const TIntrusivePtr<TPageCollection>> Storages(const TPartView &partView)
     {
         auto *part = partView.As<TPartStore>();

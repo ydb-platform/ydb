@@ -81,8 +81,6 @@ namespace NKikimr::NBlobDepot {
         TString CurrentEndpoint;
         TActorId InnerWrapperId;
         TActorId HttpProxyId;
-        bool RefreshInFlight = false;
-        bool RefreshScheduled = false;
 
         ui32 RefreshSecMin() const {
             return Settings.HasBalancerRefreshSecMin() ? Settings.GetBalancerRefreshSecMin() : 10;
@@ -142,9 +140,6 @@ namespace NKikimr::NBlobDepot {
         }
 
         void IssueBalancerRequest() {
-            if (RefreshInFlight || !BalancerEnabled()) {
-                return;
-            }
             if (!HttpProxyId) {
                 HttpProxyId = Register(NHttp::CreateHttpProxy());
             }
@@ -152,32 +147,23 @@ namespace NKikimr::NBlobDepot {
             Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
                 NHttp::THttpOutgoingRequest::CreateRequestGet(url),
                 TDuration::Seconds(10)));
-            RefreshInFlight = true;
         }
 
         void ScheduleNextRefresh() {
-            if (!RefreshScheduled && BalancerEnabled()) {
-                TActivationContext::Schedule(NextRefreshDelay(),
-                    new IEventHandle(TEvPrivate::EvBalancerTick, 0, SelfId(), SelfId(), nullptr, 0));
-                RefreshScheduled = true;
-            }
+            TActivationContext::Schedule(NextRefreshDelay(),
+                new IEventHandle(TEvPrivate::EvBalancerTick, 0, SelfId(), SelfId(), nullptr, 0));
         }
 
         void HandleBalancerTick() {
-            RefreshScheduled = false;
-            RefreshInFlight = false;
             IssueBalancerRequest();
             ScheduleNextRefresh();
         }
 
         void HandleRefreshNow() {
-            if (!RefreshInFlight) {
-                IssueBalancerRequest();
-            }
+            IssueBalancerRequest();
         }
 
         void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev) {
-            RefreshInFlight = false;
             const auto& msg = *ev->Get();
             if (msg.Response && msg.Response->Status.StartsWith("2")) {
                 TString host = TString(StripString(msg.Response->Body));
@@ -194,14 +180,17 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
             }
-            ScheduleNextRefresh();
         }
 
         void Forward(STATEFN_SIG) {
             if (!InnerWrapperId) {
                 return;
             }
+
             TActivationContext::Send(ev->Forward(InnerWrapperId));
+            if (BalancerEnabled()) {
+                IssueBalancerRequest();
+            }
         }
 
     public:
@@ -214,13 +203,14 @@ namespace NKikimr::NBlobDepot {
         {}
 
         void Bootstrap() {
-            const TString& endpoint = Settings.GetSettings().GetEndpoint();
-            OriginalEndpoint = endpoint;
-            BuildInnerWrapper(endpoint);
+            OriginalEndpoint = Settings.GetSettings().GetEndpoint();
             if (BalancerEnabled()) {
                 IssueBalancerRequest();
                 ScheduleNextRefresh();
+            } else {
+                BuildInnerWrapper(OriginalEndpoint);
             }
+
             Become(&TThis::StateWork);
         }
 

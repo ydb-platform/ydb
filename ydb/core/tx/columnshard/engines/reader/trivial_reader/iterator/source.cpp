@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
@@ -507,10 +508,12 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
         result.GetBlobsSize(), result.GetRawSize(), GetContext()->GetReadMetadata()->GetLimitRobustOptional(), GetRecordsCount());
 
     auto allocation = std::make_shared<NCommon::TAllocateMemoryStep::TFetchingStepAllocation>(
-        source, sizeToReserve, GetExecutionContext().GetCursorStep(), policy->GetStage(), false);
+        source, sizeToReserve, GetExecutionContext().GetCursorStep(), policy->GetStage(), false /*needNextStep*/,
+        IsScanMemoryLimiterEnabled(GetContext()->GetCommonContext()->GetReadMetadataPtrVerifiedAs<NCommon::TReadMetadata>()->GetGroupedMemoryLimiterOperator()) /*scheduleContinuation*/);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("mr"));
-    GetContext()->SendToGroupedMemoryAllocation(GetMemoryGroupId(), { allocation }, (ui32)policy->GetStage());
-    return true;
+    // When the limiter is disabled, OnAllocated runs inline and only registers the guard (no nested TStepAction).
+    // Return false so the program continues on this stack instead of racing with a concurrent continuation.
+    return GetContext()->SendToGroupedMemoryAllocation(GetMemoryGroupId(), { allocation }, (ui32)policy->GetStage());
 }
 
 bool TPortionDataSource::DoAddTxConflict() {

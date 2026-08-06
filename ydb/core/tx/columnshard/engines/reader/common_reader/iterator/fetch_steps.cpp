@@ -90,6 +90,12 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
     } else {
         data->RegisterAllocationGuard(std::move(guard));
     }
+    if (!ScheduleContinuation) {
+        // Allocation was satisfied inline (e.g. memory limiter disabled). The caller continues on the
+        // same stack — do not start a concurrent TStepAction that would race with it.
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data->AddEvent("fmalloc_inline"));
+        return true;
+    }
     if (NeedNextStep) {
         Step.Next();
     }
@@ -101,13 +107,15 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
 }
 
 TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem,
-    const TFetchingScriptCursor& step, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep)
+    const TFetchingScriptCursor& step, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep,
+    const bool scheduleContinuation)
     : TBase(mem)
     , Source(source)
     , Step(step)
     , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
     , StageIndex(stageIndex)
     , NeedNextStep(needNextStep)
+    , ScheduleContinuation(scheduleContinuation)
 {
 }
 

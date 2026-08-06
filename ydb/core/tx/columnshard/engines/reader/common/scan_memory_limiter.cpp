@@ -34,4 +34,13 @@ bool SendScanToAllocation(EScanGroupedMemoryLimiterOperator operatorType, const 
     }
 }
 
+bool IsScanMemoryLimiterEnabled(EScanGroupedMemoryLimiterOperator operatorType) {
+    switch (operatorType) {
+        case EScanGroupedMemoryLimiterOperator::Deduplication:
+            return NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::IsEnabled();
+        case EScanGroupedMemoryLimiterOperator::Scan:
+            return NGroupedMemoryManager::TScanMemoryLimiterOperator::IsEnabled();
+    }
+}
+
 }   // namespace NKikimr::NOlap::NReader

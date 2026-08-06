@@ -4,8 +4,6 @@
 
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
-#include <util/string/vector.h>
-
 namespace NKikimr::NMetadata::NSecret {
 
 class TCheckSecretNameUnique: public NModifications::TModificationStage {
@@ -13,22 +11,24 @@ private:
     THashMap<TString, TString> SecretNameToOwner;
 
     static Ydb::Table::ExecuteDataQueryRequest BuildRequest(std::vector<TSecretId> secrets) {
-        std::vector<TString> secretNameLiterals;
-        for (const auto& id : secrets) {
-            secretNameLiterals.push_back(TStringBuilder() << '"' << id.GetSecretId() << '"');
-        }
-
         Ydb::Table::ExecuteDataQueryRequest request;
         request.mutable_query_cache_policy()->set_keep_in_cache(true);
         TStringBuilder sb;
         sb << "--!syntax_v1\n";
+        sb << "DECLARE $secretNames AS List<Utf8>;" << Endl;
         sb << "SELECT " + TSecret::TDecoder::SecretId + ", " + TSecret::TDecoder::OwnerUserId + ", " + TSecret::TDecoder::Value << Endl;
         sb << "FROM `" + TSecret::GetBehaviour()->GetStorageTablePath() + "`" << Endl;
         sb << "VIEW index_by_secret_id" << Endl;
-        sb << "WHERE " + TSecret::TDecoder::SecretId + " IN (" + JoinStrings(secretNameLiterals.begin(), secretNameLiterals.end(), ", ") + ")"
-           << Endl;
+        sb << "WHERE " + TSecret::TDecoder::SecretId + " IN $secretNames" << Endl;
         AFL_DEBUG(NKikimrServices::METADATA_SECRET)("event", "build_precondition")("sql", sb);
         request.mutable_query()->set_yql_text(sb);
+
+        Ydb::TypedValue secretNamesParam;
+        for (const auto& id : secrets) {
+            *secretNamesParam.mutable_value()->add_items() = NInternal::TYDBValue::Utf8(id.GetSecretId());
+        }
+        secretNamesParam.mutable_type()->mutable_list_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+        (*request.mutable_parameters())["$secretNames"] = secretNamesParam;
         return request;
     }
 

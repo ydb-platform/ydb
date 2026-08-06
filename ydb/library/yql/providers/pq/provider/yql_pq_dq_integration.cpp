@@ -403,7 +403,7 @@ public:
     }
 
     TMaybe<TSourceWatermarksSettings> ExtractSourceWatermarksSettings(const TExprNode& /*node*/, const ::google::protobuf::Any& protoSettings, const TString& sourceType) override {
-        YQL_ENSURE(sourceType == "PqSource");
+        YQL_ENSURE(sourceType == PqSource);
         YQL_ENSURE(protoSettings.Is<NPq::NProto::TDqPqTopicSource>());
         NYql::NPq::NProto::TDqPqTopicSource srcDesc;
         if (!protoSettings.UnpackTo(&srcDesc)) {
@@ -648,7 +648,7 @@ public:
                 if (sharedReading && !watermarkExprSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use watermark expr: " + watermarkExprSql));
                 }
-                sourceType = "PqSource";
+                sourceType = PqSource;
             }
         }
     }

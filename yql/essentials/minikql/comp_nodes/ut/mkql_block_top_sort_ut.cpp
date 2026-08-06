@@ -7,8 +7,7 @@
 
 #include <cstring>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -47,7 +46,7 @@ Y_UNIT_TEST_LLVM(TopByFirstKeyAsc) {
     const auto blockStream = MakeTestBlockStream(pb);
     const auto topBlocks = pb.WideTopBlocks(blockStream,
                                             NTest::ConvertValueToLiteralNode(pb, ui64(4)),
-                                            {{0U, NTest::ConvertValueToLiteralNode(pb, true)}});
+                                            {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}});
     const auto topFlow = pb.ToFlow(pb.WideFromBlocks(topBlocks), {});
     const auto pgmReturn = pb.Collect(pb.NarrowMap(topFlow,
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -70,7 +69,7 @@ Y_UNIT_TEST_LLVM(TopByFirstKeyDesc) {
     const auto blockStream = MakeTestBlockStream(pb);
     const auto topBlocks = pb.WideTopBlocks(blockStream,
                                             NTest::ConvertValueToLiteralNode(pb, ui64(6)),
-                                            {{0U, NTest::ConvertValueToLiteralNode(pb, false)}});
+                                            {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)}});
     const auto topFlow = pb.ToFlow(pb.WideFromBlocks(topBlocks), {});
     const auto pgmReturn = pb.Collect(pb.NarrowMap(topFlow,
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -95,7 +94,7 @@ Y_UNIT_TEST_LLVM(TopBySecondKeyAsc) {
     const auto blockStream = MakeTestBlockStream(pb);
     const auto topBlocks = pb.WideTopBlocks(blockStream,
                                             NTest::ConvertValueToLiteralNode(pb, ui64(3)),
-                                            {{1U, NTest::ConvertValueToLiteralNode(pb, true)}});
+                                            {{1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}});
     const auto topFlow = pb.ToFlow(pb.WideFromBlocks(topBlocks), {});
     const auto pgmReturn = pb.Collect(pb.NarrowMap(topFlow,
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -117,7 +116,7 @@ Y_UNIT_TEST_LLVM(TopBySecondKeyDesc) {
     const auto blockStream = MakeTestBlockStream(pb);
     const auto topBlocks = pb.WideTopBlocks(blockStream,
                                             NTest::ConvertValueToLiteralNode(pb, ui64(2)),
-                                            {{1U, NTest::ConvertValueToLiteralNode(pb, false)}});
+                                            {{1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)}});
     const auto topFlow = pb.ToFlow(pb.WideFromBlocks(topBlocks), {});
     const auto pgmReturn = pb.Collect(pb.NarrowMap(topFlow,
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -138,8 +137,8 @@ Y_UNIT_TEST_LLVM(TopSortByFirstSecondAscDesc) {
     const auto blockStream = MakeTestBlockStream(pb);
     const auto topSortBlocks = pb.WideTopSortBlocks(blockStream,
                                                     NTest::ConvertValueToLiteralNode(pb, ui64(4)),
-                                                    {{0U, NTest::ConvertValueToLiteralNode(pb, true)},
-                                                     {1U, NTest::ConvertValueToLiteralNode(pb, false)}});
+                                                    {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)},
+                                                     {1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)}});
     const auto topSortFlow = pb.ToFlow(pb.WideFromBlocks(topSortBlocks), {});
     const auto pgmReturn = pb.Collect(pb.NarrowMap(topSortFlow,
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -162,8 +161,8 @@ Y_UNIT_TEST_LLVM(TopSortByFirstSecondDescAsc) {
     const auto blockStream = MakeTestBlockStream(pb);
     const auto topSortBlocks = pb.WideTopSortBlocks(blockStream,
                                                     NTest::ConvertValueToLiteralNode(pb, ui64(6)),
-                                                    {{0U, NTest::ConvertValueToLiteralNode(pb, false)},
-                                                     {1U, NTest::ConvertValueToLiteralNode(pb, true)}});
+                                                    {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)},
+                                                     {1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}});
     const auto topSortFlow = pb.ToFlow(pb.WideFromBlocks(topSortBlocks), {});
     const auto pgmReturn = pb.Collect(pb.NarrowMap(topSortFlow,
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -188,8 +187,8 @@ Y_UNIT_TEST_LLVM(TopSortBySecondFirstAscDesc) {
     const auto blockStream = MakeTestBlockStream(pb);
     const auto topSortBlocks = pb.WideTopSortBlocks(blockStream,
                                                     NTest::ConvertValueToLiteralNode(pb, ui64(4)),
-                                                    {{1U, NTest::ConvertValueToLiteralNode(pb, true)},
-                                                     {0U, NTest::ConvertValueToLiteralNode(pb, false)}});
+                                                    {{1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)},
+                                                     {0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)}});
     const auto topSortFlow = pb.ToFlow(pb.WideFromBlocks(topSortBlocks), {});
     const auto pgmReturn = pb.Collect(pb.NarrowMap(topSortFlow,
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -212,8 +211,8 @@ Y_UNIT_TEST_LLVM(TopSortBySecondFirstDescAsc) {
     const auto blockStream = MakeTestBlockStream(pb);
     const auto topSortBlocks = pb.WideTopSortBlocks(blockStream,
                                                     NTest::ConvertValueToLiteralNode(pb, ui64(6)),
-                                                    {{1U, NTest::ConvertValueToLiteralNode(pb, false)},
-                                                     {0U, NTest::ConvertValueToLiteralNode(pb, true)}});
+                                                    {{1U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false)},
+                                                     {0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}});
     const auto topSortFlow = pb.ToFlow(pb.WideFromBlocks(topSortBlocks), {});
     const auto pgmReturn = pb.Collect(pb.NarrowMap(topSortFlow,
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -239,7 +238,7 @@ Y_UNIT_TEST_LLVM(SortByFirstKeyAsc) {
 
     const auto blockStream = MakeTestBlockStream(pb);
     const auto sortBlocks = pb.WideSortBlocks(blockStream,
-                                              {{0U, NTest::ConvertValueToLiteralNode(pb, true)}});
+                                              {{0U, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true)}});
     const auto sortFlow = pb.ToFlow(pb.WideFromBlocks(sortBlocks), {});
     const auto pgmReturn = pb.Collect(pb.NarrowMap(sortFlow,
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
@@ -259,5 +258,4 @@ Y_UNIT_TEST_LLVM(SortByFirstKeyAsc) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockSortTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

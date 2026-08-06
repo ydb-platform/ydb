@@ -30,13 +30,6 @@ TLogger& TLogger::AddTag(TLoggingTagKey key, const TValue& value)
     return *this;
 }
 
-template <class TValue>
-TLogger& TLogger::AddTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec)
-{
-    GetMutableCoWState()->Tags.Add(key, value, spec);
-    return *this;
-}
-
 template <class... TArgs>
 TLogger& TLogger::AddTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args)
 {
@@ -63,21 +56,6 @@ template <class TValue>
 TLogger TLogger::WithTag(TLoggingTagKey key, const TValue& value) &&
 {
     AddTag(key, value);
-    return std::move(*this);
-}
-
-template <class TValue>
-TLogger TLogger::WithTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) const &
-{
-    auto result = *this;
-    result.AddTag(key, value, spec);
-    return result;
-}
-
-template <class TValue>
-TLogger TLogger::WithTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) &&
-{
-    AddTag(key, value, spec);
     return std::move(*this);
 }
 
@@ -445,12 +423,6 @@ public:
     TTaggedLoggingGuard& With(TLoggingTagKey tag, const TValue& value) &
     {
         return DoWith(tag, value, "v"_sb);
-    }
-
-    template <class TValue>
-    TTaggedLoggingGuard& With(TLoggingTagKey tag, const TValue& value, TLoggingTagSpec spec) &
-    {
-        return DoWith(tag, value, spec.Get());
     }
 
     //! Attaches a keyed tag composed from several values, e.g. |.WithFormat("Method", "%v.%v", service, method)|.

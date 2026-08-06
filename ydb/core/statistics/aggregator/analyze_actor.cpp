@@ -74,6 +74,10 @@ public:
             return;
         }
 
+        YDB_LOG_WARN("ScanActor OnFinish non-success",
+            {"selfId", SelfId()},
+            {"status", status});
+
         if (!ResponseSent) {
             auto response = std::make_unique<TEvPrivate::TEvAnalyzeScanResult>(
                 status, std::move(issues));
@@ -105,6 +109,12 @@ private:
 };
 
 void TAnalyzeActor::Bootstrap() {
+    YDB_LOG_DEBUG("Bootstrap",
+        {"selfId", SelfId()},
+        {"operationId", OperationId.Quote()},
+        {"pathId", PathId},
+        {"databaseName", DatabaseName});
+
     Become(&TThis::StateNavigate);
 
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
@@ -123,6 +133,12 @@ void TAnalyzeActor::Bootstrap() {
 void TAnalyzeActor::FinishWithFailure(
         TEvStatistics::TEvAnalyzeActorResult::EStatus status,
         NYql::TIssue issue) {
+    YDB_LOG_WARN("FinishWithFailure",
+        {"selfId", SelfId()},
+        {"status", static_cast<int>(status)},
+        {"operationId", OperationId.Quote()},
+        {"pathId", PathId});
+
     auto response = std::make_unique<TEvStatistics::TEvAnalyzeActorResult>(status);
 
     TStringBuilder errMsg;
@@ -175,6 +191,15 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     // TODO: escape table path
     TableName = "/" + JoinVectorIntoString(entry.Path, "/");
     IsColumnTable = !!entry.ColumnTableInfo;
+
+    // For background traversals, DatabaseName is empty (the SA does not know
+    // the tenant database). Derive it from the Navigate response: the database
+    // is the table path minus the last component (the table name).
+    if (DatabaseName.empty() && entry.Path.size() > 1) {
+        auto dbPath = entry.Path;
+        dbPath.pop_back();
+        DatabaseName = "/" + JoinVectorIntoString(dbPath, "/");
+    }
 
     THashMap<ui32, TSysTables::TTableColumnInfo> tag2Column;
     for (const auto& col : entry.Columns) {
@@ -621,6 +646,11 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     try {
         HandleImpl(ev);
     } catch (const std::exception& ex) {
+        YDB_LOG_ERROR("Handle TEvAnalyzeScanResult exception",
+            {"selfId", SelfId()},
+            {"operationId", OperationId.Quote()},
+            {"error", ex.what()});
+
         NYql::TIssue error(TStringBuilder()
             << "Processing statistics scan results failed with " << ex.what());
         FinishWithFailure(
@@ -630,6 +660,10 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
 }
 
 void TAnalyzeActor::PassAway() {
+    YDB_LOG_DEBUG("PassAway",
+        {"selfId", SelfId()},
+        {"operationId", OperationId.Quote()});
+
     for (const auto& [id, info] : ScanActorsInFlight){
         Send(id, new TEvents::TEvPoison());
     }

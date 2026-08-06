@@ -25,6 +25,10 @@
     "YqlSelect": {
         "min_langver": "max"
     },
+    "YtReservedColumnPrefix": {
+        "description": "Reserved '_yql_' column name prefix in YT tables",
+        "min_langver": "max"
+    },
     "Materialize": {
         "description": "MATERIALIZE",
         "min_langver": "2026.02"

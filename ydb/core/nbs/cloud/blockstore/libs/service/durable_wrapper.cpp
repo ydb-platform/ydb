@@ -28,27 +28,6 @@ constexpr auto MaxDelay = TDuration::Seconds(10);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool HasNeverRetriableErrors(const NProto::TError& error)
-{
-    constexpr EWellKnownResultCodes NeverRetriableErrors[] = {
-        E_CANCELLED,   // Request is canceled,
-                       // no point in retrying
-        E_ARGUMENT,    // Request is ill-formed,
-                       // no point in retrying
-        E_IO_SILENT,   // Unrecoverable error, that must be
-                       // passed up to the client
-        E_IO,          // Unrecoverable error, that must be
-                       // passed up to the client
-    };
-
-    return AnyOf(
-        NeverRetriableErrors,
-        [errorCode = error.GetCode()]   //
-        (EWellKnownResultCodes code) { return code == errorCode; });
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 template <typename TRequest, typename TResponse>
 class TDurable
 {
@@ -152,8 +131,8 @@ private:
 
     void OnResponse(ui64 requestId, ui32 generation, TResponse response)
     {
-        const bool shouldReply = !HasError(response.Error) ||
-                                 HasNeverRetriableErrors(response.Error);
+        const bool shouldReply =
+            !HasError(response.Error) || IsNeverRetriableError(response.Error);
 
         NThreading::TPromise<TResponse> promise;
         TDuration delay;

@@ -222,6 +222,68 @@ struct TEvXdcCatchReplay
     : TEventPB<TEvXdcCatchReplay, NInterconnectTest::TEvTestSerialization, EventSpaceBegin(TEvents::ES_PRIVATE) + 100>
 {};
 
+struct TEvOversizedTcpEvent
+    : TEventPB<TEvOversizedTcpEvent, NInterconnectTest::TEvTestSerialization, EventSpaceBegin(TEvents::ES_PRIVATE) + 101>
+{};
+
+struct TOversizedTcpEventContext {
+    std::atomic<bool> Undelivered = false;
+    std::atomic<bool> Received = false;
+};
+
+class TOversizedTcpEventSenderActor : public TActorBootstrapped<TOversizedTcpEventSenderActor> {
+public:
+    TOversizedTcpEventSenderActor(TActorId recipient, std::unique_ptr<IEventBase> event,
+            std::shared_ptr<TOversizedTcpEventContext> context)
+        : Recipient(recipient)
+        , Event(std::move(event))
+        , Context(std::move(context))
+    {}
+
+    void Bootstrap() {
+        Send(Recipient, std::move(Event), IEventHandle::FlagTrackDelivery);
+        Become(&TThis::StateFunc);
+    }
+
+private:
+    void Handle(TEvents::TEvUndelivered::TPtr&) {
+        Context->Undelivered.store(true, std::memory_order_release);
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvents::TEvUndelivered, Handle);
+    )
+
+private:
+    const TActorId Recipient;
+    std::unique_ptr<IEventBase> Event;
+    const std::shared_ptr<TOversizedTcpEventContext> Context;
+};
+
+class TOversizedTcpEventReceiverActor : public TActorBootstrapped<TOversizedTcpEventReceiverActor> {
+public:
+    explicit TOversizedTcpEventReceiverActor(std::shared_ptr<TOversizedTcpEventContext> context)
+        : Context(std::move(context))
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+    }
+
+private:
+    void Handle(TEvOversizedTcpEvent::TPtr&) {
+        Context->Received.store(true, std::memory_order_release);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvOversizedTcpEvent, Handle);
+    )
+
+private:
+    const std::shared_ptr<TOversizedTcpEventContext> Context;
+};
+
 class TXdcCatchReplaySenderActor : public TActorBootstrapped<TXdcCatchReplaySenderActor> {
 public:
     TXdcCatchReplaySenderActor(TActorId recipient, IEventBase* event)
@@ -1241,6 +1303,43 @@ void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(Interconnect) {
+
+    Y_UNIT_TEST(ProcessUndeliveredAfterOversizedTcpEvent) {
+        TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::DISABLE_RDMA);
+
+        auto context = std::make_shared<TOversizedTcpEventContext>();
+        const TActorId recipient = cluster.RegisterActor(new TOversizedTcpEventReceiverActor(context), 1);
+
+        auto event = std::make_unique<TEvOversizedTcpEvent>();
+        // TEvTestSerialization.Buffer is encoded as a one-byte field tag, a four-byte varint length at
+        // this payload size, and the payload itself. Therefore its serialized size is:
+        //
+        //   1 + 4 + (EventMaxByteSize - 4) = EventMaxByteSize + 1.
+        //
+        // Exceeding the limit by exactly one byte makes the coroutine request more output after consuming
+        // the complete serialization budget. The size check must terminate the session while the coroutine
+        // is suspended and ProcessUndelivered must abort the pending serialization.
+        event->Record.SetBuffer(TString(EventMaxByteSize - 4, 'x'));
+        UNIT_ASSERT_VALUES_EQUAL(event->CalculateSerializedSize(), EventMaxByteSize + 1);
+
+        cluster.RegisterActor(new TOversizedTcpEventSenderActor(recipient, std::move(event), context), 2);
+
+        WaitForCondition(TDuration::Seconds(60), [&] {
+            return context->Undelivered.load(std::memory_order_acquire)
+                || context->Received.load(std::memory_order_acquire);
+        }, "oversized TCP event result");
+
+        UNIT_ASSERT(context->Undelivered.load(std::memory_order_acquire));
+        UNIT_ASSERT(!context->Received.load(std::memory_order_acquire));
+
+        auto regular = std::make_unique<TEvOversizedTcpEvent>();
+        regular->Record.SetBuffer("after oversized event");
+        cluster.RegisterActor(new TSingleEventSenderActor(recipient, regular.release()), 2);
+
+        WaitForCondition(TDuration::Seconds(60), [&] {
+            return context->Received.load(std::memory_order_acquire);
+        }, "regular TCP event delivery after oversized event");
+    }
 
     Y_UNIT_TEST(ScopeClassCountersRebindPeerLabel) {
         RunScopeClassCounterRebindTest(TScopeId(0, 1), "system");

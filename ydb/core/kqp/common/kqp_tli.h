@@ -179,37 +179,39 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
         return;
     }
 
-    TStringStream ss;
-    LogKeyValue("Component", params.Component, ss);
-    LogKeyValue("Message", params.Message, ss);
+    auto message = YDB_LOG_CREATE_MESSAGE(
+        {"сomponent", params.Component},
+        {"message", params.Message},
+    );
 
     if (!params.TraceId.empty()) {
-        LogKeyValue("TraceId", params.TraceId, ss);
+        YDB_LOG_UPDATE_MESSAGE(message, {"traceId", params.TraceId});
     }
 
     // Determine if this is a breaker or victim log based on which TraceId is set (and non-zero)
     const bool isBreaker = params.BreakerQuerySpanId.Defined() && *params.BreakerQuerySpanId != 0;
 
     if (isBreaker) {
-        LogKeyValue("BreakerQuerySpanId", ToString(*params.BreakerQuerySpanId), ss);
+        YDB_LOG_UPDATE_MESSAGE(message, {"breakerQuerySpanId", ToString(*params.BreakerQuerySpanId)});
     } else if (params.VictimQuerySpanId && *params.VictimQuerySpanId != 0) {
-        LogKeyValue("VictimQuerySpanId", ToString(*params.VictimQuerySpanId), ss);
+        YDB_LOG_UPDATE_MESSAGE(message, {"victimQuerySpanId", ToString(*params.VictimQuerySpanId)});
     }
 
     if (params.CurrentQuerySpanId && *params.CurrentQuerySpanId != 0) {
-        LogKeyValue("CurrentQuerySpanId", ToString(*params.CurrentQuerySpanId), ss);
+        YDB_LOG_UPDATE_MESSAGE(message, {"currentQuerySpanId", ToString(*params.CurrentQuerySpanId)});
     }
 
     // Use appropriate field names based on breaker vs victim
     if (isBreaker) {
-        LogKeyValue("BreakerQueryText", EscapeC(params.QueryText), ss);
-        LogKeyValue("BreakerQueryTexts", EscapeC(params.QueryTexts), ss, true);
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"BreakerQueryText", EscapeC(params.QueryText)},
+            {"BreakerQueryTexts", EscapeC(params.QueryTexts)});
     } else {
-        LogKeyValue("VictimQueryText", EscapeC(params.VictimQueryText), ss);
-        LogKeyValue("VictimQueryTexts", EscapeC(params.QueryTexts), ss, true);
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"VictimQueryText", EscapeC(params.VictimQueryText)},
+            {"VictimQueryTexts", EscapeC(params.QueryTexts)});
     }
-
-    LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
+    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TLI, "", message);
 }
 
 }

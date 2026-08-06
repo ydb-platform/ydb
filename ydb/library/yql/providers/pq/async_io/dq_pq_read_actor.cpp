@@ -84,6 +84,7 @@ struct TEvPrivate {
         EvCheckPartitionTimer,
         EvCheckPartitionCount,
         EvCheckPartitionCountResult,
+        EvRequestPartitionStatus,
 
         EvEnd
     };
@@ -139,6 +140,8 @@ struct TEvPrivate {
     };
 
     struct TEvCheckPartitionTimer : public TEventLocal<TEvCheckPartitionTimer, EvCheckPartitionTimer> {};
+
+    struct TEvRequestPartitionStatus : public TEventLocal<TEvRequestPartitionStatus, EvRequestPartitionStatus> {};
 
     struct TEvCheckPartitionCount : public TEventLocal<TEvCheckPartitionCount, EvCheckPartitionCount> {
         explicit TEvCheckPartitionCount(ui32 clusterIndex)
@@ -436,6 +439,7 @@ public:
             }
 
             SRC_LOG_I("SessionId: " << GetSessionId(clusterState.Index) << " CreateReadSession");
+            ScheduleStatusRequest();
             if (WatermarkTracker) {
                 TPartitionKey partitionKey { .Cluster = TString(clusterState.Info.Name) };
                 auto now = TInstant::Now();
@@ -482,6 +486,7 @@ private:
         hFunc(TEvPrivate::TEvCheckPartitionTimer, Handle);
         hFunc(TEvPrivate::TEvCheckPartitionCount, Handle);
         hFunc(TEvPrivate::TEvCheckPartitionCountResult, Handle);
+        hFunc(TEvPrivate::TEvRequestPartitionStatus, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
     )
 
@@ -682,6 +687,24 @@ private:
         Clusters[clusterIndex].PartitionsCount = partitionsCount;
         Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
         SchedulePartitionCountTimer();
+    }
+
+    void Handle(TEvPrivate::TEvRequestPartitionStatus::TPtr&) {
+        StatusRequestScheduled = false;
+        for (const auto& [key, session] : ActivePartitionSessions) {
+            SRC_LOG_D("RequestStatus for partition " << key.PartitionId << " cluster \"" << key.Cluster << "\"");
+            session->RequestStatus();
+        }
+        ScheduleStatusRequest();
+    }
+
+    void ScheduleStatusRequest() {
+        if (!StatusRequestScheduled
+            && !FinishedByOffsets && SourceParams.GetStopAtCurrentEndOffsets()
+            && (BeginWriteTime || EndWriteTime)) {
+            StatusRequestScheduled = true;
+            Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRequestPartitionStatus());
+        }
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
@@ -1138,6 +1161,8 @@ private:
         void operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
 
+            Self.ActivePartitionSessions[partitionKey] = event.GetPartitionSession();
+
             auto& partitionInfo = Self.Partitions[partitionKey];
             if (!partitionInfo.Offset && Self.BeginOffset) {
                 partitionInfo.Offset = *Self.BeginOffset;
@@ -1156,13 +1181,21 @@ private:
                 }
             }
 
-            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << "StartPartitionSessionEvent received (end offset " << event.GetEndOffset() << "), confirm StartPartitionSession with start offset " << partitionInfo.Offset);
-            event.Confirm(partitionInfo.Offset);
+            std::optional<uint64_t> maxOffset;
+            if (Self.SourceParams.GetStopAtCurrentEndOffsets() && event.GetEndOffset()) {
+                maxOffset = event.GetEndOffset() - 1;
+            }
+
+            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << "StartPartitionSessionEvent received (end offset " << event.GetEndOffset() 
+                << "), confirm StartPartitionSession with start offset " << partitionInfo.Offset
+                << ", max offset " << maxOffset);
+            event.Confirm(partitionInfo.Offset, std::nullopt, maxOffset);
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " StopPartitionSessionEvent received");
+            Self.ActivePartitionSessions.erase(partitionKey);
             event.Confirm();
         }
 
@@ -1177,11 +1210,40 @@ private:
             }
         }
 
-        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }
+        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent& event) {
+            const auto& LogPrefix = Self.LogPrefix;
+            const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
+            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey
+                << " PartitionSessionStatusEvent:"
+                << " CommittedOffset=" << event.GetCommittedOffset()
+                << " ReadOffset=" << event.GetReadOffset()
+                << " EndOffset=" << event.GetEndOffset()
+                << " WriteTimeHighWatermark=" << event.GetWriteTimeHighWatermark());
+
+            if (Self.SourceParams.GetStopAtCurrentEndOffsets()) {
+                auto& partitionInfo = Self.Partitions[partitionKey];
+                // Detect that the session will not deliver more messages: server-side read offset
+                // reached the end offset that was established at session start.
+                // This handles the case where StartingMessageTimestamp (= BeginWriteTime) causes the
+                // server to skip all messages internally, so no TDataReceivedEvent ever arrives and
+                // partitionInfo.Offset is never updated by MaybeReturnReadyBatch.
+                // Closing the session here is safe: any already-buffered data in ReadyBuffer is
+                // still delivered to the CA, since CheckFinishedByOffsets only closes the read
+                // session but does not clear ReadyBuffer.
+                if (partitionInfo.EndOffset && event.GetReadOffset() >= *partitionInfo.EndOffset) {
+                    SRC_LOG_I("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey
+                        << " Partition finished by status check: ReadOffset=" << event.GetReadOffset()
+                        << " EndOffset=" << *partitionInfo.EndOffset);
+                    Self.FinishedPartitions.insert(partitionKey);
+                    Self.CheckFinishedByOffsets();
+                }
+            }
+        }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " PartitionSessionClosedEvent received");
+            Self.ActivePartitionSessions.erase(partitionKey);
         }
 
         std::pair<NUdf::TUnboxedValuePod, i64> CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
@@ -1242,6 +1304,8 @@ private:
     bool CaNotified = false;
     bool FinishedByOffsets = false;
     THashSet<TPartitionKey> FinishedPartitions;
+    THashMap<TPartitionKey, NYdb::NTopic::TPartitionSession::TPtr> ActivePartitionSessions;
+    bool StatusRequestScheduled = false;
     const TDuration CheckPartitionCountPeriod;
     TInstant NextCheckPartitionTime = TInstant::Now();
     bool PartitionCountTimerScheduled = false;

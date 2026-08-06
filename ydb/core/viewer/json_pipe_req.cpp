@@ -227,8 +227,8 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHt
     if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/x-www-form-urlencoded") {
         BuildParamsFromFormData(HttpEvent->Get()->Request->Body);
     }
-    if (auto db = HttpEvent->Get()->Database; db) {
-        Database = db;
+    if (!HttpEvent->Get()->Database.empty()) {
+        Database = HttpEvent->Get()->Database;
     }
     InitConfig(Params);
     SetupTracing(handlerName);

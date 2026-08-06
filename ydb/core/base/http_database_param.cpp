@@ -7,7 +7,7 @@
 
 namespace NKikimr {
 
-const TString DATABASE_PARAM = "database";
+static constexpr const char* DATABASE_PARAM = "database";
 
 TStringBuf TrimHttpContentTypeHeader(const TStringBuf contentTypeHeader) {
     TStringBuf contentType = contentTypeHeader.Before(';');

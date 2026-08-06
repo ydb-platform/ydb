@@ -1273,6 +1273,17 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         return stats;
     }
 
+    const Ydb::TableStats::TableAccessStats* FindTableAccess(const Ydb::TableStats::QueryStats& stats, TStringBuf name) {
+        for (const auto& phase : stats.query_phases()) {
+            for (const auto& access : phase.table_access()) {
+                if (TStringBuf(access.name()) == name) {
+                    return &access;
+                }
+            }
+        }
+        return nullptr;
+    }
+
     void Check(const TTotalStats& lhs, const TTotalStats& rhs) {
         UNIT_ASSERT_VALUES_EQUAL(lhs.Writes, rhs.Writes);
         UNIT_ASSERT_VALUES_EQUAL(lhs.Reads, rhs.Reads);
@@ -1673,14 +1684,22 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             Cerr << stats.DebugString() << Endl;
 
+            // With streamed index writes the other INSERT is flushed as an uncommitted write. The
+            // shard applies its row either way, but the acknowledgement no longer waits for the log
+            // commit, so it races with the failure: these stats are reported in full or not at all.
+            const auto* other = FindTableAccess(stats, "/Root/TestTable");
+            const size_t writes = other ? other->updates().rows() : 0;
+            UNIT_ASSERT_C(writes <= 1, writes);
+            UNIT_ASSERT_C(EnableIndexStreamWrite || writes == 0, writes);
+
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = writes,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = writes * 20,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1702,14 +1721,20 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             Cerr << stats.DebugString() << Endl;
 
+            // The other INSERT races with the failure, see above
+            const auto* other = FindTableAccess(stats, "/Root/TestTable");
+            const size_t writes = other ? other->updates().rows() : 0;
+            UNIT_ASSERT_C(writes <= 1, writes);
+            UNIT_ASSERT_C(EnableIndexStreamWrite || writes == 0, writes);
+
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = writes,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = writes * 20,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1973,19 +1998,30 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             Cerr << stats.DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
+
+            // The failing INSERT reads the conflicting row and writes nothing
+            const auto* failed = FindTableAccess(stats, "/Root/TestTable2");
+            UNIT_ASSERT(failed);
+            UNIT_ASSERT_VALUES_EQUAL(failed->updates().rows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(failed->updates().bytes(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(failed->reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(failed->reads().bytes(), 8);
+
+            // The other INSERT is flushed as an uncommitted write. The shard applies its row
+            // either way, but the acknowledgement no longer waits for the log commit, so it
+            // races with the failure: these stats are reported in full or not at all.
+            const auto* other = FindTableAccess(stats, "/Root/TestTable");
+            const size_t writes = other ? other->updates().rows() : 0;
+            UNIT_ASSERT_C(writes <= 1, writes);
 
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = writes,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = writes * 20,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -2007,21 +2043,28 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             Cerr << stats.DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
+            // The failing INSERT reads the conflicting row and writes nothing
+            const auto* failed = FindTableAccess(stats, "/Root/TestTable2");
+            UNIT_ASSERT(failed);
+            UNIT_ASSERT_VALUES_EQUAL(failed->updates().rows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(failed->updates().bytes(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(failed->reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(failed->reads().bytes(), 8);
+
+            // The other INSERT races with the failure, see above
+            const auto* other = FindTableAccess(stats, "/Root/TestTable");
+            const size_t writes = other ? other->updates().rows() : 0;
+            UNIT_ASSERT_C(writes <= 1, writes);
 
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = writes,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = writes * 20,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });

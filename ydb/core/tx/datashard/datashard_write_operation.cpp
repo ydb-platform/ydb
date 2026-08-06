@@ -56,6 +56,8 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
     if (record.GetLockTxId()) {
         LockTxId = record.GetLockTxId();
         LockNodeId = record.GetLockNodeId();
+        WriterIndex = record.GetWriteSeqNum().GetWriterIndex();
+        WriteSeqNum = record.GetWriteSeqNum().GetWriteSeqNum();
     }
 
     if (record.HasMvccSnapshot()) {

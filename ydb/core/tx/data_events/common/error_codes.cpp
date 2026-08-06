@@ -8,6 +8,7 @@ TConclusion<NErrorCodes::TOperator::TYdbStatusInfo> TOperator::GetStatusInfo(
         case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED:
         case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
         case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED:
             return TConclusionStatus::Fail("Incorrect status for interpretation to YdbStatus");
         case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED:
             return TYdbStatusInfo(Ydb::StatusIds::ABORTED, NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED, "Request aborted");

@@ -468,6 +468,11 @@ public:
         , LockNodeId(lockNodeId)
         , InconsistentTx(inconsistentTx)
         , IsOlap(isOlap)
+        , PipelinedWrites(
+              AppData()->FeatureFlags.GetEnableDataShardPipelinedUncommittedWrites()
+              && !inconsistentTx
+              && !isOlap
+              && lockTxId != 0)
         , KeyColumnTypes(std::move(keyColumnTypes))
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
@@ -914,7 +919,9 @@ public:
             ProcessWritePreparedShard(ev);
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
+        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+        // A resent uncommitted write, reported with the original result
+        case NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED: {
             ProcessWriteCompletedShard(ev);
             return;
         }
@@ -1169,6 +1176,27 @@ public:
             {"mode", static_cast<int>(Mode)},
             {"locks", txLocks});
 
+        if (Mode == EMode::COMMIT) {
+            UpdateStats(ev->Get()->Record.GetTxStats());
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0);
+            return;
+        }
+
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
+        const auto result = ShardedWriteController->OnMessageAcknowledged(
+                ev->Get()->Record.GetOrigin(), ev->Cookie);
+        if (!result) {
+            // A resent batch is answered twice, only the first result is taken
+            YDB_LOG_DEBUG("Ignored an already acknowledged result",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", ev->Get()->Record.GetOrigin()},
+                {"cookie", ev->Cookie});
+            return;
+        }
+
+        // The batch is applied, so the next one to this shard gets a fresh write seq num
+        InFlightWriteSeqNum.erase(ev->Get()->Record.GetOrigin());
+
         // Only collect locks in WRITE mode (COLLECTING state required by AddLock)
         if (Mode == EMode::WRITE) {
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
@@ -1182,21 +1210,11 @@ public:
             }
         }
 
-        if (Mode == EMode::COMMIT) {
-            UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0);
-            return;
-        }
-
-        OnMessageReceived(ev->Get()->Record.GetOrigin());
-        const auto result = ShardedWriteController->OnMessageAcknowledged(
-                ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
-            UpdateStats(ev->Get()->Record.GetTxStats());
+        UpdateStats(ev->Get()->Record.GetTxStats());
+        if (result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
-        } else if (result) {
+        } else {
             AFL_ENSURE(Mode == EMode::WRITE);
-            UpdateStats(ev->Get()->Record.GetTxStats());
             Callbacks->OnMessageAcknowledged(result->DataSize);
         }
     }
@@ -1314,6 +1332,16 @@ public:
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
+            if (PipelinedWrites) {
+                // Any resend of the batch must repeat its seq num, not allocate a new one.
+                auto [it, allocated] = InFlightWriteSeqNum.try_emplace(shardId, 0);
+                if (allocated) {
+                    it->second = TxManager->NextWriteSeqNum(WriterIndex, shardId);
+                }
+                auto* writeSeqNum = evWrite->Record.MutableWriteSeqNum();
+                writeSeqNum->SetWriterIndex(WriterIndex);
+                writeSeqNum->SetWriteSeqNum(it->second);
+            }
 
             if (MvccSnapshot && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
@@ -1667,6 +1695,11 @@ private:
     const ui64 LockNodeId;
     const bool InconsistentTx;
     const bool IsOlap;
+    const bool PipelinedWrites;
+    // This writer's id in the uncommitted write chain; one write actor per table today.
+    static constexpr ui64 WriterIndex = 0;
+    // Write seq num of the batch in flight at each shard, kept until the shard confirms it.
+    THashMap<ui64, ui64> InFlightWriteSeqNum;
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     IKqpTableWriterCallbacks* Callbacks;
@@ -5434,6 +5467,7 @@ public:
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
         case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED:
             AFL_ENSURE(false);
         case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
             YDB_LOG_ERROR("Received external EvWriteResult with aborted status.",

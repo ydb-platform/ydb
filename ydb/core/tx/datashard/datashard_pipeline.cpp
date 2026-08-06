@@ -1725,6 +1725,26 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
             return writeOp;
     }
 
+    if (rec.HasWriteSeqNum()) {
+        const ui64 writerIndex = rec.GetWriteSeqNum().GetWriterIndex();
+        const ui64 writeSeqNum = rec.GetWriteSeqNum().GetWriteSeqNum();
+        // A write with LockTxId has to be immediate, see TKeyValidator::IsValidKey
+        if (writeSeqNum == 0
+            || !rec.GetLockTxId()
+            || rec.txmode() != NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
+            || rec.HasLocks()
+            || rec.OperationsSize() == 0)
+        {
+            badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                << "WriteSeqNum " << writerIndex << ":" << writeSeqNum << " requires a non-zero"
+                   " WriteSeqNum, LockTxId, MODE_IMMEDIATE, at least one operation and no Locks");
+            return writeOp;
+        }
+        if (AppData()->FeatureFlags.GetEnableDataShardPipelinedUncommittedWrites()) {
+            writeOp->SetPipelinedWriteFlag();
+        }
+    }
+
     // Make config checks for immediate op.
     if (writeOp->IsImmediate()) {
         if (Config.NoImmediate() || (Config.ForceOnlineRW())) {

@@ -331,6 +331,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueExis
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueExistingTopicNoConsumerWithExtendedRetention
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueExistingTopicWithSharedConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueExistingTopicWithStreamingConsumer
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueFifo
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueSetsContentBasedDeduplicationMessageRateLimit
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueSetsDefaultTopicMessageRateLimit
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithAttributes
@@ -470,6 +471,7 @@ ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
 ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
+ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnReturningBothGenerated
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap-UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin

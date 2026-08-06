@@ -69,6 +69,10 @@ public:
         return !!ExecutionVisitor;
     }
 
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor> GetExecutionVisitorOptional() const {
+        return ExecutionVisitor;
+    }
+
     void SetProgramIterator(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& it,
         const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& visitor);
 

@@ -102,54 +102,52 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
     // Snapshot scalars only — do not keep references into Resources across further work.
     // Never call GetReservedMemory() here: Execute() may have started a concurrent continuation that
     // mutates ResourceGuards (RegisterAllocationGuard / ClearMemoryGuards) on another worker.
-    const auto visitor = source->GetExecutionContext().HasExecutionVisitor()
-        ? source->GetExecutionContext().GetExecutionVisitorVerified()
-        : nullptr;
+    const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
     ui32 filteredRows = source->GetRecordsCount();
     TString indexStatus = "Unknown";
     ui32 indexFilteredRows = source->GetRecordsCount();
-    if (visitor && visitor->MutableContext().HasResources()) {
-        const auto& resources = visitor->MutableContext().GetResources();
-        filteredRows = resources.GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
-        if (processorType == NArrow::NSSA::EProcessorType::CheckIndexData) {
-            auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
-            if (indexProcessor && source->GetSourceSchemaOptional()) {
-                const auto& idxCtx = indexProcessor->GetIndexContext();
-                NIndexes::NRequest::TOriginalDataAddress addr(idxCtx.GetColumnId(), idxCtx.GetSubColumnName());
-                auto skipIndexes = source->GetSourceSchemaOptional()->GetIndexInfo().FindSkipIndexes(addr, idxCtx.GetOperation());
-                bool hasActualIndexData = false;
-                if (!skipIndexes.empty() && source->HasPortionAccessor()) {
-                    std::set<ui32> indexEntityIds;
-                    for (auto&& skipIdx : skipIndexes) {
-                        indexEntityIds.insert(skipIdx->GetIndexId());
-                    }
-                    hasActualIndexData = source->GetPortionAccessor().GetIndexBlobBytes(indexEntityIds, false) > 0;
+    if (const auto* resources = visitor ? visitor->MutableContext().GetResourcesOptional() : nullptr) {
+        filteredRows = resources->GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
+    }
+    if (processorType == NArrow::NSSA::EProcessorType::CheckIndexData) {
+        auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
+        if (indexProcessor && source->GetSourceSchemaOptional()) {
+            const auto& idxCtx = indexProcessor->GetIndexContext();
+            NIndexes::NRequest::TOriginalDataAddress addr(idxCtx.GetColumnId(), idxCtx.GetSubColumnName());
+            auto skipIndexes = source->GetSourceSchemaOptional()->GetIndexInfo().FindSkipIndexes(addr, idxCtx.GetOperation());
+            bool hasActualIndexData = false;
+            if (!skipIndexes.empty() && source->HasPortionAccessor()) {
+                std::set<ui32> indexEntityIds;
+                for (auto&& skipIdx : skipIndexes) {
+                    indexEntityIds.insert(skipIdx->GetIndexId());
                 }
-                if (skipIndexes.empty() || !hasActualIndexData) {
-                    indexStatus = "NoIndex";
-                    indexFilteredRows = source->GetRecordsCount();
-                } else {
-                    const ui32 outputColumnId = indexProcessor->GetOutputColumnIdOnce();
-                    const auto& outputAccessor = resources.GetAccessorOptional(outputColumnId);
-                    if (outputAccessor) {
-                        auto* sparsed = dynamic_cast<const NArrow::NAccessor::TSparsedArray*>(outputAccessor.get());
-                        if (sparsed && sparsed->GetDefaultValue() && sparsed->GetDefaultValue()->is_valid) {
-                            auto* uint8Scalar = dynamic_cast<const arrow::UInt8Scalar*>(sparsed->GetDefaultValue().get());
-                            if (uint8Scalar && uint8Scalar->value == 0) {
-                                indexStatus = "AllDenied";
-                                indexFilteredRows = 0;
-                            } else {
-                                indexStatus = "AllAccepted";
-                                indexFilteredRows = source->GetRecordsCount();
-                            }
+                hasActualIndexData = source->GetPortionAccessor().GetIndexBlobBytes(indexEntityIds, false) > 0;
+            }
+            if (skipIndexes.empty() || !hasActualIndexData) {
+                indexStatus = "NoIndex";
+                indexFilteredRows = source->GetRecordsCount();
+            } else if (const auto* resources = visitor ? visitor->MutableContext().GetResourcesOptional() : nullptr) {
+                // Re-read resources after non-resource work — concurrent ExtractResources may have cleared them.
+                const ui32 outputColumnId = indexProcessor->GetOutputColumnIdOnce();
+                const auto& outputAccessor = resources->GetAccessorOptional(outputColumnId);
+                if (outputAccessor) {
+                    auto* sparsed = dynamic_cast<const NArrow::NAccessor::TSparsedArray*>(outputAccessor.get());
+                    if (sparsed && sparsed->GetDefaultValue() && sparsed->GetDefaultValue()->is_valid) {
+                        auto* uint8Scalar = dynamic_cast<const arrow::UInt8Scalar*>(sparsed->GetDefaultValue().get());
+                        if (uint8Scalar && uint8Scalar->value == 0) {
+                            indexStatus = "AllDenied";
+                            indexFilteredRows = 0;
                         } else {
                             indexStatus = "AllAccepted";
                             indexFilteredRows = source->GetRecordsCount();
                         }
                     } else {
-                        indexStatus = "Partial";
-                        indexFilteredRows = resources.GetFilter().GetFilteredCount().value_or(source->GetRecordsCount());
+                        indexStatus = "AllAccepted";
+                        indexFilteredRows = source->GetRecordsCount();
                     }
+                } else {
+                    indexStatus = "Partial";
+                    indexFilteredRows = resources->GetFilter().GetFilteredCount().value_or(source->GetRecordsCount());
                 }
             }
         }
@@ -300,8 +298,9 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
 
         // A nested continuation may have finished the shared program (extracted resources / stopped visitor)
         // while Execute() was in progress. Do not keep mutating that shared state from this frame.
-        if (!source->GetExecutionContext().HasExecutionVisitor() ||
-            !source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().HasResources()) {
+        // Pin visitor once — HasExecutionVisitor + GetExecutionVisitorVerified is a TOCTOU with Stop().
+        const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
+        if (!visitor || !visitor->MutableContext().HasResources()) {
             return false;
         }
 
@@ -311,21 +310,21 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         source->MutableExecutionContext().OnFinishProgramStepExecution();
         GetSignals(iterator->GetCurrentNodeId())->OnExecuteGraphNode(source->GetRecordsCount());
         source->GetContext()->GetCommonContext()->GetCounters().OnExecuteGraphNode(iterator->GetCurrentNode().GetIdentifier());
-        if (source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().GetResources().GetRecordsCountActualOptional() == 0) {
-            source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().MutableResources().Clear();
+        if (const auto* resources = visitor->MutableContext().GetResourcesOptional();
+            resources && resources->GetRecordsCountActualOptional() == 0) {
+            visitor->MutableContext().MutableResources().Clear();
             break;
         }
     }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fgraph"));
-    if (!source->GetExecutionContext().HasExecutionVisitor() ||
-        !source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().HasResources()) {
+    const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
+    if (!visitor || !visitor->MutableContext().HasResources()) {
         // Nested continuation already took ownership of progress — do not advance this cursor.
         return false;
     }
     YDB_LOG_DEBUG_COMP(NKikimrServices::SSA_GRAPH_EXECUTION, "",
-        {"graphConstructed", Program->DebugDOT(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutedIds())});
-    source->MutableStageData().ReturnTable(
-        source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().ExtractResources());
+        {"graphConstructed", Program->DebugDOT(visitor->GetExecutedIds())});
+    source->MutableStageData().ReturnTable(visitor->MutableContext().ExtractResources());
 
     return true;
 }

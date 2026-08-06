@@ -361,6 +361,10 @@ public:
         return !Extracted && !!Resources;
     }
 
+    const NAccessor::TAccessorsCollection* GetResourcesOptional() const {
+        return HasResources() ? Resources.get() : nullptr;
+    }
+
     const NAccessor::TAccessorsCollection& GetResources() const {
         AFL_VERIFY(HasResources());
         return *Resources;

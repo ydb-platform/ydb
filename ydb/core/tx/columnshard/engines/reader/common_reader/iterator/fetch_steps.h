@@ -179,4 +179,8 @@ public:
     }
 };
 
+// Shared by simple/trivial DoStartReserveMemory: sync vs async path with matching scheduleContinuation.
+TConclusion<bool> StartProgramStepReserveMemory(const std::shared_ptr<IDataSource>& source, const ui64 sizeToReserve,
+    const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage);
+
 }   // namespace NKikimr::NOlap::NReader::NCommon

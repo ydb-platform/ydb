@@ -6,7 +6,6 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
-#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
@@ -18,7 +17,6 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
-#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
@@ -507,29 +505,8 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
     const ui64 sizeToReserve = policy->GetReserveMemorySize(
         result.GetBlobsSize(), result.GetRawSize(), GetContext()->GetReadMetadata()->GetLimitRobustOptional(), GetRecordsCount());
 
-    const auto limiterOperator =
-        GetContext()->GetCommonContext()->GetReadMetadataPtrVerifiedAs<NCommon::TReadMetadata>()->GetGroupedMemoryLimiterOperator();
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("mr"));
-
-    // Decide sync vs async once. scheduleContinuation must match that decision so we neither race with a
-    // concurrent TStepAction (inline path) nor stall without a continuation (async path).
-    if (IsScanMemoryLimiterEnabled(limiterOperator)) {
-        auto allocation = std::make_shared<NCommon::TAllocateMemoryStep::TFetchingStepAllocation>(
-            source, sizeToReserve, GetExecutionContext().GetCursorStep(), policy->GetStage(), false /*needNextStep*/,
-            true /*scheduleContinuation*/);
-        const bool async = GetContext()->SendToGroupedMemoryAllocation(GetMemoryGroupId(), { allocation }, (ui32)policy->GetStage());
-        // If the limiter was disabled between the check and Send, allocation ran inline and already scheduled a
-        // continuation (scheduleContinuation=true). Always wait for that continuation — do not also continue here.
-        Y_UNUSED(async);
-        return true;
-    }
-
-    auto allocation = std::make_shared<NCommon::TAllocateMemoryStep::TFetchingStepAllocation>(
-        source, sizeToReserve, GetExecutionContext().GetCursorStep(), policy->GetStage(), false /*needNextStep*/,
-        false /*scheduleContinuation*/);
-    AFL_VERIFY(allocation->OnAllocated(
-        std::make_shared<NGroupedMemoryManager::TAllocationGuard>(0, 0, 0, NActors::TActorId(), allocation->GetMemory(), nullptr), allocation));
-    return false;
+    return NCommon::StartProgramStepReserveMemory(source, sizeToReserve, policy->GetStage());
 }
 
 bool TPortionDataSource::DoAddTxConflict() {

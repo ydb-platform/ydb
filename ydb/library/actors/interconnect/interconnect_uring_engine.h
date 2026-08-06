@@ -71,6 +71,9 @@ namespace NActors {
     // With EnableFixedFiles, each ring reserves UringEngineFixedFilesPerRing slots via
     // io_uring_register_files (sparse); session sockets are bound with register_files_update and
     // submitted with IOSQE_FIXED_FILE. Unsupported kernels or a full table fall back to plain fds.
+    // With EnableProvidedBuffers, idle/min-size sessions recv via BUFFER_SELECT from a shared pool
+    // (buf_ring when available, else provide_buffers). YDB_IC_V2_DISABLE_BUF_RING forces the non-buf_ring
+    // pool path for testing.
     //
     // Common holds the engine via an intrusive pointer too; the resulting cycle is broken by Stop().
     TUringEnginePtr CreateUringEngine(TIntrusivePtr<TInterconnectProxyCommon> common);

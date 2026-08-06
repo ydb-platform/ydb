@@ -6,6 +6,13 @@
 * `*_fwd.h` for forwards; `.pb.h` only when needed; config: [`public/config.h`](public/config.h).
 * Implement methods in `.cpp`, not headers (except templates).
 
+## Tests
+
+Cover cases:
+* small and large messages
+* kafka batch message format with single and multiple messages
+* holes in the offset (mirroring)
+
 ## Review
 
 * Flag redundant or unreachable branches.

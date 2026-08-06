@@ -8,7 +8,7 @@
 
     1. On the **Info** tab, click the **CPU** button and see if any pools show high CPU usage.
 
-        ![](../_assets/embedded-ui-cpu-system-pool.png)
+        ![](../_assets/ydb-ui-cpu-system-pool.png)
 
 1. Use Grafana charts to analyze CPU utilization in all pools:
 

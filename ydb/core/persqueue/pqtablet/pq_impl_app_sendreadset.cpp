@@ -75,6 +75,9 @@ TString TPersQueue::RenderSendReadSetHtmlForms(
         LAYOUT_ROW() {
             for (const TOption& option : options) {
                 LAYOUT_COLUMN() {
+                    // Explicit action: without EnableTabletDevUiSecurePath everything stays on
+                    // /app, with it read-only pages stay on /app and SendReadSet moves to
+                    // /app/secure.
                     str << "<form class=\"form-horizontal\" action=\"" << formAction << "\" method=\"get\">";
                     {
                         DIV_CLASS("control-group") {

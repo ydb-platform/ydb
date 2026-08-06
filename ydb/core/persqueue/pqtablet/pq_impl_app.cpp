@@ -35,8 +35,6 @@ namespace {
         return tx.State == NKikimrPQ::TTransaction_EState_WAIT_RS;
     }
 
-    // Parameters that only select a read-only view, see TPersQueue::OnRenderAppHtmlPage() for the
-    // dispatch. SendReadSet is deliberately absent: it commits or aborts a transaction.
     bool IsKnownPublicPersQueueDevUiParam(TStringBuf name) {
         static constexpr TStringBuf names[] = {
             "TabletID",

@@ -2851,7 +2851,6 @@ value {
             size_t resultFileSize,
             size_t readBatchSize,
             bool compressed,
-            bool enableDataShardDirectPartImport,
             EEncryptedImportRebootMode rebootMode = EEncryptedImportRebootMode::None)
     {
         TString key = "Cool very very secret rand key!!";
@@ -2981,13 +2980,13 @@ value {
     }
 
     Y_UNIT_TEST(ImportBigEncryptedFileWithRebootAfterLastPortion) {
-        ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false, false, EEncryptedImportRebootMode::AfterLastPortion);
-        ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true, false, EEncryptedImportRebootMode::AfterLastPortion);
+        ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false, EEncryptedImportRebootMode::AfterLastPortion);
+        ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true, EEncryptedImportRebootMode::AfterLastPortion);
     }
 
     Y_UNIT_TEST(ImportBigEncryptedFileWithRebootsAfterReadAndStateSave) {
-        ImportBigEncryptedFile(315_B, 70_KB, 8_KB, false, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
-        ImportBigEncryptedFile(555_B, 70_KB, 8_KB, true, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
+        ImportBigEncryptedFile(315_B, 70_KB, 8_KB, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
+        ImportBigEncryptedFile(555_B, 70_KB, 8_KB, true, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
     }
 
     Y_UNIT_TEST(ImportBigEncryptedFile) {

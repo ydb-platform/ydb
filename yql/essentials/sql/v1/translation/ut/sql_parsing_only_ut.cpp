@@ -4609,6 +4609,65 @@ Y_UNIT_TEST(AlterTableAddIndexUnknownSubtype) {
                         "<main>:1:57: Error: UNKNOWN index subtype is not supported\n");
 }
 
+Y_UNIT_TEST(AlterTableRebuildIndexIsSupported) {
+    auto res = SqlToYql("USE ydb; ALTER TABLE table REBUILD INDEX idx");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "rebuildIndex");
+            UNIT_ASSERT_STRING_CONTAINS(line, "indexName");
+            UNIT_ASSERT_STRING_CONTAINS(line, "idx");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterTableRebuildIndexWithSettingsIsSupported) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE table REBUILD INDEX idx WITH (levels = 2, clusters = 3);
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "rebuildIndex");
+            UNIT_ASSERT_STRING_CONTAINS(line, "indexSettings");
+            UNIT_ASSERT_STRING_CONTAINS(line, "levels");
+            UNIT_ASSERT_STRING_CONTAINS(line, "clusters");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+}
+
+Y_UNIT_TEST(AlterTableRebuildIndexDuplicatedSettingFails) {
+    ExpectFailWithError(R"sql(USE ydb;
+            ALTER TABLE table REBUILD INDEX idx WITH (levels = 2, levels = 3)
+            )sql",
+                        "<main>:2:76: Error: Duplicated levels\n");
+}
+
+Y_UNIT_TEST(AlterTableRebuildIndexWithColumnsIsNotSupported) {
+    // The column list via ON (...) was removed: only WITH (...) settings are accepted.
+    ExpectFailWithFuzzyError("USE ydb; ALTER TABLE table REBUILD INDEX idx ON (col)",
+                             "Error: extraneous input 'ON'");
+}
+
+Y_UNIT_TEST(AlterTableRebuildIndexWithColumnsAndSettingsIsNotSupported) {
+    ExpectFailWithFuzzyError("USE ydb; ALTER TABLE table REBUILD INDEX idx ON (a, b) WITH (levels = 2)",
+                             "Error: extraneous input 'ON'");
+}
+
+Y_UNIT_TEST(AlterTableRebuildIndexEmptyWithFails) {
+    // Empty WITH () is rejected by the grammar: the settings list must be non-empty.
+    ExpectFailWithFuzzyError("USE ydb; ALTER TABLE table REBUILD INDEX idx WITH ()",
+                             "Error: mismatched input");
+}
+
 Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {
     const auto result = SqlToYql("USE ydb;   ALTER TABLE table ALTER INDEX index SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 10");
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());

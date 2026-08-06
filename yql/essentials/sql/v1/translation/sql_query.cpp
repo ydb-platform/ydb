@@ -3188,26 +3188,15 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
 }
 
 bool TSqlQuery::AlterTableRebuildIndex(const TRule_alter_table_rebuild_index& node, TAlterTableParameters& params) {
-    // REBUILD INDEX an_id (ON LPAREN columns RPAREN)? with_index_settings?
+    // REBUILD INDEX an_id with_index_settings?
     const auto indexName = IdEx(node.GetRule_an_id3(), *this);
     // Use GlobalVectorKmeansTree as default type - will be validated/resolved in KQP exec layer
     params.RebuildIndexes.emplace_back(indexName, TIndexDescription::EType::GlobalVectorKmeansTree);
     auto& index = params.RebuildIndexes.back();
 
-    // Parse optional ON (columns) clause
-    if (node.HasBlock4()) {
-        const auto& onClause = node.GetBlock4();
-        // First column
-        index.IndexColumns.push_back(IdEx(onClause.GetRule_an_id_schema3(), *this));
-        // Remaining columns
-        for (const auto& block : onClause.GetBlock4()) {
-            index.IndexColumns.push_back(IdEx(block.GetRule_an_id_schema2(), *this));
-        }
-    }
-
     // Parse optional WITH (settings) clause
-    if (node.HasBlock5()) {
-        if (!FillIndexSettings(node.GetBlock5().GetRule_with_index_settings1(), index.IndexSettings)) {
+    if (node.HasBlock4()) {
+        if (!FillIndexSettings(node.GetBlock4().GetRule_with_index_settings1(), index.IndexSettings)) {
             return false;
         }
     }

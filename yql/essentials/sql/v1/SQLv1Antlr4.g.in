@@ -867,7 +867,6 @@ alter_table_alter_changefeed: ALTER CHANGEFEED an_id changefeed_alter_settings;
 alter_table_drop_changefeed: DROP CHANGEFEED an_id;
 alter_table_alter_index: ALTER INDEX an_id alter_table_alter_index_action;
 alter_table_rebuild_index: REBUILD INDEX an_id
-    (ON LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?
     with_index_settings?
 ;
 alter_table_compact: COMPACT with_compact_settings?;

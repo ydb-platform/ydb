@@ -277,6 +277,8 @@ class ResultsProcessor:
                 'threads': summary.get('threads'),
                 'warmup_seconds': summary.get('warmup_seconds'),
                 'report_url': report_url,
+                'ci_launch_id': os.getenv('CI_LAUNCH_ID') or None,
+                'ci_launch_url': os.getenv('CI_LAUNCH_URL') or None,
                 # Full stays in column newOrderLatency90; Ms/Pure for BenchBase-like compare.
                 'newOrderLatency90_ms': new_order.get('percentiles_ms', {}).get('90'),
                 'newOrderLatency90_pure': new_order.get('percentiles_pure', {}).get('90'),

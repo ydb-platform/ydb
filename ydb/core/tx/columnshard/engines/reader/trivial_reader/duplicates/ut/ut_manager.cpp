@@ -180,10 +180,6 @@ public:
     }
 };
 
-<<<<<<< HEAD
-std::shared_ptr<NArrow::NAccessor::IChunkedArray> MakeUInt64Column(const std::vector<ui64>& values)
-{
-=======
 class TNeverRespondingColumnDataCacheService: public NActors::TActor<TNeverRespondingColumnDataCacheService> {
     using TBase = NActors::TActor<TNeverRespondingColumnDataCacheService>;
 
@@ -258,7 +254,6 @@ void EnsureInlineDeduplicationConveyor(NActors::TTestActorRuntimeBase& runtime) 
 }
 
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> MakeUInt64Column(const std::vector<ui64>& values) {
->>>>>>> 2affe8baeb6 (more validations, fix abort sensors and guards (#48648))
     arrow::UInt64Builder builder;
     AFL_VERIFY(builder.AppendValues(values).ok());
     return std::make_shared<NArrow::NAccessor::TTrivialArray>(builder.Finish().ValueOrDie());
@@ -329,13 +324,8 @@ NActors::TActorId SetupDuplicateManager(NActors::TTestActorRuntimeBase& runtime,
     const std::deque<std::shared_ptr<TPortionInfo>>& portions,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NActors::TActorId& scanActorId,
-<<<<<<< HEAD
-    TManagerSetupResult& result, const ERequestSorting sorting = ERequestSorting::NONE)
-{
-=======
     TManagerSetupResult& result, const ERequestSorting sorting = ERequestSorting::NONE,
     const TDuration inflightTimeout = THangTracker::DefaultTimeout) {
->>>>>>> 2affe8baeb6 (more validations, fix abort sensors and guards (#48648))
     auto readContext = MakeTestReadContext(requestSnapshot, dataAccessorsManager, columnDataManager, scanActorId, sorting);
     runtime.Register(new TManagerSetupActor(readContext, portions, &result, inflightTimeout));
 

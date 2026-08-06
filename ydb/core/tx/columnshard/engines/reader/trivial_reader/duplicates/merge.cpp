@@ -41,21 +41,10 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         }
         Context->Merger->AddSource(data, nullptr,
             Context->IsReversed ? NArrow::NMerger::TIterationOrder::Reversed(0) : NArrow::NMerger::TIterationOrder::Forward(0), portionId);
-<<<<<<< HEAD
-        Context->FiltersBuilder.AddSource(portionId, Context->Portions->GetPortionVerified(portionId)->GetRecordsCount());
+        Context->FiltersBuilder.AddSource(portionId, expectedRecordsCount);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
         ("component", "duplicates_manager")("event", "TMergeBorders::DoExecute")("type", "add_source")("portion_id", portionId)(
             "records_count", data->GetRecordsCount())("builder", Context->FiltersBuilder.DebugString());
-=======
-        Context->FiltersBuilder.AddSource(portionId, expectedRecordsCount);
-        YDB_LOG_TRACE("",
-            {"component", "duplicates_manager"},
-            {"event", "TMergeBorders::DoExecute"},
-            {"type", "add_source"},
-            {"portionId", portionId},
-            {"recordsCount", data->GetRecordsCount()},
-            {"builder", Context->FiltersBuilder.DebugString()});
->>>>>>> 2affe8baeb6 (more validations, fix abort sensors and guards (#48648))
     }
 
     if (!(Context->FiltersBuilder.CountSources() > 0 || ReadyBorders.empty())) {
@@ -65,24 +54,14 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
 
     for (const auto& readyBorder : ReadyBorders) {
         Context->Merger->PutControlPoint(readyBorder.BuildSortablePosition(Context->IsReversed), false);
-<<<<<<< HEAD
-        Context->Merger->DrainToControlPoint(Context->FiltersBuilder, true);
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
-        ("component", "duplicates_manager")("event", "TMergeBorders::DoExecute")("type", "drain")(
-            "border", readyBorder.BuildSortablePosition(Context->IsReversed).DebugString())("builder", Context->FiltersBuilder.DebugString());
-=======
         if (!Context->Merger->DrainToControlPoint(Context->FiltersBuilder, true)) {
             sendFailure(TStringBuilder() << "cannot drain duplicate filter merger to control point "
                                          << readyBorder.BuildSortablePosition(Context->IsReversed).DebugString());
             return;
         }
-        YDB_LOG_TRACE("",
-            {"component", "duplicates_manager"},
-            {"event", "TMergeBorders::DoExecute"},
-            {"type", "drain"},
-            {"border", readyBorder.BuildSortablePosition(Context->IsReversed).DebugString()},
-            {"builder", Context->FiltersBuilder.DebugString()});
->>>>>>> 2affe8baeb6 (more validations, fix abort sensors and guards (#48648))
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
+        ("component", "duplicates_manager")("event", "TMergeBorders::DoExecute")("type", "drain")(
+            "border", readyBorder.BuildSortablePosition(Context->IsReversed).DebugString())("builder", Context->FiltersBuilder.DebugString());
     }
 
     Context->Counters->OnRowsMerged(

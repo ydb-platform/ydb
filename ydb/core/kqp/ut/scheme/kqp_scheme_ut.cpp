@@ -5537,6 +5537,163 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(RebuildVectorIndexInheritColumnsSql) {
+        // Omitting the ON (...) clause entirely must inherit the existing index columns
+        // and succeed (covers the !hasUserColumns branch in the KQP exec layer).
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Data String,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=2, clusters=2)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            // No ON (...) clause: columns are inherited from the existing index.
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable`
+                    REBUILD INDEX vector_idx
+                    WITH (levels = 2, clusters = 3);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/TestTable").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns()[0], "Embedding");
+        }
+    }
+
+    Y_UNIT_TEST(RebuildVectorIndexOverrideForbiddenSettingsSql) {
+        // metric/vector_type/vector_dimension must not be overridable on REBUILD INDEX.
+        // These are rejected already at the KQP exec layer before reaching schemeshard.
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Data String,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=2, clusters=2)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        // Each of distance / vector_type / vector_dimension must be rejected.
+        for (const TString& forbidden : {
+                TString("distance=manhattan"),
+                TString("vector_type=uint8"),
+                TString("vector_dimension=4")})
+        {
+            auto status = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable`
+                    REBUILD INDEX vector_idx
+                        ON (Embedding)
+                    WITH ()" << forbidden << R"(, levels = 2, clusters = 3);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS,
+                "override of '" << forbidden << "' must be rejected");
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
+                "Can't override parameters distance, similarity, vector_type or vector_dimension");
+        }
+    }
+
+    Y_UNIT_TEST(RebuildNonExistentIndexSql) {
+        // Rebuilding an index that does not exist must fail with a clear message.
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Data String,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=2, clusters=2)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable`
+                    REBUILD INDEX missing_idx
+                    WITH (levels = 2, clusters = 3);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "not found");
+        }
+    }
+
+    Y_UNIT_TEST(RebuildNonVectorIndexSql) {
+        // REBUILD INDEX is only supported for vector_kmeans_tree indexes; rebuilding a
+        // plain secondary index must be rejected at the KQP exec layer.
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Data String,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX secondary_idx GLOBAL ON (Data)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable`
+                    REBUILD INDEX secondary_idx
+                        ON (Data);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
+                "only supported for vector_kmeans_tree");
+        }
+    }
+
     Y_UNIT_TEST(RenameTableWithVectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);

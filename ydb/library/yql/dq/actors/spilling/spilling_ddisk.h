@@ -23,9 +23,16 @@ struct TDDiskSpillingConfig {
 };
 
 // Process-wide backend selection. Called once from KQP proxy on startup.
-void ConfigureDqSpillingBackend(EDqSpillingBackend backend, TDDiskSpillingConfig ddiskConfig = {});
+void ConfigureDqSpillingBackend(
+    EDqSpillingBackend backend,
+    TDDiskSpillingConfig ddiskConfig = {},
+    TIntrusivePtr<TSpillingCounters> counters = nullptr);
 EDqSpillingBackend GetDqSpillingBackend();
 const TDDiskSpillingConfig& GetDqDDiskSpillingConfig();
+TIntrusivePtr<TSpillingCounters> GetDqSpillingCounters();
+
+// Lightweight mon actor that serves /actors/kqp_spilling_ddisk.
+NActors::IActor* CreateDqDDiskSpillingMonActor(TIntrusivePtr<TSpillingCounters> counters);
 
 // Same contract as CreateDqLocalFileSpillingActor: accepts TEvDqSpilling::{Write,Read},
 // replies with WriteResult / ReadResult / Error to `client`.

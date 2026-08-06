@@ -291,9 +291,17 @@ public:
         if (auto& ddiskCfg = TableServiceConfig.GetSpillingServiceConfig().GetDDiskConfig(); ddiskCfg.GetEnable()) {
             NYql::NDq::TDDiskSpillingConfig cfg;
             cfg.Enable = true;
-            NYql::NDq::ConfigureDqSpillingBackend(NYql::NDq::EDqSpillingBackend::DDisk, cfg);
+            NYql::NDq::ConfigureDqSpillingBackend(NYql::NDq::EDqSpillingBackend::DDisk, cfg, Counters);
+
+            if (NActors::TMon* mon = AppData()->Mon) {
+                auto monActor = TActivationContext::Register(
+                    NYql::NDq::CreateDqDDiskSpillingMonActor(Counters));
+                NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+                mon->RegisterActorPage(actorsMonPage, "kqp_spilling_ddisk", "KQP DDisk Spilling", false,
+                    TActivationContext::ActorSystem(), monActor);
+            }
         } else if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
-            NYql::NDq::ConfigureDqSpillingBackend(NYql::NDq::EDqSpillingBackend::LocalFile);
+            NYql::NDq::ConfigureDqSpillingBackend(NYql::NDq::EDqSpillingBackend::LocalFile, {}, Counters);
 
             TString spillingRoot = cfg.GetRoot();
             if (spillingRoot.empty()) {

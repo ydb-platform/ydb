@@ -1,8 +1,16 @@
+<<<<<<< HEAD
 # Examples of working with topics via Amazon SQS API
 
 <!-- markdownlint-disable blanks-around-fences -->
 
 This article provides examples of working with [topics](../../concepts/datamodel/topic.md) using the Amazon SQS API via [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-welcome.html).
+=======
+# Examples of working with a topic via the SQS API
+
+<!-- markdownlint-disable blanks-around-fences -->
+
+This article provides examples of working with [topics](../../concepts/datamodel/topic.md) using the SQS API with the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-welcome.html).
+>>>>>>> 1676b145b9a (Auto-translate docs from PR #44144 (#49147))
 
 {% include [x](_includes/limitations.md) %}
 
@@ -16,19 +24,33 @@ The endpoint for accessing the Amazon SQS API is formed as follows:
 
 Where:
 
+<<<<<<< HEAD
 - `db-balancer` — DNS name of the HTTPS balancer whose backend includes the database compute nodes (or the address of the node/service where the HTTP Proxy is running).
 - `port` — port on which the HTTP Proxy is available.
 - `database` — full path of the database where the topics are located.
+=======
+- `db-balancer`: DNS name of the HTTPS load balancer with database compute nodes as its backend (or the address of the node or service where the HTTP Proxy is running).
+- `port`: port on which the HTTP Proxy is available.
+- `database`: full path of the database that contains the topics.
+>>>>>>> 1676b145b9a (Auto-translate docs from PR #44144 (#49147))
 
-This endpoint is specified in AWS CLI via the `--endpoint` parameter.
+This endpoint is specified in the AWS CLI via the `--endpoint` parameter.
 
 {% note info %}
 
+<<<<<<< HEAD
 The examples use the endpoint `https://my_db.balancer.example.com:8443/Root/my_db`. It includes:
 
 - `my_db.balancer.example.com` — DNS name of the balancer through which the Amazon SQS protocol is available.
 - `8443` — network port.
 - `/Root/my_db` — database name.
+=======
+The examples use the endpoint `https://my_db.balancer.example.com:8443/Root/my_db`. In it:
+
+- `my_db.balancer.example.com`: DNS name of the load balancer through which the SQS protocol is available.
+- `8443`: network port.
+- `/Root/my_db`: database name.
+>>>>>>> 1676b145b9a (Auto-translate docs from PR #44144 (#49147))
 
 {% endnote %}
 
@@ -45,7 +67,7 @@ aws --endpoint "$ENDPOINT" \
 ```
 
 
-After executing the command, a [topic](../../concepts/datamodel/topic.md) with the specified name and a [shared (common) reader](../../concepts/datamodel/topic.md#shared-consumer) named `ydb-sqs-consumer` will be created. You can verify the topic's existence using the [scheme describe](../ydb-cli/commands/scheme-describe.md) command of the [YDB CLI](../ydb-cli/index.md):
+After running the command, a [topic](../../concepts/datamodel/topic.md) with the specified name and a [shared (common) reader](../../concepts/datamodel/topic.md#shared-consumer) named `ydb-sqs-consumer` will be created. You can check that the topic exists using the [scheme describe](../ydb-cli/commands/scheme-describe.md) command of the [YDB CLI](../ydb-cli/index.md):
 
 
 ```shell
@@ -66,7 +88,11 @@ aws --endpoint "$ENDPOINT" \
 ```
 
 
+<<<<<<< HEAD
 After executing the command, a [topic](../../concepts/datamodel/topic.md) named `my_topic.fifo` and a [shared (common) reader](../../concepts/datamodel/topic.md#shared-consumer) named `ydb-sqs-consumer` will be created, with message ordering preservation enabled.
+=======
+After running the command, a [topic](../../concepts/datamodel/topic.md) named `my_topic.fifo` and a [shared (common) reader](../../concepts/datamodel/topic.md#shared-consumer) named `ydb-sqs-consumer` will be created, with message ordering enabled.
+>>>>>>> 1676b145b9a (Auto-translate docs from PR #44144 (#49147))
 
 ## Getting a list of topics
 
@@ -80,6 +106,7 @@ aws --endpoint "$ENDPOINT" sqs list-queues
 ```
 
 
+<<<<<<< HEAD
 ### Getting the QueueUrl of a topic
 
 To get the `QueueUrl` of a topic, run the command:
@@ -102,14 +129,23 @@ Where:
 In the example above, `my_topic` is `{topic_name}`, and `my_consumer` is `{consumer_name}`.
 
 ## Writing to a topic and reading from a topic
+=======
+## Writing to and reading from a topic
+>>>>>>> 1676b145b9a (Auto-translate docs from PR #44144 (#49147))
 
-For read and write operations, AWS CLI uses the `--queue-url` parameter. It can be obtained via `get-queue-url`.
+For read and write operations, the AWS CLI uses the `--queue-url` parameter. You can obtain it via `get-queue-url`.
 
 Below is an example:
 
+<<<<<<< HEAD
 - getting `QueueUrl`.
 - writing a message.
 - reading a message.
+=======
+- Getting `QueueUrl`.
+- Writing a message.
+- Reading a message.
+>>>>>>> 1676b145b9a (Auto-translate docs from PR #44144 (#49147))
 
 
 ```shell
@@ -118,7 +154,7 @@ ENDPOINT="https://my_db.balancer.example.com:8443/Root/my_db"
 # get QueueUrl
 QUEUE_URL="$(aws --endpoint "$ENDPOINT" sqs get-queue-url --queue-name "my_topic" --query 'QueueUrl' --output text)"
 
-# write a message to a topic
+# write a message to the topic
 aws --endpoint "$ENDPOINT" sqs send-message \
   --queue-url "$QUEUE_URL" \
   --message-body "hello from aws cli"

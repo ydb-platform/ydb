@@ -54,7 +54,7 @@ message TGetPartitionsForNodeResponse
   NYdb.NBS.NProto.TError Error = 1;
 
   repeated uint64 Partitions = 2;
-};
+}
 
 //
 // GetNodesForPartition
@@ -62,11 +62,11 @@ message TGetPartitionsForNodeResponse
 message TGetNodesForPartitionRequest
 {
   uint64 PartitionTabletId = 1;
-};
+}
 
 message TGetNodesForPartitionResponse
 {
   NYdb.NBS.NProto.TError Error = 1;
 
   repeated uint32 Nodes = 2;
-};
+}

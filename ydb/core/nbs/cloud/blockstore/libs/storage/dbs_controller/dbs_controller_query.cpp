@@ -32,7 +32,7 @@ void TDbsControllerActor::HandleGetPartitionsForNodeRequest(
     LOG_INFO_S(
         ctx,
         NKikimrServices::DBS_CONTROLLER,
-        "Handle GetPartitionsForNode request" << ", tabletId: "
+        "Handle GetPartitionsForNode request" << ", nodeId: "
                                               << ev->Get()->Record.GetNodeId());
 
     // TODO Dummy

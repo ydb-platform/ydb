@@ -52,7 +52,8 @@ struct TDbsControllerSchema: public NKikimr::NIceDb::Schema
             DirectBlockGroupId,
             NodeId,
             PDiskId,
-            DDiskSlotId>;
+            DDiskSlotId,
+            IsPBuffer>;
     };
 
     struct InverseDDiskMap: TTableSchema<2>
@@ -81,7 +82,7 @@ struct TDbsControllerSchema: public NKikimr::NIceDb::Schema
         using TColumns = TableColumns<NodeId, PDiskId, DDiskSlotId, TabletId>;
     };
 
-    using TTables = SchemaTables<DDiskMap>;
+    using TTables = SchemaTables<DDiskMap, InverseDDiskMap>;
 
     using TSettings =
         SchemaSettings<ExecutorLogBatching<true>, ExecutorLogFlushPeriod<0>>;

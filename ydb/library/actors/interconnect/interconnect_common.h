@@ -73,7 +73,7 @@ namespace NActors {
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
         bool RdmaChecksum = true;
 
-        struct {
+        struct TV2 {
             // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
             // v2 is used only when both peers have this enabled and encryption is not in effect.
             bool Enable = false;
@@ -86,13 +86,13 @@ namespace NActors {
             // serialization cost off the engine's shard worker thread).
             bool EnablePreserializeEvents = false;
             // Number of worker threads.
-            ui32 UringEngineThreads = 4;
+            ui32 Threads = 4;
             // io_uring rings per v2 shard worker (default 1). Each ring may have its own SQPOLL thread, so this
             // scales kernel submission-polling independently of the number of serialization workers.
-            ui32 UringEngineRingsPerShard = 1;
+            ui32 RingsPerShard = 1;
             // SQPOLL kernel-thread idle window (ms) for v2 rings before it sleeps. Only used when EnableSQPOLL
             // is on. Matches TUringContext::SqThreadIdleMs by default.
-            ui32 UringEngineSqThreadIdleMs = 2000;
+            ui32 SqThreadIdleMs = 2000;
             // Enable kernel threads sharing among different worker threads.
             bool ShareRingsAmongThreads = false;
             // Register session sockets into each ring's fixed-file table (IOSQE_FIXED_FILE) to avoid
@@ -100,7 +100,21 @@ namespace NActors {
             // the table or a ring runs out of slots. Requires sparse/update support (kernel >= 5.5; target 5.13+).
             bool EnableFixedFiles = true;
             // Size of the fixed-file table reserved per ring when EnableFixedFiles is on.
-            ui32 UringEngineFixedFilesPerRing = 4096;
+            ui32 FixedFilesPerRing = 4096;
+            // Shared provided-buffer pool (buf_ring or provide_buffers) for sessions whose receive
+            // target is still at the minimum size. Falls back to per-session plain buffers.
+            bool EnableProvidedBuffers = true;
+            // Number of shared-pool buffers reserved per ring.
+            ui32 PoolBufCount = 128;
+            // Minimum and maximum write buffer size.
+            ui32 MinWriteBufferSize = 4_KB;
+            ui32 MaxWriteBufferSize = 256_KB;
+            // Minimum and maximum read buffer size.
+            ui32 MinReadBufferSize = 4_KB;
+            ui32 MaxReadBufferSize = 256_KB;
+            // Minimum and maximum serialization window size.
+            ui32 MinSerializeWindowSize = 4_KB;
+            ui32 MaxSerializeWindowSize = 256_KB;
         } V2;
     };
 

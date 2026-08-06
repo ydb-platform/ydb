@@ -627,8 +627,8 @@ namespace {
             settings.V2.ChecksumEvents = cfg.Checksum;
             settings.V2.EnableSQPOLL = cfg.SqPoll;
             settings.V2.EnablePreserializeEvents = cfg.Preserialize;
-            settings.V2.UringEngineThreads = cfg.UringShards;
-            settings.V2.UringEngineRingsPerShard = cfg.RingsPerShard;
+            settings.V2.Threads = cfg.UringShards;
+            settings.V2.RingsPerShard = cfg.RingsPerShard;
             if (cfg.TcpSocketBufferSize) {
                 settings.TCPSocketBufferSize = cfg.TcpSocketBufferSize;
             }

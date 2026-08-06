@@ -935,8 +935,8 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
     Y_UNIT_TEST_QUAD(TestTeardownDuringStateSpilling, UseLLVM, UseFlow) {
         TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
 
-        auto streamCreator = [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
-            return new TWideKVStream(ctx, 1000, 1, columnTypes, keyWidth, refMap, [&](const size_t rowNum, bool&) {
+        auto streamCreator = [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
+            return new TWideKVStream(ctx, 1000, 1, columnTypes, refMap, [&](const size_t rowNum, bool&) {
                 if (rowNum == 500) {
                     setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
                 }

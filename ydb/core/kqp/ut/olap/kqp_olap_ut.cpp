@@ -5002,17 +5002,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        auto queryClient = kikimr.GetQueryClient();
-        size_t rowsCount = 1;
-        for (ui32 i = 0; i < 60 && rowsCount != 0; ++i) {
-            csController->WaitCleaning(TDuration::Seconds(1));
-            auto result = queryClient
+        csController->WaitCleaning(TDuration::Seconds(5));
+
+        {
+            auto result = kikimr.GetQueryClient()
                               .ExecuteQuery("SELECT * FROM `olapStore/.sys/store_primary_index_portion_stats`", NQuery::TTxControl::NoTx())
                               .GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            rowsCount = result.GetResultSet(0).RowsCount();
+            UNIT_ASSERT_EQUAL(result.GetResultSet(0).RowsCount(), 0);
         }
-        UNIT_ASSERT_VALUES_EQUAL(rowsCount, 0);
     }
 
     Y_UNIT_TEST(OlapTxMode) {

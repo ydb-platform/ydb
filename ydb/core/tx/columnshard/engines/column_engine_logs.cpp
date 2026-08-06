@@ -588,14 +588,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
         }
     }
 
-    // pathsToDrop is sorted ascending by drop snapshot. A dropped table stays readable for any
-    // snapshot strictly older than its drop version, so its portions must be retained until the
-    // drop version falls out of the read window (minSnapshotForNewReads, driven by MaxReadStaleness).
-    // Removing them earlier would break reads at valid pre-drop snapshots.
-    for (auto& [dropSnapshot, pathIds] : pathsToDrop) {
-        if (minSnapshotForNewReads < dropSnapshot) {
-            break;
-        }
+    for (auto& [_, pathIds] : pathsToDrop) {
         for (TInternalPathId pathId : pathIds) {
             auto g = GranulesStorage->GetGranuleOptional(pathId);
             if (!g) {

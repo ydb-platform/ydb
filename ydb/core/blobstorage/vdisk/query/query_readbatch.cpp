@@ -41,7 +41,18 @@ namespace NKikimr {
         }
 
         ui32 partOffs = data.Offset;
-        TDiskBlob::DeriveBlobHeaderMode(blobSize, data.Size, &partOffs);
+        auto blobHeaderMode = TDiskBlob::DeriveBlobHeaderMode(blobSize, data.Size, &partOffs);
+        ui32 trailingChecksumSize = 0;
+        switch (blobHeaderMode) {
+            case EBlobHeaderMode::OLD_HEADER:
+            case EBlobHeaderMode::NO_HEADER:
+                break;
+
+            case EBlobHeaderMode::XXH3_64BIT_HEADER:
+                trailingChecksumSize = TDiskBlob::GetBlobHeaderSize(blobHeaderMode);
+                break;
+        }
+        const ui32 diskBlobDataEnd = data.Offset + data.Size - trailingChecksumSize;
 
         for (ui8 i : parts) {
             const TLogoBlobID partId(CurID, i + 1);
@@ -54,7 +65,20 @@ namespace NKikimr {
                 } else if (!partSize) {
                     tmpItem.UpdateWithMemItem(partId, Cookie, TRope());
                 } else if (tmpItem.ShouldUpdateWithDisk()) {
-                    const ui32 size = QuerySize ? QuerySize : partSize - QueryShift;
+                    ui32 size = QuerySize ? QuerySize : partSize - QueryShift;
+                    if (!QuerySize && !QueryShift) {
+                        switch (blobHeaderMode) {
+                            case EBlobHeaderMode::OLD_HEADER:
+                            case EBlobHeaderMode::NO_HEADER:
+                                break;
+
+                            case EBlobHeaderMode::XXH3_64BIT_HEADER:
+                                if (partOffs + partSize == diskBlobDataEnd) {
+                                    size += trailingChecksumSize;
+                                }
+                                break;
+                        }
+                    }
                     Y_DEBUG_ABORT_UNLESS(size);
                     tmpItem.UpdateWithDiskItem(partId, Cookie, TDiskPart(data.ChunkIdx, partOffs + QueryShift, size));
                 }

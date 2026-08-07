@@ -38,11 +38,10 @@ void TTextWriter::TValueWriter::operator()(const TString& value) const {
     }
     outputText << "=";
     auto str = TTypesMapping::ToString(value);
-    if (SubstGlobal(str, "\n", "\\n") !=0 ||
-        SubstGlobal(str, "\"", "\\\"") !=0  ||
-        SubstGlobal(str, "'", "\\'") !=0 ||
-        str.Contains(" ") ||
-        str.Contains("=")) {
+    auto substNewLines = SubstGlobal(str, "\n", "\\n");
+    auto substDoubleQuote = SubstGlobal(str, "\"", "\\\"");
+
+    if ( substNewLines!=0 || substDoubleQuote!=0 || str.Contains(" ") || str.Contains("=") || str.Contains("'")) {
         outputText << "\"";
         outputText << str;
         outputText << "\"";

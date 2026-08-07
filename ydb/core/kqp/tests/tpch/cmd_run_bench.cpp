@@ -77,7 +77,7 @@ NKikimrClient::TConsoleResponse DoGrpcRequest(const TString& endpoint, NKikimrCl
     NYdbGrpc::TGRpcClientLow grpcClient;
     auto grpcContext = grpcClient.CreateContext();
 
-    NYdbGrpc::TGRpcClientConfig grpcConfig{endpoint};
+    NYdbGrpc::TGRpcClientConfig grpcConfig{endpoint, "kqp_run_bench"};
     auto grpc = grpcClient.CreateGRpcServiceConnection<NKikimrClient::TGRpcServer>(grpcConfig);
 
     TAtomic done = 0;

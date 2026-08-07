@@ -442,21 +442,25 @@ void TColumnShard::RunTruncateTable(
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(truncateProto);
-    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
+    // Prefer the propose-time fence (TruncatingLocalToInternal): ResolveInternalPathId is empty
+    // after TruncateTablePropose, by design. Fall back to Resolve for defensive coverage.
+    std::optional<TInternalPathId> oldInternalPathId = TablesManager.GetTruncatingInternalPathId(schemeShardLocalPathId);
+    if (!oldInternalPathId) {
+        oldInternalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
+    }
 
-    if (!internalPathId) {
+    if (!oldInternalPathId) {
         LOG_S_DEBUG("TruncateTable for unknown or deleted scheme shard pathId: " << schemeShardLocalPathId << " at tablet " << TabletID());
         return;
     }
 
-    const auto oldInternalPathId = *internalPathId;
-    const auto& pathId = TUnifiedPathId::BuildValid(oldInternalPathId, schemeShardLocalPathId);
-    if (!TablesManager.HasTable(oldInternalPathId)) {
+    const auto& pathId = TUnifiedPathId::BuildValid(*oldInternalPathId, schemeShardLocalPathId);
+    if (!TablesManager.HasTable(*oldInternalPathId)) {
         LOG_S_DEBUG("TruncateTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
         return;
     }
 
-    if (TablesManager.GetTable(oldInternalPathId).IsReadOnly(schemeShardLocalPathId)) {
+    if (TablesManager.GetTable(*oldInternalPathId).IsReadOnly(schemeShardLocalPathId)) {
         LOG_S_WARN("TruncateTable skipped for read-only pathId: " << pathId << " at tablet " << TabletID());
         return;
     }
@@ -465,10 +469,10 @@ void TColumnShard::RunTruncateTable(
 
     // Capture schema + TTL/lifecycle settings of the table being truncated BEFORE TruncateTable() drops it,
     // so the freshly generated internal path id inherits the same configuration.
-    const auto lastVersionInfo = TablesManager.LoadLastTableVersionInfo(oldInternalPathId, db);
-    const auto ttlSettings = TablesManager.GetTableTtlProto(oldInternalPathId, version);
+    const auto lastVersionInfo = TablesManager.LoadLastTableVersionInfo(*oldInternalPathId, db);
+    const auto ttlSettings = TablesManager.GetTableTtlProto(*oldInternalPathId, version);
 
-    const auto newInternalPathId = TablesManager.TruncateTable(schemeShardLocalPathId, oldInternalPathId, version, db);
+    const auto newInternalPathId = TablesManager.TruncateTable(schemeShardLocalPathId, *oldInternalPathId, version, db);
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
     newInternalPathId.ToProto(tableVerProto);
@@ -1686,8 +1690,8 @@ public:
                     }
                     if (!itPortionConstructor->second.HasIndexes()) {
                         if (!itPortionConstructor->second.GetPortionInfo()
-                                 ->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())
-                                 ->GetIndexesCount()) {
+                                ->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())
+                                ->GetIndexesCount()) {
                             itPortionConstructor->second.SetIndexes({});
                         } else {
                             auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(i.first.GetRawValue(), p).Select();

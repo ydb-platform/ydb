@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         const ui64 absentPathId = 111;
         ui64 txId = 10;
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -317,9 +317,10 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
     }
 
-    // TRUNCATE allocates a brand-new InternalPathId for the table. The TTL/tiering settings of the
+    // TRUNCATE allocates a brand-new InternalPathId for the table. The TTL settings of the
     // truncated generation must be replayed onto that new path id, otherwise the table would silently
     // lose its data-lifecycle configuration (SchemeShard does not resend TTL settings on TRUNCATE).
+    // Tables with tiering are rejected on SchemeShard, so this test covers pure TTL (delete action).
     Y_UNIT_TEST(TruncatePreservesTtl) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
@@ -342,8 +343,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         // Sanity: TTL is present for the original generation.
         {
-            const auto internalPathId =
-                shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
             UNIT_ASSERT(internalPathId);
             UNIT_ASSERT(shard->GetTablesManager().GetTableTtl(*internalPathId).has_value());
         }
@@ -356,8 +356,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         // After TRUNCATE the freshly generated InternalPathId must still carry the TTL settings.
         {
-            const auto newInternalPathId =
-                shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            const auto newInternalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
             UNIT_ASSERT(newInternalPathId);
             const auto ttl = shard->GetTablesManager().GetTableTtl(*newInternalPathId);
             UNIT_ASSERT_C(ttl.has_value(), "TTL settings were lost after TRUNCATE");
@@ -375,7 +374,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -426,7 +425,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -468,7 +467,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 srcPathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -501,6 +500,53 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
     }
 
+    Y_UNIT_TEST(TruncateCopySourceFails) {
+        // After CopyTable the source shares InternalPathId with the read-only destination.
+        // Truncating the source would take DropTable's partial-drop path and must be rejected.
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareStandaloneTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        {
+            std::vector<ui64> writeIds;
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        const ui64 dstPathId = 2;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, dstPathId, 1), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        ProposeSchemaTxFail(runtime, sender, TTestSchema::TruncateTableTxBody(srcPathId, 1), ++txId);
+
+        // Both source and copy remain readable.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+    }
+
     Y_UNIT_TEST(TruncateSeqNoCheck) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
@@ -509,7 +555,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
 
@@ -520,15 +566,18 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         // Truncate with round=3 (lower) should fail
         ProposeSchemaTxFail(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 3), ++txId);
 
+        // Drop on the same path with a lower per-path SeqNo must also fail (Truncate is path-scoped).
+        ProposeSchemaTxFail(runtime, sender, TTestSchema::DropTableTxBody(pathId, 4), ++txId);
+
         // Truncate with round=6 (higher) should succeed
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 6), ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });
     }
 
     // Verifies that TRUNCATE waits for all in-flight write transactions to complete before
-    // becoming PREPARED (analogous to MoveTable::WithCommitInProgress). Without the TWaitTxs
-    // mechanism a write tx committed concurrently with TRUNCATE could end up writing into the
-    // old (already-dropped) InternalPathId and the data would be silently lost in GC.
+    // becoming PREPARED (analogous to MoveTable::WithCommitInProgress). Combined with
+    // TruncateTablePropose (path fence), this prevents a concurrent write from committing into
+    // the old InternalPathId after the generation swap.
     Y_UNIT_TEST_DUO(TruncateWithCommitInProgress, Reboot) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
@@ -537,7 +586,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -620,6 +669,86 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT(rb);
             UNIT_ASSERT_EQUAL(rb->num_rows(), 50);
         }
+    }
+
+    // Path fence on TRUNCATE propose (TruncateTablePropose): new writes and CommitWriteLock for
+    // locks that still hold the old generation must fail with "unknown table", same as Move.
+    Y_UNIT_TEST(TruncateFencesWritesOnPropose) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 pathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        // Lock-held write that resolved the path before TRUNCATE propose.
+        std::vector<ui64> writeIdsBefore;
+        const auto lockBefore = 1;
+        {
+            const bool ok = WriteData(runtime, sender, writeId++, pathId, MakeTestBlob({ 0, 50 }, testTable.Schema), testTable.Schema, true,
+                &writeIdsBefore, NEvWrite::EModificationType::Upsert, lockBefore);
+            UNIT_ASSERT(ok);
+        }
+
+        // Start TRUNCATE propose asynchronously — TruncateTablePropose fences the path immediately.
+        const auto truncateTxId = ++txId;
+        {
+            auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, truncateTxId, TTestSchema::TruncateTableTxBody(pathId, 1), 0, 0);
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+
+        // New write after fence must fail.
+        {
+            std::vector<ui64> writeIdsAfter;
+            const bool ok = WriteData(
+                runtime, sender, writeId++, pathId, MakeTestBlob({ 50, 100 }, testTable.Schema), testTable.Schema, true, &writeIdsAfter);
+            UNIT_ASSERT(!ok);
+        }
+
+        // Commit of the pre-fence lock must also fail (CommitWriteLock checks ResolveInternalPathId).
+        { ProposeCommitFail(runtime, sender, TTestTxConfig::TxTablet0, ++txId, writeIdsBefore, lockBefore); }
+
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        UNIT_ASSERT(ev);
+        const auto& res = ev->Get()->Record;
+        UNIT_ASSERT_EQUAL(res.GetTxId(), truncateTxId);
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        planStep = TPlanStep{ res.GetMinStep() };
+        PlanSchemaTx(runtime, sender, { planStep, truncateTxId });
+
+        // After TRUNCATE the table is empty.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, NOlap::TSnapshot{ planStep, truncateTxId });
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+        }
+    }
+
+    // TRUNCATE is only supported for standalone column tables. A table that belongs to a column
+    // store must be rejected at propose time on the column shard side (the SchemeShard operation
+    // enforces the same restriction). PrepareTablet creates an in-store table (schema preset id=1).
+    Y_UNIT_TEST(TruncateInStoreTableFails) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 pathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        Y_UNUSED(planStep);
+
+        ui64 txId = 10;
+        // TRUNCATE of an in-store column table must be rejected at propose time.
+        ProposeSchemaTxFail(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
     }
 }
 }   // namespace NKikimr

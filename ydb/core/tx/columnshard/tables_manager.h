@@ -157,6 +157,17 @@ public:
         return *dropVersion;
     }
 
+    bool HasSchemeShardLocalPathId(const TSchemeShardLocalPathId& schemeShardLocalPathId) const {
+        return SchemeShardLocalPathIds.contains(schemeShardLocalPathId);
+    }
+
+    // Path-local drop version. Caller must ensure HasSchemeShardLocalPathId; nullopt means the path is live.
+    std::optional<NOlap::TSnapshot> GetPathDropVersionOptional(const TSchemeShardLocalPathId& schemeShardLocalPathId) const {
+        const auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
+        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
+        return it->second.DropVersion;
+    }
+
     void Merge(TTableInfo&& other) {
         AFL_VERIFY(InternalPathId == other.InternalPathId);
         Versions.insert(other.Versions.begin(), other.Versions.end());
@@ -273,6 +284,8 @@ public:
         if (!minReadSnapshot) {
             return true;
         }
+        // Exclusive drop boundary, same as CanBeUsedAt / ResolveInternalPathIdForSnapshot:
+        // a read at exactly the drop/truncate snapshot must not see the dropped generation.
         return *dropVersion <= *minReadSnapshot;
     }
 
@@ -353,7 +366,11 @@ public:
             ttlVersion.emplace(std::move(deserializedTtl));
         }
         AddVersion(pathId, snapshot, ttlVersion);
-        TtlProtos[pathId].emplace(snapshot, ttlSettings);
+        // Keep TtlProtos in lockstep with Ttl: both maps must always carry the same (pathId, snapshot)
+        // versions, otherwise GetTableTtl and GetTableTtlProto could disagree. Mirror the same
+        // idempotency invariant enforced by AddVersion above.
+        auto [it, inserted] = TtlProtos[pathId].emplace(snapshot, ttlSettings);
+        AFL_VERIFY(inserted || it->second.SerializeAsString() == ttlSettings.SerializeAsString())("snapshot", snapshot);
     }
 
     std::optional<NOlap::TTiering> GetTableTtl(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
@@ -402,6 +419,9 @@ private:
     THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>> SchemeShardLocalToInternalAll;
     THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal;   // Paths that are being renamed
     THashMap<TSchemeShardLocalPathId, TInternalPathId> CopyingLocalToInternal;   // Paths that are being copied
+    // Paths whose SchemeShardLocalToInternal mapping has been fenced for an in-flight TRUNCATE
+    // (same role as RenamingLocalToInternal for Move). Cleared when TRUNCATE is applied on plan.
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> TruncatingLocalToInternal;
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
@@ -438,9 +458,8 @@ public:   //IPathIdTranslator
     virtual std::vector<NOlap::TSnapshot> GetReadOnlyTablesSnapshots() const override;
 
 public:
-    std::optional<TInternalPathId> ResolveInternalPathIdForSnapshot(
-        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& readSnapshot,
-        const bool withTabletPathId) const;
+    std::optional<TInternalPathId> ResolveInternalPathIdForSnapshot(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId,
+        const NOlap::TSnapshot& readSnapshot, const bool withTabletPathId) const;
 
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
@@ -579,14 +598,25 @@ public:
     }
 
     void MoveTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
+    void MoveTableAbortPropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
     void MoveTableProgress(
         NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId);
 
     void CopyTablePropose(const TSchemeShardLocalPathId srcSchemeShardLocalPathId);
+    void CopyTableAbortPropose(const TSchemeShardLocalPathId srcSchemeShardLocalPathId);
     void CopyTablePlanStep(NIceDb::TNiceDb& db, const NOlap::TSnapshot& version, const TSchemeShardLocalPathId srcSchemeShardLocalPathId,
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
     void CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapshot& version, const TSchemeShardLocalPathId srcSchemeShardLocalPathId,
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
+
+    // Fence the path for TRUNCATE on propose: remove SchemeShardLocalToInternal so new writes and
+    // CommitWriteLock fail with "unknown table" (same pattern as MoveTablePropose). The old
+    // InternalPathId is kept in TruncatingLocalToInternal until TruncateTable runs on plan.
+    void TruncateTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
+    // Undo TruncateTablePropose if the schema tx is aborted before plan.
+    void TruncateTableAbortPropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
+    // Returns the InternalPathId fenced by TruncateTablePropose, if any.
+    std::optional<TInternalPathId> GetTruncatingInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) const;
 
     NOlap::TSnapshot ResolveReadSnapshot(const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& requestSnapshot) const;
 

@@ -104,6 +104,7 @@ THostSnapshot MakeHostSnapshot(const TOracleHostStat& stat)
         .InflightByOperation = stat.InflightByOperation,
         .Errors = stat.Errors,
         .PBufferUsedSize = stat.PBufferUsedSize,
+        .LatencyByOperation = stat.LatencyByOperation,
     };
 }
 
@@ -166,14 +167,6 @@ CreateWaitSessionCbForSyncWithPBuffer(
     };
 
     return cb;
-}
-
-bool IsDDiskOperation(EOperation operation)
-{
-    return operation == EOperation::ReadFromDDisk ||
-           operation == EOperation::WriteToDDisk ||
-           operation == EOperation::Flush ||
-           operation == EOperation::FlushCrossNode;
 }
 
 }   // namespace
@@ -2008,6 +2001,7 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .VChunkCount = VChunks.size(),
         .Hosts = std::move(hosts),
         .Connections = std::move(connections),
+        .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };
 }
 

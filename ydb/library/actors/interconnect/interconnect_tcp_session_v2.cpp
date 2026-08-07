@@ -5,6 +5,8 @@
 #include <util/stream/str.h>
 #include <util/string/cast.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT_SESSION
+
 namespace NActors {
 
     class TInterconnectSessionTCPv2::TDirectSessionV2 final : public IDirectSession {
@@ -61,16 +63,20 @@ namespace NActors {
                 interval != TDuration::Zero()) {
             Schedule(interval, new TEvPrivate::TEvCheckSubscriberLiveness);
         }
-        LOG_INFO_IC_SESSION("ICS90", "v2 session created");
+        YDB_LOG_INFO("V2 session created",
+            {"marker", "ICS90"});
     }
 
     void TInterconnectSessionTCPv2::SetNewConnection(TEvHandshakeDone::TPtr& ev) {
         // v2 establishes exactly one connection for its lifetime (no continuation)
         Y_ABORT_UNLESS(!Socket, "TInterconnectSessionTCPv2 does not support connection continuation");
 
-        LOG_INFO_IC_SESSION("ICS91", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64,
-            ev->Sender.ToString().data(), ev->Get()->Self.ToString().data(), ev->Get()->Peer.ToString().data(),
-            i64(*ev->Get()->Socket));
+        YDB_LOG_INFO("Handshake done socket: %li",
+            {"marker", "ICS91"},
+            {"sender", ev->Sender},
+            {"self", ev->Get()->Self},
+            {"peer", ev->Get()->Peer},
+            {"socket", i64(*ev->Get()->Socket)});
 
         Socket = std::move(ev->Get()->Socket);
         XdcSocket = std::move(ev->Get()->XdcSocket); // unused by v2 (no external data channel)
@@ -86,7 +92,8 @@ namespace NActors {
         EngineHandle = Proxy->Common->UringEngineV2->Register(Socket, SelfId(), Params.PeerScopeId,
             onDisconnectCallback, SelfId().NodeId() < Proxy->PeerNodeId, ClockSkew, PingRTT);
         if (!EngineHandle) {
-            LOG_ERROR_IC_SESSION("ICS99", "v2 io_uring engine failed to register the connection");
+            YDB_LOG_ERROR("V2 io_uring engine failed to register the connection",
+                {"marker", "ICS99"});
             return Terminate(TDisconnectReason::LostConnection());
         }
 
@@ -94,7 +101,9 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCPv2::Terminate(TDisconnectReason reason) {
-        LOG_INFO_IC_SESSION("ICS92", "v2 session terminated reason# %s", reason.ToString().data());
+        YDB_LOG_INFO("V2 session terminated",
+            {"marker", "ICS92"},
+            {"reason", reason});
 
         if (const TString& s = reason.ToString()) {
             Proxy->Metrics->IncDisconnectByReason(s);
@@ -139,13 +148,15 @@ namespace NActors {
 
     void TInterconnectSessionTCPv2::StartHandshake() {
         // no continuation -- lost connection means the session is gone
-        LOG_INFO_IC_SESSION("ICS93", "StartHandshake on v2 session -> terminating (no continuation)");
+        YDB_LOG_INFO("StartHandshake on v2 session -> terminating (no continuation)",
+            {"marker", "ICS93"});
         Terminate(TDisconnectReason::LostConnection());
     }
 
     void TInterconnectSessionTCPv2::ReestablishConnectionWithHandshake(TDisconnectReason reason) {
         // no continuation -- lost connection means the session is gone
-        LOG_INFO_IC_SESSION("ICS94", "ReestablishConnectionWithHandshake on v2 session -> terminating (no continuation)");
+        YDB_LOG_INFO("ReestablishConnectionWithHandshake on v2 session -> terminating (no continuation)",
+            {"marker", "ICS94"});
         Terminate(std::move(reason));
     }
 
@@ -192,13 +203,17 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCPv2::HandleSubscribe(STATEFN_SIG) {
-        LOG_DEBUG_IC_SESSION("ICS96", "subscribe for session state for %s", ev->Sender.ToString().data());
+        YDB_LOG_DEBUG("Subscribe for session state",
+            {"marker", "ICS96"},
+            {"sender", ev->Sender});
         AddSubscriber(ev->Sender, ev->Cookie);
         Send(ev->Sender, MakeNodeConnectedEvent(), 0, ev->Cookie);
     }
 
     void TInterconnectSessionTCPv2::HandleUnsubscribe(STATEFN_SIG) {
-        LOG_DEBUG_IC_SESSION("ICS97", "unsubscribe for session state for %s", ev->Sender.ToString().data());
+        YDB_LOG_DEBUG("Unsubscribe for session state",
+            {"marker", "ICS97"},
+            {"sender", ev->Sender});
         Subscribers.erase(ev->Sender);
     }
 

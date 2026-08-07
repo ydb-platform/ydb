@@ -1,5 +1,7 @@
 #include <ydb/core/blobstorage/vdisk/query/query_statalgo.h>
 
+#include "query_stat_test_utils.h"
+
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_ut.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
 
@@ -13,24 +15,11 @@ namespace {
     using TLevelIndex = ::NKikimr::TLevelIndex<TKey, TMemRec>;
     using TLevelSegment = ::NKikimr::TLevelSegment<TKey, TMemRec>;
     using TYieldedState = TDbStatYieldedState<TKey, TMemRec>;
+    using NDbStatTest::TManualMonotonicTimeProvider;
 
     TKey MakeKey(ui32 step) {
         return TKey(TLogoBlobID(1, 1, step, 0, 0, 0));
     }
-
-    class TManualMonotonicTimeProvider : public NMonotonic::IMonotonicTimeProvider {
-    public:
-        TMonotonic Now() override {
-            return CurrentTime;
-        }
-
-        void Advance(TDuration duration) {
-            CurrentTime += duration;
-        }
-
-    private:
-        TMonotonic CurrentTime = TMonotonic::Zero();
-    };
 
     class TTestDatabase {
     public:

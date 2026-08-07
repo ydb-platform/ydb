@@ -1,29 +1,13 @@
 #include <ydb/core/blobstorage/vdisk/query/query_stat_yield.h>
 
+#include "query_stat_test_utils.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 namespace {
 
-    class TManualMonotonicTimeProvider : public NMonotonic::IMonotonicTimeProvider {
-    public:
-        TMonotonic Now() override {
-            ++Calls;
-            return CurrentTime;
-        }
-
-        void Advance(TDuration duration) {
-            CurrentTime += duration;
-        }
-
-        ui32 GetCalls() const {
-            return Calls;
-        }
-
-    private:
-        TMonotonic CurrentTime = TMonotonic::Zero();
-        ui32 Calls = 0;
-    };
+    using NDbStatTest::TManualMonotonicTimeProvider;
 
     Y_UNIT_TEST_SUITE(TDbStatYieldCheckerTest) {
         Y_UNIT_TEST(ChecksTimeOnlyAtConfiguredSteps) {

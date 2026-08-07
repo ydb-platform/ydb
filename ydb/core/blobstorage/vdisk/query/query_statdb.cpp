@@ -253,40 +253,36 @@ namespace NKikimr {
     }
 
     template <class TKey, class TMemRec>
-    concept CLogoBlobsDb = std::same_as<TKey, TKeyLogoBlob> && std::same_as<TMemRec, TMemRecLogoBlob>;
+    concept CStatDb =
+        (std::same_as<TKey, TKeyLogoBlob> && std::same_as<TMemRec, TMemRecLogoBlob>) ||
+        (std::same_as<TKey, TKeyBlock> && std::same_as<TMemRec, TMemRecBlock>) ||
+        (std::same_as<TKey, TKeyBarrier> && std::same_as<TMemRec, TMemRecBarrier>);
 
     template <class TKey, class TMemRec>
-    concept CBlocksDb = std::same_as<TKey, TKeyBlock> && std::same_as<TMemRec, TMemRecBlock>;
-
-    template <class TKey, class TMemRec>
-    concept CBarriersDb = std::same_as<TKey, TKeyBarrier> && std::same_as<TMemRec, TMemRecBarrier>;
-
-    template <class TKey, class TMemRec>
-    concept CStatDb = CLogoBlobsDb<TKey, TMemRec> || CBlocksDb<TKey, TMemRec> || CBarriersDb<TKey, TMemRec>;
-
-    template <class TKey, class TMemRec>
-        requires CLogoBlobsDb<TKey, TMemRec>
     void EmplaceSnapshot(
             std::optional<TLevelIndexSnapshot<TKey, TMemRec>>& snapshot,
-            THullDsSnap& fullSnapshot)
+            THullDsSnap&& fullSnapshot);
+
+    template <>
+    void EmplaceSnapshot<TKeyLogoBlob, TMemRecLogoBlob>(
+            std::optional<TLevelIndexSnapshot<TKeyLogoBlob, TMemRecLogoBlob>>& snapshot,
+            THullDsSnap&& fullSnapshot)
     {
         snapshot.emplace(std::move(fullSnapshot.LogoBlobsSnap));
     }
 
-    template <class TKey, class TMemRec>
-        requires CBlocksDb<TKey, TMemRec>
-    void EmplaceSnapshot(
-            std::optional<TLevelIndexSnapshot<TKey, TMemRec>>& snapshot,
-            THullDsSnap& fullSnapshot)
+    template <>
+    void EmplaceSnapshot<TKeyBlock, TMemRecBlock>(
+            std::optional<TLevelIndexSnapshot<TKeyBlock, TMemRecBlock>>& snapshot,
+            THullDsSnap&& fullSnapshot)
     {
         snapshot.emplace(std::move(fullSnapshot.BlocksSnap));
     }
 
-    template <class TKey, class TMemRec>
-        requires CBarriersDb<TKey, TMemRec>
-    void EmplaceSnapshot(
-            std::optional<TLevelIndexSnapshot<TKey, TMemRec>>& snapshot,
-            THullDsSnap& fullSnapshot)
+    template <>
+    void EmplaceSnapshot<TKeyBarrier, TMemRecBarrier>(
+            std::optional<TLevelIndexSnapshot<TKeyBarrier, TMemRecBarrier>>& snapshot,
+            THullDsSnap&& fullSnapshot)
     {
         snapshot.emplace(std::move(fullSnapshot.BarriersSnap));
     }
@@ -361,7 +357,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvTakeHullSnapshotResult::TPtr& ev) {
-            EmplaceSnapshot<TKey, TMemRec>(Snapshot, ev->Get()->Snap);
+            EmplaceSnapshot<TKey, TMemRec>(Snapshot, std::move(ev->Get()->Snap));
             ContinueTraversal();
         }
 
@@ -371,12 +367,12 @@ namespace NKikimr {
             }
             SendVDiskResponse(TActivationContext::AsActorContext(), Ev->Sender, Result.release(),
                     Ev->Cookie, HullCtx->VCtx, {});
-            TThis::Send(ParentId, new TEvents::TEvGone);
             TThis::PassAway();
         }
 
         void PassAway() override {
             ReleaseSnapshot();
+            TThis::Send(ParentId, new TEvents::TEvGone);
             TBase::PassAway();
         }
 

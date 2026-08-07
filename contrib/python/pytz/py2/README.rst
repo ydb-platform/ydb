@@ -16,9 +16,9 @@ Almost all of the Olson timezones are supported.
 
 .. note::
 
-    Projects using Python 3.9 or later should be using the support
-    now included as part of the standard library, and third party
-    packages work with it such as `tzdata <https://pypi.org/project/tzdata/>`_.
+    Projects using Python 3.9 or later should use the standard library 
+    `zoneinfo <https://docs.python.org/3/library/zoneinfo.html>`_ module with
+    time zone database updates from `tzdata <https://pypi.org/project/tzdata/>`_ package.
     pytz offers no advantages beyond backwards compatibility with
     code written for earlier versions of Python.
 
@@ -33,7 +33,9 @@ Almost all of the Olson timezones are supported.
     2002-10-27 0:59 EST instead of the correct 2002-10-27 1:59 EDT). A
     ``normalize()`` method is provided to correct this. Unfortunately these
     issues cannot be resolved without modifying the Python datetime
-    implementation (see PEP-431).
+    implementation (see PEP-431). Attaching the timezone info from
+    this module directly into ``datetime(tzinfo=pytz.timezone('US/Eastern'))`` will result in 
+    incorrect behaviour.
 
 
 Installation

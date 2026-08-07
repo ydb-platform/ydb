@@ -3665,6 +3665,21 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     ModifyPlan(root, collectPlanNodeId);
     ModifyPlan(root, addStatsToPlanNode);
 
+    // Executer TxId of this execution phase, so that the plan can be matched with LWTrace
+    // records. It is not reported for literal-only phases, which never reach shards.
+    NKqpProto::TKqpExecutionExtraStats executionExtraStats;
+    if (stats.HasExtra() && stats.GetExtra().UnpackTo(&executionExtraStats) && executionExtraStats.GetTxId()) {
+        const ui64 txId = executionExtraStats.GetTxId();
+        root["TxId"] = txId;
+        // SerializeTxPlans() keeps only the subplans of the tx plan root, so the value has to be
+        // duplicated into them to survive the final serialization.
+        if (root.GetMapSafe().contains("Plans") && root.GetMapSafe().at("Plans").IsArray()) {
+            for (auto& plan : root.GetMapSafe().at("Plans").GetArraySafe()) {
+                plan["TxId"] = txId;
+            }
+        }
+    }
+
     if (stats.GetNodes().size()) {
         if (root.GetMapSafe().contains("Plans") && root.GetMapSafe().at("Plans").IsArray()) {
             for (auto& plan : root.GetMapSafe().at("Plans").GetArraySafe()) {

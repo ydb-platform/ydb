@@ -36,7 +36,7 @@ METHOD_ARITY(const volatile noexcept)
 
 #undef METHOD_ARITY
 
-}; // namespace NYql
+} // namespace NYql
 
 template <typename T>
 inline constexpr std::size_t arity_v = NYql::TArity<T>::value;

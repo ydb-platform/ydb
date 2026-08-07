@@ -184,6 +184,7 @@ PEERDIR(
     yql/essentials/public/udf/arrow
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils
+    yql/essentials/utils/meta
     yql/essentials/public/issue/protos
 )
 

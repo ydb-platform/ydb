@@ -9,7 +9,7 @@
 #include <span>
 
 #include <yql/essentials/minikql/mkql_rh_hash_utils.h>
-#include <yql/essentials/utils/is_pod.h>
+#include <yql/essentials/utils/meta/struct.h>
 #include <yql/essentials/utils/prefetch.h>
 
 #include <util/digest/city.h>

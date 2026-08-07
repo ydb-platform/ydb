@@ -79,13 +79,15 @@ namespace {
         if (messagePattern.empty()) {
             return true;
         }
-        const size_t messagePos = record.find("Message: ");
+        const size_t messagePos = record.find("message=");
         if (messagePos == TString::npos) {
             return false;
         }
-        const size_t messageStart = messagePos + 9;
-        const size_t messageEnd = record.find(',', messageStart);
+        const size_t messageStart = messagePos + 9 /* skip message=" */;
+        const size_t messageEnd = record.find('"', messageStart);
         const TString message = record.substr(messageStart, messageEnd == TString::npos ? record.size() : messageEnd - messageStart);
+        Cerr << "    extracted message:" << message << Endl;
+
         std::regex messageRegex(messagePattern.c_str());
         std::smatch match;
         return std::regex_search(message.cbegin(), message.cend(), match, messageRegex);
@@ -162,16 +164,24 @@ namespace {
     std::optional<TString> ExtractQueryTextsField(const TString& logs, const TString& messagePattern,
         const TString& fieldName, const std::optional<TString>& expectedContainedText = std::nullopt)
     {
+        Cerr << "Extract" << " messagePattern=" << messagePattern << " fieldName="<< fieldName << Endl;
+
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: SessionActor") || !MatchesMessage(record, messagePattern)) {
+            Cerr << " Check " << record << Endl;
+            Cerr << "  Contains1= " << record.Contains("сomponent=SessionActor") << Endl;
+            Cerr << "  MatchesMessage= " << MatchesMessage(record, messagePattern) << Endl;
+
+            if (!record.Contains("сomponent=SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            const TString prefix = fieldName + ": ";
+            const TString prefix = fieldName + "=";
             const size_t allPos = record.find(prefix);
+            Cerr << "  allPos= " << allPos << Endl;
             if (allPos == TString::npos) {
                 continue;
             }
             TString result = record.substr(allPos + prefix.size());
+            Cerr << "  result=" << result << Endl;
             if (result.EndsWith(",")) {
                 result.pop_back();
             }
@@ -179,8 +189,10 @@ namespace {
             if (expectedContainedText && !unescaped.Contains(*expectedContainedText)) {
                 continue;
             }
+            Cerr << "Extract" << " messagePattern=" << messagePattern << " fieldName="<< fieldName << " RETURN " << unescaped << Endl;
             return unescaped;
         }
+        Cerr << "Extract" << " messagePattern=" << messagePattern << " fieldName="<< fieldName <<  " RETURN std::nullopt" << Endl;
         return std::nullopt;
     }
 

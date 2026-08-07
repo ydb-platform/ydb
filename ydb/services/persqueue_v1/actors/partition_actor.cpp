@@ -793,11 +793,17 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
             PARTITION_ENSURE(RestoredDirectReadId != 0)
                 ("restored_direct_read_id", RestoredDirectReadId);
 
-            PARTITION_ENSURE(result.HasCmdPublishReadResult())
-                ("result", result.ShortDebugString());
-            PARTITION_ENSURE(*DirectReadsToPublish.begin() == result.GetCmdPublishReadResult().GetDirectReadId())
-                ("expected_direct_read_id", *DirectReadsToPublish.begin())
-                ("got_direct_read_id", result.GetCmdPublishReadResult().GetDirectReadId());
+            // Late/duplicate Prepare (or other non-Publish) is possible after nested pipe restart:
+            // restore may re-send Prepare for the same id while a previous Prepare is still delivered
+            // after we have already moved to Publish. Soft-ignore like Prepare stage.
+            if (!result.HasCmdPublishReadResult() || DirectReadsToPublish.empty()
+                    || *DirectReadsToPublish.begin() != result.GetCmdPublishReadResult().GetDirectReadId()) {
+                YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect PublishReadResult, got",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()});
+                return;
+            }
             DirectReadsToPublish.erase(DirectReadsToPublish.begin());
             if (!SendNextRestorePrepareOrForget()) {
                 OnDirectReadsRestored();

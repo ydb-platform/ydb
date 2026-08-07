@@ -554,8 +554,7 @@ Y_UNIT_TEST(RequestInflyOnDuplicatePrepareAfterPipeRestart) {
 }
 
 // LOGBROKER-10590: nested pipe restart re-sends restore Prepare for the same DirectReadId;
-// if the first Prepare arrives only after the second has already moved restore to Publish,
-// PARTITION_ENSURE(result.HasCmdPublishReadResult()) fires (Prepare stage soft-ignores, Publish does not).
+// a late Prepare after restore has moved to Publish must be ignored (not ENSURE).
 Y_UNIT_TEST(HasCmdPublishReadResultOnPrepareDuringPublishRestore) {
     TDirectReadRestoreEnv env;
     env.Start();
@@ -608,9 +607,8 @@ Y_UNIT_TEST(HasCmdPublishReadResultOnPrepareDuringPublishRestore) {
     env.ReleaseHeldPrepares();
     runtime.SimulateSleep(TDuration::Seconds(1));
 
-    // Intentionally asserting the bug exists (repro). Flip after fix.
-    UNIT_ASSERT_C(env.HasCmdPublishReadResultEnsure.load() > 0,
-        "expected PARTITION_ENSURE(result.HasCmdPublishReadResult()) on late Prepare during Publish"
+    UNIT_ASSERT_C(env.HasCmdPublishReadResultEnsure.load() == 0,
+        "late Prepare during Publish restore must not hit PARTITION_ENSURE(result.HasCmdPublishReadResult())"
             << "; heldPrepare=" << env.HeldPrepareResponses.load()
             << "; heldPublish=" << env.HeldPublishResponses.load()
             << "; reason=" << env.EnsureCloseReason);

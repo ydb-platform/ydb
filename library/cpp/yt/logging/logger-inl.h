@@ -425,6 +425,14 @@ public:
         return DoWith(tag, value, "v"_sb);
     }
 
+    //! Attaches the tag only when #condition holds, for fields a message omits rather
+    //! than renders empty. NB: #value is evaluated either way.
+    template <class TValue>
+    TTaggedLoggingGuard& WithIf(bool condition, TLoggingTagKey tag, const TValue& value) &
+    {
+        return condition ? DoWith(tag, value, "v"_sb) : *this;
+    }
+
     //! Attaches a keyed tag composed from several values, e.g. |.WithFormat("Method", "%v.%v", service, method)|.
     template <class... TArgs>
     TTaggedLoggingGuard& WithFormat(TLoggingTagKey tag, TFormatString<TArgs...> format, TArgs&&... args) &
@@ -432,6 +440,15 @@ public:
         Format(Writer_.BeginTag(tag.Get()), format, std::forward<TArgs>(args)...);
         Writer_.EndTag();
         return *this;
+    }
+
+    //! Attaches a composed tag only when #condition holds. NB: #args are evaluated either way.
+    template <class... TArgs>
+    TTaggedLoggingGuard& WithFormatIf(bool condition, TLoggingTagKey tag, TFormatString<TArgs...> format, TArgs&&... args) &
+    {
+        return condition
+            ? WithFormat(tag, format, std::forward<TArgs>(args)...)
+            : *this;
     }
 
     //! Splices a pre-built list of keyed tags, preserving them as individual tags. Chosen
@@ -639,7 +656,19 @@ public:
     }
 
     template <class... TArgs>
+    TNullTaggedLoggingGuard& WithIf(TArgs&&...)
+    {
+        return *this;
+    }
+
+    template <class... TArgs>
     TNullTaggedLoggingGuard& WithFormat(TArgs&&...)
+    {
+        return *this;
+    }
+
+    template <class... TArgs>
+    TNullTaggedLoggingGuard& WithFormatIf(TArgs&&...)
     {
         return *this;
     }

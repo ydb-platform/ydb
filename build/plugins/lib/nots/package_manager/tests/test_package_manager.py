@@ -158,7 +158,7 @@ def test_build_workspace_without_lockfile(tmp_path):
 
     package_manager.build_workspace(tarballs_store="__tarballs__", local_cli=True)
 
-    lockfile = package_manager.load_lockfile(os.path.join(package_manager.build_path, "pnpm-lock.yaml"))
+    lockfile = package_manager.load_lockfile(os.path.join(package_manager.build_path, "pre.pnpm-lock.yaml"))
     assert lockfile.data["lockfileVersion"] == "9.0"
 
 
@@ -191,14 +191,14 @@ def test_build_workspace_merges_transitive_workspace_lockfiles(tmp_path):
     reporter_workspace.packages = {".", "../ci-reporter"}
     reporter_workspace.write()
 
-    reporter_lockfile = package_manager_module.Lockfile(str(reporter_path / "pnpm-lock.yaml"))
+    reporter_lockfile = package_manager_module.Lockfile(str(reporter_path / "pre.pnpm-lock.yaml"))
     reporter_lockfile.data = {
         "lockfileVersion": "9.0",
         "importers": {".": {"dependencies": {"ci-reporter": {"specifier": "workspace:../ci-reporter"}}}},
     }
     reporter_lockfile.write()
 
-    ci_reporter_lockfile = package_manager_module.Lockfile(str(ci_reporter_path / "pnpm-lock.yaml"))
+    ci_reporter_lockfile = package_manager_module.Lockfile(str(ci_reporter_path / "pre.pnpm-lock.yaml"))
     ci_reporter_lockfile.data = {
         "lockfileVersion": "9.0",
         "importers": {
@@ -215,30 +215,8 @@ def test_build_workspace_merges_transitive_workspace_lockfiles(tmp_path):
 
     package_manager.build_workspace(tarballs_store="__tarballs__", local_cli=True)
 
-    lockfile = package_manager.load_lockfile(str(build_path / "pnpm-lock.yaml"))
+    lockfile = package_manager.load_lockfile(str(build_path / "pre.pnpm-lock.yaml"))
     assert set(lockfile.get_importers()) == {".", "../reporter", "../ci-reporter"}
-
-
-def test_rebase_file_tarball_resolutions(tmp_path):
-    source_dir = tmp_path / "source" / "module"
-    target_dir = tmp_path / "target" / "module"
-    lockfile = package_manager_module.Lockfile(str(source_dir / "pnpm-lock.yaml"))
-    lockfile.data = {
-        "lockfileVersion": "9.0",
-        "packages": {
-            "pkg@1.0.0": {
-                "resolution": {
-                    "integrity": "sha512-YQ==",
-                    "tarball": "file:__tarballs__/pkg/-/pkg-1.0.0.tgz",
-                }
-            }
-        },
-    }
-
-    package_manager_module.PackageManager._rebase_file_tarball_resolutions(lockfile, str(target_dir))
-
-    tarball = lockfile.data["packages"]["pkg@1.0.0"]["resolution"]["tarball"]
-    assert tarball == "file:../../source/module/__tarballs__/pkg/-/pkg-1.0.0.tgz"
 
 
 def _load_package_json(path):

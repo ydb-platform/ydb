@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-class _MacOSDefaults(PlatformDirsABC):  # noqa: PLR0904
+class _MacOSDefaults(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
     """Default platform directories for macOS without XDG environment variable overrides.
 
     Follows the guidance from `Apple's File System Programming Guide
@@ -26,7 +26,7 @@ class _MacOSDefaults(PlatformDirsABC):  # noqa: PLR0904
     """
 
     def _base_user_app_support_dir(self) -> str:
-        return self._append_app_name_and_version(os.path.expanduser("~/Library/Application Support"))  # noqa: PTH111
+        return self._append_app_name_and_version(os.path.expanduser("~/Library/Application Support"))  # ruff:ignore[os-path-expanduser]
 
     def _base_site_dirs(self) -> list[str]:
         is_homebrew = "/opt/python" in sys.prefix
@@ -66,7 +66,7 @@ class _MacOSDefaults(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_cache_dir(self) -> str:
         """Cache directory tied to the user, e.g. ``~/Library/Caches/$appname/$version``."""
-        return self._append_app_name_and_version(os.path.expanduser("~/Library/Caches"))  # noqa: PTH111
+        return self._append_app_name_and_version(os.path.expanduser("~/Library/Caches"))  # ruff:ignore[os-path-expanduser]
 
     @property
     def site_cache_dir(self) -> str:
@@ -97,7 +97,7 @@ class _MacOSDefaults(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_log_dir(self) -> str:
         """Log directory tied to the user, e.g. ``~/Library/Logs/$appname/$version``."""
-        return self._append_app_name_and_version(os.path.expanduser("~/Library/Logs"))  # noqa: PTH111
+        return self._append_app_name_and_version(os.path.expanduser("~/Library/Logs"))  # ruff:ignore[os-path-expanduser]
 
     @property
     def site_log_dir(self) -> str:
@@ -107,62 +107,62 @@ class _MacOSDefaults(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_documents_dir(self) -> str:
         """Documents directory tied to the user, e.g. ``~/Documents``."""
-        return os.path.expanduser("~/Documents")  # noqa: PTH111
+        return os.path.expanduser("~/Documents")  # ruff:ignore[os-path-expanduser]
 
     @property
     def user_downloads_dir(self) -> str:
         """Downloads directory tied to the user, e.g. ``~/Downloads``."""
-        return os.path.expanduser("~/Downloads")  # noqa: PTH111
+        return os.path.expanduser("~/Downloads")  # ruff:ignore[os-path-expanduser]
 
     @property
     def user_pictures_dir(self) -> str:
         """Pictures directory tied to the user, e.g. ``~/Pictures``."""
-        return os.path.expanduser("~/Pictures")  # noqa: PTH111
+        return os.path.expanduser("~/Pictures")  # ruff:ignore[os-path-expanduser]
 
     @property
     def user_videos_dir(self) -> str:
         """Videos directory tied to the user, e.g. ``~/Movies``."""
-        return os.path.expanduser("~/Movies")  # noqa: PTH111
+        return os.path.expanduser("~/Movies")  # ruff:ignore[os-path-expanduser]
 
     @property
     def user_music_dir(self) -> str:
         """Music directory tied to the user, e.g. ``~/Music``."""
-        return os.path.expanduser("~/Music")  # noqa: PTH111
+        return os.path.expanduser("~/Music")  # ruff:ignore[os-path-expanduser]
 
     @property
     def user_desktop_dir(self) -> str:
         """Desktop directory tied to the user, e.g. ``~/Desktop``."""
-        return os.path.expanduser("~/Desktop")  # noqa: PTH111
+        return os.path.expanduser("~/Desktop")  # ruff:ignore[os-path-expanduser]
 
     @property
     def user_projects_dir(self) -> str:
         """Projects directory tied to the user, e.g. ``~/Projects``."""
-        return os.path.expanduser("~/Projects")  # noqa: PTH111
+        return os.path.expanduser("~/Projects")  # ruff:ignore[os-path-expanduser]
 
     @property
     def user_publicshare_dir(self) -> str:
         """Public share directory tied to the user, e.g. ``~/Public``."""
-        return os.path.expanduser("~/Public")  # noqa: PTH111  # API returns str, not Path
+        return os.path.expanduser("~/Public")  # ruff:ignore[os-path-expanduser]  # API returns str, not Path
 
     @property
     def user_templates_dir(self) -> str:
         """Templates directory tied to the user, e.g. ``~/Templates``."""
-        return os.path.expanduser("~/Templates")  # noqa: PTH111  # API returns str, not Path
+        return os.path.expanduser("~/Templates")  # ruff:ignore[os-path-expanduser]  # API returns str, not Path
 
     @property
     def user_fonts_dir(self) -> str:
         """Fonts directory tied to the user, e.g. ``~/Library/Fonts``."""
-        return os.path.expanduser("~/Library/Fonts")  # noqa: PTH111  # API returns str, not Path
+        return os.path.expanduser("~/Library/Fonts")  # ruff:ignore[os-path-expanduser]  # API returns str, not Path
 
     @property
     def user_preference_dir(self) -> str:
         """Preference directory tied to the user, e.g. ``~/Library/Preferences/AppName``."""
-        return self._append_app_name_and_version(os.path.expanduser("~/Library/Preferences"))  # noqa: PTH111  # API returns str, not Path
+        return self._append_app_name_and_version(os.path.expanduser("~/Library/Preferences"))  # ruff:ignore[os-path-expanduser]  # API returns str, not Path
 
     @property
     def user_bin_dir(self) -> str:
         """Bin directory tied to the user, e.g. ``~/.local/bin``."""
-        return os.path.expanduser("~/.local/bin")  # noqa: PTH111
+        return os.path.expanduser("~/.local/bin")  # ruff:ignore[os-path-expanduser]
 
     @property
     def site_bin_dir(self) -> str:
@@ -172,7 +172,7 @@ class _MacOSDefaults(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_applications_dir(self) -> str:
         """Applications directory tied to the user, e.g. ``~/Applications``."""
-        return os.path.expanduser("~/Applications")  # noqa: PTH111
+        return os.path.expanduser("~/Applications")  # ruff:ignore[os-path-expanduser]
 
     @property
     def _site_applications_dirs(self) -> list[str]:
@@ -187,7 +187,7 @@ class _MacOSDefaults(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_runtime_dir(self) -> str:
         """Runtime directory tied to the user, e.g. ``~/Library/Caches/TemporaryItems/$appname/$version``."""
-        return self._append_app_name_and_version(os.path.expanduser("~/Library/Caches/TemporaryItems"))  # noqa: PTH111
+        return self._append_app_name_and_version(os.path.expanduser("~/Library/Caches/TemporaryItems"))  # ruff:ignore[os-path-expanduser]
 
     @property
     def site_runtime_dir(self) -> str:

@@ -21,12 +21,12 @@ def fix(x, out=None):
     Round to nearest integer towards zero.
 
     Round an array of floats element-wise to nearest integer towards zero.
-    The rounded values are returned as floats.
+    The rounded values have the same data-type as the input.
 
     Parameters
     ----------
     x : array_like
-        An array of floats to be rounded
+        An array to be rounded
     out : ndarray, optional
         A location into which the result is stored. If provided, it must have
         a shape that the input broadcasts to. If not provided or None, a
@@ -35,12 +35,12 @@ def fix(x, out=None):
     Returns
     -------
     out : ndarray of floats
-        A float array with the same dimensions as the input.
-        If second argument is not supplied then a float array is returned
+        An array with the same dimensions and data-type as the input.
+        If second argument is not supplied then a new array is returned
         with the rounded values.
 
         If a second argument is supplied the result is stored there.
-        The return value `out` is then a reference to that array.
+        The return value ``out`` is then a reference to that array.
 
     See Also
     --------
@@ -49,10 +49,11 @@ def fix(x, out=None):
 
     Examples
     --------
+    >>> import numpy as np
     >>> np.fix(3.14)
     3.0
     >>> np.fix(3)
-    3.0
+    3
     >>> np.fix([2.1, 2.9, -2.1, -2.9])
     array([ 2.,  2., -2., -2.])
 
@@ -111,6 +112,7 @@ def isposinf(x, out=None):
 
     Examples
     --------
+    >>> import numpy as np
     >>> np.isposinf(np.inf)
     True
     >>> np.isposinf(-np.inf)
@@ -180,6 +182,7 @@ def isneginf(x, out=None):
 
     Examples
     --------
+    >>> import numpy as np
     >>> np.isneginf(-np.inf)
     True
     >>> np.isneginf(np.inf)

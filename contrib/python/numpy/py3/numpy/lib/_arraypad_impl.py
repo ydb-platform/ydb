@@ -49,7 +49,7 @@ def _slice_at_axis(sl, axis):
 
     Examples
     --------
-    >>> _slice_at_axis(slice(None, 3, -1), 1)
+    >>> np._slice_at_axis(slice(None, 3, -1), 1)
     (slice(None, None, None), slice(None, 3, -1), (...,))
     """
     return (slice(None),) * axis + (sl,) + (...,)
@@ -684,6 +684,7 @@ def pad(array, pad_width, mode='constant', **kwargs):
 
     Examples
     --------
+    >>> import numpy as np
     >>> a = [1, 2, 3, 4, 5]
     >>> np.pad(a, (2, 3), 'constant', constant_values=(4, 6))
     array([4, 4, 1, ..., 6, 6, 6])
@@ -860,7 +861,7 @@ def pad(array, pad_width, mode='constant', **kwargs):
 
     elif mode in {"reflect", "symmetric"}:
         method = kwargs.get("reflect_type", "even")
-        include_edge = True if mode == "symmetric" else False
+        include_edge = mode == "symmetric"
         for axis, (left_index, right_index) in zip(axes, pad_width):
             if array.shape[axis] == 1 and (left_index > 0 or right_index > 0):
                 # Extending singleton dimension for 'reflect' is legacy

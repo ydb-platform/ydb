@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         std::string brokenLock;
         for (const auto& row : logRows) {
             // we need to find row with info about read physical tx and extract lock id
-            if (row.Contains("Component: Executer, Type: InputActorResult")) {
+            if (row.Contains("component=Executer") && row.Contains("type=InputActorResult")) {
                 std::regex lockIdRegex(R"(LockId:\s*(\d+))");
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract read lock id");
@@ -261,8 +261,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             }
 
             // we need to find row with info about broken locks and extract lock id
-            if (row.Contains("Component: DataShard, Type: Locks")) {
-                std::regex lockIdRegex(R"(BrokenLocks:\s*\[(\d+)\s*\])");
+            if (row.Contains("component=DataShard") && row.Contains("type=Locks")) {
+                std::regex lockIdRegex(R"(brokenLocks=(\d+) )");
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
                 brokenLock = lockIdMatch[1].str();

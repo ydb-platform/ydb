@@ -16,7 +16,7 @@ Accepted (MVP).
 ## Decision
 
 ### Share
-
+ 
 - Context — **объект в per-query compartment** с identity **`ui64` handle** (id в реестре `object_framework`).
 - **MVP example** (`examples/ctx/`): один module image — `Ctx::New` / `CountRow` / `CountPositive` / `Snapshot` линкуют static `object_framework` через `PEERDIR`. Filters и snapshot шарят один реестр.
 - Cross-module (опционально, не в examples): реестр в **shared wasm library** (`required_libraries`); static `object_framework` внутри одного module image **не** шарит handles с другим.

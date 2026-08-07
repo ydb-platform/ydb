@@ -1,4 +1,5 @@
 #include "auto_config_initializer.h"
+#include "config_helpers.h"
 
 #include <ydb/core/protos/config.pb.h>
 
@@ -193,21 +194,25 @@ namespace NKikimr::NAutoConfigInitializer {
             i16 cpuCount = (config.HasCpuCount() ? config.GetCpuCount() : 0);
             return GetASPools(cpuCount);
         } else {
+            auto expandedPoolId = [&](ui32 executorId) {
+                return static_cast<ui8>(NKikimr::NActorSystemConfigHelpers::GetExpandedExecutorPoolId(config, executorId));
+            };
+
             ui8 icPoolId = 0;
             for (ui32 i = 0; i < config.ServiceExecutorSize(); ++i) {
                 auto item = config.GetServiceExecutor(i);
                 const TString service = item.GetServiceName();
                 if (service == "Interconnect") {
-                    icPoolId = static_cast<ui8>(item.GetExecutorId());
+                    icPoolId = expandedPoolId(item.GetExecutorId());
                     break;
                 }
             }
 
             return TASPools {
-                .SystemPoolId = static_cast<ui8>(config.HasSysExecutor() ? config.GetSysExecutor() : 0),
-                .UserPoolId = static_cast<ui8>(config.HasUserExecutor() ? config.GetUserExecutor() : 0),
-                .BatchPoolId = static_cast<ui8>(config.HasBatchExecutor() ? config.GetBatchExecutor() : 0),
-                .IOPoolId = static_cast<ui8>(config.HasIoExecutor() ? config.GetIoExecutor() : 0),
+                .SystemPoolId = expandedPoolId(config.HasSysExecutor() ? config.GetSysExecutor() : 0),
+                .UserPoolId = expandedPoolId(config.HasUserExecutor() ? config.GetUserExecutor() : 0),
+                .BatchPoolId = expandedPoolId(config.HasBatchExecutor() ? config.GetBatchExecutor() : 0),
+                .IOPoolId = expandedPoolId(config.HasIoExecutor() ? config.GetIoExecutor() : 0),
                 .ICPoolId = icPoolId,
             };
         }
@@ -226,7 +231,7 @@ namespace NKikimr::NAutoConfigInitializer {
             if (servicePools.count(service)) {
                 continue;
             }
-            const ui32 pool = item.GetExecutorId();
+            const ui32 pool = useAutoConfig ? item.GetExecutorId() : NKikimr::NActorSystemConfigHelpers::GetExpandedExecutorPoolId(config, item.GetExecutorId());
             servicePools.insert(std::pair<TString, ui32>(service, pool));
         }
         return servicePools;
@@ -418,7 +423,6 @@ namespace NKikimr::NAutoConfigInitializer {
     }
 
 } // NKikimr::NActorSystemInitializer
-
 namespace NKikimr {
     bool NeedToUseAutoConfig(const NKikimrConfig::TActorSystemConfig& config) {
         bool hasSpecialFields = config.HasNodeType() || config.HasCpuCount();

@@ -3,6 +3,8 @@
 #include <ydb/library/yaml_config/validator/validator_checks.h>
 #include <ydb/library/yaml_config/validator/configurators.h>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr {
 
 using namespace NYamlConfig::NValidator;
@@ -175,13 +177,27 @@ TMapBuilder ActorSystemConfigBuilder() {
       .Optional()
       .MapItem([](auto& executorItem){
         executorItem
-        .Enum("name", {"System", "User", "Batch", "IO", "IC"})
+        .Enum("name", {"System", "User", "Batch", "IO", "IC", "BlobStorage"})
         .Int64("spin_threshold", [](auto& spinThreshold){
           spinThreshold
           .Min(0)
           .Optional();
         })
-        .Int64("threads", nonNegative())
+        .Int64("threads", [](auto& threads){
+          threads
+          .Optional()
+          .Min(0);
+        })
+        .Int64("placement_groups", [](auto& placementGroups){
+          placementGroups
+          .Optional()
+          .Min(1);
+        })
+        .Int64("placement_group_threads", [](auto& placementGroupThreads){
+          placementGroupThreads
+          .Optional()
+          .Min(1);
+        })
         .Int64("max_threads", [](auto& maxThreads){
           maxThreads
           .Optional()
@@ -202,7 +218,28 @@ TMapBuilder ActorSystemConfigBuilder() {
           .Optional()
           .Min(0);
         })
-        .Enum("type", {"IO", "BASIC"})
+        .Enum("type", {"IO", "BASIC", "PLACEMENT"})
+        .AddCheck("threads and placement_groups usage must match executor type", [](auto& executorContext) {
+          auto node = executorContext.Node();
+          const bool isPlacement = node["type"].Enum().Value() == "PLACEMENT";
+          const bool hasThreads = node["threads"].Exists();
+          const bool hasPlacementGroups = node["placement_groups"].Exists();
+          const bool hasPlacementGroupThreads = node["placement_group_threads"].Exists();
+
+          if (isPlacement) {
+            executorContext.Expect(!hasThreads,
+              "PLACEMENT executor must not define threads");
+            executorContext.Expect(hasPlacementGroups,
+              "PLACEMENT executor must define placement_groups");
+          } else {
+            executorContext.Expect(hasThreads,
+              "non-PLACEMENT executor must define threads");
+            executorContext.Expect(!hasPlacementGroups,
+              "placement_groups can only be defined for PLACEMENT executor");
+            executorContext.Expect(!hasPlacementGroupThreads,
+              "placement_group_threads can only be defined for PLACEMENT executor");
+          }
+        })
         .AddCheck("Harmonizer needy CPU window is supported only for BASIC executors", [](auto& executorContext){
           auto node = executorContext.Node();
           if (node["harmonizer_needy_cpu_window_seconds"].Exists()) {
@@ -211,12 +248,32 @@ TMapBuilder ActorSystemConfigBuilder() {
         });
       });
     })
+    .Int64("blob_storage_executor", [](auto& blobStorageExecutor){
+      blobStorageExecutor
+      .Optional()
+      .Min(0);
+    })
     .Map("scheduler", [](auto& scheduler){
       scheduler
       .Optional()
       .Int64("progress_threshold", nonNegative())
       .Int64("resolution", nonNegative())
       .Int64("spin_threshold", nonNegative());
+    })
+    .AddCheck("BlobStorageExecutor must reference an existing executor", [](auto& actorSystemContext){
+      auto node = actorSystemContext.Node();
+      if (!node["blob_storage_executor"].Exists()) {
+        return;
+      }
+      if (!node["executor"].Exists()) {
+        actorSystemContext.Expect(false, "blob_storage_executor requires executor");
+        return;
+      }
+
+      auto executors = node["executor"].Array();
+      const i64 executorId = node["blob_storage_executor"].Int64();
+      actorSystemContext.Expect(executorId >= 0 && executorId < executors.Length(),
+        "blob_storage_executor is out of executor range");
     })
     .AddCheck("Must either be auto config or manual config", [](auto& actorSystemContext){
       bool autoConfig = false;
@@ -229,6 +286,7 @@ TMapBuilder ActorSystemConfigBuilder() {
         actorSystemContext.Expect(node["cpu_count"].Exists(), "cpu_count must exist when using auto congfig");
 
         actorSystemContext.Expect(!node["executor"].Exists(), "executor must not exist when using auto congfig");
+        actorSystemContext.Expect(!node["blob_storage_executor"].Exists(), "blob_storage_executor must not exist when using auto congfig");
         actorSystemContext.Expect(!node["scheduler"].Exists(), "scheduler must not exist when using auto congfig");
       } else {
         actorSystemContext.Expect(node["executor"].Exists(), "executor must exist when not using auto congfig");

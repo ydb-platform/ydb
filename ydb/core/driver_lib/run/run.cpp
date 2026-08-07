@@ -1,4 +1,5 @@
 #include "auto_config_initializer.h"
+#include "config_helpers.h"
 #include "run.h"
 #include "grpc_servers_manager.h"
 #include "service_initializer.h"
@@ -1483,6 +1484,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     bool useSharedThreads = cfg.HasActorSystemConfig() && cfg.GetActorSystemConfig().HasUseSharedThreads() && cfg.GetActorSystemConfig().GetUseSharedThreads();
     NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(cfg.GetActorSystemConfig(), useAutoConfig);
     TMap<TString, ui32> servicePools = NAutoConfigInitializer::GetServicePools(cfg.GetActorSystemConfig(), useAutoConfig);
+    TVector<ui32> blobStorageExecutorPoolIds =
+        NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(cfg.GetActorSystemConfig());
 
     if (useSharedThreads) {
         pools.SystemPoolId = 0;
@@ -1492,6 +1495,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         pools.ICPoolId = 4;
         servicePools.clear();
         servicePools["Interconnect"] = 4;
+        blobStorageExecutorPoolIds.clear();
     }
 
     AppData.Reset(new TAppData(pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
@@ -1499,7 +1503,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
                                TypeRegistry.Get(),
                                FunctionRegistry.Get(),
                                FormatFactory.Get(),
-                               &KikimrShouldContinue));
+                               &KikimrShouldContinue,
+                               std::move(blobStorageExecutorPoolIds)));
 
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;

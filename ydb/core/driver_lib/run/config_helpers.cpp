@@ -5,13 +5,21 @@
 #include <ydb/core/protos/resource_broker.pb.h>
 
 #include <ydb/library/actors/util/affinity.h>
+#include <ydb/library/actors/util/cpu_topology.h>
 
+#include <util/generic/hash_set.h>
+#include <util/string/builder.h>
+
+#include <optional>
+#include <utility>
 
 namespace NKikimr {
 
 namespace NActorSystemConfigHelpers {
 
 namespace {
+
+using TExecutorConfig = NKikimrConfig::TActorSystemConfig::TExecutor;
 
 template <class TConfig>
 static TCpuMask ParseAffinity(const TConfig& cfg) {
@@ -31,6 +39,23 @@ static TCpuMask ParseAffinity(const TConfig& cfg) {
     return result;
 }
 
+TString GetPlacementExecutorPoolName(const TExecutorConfig& poolConfig, ui32 groupIndex, ui32 placementGroups) {
+    const TString& baseName = poolConfig.GetName();
+    return placementGroups == 1 || baseName.empty()
+        ? baseName
+        : TStringBuilder() << baseName << groupIndex;
+}
+
+ui32 GetExpandedExecutorPoolCount(const TExecutorConfig& poolConfig) {
+    if (poolConfig.GetType() != TExecutorConfig::PLACEMENT) {
+        return 1;
+    }
+
+    const ui32 placementGroups = poolConfig.GetPlacementGroups();
+    Y_ABORT_UNLESS(placementGroups, "PLACEMENT executor must have non-zero placement group count");
+    return placementGroups;
+}
+
 TDuration GetSelfPingInterval(const NKikimrConfig::TActorSystemConfig& systemConfig) {
     return systemConfig.HasSelfPingInterval()
         ? TDuration::MicroSeconds(systemConfig.GetSelfPingInterval())
@@ -48,87 +73,289 @@ NActors::EASProfile ConvertActorSystemProfile(NKikimrConfig::TActorSystemConfig:
     }
 }
 
+[[nodiscard]]
+NActors::TIOExecutorPoolConfig BuildIoExecutorPoolConfig(
+    const TString poolName,
+    const ui32 poolId,
+    const TExecutorConfig& poolConfig,
+    const NKikimrConfig::TActorSystemConfig& systemConfig,
+    const std::optional<TCpuMask>& defaultAffinity)
+{
+    NActors::TIOExecutorPoolConfig io;
+    io.PoolId = poolId;
+    io.PoolName = poolName;
+    io.Threads = poolConfig.GetThreads();
+    if (!poolConfig.HasAffinity() && defaultAffinity) {
+        Y_ABORT_UNLESS(defaultAffinity->CpuCount(),
+            "PLACEMENT executors consume all CPUs; executor pool '%s' has no CPUs left and no explicit Affinity",
+            poolName.c_str());
+        io.Affinity = *defaultAffinity;
+    } else {
+        io.Affinity = ParseAffinity(poolConfig.GetAffinity());
+    }
+    io.UseRingQueue = systemConfig.HasUseRingQueue() && systemConfig.GetUseRingQueue();
+    return io;
+}
+
+[[nodiscard]]
+NActors::TBasicExecutorPoolConfig BuildBasicExecutorPoolConfig(
+    const TString poolName,
+    const ui32 poolId,
+    const TExecutorConfig& poolConfig,
+    const NKikimrConfig::TActorSystemConfig& systemConfig,
+    NActors::TCpuManagerConfig& cpuManager,
+    NMonitoring::TDynamicCounterPtr counters,
+    const TCpuMask& affinity,
+    ui32 threads,
+    ui32 minThreadCount,
+    ui32 maxThreadCount,
+    ui32 defaultThreadCount)
+{
+    NActors::TBasicExecutorPoolConfig basic;
+
+    basic.PoolId = poolId;
+    basic.PoolName = poolName;
+    basic.UseRingQueue = systemConfig.HasUseRingQueue() && systemConfig.GetUseRingQueue();
+
+    basic.Affinity = affinity;
+    basic.Threads = threads;
+    basic.MinThreadCount = minThreadCount;
+    basic.MaxThreadCount = maxThreadCount;
+    basic.DefaultThreadCount = defaultThreadCount;
+
+    if (poolConfig.HasMaxAvgPingDeviation() && counters) {
+        auto poolGroup = counters->GetSubgroup("execpool", basic.PoolName);
+        auto& poolInfo = cpuManager.PingInfoByPool[poolId];
+        poolInfo.AvgPingCounter = poolGroup->GetCounter("SelfPingAvgUs", false);
+        poolInfo.AvgPingCounterWithSmallWindow = poolGroup->GetCounter("SelfPingAvgUsIn1s", false);
+        const TDuration maxAvgPing = GetSelfPingInterval(systemConfig) + TDuration::MicroSeconds(poolConfig.GetMaxAvgPingDeviation());
+        poolInfo.MaxAvgPingUs = maxAvgPing.MicroSeconds();
+    }
+
+    basic.SpinThreshold = poolConfig.GetSpinThreshold();
+    basic.RealtimePriority = poolConfig.GetRealtimePriority();
+    basic.HasSharedThread = poolConfig.GetHasSharedThread();
+    if (poolConfig.HasTimePerMailboxMicroSecs()) {
+        basic.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
+    } else if (systemConfig.HasTimePerMailboxMicroSecs()) {
+        basic.TimePerMailbox = TDuration::MicroSeconds(systemConfig.GetTimePerMailboxMicroSecs());
+    }
+    if (poolConfig.HasEventsPerMailbox()) {
+        basic.EventsPerMailbox = poolConfig.GetEventsPerMailbox();
+    } else if (systemConfig.HasEventsPerMailbox()) {
+        basic.EventsPerMailbox = systemConfig.GetEventsPerMailbox();
+    }
+    basic.ActorSystemProfile = ConvertActorSystemProfile(systemConfig.GetActorSystemProfile());
+    Y_ABORT_UNLESS(basic.EventsPerMailbox != 0);
+    basic.Priority = poolConfig.GetPriority();
+    const ui32 harmonizerNeedyCpuWindowSeconds = poolConfig.GetHarmonizerNeedyCpuWindowSeconds();
+    Y_ABORT_UNLESS(harmonizerNeedyCpuWindowSeconds >= 1 && harmonizerNeedyCpuWindowSeconds <= 32,
+        "HarmonizerNeedyCpuWindowSeconds must be in range [1, 32], got %" PRIu32,
+        harmonizerNeedyCpuWindowSeconds);
+    basic.HarmonizerNeedyCpuWindowSeconds = static_cast<ui8>(harmonizerNeedyCpuWindowSeconds);
+    if (poolConfig.HasMinLocalQueueSize()) {
+        basic.MinLocalQueueSize = poolConfig.GetMinLocalQueueSize();
+    }
+    if (poolConfig.HasMaxLocalQueueSize()) {
+        basic.MaxLocalQueueSize = poolConfig.GetMaxLocalQueueSize();
+    }
+    for (const auto& pool : poolConfig.GetAdjacentPools()) {
+        basic.AdjacentPools.push_back(pool);
+    }
+    if (poolConfig.HasForcedForeignSlots()) {
+        basic.ForcedForeignSlotCount = poolConfig.GetForcedForeignSlots();
+    }
+    if (poolConfig.HasAllThreadsAreShared()) {
+        basic.AllThreadsAreShared = poolConfig.GetAllThreadsAreShared();
+    }
+
+    return basic;
+}
+
+ui32 GetExecutorPoolCount(const NKikimrConfig::TActorSystemConfig& systemConfig) {
+    ui32 poolCount = 0;
+    for (const auto& poolConfig : systemConfig.GetExecutor()) {
+        poolCount += GetExpandedExecutorPoolCount(poolConfig);
+    }
+    return poolCount;
+}
+
 }  // anonymous namespace
 
-void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig, const NKikimrConfig::TActorSystemConfig& systemConfig, ui32 poolId, NMonitoring::TDynamicCounterPtr counters) {
-    Y_ABORT_UNLESS(!poolConfig.HasHarmonizerNeedyCpuWindowSeconds()
-        || poolConfig.GetType() == NKikimrConfig::TActorSystemConfig::TExecutor::BASIC,
-        "HarmonizerNeedyCpuWindowSeconds is supported only for BASIC executors");
-
-    switch (poolConfig.GetType()) {
-        case NKikimrConfig::TActorSystemConfig::TExecutor::BASIC: {
-            NActors::TBasicExecutorPoolConfig basic;
-            basic.PoolId = poolId;
-            basic.PoolName = poolConfig.GetName();
-            basic.UseRingQueue = systemConfig.GetUseRingQueue();
-            if (poolConfig.HasMaxAvgPingDeviation() && counters) {
-                auto poolGroup = counters->GetSubgroup("execpool", basic.PoolName);
-                auto &poolInfo = cpuManager.PingInfoByPool[poolId];
-                poolInfo.AvgPingCounter = poolGroup->GetCounter("SelfPingAvgUs", false);
-                poolInfo.AvgPingCounterWithSmallWindow = poolGroup->GetCounter("SelfPingAvgUsIn1s", false);
-                TDuration maxAvgPing = GetSelfPingInterval(systemConfig) + TDuration::MicroSeconds(poolConfig.GetMaxAvgPingDeviation());
-                poolInfo.MaxAvgPingUs = maxAvgPing.MicroSeconds();
-            }
-            basic.Threads = Max(poolConfig.GetThreads(), poolConfig.GetMaxThreads());
-            basic.SpinThreshold = poolConfig.GetSpinThreshold();
-            basic.Affinity = ParseAffinity(poolConfig.GetAffinity());
-            basic.RealtimePriority = poolConfig.GetRealtimePriority();
-            basic.HasSharedThread = poolConfig.GetHasSharedThread();
-            if (poolConfig.HasTimePerMailboxMicroSecs()) {
-                basic.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
-            } else if (systemConfig.HasTimePerMailboxMicroSecs()) {
-                basic.TimePerMailbox = TDuration::MicroSeconds(systemConfig.GetTimePerMailboxMicroSecs());
-            }
-            if (poolConfig.HasEventsPerMailbox()) {
-                basic.EventsPerMailbox = poolConfig.GetEventsPerMailbox();
-            } else if (systemConfig.HasEventsPerMailbox()) {
-                basic.EventsPerMailbox = systemConfig.GetEventsPerMailbox();
-            }
-            basic.ActorSystemProfile = ConvertActorSystemProfile(systemConfig.GetActorSystemProfile());
-            Y_ABORT_UNLESS(basic.EventsPerMailbox != 0);
-            basic.MinThreadCount = poolConfig.GetMinThreads();
-            basic.MaxThreadCount = poolConfig.GetMaxThreads();
-            basic.DefaultThreadCount = poolConfig.GetThreads();
-            basic.Priority = poolConfig.GetPriority();
-            const ui32 harmonizerNeedyCpuWindowSeconds = poolConfig.GetHarmonizerNeedyCpuWindowSeconds();
-            Y_ABORT_UNLESS(harmonizerNeedyCpuWindowSeconds >= 1 && harmonizerNeedyCpuWindowSeconds <= 32,
-                "HarmonizerNeedyCpuWindowSeconds must be in range [1, 32], got %" PRIu32,
-                harmonizerNeedyCpuWindowSeconds);
-            basic.HarmonizerNeedyCpuWindowSeconds = static_cast<ui8>(harmonizerNeedyCpuWindowSeconds);
-            if (poolConfig.HasMinLocalQueueSize()) {
-                basic.MinLocalQueueSize = poolConfig.GetMinLocalQueueSize();
-            }
-            if (poolConfig.HasMaxLocalQueueSize()) {
-                basic.MaxLocalQueueSize = poolConfig.GetMaxLocalQueueSize();
-            }
-            for (const auto& pool : poolConfig.GetAdjacentPools()) {
-                basic.AdjacentPools.push_back(pool);
-            }
-            if (poolConfig.HasForcedForeignSlots()) {
-                basic.ForcedForeignSlotCount = poolConfig.GetForcedForeignSlots();
-            }
-            if (poolConfig.HasAllThreadsAreShared()) {
-                basic.AllThreadsAreShared = poolConfig.GetAllThreadsAreShared();
-            }
-            cpuManager.Basic.emplace_back(std::move(basic));
-
-            break;
+ui32 GetExpandedExecutorPoolId(const NKikimrConfig::TActorSystemConfig& systemConfig, ui32 executorId) {
+    ui32 poolId = 0;
+    for (ui32 i = 0; i < static_cast<ui32>(systemConfig.ExecutorSize()); ++i) {
+        if (i == executorId) {
+            return poolId;
         }
-
-        case NKikimrConfig::TActorSystemConfig::TExecutor::IO: {
-            NActors::TIOExecutorPoolConfig io;
-            io.PoolId = poolId;
-            io.PoolName = poolConfig.GetName();
-            io.Threads = poolConfig.GetThreads();
-            io.Affinity = ParseAffinity(poolConfig.GetAffinity());
-            cpuManager.IO.emplace_back(std::move(io));
-            io.UseRingQueue = systemConfig.HasUseRingQueue() && systemConfig.GetUseRingQueue();
-            break;
-        }
-
-        default:
-            Y_ABORT();
+        poolId += GetExpandedExecutorPoolCount(systemConfig.GetExecutor(i));
     }
+
+    Y_ABORT("ExecutorId# %" PRIu32 " is out of range; executor count# %d",
+        executorId, systemConfig.ExecutorSize());
+}
+
+TVector<ui32> GetBlobStorageExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig) {
+    if (!systemConfig.HasBlobStorageExecutor()) {
+        return {};
+    }
+
+    const ui32 executorId = systemConfig.GetBlobStorageExecutor();
+    Y_ABORT_UNLESS(executorId < static_cast<ui32>(systemConfig.ExecutorSize()),
+        "BlobStorageExecutor id %" PRIu32 " is out of range; executor count is %d",
+        executorId, systemConfig.ExecutorSize());
+
+    const auto& poolConfig = systemConfig.GetExecutor(executorId);
+    const ui32 firstPoolId = GetExpandedExecutorPoolId(systemConfig, executorId);
+    const ui32 poolCount = GetExpandedExecutorPoolCount(poolConfig);
+
+    TVector<ui32> executorPoolIds;
+    executorPoolIds.reserve(poolCount);
+    for (ui32 offset = 0; offset < poolCount; ++offset) {
+        executorPoolIds.push_back(firstPoolId + offset);
+    }
+    return executorPoolIds;
+}
+
+namespace {
+
+void AddExecutorPoolsImpl(NActors::TCpuManagerConfig& cpuManager,
+        const NKikimrConfig::TActorSystemConfig& systemConfig, NMonitoring::TDynamicCounterPtr counters,
+        const TCpuTopology* suppliedCpuTopology) {
+    cpuManager.PingInfoByPool.resize(GetExecutorPoolCount(systemConfig));
+
+    std::optional<TCpuTopology> parsedCpuTopology;
+    const TCpuTopology* cpuTopology = suppliedCpuTopology;
+    std::optional<TCpuMask> remainingCpus;
+    TCpuMask usedPlacementCpus;
+    ui32 placementGroupOffset = 0;
+    for (const auto& poolConfig : systemConfig.GetExecutor()) {
+        if (poolConfig.GetType() != TExecutorConfig::PLACEMENT) {
+            continue;
+        }
+
+        const ui32 placementGroups = poolConfig.GetPlacementGroups();
+        Y_ABORT_UNLESS(placementGroups, "PLACEMENT executor must have non-zero placement group count");
+        Y_ABORT_UNLESS(!poolConfig.HasAffinity(), "PLACEMENT executor must not define Affinity together with PlacementGroups");
+
+        if (!cpuTopology) {
+            auto result = ParseCpuTopology();
+            Y_ABORT_UNLESS(result, "Failed to parse CPU topology for PLACEMENT executors: %s", result.error().c_str());
+            parsedCpuTopology.emplace(std::move(*result));
+            cpuTopology = &*parsedCpuTopology;
+        }
+
+        Y_ABORT_UNLESS(placementGroupOffset + placementGroups <= cpuTopology->PlacementGroups.size(),
+            "PLACEMENT executors requested %" PRIu32 " placement groups, but CPU topology has only %zu placement groups",
+            placementGroupOffset + placementGroups, cpuTopology->PlacementGroups.size());
+
+        for (ui32 group = 0; group < placementGroups; ++group) {
+            usedPlacementCpus = usedPlacementCpus | cpuTopology->PlacementGroups[placementGroupOffset + group].Cpus;
+        }
+        placementGroupOffset += placementGroups;
+    }
+    if (placementGroupOffset) {
+        remainingCpus = cpuTopology->AllCpus - usedPlacementCpus;
+    }
+
+    // Counters are grouped by pool name, so expanded PLACEMENT pool names must not collide
+    // with each other or with other pools. Only enforced for configs that use PLACEMENT
+    // executors to avoid breaking pre-existing configs.
+    const bool hasPlacementExecutors = placementGroupOffset != 0;
+    THashSet<TString> poolNames;
+    auto checkPoolName = [&](const TString& poolName) {
+        if (hasPlacementExecutors) {
+            Y_ABORT_UNLESS(poolNames.insert(poolName).second,
+                "duplicate executor pool name '%s'; pool names must be unique when PLACEMENT executors are used",
+                poolName.c_str());
+        }
+    };
+
+    ui32 poolId = 0;
+    placementGroupOffset = 0;
+    for (const auto& poolConfig : systemConfig.GetExecutor()) {
+        Y_ABORT_UNLESS(!poolConfig.HasHarmonizerNeedyCpuWindowSeconds()
+            || poolConfig.GetType() == TExecutorConfig::BASIC,
+            "HarmonizerNeedyCpuWindowSeconds is supported only for BASIC executors");
+
+        switch (poolConfig.GetType()) {
+            case TExecutorConfig::BASIC: {
+                const TString poolName = poolConfig.GetName();
+                checkPoolName(poolName);
+                ui32 threads = Max(poolConfig.GetThreads(), poolConfig.GetMaxThreads());
+                ui32 minThreadCount = poolConfig.GetMinThreads();
+                ui32 maxThreadCount = poolConfig.GetMaxThreads();
+                ui32 defaultThreadCount = poolConfig.GetThreads();
+
+                TCpuMask affinity;
+                if (!poolConfig.HasAffinity() && remainingCpus) {
+                    Y_ABORT_UNLESS(remainingCpus->CpuCount(),
+                        "PLACEMENT executors consume all CPUs; executor pool '%s' has no CPUs left and no explicit Affinity",
+                        poolName.c_str());
+                    affinity = *remainingCpus;
+                } else {
+                    affinity = ParseAffinity(poolConfig.GetAffinity());
+                }
+
+                cpuManager.Basic.emplace_back(BuildBasicExecutorPoolConfig(poolName, poolId, poolConfig, systemConfig, cpuManager,
+                    counters, affinity, threads, minThreadCount, maxThreadCount, defaultThreadCount));
+
+                ++poolId;
+                break;
+            }
+
+            case TExecutorConfig::IO: {
+                const TString poolName = poolConfig.GetName();
+                checkPoolName(poolName);
+                cpuManager.IO.emplace_back(BuildIoExecutorPoolConfig(poolName, poolId, poolConfig, systemConfig, remainingCpus));
+                ++poolId;
+                break;
+            }
+
+            case TExecutorConfig::PLACEMENT: {
+                Y_ABORT_UNLESS(cpuTopology);
+                const ui32 placementGroups = poolConfig.GetPlacementGroups();
+                for (ui32 group = 0; group < placementGroups; ++group) {
+                    const TString poolName = GetPlacementExecutorPoolName(poolConfig, group, placementGroups);
+                    checkPoolName(poolName);
+                    const TCpuTopologyGroup& placementGroup = cpuTopology->PlacementGroups[placementGroupOffset + group];
+                    Y_ABORT_UNLESS(!poolConfig.HasAffinity(), "PLACEMENT executor must not define Affinity");
+                    Y_ABORT_UNLESS(placementGroup.Cpus.CpuCount(), "PLACEMENT executor placement group %" PRIu32 " has no CPUs", placementGroup.Id);
+                    TCpuMask affinity = placementGroup.Cpus;
+                    ui32 threads = poolConfig.HasPlacementGroupThreads()
+                        ? poolConfig.GetPlacementGroupThreads()
+                        : affinity.CpuCount();
+                    Y_ABORT_UNLESS(threads, "PLACEMENT executor placement group %" PRIu32 " has zero threads", placementGroup.Id);
+                    ui32 minThreadCount = threads;
+                    ui32 maxThreadCount = threads;
+                    ui32 defaultThreadCount = threads;
+
+                    cpuManager.Basic.emplace_back(BuildBasicExecutorPoolConfig(poolName, poolId, poolConfig, systemConfig, cpuManager,
+                        counters, affinity, threads, minThreadCount, maxThreadCount, defaultThreadCount));
+
+                    ++poolId;
+                }
+                placementGroupOffset += placementGroups;
+                break;
+            }
+
+            default:
+                Y_ABORT();
+        }
+    }
+}
+
+} // anonymous namespace
+
+void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager,
+        const NKikimrConfig::TActorSystemConfig& systemConfig, NMonitoring::TDynamicCounterPtr counters) {
+    AddExecutorPoolsImpl(cpuManager, systemConfig, std::move(counters), nullptr);
+}
+
+void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager,
+        const NKikimrConfig::TActorSystemConfig& systemConfig, NMonitoring::TDynamicCounterPtr counters,
+        const TCpuTopology& cpuTopology) {
+    AddExecutorPoolsImpl(cpuManager, systemConfig, std::move(counters), &cpuTopology);
 }
 
 NActors::TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemConfig::TScheduler& config) {

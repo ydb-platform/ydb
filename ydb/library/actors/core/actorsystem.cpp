@@ -507,6 +507,10 @@ namespace NActors {
         return ServiceMap->RegisterLocalService(serviceId, actorId);
     }
 
+    std::optional<TCpuMask> TActorSystem::GetExecutorPoolAffinity(ui32 poolId) const {
+        return CpuManager->GetExecutorPoolAffinity(poolId);
+    }
+
     void TActorSystem::Start() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start");
         Y_ABORT_UNLESS(!StartExecuted.exchange(true));

@@ -16,6 +16,9 @@
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/library/pdisk_io/wcache.h>
+#include <ydb/library/actors/util/cpumask.h>
+
+#include <optional>
 
 namespace NKikimr {
 
@@ -189,6 +192,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     bool SortFreeChunksHDD = true;
 
+    std::optional<TCpuMask> BlobStorageExecutorPoolAffinity;
+
     // used for tests only
     std::optional<ui64> NonceRandNum;
 
@@ -360,6 +365,10 @@ struct TPDiskConfig : public TThrRefBase {
         str << " UseBytesFlightControl# " << (UseBytesFlightControl ? "true" : "false") << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
         str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
+        if (BlobStorageExecutorPoolAffinity) {
+            str << " BlobStorageExecutorPoolAffinityCpuCount# "
+                << BlobStorageExecutorPoolAffinity->CpuCount() << x;
+        }
         str << "}";
         return str.Str();
     }

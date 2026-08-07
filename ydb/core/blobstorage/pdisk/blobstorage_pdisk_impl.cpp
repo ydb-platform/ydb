@@ -47,12 +47,13 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     , OwnerData(OwnerCount)
     , Keeper(Mon, cfg)
     , CostLimitNs(cfg->CostLimitNs)
-    , PDiskThread(*this)
+    , PDiskThread(*this, cfg->BlobStorageExecutorPoolAffinity)
     , BlockDevice(CreateRealBlockDevice(cfg->GetDevicePath(), Mon,
                     HPCyclesMs(ReorderingMs), DriveModel.SeekTimeNs(), cfg->DeviceInFlight,
                     TDeviceMode::LockFile | (cfg->UseSpdkNvmeDriver ? TDeviceMode::UseSpdk : 0),
                     cfg->MaxQueuedCompletionActions, cfg->CompletionThreadsCount, cfg->SectorMap,
-                    cfg->BufferPoolBufferSizeBytes, this, cfg->ReadOnly, cfg->UseBytesFlightControl))
+                    cfg->BufferPoolBufferSizeBytes, this, cfg->ReadOnly, cfg->UseBytesFlightControl,
+                    cfg->BlobStorageExecutorPoolAffinity))
     , Cfg(cfg)
     , CreationTime(TInstant::Now())
     , ExpectedSlotCount(cfg->ExpectedSlotCount)

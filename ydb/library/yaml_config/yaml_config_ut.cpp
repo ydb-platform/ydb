@@ -1389,6 +1389,22 @@ config:
 }
 
 Y_UNIT_TEST_SUITE(YamlConfig) {
+    Y_UNIT_TEST(BlobStorageExecutorIsConvertedToProto) {
+        auto doc = NFyaml::TDocument::Parse(R"(
+actor_system_config:
+  executor:
+  - name: BlobStorage
+    type: PLACEMENT
+    placement_groups: 2
+  blob_storage_executor: 0
+)");
+
+        const auto config = NYamlConfig::YamlToProto(doc.Root(), false, false);
+
+        UNIT_ASSERT(config.GetActorSystemConfig().HasBlobStorageExecutor());
+        UNIT_ASSERT_VALUES_EQUAL(config.GetActorSystemConfig().GetBlobStorageExecutor(), 0);
+    }
+
     Y_UNIT_TEST(CollectLabels) {
         auto doc = NFyaml::TDocument::Parse(WholeConfig);
 

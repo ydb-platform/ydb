@@ -58,6 +58,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_ddisk.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
@@ -287,7 +288,21 @@ public:
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
-        if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
+        if (auto& ddiskCfg = TableServiceConfig.GetSpillingServiceConfig().GetDDiskConfig(); ddiskCfg.GetEnable()) {
+            NYql::NDq::TDDiskSpillingConfig cfg;
+            cfg.Enable = true;
+            NYql::NDq::ConfigureDqSpillingBackend(NYql::NDq::EDqSpillingBackend::DDisk, cfg, Counters);
+
+            if (NActors::TMon* mon = AppData()->Mon) {
+                auto monActor = TActivationContext::Register(
+                    NYql::NDq::CreateDqDDiskSpillingMonActor(Counters));
+                NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+                mon->RegisterActorPage(actorsMonPage, "kqp_spilling_ddisk", "KQP DDisk Spilling", false,
+                    TActivationContext::ActorSystem(), monActor);
+            }
+        } else if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
+            NYql::NDq::ConfigureDqSpillingBackend(NYql::NDq::EDqSpillingBackend::LocalFile, {}, Counters);
+
             TString spillingRoot = cfg.GetRoot();
             if (spillingRoot.empty()) {
                 spillingRoot = NYql::NDq::GetTmpSpillingRootForCurrentUser();
@@ -502,7 +517,9 @@ public:
             Send(CompileComputationPatternService, new TEvents::TEvPoisonPill());
         }
 
-        Send(SpillingService, new TEvents::TEvPoison);
+        if (SpillingService) {
+            Send(SpillingService, new TEvents::TEvPoison);
+        }
         Send(KqpNodeService, new TEvents::TEvPoison);
 
         Send(KqpComputeSchedulerService, new TEvents::TEvPoison());

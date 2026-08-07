@@ -486,7 +486,9 @@ public:
         appData->InitFeatureFlags(Config.GetFeatureFlags());
         NPQ::InitMaxHeaderSize(appData->FeatureFlags);
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
-        appData->EnableKqpSpilling = Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable();
+        appData->EnableKqpSpilling =
+            Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable()
+            || Config.GetTableServiceConfig().GetSpillingServiceConfig().GetDDiskConfig().GetEnable();
 
         appData->CompactionConfig = Config.GetCompactionConfig();
         appData->BackgroundCleaningConfig = Config.GetBackgroundCleaningConfig();

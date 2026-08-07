@@ -14,6 +14,7 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.DirectSessionRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.FallbackWithoutBufRing
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LargePayloadRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.PeerStopTriggersDisconnect
+ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
 ydb/services/persqueue_v1/ut PersQueueV1Gaps_EmptyDatabase.StreamReadRejectsEmptyAndMissingDatabase
 ydb/services/persqueue_v1/ut PersQueueV1Gaps_EmptyDatabase.StreamWriteRejectsEmptyAndMissingDatabase
 ydb/tests/compatibility/common test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_setup_in_blob_storage_config[restart_stable-26-2-1_to_stable-26-3-1]

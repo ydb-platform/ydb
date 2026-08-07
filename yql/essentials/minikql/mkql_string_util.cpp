@@ -2,9 +2,21 @@
 
 #include <util/generic/scope.h>
 
+#include <algorithm>
+#include <limits>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
+
+constexpr ui32 CapacityWithHalfSpare(ui32 size) noexcept {
+    return size + std::min(size / 2U, std::numeric_limits<ui32>::max() - size);
+}
+
+static_assert(CapacityWithHalfSpare(2U) == 3U);
+static_assert(CapacityWithHalfSpare(0xAAAAAAAAU) == 0xFFFFFFFFU);
+static_assert(CapacityWithHalfSpare(0xAAAAAAABU) == 0xFFFFFFFFU);
+static_assert(CapacityWithHalfSpare(0xFFFFFFFFU) == 0xFFFFFFFFU);
 
 ui32 CheckedSum(ui32 one, ui32 two) {
     if (ui64(one) + ui64(two) > ui64(std::numeric_limits<ui32>::max())) {
@@ -49,7 +61,7 @@ NUdf::TUnboxedValuePod AppendString(const NUdf::TUnboxedValuePod value, const NU
                 }
             }
         }
-        auto data = NUdf::TStringValue::AllocateData(newSize, newSize + newSize / 2);
+        auto data = NUdf::TStringValue::AllocateData(newSize, CapacityWithHalfSpare(newSize));
         NUdf::TStringValue str(data);
         Y_DEFER {
             data->ReleaseRef();
@@ -80,7 +92,7 @@ NUdf::TUnboxedValuePod PrependString(const NUdf::TStringRef ref, const NUdf::TUn
         std::memcpy(buf + ref.Size(), valueRef.Data(), valueRef.Size());
         return result;
     } else {
-        auto data = NUdf::TStringValue::AllocateData(newSize, newSize + newSize / 2);
+        auto data = NUdf::TStringValue::AllocateData(newSize, CapacityWithHalfSpare(newSize));
         NUdf::TStringValue str(data);
         Y_DEFER {
             data->ReleaseRef();
@@ -129,7 +141,7 @@ NUdf::TUnboxedValuePod ConcatStrings(const NUdf::TUnboxedValuePod first, const N
             }
         }
 
-        auto data = NUdf::TStringValue::AllocateData(newSize, newSize + newSize / 2);
+        auto data = NUdf::TStringValue::AllocateData(newSize, CapacityWithHalfSpare(newSize));
         NUdf::TStringValue str(data);
         Y_DEFER {
             data->ReleaseRef();
@@ -170,7 +182,7 @@ NUdf::TUnboxedValuePod SubString(const NUdf::TUnboxedValuePod value, ui32 offset
             }
         }
 
-        auto data = NUdf::TStringValue::AllocateData(newSize, newSize + (newSize >> 1U));
+        auto data = NUdf::TStringValue::AllocateData(newSize, CapacityWithHalfSpare(newSize));
         NUdf::TStringValue str(data);
         Y_DEFER {
             data->ReleaseRef();

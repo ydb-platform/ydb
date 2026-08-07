@@ -14,6 +14,7 @@ PEERDIR(
 )
 
 SRCS(
+    blobstorage_cost_tracker_ut.cpp
     circlebufresize_ut.cpp
     circlebufstream_ut.cpp
     circlebuf_ut.cpp

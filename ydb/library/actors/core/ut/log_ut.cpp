@@ -727,13 +727,19 @@ Y_UNIT_TEST_SUITE(TWriteShortTextLogTest) {
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text"});
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text with space"});
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text_with_new_line\n"});
-        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text_with_quotation\""});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text_with_quotation'"});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text_with_double_quotation\""});
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text_with_equal="});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", R"("QuotedValue")"});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", R"(\"EscapedQuotedValue\")"});
 
-        env.FetchMessage("FAKE: Test message with data value=text");
-        env.FetchMessage("FAKE: Test message with data value=\"text with space\"");
-        env.FetchMessage("FAKE: Test message with data value=\"text_with_new_line\\n\"");
-        env.FetchMessage("FAKE: Test message with data value=\"text_with_quotation\\\"\"");
-        env.FetchMessage("FAKE: Test message with data value=\"text_with_equal=\"");
+        env.FetchMessage(R"(FAKE: Test message with data value=text)");
+        env.FetchMessage(R"(FAKE: Test message with data value="text with space")");
+        env.FetchMessage(R"(FAKE: Test message with data value="text_with_new_line\n")");
+        env.FetchMessage(R"(FAKE: Test message with data value="text_with_quotation'")");
+        env.FetchMessage(R"(FAKE: Test message with data value="text_with_double_quotation\"")");
+        env.FetchMessage(R"(FAKE: Test message with data value="text_with_equal=")");
+        env.FetchMessage(R"(FAKE: Test message with data value="\"QuotedValue\"")");
+        env.FetchMessage(R"(FAKE: Test message with data value="\\\"EscapedQuotedValue\\\"")");
     }
 }

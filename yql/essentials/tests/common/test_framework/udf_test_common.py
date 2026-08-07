@@ -131,7 +131,7 @@ def facade_runner(prov, cfg_dir, binary=None, secure_params={}, patch_cfg_file=N
 
 
 def canonize_opt(res):
-    return [yatest.common.canonical_file(res.opt_file, local=True, diff_tool=ASTDIFF_PATH)]
+    return [yatest.common.canonical_file(res.opt_file, diff_tool=ASTDIFF_PATH)]
 
 
 def canonize_results(case, res, xfail, canonize_ast, diff_tool):

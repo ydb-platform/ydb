@@ -11430,6 +11430,13 @@
             "uri": "https://{canondata_backend}/1881367/69a6c883473c196fb2616e606866802880addd73/resource.tar.gz#test_sql2yql.test_type_erase-tree_rec_/sql.yql"
         }
     ],
+    "test_sql2yql.test[type_erase-tree_trampoline]": [
+        {
+            "checksum": "090caa4dcc0d4f1d123fbd02c82f9e9c",
+            "size": 5857,
+            "uri": "https://{canondata_backend}/1936273/8d5b699796ab2ee0f0e282dda42685e9c400cc68/resource.tar.gz#test_sql2yql.test_type_erase-tree_trampoline_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[type_literal-evaluate]": [
         {
             "checksum": "c87846b52c8479dc0df724bdd3e8f2af",
@@ -19512,6 +19519,11 @@
     "test_sql_format.test[type_erase-tree_rec]": [
         {
             "uri": "file://test_sql_format.test_type_erase-tree_rec_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[type_erase-tree_trampoline]": [
+        {
+            "uri": "file://test_sql_format.test_type_erase-tree_trampoline_/formatted.sql"
         }
     ],
     "test_sql_format.test[type_literal-evaluate]": [

@@ -6,7 +6,6 @@
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <ydb/library/actors/core/actorid.h>
 

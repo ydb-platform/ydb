@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsTableMode) {
             // Empty topic: greater-than predicate — must return 0 rows
             test("__ydb_write_time > Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {});
 
-            WriteTopicMessage(topicName, "data", 0, local);                   // wrong schema
+            WriteTopicMessage(topicName, "data", 0, local);                    // wrong schema
             WriteTopicMessage(topicName, "{\"key\": \"data1\"}", 0, local);
             WriteTopicMessage(topicName, "{\"key\": \"data2\"}", 0, local);
             Sleep(TDuration::Seconds(5));

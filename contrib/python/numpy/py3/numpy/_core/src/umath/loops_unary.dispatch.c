@@ -5932,12 +5932,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_negative)
             goto clear;
         }
     #if 0
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len
@@ -6173,12 +6173,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_negative)
             goto clear;
         }
     #if 0
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len
@@ -6414,12 +6414,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_negative)
             goto clear;
         }
     #if 1
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len
@@ -6655,12 +6655,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_negative)
             goto clear;
         }
     #if 1
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len
@@ -6896,12 +6896,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_negative)
             goto clear;
         }
     #if 1
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len
@@ -7137,12 +7137,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_negative)
             goto clear;
         }
     #if 0
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len
@@ -7378,12 +7378,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_negative)
             goto clear;
         }
     #if 0
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len
@@ -7619,12 +7619,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_negative)
             goto clear;
         }
     #if 1
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len
@@ -7860,12 +7860,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_negative)
             goto clear;
         }
     #if 1
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len
@@ -8101,12 +8101,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_negative)
             goto clear;
         }
     #if 1
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len
@@ -8342,12 +8342,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_negative)
             goto clear;
         }
     #if 1
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len
@@ -8583,12 +8583,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_negative)
             goto clear;
         }
     #if 1
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len
@@ -8824,12 +8824,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGDOUBLE_negative)
             goto clear;
         }
     #if 1
-        const npy_intp istride = istep / sizeof(STYPE);
-        const npy_intp ostride = ostep / sizeof(STYPE);
-        if (TO_SIMD_SFX(npyv_loadable_stride)(istride) &&
-            TO_SIMD_SFX(npyv_storable_stride)(ostride))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(istep) &&
+            TO_SIMD_SFX(npyv_storable_stride)(ostep))
         {
-            if (istride == 1 && ostride != 1) {
+            const npy_intp istride = istep / sizeof(STYPE);
+            const npy_intp ostride = ostep / sizeof(STYPE);
+            if (istride == sizeof(STYPE) && ostride != 1) {
                 // contiguous input, non-contiguous output
                 TO_SIMD_SFX(simd_unary_cn_negative)(
                     (STYPE*)ip, (STYPE*)op, ostride, len

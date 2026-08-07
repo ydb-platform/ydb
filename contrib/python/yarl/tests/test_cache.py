@@ -5,7 +5,7 @@ import yarl
 # Don't check the actual behavior but make sure that calls are allowed
 
 
-def teardown_module():
+def teardown_module() -> None:
     yarl.cache_configure()
 
 

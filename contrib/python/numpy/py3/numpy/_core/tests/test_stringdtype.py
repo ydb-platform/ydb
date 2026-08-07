@@ -11,7 +11,7 @@ import pytest
 
 from numpy.dtypes import StringDType
 from numpy._core.tests._natype import pd_NA
-from numpy.testing import assert_array_equal, IS_WASM
+from numpy.testing import assert_array_equal, IS_WASM, IS_PYPY
 
 
 @pytest.fixture
@@ -232,12 +232,12 @@ def test_self_casts(dtype, dtype2, strings):
     if hasattr(dtype, "na_object") and hasattr(dtype2, "na_object"):
         na1 = dtype.na_object
         na2 = dtype2.na_object
-        if ((na1 is not na2 and
+        if (na1 is not na2 and
              # check for pd_NA first because bool(pd_NA) is an error
              ((na1 is pd_NA or na2 is pd_NA) or
               # the second check is a NaN check, spelled this way
               # to avoid errors from math.isnan and np.isnan
-              (na1 != na2 and not (na1 != na1 and na2 != na2))))):
+              (na1 != na2 and not (na1 != na1 and na2 != na2)))):
             with pytest.raises(TypeError):
                 arr[:-1] == newarr[:-1]
             return
@@ -378,13 +378,6 @@ def test_isnan(dtype, string_list):
         assert not np.any(np.isnan(sarr))
 
 
-def _pickle_load(filename):
-    with open(filename, "rb") as f:
-        res = pickle.load(f)
-
-    return res
-
-@pytest.mark.skipif(IS_WASM, reason="no threading support in wasm")
 def test_pickle(dtype, string_list):
     arr = np.array(string_list, dtype=dtype)
 
@@ -393,15 +386,6 @@ def test_pickle(dtype, string_list):
 
     with open(f.name, "rb") as f:
         res = pickle.load(f)
-
-    assert_array_equal(res[0], arr)
-    assert res[1] == dtype
-
-    # load the pickle in a subprocess to ensure the string data are
-    # actually stored in the pickle file
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        e = executor.submit(_pickle_load, f.name)
-        res = e.result()
 
     assert_array_equal(res[0], arr)
     assert res[1] == dtype
@@ -535,6 +519,15 @@ def test_concatenate(string_list):
     sarr_cat = np.array(string_list + string_list, dtype="T")
 
     assert_array_equal(np.concatenate([sarr], axis=0), sarr)
+
+
+def test_resize_method(string_list):
+    sarr = np.array(string_list, dtype="T")
+    if IS_PYPY:
+        sarr.resize(len(string_list)+3, refcheck=False)
+    else:
+        sarr.resize(len(string_list)+3)
+    assert_array_equal(sarr, np.array(string_list + ['']*3,  dtype="T"))
 
 
 def test_create_with_copy_none(string_list):
@@ -1003,6 +996,62 @@ def test_ufunc_multiply(dtype, string_list, other, other_dtype, use_out):
             other * arr
 
 
+def test_findlike_promoters():
+    r = "Wally"
+    l = "Where's Wally?"
+    s = np.int32(3)
+    e = np.int8(13)
+    for dtypes in [("T", "U"), ("U", "T")]:
+        for function, answer in [
+            (np.strings.index, 8),
+            (np.strings.endswith, True),
+        ]:
+            assert answer == function(
+                np.array(l, dtype=dtypes[0]), np.array(r, dtype=dtypes[1]), s, e
+            )
+
+
+def test_strip_promoter():
+    arg = ["Hello!!!!", "Hello??!!"]
+    strip_char = "!"
+    answer = ["Hello", "Hello??"]
+    for dtypes in [("T", "U"), ("U", "T")]:
+        result = np.strings.strip(
+            np.array(arg, dtype=dtypes[0]),
+            np.array(strip_char, dtype=dtypes[1])
+        )
+        assert_array_equal(result, answer)
+        assert result.dtype.char == "T"
+
+
+def test_replace_promoter():
+    arg = ["Hello, planet!", "planet, Hello!"]
+    old = "planet"
+    new = "world"
+    answer = ["Hello, world!", "world, Hello!"]
+    for dtypes in itertools.product("TU", repeat=3):
+        if dtypes == ("U", "U", "U"):
+            continue
+        answer_arr = np.strings.replace(
+            np.array(arg, dtype=dtypes[0]),
+            np.array(old, dtype=dtypes[1]),
+            np.array(new, dtype=dtypes[2]),
+        )
+        assert_array_equal(answer_arr, answer)
+        assert answer_arr.dtype.char == "T"
+
+
+def test_center_promoter():
+    arg = ["Hello", "planet!"]
+    fillchar = "/"
+    for dtypes in [("T", "U"), ("U", "T")]:
+        answer = np.strings.center(
+            np.array(arg, dtype=dtypes[0]), 9, np.array(fillchar, dtype=dtypes[1])
+        )
+        assert_array_equal(answer, ["//Hello//", "/planet!/"])
+        assert answer.dtype.char == "T"
+
+
 DATETIME_INPUT = [
     np.datetime64("1923-04-14T12:43:12"),
     np.datetime64("1994-06-21T14:43:15"),
@@ -1304,29 +1353,36 @@ BINARY_FUNCTIONS = [
     ("add", (None, None)),
     ("multiply", (None, 2)),
     ("mod", ("format: %s", None)),
-    pytest.param("center", (None, 25), marks=unicode_bug_fail),
+    ("center", (None, 25)),
     ("count", (None, "A")),
     ("encode", (None, "UTF-8")),
     ("endswith", (None, "lo")),
     ("find", (None, "A")),
     ("index", (None, "e")),
     ("join", ("-", None)),
+    ("ljust", (None, 12)),
     ("lstrip", (None, "A")),
+    ("partition", (None, "A")),
     ("replace", (None, "A", "B")),
     ("rfind", (None, "A")),
     ("rindex", (None, "e")),
+    ("rjust", (None, 12)),
     ("rsplit", (None, "A")),
     ("rstrip", (None, "A")),
+    ("rpartition", (None, "A")),
     ("split", (None, "A")),
     ("strip", (None, "A")),
     ("startswith", (None, "A")),
-    pytest.param("zfill", (None, 12), marks=unicode_bug_fail),
+    ("zfill", (None, 12)),
 ]
 
 PASSES_THROUGH_NAN_NULLS = [
     "add",
+    "center",
+    "ljust",
     "multiply",
     "replace",
+    "rjust",
     "strip",
     "lstrip",
     "rstrip",

@@ -1,3 +1,5 @@
+ENABLE(TIDY_ALLOW_GENERATED)
+
 ADDINCL(
     ${ARCADIA_BUILD_ROOT}/${MODDIR}
     yql/essentials/minikql/codegen

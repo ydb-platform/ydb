@@ -9,4 +9,9 @@ SRCS(
     dbs_controller.proto
 )
 
+PEERDIR(
+    ydb/core/nbs/cloud/storage/core/protos
+    ydb/core/protos
+)
+
 END()

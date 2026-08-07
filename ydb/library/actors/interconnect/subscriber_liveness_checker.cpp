@@ -9,6 +9,8 @@
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::INTERCONNECT_SESSION
+
 namespace NActors {
     namespace {
 
@@ -57,8 +59,8 @@ namespace NActors {
                     details << "{activity# " << FormatSubscriberActivityName(activityIndex)
                         << " actors# " << count << '}';
                 }
-                LOG_WARN_S(*TlsActivationContext, NActorsServices::INTERCONNECT_SESSION,
-                    "Subscriber liveness check found leaked subscriptions: " << details);
+                YDB_LOG_WARN("Subscriber liveness check found leaked",
+                    {"subscriptions", details});
             }
 
         private:

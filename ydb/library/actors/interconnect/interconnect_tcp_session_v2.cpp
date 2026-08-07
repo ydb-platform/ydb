@@ -92,7 +92,8 @@ namespace NActors {
         EngineHandle = Proxy->Common->UringEngineV2->Register(Socket, SelfId(), Params.PeerScopeId,
             onDisconnectCallback, SelfId().NodeId() < Proxy->PeerNodeId, ClockSkew, PingRTT);
         if (!EngineHandle) {
-            LOG_ERROR_IC_SESSION("ICS99", "v2 io_uring engine failed to register the connection");
+            YDB_LOG_ERROR("V2 io_uring engine failed to register the connection",
+                {"marker", "ICS99"});
             return Terminate(TDisconnectReason::LostConnection());
         }
 

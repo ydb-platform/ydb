@@ -277,7 +277,7 @@ namespace NActors {
                 }
 
                 const int err = errno;
-                YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH40 Kernel liveness disabled for due to setsockopt failure",
+                YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH40 Kernel liveness disabled for due to setsockopt( failure",
                     {"logPrefix", Actor->LogPrefix.data()},
                     {"socket", int(*Socket)},
                     {"name", name},
@@ -879,7 +879,7 @@ namespace NActors {
         }
 
         void PerformOutgoingHandshake() {
-            YDB_LOG_DEBUG_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Starting outgoing handshake",
+            YDB_LOG_DEBUG_CTX(this->GetActorContext(), "Starting outgoing handshake",
                 {"marker", "ICH01"});
 
             // perform connection and log its result
@@ -1550,7 +1550,7 @@ namespace NActors {
             if (const NInterconnect::TAddress* addr = std::get_if<NInterconnect::TAddress>(&sockname)) {
                 rdmaCtx = NLinkMgr::GetCtx(*addr);
                 if (rdmaCtx) {
-                    YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Found verbs context for address",
+                    YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Found verbs fontext for address",
                         {"marker", "ICRDMA"},
                         {"address", std::get<0>(sockname)});
                 } else {
@@ -1559,7 +1559,7 @@ namespace NActors {
                         {"address", std::get<0>(sockname)});
                 }
             } else if (int* err = get_if<int>(&sockname)) {
-                YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Unable to get local address for socket. Rdma will not be used",
+                YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Unable to get local address for Rdma will not be used",
                     {"marker", "ICRDMA"},
                     {"socket", (int)(*MainChannel.GetSocketRef())},
                     {"err", *err});
@@ -1623,8 +1623,7 @@ namespace NActors {
                 if (err) {
                     TStringBuilder sb;
                     sb << hd;
-
-                    success.SetRdmaErr("Unable to promote QP to RTS on the incomming side");
+                    success.SetRdmaErr("Unable to promote QP to RTS on the incoming side");
                     YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to promote QP to RTS, handshake",
                         {"marker", "ICRDMA"},
                         {"err", err},

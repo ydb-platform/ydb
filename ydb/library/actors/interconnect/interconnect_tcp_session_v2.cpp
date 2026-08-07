@@ -71,7 +71,7 @@ namespace NActors {
         // v2 establishes exactly one connection for its lifetime (no continuation)
         Y_ABORT_UNLESS(!Socket, "TInterconnectSessionTCPv2 does not support connection continuation");
 
-        YDB_LOG_INFO("Handshake done socket",
+        YDB_LOG_INFO("Handshake done socket: %li",
             {"marker", "ICS91"},
             {"sender", ev->Sender},
             {"self", ev->Get()->Self},
@@ -92,7 +92,8 @@ namespace NActors {
         EngineHandle = Proxy->Common->UringEngineV2->Register(Socket, SelfId(), Params.PeerScopeId,
             onDisconnectCallback, SelfId().NodeId() < Proxy->PeerNodeId, ClockSkew, PingRTT);
         if (!EngineHandle) {
-            LOG_ERROR_IC_SESSION("ICS99", "v2 io_uring engine failed to register the connection");
+            YDB_LOG_ERROR("V2 io_uring engine failed to register the connection",
+                {"marker", "ICS99"});
             return Terminate(TDisconnectReason::LostConnection());
         }
 

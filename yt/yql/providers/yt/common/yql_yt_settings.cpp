@@ -647,6 +647,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _ParseExpressionColumns);
     REGISTER_SETTING(*this, _SecureTmpTokenUsersAccessPeriod);
     REGISTER_SETTING(*this, _FixEndlessLoopInDropIfExists);
+    REGISTER_SETTING(*this, _ForbidReservedColumns);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

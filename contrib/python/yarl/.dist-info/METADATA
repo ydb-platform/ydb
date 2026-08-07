@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: yarl
-Version: 1.18.3
+Version: 1.19.0
 Summary: Yet another URL library
 Home-page: https://github.com/aio-libs/yarl
 Author: Andrew Svetlov
@@ -37,7 +37,8 @@ License-File: LICENSE
 License-File: NOTICE
 Requires-Dist: idna>=2.0
 Requires-Dist: multidict>=4.0
-Requires-Dist: propcache>=0.2.0
+Requires-Dist: propcache>=0.2.1
+Dynamic: license-file
 
 yarl
 ====
@@ -48,8 +49,9 @@ The module provides handy URL class for URL parsing and changing.
    :target: https://github.com/aio-libs/yarl/actions?query=workflow%3ACI
    :align: right
 
-.. image:: https://codecov.io/gh/aio-libs/yarl/branch/master/graph/badge.svg
-   :target: https://codecov.io/gh/aio-libs/yarl
+.. image:: https://codecov.io/gh/aio-libs/yarl/graph/badge.svg?flag=pytest
+   :target: https://app.codecov.io/gh/aio-libs/yarl?flags[]=pytest
+   :alt: Codecov coverage for the pytest-driven measurements
 
 .. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
    :target: https://codspeed.io/aio-libs/yarl
@@ -153,7 +155,7 @@ The library is Python 3 only!
 
 PyPI contains binary wheels for Linux, Windows and MacOS.  If you want to install
 ``yarl`` on another operating system where wheels are not provided,
-the the tarball will be used to compile the library from
+the tarball will be used to compile the library from
 the source code. It requires a C compiler and and Python headers installed.
 
 To skip the compilation you must explicitly opt-in by using a PEP 517
@@ -264,6 +266,81 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+1.19.0
+======
+
+*(2025-04-05)*
+
+
+Bug fixes
+---------
+
+- Fixed entire name being re-encoded when using ``yarl.URL.with_suffix()`` -- by `@NTFSvolume <https://github.com/sponsors/NTFSvolume>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1468 <https://github.com/aio-libs/yarl/issues/1468>`__.
+
+
+Features
+--------
+
+- Started building armv7l wheels for manylinux -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1495 <https://github.com/aio-libs/yarl/issues/1495>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- GitHub Actions CI/CD is now configured to manage caching pip-ecosystem
+  dependencies using `re-actors/cache-python-deps`_ -- an action by
+  `@webknjaz <https://github.com/sponsors/webknjaz>`__ that takes into account ABI stability and the exact
+  version of Python runtime.
+
+  .. _`re-actors/cache-python-deps`:
+     https://github.com/marketplace/actions/cache-python-deps
+
+  *Related issues and pull requests on GitHub:*
+  `#1471 <https://github.com/aio-libs/yarl/issues/1471>`__.
+
+- Increased minimum `propcache`_ version to 0.2.1 to fix failing tests -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  .. _`propcache`:
+     https://github.com/aio-libs/propcache
+
+  *Related issues and pull requests on GitHub:*
+  `#1479 <https://github.com/aio-libs/yarl/issues/1479>`__.
+
+- Added all hidden folders to pytest's ``norecursedirs`` to prevent it
+  from trying to collect tests there -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1480 <https://github.com/aio-libs/yarl/issues/1480>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved accuracy of type annotations -- by `@Dreamsorcerer <https://github.com/sponsors/Dreamsorcerer>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1484 <https://github.com/aio-libs/yarl/issues/1484>`__.
+
+- Improved performance of parsing query strings -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1493 <https://github.com/aio-libs/yarl/issues/1493>`__, `#1497 <https://github.com/aio-libs/yarl/issues/1497>`__.
+
+- Improved performance of the C unquoter -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1496 <https://github.com/aio-libs/yarl/issues/1496>`__, `#1498 <https://github.com/aio-libs/yarl/issues/1498>`__.
+
+
+----
+
 
 1.18.3
 ======

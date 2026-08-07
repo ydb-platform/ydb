@@ -4,7 +4,26 @@
 
 #include <util/generic/algorithm.h>
 
+#include <cmath>
+#include <iterator>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+TDuration PercentileAt(const TMultiSet<TDuration>& durations, double percentile)
+{
+    const size_t n = durations.size();
+    Y_ABORT_UNLESS(n > 0);
+    // Nearest-rank: ceil(p * n) - 1, clamped to [0, n).
+    const size_t idx =
+        Min(n - 1, static_cast<size_t>(std::ceil(percentile * n)) - 1);
+    return *std::next(durations.begin(), static_cast<std::ptrdiff_t>(idx));
+}
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -30,6 +49,21 @@ TDuration TTimePredictor::THistory::Predict(size_t nthFromEnd) const
         ++it;
     }
     return it == Durations.rend() ? TDuration() : *it;
+}
+
+TLatencyStats TTimePredictor::THistory::GetLatencyStats() const
+{
+    TLatencyStats stats;
+    if (Durations.empty()) {
+        return stats;
+    }
+    stats.Count = Durations.size();
+    stats.Min = *Durations.begin();
+    stats.Max = *Durations.rbegin();
+    stats.P50 = PercentileAt(Durations, 0.50);
+    stats.P90 = PercentileAt(Durations, 0.90);
+    stats.P99 = PercentileAt(Durations, 0.99);
+    return stats;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -74,6 +108,19 @@ TDuration TTimePredictor::Predict(THostMask hostMask) const
         result = Max(result, Predict(host));
     }
     return result;
+}
+
+TLatencyStats TTimePredictor::GetLatencyStats(THostIndex host) const
+{
+    if (host >= History.size()) {
+        return {};
+    }
+    return History[host].GetLatencyStats();
+}
+
+size_t TTimePredictor::GetCapacity() const
+{
+    return Capacity;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

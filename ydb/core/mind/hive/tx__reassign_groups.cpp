@@ -75,7 +75,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxReassignGroups::Complete",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 

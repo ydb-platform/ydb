@@ -28,11 +28,22 @@ TMergeBorders::TMergeBorders(const TActorId& owner, const std::shared_ptr<TMerge
 }
 
 void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
+    auto sendFailure = [&](const TString& reason) {
+        TActivationContext::AsActorContext().Send(Owner, std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context),
+                                                             THashMap<ui64, NArrow::TColumnFilter>{}, TConclusionStatus::Fail(reason)));
+    };
+
     auto columnData = Event->Get()->Result->ExtractDataByPortion(Context->FetchingColumns);
     for (const auto& [portionId, data] : columnData) {
+        const ui64 expectedRecordsCount = Context->Portions->GetPortionVerified(portionId)->GetRecordsCount();
+        if (data->GetRecordsCount() != expectedRecordsCount) {
+            sendFailure(TStringBuilder() << "duplicate filter column data records mismatch for portion " << portionId
+                                         << ": meta=" << expectedRecordsCount << ", fetched=" << data->GetRecordsCount());
+            return;
+        }
         Context->Merger->AddSource(data, nullptr,
             Context->IsReversed ? NArrow::NMerger::TIterationOrder::Reversed(0) : NArrow::NMerger::TIterationOrder::Forward(0), portionId);
-        Context->FiltersBuilder.AddSource(portionId, Context->Portions->GetPortionVerified(portionId)->GetRecordsCount());
+        Context->FiltersBuilder.AddSource(portionId, expectedRecordsCount);
         YDB_LOG_TRACE("",
             {"component", "duplicates_manager"},
             {"event", "TMergeBorders::DoExecute"},
@@ -42,11 +53,18 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             {"builder", Context->FiltersBuilder.DebugString()});
     }
 
-    AFL_VERIFY(Context->FiltersBuilder.CountSources() > 0 || ReadyBorders.empty());
+    if (!(Context->FiltersBuilder.CountSources() > 0 || ReadyBorders.empty())) {
+        sendFailure("duplicate filter merge has ready borders but no sources");
+        return;
+    }
 
     for (const auto& readyBorder : ReadyBorders) {
         Context->Merger->PutControlPoint(readyBorder.BuildSortablePosition(Context->IsReversed), false);
-        Context->Merger->DrainToControlPoint(Context->FiltersBuilder, true);
+        if (!Context->Merger->DrainToControlPoint(Context->FiltersBuilder, true)) {
+            sendFailure(TStringBuilder() << "cannot drain duplicate filter merger to control point "
+                                         << readyBorder.BuildSortablePosition(Context->IsReversed).DebugString());
+            return;
+        }
         YDB_LOG_TRACE("",
             {"component", "duplicates_manager"},
             {"event", "TMergeBorders::DoExecute"},

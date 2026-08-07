@@ -1,6 +1,7 @@
 #include "partition_actor.h"
 #include "persqueue_utils.h"
 #include "fill_batched_data_offset.h"
+#include "fill_batched_data.h"
 
 #include <limits>
 #include <ydb/core/persqueue/common/actor.h>
@@ -532,7 +533,7 @@ template<typename TReadResponse>
 bool FillBatchedData(
         TReadResponse* data, const NKikimrClient::TCmdReadResult& res,
         const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
-        const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) {
+        const NPersQueue::TTopicConverterPtr& topic) {
     constexpr EProtocol Protocol = std::is_same_v<TReadResponse, PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch> ? EProtocol::PQv1 : EProtocol::Topic;
     auto* partitionData = data->add_partition_data();
 
@@ -585,7 +586,7 @@ bool FillBatchedData(
         TString sourceId;
         if (!r.GetSourceId().empty()) {
             if (!NPQ::NSourceIdEncoding::IsValidEncoded(r.GetSourceId())) {
-                YDB_LOG_ERROR_CTX(ctx, "Read bad sourceId from offset seqNo sourceId",
+                YDB_LOG_ERROR("Read bad sourceId from offset seqNo sourceId",
                     {"partition", Partition},
                     {"offset", r.GetOffset()},
                     {"seqNo", r.GetSeqNo()},
@@ -675,6 +676,18 @@ bool FillBatchedData(
     }
     return hasData;
 }
+
+template bool FillBatchedData<PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch>(
+        PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch* data,
+        const NKikimrClient::TCmdReadResult& res,
+        const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
+        const NPersQueue::TTopicConverterPtr& topic);
+
+template bool FillBatchedData<Topic::StreamReadMessage::ReadResponse>(
+        Topic::StreamReadMessage::ReadResponse* data,
+        const NKikimrClient::TCmdReadResult& res,
+        const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
+        const NPersQueue::TTopicConverterPtr& topic);
 
 void TPartitionActor::Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, const TActorContext& ctx) {
     NotCommitedToFinishParents.erase(ev->Get()->ParentPartitionId);
@@ -911,11 +924,11 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
     if (Protocol == EProtocol::PQv1) {
         typename MigrationStreamingReadServerMessage::DataBatch* data = migrationResponse.mutable_data_batch();
         hasData = FillBatchedData<MigrationStreamingReadServerMessage::DataBatch>(
-            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic);
     } else {
         StreamReadMessage::ReadResponse* data = response.mutable_read_response();
         hasData = FillBatchedData<StreamReadMessage::ReadResponse>(
-            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic);
     }
 
     WriteTimestampEstimateMs = Max(WriteTimestampEstimateMs, WTime);

@@ -600,7 +600,6 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TExprBase read, TExprContext& ct
         return RewriteReadToPrefixLookup(readTable.Cast(), ctx, kqpCtx);
     } else {
         auto readRanges = read.Maybe<TKqlReadTableRangesBase>();
-        YQL_ENSURE(readRanges);
         return RewriteReadToPrefixLookup(readRanges.Cast(), ctx, kqpCtx, maxKeys);
     }
 }

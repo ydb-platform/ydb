@@ -19,11 +19,11 @@ NO_LINT()
 SRCDIR(contrib/python/numpy/py3)
 
 TEST_SRCS(
-    numpy/_core/tests/__init__.py
     numpy/_core/tests/test__exceptions.py
     numpy/_core/tests/test_abc.py
     numpy/_core/tests/test_api.py
     numpy/_core/tests/test_argparse.py
+    numpy/_core/tests/test_array_api_info.py
     numpy/_core/tests/test_array_coercion.py
     #numpy/_core/tests/test_array_interface.py
     numpy/_core/tests/test_arraymethod.py
@@ -57,6 +57,7 @@ TEST_SRCS(
     numpy/_core/tests/test_mem_overlap.py
     #numpy/_core/tests/test_mem_policy.py
     numpy/_core/tests/test_memmap.py
+    numpy/_core/tests/test_multithreading.py
     numpy/_core/tests/test_multiarray.py
     numpy/_core/tests/test_nditer.py
     numpy/_core/tests/test_nep50_promotions.py

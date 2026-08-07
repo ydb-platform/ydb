@@ -713,17 +713,19 @@ namespace NKikimr::NStorage {
         });
     }
 
-    bool TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
+    bool TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TStateStorageConfig *ss
             , const NKikimrBlobStorage::TStorageConfig& baseConfig, std::unordered_set<ui32>& usedNodes
             , const std::unordered_set<ui32>& nodesToUse
-            , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig
+            , const NKikimrConfig::TStateStorageConfig *oldConfig
             , bool automaticManagement
             , ui32 overrideReplicasInRingCount
             , ui32 overrideRingsCount
             , ui32 replicasSpecificVolume
         ) {
         if (!automaticManagement) {
-            ss->CopyFrom(oldConfig);
+            if (oldConfig) {
+                ss->CopyFrom(*oldConfig);
+            }
 
             const auto collectNodes = [&](const auto& self, const auto& ring) -> void {
                 for (ui32 nodeId : ring.GetNode()) {
@@ -734,11 +736,13 @@ namespace NKikimr::NStorage {
                 }
             };
 
-            if (oldConfig.HasRing()) {
-                collectNodes(collectNodes, oldConfig.GetRing());
-            }
-            for (const auto& rg : oldConfig.GetRingGroups()) {
-                collectNodes(collectNodes, rg);
+            if (oldConfig) {
+                if (oldConfig->HasRing()) {
+                    collectNodes(collectNodes, oldConfig->GetRing());
+                }
+                for (const auto& rg : oldConfig->GetRingGroups()) {
+                    collectNodes(collectNodes, rg);
+                }
             }
 
             return true;
@@ -754,7 +758,9 @@ namespace NKikimr::NStorage {
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
         for (auto& [pileId, nodesByDataCenter] : nodes) {
-            TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId, usedNodes, oldConfig, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+            TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId, usedNodes,
+                oldConfig ? *oldConfig : NKikimrConfig::TStateStorageConfig(), overrideReplicasInRingCount,
+                overrideRingsCount, replicasSpecificVolume);
             generator.AddRingGroup(ss);
             goodConfig &= generator.IsGoodConfig();
         }

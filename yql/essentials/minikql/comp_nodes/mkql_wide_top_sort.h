@@ -2,12 +2,10 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapWideTop(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapWideTopSort(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapWideSort(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

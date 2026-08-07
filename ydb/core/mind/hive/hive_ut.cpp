@@ -155,7 +155,7 @@ namespace {
                     STRAND_PDISK && !runtime.IsRealThreads() ? static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime)) :
                     static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory()));
                 //nodeWardenConfig->Monitoring = monitoring;
-            auto* serviceSet = nodeWardenConfig->BlobStorageConfig.MutableServiceSet();
+            auto* serviceSet = nodeWardenConfig->BlobStorageConfig->MutableServiceSet();
             serviceSet->AddAvailabilityDomains(0);
             for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
                 auto* pdisk = serviceSet->AddPDisks();
@@ -9537,6 +9537,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 break;
             }
         }
+        TBlockEvents<TEvBlobStorage::TEvControllerSelectGroupsResult> block(runtime);
+        {
+            // test concurrently creating tablet
+            activeZone = false;
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100501, TTabletTypes::Dummy, {3, GetChannelBind("def1")}));
+            SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
+            activeZone = true;
+        }
         {
             auto observer = runtime.AddObserver<TEvTablet::TEvMoveData>([group] (auto&& ev) {
                 const auto& groups = ev->Get()->Record.GetGroups();
@@ -9928,12 +9936,12 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
 
     class TMockBSController {
     protected:
-        std::unordered_map<TString, std::vector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters>> GroupsByPool;
+        std::unordered_map<TString, std::vector<NKikimrBlobStorage::TGroupMetrics::TGroupParameters>> GroupsByPool;
         std::unordered_map<ui32, std::pair<TString, size_t>> GroupIdToIdx;
         std::unordered_map<ui64, std::vector<ui32>> TabletToGroups;
         ui64 NoChangesCounter = 0;
 
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters& FindGroup(ui32 groupId) {
+        NKikimrBlobStorage::TGroupMetrics::TGroupParameters& FindGroup(ui32 groupId) {
             const auto& [pool, idx] = GroupIdToIdx[groupId];
             return GroupsByPool[pool][idx];
         }
@@ -9949,7 +9957,7 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
         }
 
     public:
-        void AddGroup(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters&& group) {
+        void AddGroup(NKikimrBlobStorage::TGroupMetrics::TGroupParameters&& group) {
             NoChangesCounter = 0;
             const auto& name = group.GetStoragePoolName();
             auto& groups = GroupsByPool[name];
@@ -10061,7 +10069,7 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
         TMockBSController bsc;
         ui32 groupId = 0x80000000;
         for (const auto& pool : STORAGE_POOLS) {
-            NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters group;
+            NKikimrBlobStorage::TGroupMetrics::TGroupParameters group;
             group.SetGroupID(++groupId);
             group.SetStoragePoolName(pool);
             ui64 size = DEFAULT_BIND_SIZE * 300;
@@ -10087,7 +10095,7 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
             ui64 tabletId = NTestSuiteTHiveTest::SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, i, tabletType, BINDED_CHANNELS_FOR_MOCK), 0, true);
             NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, tabletId, 0);
         }
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters group;
+        NKikimrBlobStorage::TGroupMetrics::TGroupParameters group;
         group.SetGroupID(++groupId);
         group.SetStoragePoolName("def1");
         ui64 size = DEFAULT_BIND_SIZE * 300;
@@ -10105,7 +10113,7 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
         ui32 groupId = 0x80000000;
         for (const auto& pool : STORAGE_POOLS) {
             for (unsigned i = 0; i < 10; ++i) {
-                NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters group;
+                NKikimrBlobStorage::TGroupMetrics::TGroupParameters group;
                 group.SetGroupID(++groupId);
                 group.SetStoragePoolName(pool);
                 ui64 size = DEFAULT_BIND_SIZE * 30;
@@ -10133,7 +10141,7 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
             NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, tabletId, 0);
         }
         for (unsigned i = 0; i < 2; ++i) {
-            NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters group;
+            NKikimrBlobStorage::TGroupMetrics::TGroupParameters group;
             group.SetGroupID(++groupId);
             group.SetStoragePoolName("def1");
             ui64 size = DEFAULT_BIND_SIZE * 10;
@@ -10152,7 +10160,7 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
         ui32 groupId = 0x80000000;
         for (const auto& pool : STORAGE_POOLS) {
             for (unsigned i = 0; i < 1; ++i) {
-                NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters group;
+                NKikimrBlobStorage::TGroupMetrics::TGroupParameters group;
                 group.SetGroupID(++groupId);
                 group.SetStoragePoolName(pool);
                 ui64 size = DEFAULT_BIND_SIZE * 500;
@@ -10180,7 +10188,7 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
             NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, tabletId, 0);
         }
         for (unsigned i = 0; i < 10; ++i) {
-            NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters group;
+            NKikimrBlobStorage::TGroupMetrics::TGroupParameters group;
             group.SetGroupID(++groupId);
             group.SetStoragePoolName("def1");
             ui64 size = DEFAULT_BIND_SIZE * 500;

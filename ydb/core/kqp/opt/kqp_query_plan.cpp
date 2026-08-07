@@ -1,6 +1,7 @@
 #include "kqp_query_plan.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/library/json_index/json_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -624,6 +625,63 @@ private:
             }
 
             SerializerCtx.Tables[tablePath].Reads.push_back(std::move(readInfo));
+        } else if (auto maybeVectorSearch = connection.Maybe<TKqpCnVectorSearch>()) {
+            auto vectorSearch = maybeVectorSearch.Cast();
+
+            planNode.TypeName = "VectorSearch";
+            const TString indexName(vectorSearch.Index().Value());
+            planNode.NodeInfo["Index"] = indexName;
+
+            // The actor always reads the kmeans-tree level and posting index tables; whether it also
+            // reads the main table depends on the index being covering for the requested columns. When
+            // it is covering, every output column is served from the posting table and the main table
+            // is not touched — reflect that so covered-index plans show no main-table access.
+            // The posting table holds the main table's key columns plus the index data columns; the
+            // index key columns (the embedding, and the prefix of a prefixed index) are not in it, so
+            // ask its metadata rather than deriving the set from the index description.
+            TString tablePath(vectorSearch.Table().Path().Value());
+            auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+
+            TKikimrTableMetadataPtr postingMeta;
+            {
+                const TString postingPath = TStringBuilder()
+                    << tablePath << "/" << indexName << "/" << NTableIndex::NKMeans::PostingTable;
+                const auto& tables = SerializerCtx.TablesData->GetTables();
+                if (auto* desc = tables.FindPtr(std::make_pair(SerializerCtx.Cluster, postingPath))) {
+                    postingMeta = desc->Metadata;
+                }
+            }
+
+            // Without the posting metadata, fall back to reporting the main table read.
+            bool covered = bool(postingMeta);
+            auto& columns = planNode.NodeInfo["Columns"];
+            TVector<TString> readColumns;
+            readColumns.reserve(vectorSearch.Columns().Size());
+            for (const auto& column : vectorSearch.Columns()) {
+                columns.AppendValue(column.Value());
+                readColumns.push_back(TString(column.Value()));
+                if (postingMeta && !postingMeta->Columns.contains(readColumns.back())) {
+                    covered = false;
+                }
+            }
+
+            if (!covered) {
+                planNode.NodeInfo["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+                planNode.NodeInfo["Path"] = tablePath;
+
+                TTableRead readInfo;
+                readInfo.Type = EPlanTableReadType::Lookup;
+                readInfo.Columns = readColumns;
+                SerializerCtx.Tables[tablePath].Reads.push_back(std::move(readInfo));
+            }
+
+            // TopK (LIMIT) is either a literal or a query parameter resolved at runtime.
+            TExprBase topK = vectorSearch.TopK();
+            if (auto literal = topK.Maybe<TCoUint64>()) {
+                planNode.NodeInfo["TopK"] = TString(literal.Cast().Literal().Value());
+            } else if (auto param = topK.Maybe<TCoParameter>()) {
+                planNode.NodeInfo["TopK"] = TString(param.Cast().Name().Value());
+            }
         } else {
             planNode.TypeName = connection.Ref().Content();
         }
@@ -2615,6 +2673,7 @@ private:
                 return result;
             }
 
+            const auto effectiveTableStats = ownTableStats ? ownTableStats : inheritedTableStats;
             for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
                 if (!p.GetMapSafe().contains("Operators") && p.GetMapSafe().contains("CTE Name")) {
                     auto precompute = p.GetMapSafe().at("CTE Name").GetStringSafe();
@@ -2622,7 +2681,7 @@ private:
                         planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false, nullptr));
                     }
                 } else if (p.GetMapSafe().at("Node Type").GetStringSafe().find("Precompute") == TString::npos) {
-                    planInputs.AppendValue(ReconstructImpl(p, 0, taskCount, fromBroadcast, inheritedTableStats));
+                    planInputs.AppendValue(ReconstructImpl(p, 0, taskCount, fromBroadcast, effectiveTableStats));
                 }
             }
             result["Plans"] = planInputs;
@@ -3605,6 +3664,21 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
     ModifyPlan(root, collectPlanNodeId);
     ModifyPlan(root, addStatsToPlanNode);
+
+    // Executer TxId of this execution phase, so that the plan can be matched with LWTrace
+    // records. It is not reported for literal-only phases, which never reach shards.
+    NKqpProto::TKqpExecutionExtraStats executionExtraStats;
+    if (stats.HasExtra() && stats.GetExtra().UnpackTo(&executionExtraStats) && executionExtraStats.GetTxId()) {
+        const ui64 txId = executionExtraStats.GetTxId();
+        root["TxId"] = txId;
+        // SerializeTxPlans() keeps only the subplans of the tx plan root, so the value has to be
+        // duplicated into them to survive the final serialization.
+        if (root.GetMapSafe().contains("Plans") && root.GetMapSafe().at("Plans").IsArray()) {
+            for (auto& plan : root.GetMapSafe().at("Plans").GetArraySafe()) {
+                plan["TxId"] = txId;
+            }
+        }
+    }
 
     if (stats.GetNodes().size()) {
         if (root.GetMapSafe().contains("Plans") && root.GetMapSafe().at("Plans").IsArray()) {

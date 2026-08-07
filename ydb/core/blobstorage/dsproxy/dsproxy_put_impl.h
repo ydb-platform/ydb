@@ -42,6 +42,7 @@ private:
     ui32 VMultiPutResponses = 0;
     NActors::NLog::EPriority ResultPriority = NActors::NLog::PRI_DEBUG;
     bool EnableRequestMod3x3ForMinLatecy = false;
+    bool EnableChecksumCalcAndValidation = false;
 
     const TEvBlobStorage::TEvPut::ETactic Tactic;
 
@@ -120,7 +121,7 @@ public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TEvBlobStorage::TEvPut *ev, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             bool enableRequestMod3x3ForMinLatecy, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
-            const TAccelerationParams& accelerationParams)
+            const TAccelerationParams& accelerationParams, bool enableChecksumCalcAndValidation)
         : Info(info)
         , Blackboard(info, state, ev->HandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(1)
@@ -129,6 +130,7 @@ public:
         , ApproximateFreeSpaceShare(0.f)
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
+        , EnableChecksumCalcAndValidation(enableChecksumCalcAndValidation)
         , Tactic(ev->Tactic)
         , AccelerationParams(accelerationParams)
         , History(Info)
@@ -147,7 +149,7 @@ public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TBatchedVec<TEvBlobStorage::TEvPut::TPtr> &events, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             NKikimrBlobStorage::EPutHandleClass putHandleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-            bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams)
+            bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams, bool enableChecksumCalcAndValidation)
         : Info(info)
         , Blackboard(info, state, putHandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(events.size())
@@ -156,6 +158,7 @@ public:
         , ApproximateFreeSpaceShare(0.f)
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
+        , EnableChecksumCalcAndValidation(enableChecksumCalcAndValidation)
         , Tactic(tactic)
         , AccelerationParams(accelerationParams)
         , History(Info)
@@ -249,7 +252,7 @@ public:
             Y_ABORT_UNLESS(it == begin);
 
             const TVDiskID vdiskId = Info->GetVDiskId(it->first);
-            const bool checksumming = Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
+            const bool checksumming = EnableChecksumCalcAndValidation && Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
                 TGroupQueues::TVDisk::TQueues::VDiskQueueId(Blackboard.PutHandleClass));
 
             if (std::next(it) == end) { // TEvVPut

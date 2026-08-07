@@ -19,10 +19,13 @@ private:
     bool ReadOnlyConflicts;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const override;
 
+    using EErrorClass = NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass;
+
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) override;
     virtual TConclusionStatus DoOnFinished() override;
     virtual void DoOnError(const TString& errorMessage) override;
-    void SendErrorMessage(const TString& errorMessage, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
+    void OnError(const TString& errorMessage, const EErrorClass errorClass);
+    void SendErrorMessage(const TString& errorMessage, const EErrorClass errorClass);
 
 public:
     virtual bool IsActive() const override {

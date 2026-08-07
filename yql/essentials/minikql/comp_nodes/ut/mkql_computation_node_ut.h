@@ -147,7 +147,7 @@ struct TSetup {
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm.GetNode(), *Env);
         bool wereChanges = false;
-        SinglePassVisitCallables(pgm, explorer, renameProvider, *Env, true, wereChanges);
+        SinglePassVisitCallables(pgm, explorer, renameProvider, *Env, /*inPlace=*/true, wereChanges);
     }
 
     void Reset() {

@@ -2556,8 +2556,7 @@
     },
     "AssociateMemberToFarmResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "AssociateMemberToFleetRequest":{
       "type":"structure",
@@ -2604,8 +2603,7 @@
     },
     "AssociateMemberToFleetResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "AssociateMemberToJobRequest":{
       "type":"structure",
@@ -2659,8 +2657,7 @@
     },
     "AssociateMemberToJobResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "AssociateMemberToQueueRequest":{
       "type":"structure",
@@ -2707,8 +2704,7 @@
     },
     "AssociateMemberToQueueResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "AssumeFleetRoleForReadRequest":{
       "type":"structure",
@@ -3717,6 +3713,10 @@
         "roleArn":{
           "shape":"IamRoleArn",
           "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role that the monitor uses to connect to Deadline Cloud. Every user that signs in to the monitor using IAM Identity Center uses this role to access Deadline Cloud resources.</p>"
+        },
+        "tags":{
+          "shape":"Tags",
+          "documentation":"<p>The tags to add to your monitor. Each tag consists of a tag key and a tag value. Tag keys and values are both required, but tag values can be empty strings.</p>"
         }
       }
     },
@@ -3816,8 +3816,7 @@
     },
     "CreateQueueFleetAssociationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CreateQueueLimitAssociationRequest":{
       "type":"structure",
@@ -3845,8 +3844,7 @@
     },
     "CreateQueueLimitAssociationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CreateQueueRequest":{
       "type":"structure",
@@ -4160,8 +4158,7 @@
     },
     "DeleteBudgetResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteFarmRequest":{
       "type":"structure",
@@ -4177,8 +4174,7 @@
     },
     "DeleteFarmResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteFleetRequest":{
       "type":"structure",
@@ -4210,8 +4206,7 @@
     },
     "DeleteFleetResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteLicenseEndpointRequest":{
       "type":"structure",
@@ -4227,8 +4222,7 @@
     },
     "DeleteLicenseEndpointResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteLimitRequest":{
       "type":"structure",
@@ -4253,8 +4247,7 @@
     },
     "DeleteLimitResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteMeteredProductRequest":{
       "type":"structure",
@@ -4279,8 +4272,7 @@
     },
     "DeleteMeteredProductResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteMonitorRequest":{
       "type":"structure",
@@ -4296,8 +4288,7 @@
     },
     "DeleteMonitorResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteQueueEnvironmentRequest":{
       "type":"structure",
@@ -4329,8 +4320,7 @@
     },
     "DeleteQueueEnvironmentResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteQueueFleetAssociationRequest":{
       "type":"structure",
@@ -4362,8 +4352,7 @@
     },
     "DeleteQueueFleetAssociationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteQueueLimitAssociationRequest":{
       "type":"structure",
@@ -4395,8 +4384,7 @@
     },
     "DeleteQueueLimitAssociationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteQueueRequest":{
       "type":"structure",
@@ -4421,8 +4409,7 @@
     },
     "DeleteQueueResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteStorageProfileRequest":{
       "type":"structure",
@@ -4447,8 +4434,7 @@
     },
     "DeleteStorageProfileResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWorkerRequest":{
       "type":"structure",
@@ -4480,8 +4466,7 @@
     },
     "DeleteWorkerResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DependenciesList":{
       "type":"list",
@@ -4555,8 +4540,7 @@
     },
     "DisassociateMemberFromFarmResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DisassociateMemberFromFleetRequest":{
       "type":"structure",
@@ -4588,8 +4572,7 @@
     },
     "DisassociateMemberFromFleetResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DisassociateMemberFromJobRequest":{
       "type":"structure",
@@ -4628,8 +4611,7 @@
     },
     "DisassociateMemberFromJobResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DisassociateMemberFromQueueRequest":{
       "type":"structure",
@@ -4661,14 +4643,12 @@
     },
     "DisassociateMemberFromQueueResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DnsName":{"type":"string"},
     "Document":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "document":true,
       "sensitive":true
     },
@@ -6285,6 +6265,10 @@
         "acquiredLimits":{
           "shape":"AcquiredLimits",
           "documentation":"<p>The limits and their amounts acquired during a session action. If no limits were acquired during the session, this field isn't returned.</p>"
+        },
+        "manifests":{
+          "shape":"TaskRunManifestPropertiesListResponse",
+          "documentation":"<p>The list of manifest properties that describe file attachments for the task run.</p>"
         }
       }
     },
@@ -7335,8 +7319,7 @@
     },
     "JobParameterDefinition":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "document":true
     },
     "JobParameterDefinitions":{
@@ -7449,6 +7432,14 @@
         "startedAt":{
           "shape":"StartedAt",
           "documentation":"<p>The date and time the resource started running.</p>"
+        },
+        "updatedAt":{
+          "shape":"UpdatedAt",
+          "documentation":"<p>The date and time the resource was updated.</p>"
+        },
+        "updatedBy":{
+          "shape":"UpdatedBy",
+          "documentation":"<p>The user or system that updated this resource.</p>"
         },
         "jobParameters":{
           "shape":"JobParameters",
@@ -9571,8 +9562,7 @@
     },
     "PutMeteredProductResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "QueueBlockedReason":{
       "type":"string",
@@ -10376,6 +10366,10 @@
           "shape":"ServiceManagedEc2InstanceMarketOptions",
           "documentation":"<p>The Amazon EC2 market type.</p>"
         },
+        "vpcConfiguration":{
+          "shape":"VpcConfiguration",
+          "documentation":"<p>The VPC configuration details for a service managed Amazon EC2 fleet.</p>"
+        },
         "storageProfileId":{
           "shape":"StorageProfileId",
           "documentation":"<p>The storage profile ID.</p>"
@@ -10627,6 +10621,10 @@
         "definition":{
           "shape":"SessionActionDefinitionSummary",
           "documentation":"<p>The session action definition.</p>"
+        },
+        "manifests":{
+          "shape":"TaskRunManifestPropertiesListResponse",
+          "documentation":"<p>The list of manifest properties that describe file attachments for the task run.</p>"
         }
       },
       "documentation":"<p>The details of a session action.</p>"
@@ -11142,7 +11140,8 @@
         "INT",
         "FLOAT",
         "STRING",
-        "PATH"
+        "PATH",
+        "CHUNK_INT"
       ]
     },
     "StepRequiredCapabilities":{
@@ -11214,6 +11213,10 @@
           "shape":"CreatedAt",
           "documentation":"<p>The date and time the resource was created.</p>"
         },
+        "createdBy":{
+          "shape":"CreatedBy",
+          "documentation":"<p>The user or system that created this resource.</p>"
+        },
         "startedAt":{
           "shape":"StartedAt",
           "documentation":"<p>The date and time the resource started running.</p>"
@@ -11221,6 +11224,14 @@
         "endedAt":{
           "shape":"EndedAt",
           "documentation":"<p>The date and time the resource ended running.</p>"
+        },
+        "updatedAt":{
+          "shape":"UpdatedAt",
+          "documentation":"<p>The date and time the resource was updated.</p>"
+        },
+        "updatedBy":{
+          "shape":"UpdatedBy",
+          "documentation":"<p>The user or system that updated this resource.</p>"
         },
         "parameterSpace":{
           "shape":"ParameterSpace",
@@ -11450,8 +11461,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "Tags":{
       "type":"map",
@@ -11486,6 +11496,10 @@
         "path":{
           "shape":"PathString",
           "documentation":"<p>A file system path represented as a string.</p>"
+        },
+        "chunkInt":{
+          "shape":"String",
+          "documentation":"<p>A range (for example 1-10) or selection of specific (for example 1,3,7,8,10) integers represented as a string.</p>"
         }
       },
       "documentation":"<p>The data types for the task parameters.</p>",
@@ -11503,6 +11517,54 @@
       "box":true,
       "max":2147483647,
       "min":0
+    },
+    "TaskRunManifestPropertiesListRequest":{
+      "type":"list",
+      "member":{"shape":"TaskRunManifestPropertiesRequest"},
+      "max":10,
+      "min":0
+    },
+    "TaskRunManifestPropertiesListResponse":{
+      "type":"list",
+      "member":{"shape":"TaskRunManifestPropertiesResponse"}
+    },
+    "TaskRunManifestPropertiesRequest":{
+      "type":"structure",
+      "members":{
+        "outputManifestPath":{
+          "shape":"TaskRunManifestPropertiesRequestOutputManifestPathString",
+          "documentation":"<p>The manifest file path.</p>"
+        },
+        "outputManifestHash":{
+          "shape":"TaskRunManifestPropertiesRequestOutputManifestHashString",
+          "documentation":"<p>The hash value of the file.</p>"
+        }
+      },
+      "documentation":"<p>The output manifest properties reported by the worker agent for a completed task run.</p>"
+    },
+    "TaskRunManifestPropertiesRequestOutputManifestHashString":{
+      "type":"string",
+      "max":256,
+      "min":1
+    },
+    "TaskRunManifestPropertiesRequestOutputManifestPathString":{
+      "type":"string",
+      "max":512,
+      "min":1
+    },
+    "TaskRunManifestPropertiesResponse":{
+      "type":"structure",
+      "members":{
+        "outputManifestPath":{
+          "shape":"String",
+          "documentation":"<p>The manifest file path.</p>"
+        },
+        "outputManifestHash":{
+          "shape":"String",
+          "documentation":"<p>The hash value of the file.</p>"
+        }
+      },
+      "documentation":"<p>The manifest properties for a task run, corresponding to the manifest properties in the job.</p>"
     },
     "TaskRunSessionActionDefinition":{
       "type":"structure",
@@ -11537,6 +11599,10 @@
         "stepId":{
           "shape":"StepId",
           "documentation":"<p>The step ID.</p>"
+        },
+        "parameters":{
+          "shape":"TaskParameters",
+          "documentation":"<p>The parameters of a task run in a session action.</p>"
         }
       },
       "documentation":"<p>The details of a task run in a session action.</p>"
@@ -11609,6 +11675,14 @@
         "endedAt":{
           "shape":"EndedAt",
           "documentation":"<p>The date and time the resource ended running.</p>"
+        },
+        "updatedAt":{
+          "shape":"UpdatedAt",
+          "documentation":"<p>The date and time the resource was updated.</p>"
+        },
+        "updatedBy":{
+          "shape":"UpdatedBy",
+          "documentation":"<p>The user or system that updated this resource.</p>"
         }
       },
       "documentation":"<p>The details of a task search.</p>"
@@ -11765,8 +11839,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateBudgetRequest":{
       "type":"structure",
@@ -11826,8 +11899,7 @@
     },
     "UpdateBudgetResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateFarmRequest":{
       "type":"structure",
@@ -11851,8 +11923,7 @@
     },
     "UpdateFarmResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateFleetRequest":{
       "type":"structure",
@@ -11912,8 +11983,7 @@
     },
     "UpdateFleetResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateJobLifecycleStatus":{
       "type":"string",
@@ -11980,8 +12050,7 @@
     },
     "UpdateJobResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateLimitRequest":{
       "type":"structure",
@@ -12018,8 +12087,7 @@
     },
     "UpdateLimitResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateMonitorRequest":{
       "type":"structure",
@@ -12047,8 +12115,7 @@
     },
     "UpdateMonitorResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateQueueEnvironmentRequest":{
       "type":"structure",
@@ -12099,8 +12166,7 @@
     },
     "UpdateQueueEnvironmentResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateQueueFleetAssociationRequest":{
       "type":"structure",
@@ -12137,8 +12203,7 @@
     },
     "UpdateQueueFleetAssociationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateQueueFleetAssociationStatus":{
       "type":"string",
@@ -12183,8 +12248,7 @@
     },
     "UpdateQueueLimitAssociationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateQueueLimitAssociationStatus":{
       "type":"string",
@@ -12264,8 +12328,7 @@
     },
     "UpdateQueueResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateSessionRequest":{
       "type":"structure",
@@ -12316,8 +12379,7 @@
     },
     "UpdateSessionResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateStepRequest":{
       "type":"structure",
@@ -12368,8 +12430,7 @@
     },
     "UpdateStepResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateStorageProfileRequest":{
       "type":"structure",
@@ -12417,8 +12478,7 @@
     },
     "UpdateStorageProfileResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateTaskRequest":{
       "type":"structure",
@@ -12476,8 +12536,7 @@
     },
     "UpdateTaskResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateWorkerRequest":{
       "type":"structure",
@@ -12630,6 +12689,10 @@
         "progressPercent":{
           "shape":"SessionActionProgressPercent",
           "documentation":"<p>The percentage completed.</p>"
+        },
+        "manifests":{
+          "shape":"TaskRunManifestPropertiesListRequest",
+          "documentation":"<p>A list of output manifest properties reported by the worker agent, with each entry corresponding to a manifest property in the job.</p>"
         }
       },
       "documentation":"<p>The updated session action information as it relates to completion and progress of the session.</p>"
@@ -12785,11 +12848,30 @@
         "OTHER"
       ]
     },
+    "VpcConfiguration":{
+      "type":"structure",
+      "members":{
+        "resourceConfigurationArns":{
+          "shape":"VpcResourceConfigurationArns",
+          "documentation":"<p>The ARNs of the VPC Lattice resource configurations attached to the fleet.</p>"
+        }
+      },
+      "documentation":"<p>The configuration options for a service managed fleet's VPC.</p>"
+    },
     "VpcId":{
       "type":"string",
       "max":32,
       "min":1,
       "pattern":"vpc-[\\w]{1,120}"
+    },
+    "VpcResourceConfigurationArn":{
+      "type":"string",
+      "max":2048,
+      "min":1
+    },
+    "VpcResourceConfigurationArns":{
+      "type":"list",
+      "member":{"shape":"VpcResourceConfigurationArn"}
     },
     "WindowsUser":{
       "type":"structure",

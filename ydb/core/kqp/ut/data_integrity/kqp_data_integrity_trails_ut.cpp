@@ -14,12 +14,18 @@ namespace {
         const TString& str,
         const TVector<std::pair<TString, ui64>>& regexToMatchCount)
     {
+        // Split whole log on separate rows. Use rule that each row starts by prefix like "YYYY-MM-DDTHH:MM:SS.XXXXXXZ node 1:"
+        auto logRows = SplitString(str, "Z node 1 :");
+
         for (auto& [regexString, expectedMatchCount]: regexToMatchCount) {
             std::regex expression(regexString.c_str());
+            unsigned matchCount = 0;
 
-            auto matchCount = std::distance(
-                std::sregex_iterator(str.begin(), str.end(), expression),
-                std::sregex_iterator());
+            for(auto& row: logRows) {
+                std::smatch expressionMatch;
+                std::regex_search(row.data(), expressionMatch, expression);
+                matchCount += expressionMatch.size();
+            }
 
             UNIT_ASSERT_VALUES_EQUAL(expectedMatchCount, matchCount);
         }
@@ -33,7 +39,7 @@ namespace {
 
         // [\\w]+\\.[A-Za-z]+:[0-9]+ match filename and line number
         builder << "DATA_INTEGRITY " << logLevel
-                << ": [\\w]+\\.[A-Za-z]+:[0-9]+: Component: " << component;
+                << ": [\\w]+\\.[A-Za-z]+:[0-9]+: .*component=" << component;
         return builder;
     }
 
@@ -72,7 +78,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             // check grpc logs
             {ConstructRegexToCheckLogs("TRACE", "Grpc"), LogEnabled ? 2 : 0},
             // check datashard logs
-            {ConstructRegexToCheckLogs("INFO", "DataShard"), LogEnabled ? 2 : 0},
+            {ConstructRegexToCheckLogs("INFO", "DataShard"), LogEnabled ? 4 : 0},
             // check write actor logs
             {ConstructRegexToCheckLogs("INFO", "WriteActor"),
              LogEnabled ? 1 : 0},
@@ -122,7 +128,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             regexToMatchCount = {
                 {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2 + 2},
                 {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2 + 2},
-                {ConstructRegexToCheckLogs("INFO", "DataShard"), 2},
+                {ConstructRegexToCheckLogs("INFO", "DataShard"), 4},
                 // check write actor logs
                 {ConstructRegexToCheckLogs("INFO", "WriteActor"), 1},
             };

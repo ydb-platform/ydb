@@ -113,7 +113,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                     TStringStream keysStr;
                     WriteTableRange(range, keyDef->KeyColumnTypes, keysStr);
 
-                    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+                    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
                         message,
                         {"op", ToString(keyDef->TableId)},
                         {"keys", keysStr.Str()});
@@ -133,7 +133,7 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
         brokenLocks << lock << " ";
     }
 
-    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
         {"component", "DataShard"},
         {"type", "Locks"},
         {"tabletId", ToString(tabletId)},
@@ -144,7 +144,7 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
 template <typename TxResult>
 inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const typename TxResult::EStatus status) {
     TString statusString = TxResult::EStatus_descriptor()->FindValueByNumber(status)->name();
-    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
         {"component", "DataShard"},
         {"type", "Finished"},
         {"tabletId", ToString(tabletId)},

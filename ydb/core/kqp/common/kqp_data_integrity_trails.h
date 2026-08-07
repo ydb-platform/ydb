@@ -74,7 +74,7 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
     if (!ShouldBeLogged(request->Get()->GetAction(), request->Get()->GetType())) {
         return;
     }
-    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
         {"component", "SessionActor"},
         {"sessionId", request->Get()->GetSessionId()},
         {"traceId", request->Get()->GetTraceId()},
@@ -91,7 +91,7 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
     }
 
     auto& record = response->Record;
-    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
         {"component", "SessionActor"},
         {"sessionId", record.GetResponse().GetSessionId()},
         {"traceId", traceId},
@@ -114,7 +114,7 @@ inline void LogIntegrityTrails(const TString& txType, const TString& txLocksDebu
         YDB_LOG_UPDATE_MESSAGE(message,
             {"ShardId", ToString(*shardId)});
     }
-    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
 }
 
 inline void LogIntegrityTrails(const TString& state, const TString& traceId, const NEvents::TDataEvents::TEvWriteResult::TPtr& ev, const TActorContext& ctx) {
@@ -127,7 +127,7 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
     NYql::TIssues issues;
     NYql::IssuesFromMessage(record.GetIssues(), issues);
 
-    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
         {"component", "Executer"},
         {"type", "Request"},
         {"state", state},
@@ -146,7 +146,7 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
         locksDebugStr << lock.ShortDebugString() << " ";
     }
 
-    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
         {"component", "Executer"},
         {"type", "Response"},
         {"state", state},
@@ -165,7 +165,7 @@ inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64
         locksDebugStr << lock.ShortDebugString() << " ";
     }
 
-    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
         {"component", "Executer"},
         {"type", type},
         {"traceId", traceId},
@@ -183,7 +183,7 @@ inline void LogIntegrityTrails(const TString& txType, ui64 txId, TMaybe<ui64> sh
         YDB_LOG_UPDATE_MESSAGE(message,
             {"shardId", ToString(*shardId)});
     }
-    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
 }
 
 }

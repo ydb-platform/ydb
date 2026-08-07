@@ -118,6 +118,7 @@ message TActorSystemConfig {
     optional uint32 IoExecutor = 5;
     optional uint32 BatchExecutor = 6;
     optional uint32 BlobStorageExecutor = 23; // Index into Executor; a PLACEMENT executor expands into all its placement-group pools.
+    optional uint32 InterconnectSessionExecutor = 24; // Index into Executor; a PLACEMENT executor expanded into its placement-group pools.
 
     message TServiceExecutor {
         required string ServiceName = 1;

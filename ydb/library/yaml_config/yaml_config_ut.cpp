@@ -1243,6 +1243,22 @@ actor_system_config:
         UNIT_ASSERT_VALUES_EQUAL(config.GetActorSystemConfig().GetBlobStorageExecutor(), 0);
     }
 
+    Y_UNIT_TEST(InterconnectSessionExecutorIsConvertedToProto) {
+        auto doc = NFyaml::TDocument::Parse(R"(
+actor_system_config:
+  executor:
+  - name: ICSession
+    type: PLACEMENT
+    placement_groups: 2
+  interconnect_session_executor: 0
+)");
+
+        const auto config = NYamlConfig::YamlToProto(doc.Root(), false, false);
+
+        UNIT_ASSERT(config.GetActorSystemConfig().HasInterconnectSessionExecutor());
+        UNIT_ASSERT_VALUES_EQUAL(config.GetActorSystemConfig().GetInterconnectSessionExecutor(), 0);
+    }
+
     Y_UNIT_TEST(CollectLabels) {
         auto doc = NFyaml::TDocument::Parse(WholeConfig);
 

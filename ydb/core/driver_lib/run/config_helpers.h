@@ -23,6 +23,9 @@ ui32 GetExpandedExecutorPoolId(const NKikimrConfig::TActorSystemConfig& systemCo
 // Returns pool ids expanded from the executor definition referenced by BlobStorageExecutor.
 TVector<ui32> GetBlobStorageExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig);
 
+// Returns pool ids expanded from InterconnectSessionExecutor, or an empty vector when it is absent.
+TVector<ui32> GetInterconnectSessionExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig);
+
 NActors::TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemConfig::TScheduler& config);
 
 }  // namespace NActorSystemConfigHelpers

@@ -18,7 +18,7 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/core/kqp/common
     ydb/core/kqp/ut/common
-    ydb/core/kqp/workload_service/ut/common
+    ydb/services/workload_manager/ut/common
     ydb/core/testlib/basics/pg
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy

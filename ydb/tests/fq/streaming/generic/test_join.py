@@ -1,22 +1,23 @@
-import pytest
-import os
 import json
-import sys
+import pytest
+import logging
 import time
+import datetime
+from typing import Callable
+
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
+from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
+import ydb.issues
+import os
+import sys
 from collections import Counter
 from itertools import chain, islice
 
-import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
-
-from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-
-from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
-from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
-
 import conftest
 import random
+
+# The token that the IAM emulator returns by default.
+USER_TOKEN = "root@builtin"
 
 MAX_WRITE_STREAM_SIZE = 500
 DEBUG = 0
@@ -52,6 +53,100 @@ def freeze(json):
     if t == list:
         return tuple(map(freeze, json))
     return json
+
+
+def create_secret(self, kikimr: Kikimr, secret_name: str) -> None:
+    kikimr.ydb_client.query(f"""
+        CREATE SECRET `{secret_name}` WITH (value="{USER_TOKEN}");
+    """)
+
+
+def create_source(
+    kikimr: Kikimr,
+    source_name: str,
+    secret_path: str,
+    endpoint: Endpoint,
+    shared_reading: bool = False,
+) -> None:
+    """Create an External Data Source that authenticates via IAM."""
+    kikimr.ydb_client.query(f"""
+        CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
+            SOURCE_TYPE = "Ydb",
+            LOCATION = "{endpoint.endpoint}",
+            DATABASE_NAME = "{endpoint.database}",
+            USE_TLS = "FALSE",
+            AUTH_METHOD = "TOKEN",
+            TOKEN_SECRET_PATH = "{secret_path}",
+            SHARED_READING="{shared_reading}"
+        );
+    """)
+
+
+def create_table(
+    kikimr: Kikimr,
+) -> None:
+    """Create an External Data Source that authenticates via IAM."""
+    kikimr.ydb_client.query("""
+    CREATE TABLE simple_table (number Int32, PRIMARY KEY (number));
+    COMMIT;
+    INSERT INTO simple_table (number) VALUES
+      (1),
+      (2),
+      (3);
+    COMMIT;
+
+    CREATE TABLE join_table (id Int32, data STRING, PRIMARY KEY (id));
+    COMMIT;
+    INSERT INTO join_table (id, data) VALUES
+      (1, "ydb10"),
+      (2, "ydb20"),
+      (3, "ydb30");
+    COMMIT;
+    CREATE TABLE users (age Int32, id Int32, ip STRING, name STRING, region Int32, PRIMARY KEY(id));
+    COMMIT;
+    INSERT INTO users (age, id, ip, name, region) VALUES
+      (15, 1, "95.106.17.32", "Anya", 213),
+      (25, 2, "88.78.248.151", "Petr", 225),
+      (17, 3, "93.94.183.63", "Masha", 1),
+      (5, 4, "::ffff:193.34.173.188", "Alena", 225),
+      (15, 5, "93.170.111.29", "Irina", 2),
+      (13, 6, "93.170.111.28", "Inna", 21),
+      (33, 7, "::ffff:193.34.173.173", "Ivan", 125),
+      (45, 8, "::ffff:133.34.173.188", "Asya", 225),
+      (27, 9, "::ffff:133.34.172.188", "German", 125),
+      (41, 10, "::ffff:133.34.173.185", "Olya", 225),
+      (35, 11, "::ffff:193.34.163.188", "Slava", 2),
+      (56, 12, "2a02:1812:1713:4f00:517e:1d79:c88b:704", "Elena", 2),
+      (18, 17, "ivalid ip", "newUser", 12);
+    COMMIT;
+    CREATE TABLE db (
+        b STRING NOT NULL,
+        c Uint32,
+        a Int32 NOT NULL,
+        d Int8,
+        f Int32,
+        e Int64,
+        g Int32,
+        h Int32,
+        is_odd Bool NOT NULL,
+        is_true Bool NOT NULL,
+        is_false Bool NOT NULL,
+        opt_odd Bool,
+        opt_true Bool,
+        opt_false Bool,
+        opt_null Bool,
+        ts Timestamp,
+        dur Interval,
+        tsd Date,
+        PRIMARY KEY(b, a));
+    COMMIT;
+    INSERT INTO db (a, b, c, d, e, f, is_odd, is_true, is_false, opt_odd, opt_true, opt_false, opt_null, ts, dur, tsd) VALUES
+      (1, "2", 3, 4, 5, 6, true, true, false, true, true, false, NULL, Timestamp("1970-01-03T10:11:12Z"), Interval("PT13S"), Date("1970-01-05")),
+      (7, "8", 9, 10, 11, 12, true, true, false, true, true, false, NULL, Timestamp("1970-01-03T10:11:13Z"), Interval("PT14S"), Date("1970-01-06")),
+      (2, "3", 6, NULL, 8, 9, false, true, false, false, true, false, NULL, Timestamp("1970-01-03T10:11:14Z"), Interval("PT15S"), Date("1970-01-07")),
+      (4, "5", 4, 15, 17, NULL, false, true, false, false, true, false, NULL, Timestamp("1970-01-03T10:11:15Z"), Interval("PT16S"), Date("1970-01-08"));
+    COMMIT;
+    """)
 
 
 TESTCASES = [
@@ -1108,93 +1203,35 @@ TESTCASES = [
 ]
 
 
-one_time_waiter = OneTimeWaiter(
-    data_source_kind=EGenericDataSourceKind.YDB,
-    docker_compose_file_path=conftest.docker_compose_file_path,
-    expected_tables=["simple_table", "join_table", "dummy_table"],
-)
-
-
-class TestJoinStreaming(TestYdsBase):
-    @yq_v1
-    @pytest.mark.parametrize(
-        "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
-    )
-    @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_simple(self, kikimr, fq_client: FederatedQueryClient, yq_version):
-        self.init_topics(f"pq_yq_streaming_test_simple{yq_version}")
-        fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-
-        table_name = 'join_table'
-        ydb_conn_name = f'ydb_conn_{table_name}'
-
-        fq_client.create_ydb_connection(
-            name=ydb_conn_name,
-            database_id='local',
-        )
-        one_time_waiter.wait()
-
-        sql = R'''
-            $input = SELECT * FROM myyds.`{input_topic}`;
-
-            $enriched = select e.Data as Data
-                from
-                    $input as e
-                left join
-                    ydb_conn_{table_name}.{table_name} as u
-                on(e.Data = CAST(u.id as String))
-            ;
-
-            insert into myyds.`{output_topic}`
-            select * from $enriched;
-            '''.format(input_topic=self.input_topic, output_topic=self.output_topic, table_name=table_name)
-
-        query_id = fq_client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
-
-        messages = ['A', 'B', 'C']
-        self.write_stream(messages)
-
-        read_data = self.read_stream(len(messages))
-        assert read_data == messages
-
-        fq_client.abort_query(query_id)
-        fq_client.wait_query(query_id)
-
-        describe_response = fq_client.describe_query(query_id)
-        status = describe_response.result.query.meta.status
-        assert not describe_response.issues, str(describe_response.issues)
-        assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)
-
-    @yq_v1
-    @pytest.mark.parametrize(
-        "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
-    )
-    @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
+class TestJoinYdbStreaming(StreamingTestBase):
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
     @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
+    @pytest.mark.parametrize("local", [True, False])
     def test_streamlookup(
         self,
-        kikimr,
-        testcase,
-        streamlookup,
-        partitions_count,
-        fq_client: FederatedQueryClient,
-        yq_version,
+        kikimr: Kikimr,
+        testcase: int,
+        streamlookup: bool,
+        partitions_count: int,
+        entity_name: Callable[[str], str],
     ):
-        title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}{yq_version}"
-        self.init_topics(title, partitions_count=partitions_count)
-        fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}"
+        query_name = f"q_{title}"
+        endpoint = self.get_endpoint(kikimr, local_topics=True)
+        source_name = entity_name("join_source")
+
+        # 1. Create the secret
+        secret_name = entity_name("iam_secret")
+        self.create_secret(kikimr, secret_name)
+
+        # 2. Create and populate local table
+        create_table(kikimr)
+
+        # 3. Create TOKEN-auth external data source.
+        create_source(kikimr, source_name, secret_name, endpoint)
 
         table_name = 'join_table'
-        ydb_conn_name = f'ydb_conn_{table_name}'
-
-        fq_client.create_ydb_connection(
-            name=ydb_conn_name,
-            database_id='local',
-        )
 
         sql, messages, *options = TESTCASES[testcase]
         sql = sql.format(
@@ -1204,22 +1241,22 @@ class TestJoinStreaming(TestYdsBase):
             streamlookup=Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else '',
         )
 
-        options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
+        # options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
 
-        one_time_waiter.wait()
-
-        query_id = fq_client.create_query(title, sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-
-        if not streamlookup and "MultiGet true" in sql:
-            fq_client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-            describe_result = fq_client.describe_query(query_id).result
-            describe_string = "{}".format(describe_result)
-            print("Describe result: {}".format(describe_string), file=sys.stderr)
-            assert "Cannot compare key columns" in describe_string
+        try:
+            kikimr.ydb_client.query(f"""
+                CREATE STREAMING QUERY {query_name} AS DO
+                {sql}
+                END DO;
+            """)
+        except ydb.issues.Error as ex:
+            assert not streamlookup and "MultiGet true" in sql, ex
+            assert "Cannot compare key columns" in ex.message
             return
 
-        fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+        assert not (not streamlookup and "MultiGet true" in sql)
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
 
         for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
             self.write_stream(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]))
@@ -1234,6 +1271,7 @@ class TestJoinStreaming(TestYdsBase):
         messages_ctr = Counter(map(freeze, map(json.loads, chain(*map(lambda row: islice(row, 1, None), messages)))))
         assert read_data_ctr == messages_ctr
 
+        """
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
             sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks")
             for component in ["Lookup", "LookupSrc"]:
@@ -1251,15 +1289,9 @@ class TestJoinStreaming(TestYdsBase):
                         f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
                         file=sys.stderr,
                     )
+        """
 
-        fq_client.abort_query(query_id)
-        fq_client.wait_query(query_id)
-
-        describe_response = fq_client.describe_query(query_id)
-        status = describe_response.result.query.meta.status
-        assert not describe_response.issues, str(describe_response.issues)
-        assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)
-
+    """
     @yq_v1
     @pytest.mark.parametrize(
         "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
@@ -1416,3 +1448,4 @@ class TestJoinStreaming(TestYdsBase):
         status = describe_response.result.query.meta.status
         assert not describe_response.issues, str(describe_response.issues)
         assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)
+        """

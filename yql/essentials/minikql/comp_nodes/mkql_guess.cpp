@@ -3,32 +3,31 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsOptional>
 class TGuessWrapper: public TMutableCodegeneratorPtrNode<TGuessWrapper<IsOptional>> {
-    typedef TMutableCodegeneratorPtrNode<TGuessWrapper<IsOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorPtrNode<TGuessWrapper<IsOptional>>;
 
 public:
     TGuessWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode, ui32 index)
         : TBaseComputation(mutables, kind)
-        , VarNode(varNode)
-        , Index(index)
+        , VarNode_(varNode)
+        , Index_(index)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        auto var = VarNode->GetValue(compCtx);
+        auto var = VarNode_->GetValue(compCtx);
 
         if (IsOptional && !var) {
             return NUdf::TUnboxedValuePod();
         }
 
         const auto currentIndex = var.GetVariantIndex();
-        if (Index == currentIndex) {
+        if (Index_ == currentIndex) {
             return var.Release().GetVariantItem().MakeOptional();
         } else {
             return NUdf::TUnboxedValuePod();
@@ -41,9 +40,9 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
 
-        const auto var = GetNodeValue(VarNode, ctx, block);
+        const auto var = GetNodeValue(VarNode_, ctx, block);
 
-        const auto ind = ConstantInt::get(indexType, Index);
+        const auto ind = ConstantInt::get(indexType, Index_);
         const auto zero = ConstantInt::get(valueType, 0ULL);
 
         const auto none = BasicBlock::Create(context, "none", ctx.Func);
@@ -123,11 +122,11 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(VarNode);
+        this->DependsOn(VarNode_);
     }
 
-    IComputationNode* const VarNode;
-    const ui32 Index;
+    IComputationNode* const VarNode_;
+    const ui32 Index_;
 };
 
 } // namespace
@@ -150,5 +149,4 @@ IComputationNode* WrapGuess(TCallable& callable, const TComputationNodeFactoryCo
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -2936,7 +2936,7 @@ value {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    size_t MakeBigEncryptedExport(TS3Mock& s3Mock, const TString& key, const NBackup::TEncryptionIV& iv, size_t encryptedBlockSize, size_t resultFileSize, bool compressed) {
+    std::pair<size_t, size_t> MakeBigEncryptedExport(TS3Mock& s3Mock, const TString& key, const NBackup::TEncryptionIV& iv, size_t encryptedBlockSize, size_t resultFileSize, bool compressed) {
         const TStringBuf exportPrefix = "/test_bucket/Export123/";
         NBackup::TEncryptionKey encryptionKey(key);
 
@@ -3029,7 +3029,7 @@ value {
             UNIT_ASSERT_VALUES_EQUAL(decodedLines, line);
         }
         UNIT_ASSERT(line > 0);
-        return line;
+        return {line, resultEncryptedData.size()};
     }
 
     TString PrintInProtoText(const NBackup::TEncryptionIV& iv) {
@@ -3044,11 +3044,24 @@ value {
         return result;
     }
 
+    enum class EEncryptedImportRebootMode {
+        None,
+        AfterLastPortion,
+        AfterReadAndAfterStateSave,
+    };
+
     // Test that checks different combinations of:
     // - downloaded blocks size
     // - decrypted blocks size
     // - compression blocks size
-    void ImportBigEncryptedFile(size_t encryptedBlockSize, size_t resultFileSize, size_t readBatchSize, bool compressed, bool enableDataShardDirectPartImport) {
+    void ImportBigEncryptedFile(
+            size_t encryptedBlockSize,
+            size_t resultFileSize,
+            size_t readBatchSize,
+            bool compressed,
+            bool enableDataShardDirectPartImport,
+            EEncryptedImportRebootMode rebootMode = EEncryptedImportRebootMode::None)
+    {
         TString key = "Cool very very secret rand key!!";
         NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
 
@@ -3058,7 +3071,8 @@ value {
         TS3Mock s3Mock(s3Settings);
         s3Mock.Start();
 
-        const size_t lines = MakeBigEncryptedExport(s3Mock, key, iv, encryptedBlockSize, resultFileSize, compressed);
+        const auto [lines, contentLength] = MakeBigEncryptedExport(s3Mock, key, iv, encryptedBlockSize, resultFileSize, compressed);
+        UNIT_ASSERT_GT(contentLength, 0);
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(false));
@@ -3080,6 +3094,38 @@ value {
 
         const auto desc = DescribePath(runtime, "/MyRoot/TestTable", true, true);
         UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
+
+        bool wholeFileRead = false;
+        bool readyToReboot = false;
+        ui32 rebootCount = 0;
+
+        if (rebootMode != EEncryptedImportRebootMode::None) {
+            runtime.SetObserverFunc([&, contentLength](TAutoPtr<IEventHandle>& ev) {
+                if (readyToReboot) {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                const bool afterRead = rebootCount % 2 == 0;
+                switch (ev->GetTypeRewrite()) {
+                case NWrappers::NExternalStorage::EvGetObjectResponse: {
+                    const auto& interval = ev->Get<NWrappers::NExternalStorage::TEvGetObjectResponse>()->GetReadInterval();
+                    if (rebootMode == EEncryptedImportRebootMode::AfterLastPortion) {
+                        wholeFileRead |= interval.second + 1 == contentLength;
+                    } else if (afterRead) {
+                        readyToReboot = true;
+                    }
+                    break;
+                }
+                case TEvDataShard::EvS3UploadRowsResponse:
+                    if (rebootMode == EEncryptedImportRebootMode::AfterLastPortion) {
+                        readyToReboot = wholeFileRead;
+                    } else if (!afterRead) {
+                        readyToReboot = true;
+                    }
+                    break;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+        }
 
         NKikimrScheme::EStatus status = (NKikimrScheme::EStatus)TestRestore(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableName: "TestTable"
@@ -3104,10 +3150,53 @@ value {
             }
         )", GenerateTableDescription(desc).data(), s3Port, readBatchSize, PrintInProtoText(iv).c_str(), key.c_str()));
         UNIT_ASSERT_EQUAL(status, NKikimrScheme::StatusAccepted);
+
+        auto waitReadyToReboot = [&]() {
+            if (!readyToReboot) {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&readyToReboot](IEventHandle&) -> bool {
+                    return readyToReboot;
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(10));
+            }
+            return readyToReboot;
+        };
+
+        if (rebootMode == EEncryptedImportRebootMode::AfterLastPortion) {
+            UNIT_ASSERT(waitReadyToReboot());
+            runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+            RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
+        } else if (rebootMode == EEncryptedImportRebootMode::AfterReadAndAfterStateSave) {
+            constexpr ui32 rebootsCount = 4;
+            ui32 rebootsDone = 0;
+            for (ui32 i = 0; i < rebootsCount; ++i) {
+                if (!waitReadyToReboot()) {
+                    break;
+                }
+                readyToReboot = false;
+                ++rebootCount;
+                RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
+                ++rebootsDone;
+            }
+            runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+            Cerr << "Reboots done: " << rebootsDone << Endl;
+            UNIT_ASSERT_GE(rebootsDone, 0);
+        }
+
         env.TestWaitNotification(runtime, txId);
 
         const ui64 rows = CountRows(runtime, "/MyRoot/TestTable");
         UNIT_ASSERT_VALUES_EQUAL(rows, lines);
+    }
+
+    Y_UNIT_TEST(ImportBigEncryptedFileWithRebootAfterLastPortion) {
+        ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false, false, EEncryptedImportRebootMode::AfterLastPortion);
+        ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true, false, EEncryptedImportRebootMode::AfterLastPortion);
+    }
+
+    Y_UNIT_TEST(ImportBigEncryptedFileWithRebootsAfterReadAndStateSave) {
+        ImportBigEncryptedFile(315_B, 70_KB, 8_KB, false, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
+        ImportBigEncryptedFile(555_B, 70_KB, 8_KB, true, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
     }
 
     Y_UNIT_TEST_FLAG(ImportBigEncryptedFile, EnableDataShardDirectPartImport) {
@@ -7100,6 +7189,55 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         // Check partition count
         UNIT_ASSERT_VALUES_EQUAL(pqGroup.GetTotalGroupCount(), 3);
         UNIT_ASSERT_VALUES_EQUAL(pqGroup.GetPartitionPerTablet(), 3);
+    }
+
+    Y_UNIT_TEST(ImportCancelledWithIssueOnInvalidDestinationPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: "/MyRoot"
+              destination_prefix: "BackupPrefix"
+              items {
+                source_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_prefix: "BackupPrefix"
+              destination_path: "Restored"
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto issues = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+                        .GetResponse().GetEntry().GetIssues();
+        UNIT_ASSERT(!issues.empty());
+        Cerr << NYql::IssuesFromMessageAsString(issues) << Endl;
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(issues), "Restored");
     }
 
     Y_UNIT_TEST(UnknownSchemeObjectImport) {

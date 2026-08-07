@@ -50,6 +50,7 @@ SET(ORIG_SOURCES
     mkql_element.cpp
     mkql_ensure.cpp
     mkql_enumerate.cpp
+    mkql_erased.cpp
     mkql_exists.cpp
     mkql_expand_map.cpp
     mkql_extend.cpp
@@ -132,6 +133,8 @@ SET(ORIG_SOURCES
     mkql_tooptional.cpp
     mkql_tostring.cpp
     mkql_udf.cpp
+    mkql_udf_profile.cpp
+    mkql_udf_profile.h
     mkql_unwrap.cpp
     mkql_varitem.cpp
     mkql_visitall.cpp
@@ -172,6 +175,7 @@ COPY(
 PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/xxhash
+    library/cpp/hyperloglog
     yql/essentials/types/binary_json
     yql/essentials/minikql
     yql/essentials/minikql/arrow

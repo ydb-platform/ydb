@@ -168,6 +168,16 @@ public:
         UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS);
     }
 
+    Ydb::StatusIds::StatusCode DescribeConsumerStatus(const TString& consumerName) {
+        grpc::ClientContext rcontext;
+        Ydb::Topic::DescribeConsumerRequest request;
+        Ydb::Topic::DescribeConsumerResponse response;
+        request.set_path(JoinPath({"/Root/PQ/", topicName}));
+        request.set_consumer(consumerName);
+        Stub->DescribeConsumer(&rcontext, request, &response);
+        return response.operation().status();
+    }
+
 private:
     std::shared_ptr<grpc::Channel> Channel;
     std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> Stub;
@@ -280,6 +290,13 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         server.DescribeConsumer("my-consumer",false, false);
         server.UseBadTopic = true;
         server.DescribeConsumer("my-consumer",true, true);
+    }
+
+    Y_UNIT_TEST(DescribeUnknownConsumer) {
+        auto server = TDescribeTestServer();
+        UNIT_ASSERT_VALUES_EQUAL(
+            server.DescribeConsumerStatus("no-such-consumer"),
+            Ydb::StatusIds::SCHEME_ERROR);
     }
 }
 

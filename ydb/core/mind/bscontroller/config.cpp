@@ -3,7 +3,9 @@
 #include "diff.h"
 #include "table_merger.h"
 
+#include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
 

@@ -1,6 +1,8 @@
---- contrib/python/botocore/py3/botocore/auth.py	(index)
-+++ contrib/python/botocore/py3/botocore/auth.py	(working tree)
-@@ -416,7 +416,7 @@ class SigV4Auth(BaseSigner):
+diff --git a/botocore/auth.py b/botocore/auth.py
+index b17516d..f16bd4d 100644
+--- a/botocore/auth.py
++++ b/botocore/auth.py
+@@ -419,7 +419,7 @@ class SigV4Auth(BaseSigner):
      def add_auth(self, request):
          if self.credentials is None:
              raise NoCredentialsError()

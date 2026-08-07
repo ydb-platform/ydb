@@ -535,7 +535,71 @@ TStatus ComputeTypes(TIntrusivePtr<TOpTableLookup> lookup, TRBOContext& ctx) {
         newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, itemType->GetItemType()));
     }
     auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
-    lookup->Type = ctx.ExprCtx.MakeType<TListExprType>(newStructType);
+
+    if (!lookup->IsJoin()) {
+        lookup->Type = ctx.ExprCtx.MakeType<TListExprType>(newStructType);
+        return TStatus::Ok;
+    }
+
+    if (lookup->FetchedRowFilter) {
+        auto& lambda = lookup->FetchedRowFilter->Node;
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {newStructType}, ctx.ExprCtx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Could not update the lookup join filter lambda arg types";
+            return TStatus::Error;
+        }
+
+        ctx.TypeAnnTransformer.Rewind();
+        TStatus status(TStatus::Ok);
+        do {
+            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+        } while (status == TStatus::Repeat);
+
+        if (!lambda->GetTypeAnn()) {
+            YQL_CLOG(TRACE, CoreDq) << "Could not infer the lookup join filter lambda type, status = " << status;
+            return TStatus::Error;
+        }
+        if (!EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx.ExprCtx, true)) {
+            return TStatus::Error;
+        }
+    }
+
+    const auto* leftItemType = lookup->GetInput()->Type->Cast<TListExprType>()->GetItemType();
+    if (!EnsureStructType(lookup->Pos, *leftItemType, ctx.ExprCtx)) {
+        return TStatus::Error;
+    }
+
+    TVector<const TTypeAnnotationNode*> tupleItemTypes;
+    tupleItemTypes.push_back(leftItemType);
+    tupleItemTypes.push_back(ctx.ExprCtx.MakeType<TOptionalExprType>(newStructType));
+    tupleItemTypes.push_back(ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64));
+    lookup->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TTupleExprType>(tupleItemTypes));
+    return TStatus::Ok;
+}
+
+TStatus ComputeTypes(TIntrusivePtr<TOpIndexLookupJoin> lookupJoin, TRBOContext& ctx) {
+    const auto* itemType = lookupJoin->GetInput()->Type->Cast<TListExprType>()->GetItemType();
+    if (!EnsureTupleType(lookupJoin->Pos, *itemType, ctx.ExprCtx)) {
+        return TStatus::Error;
+    }
+
+    const auto* tupleType = itemType->Cast<TTupleExprType>();
+    // (left row, optional(right row), cookie)
+    Y_ENSURE(tupleType->GetSize() == 3, "Unexpected lookup join input tuple");
+    const auto leftItemTypes = tupleType->GetItems()[0]->Cast<TStructExprType>()->GetItems();
+
+    TVector<const TItemExprType*> structItemTypes;
+    structItemTypes.insert(structItemTypes.end(), leftItemTypes.begin(), leftItemTypes.end());
+
+    if (JoinOutputsRight(lookupJoin->JoinKind)) {
+        auto rightItemTypes = tupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems();
+        // An unmatched left row of a left join produces NULLs on the right side.
+        if (lookupJoin->JoinKind == "Left") {
+            rightItemTypes = AddOptional(rightItemTypes, ctx);
+        }
+        structItemTypes.insert(structItemTypes.end(), rightItemTypes.begin(), rightItemTypes.end());
+    }
+
+    lookupJoin->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes));
     return TStatus::Ok;
 }
 
@@ -581,6 +645,9 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     }
     else if (MatchOperator<TOpTableLookup>(op)) {
         return ComputeTypes(CastOperator<TOpTableLookup>(op), ctx);
+    }
+    else if (MatchOperator<TOpIndexLookupJoin>(op)) {
+        return ComputeTypes(CastOperator<TOpIndexLookupJoin>(op), ctx);
     }
     else if(MatchOperator<TOpAggregate>(op)) {
         return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);

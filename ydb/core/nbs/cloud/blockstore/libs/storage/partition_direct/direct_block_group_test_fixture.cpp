@@ -141,7 +141,8 @@ TDBGFixture::MakeDirectBlockGroup(
         0,
         ddisksIds,
         pbufferIds,
-        std::move(transport));
+        std::move(transport),
+        nullptr);
 }
 
 bool TDBGFixture::DoExecutorAndRuntimeWorkWithPredicate(

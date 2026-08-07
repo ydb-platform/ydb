@@ -3,6 +3,7 @@
 #include "yql_opt_proposed_by_data.h"
 #include "yql_linear_checker.h"
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/log/log.h>
@@ -994,7 +995,7 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
             });
         }
 
-        if (!hasErrors && types.LangVer >= NFeature::LinearTypes.MinLangVer) {
+        if (!hasErrors && IsAvailable(NFeature::LinearTypes, types)) {
             hasErrors = !ValidateLinearTypes(*input, ctx);
         }
 

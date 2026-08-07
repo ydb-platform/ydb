@@ -28,7 +28,13 @@ from botocore.exceptions import (
     InvalidConfigError,
     TokenRetrievalError,
 )
-from botocore.utils import CachedProperty, JSONFileCache, SSOTokenLoader
+from botocore.utils import (
+    CachedProperty,
+    JSONFileCache,
+    SSOTokenLoader,
+    create_nested_client,
+    get_token_from_environment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +45,7 @@ def _utc_now():
 
 def create_token_resolver(session):
     providers = [
+        ScopedEnvTokenProvider(session),
         SSOTokenProvider(session),
     ]
     return TokenProviderChain(providers=providers)
@@ -162,9 +169,9 @@ class TokenProviderChain:
             providers = []
         self._providers = providers
 
-    def load_token(self):
+    def load_token(self, **kwargs):
         for provider in self._providers:
-            token = provider.load_token()
+            token = provider.load_token(**kwargs)
             if token is not None:
                 return token
         return None
@@ -250,7 +257,7 @@ class SSOTokenProvider:
             region_name=self._sso_config["sso_region"],
             signature_version=UNSIGNED,
         )
-        return self._session.create_client("sso-oidc", config=config)
+        return create_nested_client(self._session, "sso-oidc", config=config)
 
     def _attempt_create_token(self, token):
         response = self._client.create_token(
@@ -321,10 +328,36 @@ class SSOTokenProvider:
             token_dict["accessToken"], expiration=expiration
         )
 
-    def load_token(self):
+    def load_token(self, **kwargs):
         if self._sso_config is None:
             return None
 
         return DeferredRefreshableToken(
             self.METHOD, self._refresher, time_fetcher=self._now
         )
+
+
+class ScopedEnvTokenProvider:
+    """
+    Token provider that loads tokens from environment variables scoped to
+    a specific `signing_name`.
+    """
+
+    METHOD = 'env'
+
+    def __init__(self, session, environ=None):
+        self._session = session
+        if environ is None:
+            environ = os.environ
+        self.environ = environ
+
+    def load_token(self, **kwargs):
+        signing_name = kwargs.get("signing_name")
+        if signing_name is None:
+            return None
+
+        token = get_token_from_environment(signing_name, self.environ)
+
+        if token is not None:
+            logger.info("Found token in environment variables.")
+            return FrozenAuthToken(token)

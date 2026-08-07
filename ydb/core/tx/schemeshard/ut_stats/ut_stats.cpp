@@ -175,10 +175,39 @@ TTableId ResolveTableId(TTestActorRuntime& runtime, const TString& path) {
     return response->ResultSet.at(0).TableId;
 }
 
+ui64 GetRowUpdates(TTestActorRuntime& runtime, const TString& path) {
+    auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, path, true, true);
+    return description.GetPathDescription().GetTableStats().GetRowUpdates();
+}
+
+void WaitRowUpdatesAtLeast(TTestActorRuntime& runtime, TTestEnv& env, const TString& path, ui64 expected) {
+    while (GetRowUpdates(runtime, path) < expected) {
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+    }
+}
+
+// A single-shard table whose writes go through the datashard write path, so they
+// increment the RowUpdates counter (LocalMiniKQL writes do not).
+void CreateSimpleTable(TTestActorRuntime& runtime, TTestEnv& env, ui64& txId) {
+    TestCreateTable(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot", R"(
+        Name: "Simple"
+        Columns { Name: "key"   Type: "Uint32" }
+        Columns { Name: "value" Type: "Utf8" }
+        KeyColumnNames: ["key"]
+    )");
+    env.TestWaitNotification(runtime, txId);
+}
+
+void WriteRows(TTestActorRuntime& runtime, ui64& txId, int partitionIdx, ui32 fromKeyInclusive, ui32 toKey) {
+    for (ui32 key = fromKeyInclusive; key < toKey; ++key) {
+        WriteRow(runtime, ++txId, "/MyRoot/Simple", partitionIdx, key, "value");
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
-    constexpr ui64 WRITTEN_TOPIC_DATA_SIZE = 16975350; // unstable value, can change if internal message store changes
+    constexpr ui64 WRITTEN_TOPIC_DATA_SIZE = 16975298; // unstable value, can change if internal message store changes
 
     Y_UNIT_TEST(ShouldNotBatchWhenDisabled) {
         TTestBasicRuntime runtime;
@@ -617,6 +646,75 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         InjectPeriodicTopicStats(runtime, allowInjectedTopicStats, topic1Id, generation, round - 1, 19, 7);
 
         AssertTopicSize(17, 7); // not changed because round is less
+    }
+
+    Y_UNIT_TEST(RowUpdatesSurviveShardRestart) {
+        // A datashard keeps RowUpdates in memory, so a restart resets it to zero.
+        // The schemeshard re-baselines the shard on the generation bump, so the table
+        // aggregate must keep growing across the restart, never drop.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnableBackgroundCompaction(false);
+        opts.DataShardStatsReportIntervalSeconds(0);
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 1000;
+        CreateSimpleTable(runtime, env, txId);
+        WriteRows(runtime, txId, 0, 0, INITIAL_ROWS_COUNT);
+
+        WaitRowUpdatesAtLeast(runtime, env, "/MyRoot/Simple", INITIAL_ROWS_COUNT);
+
+        // Restart the datashard: its in-memory RowUpdates counter resets to zero.
+        auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, shards[0], sender);
+
+        // Write more rows after the restart.
+        const ui32 extraRows = 50;
+        WriteRows(runtime, txId, 0, INITIAL_ROWS_COUNT, INITIAL_ROWS_COUNT + extraRows);
+
+        // The aggregate keeps the pre-restart updates and adds the new ones; if it had
+        // dropped on the generation bump it would stall at extraRows and never reach this.
+        WaitRowUpdatesAtLeast(runtime, env, "/MyRoot/Simple", INITIAL_ROWS_COUNT + extraRows);
+        UNIT_ASSERT_GE(GetRowUpdates(runtime, "/MyRoot/Simple"), INITIAL_ROWS_COUNT + extraRows);
+    }
+
+    Y_UNIT_TEST(RowUpdatesSurviveShardSplit) {
+        // On split the schemeshard removes the parent shard and adds empty children.
+        // RowUpdates is deliberately not subtracted with the parent's current-state
+        // metrics, so the table aggregate survives the reshard.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnableBackgroundCompaction(false);
+        opts.DataShardStatsReportIntervalSeconds(0);
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 1000;
+        // Single-shard table with keys [0, INITIAL_ROWS_COUNT).
+        CreateSimpleTable(runtime, env, txId);
+        WriteRows(runtime, txId, 0, 0, INITIAL_ROWS_COUNT);
+
+        WaitRowUpdatesAtLeast(runtime, env, "/MyRoot/Simple", INITIAL_ROWS_COUNT);
+
+        auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        // Split the single shard in two at key = INITIAL_ROWS_COUNT / 2.
+        TestSplitTable(runtime, ++txId, "/MyRoot/Simple", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: %lu } } } }
+            )", shards[0], INITIAL_ROWS_COUNT / 2));
+        env.TestWaitNotification(runtime, txId);
+
+        auto newShards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(newShards.size(), 2u);
+
+        // Children start at zero, but the table aggregate still carries the parent's
+        // updates — they were not lost in the reshard.
+        UNIT_ASSERT_GE(GetRowUpdates(runtime, "/MyRoot/Simple"), INITIAL_ROWS_COUNT);
     }
 
 };

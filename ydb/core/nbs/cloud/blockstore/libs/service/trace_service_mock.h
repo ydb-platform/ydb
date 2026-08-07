@@ -11,7 +11,7 @@ namespace NYdb::NBS::NBlockStore {
 class TTraceServiceMock final: public ITraceService
 {
 public:
-    NWilson::TSpan CreteRootSpan(TStringBuf name) override
+    NWilson::TSpan CreateRootSpan(TStringBuf name) override
     {
         Y_UNUSED(name);
         return NWilson::TSpan();

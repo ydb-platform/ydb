@@ -1,7 +1,5 @@
 /*.md @ydb-platform/docs
 
-/CHANGELOG.md @ydb-platform/changelog-reviewers
-
 /AGENTS.md @ydb-platform/ai-reviewers
 
 /BUILD.md @ydb-platform/ci
@@ -64,12 +62,16 @@
 /ydb/library/yql/udfs/common/knn @ydb-platform/datashard
 /ydb/services/fq @ydb-platform/fq
 /ydb/services/metadata @ydb-platform/fq
+/ydb/services/udf_store @ydb-platform/fq
+/ydb/library/wasm @ydb-platform/fq
 /ydb/services/workload_manager @ydb-platform/fq
 /ydb/core/resource_pools @ydb-platform/fq
+/ydb/tests/fq @ydb-platform/fq
 
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/kafka_proxy @ydb-platform/Topics
 /ydb/core/persqueue @ydb-platform/Topics
+/ydb/library/persqueue @ydb-platform/Topics
 /ydb/services/datastreams @ydb-platform/Topics
 /ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
 /ydb/services/persqueue_v1 @ydb-platform/Topics

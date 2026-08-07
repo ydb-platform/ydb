@@ -157,6 +157,7 @@ public:
     NCommon::TConfSetting<bool, Static> QueryCacheUseExpirationTimeout;
     NCommon::TConfSetting<bool, Static> QueryCacheUseForCalc;
     NCommon::TConfSetting<bool, Static> QueryCacheCombineChunksReplace;
+    NCommon::TConfSetting<bool, Static> QueryCacheReportProgress;
     NCommon::TConfSetting<ui32, Static> DefaultMaxJobFails;
     NCommon::TConfSetting<TString, Static> DefaultCluster;
     NCommon::TConfSetting<TDuration, Static> BinaryExpirationInterval;
@@ -190,6 +191,7 @@ public:
     NCommon::TConfSetting<bool, Static> _ParseExpressionColumns;
     NCommon::TConfSetting<TDuration, Static> _SecureTmpTokenUsersAccessPeriod;
     NCommon::TConfSetting<bool, Static> _FixEndlessLoopInDropIfExists;
+    NCommon::TConfSetting<bool, Static> _ForbidReservedColumns;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;
@@ -365,6 +367,8 @@ public:
     NCommon::TConfSetting<ui64, Static> MaxKeyRangeCount;
     NCommon::TConfSetting<ui64, Static> MaxChunksForDqRead;
     NCommon::TConfSetting<bool, Static> JoinCommonUseMapMultiOut;
+    NCommon::TConfSetting<bool, Static> JoinCommonUseFlatPayload;
+    NCommon::TConfSetting<ui64, Static> JoinCommonFlatPayloadColumnLimit;
     NCommon::TConfSetting<bool, Static> UseAggPhases;
     NCommon::TConfSetting<bool, Static> UsePartitionsByKeysForFinalAgg;
     NCommon::TConfSetting<double, Static> MaxCpuUsageToFuseMultiOuts;

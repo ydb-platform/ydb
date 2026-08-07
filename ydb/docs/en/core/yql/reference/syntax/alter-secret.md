@@ -5,10 +5,11 @@ The `ALTER SECRET` statement modifies an existing [secret](../../../concepts/dat
 ## Syntax {#syntax}
 
 ```sql
-ALTER SECRET secret_name
+ALTER SECRET [IF EXISTS] secret_name
 WITH (option = value[, ...])
 ```
 
+* `IF EXISTS` — the statement does not return an error if the secret does not exist; in this case, it is a no-op.
 * `secret_name` — the name of the secret to modify.
 * `option` — command option:
   * `value` — string with the secret value.
@@ -23,6 +24,12 @@ Change the value of secret `secret_name` to `secret_value_new`:
 
 ```sql
 ALTER SECRET secret_name WITH (value = "secret_value_new");
+```
+
+Change the value of secret `secret_name` to `secret_value_new` only if it exists; if it does not exist, the statement is a no-op:
+
+```sql
+ALTER SECRET IF EXISTS secret_name WITH (value = "secret_value_new");
 ```
 
 ## See also {#see-also}

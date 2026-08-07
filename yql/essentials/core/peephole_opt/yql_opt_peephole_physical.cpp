@@ -3233,41 +3233,24 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-bool IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(const TTypeAnnotationContext& types) {
-    static const char Flag[] = "ExpandLMapOrShuffleByKeysViaBlock";
-    return !IsOptimizerDisabled<Flag>(types);
-}
-
-TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
-    if (IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(types)) {
-        return ctx.Builder(node->Pos())
-            .Callable("Block")
-                .Lambda(0)
-                    .Param("parent")
-                    .Callable("Collect")
-                        .Apply(0, node->Tail())
-                            .With(0)
-                                .Callable("Iterator")
-                                    .Add(0, node->HeadPtr())
-                                    .Callable(1, "DependsOn")
-                                        .Arg(0, "parent")
-                                    .Seal()
+    return ctx.Builder(node->Pos())
+        .Callable("Block")
+            .Lambda(0)
+                .Param("parent")
+                .Callable("Collect")
+                    .Apply(0, node->Tail())
+                        .With(0)
+                            .Callable("Iterator")
+                                .Add(0, node->HeadPtr())
+                                .Callable(1, "DependsOn")
+                                    .Arg(0, "parent")
                                 .Seal()
-                            .Done()
-                        .Seal()
+                            .Seal()
+                        .Done()
                     .Seal()
                 .Seal()
-            .Seal().Build();
-    }
-    return ctx.Builder(node->Pos())
-        .Callable("Collect")
-            .Apply(0, node->Tail())
-                .With(0)
-                    .Callable("Iterator")
-                        .Add(0, node->HeadPtr())
-                    .Seal()
-                .Done()
             .Seal()
         .Seal().Build();
 }
@@ -3279,14 +3262,14 @@ bool IsExpandLMapOrShuffleByKeysPromoted(const TTypeAnnotationContext& types) {
 
 TExprNode::TPtr ExpandLMapOrShuffleByKeysAtCommonStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (IsExpandLMapOrShuffleByKeysPromoted(types)) {
-        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+        return ExpandLMapOrShuffleByKeys(node, ctx);
     }
     return node;
 }
 
 TExprNode::TPtr ExpandLMapOrShuffleByKeysAtFinalStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (!IsExpandLMapOrShuffleByKeysPromoted(types)) {
-        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+        return ExpandLMapOrShuffleByKeys(node, ctx);
     }
     return node;
 }

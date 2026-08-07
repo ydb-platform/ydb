@@ -13,9 +13,8 @@ Building on the high-level overview in [{#T}](index.md), this article dives deep
 1. **Author** opens a GitHub pull request with suggested changes to the [ydb/docs folder](https://github.com/ydb-platform/ydb/tree/main/ydb/docs). Following the [style guide](style-guide.md) from the beginning makes the review process smoother.
 2. **Author** ensures the pull request is in a reviewable state by meeting all of the following criteria:
 
-   1. The pull request has `* Documentation` as the only changelog category. If done correctly, automation marks the pull request with a "documentation" label.
-   2. The pull request is *not* marked as a draft.
-   3. The suggested change builds successfully, and automation has posted a comment with a preview link (instead of errors). The preview shows the changed content as expected.
+   1. The pull request is *not* marked as a draft.
+   2. The suggested change builds successfully, and automation has posted a comment with a preview link (instead of errors). The preview shows the changed content as expected.
 
 3. *(optional)* **Author** shares a link to the pull request in a [community](https://t.me/ydb_en) or documentation-related chat for extra visibility.
 4. A **primary reviewer** gets automatically assigned or picks the pull request from the [inbound list](https://github.com/ydb-platform/ydb/pulls?q=is%3Aopen+is%3Apr+label%3Adocumentation+draft%3Afalse+no%3Aassignee) via the "assign yourself" button, and then provides the initial set of feedback and suggestions.

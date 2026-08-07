@@ -129,7 +129,7 @@ def _init_stress_utils():
                 "--endpoint", "grpc://{node_host}:2135",
                 "--sqs-endpoint", "http://{node_host}:8433/{database}",
             ],
-            'local_path': 'ydb/tests/stress/topic_sqs/topic_sqs'
+            'local_path': 'ydb/tests/stress/sqs_topic/sqs_topic'
         },
         'MinMax': {
             'args': ["--endpoint", "grpc://{node_host}:2135",

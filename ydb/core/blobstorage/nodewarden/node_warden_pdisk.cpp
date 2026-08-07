@@ -63,7 +63,7 @@ namespace NKikimr::NStorage {
         const ui64 inMemoryForTestsBufferBytes = pdisk.GetInMemoryForTestsBufferBytes();
         Y_VERIFY_S(!inMemoryForTestsBufferBytes, "InMemory PDisk is deprecated, use SectorMap instead");
 
-        TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig(path, pdiskGuid, pdiskID, pdiskCategory, &Cfg->FeatureFlags);
+        TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig(path, pdiskGuid, pdiskID, pdiskCategory, Cfg->FeatureFlags.get());
         pdiskConfig->StartOwnerRound = NextLocalPDiskInitOwnerRound();
         if (pdisk.HasManagementStage()) {
             pdiskConfig->SerialManagementStage = pdisk.GetManagementStage();
@@ -388,7 +388,7 @@ namespace NKikimr::NStorage {
 
         TPDiskCategory category(record.Record.GetPDiskCategory());
         std::optional<ui64> readBytesPerSecond, writeBytesPerSecond;
-        for (const auto& item : Cfg->BlobStorageConfig.GetServiceSet().GetReplBrokerConfig().GetMediaTypeQuota()) {
+        for (const auto& item : Cfg->BlobStorageConfig->GetServiceSet().GetReplBrokerConfig().GetMediaTypeQuota()) {
             if (PDiskTypeToPDiskType(item.GetType()) == category.Type()) {
                 if (item.HasReadBytesPerSecond()) {
                     readBytesPerSecond.emplace(item.GetReadBytesPerSecond());

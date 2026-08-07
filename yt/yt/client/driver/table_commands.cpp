@@ -64,8 +64,7 @@ NLogging::TLogger WithCommandTag(
     const NLogging::TLogger& logger,
     const ICommandContextPtr& context)
 {
-    return logger.WithTag("Command: %v",
-        context->Request().CommandName);
+    return logger.WithTag("Command", context->Request().CommandName);
 }
 
 } // namespace

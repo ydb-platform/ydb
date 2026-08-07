@@ -12,9 +12,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 
 class TDbsControllerDatabase: public NKikimr::NIceDb::TNiceDb
 {
-    using TDbsControllerState =
-        ::NYdb::NBS::DbsController::NProto::TDbsControllerState;
-
 public:
     TDbsControllerDatabase(NKikimr::NTable::TDatabase& database)
         : NKikimr::NIceDb::TNiceDb(database)

@@ -2,8 +2,7 @@
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using NYql::NUdf::TUnboxedValueComparatorStreamView;
 
@@ -29,7 +28,7 @@ Y_UNIT_TEST_LLVM(TestPredicateExpression) {
                         pb.Exists(items.front()),
                         NTest::ConvertValueToLiteralNode(pb, TMaybe<bool>{true}),
                         pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<bool>::Id));
-                    return pb.Coalesce(v, NTest::ConvertValueToLiteralNode(pb, false));
+                    return pb.Coalesce(v, NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false));
                 }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
 
@@ -210,7 +209,7 @@ Y_UNIT_TEST_LLVM(TestTakeWhileInclusiveSingular) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTakeWhileInclusive(pb.Source(),
                                                                              [&](TRuntimeNode::TList) -> TRuntimeNode {
-                                                                                 return NTest::ConvertValueToLiteralNode(pb, false);
+                                                                                 return NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false);
                                                                              }),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
 
@@ -276,7 +275,7 @@ Y_UNIT_TEST_LLVM(TestSkipWhileInclusiveSingular) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideSkipWhileInclusive(limitedSource,
                                                                              [&](TRuntimeNode::TList) -> TRuntimeNode {
-                                                                                 return NTest::ConvertValueToLiteralNode(pb, false);
+                                                                                 return NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false);
                                                                              }),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
 
@@ -309,5 +308,4 @@ Y_UNIT_TEST_LLVM(TestFilterByBooleanField) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideFilterTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

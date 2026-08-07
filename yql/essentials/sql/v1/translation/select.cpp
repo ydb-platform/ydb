@@ -520,6 +520,10 @@ protected:
         return Source_->GetWriteSettings();
     }
 
+    void SetCompositeSelect(TCompositeSelect* composite) override {
+        Source_->SetCompositeSelect(composite);
+    }
+
 protected:
     void SetSource(ISource* source) {
         Source_ = source;
@@ -1557,6 +1561,8 @@ public:
         Y_DEBUG_ABORT_UNLESS(Subselects_.size() > 1);
     }
 
+    void RebindNestedProxySources();
+
     void GetInputTables(TTableList& tableList) const override {
         for (const auto& select : Subselects_) {
             select->GetInputTables(tableList);
@@ -1711,6 +1717,7 @@ public:
     TNodePtr DoClone() const final {
         auto newSource = MakeIntrusive<TCompositeSelect>(Pos_, Source_->CloneSource(), OriginalSource_->CloneSource(), Settings_);
         newSource->SetSubselects(CloneContainer(Subselects_), CloneContainer(Grouping_), CloneContainer(GroupByExpr_));
+        newSource->RebindNestedProxySources();
         return newSource;
     }
 
@@ -2253,11 +2260,19 @@ public:
         return terms;
     }
 
+    ISource* RealSource() const {
+        return Source_.Get();
+    }
+
     TNodePtr DoClone() const final {
         return new TSelectCore(Pos_, Source_->CloneSource(), CloneContainer(GroupByExpr_),
                                CloneContainer(GroupBy_), CompactGroupBy_, GroupBySuffix_, AssumeSorted_, CloneContainer(OrderBy_),
                                SafeClone(Having_), CloneContainer(WinSpecs_), SafeClone(LegacyHoppingWindowSpec_),
                                CloneContainer(Terms_), Distinct_, Without_, ForceWithout_, SelectStream_, Settings_, TColumnsSets(UniqueSets_), TColumnsSets(DistinctSets_));
+    }
+
+    void SetCompositeSelect(TCompositeSelect* composite) override {
+        RealSource()->SetCompositeSelect(composite);
     }
 
 private:
@@ -2948,6 +2963,12 @@ public:
         return CompositeSelect_;
     }
 
+    void SetCompositeSelect(TCompositeSelect* composite) override {
+        YQL_ENSURE(!Holder_);
+        CompositeSelect_ = composite;
+        Source_ = composite->RealSource();
+    }
+
     bool AddGrouping(TContext& ctx, const TVector<TString>& columns, TString& hintColumn) override {
         Y_UNUSED(ctx);
         hintColumn = TStringBuilder() << "GroupingHint" << Hints_.size();
@@ -3020,6 +3041,12 @@ private:
     mutable TSet<TString> GroupByColumns_;
     mutable TVector<ui64> Hints_;
 };
+
+void TCompositeSelect::RebindNestedProxySources() {
+    for (const auto& select : Subselects_) {
+        select->SetCompositeSelect(this);
+    }
+}
 
 namespace {
 TSourcePtr DoBuildSelectCore(

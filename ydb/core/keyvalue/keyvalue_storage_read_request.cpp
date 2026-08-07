@@ -342,6 +342,11 @@ public:
             return;
         }
 
+        Y_ABORT_UNLESS(!batch.ReadItemIndecies.empty());
+        IntermediateResult->Stat.GetLatencies.emplace_back(
+                ReadItems[batch.ReadItemIndecies.front()].ReadItem->LogoBlobId.Channel(),
+                (TActivationContext::Now() - batch.SentTime).MilliSeconds());
+
         ReceivedGetResults++;
         if (ReceivedGetResults == Batches.size()) {
             auto status = NKikimrKeyValue::Statuses::RSTATUS_OK;

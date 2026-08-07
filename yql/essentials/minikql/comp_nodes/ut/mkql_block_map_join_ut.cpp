@@ -3,8 +3,7 @@
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -45,8 +44,8 @@ TRuntimeNode FromWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode {
                                                        TVector<TRuntimeNode> tupleElements;
                                                        tupleElements.reserve(items.size());
-                                                       for (size_t i = 0; i < items.size(); i++) {
-                                                           tupleElements.emplace_back(items[i]);
+                                                       for (auto& item : items) {
+                                                           tupleElements.emplace_back(item);
                                                        }
                                                        return pgmBuilder.NewTuple(tupleElements);
                                                    }));
@@ -185,7 +184,8 @@ NUdf::TUnboxedValue DoTestBlockJoin(TSetup<false>& setup,
 
     auto& ctx = graph->GetContext();
 
-    NUdf::TUnboxedValuePod leftBlockListValue, rightBlockListValue;
+    NUdf::TUnboxedValuePod leftBlockListValue;
+    NUdf::TUnboxedValuePod rightBlockListValue;
     if (scalar) {
         leftBlockListValue = MakeUint64ScalarBlock(ctx, blockSize, AS_TYPE(TTupleType, leftItemType)->GetElements(), std::move(leftListValue));
         rightBlockListValue = MakeUint64ScalarBlock(ctx, blockSize, AS_TYPE(TTupleType, rightItemType)->GetElements(), std::move(rightListValue));
@@ -194,8 +194,8 @@ NUdf::TUnboxedValue DoTestBlockJoin(TSetup<false>& setup,
         rightBlockListValue = ToBlocks(ctx, blockSize, AS_TYPE(TTupleType, rightItemType)->GetElements(), std::move(rightListValue));
     }
 
-    graph->GetEntryPoint(0, true)->SetValue(ctx, leftBlockListValue);
-    graph->GetEntryPoint(1, true)->SetValue(ctx, rightBlockListValue);
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(ctx, leftBlockListValue);
+    graph->GetEntryPoint(1, /*require=*/true)->SetValue(ctx, rightBlockListValue);
     return FromBlocks(ctx, AS_TYPE(TTupleType, joinItemType)->GetElements(), graph->GetValue());
 }
 
@@ -387,7 +387,7 @@ Y_UNIT_TEST(TestInnerJoinRightAny) {
     RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
                      leftType, std::move(leftList), {0},
                      rightType, std::move(rightList), {0},
-                     {}, {0}, true);
+                     {}, {0}, /*rightAny=*/true);
 }
 
 Y_UNIT_TEST(TestLeftJoin) {
@@ -789,7 +789,7 @@ Y_UNIT_TEST(TestScalar) {
     RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
                      leftType, std::move(leftList), {0},
                      rightType, std::move(rightList), {0},
-                     {}, {0}, false, true);
+                     {}, {0}, /*rightAny=*/false, /*scalar=*/true);
 }
 
 Y_UNIT_TEST(TestKeyCollisionBug) {
@@ -1010,9 +1010,9 @@ Y_UNIT_TEST(TestLeftSemiJoin) {
 
     // 4. Make "expected" data.
     TSet<ui64> rightSet;
-    for (size_t i = 0; i < rightKeyInit.size(); i++) {
-        if (rightKeyInit[i].has_value()) {
-            rightSet.insert(*rightKeyInit[i]);
+    for (auto& i : rightKeyInit) {
+        if (i.has_value()) {
+            rightSet.insert(*i);
         }
     }
     TVector<std::optional<ui64>> expectedKey;
@@ -1063,9 +1063,9 @@ Y_UNIT_TEST(TestLeftOnlyJoin) {
 
     // 4. Make "expected" data.
     TSet<ui64> rightSet;
-    for (size_t i = 0; i < rightKeyInit.size(); i++) {
-        if (rightKeyInit[i].has_value()) {
-            rightSet.insert(*rightKeyInit[i]);
+    for (auto& i : rightKeyInit) {
+        if (i.has_value()) {
+            rightSet.insert(*i);
         }
     }
     TVector<std::optional<ui64>> expectedKey;
@@ -1318,7 +1318,7 @@ Y_UNIT_TEST(TestScalar) {
     RunTestBlockJoin(setup, EJoinKind::Cross, expectedType, expected,
                      leftType, std::move(leftList), {},
                      rightType, std::move(rightList), {},
-                     {}, {}, false, true);
+                     {}, {}, /*rightAny=*/false, /*scalar=*/true);
 }
 
 Y_UNIT_TEST(TestHugeRightTable) {
@@ -1496,5 +1496,4 @@ Y_UNIT_TEST(TestBasic) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestNodeMultipleUsage)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

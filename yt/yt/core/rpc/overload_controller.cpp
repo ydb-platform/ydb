@@ -26,7 +26,7 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static auto Logger = RpcServerLogger().WithTag("OverloadController");
+static const auto Logger = RpcServerLogger().WithTag("Controller", "Overload");
 static const std::string CpuThrottlingTrackerName = "CpuThrottling";
 static const std::string LogDropTrackerName = "LogDrop";
 static const std::string ControlGroupCpuName = "cpu";

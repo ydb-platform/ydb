@@ -2,8 +2,7 @@
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLCommonJoinCoreTupleTest) {
 Y_UNIT_TEST_LLVM(Inner) {
@@ -224,5 +223,4 @@ Y_UNIT_TEST_LLVM(ExclusionOrderRightFirstAny) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLCommonJoinCoreWideTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

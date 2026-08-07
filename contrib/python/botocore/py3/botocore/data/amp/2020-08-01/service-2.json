@@ -50,7 +50,25 @@
         {"shape":"AccessDeniedException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>The <code>CreateLoggingConfiguration</code> operation creates a logging configuration for the workspace. Use this operation to set the CloudWatch log group to which the logs will be published to.</p>",
+      "documentation":"<p>The <code>CreateLoggingConfiguration</code> operation creates rules and alerting logging configuration for the workspace. Use this operation to set the CloudWatch log group to which the logs will be published to.</p> <note> <p>These logging configurations are only for rules and alerting logs.</p> </note>",
+      "idempotent":true
+    },
+    "CreateQueryLoggingConfiguration":{
+      "name":"CreateQueryLoggingConfiguration",
+      "http":{
+        "method":"POST",
+        "requestUri":"/workspaces/{workspaceId}/logging/query",
+        "responseCode":202
+      },
+      "input":{"shape":"CreateQueryLoggingConfigurationRequest"},
+      "output":{"shape":"CreateQueryLoggingConfigurationResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Creates a query logging configuration for the specified workspace. This operation enables logging of queries that exceed the specified QSP threshold.</p>",
       "idempotent":true
     },
     "CreateRuleGroupsNamespace":{
@@ -92,7 +110,7 @@
         {"shape":"InternalServerException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
-      "documentation":"<p>The <code>CreateScraper</code> operation creates a scraper to collect metrics. A scraper pulls metrics from Prometheus-compatible sources within an Amazon EKS cluster, and sends them to your Amazon Managed Service for Prometheus workspace. Scrapers are flexible, and can be configured to control what metrics are collected, the frequency of collection, what transformations are applied to the metrics, and more.</p> <p>An IAM role will be created for you that Amazon Managed Service for Prometheus uses to access the metrics in your cluster. You must configure this role with a policy that allows it to scrape metrics from your cluster. For more information, see <a href=\"https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-collector-how-to.html#AMP-collector-eks-setup\">Configuring your Amazon EKS cluster</a> in the <i>Amazon Managed Service for Prometheus User Guide</i>.</p> <p>The <code>scrapeConfiguration</code> parameter contains the base-64 encoded YAML configuration for the scraper.</p> <note> <p>For more information about collectors, including what metrics are collected, and how to configure the scraper, see <a href=\"https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-collector-how-to.html\">Using an Amazon Web Services managed collector</a> in the <i>Amazon Managed Service for Prometheus User Guide</i>.</p> </note>",
+      "documentation":"<p>The <code>CreateScraper</code> operation creates a scraper to collect metrics. A scraper pulls metrics from Prometheus-compatible sources within an Amazon EKS cluster, and sends them to your Amazon Managed Service for Prometheus workspace. Scrapers are flexible, and can be configured to control what metrics are collected, the frequency of collection, what transformations are applied to the metrics, and more.</p> <p>An IAM role will be created for you that Amazon Managed Service for Prometheus uses to access the metrics in your cluster. You must configure this role with a policy that allows it to scrape metrics from your cluster. For more information, see <a href=\"https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-collector-how-to.html#AMP-collector-eks-setup\">Configuring your Amazon EKS cluster</a> in the <i>Amazon Managed Service for Prometheus User Guide</i>.</p> <p>The <code>scrapeConfiguration</code> parameter contains the base-64 encoded YAML configuration for the scraper.</p> <p>When creating a scraper, the service creates a <code>Network Interface</code> in each <b>Availability Zone</b> that are passed into <code>CreateScraper</code> through subnets. These network interfaces are used to connect to the Amazon EKS cluster within the VPC for scraping metrics.</p> <note> <p>For more information about collectors, including what metrics are collected, and how to configure the scraper, see <a href=\"https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-collector-how-to.html\">Using an Amazon Web Services managed collector</a> in the <i>Amazon Managed Service for Prometheus User Guide</i>.</p> </note>",
       "idempotent":true
     },
     "CreateWorkspace":{
@@ -149,7 +167,25 @@
         {"shape":"AccessDeniedException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Deletes the logging configuration for a workspace.</p>",
+      "documentation":"<p>Deletes the rules and alerting logging configuration for a workspace.</p> <note> <p>These logging configurations are only for rules and alerting logs.</p> </note>",
+      "idempotent":true
+    },
+    "DeleteQueryLoggingConfiguration":{
+      "name":"DeleteQueryLoggingConfiguration",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/workspaces/{workspaceId}/logging/query",
+        "responseCode":202
+      },
+      "input":{"shape":"DeleteQueryLoggingConfigurationRequest"},
+      "errors":[
+        {"shape":"ConflictException"},
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Deletes the query logging configuration for the specified workspace.</p>",
       "idempotent":true
     },
     "DeleteRuleGroupsNamespace":{
@@ -243,7 +279,24 @@
         {"shape":"AccessDeniedException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Returns complete information about the current logging configuration of the workspace.</p>"
+      "documentation":"<p>Returns complete information about the current rules and alerting logging configuration of the workspace.</p> <note> <p>These logging configurations are only for rules and alerting logs.</p> </note>"
+    },
+    "DescribeQueryLoggingConfiguration":{
+      "name":"DescribeQueryLoggingConfiguration",
+      "http":{
+        "method":"GET",
+        "requestUri":"/workspaces/{workspaceId}/logging/query",
+        "responseCode":200
+      },
+      "input":{"shape":"DescribeQueryLoggingConfigurationRequest"},
+      "output":{"shape":"DescribeQueryLoggingConfigurationResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Retrieves the details of the query logging configuration for the specified workspace.</p>"
     },
     "DescribeRuleGroupsNamespace":{
       "name":"DescribeRuleGroupsNamespace",
@@ -298,6 +351,24 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Returns information about an existing workspace. </p>"
+    },
+    "DescribeWorkspaceConfiguration":{
+      "name":"DescribeWorkspaceConfiguration",
+      "http":{
+        "method":"GET",
+        "requestUri":"/workspaces/{workspaceId}/configuration",
+        "responseCode":200
+      },
+      "input":{"shape":"DescribeWorkspaceConfigurationRequest"},
+      "output":{"shape":"DescribeWorkspaceConfigurationResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Use this operation to return information about the configuration of a workspace. The configuration details returned include workspace configuration status, label set limits, and retention period.</p>"
     },
     "GetDefaultScraperConfiguration":{
       "name":"GetDefaultScraperConfiguration",
@@ -480,7 +551,26 @@
         {"shape":"AccessDeniedException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Updates the log group ARN or the workspace ID of the current logging configuration.</p>",
+      "documentation":"<p>Updates the log group ARN or the workspace ID of the current rules and alerting logging configuration.</p> <note> <p>These logging configurations are only for rules and alerting logs.</p> </note>",
+      "idempotent":true
+    },
+    "UpdateQueryLoggingConfiguration":{
+      "name":"UpdateQueryLoggingConfiguration",
+      "http":{
+        "method":"PUT",
+        "requestUri":"/workspaces/{workspaceId}/logging/query",
+        "responseCode":202
+      },
+      "input":{"shape":"UpdateQueryLoggingConfigurationRequest"},
+      "output":{"shape":"UpdateQueryLoggingConfigurationResponse"},
+      "errors":[
+        {"shape":"ConflictException"},
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Updates the query logging configuration for the specified workspace.</p>",
       "idempotent":true
     },
     "UpdateScraper":{
@@ -522,6 +612,27 @@
         {"shape":"ServiceQuotaExceededException"}
       ],
       "documentation":"<p>Updates the alias of an existing workspace. </p>",
+      "idempotent":true
+    },
+    "UpdateWorkspaceConfiguration":{
+      "name":"UpdateWorkspaceConfiguration",
+      "http":{
+        "method":"PATCH",
+        "requestUri":"/workspaces/{workspaceId}/configuration",
+        "responseCode":202
+      },
+      "input":{"shape":"UpdateWorkspaceConfigurationRequest"},
+      "output":{"shape":"UpdateWorkspaceConfigurationResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ConflictException"},
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ServiceQuotaExceededException"}
+      ],
+      "documentation":"<p>Use this operation to create or update the label sets, label set limits, and retention period of a workspace.</p> <p>You must specify at least one of <code>limitsPerLabelSet</code> or <code>retentionPeriodInDays</code> for the request to be valid.</p>",
       "idempotent":true
     }
   },
@@ -613,6 +724,17 @@
       "documentation":"<p>The <code>AmpConfiguration</code> structure defines the Amazon Managed Service for Prometheus instance a scraper should send metrics to.</p>"
     },
     "Blob":{"type":"blob"},
+    "CloudWatchLogDestination":{
+      "type":"structure",
+      "required":["logGroupArn"],
+      "members":{
+        "logGroupArn":{
+          "shape":"LogGroupArn",
+          "documentation":"<p>The ARN of the CloudWatch log group to which the vended log data will be published. This log group must exist prior to calling this operation.</p>"
+        }
+      },
+      "documentation":"<p>Configuration details for logging to CloudWatch Logs.</p>"
+    },
     "ClusterArn":{
       "type":"string",
       "documentation":"<p>The ARN of an EKS cluster.</p>",
@@ -718,6 +840,40 @@
       },
       "documentation":"<p>Represents the output of a <code>CreateLoggingConfiguration</code> operation.</p>"
     },
+    "CreateQueryLoggingConfigurationRequest":{
+      "type":"structure",
+      "required":[
+        "destinations",
+        "workspaceId"
+      ],
+      "members":{
+        "clientToken":{
+          "shape":"IdempotencyToken",
+          "documentation":"<p>(Optional) A unique, case-sensitive identifier that you can provide to ensure the idempotency of the request.</p>",
+          "idempotencyToken":true
+        },
+        "destinations":{
+          "shape":"LoggingDestinations",
+          "documentation":"<p>The destinations where query logs will be sent. Only CloudWatch Logs destination is supported. The list must contain exactly one element.</p>"
+        },
+        "workspaceId":{
+          "shape":"WorkspaceId",
+          "documentation":"<p>The ID of the workspace for which to create the query logging configuration.</p>",
+          "location":"uri",
+          "locationName":"workspaceId"
+        }
+      }
+    },
+    "CreateQueryLoggingConfigurationResponse":{
+      "type":"structure",
+      "required":["status"],
+      "members":{
+        "status":{
+          "shape":"QueryLoggingConfigurationStatus",
+          "documentation":"<p>The current status of the query logging configuration.</p>"
+        }
+      }
+    },
     "CreateRuleGroupsNamespaceRequest":{
       "type":"structure",
       "required":[
@@ -802,7 +958,7 @@
         },
         "roleConfiguration":{
           "shape":"RoleConfiguration",
-          "documentation":"<p>The scraper role configuration for the workspace.</p>"
+          "documentation":"<p>Use this structure to enable cross-account access, so that you can use a target account to access Prometheus metrics from source accounts.</p>"
         },
         "scrapeConfiguration":{
           "shape":"ScrapeConfiguration",
@@ -940,6 +1096,25 @@
       },
       "documentation":"<p>Represents the input of a <code>DeleteLoggingConfiguration</code> operation.</p>"
     },
+    "DeleteQueryLoggingConfigurationRequest":{
+      "type":"structure",
+      "required":["workspaceId"],
+      "members":{
+        "clientToken":{
+          "shape":"IdempotencyToken",
+          "documentation":"<p>(Optional) A unique, case-sensitive identifier that you can provide to ensure the idempotency of the request.</p>",
+          "idempotencyToken":true,
+          "location":"querystring",
+          "locationName":"clientToken"
+        },
+        "workspaceId":{
+          "shape":"WorkspaceId",
+          "documentation":"<p>The ID of the workspace from which to delete the query logging configuration.</p>",
+          "location":"uri",
+          "locationName":"workspaceId"
+        }
+      }
+    },
     "DeleteRuleGroupsNamespaceRequest":{
       "type":"structure",
       "required":[
@@ -1075,6 +1250,28 @@
       },
       "documentation":"<p>Represents the output of a <code>DescribeLoggingConfiguration</code> operation.</p>"
     },
+    "DescribeQueryLoggingConfigurationRequest":{
+      "type":"structure",
+      "required":["workspaceId"],
+      "members":{
+        "workspaceId":{
+          "shape":"WorkspaceId",
+          "documentation":"<p>The ID of the workspace for which to retrieve the query logging configuration.</p>",
+          "location":"uri",
+          "locationName":"workspaceId"
+        }
+      }
+    },
+    "DescribeQueryLoggingConfigurationResponse":{
+      "type":"structure",
+      "required":["queryLoggingConfiguration"],
+      "members":{
+        "queryLoggingConfiguration":{
+          "shape":"QueryLoggingConfigurationMetadata",
+          "documentation":"<p>The detailed information about the query logging configuration for the specified workspace.</p>"
+        }
+      }
+    },
     "DescribeRuleGroupsNamespaceRequest":{
       "type":"structure",
       "required":[
@@ -1131,6 +1328,28 @@
         }
       },
       "documentation":"<p>Represents the output of a <code>DescribeScraper</code> operation.</p>"
+    },
+    "DescribeWorkspaceConfigurationRequest":{
+      "type":"structure",
+      "required":["workspaceId"],
+      "members":{
+        "workspaceId":{
+          "shape":"WorkspaceId",
+          "documentation":"<p>The ID of the workspace that you want to retrieve information for. To find the IDs of your workspaces, use the <a href=\"https://docs.aws.amazon.com/prometheus/latest/APIReference/API_ListWorkspaces.htm\">ListWorkspaces</a> operation.</p>",
+          "location":"uri",
+          "locationName":"workspaceId"
+        }
+      }
+    },
+    "DescribeWorkspaceConfigurationResponse":{
+      "type":"structure",
+      "required":["workspaceConfiguration"],
+      "members":{
+        "workspaceConfiguration":{
+          "shape":"WorkspaceConfigurationDescription",
+          "documentation":"<p>This structure contains the information about the workspace configuration.</p>"
+        }
+      }
     },
     "DescribeWorkspaceRequest":{
       "type":"structure",
@@ -1268,6 +1487,57 @@
       "max":2048,
       "min":20,
       "pattern":"^arn:aws[-a-z]*:kms:[-a-z0-9]+:[0-9]{12}:key/[-a-f0-9]+$"
+    },
+    "LabelName":{
+      "type":"string",
+      "min":1,
+      "pattern":"^[a-zA-Z_][a-zA-Z0-9_]*$"
+    },
+    "LabelSet":{
+      "type":"map",
+      "key":{"shape":"LabelName"},
+      "value":{"shape":"LabelValue"}
+    },
+    "LabelValue":{
+      "type":"string",
+      "min":1
+    },
+    "LimitsPerLabelSet":{
+      "type":"structure",
+      "required":[
+        "labelSet",
+        "limits"
+      ],
+      "members":{
+        "labelSet":{
+          "shape":"LabelSet",
+          "documentation":"<p>This defines one label set that will have an enforced active time series limit. </p> <p>Label values accept ASCII characters and must contain at least one character that isn't whitespace. ASCII control characters are not accepted. If the label name is metric name label <code>__<i>name</i>__</code>, then the <i>metric</i> part of the name must conform to the following pattern: <code>[a-zA-Z_:][a-zA-Z0-9_:]*</code> </p>"
+        },
+        "limits":{
+          "shape":"LimitsPerLabelSetEntry",
+          "documentation":"<p>This structure contains the information about the limits that apply to time series that match this label set.</p>"
+        }
+      },
+      "documentation":"<p>This structure defines one label set used to enforce active time series limits for the workspace, and defines the limit for that label set.</p> <p>A label set is a unique combination of label-value pairs. Use them to control time series limits and to monitor usage by specific label groups. Example label sets might be <code>team:finance</code> or <code>env:prod</code> </p>"
+    },
+    "LimitsPerLabelSetEntry":{
+      "type":"structure",
+      "members":{
+        "maxSeries":{
+          "shape":"LimitsPerLabelSetEntryMaxSeriesLong",
+          "documentation":"<p>The maximum number of active series that can be ingested that match this label set. </p> <p>Setting this to 0 causes no label set limit to be enforced, but it does cause Amazon Managed Service for Prometheus to vend label set metrics to CloudWatch</p>"
+        }
+      },
+      "documentation":"<p>This structure contains the information about the limits that apply to time series that match one label set.</p>"
+    },
+    "LimitsPerLabelSetEntryMaxSeriesLong":{
+      "type":"long",
+      "box":true,
+      "min":0
+    },
+    "LimitsPerLabelSetList":{
+      "type":"list",
+      "member":{"shape":"LimitsPerLabelSet"}
     },
     "ListRuleGroupsNamespacesRequest":{
       "type":"structure",
@@ -1466,7 +1736,7 @@
           "documentation":"<p>The ID of the workspace the logging configuration is for.</p>"
         }
       },
-      "documentation":"<p>Contains information about the logging configuration for the workspace.</p>"
+      "documentation":"<p>Contains information about the current rules and alerting logging configuration for the workspace.</p> <note> <p>These logging configurations are only for rules and alerting logs.</p> </note>"
     },
     "LoggingConfigurationStatus":{
       "type":"structure",
@@ -1474,7 +1744,7 @@
       "members":{
         "statusCode":{
           "shape":"LoggingConfigurationStatusCode",
-          "documentation":"<p>The current status of the logging configuration.</p>"
+          "documentation":"<p>The current status of the current rules and alerting logging configuration.</p> <note> <p>These logging configurations are only for rules and alerting logs.</p> </note>"
         },
         "statusReason":{
           "shape":"String",
@@ -1494,6 +1764,47 @@
         "CREATION_FAILED",
         "UPDATE_FAILED"
       ]
+    },
+    "LoggingDestination":{
+      "type":"structure",
+      "required":[
+        "cloudWatchLogs",
+        "filters"
+      ],
+      "members":{
+        "cloudWatchLogs":{
+          "shape":"CloudWatchLogDestination",
+          "documentation":"<p>Configuration details for logging to CloudWatch Logs.</p>"
+        },
+        "filters":{
+          "shape":"LoggingFilter",
+          "documentation":"<p>Filtering criteria that determine which queries are logged.</p>"
+        }
+      },
+      "documentation":"<p>Defines a destination and its associated filtering criteria for query logging.</p>"
+    },
+    "LoggingDestinations":{
+      "type":"list",
+      "member":{"shape":"LoggingDestination"},
+      "documentation":"<p>A list structure that contains a single CloudWatch Logs destination.</p>",
+      "max":1,
+      "min":1
+    },
+    "LoggingFilter":{
+      "type":"structure",
+      "required":["qspThreshold"],
+      "members":{
+        "qspThreshold":{
+          "shape":"LoggingFilterQspThresholdLong",
+          "documentation":"<p>The Query Samples Processed (QSP) threshold above which queries will be logged. Queries processing more samples than this threshold will be captured in logs.</p>"
+        }
+      },
+      "documentation":"<p>Filtering criteria that determine which queries are logged.</p>"
+    },
+    "LoggingFilterQspThresholdLong":{
+      "type":"long",
+      "box":true,
+      "min":0
     },
     "PaginationToken":{
       "type":"string",
@@ -1596,6 +1907,65 @@
       },
       "documentation":"<p>Represents the output of a <code>PutRuleGroupsNamespace</code> operation.</p>"
     },
+    "QueryLoggingConfigurationMetadata":{
+      "type":"structure",
+      "required":[
+        "createdAt",
+        "destinations",
+        "modifiedAt",
+        "status",
+        "workspace"
+      ],
+      "members":{
+        "createdAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date and time when the query logging configuration was created.</p>"
+        },
+        "destinations":{
+          "shape":"LoggingDestinations",
+          "documentation":"<p>The configured destinations for the query logging configuration.</p>"
+        },
+        "modifiedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p>The date and time when the query logging configuration was last modified.</p>"
+        },
+        "status":{
+          "shape":"QueryLoggingConfigurationStatus",
+          "documentation":"<p>The current status of the query logging configuration.</p>"
+        },
+        "workspace":{
+          "shape":"WorkspaceId",
+          "documentation":"<p>The ID of the workspace associated with this query logging configuration.</p>"
+        }
+      },
+      "documentation":"<p>The metadata for a query logging configuration.</p>"
+    },
+    "QueryLoggingConfigurationStatus":{
+      "type":"structure",
+      "required":["statusCode"],
+      "members":{
+        "statusCode":{
+          "shape":"QueryLoggingConfigurationStatusCode",
+          "documentation":"<p>The current status of the query logging configuration.</p>"
+        },
+        "statusReason":{
+          "shape":"String",
+          "documentation":"<p>If there is a failure, the reason for the failure.</p>"
+        }
+      },
+      "documentation":"<p>The status information for a query logging configuration.</p>"
+    },
+    "QueryLoggingConfigurationStatusCode":{
+      "type":"string",
+      "enum":[
+        "CREATING",
+        "ACTIVE",
+        "UPDATING",
+        "DELETING",
+        "CREATION_FAILED",
+        "UPDATE_FAILED"
+      ]
+    },
     "ResourceNotFoundException":{
       "type":"structure",
       "required":[
@@ -1629,14 +1999,14 @@
       "members":{
         "sourceRoleArn":{
           "shape":"IamRoleArn",
-          "documentation":"<p>A ARN identifying the source role configuration.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the role used in the source account to enable cross-account scraping. For information about the contents of this policy, see <a href=\"https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-collector-how-to.html#cross-account-remote-write\">Cross-account setup</a>.</p>"
         },
         "targetRoleArn":{
           "shape":"IamRoleArn",
-          "documentation":"<p>A ARN identifying the target role configuration.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the role used in the target account to enable cross-account scraping. For information about the contents of this policy, see <a href=\"https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-collector-how-to.html#cross-account-remote-write\">Cross-account setup</a>.</p>"
         }
       },
-      "documentation":"<p>To configure roles that allows users to write to an Amazon Managed Service for Prometheus workspace in a different account.</p>"
+      "documentation":"<p>Use this structure to enable cross-account access, so that you can use a target account to access Prometheus metrics from source accounts.</p>"
     },
     "RuleGroupsNamespaceArn":{
       "type":"string",
@@ -1824,7 +2194,10 @@
           "shape":"IamRoleArn",
           "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role that provides permissions for the scraper to discover and collect metrics on your behalf.</p> <p>For example, <code>arn:aws:iam::123456789012:role/service-role/AmazonGrafanaServiceRole-12example</code>.</p>"
         },
-        "roleConfiguration":{"shape":"RoleConfiguration"},
+        "roleConfiguration":{
+          "shape":"RoleConfiguration",
+          "documentation":"<p>This structure displays information about the IAM roles used for cross-account scraping configuration.</p>"
+        },
         "scrapeConfiguration":{
           "shape":"ScrapeConfiguration",
           "documentation":"<p>The configuration in use by the scraper.</p>"
@@ -1934,7 +2307,10 @@
           "shape":"IamRoleArn",
           "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role that provides permissions for the scraper to discover and collect metrics on your behalf.</p>"
         },
-        "roleConfiguration":{"shape":"RoleConfiguration"},
+        "roleConfiguration":{
+          "shape":"RoleConfiguration",
+          "documentation":"<p>This structure displays information about the IAM roles used for cross-account scraping configuration.</p>"
+        },
         "scraperId":{
           "shape":"ScraperId",
           "documentation":"<p>The ID of the scraper.</p>"
@@ -2195,6 +2571,40 @@
       },
       "documentation":"<p>Represents the output of an <code>UpdateLoggingConfiguration</code> operation.</p>"
     },
+    "UpdateQueryLoggingConfigurationRequest":{
+      "type":"structure",
+      "required":[
+        "destinations",
+        "workspaceId"
+      ],
+      "members":{
+        "clientToken":{
+          "shape":"IdempotencyToken",
+          "documentation":"<p>(Optional) A unique, case-sensitive identifier that you can provide to ensure the idempotency of the request.</p>",
+          "idempotencyToken":true
+        },
+        "destinations":{
+          "shape":"LoggingDestinations",
+          "documentation":"<p>The destinations where query logs will be sent. Only CloudWatch Logs destination is supported. The list must contain exactly one element.</p>"
+        },
+        "workspaceId":{
+          "shape":"WorkspaceId",
+          "documentation":"<p>The ID of the workspace for which to update the query logging configuration.</p>",
+          "location":"uri",
+          "locationName":"workspaceId"
+        }
+      }
+    },
+    "UpdateQueryLoggingConfigurationResponse":{
+      "type":"structure",
+      "required":["status"],
+      "members":{
+        "status":{
+          "shape":"QueryLoggingConfigurationStatus",
+          "documentation":"<p>The current status of the query logging configuration.</p>"
+        }
+      }
+    },
     "UpdateScraperRequest":{
       "type":"structure",
       "required":["scraperId"],
@@ -2214,7 +2624,7 @@
         },
         "roleConfiguration":{
           "shape":"RoleConfiguration",
-          "documentation":"<p>The scraper role configuration for the workspace.</p>"
+          "documentation":"<p>Use this structure to enable cross-account access, so that you can use a target account to access Prometheus metrics from source accounts.</p>"
         },
         "scrapeConfiguration":{
           "shape":"ScrapeConfiguration",
@@ -2275,6 +2685,46 @@
         }
       },
       "documentation":"<p>Represents the input of an <code>UpdateWorkspaceAlias</code> operation.</p>"
+    },
+    "UpdateWorkspaceConfigurationRequest":{
+      "type":"structure",
+      "required":["workspaceId"],
+      "members":{
+        "clientToken":{
+          "shape":"IdempotencyToken",
+          "documentation":"<p>You can include a token in your operation to make it an idempotent opeartion. </p>",
+          "idempotencyToken":true
+        },
+        "limitsPerLabelSet":{
+          "shape":"LimitsPerLabelSetList",
+          "documentation":"<p>This is an array of structures, where each structure defines a label set for the workspace, and defines the active time series limit for each of those label sets. Each label name in a label set must be unique.</p>"
+        },
+        "retentionPeriodInDays":{
+          "shape":"UpdateWorkspaceConfigurationRequestRetentionPeriodInDaysInteger",
+          "documentation":"<p>Specifies how many days that metrics will be retained in the workspace.</p>"
+        },
+        "workspaceId":{
+          "shape":"WorkspaceId",
+          "documentation":"<p>The ID of the workspace that you want to update. To find the IDs of your workspaces, use the <a href=\"https://docs.aws.amazon.com/prometheus/latest/APIReference/API_ListWorkspaces.htm\">ListWorkspaces</a> operation.</p>",
+          "location":"uri",
+          "locationName":"workspaceId"
+        }
+      }
+    },
+    "UpdateWorkspaceConfigurationRequestRetentionPeriodInDaysInteger":{
+      "type":"integer",
+      "box":true,
+      "min":1
+    },
+    "UpdateWorkspaceConfigurationResponse":{
+      "type":"structure",
+      "required":["status"],
+      "members":{
+        "status":{
+          "shape":"WorkspaceConfigurationStatus",
+          "documentation":"<p>The status of the workspace configuration.</p>"
+        }
+      }
     },
     "Uri":{
       "type":"string",
@@ -2351,6 +2801,53 @@
       "type":"string",
       "documentation":"<p>An ARN identifying a Workspace.</p>",
       "pattern":"^arn:aws[-a-z]*:aps:[-a-z0-9]+:[0-9]{12}:workspace/.+$"
+    },
+    "WorkspaceConfigurationDescription":{
+      "type":"structure",
+      "required":["status"],
+      "members":{
+        "limitsPerLabelSet":{
+          "shape":"LimitsPerLabelSetList",
+          "documentation":"<p>This is an array of structures, where each structure displays one label sets for the workspace and the limits for that label set.</p>"
+        },
+        "retentionPeriodInDays":{
+          "shape":"WorkspaceConfigurationDescriptionRetentionPeriodInDaysInteger",
+          "documentation":"<p>This field displays how many days that metrics are retained in the workspace.</p>"
+        },
+        "status":{
+          "shape":"WorkspaceConfigurationStatus",
+          "documentation":"<p>This structure displays the current status of the workspace configuration, and might also contain a reason for that status.</p>"
+        }
+      },
+      "documentation":"<p>This structure contains the description of the workspace configuration.</p>"
+    },
+    "WorkspaceConfigurationDescriptionRetentionPeriodInDaysInteger":{
+      "type":"integer",
+      "box":true,
+      "min":1
+    },
+    "WorkspaceConfigurationStatus":{
+      "type":"structure",
+      "required":["statusCode"],
+      "members":{
+        "statusCode":{
+          "shape":"WorkspaceConfigurationStatusCode",
+          "documentation":"<p>The current status of the workspace configuration.</p>"
+        },
+        "statusReason":{
+          "shape":"String",
+          "documentation":"<p>The reason for the current status, if a reason is available.</p>"
+        }
+      },
+      "documentation":"<p>This structure displays the current status of the workspace configuration, and might also contain a reason for that status.</p>"
+    },
+    "WorkspaceConfigurationStatusCode":{
+      "type":"string",
+      "enum":[
+        "ACTIVE",
+        "UPDATING",
+        "UPDATE_FAILED"
+      ]
     },
     "WorkspaceDescription":{
       "type":"structure",

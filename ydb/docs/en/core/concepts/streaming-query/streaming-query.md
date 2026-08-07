@@ -1,25 +1,25 @@
 # Streaming queries
 
-A streaming query is a type of query designed for continuous processing of an unbounded data stream ( [stream processing](https://en.wikipedia.org/wiki/Stream_processing)). Unlike regular queries, a streaming query does not terminate after returning a result but runs continuously, processing data as it arrives.
+A streaming query is a type of query designed for continuous processing of an unbounded data stream ( [stream processing](https://en.wikipedia.org/wiki/Stream_processing)). Unlike regular queries, a streaming query does not terminate after receiving a result but runs continuously, processing data as it arrives.
 
 Stream data processing is a widely used approach implemented in systems such as [Apache Flink](https://flink.apache.org/), [Apache Kafka Streams](https://kafka.apache.org/documentation/streams/), [Amazon Kinesis Data Analytics](https://aws.amazon.com/kinesis/data-analytics/). Typical use cases include monitoring and alerting, metric aggregation over time windows, real-time event transformation and filtering, enriching events with reference data, and pattern detection in event sequences.
 
-{{ ydb-short-name }} implements stream processing as part of a unified data platform. In addition to typical streaming query use cases, integration into the {{ydb-short-name}} common platform allows you to read data from [topics](../datamodel/topic.md) {{ydb-short-name}}, process change streams from [row tables](../datamodel/table.md#row-oriented-tables) via [CDC](../cdc.md), and write processing results to output topics or directly to tables. This enables building data processing pipelines within {{ydb-short-name}} with minimal latency.
+{{ ydb-short-name }} implements stream processing as part of a unified data platform. In addition to typical streaming query use cases, integration into the common {{ydb-short-name}} platform allows you to read data from [topics](../datamodel/topic.md) {{ydb-short-name}}, process change streams from [row tables](../datamodel/table.md#row-oriented-tables) via [CDC](../cdc.md), and write processing results to output topics or directly to tables. This enables building data processing pipelines inside {{ydb-short-name}} with minimal latency.
 
 ## Differences from regular queries {#differences}
 
-Regular queries work with data already stored in tables. A query executes, returns a result, and terminates. A streaming query is created and runs indefinitely until explicitly canceled by the user. Data continuously arrives in a topic, flows through the query, and is written to a sink — another topic or table.
+Regular queries work with data that is already stored in tables. A query executes, returns a result, and completes. A streaming query is created and continues running indefinitely until explicitly canceled by the user. Data continuously arrives in a topic, flows through the query, and is written to a sink — another topic or table.
 
 | Characteristic | Regular queries | Streaming queries |
 | --- | --- | --- |
-| Data | Finite set in tables | Infinite stream of events |
-| Lifetime | Terminates after processing | Runs continuously |
-| Result | Available after completion | Updated as data arrives |
+| Data | Finite dataset in tables | Infinite stream of events |
+| Lifetime | Completes after processing | Runs continuously |
+| Result | Available after completion | Updates as data arrives |
 | Recovery on failures | Manual restart | Automatic recovery from [checkpoint](../../dev/streaming-query/checkpoints.md) |
 
 ## Data sources and sinks {#data-flow}
 
-Streaming queries read data from [topics](../datamodel/topic.md) {{ ydb-short-name }} and write results to [topics](../datamodel/topic.md) or [tables](../datamodel/table.md) {{ ydb-short-name }}. Data can arrive in a topic from external systems (for example, an application writes events via the SDK), but the streaming query itself only works with {{ ydb-short-name }} entities. Direct reading from external systems, such as Apache Kafka, or writing to tables in other databases, such as PostgreSQL, is not supported.
+Streaming queries read data from [topics](../datamodel/topic.md) {{ ydb-short-name }} and write results to [topics](../datamodel/topic.md) or [tables](../datamodel/table.md) {{ ydb-short-name }}. Data can arrive in a topic from external systems (for example, an application writes events via the SDK), but the streaming query itself only works with {{ ydb-short-name }} entities. Direct reading from external systems, such as Apache Kafka, or writing to tables in other databases, like PostgreSQL, is not supported.
 
 ### Sources {#sources}
 
@@ -36,18 +36,18 @@ Streaming queries read data from [topics](../datamodel/topic.md) {{ ydb-short-na
 
 ## Guarantees {#guarantees}
 
-Under normal operation, streaming queries provide an [at-least-once](https://en.wikipedia.org/wiki/Reliable_messaging#At-least-once_delivery) data delivery guarantee — on failures, the query automatically recovers from a [checkpoint](../../dev/streaming-query/checkpoints.md) and resumes reading from saved offsets.
+Under normal operation, streaming queries provide an [at-least-once](https://en.wikipedia.org/wiki/Reliable_messaging#At-least-once_delivery) data delivery guarantee — in case of failures, the query automatically recovers from a [checkpoint](../../dev/streaming-query/checkpoints.md) and resumes reading from saved offsets.
 
 However, it is important to consider the limitations of the current implementation:
 
-- **Offset reset on query recreation:** changing the query text via [DROP](../../yql/reference/syntax/drop-streaming-query.md) + [CREATE](../../yql/reference/syntax/create-streaming-query.md) deletes the checkpoint. The new query starts reading from the end of the topic, skipping events that arrived between the deletion of the old version and the start of the new one.
-- **Incomplete aggregates due to lack of watermarks:** due to the absence of a [watermarks](https://en.wikipedia.org/wiki/Watermark_(data_synchronization)) mechanism, time windows are closed based on system time (wall-clock). Events that arrive late (e.g., due to slow partitions or network lag) are not included in the aggregates of already closed windows.
+- **Offset reset on query recreation:** changing the query text via [DROP](../../yql/reference/syntax/drop-streaming-query.md) + [CREATE](../../yql/reference/syntax/create-streaming-query.md) results in the checkpoint being deleted. The new query starts reading from the end of the topic, skipping events that arrived between the deletion of the old version and the start of the new one.
+- **Incomplete aggregates due to lack of watermarks:** due to the absence of a [watermarks](https://en.wikipedia.org/wiki/Watermark_(data_synchronization)) mechanism, time windows are closed based on system time (wall-clock). Events that arrive late (for example, due to slow partitions or network lags) are not included in the aggregates of already closed windows.
 
-Detailed description of guarantees, anomalies, and ways to minimize them — in the [{#T}](../../dev/streaming-query/guarantees.md) section.
+A detailed description of guarantees, anomalies, and ways to minimize them is in the [{#T}](../../dev/streaming-query/guarantees.md) section.
 
 {% note info %}
 
-We are constantly working on developing streaming processing mechanisms. In future versions, the guarantees provided will be improved.
+We are constantly working on improving streaming processing mechanisms. In future versions, the provided guarantees will be improved.
 
 {% endnote %}
 
@@ -55,12 +55,12 @@ We are constantly working on developing streaming processing mechanisms. In futu
 
 {% note warning %}
 
-- The query must contain at least one read from a topic, since streaming processing requires a continuous input data stream.
+- The query must contain at least one read from a topic, as streaming processing requires a continuous input data stream.
 - `JOIN` of two streams is not supported (temporary architectural limitation).
 
 {% endnote %}
 
-Also not supported in the current version:
+The following are also not supported in the current version:
 
 - The [important reader](../datamodel/topic.md#important-consumer) flag for consumers used by streaming queries.
 - [Autopartitioning](../datamodel/topic.md#autopartitioning) (split/merge of partitions) of topics used by streaming queries. When the number of partitions in a topic from which a running streaming query reads increases, new partitions will not be processed.
@@ -70,18 +70,20 @@ Also not supported in the current version:
 
 Streaming queries are created, modified, and deleted using YQL commands:
 
-- [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) — creation.
-- [ALTER STREAMING QUERY](../../yql/reference/syntax/alter-streaming-query.md) — modification and state management.
-- [DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md) — deletion.
+- [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) — creation
+- [ALTER STREAMING QUERY](../../yql/reference/syntax/alter-streaming-query.md) — modification and state management
+- [DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md) — deletion
 
-Query state is available in the system table [`.sys/streaming_queries`](../../dev/system-views.md#streaming).
+Query status is available in the system table [`.sys/streaming_queries`](../../dev/system-views.md#streaming).
 
 ## Query language {#syntax}
 
-Streaming queries are written in [YQL](../../yql/reference/index.md) and support familiar SQL constructs: [SELECT](../../yql/reference/syntax/select/index.md), [WHERE](../../yql/reference/syntax/select/where.md), [GROUP BY](../../yql/reference/syntax/select/group-by.md), [JOIN](../../yql/reference/syntax/select/join.md). For working with time windows, [GROUP BY HOP](../../yql/reference/syntax/select/group-by.md#group-by-hop) is used{% if feature_match_recogznize==true %}, for pattern matching — [MATCH_RECOGNIZE](../../yql/reference/syntax/select/match_recognize.md){% endif %}.
+Streaming queries are written in [YQL](../../yql/reference/index.md) and support familiar SQL constructs: [SELECT](../../yql/reference/syntax/select/index.md), [WHERE](../../yql/reference/syntax/select/where.md), [GROUP BY](../../yql/reference/syntax/select/group-by.md), [JOIN](../../yql/reference/syntax/select/join.md). For working with time windows, [GROUP BY HOP](../../yql/reference/syntax/select/group-by.md#group-by-hop) is used{% if feature_match_recogznize==true %}, and for pattern matching — [MATCH_RECOGNIZE](../../yql/reference/syntax/select/match_recognize.md){% endif %}.
+
+A single streaming query can read multiple input topics, use the [UNION ALL](../../yql/reference/syntax/select/union.md#union-all) construct to combine data streams, and write the result to multiple output topics and/or tables (see more details in the articles [{#T}](../../dev/streaming-query/streaming-query-formats.md#write_formats) and [{#T}](../../dev/streaming-query/table-writing.md)).
 
 ## See also
 
-- [{#T}](../../dev/streaming-query/guarantees.md) — guarantees, anomalies in window aggregation, and recommendations.
-- [{#T}](../../recipes/streaming_queries/topics.md) — step-by-step guide.
-- [{#T}](../../dev/streaming-query/streaming-query-formats.md) — data formats.
+- [{#T}](../../dev/streaming-query/guarantees.md) — guarantees, anomalies in window aggregation, and recommendations
+- [{#T}](../../recipes/streaming_queries/topics.md) — step-by-step guide
+- [{#T}](../../dev/streaming-query/streaming-query-formats.md) — data formats

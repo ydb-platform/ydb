@@ -599,9 +599,7 @@ private:
     {
         const auto& request = context->Request();
 
-        if (request.LoggingTags) {
-            Logger().WithRawTag(*request.LoggingTags);
-        }
+        auto Logger = DriverLogger().WithTags(request.LoggingTags);
 
         NTracing::TChildTraceContextGuard commandSpan(ConcatToString(TStringBuf("Driver:"), request.CommandName));
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {

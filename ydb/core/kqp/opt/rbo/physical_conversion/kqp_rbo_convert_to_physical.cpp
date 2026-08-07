@@ -5,6 +5,7 @@
 #include "kqp_rbo_physical_map_builder.h"
 #include "kqp_rbo_physical_union_all_builder.h"
 #include "kqp_rbo_physical_join_builder.h"
+#include "kqp_rbo_physical_lookup_join_builder.h"
 #include "kqp_rbo_physical_filter_builder.h"
 #include "kqp_rbo_physical_source_builder.h"
 #include "kqp_rbo_physical_query_builder.h"
@@ -280,20 +281,46 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                 currentStageBody = stageInput;
             }
 
-            auto streamInput = Build<TCoToStream>(ctx, op->Pos).Input(currentStageBody).Done().Ptr();
-            TVector<std::pair<TString, TString>> renames;
-            for (size_t i = 0; i < lookup->FetchColumns.size(); ++i) {
-                renames.emplace_back(lookup->FetchColumns[i], lookup->OutputIUs[i].GetFullName());
-            }
-            currentStageBody = NPhysicalConvertionUtils::BuildRenameMap(streamInput, renames, ctx);
+            if (lookup->IsJoin()) {
+                const auto inputStageId = *lookup->GetInput()->Props.StageId;
+                const auto connection = graph.TryGetConnection(inputStageId, opStageId);
+                auto* streamLookup = dynamic_cast<TStreamLookupConnection*>(connection.Get());
+                Y_ENSURE(streamLookup, "A table lookup in join mode must be fed by a stream lookup connection");
 
-            if (!lookup->IsSingleConsumer()) {
-                currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, lookup->GetNumOfConsumers(), ctx, op->Pos);
+                auto keys = NLookupJoinBuilder::BuildLookupKeys(*lookup, stages.at(inputStageId), ctx);
+                stages[inputStageId] = keys.InputStage;
+                streamLookup->SetInputType(keys.InputType);
+                YQL_CLOG(TRACE, CoreDq) << "Converted TableLookupJoin " << opStageId;
+            } else {
+                auto streamInput = Build<TCoToStream>(ctx, op->Pos).Input(currentStageBody).Done().Ptr();
+                TVector<std::pair<TString, TString>> renames;
+                for (size_t i = 0; i < lookup->FetchColumns.size(); ++i) {
+                    renames.emplace_back(lookup->FetchColumns[i], lookup->OutputIUs[i].GetFullName());
+                }
+                currentStageBody = NPhysicalConvertionUtils::BuildRenameMap(streamInput, renames, ctx);
+
+                if (!lookup->IsSingleConsumer()) {
+                    currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, lookup->GetNumOfConsumers(), ctx, op->Pos);
+                }
+                YQL_CLOG(TRACE, CoreDq) << "Converted TableLookup " << opStageId;
             }
 
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
-            YQL_CLOG(TRACE, CoreDq) << "Converted TableLookup " << opStageId;
+        } else if (op->Kind == EOperator::IndexLookupJoin) {
+            auto lookupJoin = CastOperator<TOpIndexLookupJoin>(op);
+            Y_ENSURE(currentStageBody, "A lookup join must share the stage of its table lookup");
+
+            currentStageBody = Build<TPhysicalIndexLookupJoinBuilder>(lookupJoin, ctx, op->Pos, currentStageBody);
+
+            if (!lookupJoin->IsSingleConsumer()) {
+                currentStageBody =
+                    NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, lookupJoin->GetNumOfConsumers(), ctx, op->Pos);
+            }
+
+            stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
+            YQL_CLOG(TRACE, CoreDq) << "Converted IndexLookupJoin " << opStageId;
         } else {
             Y_ENSURE(false, "Could not generate physical plan");
         }

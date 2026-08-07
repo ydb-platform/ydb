@@ -302,7 +302,7 @@ def _GO_PROCESS_SRCS(unit: ymake.Unit):
 
 
 @ymake.macro
-def _GO_RESOURCE(unit: ymake.Unit, *args: tuple[str, ...]):
+def _GO_RESOURCE(unit: ymake.Unit, *args: str):
     args = list(args)
     files = args[::2]
     keys = args[1::2]

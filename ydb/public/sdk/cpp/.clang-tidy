@@ -1,0 +1,26 @@
+---
+# Keep the default SDK pass small and high-signal enough to fix and keep green.
+# Run performance, style, portability, and broad numeric audits separately.
+Checks: >
+  -*,
+  clang-analyzer-core.*,
+  clang-analyzer-cplusplus.Move,
+  clang-analyzer-deadcode.DeadStores,
+  clang-analyzer-optin.core.EnumCastOutOfRange,
+  clang-analyzer-optin.cplusplus.VirtualCall,
+  bugprone-empty-catch,
+  bugprone-move-forwarding-reference,
+  bugprone-optional-value-conversion,
+  bugprone-unchecked-optional-access,
+  bugprone-unhandled-self-assignment,
+  bugprone-use-after-move,
+  cert-oop54-cpp,
+  cppcoreguidelines-avoid-reference-coroutine-parameters,
+  cppcoreguidelines-missing-std-forward,
+  cppcoreguidelines-virtual-class-destructor,
+  misc-uniqueptr-reset-release
+
+WarningsAsErrors: '*'
+HeaderFilterRegex: '^.*/ydb/public/sdk/cpp/(include|src|adapters|plugins|examples)/.*'
+FormatStyle: file
+...

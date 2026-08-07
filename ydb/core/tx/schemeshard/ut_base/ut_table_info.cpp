@@ -290,6 +290,48 @@ Y_UNIT_TEST(ApplySplitMerge_AggregatedStatsSubtracted) {
     UNIT_ASSERT_VALUES_EQUAL(info->GetPartitions().size(), 2u);
 }
 
+Y_UNIT_TEST(ApplySplitMerge_PreservesRowUpdatesAndDeletes) {
+    // Unlike RowCount/DataSize, RowUpdates/RowDeletes are cumulative counters. On
+    // split/merge, RemoveShardStats subtracts the removed shard's RowCount/DataSize but
+    // must NOT subtract its RowUpdates/RowDeletes, so they survive the reshard.
+    auto info = MakeTable();
+    // Shards: A(1/0), B(1/1), C(1/2), D(1/3)
+    info->SetPartitioning(MakeShards(4));
+
+    TDiskSpaceUsageDelta delta;
+    TPartitionStats sA;
+    sA.SeqNo = TMessageSeqNo{1, 0};
+    sA.RowCount = 100;
+    sA.RowUpdates = 700;
+    sA.RowDeletes = 150;
+    info->UpdateShardStats(&delta, TShardIdx(1, 0), sA, TInstant::Zero());
+
+    TPartitionStats sB;
+    sB.SeqNo = TMessageSeqNo{1, 0};
+    sB.RowCount = 200;
+    sB.RowUpdates = 300;
+    sB.RowDeletes = 50;
+    info->UpdateShardStats(&delta, TShardIdx(1, 1), sB, TInstant::Zero());
+
+    UNIT_ASSERT_VALUES_EQUAL(info->GetStats().Aggregated.RowCount, 300u);
+    UNIT_ASSERT_VALUES_EQUAL(info->GetStats().Aggregated.RowUpdates, 1000u);
+    UNIT_ASSERT_VALUES_EQUAL(info->GetStats().Aggregated.RowDeletes, 200u);
+
+    // Split A (position 0) into A1+A2 — B, C, D shift right by 1.
+    TVector<TTableShardInfo> dst;
+    dst.emplace_back(TShardIdx(2, 0), TString(1, '\x01'), 0, 0);
+    dst.emplace_back(TShardIdx(2, 1), TString(1, '\x02'), 0, 0);
+    TVector<TShardIdx> removed = {TShardIdx(1, 0)};
+
+    info->ApplySplitMerge(std::move(dst), removed, /*splitFirstIdx=*/0, TInstant::Zero());
+
+    // Current-state metric (RowCount) drops by the removed shard A's contribution...
+    UNIT_ASSERT_VALUES_EQUAL(info->GetStats().Aggregated.RowCount, 200u);
+    // ...but the cumulative modification counters are preserved across the split.
+    UNIT_ASSERT_VALUES_EQUAL(info->GetStats().Aggregated.RowUpdates, 1000u);
+    UNIT_ASSERT_VALUES_EQUAL(info->GetStats().Aggregated.RowDeletes, 200u);
+}
+
 Y_UNIT_TEST(ApplySplitMerge_TTL_SrcInFlightCleared) {
     auto info = MakeTable();
     EnableTTL(*info);
@@ -520,6 +562,36 @@ Y_UNIT_TEST(UpdateShardStats_GenerationRollover) {
     info->UpdateShardStats(&delta, TShardIdx(1, 0), gen2, TInstant::Zero());
 
     UNIT_ASSERT_VALUES_EQUAL(info->GetStats().Aggregated.ImmediateTxCompleted, 110u);
+}
+
+Y_UNIT_TEST(UpdateShardStats_GenerationRollover_RowUpdatesAndDeletes) {
+    // RowUpdates/RowDeletes are cumulative counters kept in the shard's memory, so they
+    // reset to zero on tablet restart. A generation bump must re-baseline them so the
+    // aggregate is preserved and keeps growing, never decrements.
+    auto info = MakeTable();
+    info->SetPartitioning(MakeShards(1));
+
+    TDiskSpaceUsageDelta delta;
+
+    // Generation 1: shard has accumulated 1000 updates and 200 deletes.
+    TPartitionStats gen1;
+    gen1.SeqNo = TMessageSeqNo{1, 0};
+    gen1.RowUpdates = 1000;
+    gen1.RowDeletes = 200;
+    info->UpdateShardStats(&delta, TShardIdx(1, 0), gen1, TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(info->GetStats().Aggregated.RowUpdates, 1000u);
+    UNIT_ASSERT_VALUES_EQUAL(info->GetStats().Aggregated.RowDeletes, 200u);
+
+    // Generation 2: shard restarted, counters restarted from zero and reached 50/10.
+    // The aggregate must keep the gen1 totals and add gen2 from a zero baseline.
+    TPartitionStats gen2;
+    gen2.SeqNo = TMessageSeqNo{2, 0};
+    gen2.RowUpdates = 50;
+    gen2.RowDeletes = 10;
+    info->UpdateShardStats(&delta, TShardIdx(1, 0), gen2, TInstant::Zero());
+
+    UNIT_ASSERT_VALUES_EQUAL(info->GetStats().Aggregated.RowUpdates, 1050u);
+    UNIT_ASSERT_VALUES_EQUAL(info->GetStats().Aggregated.RowDeletes, 210u);
 }
 
 // --- RemoveShardStats ---

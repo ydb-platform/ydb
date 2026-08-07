@@ -83,6 +83,92 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsTableMode) {
             "topic_output"_a = topic_output));
         ReadTopicMessages(topic_output, {"data", "data"}, TInstant::Now() - TDuration::Seconds(100), false, true);
     }
+
+    Y_UNIT_TEST_F(TableModeWithWriteTimePredicate, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+
+        const auto runTest = [&](bool local) {
+            const std::string suffix = local ? "_local" : "_nonlocal";
+            const std::string topicName = std::string("tableModeWriteTime") + suffix;
+            const std::string sourceName = std::string("tableModeWriteTimeSource") + suffix;
+
+            ui32 partitionCount = 1;
+            CreateTopic(topicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), local);
+
+            std::string topicRef;
+            if (local) {
+                topicRef = fmt::format("`{}`", topicName);
+            } else {
+                CreatePqSource(sourceName);
+                topicRef = fmt::format("`{}`.`{}`", sourceName, topicName);
+            }
+
+            auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
+                TString text = fmt::format(R"(
+                    SELECT
+                        __ydb_partition_id as partition_id,
+                        __ydb_write_time as offset,
+                        key as data
+                    FROM {topic}
+                    WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
+                    WHERE {filter})",
+                    "topic"_a = topicRef,
+                    "filter"_a = filter
+                );
+                auto result = ExecQuery(text);
+                CheckScriptResult(result[0], 3, rowCount, validator);
+            };
+
+            // Empty topic: equality predicate (any value) — must return 0 rows
+            test("__ydb_write_time = Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {});
+            // Empty topic: greater-than predicate — must return 0 rows
+            test("__ydb_write_time > Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {});
+
+            WriteTopicMessage(topicName, "data", 0, local);                   // wrong schema
+            WriteTopicMessage(topicName, "{\"key\": \"data1\"}", 0, local);
+            WriteTopicMessage(topicName, "{\"key\": \"data2\"}", 0, local);
+            Sleep(TDuration::Seconds(5));
+            WriteTopicMessage(topicName, "data3", 0, local);                   // wrong schema
+
+            auto received = ReadTopicMessages(topicName, {"1", "2", "3", "4"}, TInstant{}, false, local, false);
+            UNIT_ASSERT_VALUES_EQUAL(received.size(), 4);
+
+            test("__ydb_write_time = Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {});
+            test("__ydb_write_time < Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {});
+            test("__ydb_write_time = Timestamp(\"2020-01-01T00:00:00Z\") AND __ydb_write_time > Timestamp(\"2021-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {});
+            test("__ydb_write_time = Timestamp(\"" + received[1].second.ToString() + "\")", 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+            });
+            test("__ydb_write_time >= Timestamp(\"" + received[1].second.ToString() + "\") \
+                AND __ydb_write_time <= Timestamp(\"" + received[2].second.ToString() + "\")", 2, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+            });
+
+            auto test_raw = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
+                TString text = fmt::format(R"(
+                    SELECT __ydb_write_time as offset, Data FROM {topic} WHERE {filter})",
+                    "topic"_a = topicRef,
+                    "filter"_a = filter
+                );
+                auto result = ExecQuery(text);
+                CheckScriptResult(result[0], 2, rowCount, validator);
+            };
+
+            test_raw("__ydb_write_time > CurrentUtcTimestamp(1) - Interval('P1D') AND Data LIKE '%data3%'", 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(1).GetString() == "data3");
+            });
+            WriteTopicMessage(topicName, "{\"key\": \"data3\"}", 0, local);
+            Sleep(TDuration::Seconds(2));
+            test("__ydb_write_time > CurrentUtcTimestamp(1) - Interval('PT1S')", 0, [&](TResultSetParser& /*resultSet*/) {});
+        };
+
+        runTest(/* local */ false);
+        runTest(/* local */ true);
+    }
 }
 
 } // namespace NKikimr::NKqp

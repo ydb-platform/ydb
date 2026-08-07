@@ -14,7 +14,6 @@ SRCS(
     columnshard__propose_cancel.cpp
     columnshard__propose_transaction.cpp
     columnshard__scan.cpp
-    columnshard__statistics.cpp
     columnshard__tx_abort.cpp
     columnshard__write.cpp
     columnshard__write_index.cpp

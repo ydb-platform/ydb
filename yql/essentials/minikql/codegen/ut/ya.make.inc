@@ -1,3 +1,5 @@
+ENABLE(TIDY_ALLOW_GENERATED)
+
 ADDINCL(
     ${ARCADIA_BUILD_ROOT}/${MODDIR}
 )
@@ -62,5 +64,3 @@ ELSE()
         str_size
     )
 ENDIF()
-
-

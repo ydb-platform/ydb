@@ -3,26 +3,25 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsVoid>
 class TAppendWrapper: public TMutableCodegeneratorNode<TAppendWrapper<IsVoid>> {
-    typedef TMutableCodegeneratorNode<TAppendWrapper<IsVoid>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TAppendWrapper<IsVoid>>;
 
 public:
     TAppendWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(mutables, left->GetRepresentation())
-        , Left(left)
-        , Right(right)
+        , Left_(left)
+        , Right_(right)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto left = Left->GetValue(ctx);
-        auto right = Right->GetValue(ctx);
+        auto left = Left_->GetValue(ctx);
+        auto right = Right_->GetValue(ctx);
 
         if (IsVoid && !right.IsBoxed()) {
             return left.Release();
@@ -37,8 +36,8 @@ public:
 
         const auto factory = ctx.GetFactory();
 
-        const auto left = GetNodeValue(Left, ctx, block);
-        const auto right = GetNodeValue(Right, ctx, block);
+        const auto left = GetNodeValue(Left_, ctx, block);
+        const auto right = GetNodeValue(Right_, ctx, block);
 
         if constexpr (IsVoid) {
             const auto work = BasicBlock::Create(context, "work", ctx.Func);
@@ -68,12 +67,12 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Left);
-        this->DependsOn(Right);
+        this->DependsOn(Left_);
+        this->DependsOn(Right_);
     }
 
-    IComputationNode* const Left;
-    IComputationNode* const Right;
+    IComputationNode* const Left_;
+    IComputationNode* const Right_;
 };
 
 } // namespace
@@ -95,5 +94,4 @@ IComputationNode* WrapAppend(TCallable& callable, const TComputationNodeFactoryC
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

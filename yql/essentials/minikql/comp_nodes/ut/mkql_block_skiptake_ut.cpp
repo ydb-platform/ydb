@@ -8,8 +8,7 @@
 
 #include <arrow/array/builder_primitive.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -19,8 +18,8 @@ class TTestBlockFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TTestBloc
 public:
     TTestBlockFlowWrapper(TComputationMutables& mutables, size_t blockSize, size_t blockCount)
         : TBaseComputation(mutables, nullptr, EValueRepresentation::Embedded)
-        , BlockSize(blockSize)
-        , BlockCount(blockCount)
+        , BlockSize_(blockSize)
+        , BlockCount_(blockCount)
     {
         mutables.CurValueIndex += 3U;
     }
@@ -60,14 +59,14 @@ private:
         }
 
         auto index = state.Get<ui64>();
-        if (index >= BlockCount) {
+        if (index >= BlockCount_) {
             return EFetchResult::Finish;
         }
 
         arrow::UInt64Builder builder(&ctx.ArrowMemoryPool);
-        ARROW_OK(builder.Reserve(BlockSize));
-        for (size_t i = 0; i < BlockSize; ++i) {
-            builder.UnsafeAppend(index * BlockSize + i);
+        ARROW_OK(builder.Reserve(BlockSize_));
+        for (size_t i = 0; i < BlockSize_; ++i) {
+            builder.UnsafeAppend(index * BlockSize_ + i);
         }
 
         std::shared_ptr<arrow::ArrayData> block;
@@ -75,7 +74,7 @@ private:
 
         val1 = ctx.HolderFactory.CreateArrowBlock(std::move(block), NYql::DefaultDatumTestValidationMode);
         val2 = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(index)), NYql::DefaultDatumTestValidationMode);
-        val3 = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BlockSize)), NYql::DefaultDatumTestValidationMode);
+        val3 = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BlockSize_)), NYql::DefaultDatumTestValidationMode);
 
         state = NUdf::TUnboxedValuePod(++index);
         return EFetchResult::One;
@@ -84,8 +83,8 @@ private:
     void RegisterDependencies() const final {
     }
 
-    const size_t BlockSize;
-    const size_t BlockCount;
+    const size_t BlockSize_;
+    const size_t BlockCount_;
 };
 
 IComputationNode* WrapTestBlockFlow(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -113,7 +112,7 @@ TRuntimeNode MakeFlow(TSetup<LLVM>& setup) {
                                              pb.NewBlockType(NTest::ConvertToMinikqlType<ui64>(pb), TBlockType::EShape::Scalar),
                                              pb.NewBlockType(NTest::ConvertToMinikqlType<ui64>(pb), TBlockType::EShape::Scalar),
                                          })));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 } // namespace
@@ -188,5 +187,4 @@ Y_UNIT_TEST_LLVM(TestWideTakeSkipBlocks) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideTakeSkipBlocks)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

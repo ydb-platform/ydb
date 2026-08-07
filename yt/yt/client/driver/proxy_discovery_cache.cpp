@@ -60,7 +60,7 @@ public:
         : TAsyncExpiringCache(
             std::move(config),
             NRpc::TDispatcher::Get()->GetHeavyInvoker(),
-            DriverLogger().WithTag("Cache: ProxyDiscovery"))
+            DriverLogger().WithTag("Cache", "ProxyDiscovery"))
         , Client_(std::move(client))
     { }
 

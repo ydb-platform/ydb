@@ -101,8 +101,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
             request.HasLockTxId() ? Self->GetOperationsManager().GetLockOptional(request.GetLockTxId()) : nullptr, false);
 
         {
-            auto accConclusion =
-                Self->TablesManager.BuildTableMetadataAccessor(request.GetTablePath() ? request.GetTablePath() : "undefined", ssPathId);
+            auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor(
+                request.GetTablePath() ? request.GetTablePath() : "undefined", ssPathId, snapshot);
             if (accConclusion.IsFail()) {
                 return SendError("cannot build table metadata accessor for request: " + accConclusion.GetErrorMessage(),
                     AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);

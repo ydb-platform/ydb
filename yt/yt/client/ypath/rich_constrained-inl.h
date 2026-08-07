@@ -663,9 +663,9 @@ NTableClient::TVersionedWriteOptions TConstrainedRichYPath<TValidator...>::GetVe
 }
 
 template <class... TValidator>
-std::optional<std::string> TConstrainedRichYPath<TValidator...>::GetAccessMethod() const
+std::optional<ELayerAccessMethod> TConstrainedRichYPath<TValidator...>::GetAccessMethod() const
 {
-    return FindAttribute<std::string>(*this, "access_method");
+    return FindAttribute<ELayerAccessMethod>(*this, "access_method");
 }
 
 template <class... TValidator>

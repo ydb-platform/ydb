@@ -33,6 +33,7 @@ SRCS(
     node_info.cpp
     node_info.h
     object_distribution.h
+    outgoing_requests.h
     reassign_actor.cpp
     sequencer.cpp
     sequencer.h

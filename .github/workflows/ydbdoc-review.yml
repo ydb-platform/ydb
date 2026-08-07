@@ -61,7 +61,7 @@ jobs:
     if: ${{ !cancelled() && needs.ydbdoc-review.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger PR-check and docs rebuild on translation PR
+      - name: Trigger PR-check (ok-to-test) on translation PR
         uses: actions/github-script@v8
         with:
           # PAT only here (no checkout): cascades into PR-check/docs rebuild without
@@ -101,13 +101,17 @@ jobs:
               return;
             }
 
+            // ok-to-test only. Do NOT add rebuild_docs here: pull_request already
+            // starts Build documentation on the translation PR, and rebuild's
+            // workflow_dispatch cancels that run (shared concurrency) while
+            // attaching its own success check to main — PR stays red (#48409).
             await github.rest.issues.addLabels({
               owner,
               repo,
               issue_number: translationPr.number,
-              labels: ['rebuild_docs', 'ok-to-test'],
+              labels: ['ok-to-test'],
             });
 
             core.info(
-              `Added rebuild_docs and ok-to-test to translation PR #${translationPr.number}`
+              `Added ok-to-test to translation PR #${translationPr.number}`
             );

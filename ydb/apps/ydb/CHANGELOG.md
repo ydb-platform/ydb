@@ -1,4 +1,5 @@
 
+* Added support for `--format svg` plan format to `ydb sql` command when used with `--explain` or `--explain-analyze` options
 * Added `--content-based-deduplication` option to `ydb topic create` and `ydb topic alter` commands.
 * Added support for the new `setnotnull` operation in the `ydb operation` subcommands.
 

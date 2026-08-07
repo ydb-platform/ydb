@@ -14,9 +14,9 @@ from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
     guard_mode_for,
     impact_scope_for,
-    impairment_hold_sec_for,
     nemesis_types_flat_for_api,
     nemesis_types_grouped_for_api,
+    stuck_timeout_for,
     supports_boundary_scheduler,
     target_kind_for,
 )
@@ -24,6 +24,10 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_problems im
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import ClusterInventory
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.hc_model import (
+    hc_predicate_for,
+    needs_baseline,
+)
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.boundary_scheduler import (
     BoundaryNemesisScheduler,
     default_enabled_types,
@@ -48,6 +52,7 @@ failure_guard: FailureModelGuard | None = None
 cluster_inventory: ClusterInventory | None = None
 chaos_problems: ChaosProblemStore | None = None
 healthcheck_reporter: Any = None
+recovery_probe: Any = None
 
 
 def get_app_port() -> int:
@@ -231,20 +236,46 @@ def create_host_process():
         ]
         record_scope = impact_scope_for(process_type) if failure_guard is not None else None
         for cmd in cmds:
+            full = failure_guard is not None and guard_mode_for(process_type) is GuardMode.FULL
+            baseline = None
+            if (
+                full and cmd.action == "inject" and recovery_probe is not None
+                and needs_baseline(target_kind_for(process_type), record_scope)
+            ):
+                baseline = recovery_probe.alive_compute_baseline()  # before inject
+                if baseline is None:
+                    return jsonify(
+                        {
+                            "status": "error",
+                            "message": (
+                                f"Cannot inject {process_type}: no fresh healthcheck data "
+                                f"for a slot baseline (recovery probe is blind)"
+                            ),
+                        }
+                    ), 503
             nemesis_schedule.dispatch_command(cmd, track_history=False)
-            if failure_guard is not None and guard_mode_for(process_type) is GuardMode.FULL:
+            if full:
                 if cmd.action == "extract":
                     failure_guard.record_extract(cmd.execution_id, cmd.target, record_scope)
+                    if recovery_probe is not None:
+                        recovery_probe.untrack_identity(cmd.target.identity_key())
                 elif cmd.action == "inject":
-                    failure_guard.record_inject(
-                        cmd.execution_id,
-                        cmd.target,
-                        record_scope,
-                        # Paired by the operator, so a toggle holds its budget until that extract.
-                        recovery_sec=impairment_hold_sec_for(
-                            cmd.nemesis_type, paired_extract=True
-                        ),
-                    )
+                    # Held until HC confirms (or a manual extract); never on a timer.
+                    failure_guard.record_inject(cmd.execution_id, cmd.target, record_scope)
+                    if recovery_probe is not None:
+                        recovery_probe.track(
+                            cmd.execution_id,
+                            cmd.target,
+                            cmd.nemesis_type,
+                            recovered=hc_predicate_for(
+                                cmd.target,
+                                kind=target_kind_for(cmd.nemesis_type),
+                                scope=record_scope,
+                                inventory=cluster_inventory,
+                                baseline=baseline,
+                            ),
+                            stuck_timeout_sec=stuck_timeout_for(cmd.nemesis_type),
+                        )
         return jsonify(
             {
                 "status": "ok",
@@ -476,16 +507,19 @@ def _validated_profile(data: dict) -> tuple[dict, str | None]:
                 return {}, f"'{key}' must be between {lo} and {hi}"
             profile[key] = value
 
-    if "max_per_tick" in data:
-        try:
-            cap = int(data["max_per_tick"])
-        except (TypeError, ValueError):
-            return {}, "'max_per_tick' must be an integer"
-        if not 1 <= cap <= 100:
-            return {}, "'max_per_tick' must be between 1 and 100"
-        profile["max_per_tick"] = cap
+    for key in ("max_per_tick", "max_bypass_per_tick"):
+        if key in data:
+            try:
+                cap = int(data[key])
+            except (TypeError, ValueError):
+                return {}, f"'{key}' must be an integer"
+            if not 1 <= cap <= 100:
+                return {}, f"'{key}' must be between 1 and 100"
+            profile[key] = cap
 
-    unknown_keys = sorted(set(data) - {"enabled", "base_interval", "jitter", "max_per_tick"})
+    unknown_keys = sorted(
+        set(data) - {"enabled", "base_interval", "jitter", "max_per_tick", "max_bypass_per_tick"}
+    )
     if unknown_keys:
         return {}, f"unknown profile field(s): {', '.join(unknown_keys)}"
 
@@ -496,8 +530,9 @@ def _validated_profile(data: dict) -> tuple[dict, str | None]:
 def start_scheduler():
     """Apply an optional profile and start the scheduler.
 
-    Body (all optional): ``enabled``, ``base_interval``, ``jitter``, ``max_per_tick``. Omitted fields
-    keep their current value; invalid ones are rejected with 400.
+    Body (all optional): ``enabled``, ``base_interval``, ``jitter``, ``max_per_tick``,
+    ``max_bypass_per_tick``. Omitted fields keep their current value; invalid ones are
+    rejected with 400.
     """
     if nemesis_scheduler is None:
         return jsonify(
@@ -522,7 +557,7 @@ def start_scheduler():
 
 @blueprint.route("/api/scheduler/stop", methods=["POST"])
 def stop_scheduler():
-    """Stop the nemesis scheduler (and its recovery probe)."""
+    """Stop the nemesis scheduler (the app-owned recovery probe keeps running)."""
     if nemesis_scheduler is None:
         return jsonify({"status": "ok", "message": "Scheduler not initialized"})
     nemesis_scheduler.stop()

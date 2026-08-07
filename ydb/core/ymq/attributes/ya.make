@@ -8,7 +8,9 @@ SRCS(
 
 PEERDIR(
     library/cpp/digest/md5
+    ydb/core/persqueue/public
     ydb/core/protos
+    ydb/public/api/protos
 )
 
 END()

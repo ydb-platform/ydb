@@ -170,7 +170,7 @@ public:
                 partitionIndex);
 
             i64 currentOffset = 0;
-            TTimestamp offsetTimestamp = 0;
+            auto offsetTimestamp = NullTimestamp;
             // If the key doesn't exist, or the offset value is null, the offset is -1 in BigRT terms and 0 in ours.
             if (!rows.empty()) {
                 const auto& offsetValue = rows[0].Values()[0];

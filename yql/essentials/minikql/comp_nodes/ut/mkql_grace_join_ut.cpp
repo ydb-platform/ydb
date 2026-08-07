@@ -10,15 +10,14 @@
 #include <vector>
 #include <cassert>
 #include <cstdlib>
-#include <stdlib.h>
+#include <cstdlib>
 #include <random>
 
 #include <util/system/compiler.h>
 #include <util/stream/null.h>
 #include <util/system/mem_info.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 constexpr bool IsVerbose = false;
 #define CTEST (IsVerbose ? Cerr : Cnull)
@@ -127,8 +126,8 @@ Y_UNIT_TEST(TestMem1) {
     CTEST << "std:memcpy speed = " << (TupleSize * NTuples * sizeof(ui64) * 1000) / (milliseconds * 1024 * 1024) << "MB/sec" << Endl;
     CTEST << Endl;
 
-    for (ui64 i = 0; i < NBuckets; i++) {
-        tuplesPos[i] = 0;
+    for (auto& tuplePos : tuplesPos) {
+        tuplePos = 0;
     }
 
     std::chrono::steady_clock::time_point begin04 = std::chrono::steady_clock::now();
@@ -165,8 +164,8 @@ Y_UNIT_TEST(TestMem1) {
     CTEST << "Loop copy speed = " << (TupleSize * NTuples * sizeof(ui64) * 1000) / (milliseconds * 1024 * 1024) << "MB/sec" << Endl;
     CTEST << Endl;
 
-    for (ui64 i = 0; i < NBuckets; i++) {
-        free(buckets[i]);
+    for (auto& bucket : buckets) {
+        free(bucket);
     }
 
     free(b);
@@ -205,8 +204,8 @@ Y_UNIT_TEST_TWIN(TestTryToPreallocateMemoryForJoin, EXCEPTION) {
 
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
 
-    for (ui64 i = 0; i < TupleSize; i++) {
-        bigTuple[i] = dist(rng);
+    for (auto& i : bigTuple) {
+        i = dist(rng);
     }
 
     std::uniform_int_distribution<ui64> smallDist(0, SmallTableTuples - 1);
@@ -237,7 +236,7 @@ Y_UNIT_TEST_TWIN(TestTryToPreallocateMemoryForJoin, EXCEPTION) {
         });
     }
 
-    bool preallocationResult = joinTable.TryToPreallocateMemoryForJoin(smallTable, bigTable, EJoinKind::Inner, true, true);
+    bool preallocationResult = joinTable.TryToPreallocateMemoryForJoin(smallTable, bigTable, EJoinKind::Inner, /*hasMoreLeftTuples=*/true, /*hasMoreRightTuples=*/true);
     UNIT_ASSERT_EQUAL(preallocationResult, !EXCEPTION);
 }
 
@@ -268,8 +267,8 @@ Y_UNIT_TEST_LLVM(TestImp1) {
 
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
 
-    for (ui64 i = 0; i < TupleSize; i++) {
-        bigTuple[i] = dist(rng);
+    for (auto& i : bigTuple) {
+        i = dist(rng);
     }
 
     ui64 milliseconds = 0;
@@ -329,10 +328,14 @@ Y_UNIT_TEST_LLVM(TestImp1) {
     mi = NMemInfo::GetMemInfo();
     CTEST << "Mem usage after tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
-    std::vector<ui64> vals1, vals2;
-    std::vector<char*> strVals1, strVals2;
-    std::vector<ui32> strSizes1, strSizes2;
-    GraceJoin::TupleData td1, td2;
+    std::vector<ui64> vals1;
+    std::vector<ui64> vals2;
+    std::vector<char*> strVals1;
+    std::vector<char*> strVals2;
+    std::vector<ui32> strSizes1;
+    std::vector<ui32> strSizes2;
+    GraceJoin::TupleData td1;
+    GraceJoin::TupleData td2;
     vals1.resize(100);
     vals2.resize(100);
     strVals1.resize(100);
@@ -434,8 +437,8 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
 
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
 
-    for (ui64 i = 0; i < TupleSize; i++) {
-        bigTuple[i] = dist(rng);
+    for (auto& i : bigTuple) {
+        i = dist(rng);
     }
 
     ui64 millisecondsAdd = 0;
@@ -499,10 +502,14 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
         auto end03 = std::chrono::steady_clock::now();
         millisecondsAdd += std::chrono::duration_cast<std::chrono::milliseconds>(end03 - begin03).count();
     }
-    std::vector<ui64> vals1, vals2;
-    std::vector<char*> strVals1, strVals2;
-    std::vector<ui32> strSizes1, strSizes2;
-    GraceJoin::TupleData td1, td2;
+    std::vector<ui64> vals1;
+    std::vector<ui64> vals2;
+    std::vector<char*> strVals1;
+    std::vector<char*> strVals2;
+    std::vector<ui32> strSizes1;
+    std::vector<ui32> strSizes2;
+    GraceJoin::TupleData td1;
+    GraceJoin::TupleData td2;
     vals1.resize(100);
     vals2.resize(100);
     strVals1.resize(100);
@@ -544,7 +551,7 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
 
         std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
 
-        joinTable.Join(smallTable, bigTable, EJoinKind::Inner, false, pos < BigTableTuples);
+        joinTable.Join(smallTable, bigTable, EJoinKind::Inner, /*hasMoreLeftTuples=*/false, pos < BigTableTuples);
 
         std::chrono::steady_clock::time_point end05 = std::chrono::steady_clock::now();
         millisecondsJoin += std::chrono::duration_cast<std::chrono::milliseconds>(end05 - begin05).count();
@@ -594,9 +601,9 @@ Y_UNIT_TEST_LLVM(TestImp2) {
                          (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
     ui32 bigStrSize[2] = {151, 151};
 
-    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, nullptr, true);
-    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, nullptr, true);
-    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, nullptr, true);
+    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
+    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
+    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
 
     std::mt19937_64 rng;
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
@@ -607,8 +614,8 @@ Y_UNIT_TEST_LLVM(TestImp2) {
 
     ui64 bigTuple[TupleSize];
 
-    for (ui64 i = 0; i < TupleSize; i++) {
-        bigTuple[i] = dist(rng);
+    for (auto& i : bigTuple) {
+        i = dist(rng);
     }
 
     ui64 milliseconds = 0;
@@ -641,10 +648,14 @@ Y_UNIT_TEST_LLVM(TestImp2) {
     CTEST << "Adding tuples speed: " << (BigTupleSize * (BigTableTuples + SmallTableTuples) * 1000) / (milliseconds * 1024 * 1024) << "MB/sec" << Endl;
     CTEST << Endl;
 
-    std::vector<ui64> vals1, vals2;
-    std::vector<char*> strVals1, strVals2;
-    std::vector<ui32> strSizes1, strSizes2;
-    GraceJoin::TupleData td1, td2;
+    std::vector<ui64> vals1;
+    std::vector<ui64> vals2;
+    std::vector<char*> strVals1;
+    std::vector<char*> strVals2;
+    std::vector<ui32> strSizes1;
+    std::vector<ui32> strSizes2;
+    GraceJoin::TupleData td1;
+    GraceJoin::TupleData td2;
     vals1.resize(100);
     vals2.resize(100);
     strVals1.resize(100);
@@ -728,9 +739,9 @@ Y_UNIT_TEST_LLVM(TestImp3) {
                          (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
     ui32 bigStrSize[2] = {151, 151};
 
-    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, nullptr, false);
-    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, nullptr, false);
-    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, nullptr, false);
+    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
+    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
+    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
@@ -741,8 +752,8 @@ Y_UNIT_TEST_LLVM(TestImp3) {
     std::mt19937_64 rng;
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
 
-    for (ui64 i = 0; i < TupleSize; i++) {
-        bigTuple[i] = dist(rng);
+    for (auto& i : bigTuple) {
+        i = dist(rng);
     }
 
     ui64 milliseconds = 0;
@@ -773,10 +784,14 @@ Y_UNIT_TEST_LLVM(TestImp3) {
     CTEST << "Adding tuples speed: " << (BigTupleSize * (BigTableTuples + SmallTableTuples) * 1000) / (milliseconds * 1024 * 1024) << "MB/sec" << Endl;
     CTEST << Endl;
 
-    std::vector<ui64> vals1, vals2;
-    std::vector<char*> strVals1, strVals2;
-    std::vector<ui32> strSizes1, strSizes2;
-    GraceJoin::TupleData td1, td2;
+    std::vector<ui64> vals1;
+    std::vector<ui64> vals2;
+    std::vector<char*> strVals1;
+    std::vector<char*> strVals2;
+    std::vector<ui32> strSizes1;
+    std::vector<ui32> strSizes2;
+    GraceJoin::TupleData td1;
+    GraceJoin::TupleData td2;
     vals1.resize(100);
     vals2.resize(100);
     strVals1.resize(100);
@@ -2065,50 +2080,50 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TTestStreamParams& params)
             : TBase(memInfo)
-            , CompCtx(compCtx)
-            , Params(params)
+            , CompCtx_(compCtx)
+            , Params_(params)
         {
         }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            ++TotalFetches;
+            ++TotalFetches_;
 
-            UNIT_ASSERT_LE(TotalFetches, Params.MaxAllowedNumberOfFetches);
+            UNIT_ASSERT_LE(TotalFetches_, Params_.MaxAllowedNumberOfFetches);
 
-            if (TotalFetches > Params.StreamSize) {
+            if (TotalFetches_ > Params_.StreamSize) {
                 return NUdf::EFetchStatus::Finish;
             }
 
             NUdf::TUnboxedValue* items = nullptr;
-            result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, items);
-            items[0] = NUdf::TUnboxedValuePod(TotalFetches);
-            items[1] = MakeString(ToString(TotalFetches) * 5);
+            result = CompCtx_.HolderFactory.CreateDirectArrayHolder(2, items);
+            items[0] = NUdf::TUnboxedValuePod(TotalFetches_);
+            items[1] = MakeString(ToString(TotalFetches_) * 5);
 
             return NUdf::EFetchStatus::Ok;
         }
 
     private:
-        TComputationContext& CompCtx;
-        TTestStreamParams& Params;
-        ui64 TotalFetches = 0;
+        TComputationContext& CompCtx_;
+        TTestStreamParams& Params_;
+        ui64 TotalFetches_ = 0;
     };
 
     TTestStreamWrapper(TComputationMutables& mutables, TTestStreamParams& params)
         : TBaseComputation(mutables)
-        , Params(params)
+        , Params_(params)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, Params);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Params_);
     }
 
 private:
     void RegisterDependencies() const final {
     }
 
-    TTestStreamParams& Params;
+    TTestStreamParams& Params_;
 };
 
 IComputationNode* WrapTestStream(const TComputationNodeFactoryContext& ctx, TTestStreamParams& params) {
@@ -2134,7 +2149,7 @@ TRuntimeNode MakeStream(TSetup<false>& setup, bool isRight) {
                                          pb.NewTupleType({NTest::ConvertToMinikqlType<ui32>(pb),
                                                           NTest::ConvertToMinikqlType<TStringBuf>(pb)})));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinEmptyInputTest) {
@@ -2166,8 +2181,8 @@ void RunGraceJoinEmptyCaseTest(EJoinKind joinKind, bool emptyLeft, bool emptyRig
     TSetup<false> setup(GetNodeFactory(leftParams, rightParams));
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto leftStream = MakeStream(setup, false);
-    const auto rightStream = MakeStream(setup, true);
+    const auto leftStream = MakeStream(setup, /*isRight=*/false);
+    const auto rightStream = MakeStream(setup, /*isRight=*/true);
 
     const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
                                                             NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
@@ -2217,6 +2232,4 @@ ADD_JOIN_TESTS_FOR_KIND(Exclusion)
 
 #undef ADD_JOIN_TESTS_FOR_KIND
 } // Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinEmptyInputTest)
-} // namespace NMiniKQL
-
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

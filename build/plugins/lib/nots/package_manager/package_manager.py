@@ -547,6 +547,7 @@ class PackageManager(object):
 
         dep_paths = ws.get_paths(ignore_self=True)
         self._build_merged_workspace_config(ws, dep_paths)
+        dep_paths = ws.get_paths(ignore_self=True)
         self._build_merged_pre_lockfile(tarballs_store, dep_paths, local_cli, pj.has_dependencies())
 
         return ws

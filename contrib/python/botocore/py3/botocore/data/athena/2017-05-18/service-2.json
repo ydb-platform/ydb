@@ -98,7 +98,7 @@
         {"shape":"InternalServerException"},
         {"shape":"InvalidRequestException"}
       ],
-      "documentation":"<p>Creates (registers) a data catalog with the specified name and properties. Catalogs created are visible to all users of the same Amazon Web Services account.</p> <p>This API operation creates the following resources.</p> <ul> <li> <p>CFN Stack Name with a maximum length of 128 characters and prefix <code>athenafederatedcatalog-CATALOG_NAME_SANITIZED</code> with length 23 characters.</p> </li> <li> <p>Lambda Function Name with a maximum length of 64 characters and prefix <code>athenafederatedcatalog_CATALOG_NAME_SANITIZED</code> with length 23 characters.</p> </li> <li> <p>Glue Connection Name with a maximum length of 255 characters and a prefix <code>athenafederatedcatalog_CATALOG_NAME_SANITIZED</code> with length 23 characters. </p> </li> </ul>"
+      "documentation":"<p>Creates (registers) a data catalog with the specified name and properties. Catalogs created are visible to all users of the same Amazon Web Services account.</p> <p>For a <code>FEDERATED</code> catalog, this API operation creates the following resources.</p> <ul> <li> <p>CFN Stack Name with a maximum length of 128 characters and prefix <code>athenafederatedcatalog-CATALOG_NAME_SANITIZED</code> with length 23 characters.</p> </li> <li> <p>Lambda Function Name with a maximum length of 64 characters and prefix <code>athenafederatedcatalog_CATALOG_NAME_SANITIZED</code> with length 23 characters.</p> </li> <li> <p>Glue Connection Name with a maximum length of 255 characters and a prefix <code>athenafederatedcatalog_CATALOG_NAME_SANITIZED</code> with length 23 characters. </p> </li> </ul>"
     },
     "CreateNamedQuery":{
       "name":"CreateNamedQuery",
@@ -1307,8 +1307,7 @@
     },
     "CancelCapacityReservationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CapacityAllocation":{
       "type":"structure",
@@ -1592,8 +1591,7 @@
     },
     "CreateCapacityReservationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CreateDataCatalogInput":{
       "type":"structure",
@@ -1608,7 +1606,7 @@
         },
         "Type":{
           "shape":"DataCatalogType",
-          "documentation":"<p>The type of data catalog to create: <code>LAMBDA</code> for a federated catalog, <code>GLUE</code> for an Glue Data Catalog, and <code>HIVE</code> for an external Apache Hive metastore. <code>FEDERATED</code> is a federated catalog for which Athena creates the connection and the Lambda function for you based on the parameters that you pass.</p>"
+          "documentation":"<p>The type of data catalog to create: <code>LAMBDA</code> for a federated catalog, <code>GLUE</code> for an Glue Data Catalog, and <code>HIVE</code> for an external Apache Hive metastore. <code>FEDERATED</code> is a federated catalog for which Athena creates the connection and the Lambda function for you based on the parameters that you pass.</p> <p>For <code>FEDERATED</code> type, we do not support IAM identity center.</p>"
         },
         "Description":{
           "shape":"DescriptionString",
@@ -1732,8 +1730,7 @@
     },
     "CreatePreparedStatementOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CreatePresignedNotebookUrlRequest":{
       "type":"structure",
@@ -1791,8 +1788,7 @@
     },
     "CreateWorkGroupOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CustomerContentEncryptionConfiguration":{
       "type":"structure",
@@ -1953,8 +1949,7 @@
     },
     "DeleteCapacityReservationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteDataCatalogInput":{
       "type":"structure",
@@ -1989,8 +1984,7 @@
     },
     "DeleteNamedQueryOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteNotebookInput":{
       "type":"structure",
@@ -2004,8 +1998,7 @@
     },
     "DeleteNotebookOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeletePreparedStatementInput":{
       "type":"structure",
@@ -2026,8 +2019,7 @@
     },
     "DeletePreparedStatementOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWorkGroupInput":{
       "type":"structure",
@@ -2045,8 +2037,7 @@
     },
     "DeleteWorkGroupOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DescriptionString":{
       "type":"string",
@@ -2525,6 +2516,10 @@
         "MaxResults":{
           "shape":"MaxQueryResults",
           "documentation":"<p>The maximum number of results (rows) to return in this request.</p>"
+        },
+        "QueryResultType":{
+          "shape":"QueryResultType",
+          "documentation":"<p> When you set this to <code>DATA_ROWS</code> or empty, <code>GetQueryResults</code> returns the query results in rows. If set to <code>DATA_MANIFEST</code>, it returns the manifest file in rows. Only the query types <code>CREATE TABLE AS SELECT</code>, <code>UNLOAD</code>, and <code>INSERT</code> can generate a manifest file. If you use <code>DATA_MANIFEST</code> for other query types, the query will fail. </p>"
         }
       }
     },
@@ -3313,6 +3308,50 @@
       }
     },
     "Long":{"type":"long"},
+    "ManagedQueryResultsConfiguration":{
+      "type":"structure",
+      "required":["Enabled"],
+      "members":{
+        "Enabled":{
+          "shape":"Boolean",
+          "documentation":"<p>If set to true, allows you to store query results in Athena owned storage. If set to false, workgroup member stores query results in location specified under <code>ResultConfiguration$OutputLocation</code>. The default is false. A workgroup cannot have the <code>ResultConfiguration$OutputLocation</code> parameter when you set this field to true. </p>"
+        },
+        "EncryptionConfiguration":{
+          "shape":"ManagedQueryResultsEncryptionConfiguration",
+          "documentation":"<p>If you encrypt query and calculation results in Athena owned storage, this field indicates the encryption option (for example, SSE_KMS or CSE_KMS) and key information.</p>"
+        }
+      },
+      "documentation":"<p> The configuration for storing results in Athena owned storage, which includes whether this feature is enabled; whether encryption configuration, if any, is used for encrypting query results. </p>"
+    },
+    "ManagedQueryResultsConfigurationUpdates":{
+      "type":"structure",
+      "members":{
+        "Enabled":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>If set to true, specifies that Athena manages query results in Athena owned storage.</p>"
+        },
+        "EncryptionConfiguration":{
+          "shape":"ManagedQueryResultsEncryptionConfiguration",
+          "documentation":"<p>If you encrypt query and calculation results in Athena owned storage, this field indicates the encryption option (for example, SSE_KMS or CSE_KMS) and key information.</p>"
+        },
+        "RemoveEncryptionConfiguration":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>If set to true, it removes workgroup from Athena owned storage. The existing query results are cleaned up after 24hrs. You must provide query results in location specified under <code>ResultConfiguration$OutputLocation</code>.</p>"
+        }
+      },
+      "documentation":"<p>Updates the configuration for managed query results.</p>"
+    },
+    "ManagedQueryResultsEncryptionConfiguration":{
+      "type":"structure",
+      "required":["KmsKey"],
+      "members":{
+        "KmsKey":{
+          "shape":"KmsKey",
+          "documentation":"<p>The ARN of an KMS key for encrypting managed query results.</p>"
+        }
+      },
+      "documentation":"<p>If you encrypt query and calculation results in Athena owned storage, this field indicates the encryption option (for example, SSE_KMS or CSE_KMS) and key information.</p>"
+    },
     "MaxApplicationDPUSizesCount":{
       "type":"integer",
       "max":100,
@@ -3639,8 +3678,7 @@
     },
     "PutCapacityAssignmentConfigurationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "QueryExecution":{
       "type":"structure",
@@ -3656,6 +3694,10 @@
         "StatementType":{
           "shape":"StatementType",
           "documentation":"<p>The type of query statement that was run. <code>DDL</code> indicates DDL query statements. <code>DML</code> indicates DML (Data Manipulation Language) query statements, such as <code>CREATE TABLE AS SELECT</code>. <code>UTILITY</code> indicates query statements other than DDL and DML, such as <code>SHOW CREATE TABLE</code>, or <code>DESCRIBE TABLE</code>.</p>"
+        },
+        "ManagedQueryResultsConfiguration":{
+          "shape":"ManagedQueryResultsConfiguration",
+          "documentation":"<p> The configuration for storing results in Athena owned storage, which includes whether this feature is enabled; whether encryption configuration, if any, is used for encrypting query results. </p>"
         },
         "ResultConfiguration":{
           "shape":"ResultConfiguration",
@@ -3807,6 +3849,13 @@
         }
       },
       "documentation":"<p>The completion date, current state, submission time, and state change reason (if applicable) for the query execution.</p>"
+    },
+    "QueryResultType":{
+      "type":"string",
+      "enum":[
+        "DATA_MANIFEST",
+        "DATA_ROWS"
+      ]
     },
     "QueryResultsS3AccessGrantsConfiguration":{
       "type":"structure",
@@ -4276,7 +4325,7 @@
           "shape":"CalculationConfiguration",
           "documentation":"<p>Contains configuration information for the calculation.</p>",
           "deprecated":true,
-          "deprecatedMessage":"Kepler Post GA Tasks : https://sim.amazon.com/issues/ATHENA-39828"
+          "deprecatedMessage":"Structure is deprecated."
         },
         "CodeBlock":{
           "shape":"CodeBlock",
@@ -4437,8 +4486,7 @@
     },
     "StopQueryExecutionOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "String":{"type":"string"},
     "StringList":{
@@ -4538,8 +4586,7 @@
     },
     "TagResourceOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -4681,8 +4728,7 @@
     },
     "UntagResourceOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateCapacityReservationInput":{
       "type":"structure",
@@ -4703,8 +4749,7 @@
     },
     "UpdateCapacityReservationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateDataCatalogInput":{
       "type":"structure",
@@ -4733,8 +4778,7 @@
     },
     "UpdateDataCatalogOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateNamedQueryInput":{
       "type":"structure",
@@ -4764,8 +4808,7 @@
     },
     "UpdateNamedQueryOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateNotebookInput":{
       "type":"structure",
@@ -4820,13 +4863,11 @@
     },
     "UpdateNotebookMetadataOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateNotebookOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdatePreparedStatementInput":{
       "type":"structure",
@@ -4856,8 +4897,7 @@
     },
     "UpdatePreparedStatementOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateWorkGroupInput":{
       "type":"structure",
@@ -4883,8 +4923,7 @@
     },
     "UpdateWorkGroupOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "WorkGroup":{
       "type":"structure",
@@ -4923,6 +4962,10 @@
         "ResultConfiguration":{
           "shape":"ResultConfiguration",
           "documentation":"<p>The configuration for the workgroup, which includes the location in Amazon S3 where query and calculation results are stored and the encryption option, if any, used for query and calculation results. To run the query, you must specify the query results location using one of the ways: either in the workgroup using this setting, or for individual queries (client-side), using <a>ResultConfiguration$OutputLocation</a>. If none of them is set, Athena issues an error that no output location is provided.</p>"
+        },
+        "ManagedQueryResultsConfiguration":{
+          "shape":"ManagedQueryResultsConfiguration",
+          "documentation":"<p> The configuration for storing results in Athena owned storage, which includes whether this feature is enabled; whether encryption configuration, if any, is used for encrypting query results. </p>"
         },
         "EnforceWorkGroupConfiguration":{
           "shape":"BoxedBoolean",
@@ -4981,6 +5024,10 @@
         "ResultConfigurationUpdates":{
           "shape":"ResultConfigurationUpdates",
           "documentation":"<p>The result configuration information about the queries in this workgroup that will be updated. Includes the updated results location and an updated option for encrypting query results.</p>"
+        },
+        "ManagedQueryResultsConfigurationUpdates":{
+          "shape":"ManagedQueryResultsConfigurationUpdates",
+          "documentation":"<p>Updates configuration information for managed query results in the workgroup.</p>"
         },
         "PublishCloudWatchMetricsEnabled":{
           "shape":"BoxedBoolean",

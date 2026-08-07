@@ -18,6 +18,15 @@ using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+constexpr auto MinBackoff = TDuration::MilliSeconds(100);
+constexpr auto MaxBackoff = TDuration::Seconds(10);
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TDDiskDataCopier::TCopyRangeRequestState
 {
     TBlockRange64 Range;
@@ -52,7 +61,7 @@ TDDiskDataCopier::TDDiskDataCopier(
     const TDiskDescription& diskDescription,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    TBlocksDirtyMap* dirtyMap,
+    TBlocksDirtyMapPtr dirtyMap,
     THostIndex destination)
     : ActorSystem(actorSystem)
     , TraceService(traceService)
@@ -60,7 +69,7 @@ TDDiskDataCopier::TDDiskDataCopier(
     , VolumeConfig(partitionDirectService->GetVolumeConfig())
     , DirectBlockGroup(std::move(directBlockGroup))
     , Destination(destination)
-    , DirtyMap(dirtyMap)
+    , DirtyMap(std::move(dirtyMap))
     , LogTitle{
           GetCycleCount(),
           TLogTitle::TDDiskDataCopier{
@@ -70,6 +79,7 @@ TDDiskDataCopier::TDDiskDataCopier(
               .DBGIndex = VChunkConfig.GetDBGIndex(),
               .VChunkIndex = VChunkConfig.GetVChunkIndex(),
               .Destination = static_cast<int>(Destination)}}
+    , BackoffDelayProvider(MinBackoff, MaxBackoff)
 {
     Y_ABORT_UNLESS(traceService);
     Y_ABORT_UNLESS(Destination < VChunkConfig.GetHostCount());
@@ -120,7 +130,7 @@ TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Stop()
 
 NWilson::TSpan TDDiskDataCopier::CreateSpan() const
 {
-    auto span = TraceService->CreteRootSpan("CopyRange");
+    auto span = TraceService->CreateRootSpan("CopyRange");
     span.Attribute("DiskId", VolumeConfig->DiskId);
     span.Attribute("From", static_cast<i64>(FreshWatermark));
     span.Attribute("Length", static_cast<i64>(CopyRangeSize));
@@ -164,10 +174,14 @@ void TDDiskDataCopier::StartCopyRange()
         auto waitReadyFuture = readHint.WaitReady;
         Y_ABORT_UNLESS(!waitReadyFuture.HasValue());
         waitReadyFuture.Subscribe(
-            [self = shared_from_this()](const NThreading::TFuture<void>& f)
+            [weakSelf = weak_from_this()]   //
+            (const NThreading::TFuture<void>& f)
             {
                 Y_UNUSED(f);
-                self->StartCopyRange();
+
+                if (auto self = weakSelf.lock()) {
+                    self->StartCopyRange();
+                }
             });
         return;
     }
@@ -219,9 +233,13 @@ void TDDiskDataCopier::OnRangeRead(
             "%s %s Read error: %s",
             LogTitle.GetWithTime().c_str(),
             copyRangeState->Range.Print().c_str(),
-            FormatError(response.Error).c_str());
+            FormatError(response.Error).Quote().c_str());
 
-        Complete.SetValue(EResult::Error);
+        if (IsNeverRetriableError(response.Error)) {
+            Complete.SetValue(EResult::Error);
+        } else {
+            ScheduleStartCopyRange(BackoffDelayProvider.GetDelayAndIncrease());
+        }
         return;
     }
 
@@ -255,12 +273,17 @@ void TDDiskDataCopier::OnRangeWritten(
             "%s %s Write error: %s",
             LogTitle.GetWithTime().c_str(),
             copyRangeState->Range.Print().c_str(),
-            FormatError(response.Error).c_str());
+            FormatError(response.Error).Quote().c_str());
 
-        Complete.SetValue(EResult::Error);
+        if (IsNeverRetriableError(response.Error)) {
+            Complete.SetValue(EResult::Error);
+        } else {
+            ScheduleStartCopyRange(BackoffDelayProvider.GetDelayAndIncrease());
+        }
         return;
     }
 
+    BackoffDelayProvider.Reset();
     FreshWatermark = (copyRangeState->Range.End + 1) * VolumeConfig->BlockSize;
     DirtyMap->SetReadWatermark(Destination, FreshWatermark);
     Y_ABORT_UNLESS(VolumeConfig->VChunkSize > 0);
@@ -269,6 +292,18 @@ void TDDiskDataCopier::OnRangeWritten(
     } else {
         Complete.SetValue(EResult::Ok);
     }
+}
+
+void TDDiskDataCopier::ScheduleStartCopyRange(TDuration delay)
+{
+    DirectBlockGroup->Schedule(
+        delay,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->StartCopyRange();
+            }
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

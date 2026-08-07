@@ -45,7 +45,7 @@ try:
         from urllib3.contrib.pyopenssl import (
             orig_util_SSLContext as SSLContext,
         )
-except ImportError:
+except (AttributeError, ImportError):
     from urllib3.util.ssl_ import SSLContext
 
 try:

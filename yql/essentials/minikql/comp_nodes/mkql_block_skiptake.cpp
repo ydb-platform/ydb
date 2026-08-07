@@ -8,8 +8,7 @@
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -30,15 +29,15 @@ class TWideTakeSkipBlocksStreamWrapper: public TMutableComputationNode<TWideTake
 public:
     TWideTakeSkipBlocksStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, IComputationNode* count)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Stream(stream)
-        , Count(count)
+        , Stream_(stream)
+        , Count_(count)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
-                                                      std::move(Stream->GetValue(ctx)),
-                                                      Count->GetValue(ctx).Get<ui64>(),
+                                                      std::move(Stream_->GetValue(ctx)),
+                                                      Count_->GetValue(ctx).Get<ui64>(),
                                                       ctx.RuntimeSettings.DatumValidation.Get());
     }
 
@@ -49,14 +48,14 @@ private:
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue stream, ui64 count, NYql::EDatumValidationMode validationMode)
             : TBase(memInfo)
-            , HolderFactory(holderFactory)
-            , Stream(std::move(stream))
-            , Count(count)
-            , ValidationMode(validationMode)
+            , HolderFactory_(holderFactory)
+            , Stream_(std::move(stream))
+            , Count_(count)
+            , ValidationMode_(validationMode)
         {
         }
 
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
             if constexpr (Skip) {
                 return WideFetchSkip(output, width);
             } else {
@@ -65,19 +64,19 @@ private:
         }
 
         NUdf::EFetchStatus WideFetchTake(NUdf::TUnboxedValue* output, ui32 width) {
-            if (Count == 0) {
+            if (Count_ == 0) {
                 return NUdf::EFetchStatus::Finish;
             }
 
-            if (const auto result = Stream.WideFetch(output, width); NUdf::EFetchStatus::Ok == result) {
-                if (const auto blockSize = GetBlockCount(output[width - 1]); Count < blockSize) {
-                    output[width - 1] = MakeBlockCount(HolderFactory, Count, ValidationMode);
+            if (const auto result = Stream_.WideFetch(output, width); NUdf::EFetchStatus::Ok == result) {
+                if (const auto blockSize = GetBlockCount(output[width - 1]); Count_ < blockSize) {
+                    output[width - 1] = MakeBlockCount(HolderFactory_, Count_, ValidationMode_);
                     for (auto i = 0U; i < width - 1; ++i) {
-                        output[i] = SliceTakeBlock(HolderFactory, output[i], Count);
+                        output[i] = SliceTakeBlock(HolderFactory_, output[i], Count_);
                     }
-                    Count = 0;
+                    Count_ = 0;
                 } else {
-                    Count = Count - blockSize;
+                    Count_ = Count_ - blockSize;
                 }
                 return NUdf::EFetchStatus::Ok;
             } else {
@@ -86,43 +85,43 @@ private:
         }
 
         NUdf::EFetchStatus WideFetchSkip(NUdf::TUnboxedValue* output, ui32 width) {
-            if (Count == 0) {
-                return Stream.WideFetch(output, width);
+            if (Count_ == 0) {
+                return Stream_.WideFetch(output, width);
             }
             while (true) {
-                if (const auto result = Stream.WideFetch(output, width); NUdf::EFetchStatus::Ok != result) {
+                if (const auto result = Stream_.WideFetch(output, width); NUdf::EFetchStatus::Ok != result) {
                     return result;
                 }
 
-                if (const auto blockSize = GetBlockCount(output[width - 1]); Count < blockSize) {
-                    output[width - 1] = MakeBlockCount(HolderFactory, blockSize - Count, ValidationMode);
+                if (const auto blockSize = GetBlockCount(output[width - 1]); Count_ < blockSize) {
+                    output[width - 1] = MakeBlockCount(HolderFactory_, blockSize - Count_, ValidationMode_);
                     for (auto i = 0U; i < width - 1; ++i) {
-                        output[i] = SliceSkipBlock(HolderFactory, output[i], Count);
+                        output[i] = SliceSkipBlock(HolderFactory_, output[i], Count_);
                     }
-                    Count = 0;
+                    Count_ = 0;
                     return NUdf::EFetchStatus::Ok;
                 } else {
-                    Count -= blockSize;
+                    Count_ -= blockSize;
                 }
             }
 
-            return Stream.WideFetch(output, width);
+            return Stream_.WideFetch(output, width);
         }
 
     private:
-        const THolderFactory& HolderFactory;
-        NYql::NUdf::TUnboxedValue Stream;
-        ui64 Count;
-        const NYql::EDatumValidationMode ValidationMode;
+        const THolderFactory& HolderFactory_;
+        NYql::NUdf::TUnboxedValue Stream_;
+        ui64 Count_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
     void RegisterDependencies() const final {
-        this->DependsOn(Count);
-        this->DependsOn(Stream);
+        this->DependsOn(Count_);
+        this->DependsOn(Stream_);
     }
 
-    IComputationNode* const Stream;
-    IComputationNode* const Count;
+    IComputationNode* const Stream_;
+    IComputationNode* const Count_;
 };
 
 IComputationNode* WrapSkipTake(bool skip, TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -146,12 +145,11 @@ IComputationNode* WrapSkipTake(bool skip, TCallable& callable, const TComputatio
 } // namespace
 
 IComputationNode* WrapWideSkipBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapSkipTake(true, callable, ctx);
+    return WrapSkipTake(/*skip=*/true, callable, ctx);
 }
 
 IComputationNode* WrapWideTakeBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapSkipTake(false, callable, ctx);
+    return WrapSkipTake(/*skip=*/false, callable, ctx);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

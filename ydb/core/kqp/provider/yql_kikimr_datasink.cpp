@@ -1855,8 +1855,10 @@ public:
                     return nullptr; // Error has been already reported in parsing
                 }
                 auto mode = settings.Mode.Cast();
-                if (mode == "create") {
+                if (mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace") {
                     const auto emptyAtom = Build<TCoAtom>(ctx, node->Pos()).Value("").Done();
+                    const auto falseAtom = Build<TCoAtom>(ctx, node->Pos()).Value("0").Done();
+                    const auto trueAtom = Build<TCoAtom>(ctx, node->Pos()).Value("1").Done();
                     return Build<TKiCreateSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
@@ -1864,23 +1866,31 @@ public:
                         .Value(settings.Value.IsValid() ? settings.Value.Cast() : emptyAtom)
                         .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : emptyAtom)
                         .ValueParamName(settings.ValueParamName.IsValid() ? settings.ValueParamName.Cast() : emptyAtom)
+                        .ReplaceIfExists(mode == "create_or_replace" ? trueAtom : falseAtom)
+                        .ExistingOk(mode == "create_if_not_exists" ? trueAtom : falseAtom)
                         .Done()
                         .Ptr();
-                } else if (mode == "alter") {
+                } else if (mode == "alter" || mode == "alter_if_exists") {
                     const auto emptyAtom = Build<TCoAtom>(ctx, node->Pos()).Value("").Done();
+                    const auto falseAtom = Build<TCoAtom>(ctx, node->Pos()).Value("0").Done();
+                    const auto trueAtom = Build<TCoAtom>(ctx, node->Pos()).Value("1").Done();
                     return Build<TKiAlterSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
                         .Value(settings.Value.IsValid() ? settings.Value.Cast() : emptyAtom)
                         .ValueParamName(settings.ValueParamName.IsValid() ? settings.ValueParamName.Cast() : emptyAtom)
+                        .MissingOk(mode == "alter_if_exists" ? trueAtom : falseAtom)
                         .Done()
                         .Ptr();
-                } else if (mode == "drop") {
+                } else if (mode == "drop" || mode == "drop_if_exists") {
+                    const auto falseAtom = Build<TCoAtom>(ctx, node->Pos()).Value("0").Done();
+                    const auto trueAtom = Build<TCoAtom>(ctx, node->Pos()).Value("1").Done();
                     return Build<TKiDropSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
+                        .MissingOk(mode == "drop_if_exists" ? trueAtom : falseAtom)
                         .Done()
                         .Ptr();
                 } else {
@@ -2032,7 +2042,7 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
 
     YQL_ENSURE(mode);
     auto modeStr = mode.Cast().Value();
-    if (modeStr == "create" || modeStr == "alter") {
+    if (modeStr == "create" || modeStr == "create_if_not_exists" || modeStr == "create_or_replace" || modeStr == "alter" || modeStr == "alter_if_exists") {
         if (!value && !valueParamName) {
             ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
                 "Secret value is required: provide a literal or a single string parameter"));

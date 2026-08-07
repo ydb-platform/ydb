@@ -30,16 +30,6 @@ bool TStepAction::DoApply(IDataReader& owner) {
 }
 
 TConclusion<bool> TStepAction::DoExecuteImpl() {
-    Source->StartStepExecution(Cursor.GetName());
-
-    struct TStepExecutionGuard {
-        IDataSource* Source;
-
-        ~TStepExecutionGuard() {
-            Source->FinishStepExecution();
-        }
-    } stepGuard{ Source.get() };
-
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("step_action"));
     if (Source->GetContext()->IsAborted()) {
         AFL_VERIFY(!FinishedFlag);
@@ -66,7 +56,7 @@ void TStepAction::CacheSourceStats() {
     CachedBlobBytes = Source->ExtractTotalBytesRead();
     CachedRawBytes = Source->GetUsedRawBytesOptional();
     CachedFilteredRows = Source->GetFilteredRowsCount();
-    CachedTotalRows = Source->GetRecordsCount();
+    CachedTotalRows = Source->GetRecordsCountOptional().value_or(0);
     CachedTotalReservedBytes = Source->GetReservedMemory();
 }
 

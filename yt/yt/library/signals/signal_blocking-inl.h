@@ -22,7 +22,7 @@ namespace NYT::NSignals {
 
 namespace NDetail {
 
-template <CInvocable<void(bool ok, int threadCount)> TFunc>
+template <NMpl::CInvocable<void(bool ok, int threadCount)> TFunc>
 bool ValidateSingleRunningThread(const TFunc& func)
 {
 #ifdef _linux_
@@ -45,7 +45,7 @@ bool ValidateSingleRunningThread(const TFunc& func)
 #endif // _linux_
 }
 
-template <CInvocable<void(bool ok, int threadCount)> TFunc>
+template <NMpl::CInvocable<void(bool ok, int threadCount)> TFunc>
 void BlockSignalAtProcessStart(int signal, const TFunc& func)
 {
     try {

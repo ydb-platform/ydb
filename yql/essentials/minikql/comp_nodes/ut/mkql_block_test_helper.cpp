@@ -178,7 +178,7 @@ TRuntimeNode TBlockHelper::FuzzStream(TProgramBuilder& pgmBuilder, TRuntimeNode 
     TCallableBuilder callableBuilder(pgmBuilder.GetTypeEnvironment(), "FuzzStream", stream.GetStaticType());
     callableBuilder.Add(stream);
     callableBuilder.Add(pgmBuilder.NewDataLiteral<ui64>(fuzzId));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TBlockHelper::WideFuzzStream(TProgramBuilder& pgmBuilder, TRuntimeNode wideStream, const TVector<ui64>& fuzzIds) {
@@ -188,7 +188,7 @@ TRuntimeNode TBlockHelper::WideFuzzStream(TProgramBuilder& pgmBuilder, TRuntimeN
     for (ui64 id : fuzzIds) {
         cb.Add(pgmBuilder.NewDataLiteral<ui64>(id));
     }
-    return TRuntimeNode(cb.Build(), false);
+    return TRuntimeNode(cb.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TBlockHelper::MaterializeBlockStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
@@ -208,7 +208,7 @@ TVector<ui64> TBlockHelper::MakeWideStreamColumnsFuzzers(TMultiType* multiType) 
     TVector<ui64> fuzzIds(width);
     for (ui32 i = 0; i + 1 < width; ++i) {
         fuzzIds[i] = FuzzerHolder_.ReserveFuzzer();
-        FuzzerHolder_.CreateFuzzers(TFuzzOptions::FuzzAll(), fuzzIds[i], multiType->GetElementType(i), Pb_.GetTypeEnvironment(), Setup_.RuntimeSettings->DatumValidation.Get());
+        FuzzerHolder_.CreateFuzzers(FuzzOptions_, fuzzIds[i], multiType->GetElementType(i), Pb_.GetTypeEnvironment(), Setup_.RuntimeSettings->DatumValidation.Get());
     }
     fuzzIds[width - 1] = TFuzzerHolder::EmptyFuzzerId;
     return fuzzIds;

@@ -116,9 +116,9 @@ public:
     }
 
     // IPollable implementation.
-    const std::string& GetLoggingTag() const override
+    const NLogging::TLoggingTagList& GetLoggingTags() const override
     {
-        return Logger.GetTag();
+        return Logger.GetTags();
     }
 
     void OnEvent(EPollControl /*control*/) final
@@ -225,10 +225,10 @@ protected:
     {
         auto logger = BusLogger();
         if (config->Port) {
-            logger.AddTag("ServerPort: %v", *config->Port);
+            logger.AddTag("ServerPort", *config->Port);
         }
         if (config->UnixDomainSocketPath) {
-            logger.AddTag("UnixDomainSocketPath: %v", *config->UnixDomainSocketPath);
+            logger.AddTag("UnixDomainSocketPath", *config->UnixDomainSocketPath);
         }
         return logger;
     }

@@ -933,8 +933,9 @@ class Client(ABC):
          the default user database
         :param external_data: ClickHouse "external data" to send with command/query
         :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
-        :return: Decoded response from ClickHouse as either a string, int, or sequence of strings, or QuerySummary
-        if no data returned. Explicitly handled read-style commands can return an empty string for empty results.
+        :return: Decoded response from ClickHouse as a string, int, or sequence of strings for a statement that
+         produces a result set, an empty string when that result set has no rows, or a QuerySummary for a statement
+         that produces no result set such as a DDL or other control command.
         """
 
     @abstractmethod

@@ -34,35 +34,35 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockWayTest) {
 Y_UNIT_TEST(TupleVariant_Ui32Ui64_Mixed) {
     using TVariant = std::variant<ui32, ui64>;
     TVector<TVariant> data = {TVariant{ui32{1}}, TVariant{ui64{2}}, TVariant{ui32{3}}};
-    TVector<ui32> expected = {0u, 1u, 0u};
+    TVector<ui32> expected = {0U, 1U, 0U};
     TestBlockWay(data, expected);
 }
 
 Y_UNIT_TEST(TupleVariant_AllIndex0) {
     using TVariant = std::variant<ui32, ui64>;
     TVector<TVariant> data = {TVariant{ui32{10}}, TVariant{ui32{20}}, TVariant{ui32{30}}};
-    TVector<ui32> expected = {0u, 0u, 0u};
+    TVector<ui32> expected = {0U, 0U, 0U};
     TestBlockWay(data, expected);
 }
 
 Y_UNIT_TEST(TupleVariant_AllIndex1) {
     using TVariant = std::variant<ui32, ui64>;
     TVector<TVariant> data = {TVariant{ui64{10}}, TVariant{ui64{20}}, TVariant{ui64{30}}};
-    TVector<ui32> expected = {1u, 1u, 1u};
+    TVector<ui32> expected = {1U, 1U, 1U};
     TestBlockWay(data, expected);
 }
 
 Y_UNIT_TEST(TupleVariant_StringAlternative) {
     using TVariant = std::variant<ui32, TString>;
     TVector<TVariant> data = {TVariant{ui32{42}}, TVariant{TString{"hello"}}, TVariant{ui32{7}}};
-    TVector<ui32> expected = {0u, 1u, 0u};
+    TVector<ui32> expected = {0U, 1U, 0U};
     TestBlockWay(data, expected);
 }
 
 Y_UNIT_TEST(TupleVariant_InnerOptional) {
     using TVariant = std::variant<TMaybe<ui32>, ui64>;
-    TVector<TVariant> data = {TVariant{TMaybe<ui32>{10u}}, TVariant{ui64{20u}}, TVariant{TMaybe<ui32>{}}};
-    TVector<ui32> expected = {0u, 1u, 0u};
+    TVector<TVariant> data = {TVariant{TMaybe<ui32>{10U}}, TVariant{ui64{20U}}, TVariant{TMaybe<ui32>{}}};
+    TVector<ui32> expected = {0U, 1U, 0U};
     TestBlockWay(data, expected);
 }
 

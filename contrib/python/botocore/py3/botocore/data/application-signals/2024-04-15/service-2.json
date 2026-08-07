@@ -28,6 +28,22 @@
       ],
       "documentation":"<p>Use this operation to retrieve one or more <i>service level objective (SLO) budget reports</i>.</p> <p>An <i>error budget</i> is the amount of time or requests in an unhealthy state that your service can accumulate during an interval before your overall SLO budget health is breached and the SLO is considered to be unmet. For example, an SLO with a threshold of 99.95% and a monthly interval translates to an error budget of 21.9 minutes of downtime in a 30-day month.</p> <p>Budget reports include a health indicator, the attainment value, and remaining budget.</p> <p>For more information about SLO error budgets, see <a href=\"https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-ServiceLevelObjectives.html#CloudWatch-ServiceLevelObjectives-concepts\"> SLO concepts</a>.</p>"
     },
+    "BatchUpdateExclusionWindows":{
+      "name":"BatchUpdateExclusionWindows",
+      "http":{
+        "method":"PATCH",
+        "requestUri":"/exclusion-windows",
+        "responseCode":200
+      },
+      "input":{"shape":"BatchUpdateExclusionWindowsInput"},
+      "output":{"shape":"BatchUpdateExclusionWindowsOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Add or remove time window exclusions for one or more Service Level Objectives (SLOs).</p>"
+    },
     "CreateServiceLevelObjective":{
       "name":"CreateServiceLevelObjective",
       "http":{
@@ -44,7 +60,7 @@
         {"shape":"ServiceQuotaExceededException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Creates a service level objective (SLO), which can help you ensure that your critical business operations are meeting customer expectations. Use SLOs to set and track specific target levels for the reliability and availability of your applications and services. SLOs use service level indicators (SLIs) to calculate whether the application is performing at the level that you want.</p> <p>Create an SLO to set a target for a service or operation’s availability or latency. CloudWatch measures this target frequently you can find whether it has been breached. </p> <p>The target performance quality that is defined for an SLO is the <i>attainment goal</i>.</p> <p>You can set SLO targets for your applications that are discovered by Application Signals, using critical metrics such as latency and availability. You can also set SLOs against any CloudWatch metric or math expression that produces a time series.</p> <p>When you create an SLO, you specify whether it is a <i>period-based SLO</i> or a <i>request-based SLO</i>. Each type of SLO has a different way of evaluating your application's performance against its attainment goal.</p> <ul> <li> <p>A <i>period-based SLO</i> uses defined <i>periods</i> of time within a specified total time interval. For each period of time, Application Signals determines whether the application met its goal. The attainment rate is calculated as the <code>number of good periods/number of total periods</code>.</p> <p>For example, for a period-based SLO, meeting an attainment goal of 99.9% means that within your interval, your application must meet its performance goal during at least 99.9% of the time periods.</p> </li> <li> <p>A <i>request-based SLO</i> doesn't use pre-defined periods of time. Instead, the SLO measures <code>number of good requests/number of total requests</code> during the interval. At any time, you can find the ratio of good requests to total requests for the interval up to the time stamp that you specify, and measure that ratio against the goal set in your SLO.</p> </li> </ul> <p>After you have created an SLO, you can retrieve error budget reports for it. An <i>error budget</i> is the amount of time or amount of requests that your application can be non-compliant with the SLO's goal, and still have your application meet the goal.</p> <ul> <li> <p>For a period-based SLO, the error budget starts at a number defined by the highest number of periods that can fail to meet the threshold, while still meeting the overall goal. The <i>remaining error budget</i> decreases with every failed period that is recorded. The error budget within one interval can never increase.</p> <p>For example, an SLO with a threshold that 99.95% of requests must be completed under 2000ms every month translates to an error budget of 21.9 minutes of downtime per month.</p> </li> <li> <p>For a request-based SLO, the remaining error budget is dynamic and can increase or decrease, depending on the ratio of good requests to total requests.</p> </li> </ul> <p>For more information about SLOs, see <a href=\"https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-ServiceLevelObjectives.html\"> Service level objectives (SLOs)</a>. </p> <p>When you perform a <code>CreateServiceLevelObjective</code> operation, Application Signals creates the <i>AWSServiceRoleForCloudWatchApplicationSignals</i> service-linked role, if it doesn't already exist in your account. This service- linked role has the following permissions:</p> <ul> <li> <p> <code>xray:GetServiceGraph</code> </p> </li> <li> <p> <code>logs:StartQuery</code> </p> </li> <li> <p> <code>logs:GetQueryResults</code> </p> </li> <li> <p> <code>cloudwatch:GetMetricData</code> </p> </li> <li> <p> <code>cloudwatch:ListMetrics</code> </p> </li> <li> <p> <code>tag:GetResources</code> </p> </li> <li> <p> <code>autoscaling:DescribeAutoScalingGroups</code> </p> </li> </ul>"
+      "documentation":"<p>Creates a service level objective (SLO), which can help you ensure that your critical business operations are meeting customer expectations. Use SLOs to set and track specific target levels for the reliability and availability of your applications and services. SLOs use service level indicators (SLIs) to calculate whether the application is performing at the level that you want.</p> <p>Create an SLO to set a target for a service or operation’s availability or latency. CloudWatch measures this target frequently you can find whether it has been breached. </p> <p>The target performance quality that is defined for an SLO is the <i>attainment goal</i>.</p> <p>You can set SLO targets for your applications that are discovered by Application Signals, using critical metrics such as latency and availability. You can also set SLOs against any CloudWatch metric or math expression that produces a time series.</p> <note> <p>You can't create an SLO for a service operation that was discovered by Application Signals until after that operation has reported standard metrics to Application Signals.</p> </note> <p>When you create an SLO, you specify whether it is a <i>period-based SLO</i> or a <i>request-based SLO</i>. Each type of SLO has a different way of evaluating your application's performance against its attainment goal.</p> <ul> <li> <p>A <i>period-based SLO</i> uses defined <i>periods</i> of time within a specified total time interval. For each period of time, Application Signals determines whether the application met its goal. The attainment rate is calculated as the <code>number of good periods/number of total periods</code>.</p> <p>For example, for a period-based SLO, meeting an attainment goal of 99.9% means that within your interval, your application must meet its performance goal during at least 99.9% of the time periods.</p> </li> <li> <p>A <i>request-based SLO</i> doesn't use pre-defined periods of time. Instead, the SLO measures <code>number of good requests/number of total requests</code> during the interval. At any time, you can find the ratio of good requests to total requests for the interval up to the time stamp that you specify, and measure that ratio against the goal set in your SLO.</p> </li> </ul> <p>After you have created an SLO, you can retrieve error budget reports for it. An <i>error budget</i> is the amount of time or amount of requests that your application can be non-compliant with the SLO's goal, and still have your application meet the goal.</p> <ul> <li> <p>For a period-based SLO, the error budget starts at a number defined by the highest number of periods that can fail to meet the threshold, while still meeting the overall goal. The <i>remaining error budget</i> decreases with every failed period that is recorded. The error budget within one interval can never increase.</p> <p>For example, an SLO with a threshold that 99.95% of requests must be completed under 2000ms every month translates to an error budget of 21.9 minutes of downtime per month.</p> </li> <li> <p>For a request-based SLO, the remaining error budget is dynamic and can increase or decrease, depending on the ratio of good requests to total requests.</p> </li> </ul> <p>For more information about SLOs, see <a href=\"https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-ServiceLevelObjectives.html\"> Service level objectives (SLOs)</a>. </p> <p>When you perform a <code>CreateServiceLevelObjective</code> operation, Application Signals creates the <i>AWSServiceRoleForCloudWatchApplicationSignals</i> service-linked role, if it doesn't already exist in your account. This service- linked role has the following permissions:</p> <ul> <li> <p> <code>xray:GetServiceGraph</code> </p> </li> <li> <p> <code>logs:StartQuery</code> </p> </li> <li> <p> <code>logs:GetQueryResults</code> </p> </li> <li> <p> <code>cloudwatch:GetMetricData</code> </p> </li> <li> <p> <code>cloudwatch:ListMetrics</code> </p> </li> <li> <p> <code>tag:GetResources</code> </p> </li> <li> <p> <code>autoscaling:DescribeAutoScalingGroups</code> </p> </li> </ul>"
     },
     "DeleteServiceLevelObjective":{
       "name":"DeleteServiceLevelObjective",
@@ -123,6 +139,22 @@
         {"shape":"ThrottlingException"}
       ],
       "documentation":"<p>Returns the list of dependents that invoked the specified service during the provided time range. Dependents include other services, CloudWatch Synthetics canaries, and clients that are instrumented with CloudWatch RUM app monitors.</p>"
+    },
+    "ListServiceLevelObjectiveExclusionWindows":{
+      "name":"ListServiceLevelObjectiveExclusionWindows",
+      "http":{
+        "method":"GET",
+        "requestUri":"/slo/{Id}/exclusion-windows",
+        "responseCode":200
+      },
+      "input":{"shape":"ListServiceLevelObjectiveExclusionWindowsInput"},
+      "output":{"shape":"ListServiceLevelObjectiveExclusionWindowsOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Retrieves all exclusion windows configured for a specific SLO.</p>"
     },
     "ListServiceLevelObjectives":{
       "name":"ListServiceLevelObjectives",
@@ -292,8 +324,12 @@
       "type":"map",
       "key":{"shape":"KeyAttributeName"},
       "value":{"shape":"KeyAttributeValue"},
-      "max":3,
+      "max":4,
       "min":1
+    },
+    "AwsAccountId":{
+      "type":"string",
+      "pattern":"[0-9]{12}"
     },
     "BatchGetServiceLevelObjectiveBudgetReportInput":{
       "type":"structure",
@@ -334,6 +370,74 @@
         }
       }
     },
+    "BatchUpdateExclusionWindowsError":{
+      "type":"structure",
+      "required":[
+        "SloId",
+        "ErrorCode",
+        "ErrorMessage"
+      ],
+      "members":{
+        "SloId":{
+          "shape":"ServiceLevelObjectiveId",
+          "documentation":"<p>The SLO ID in the error.</p>"
+        },
+        "ErrorCode":{
+          "shape":"ExclusionWindowErrorCode",
+          "documentation":"<p>The error code.</p>"
+        },
+        "ErrorMessage":{
+          "shape":"ExclusionWindowErrorMessage",
+          "documentation":"<p>The error message.</p>"
+        }
+      },
+      "documentation":"<p>An array of structures, where each structure includes an error indicating that one of the requests in the array was not valid.</p>"
+    },
+    "BatchUpdateExclusionWindowsErrors":{
+      "type":"list",
+      "member":{"shape":"BatchUpdateExclusionWindowsError"},
+      "max":10,
+      "min":0
+    },
+    "BatchUpdateExclusionWindowsInput":{
+      "type":"structure",
+      "required":["SloIds"],
+      "members":{
+        "SloIds":{
+          "shape":"ServiceLevelObjectiveIds",
+          "documentation":"<p>The list of SLO IDs to add or remove exclusion windows from.</p>"
+        },
+        "AddExclusionWindows":{
+          "shape":"ExclusionWindows",
+          "documentation":"<p>A list of exclusion windows to add to the specified SLOs. You can add up to 10 exclusion windows per SLO.</p>"
+        },
+        "RemoveExclusionWindows":{
+          "shape":"ExclusionWindows",
+          "documentation":"<p>A list of exclusion windows to remove from the specified SLOs. The window configuration must match an existing exclusion window.</p>"
+        }
+      }
+    },
+    "BatchUpdateExclusionWindowsOutput":{
+      "type":"structure",
+      "required":[
+        "SloIds",
+        "Errors"
+      ],
+      "members":{
+        "SloIds":{
+          "shape":"ServiceLevelObjectiveIds",
+          "documentation":"<p>The list of SLO IDs that were successfully processed.</p>"
+        },
+        "Errors":{
+          "shape":"BatchUpdateExclusionWindowsErrors",
+          "documentation":"<p>A list of errors that occurred while processing the request.</p>"
+        }
+      }
+    },
+    "Boolean":{
+      "type":"boolean",
+      "box":true
+    },
     "BudgetRequestsRemaining":{
       "type":"integer",
       "box":true
@@ -351,7 +455,7 @@
           "documentation":"<p>The number of minutes to use as the look-back window.</p>"
         }
       },
-      "documentation":"<p>This object defines the length of the look-back window used to calculate one burn rate metric for this SLO. The burn rate measures how fast the service is consuming the error budget, relative to the attainment goal of the SLO. A burn rate of exactly 1 indicates that the SLO goal will be met exactly.</p> <p>For example, if you specify 60 as the number of minutes in the look-back window, the burn rate is calculated as the following:</p> <p> <i>burn rate = error rate over the look-back window / (1 - attainment goal percentage)</i> </p> <p>For more information about burn rates, see <a href=\"https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-ServiceLevelObjectives.html#CloudWatch-ServiceLevelObjectives-burn\">Calculate burn rates</a>.</p>"
+      "documentation":"<p>This object defines the length of the look-back window used to calculate one burn rate metric for this SLO. The burn rate measures how fast the service is consuming the error budget, relative to the attainment goal of the SLO. A burn rate of exactly 1 indicates that the SLO goal will be met exactly.</p> <p>For example, if you specify 60 as the number of minutes in the look-back window, the burn rate is calculated as the following:</p> <p> <i>burn rate = error rate over the look-back window / (100% - attainment goal percentage)</i> </p> <p>For more information about burn rates, see <a href=\"https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-ServiceLevelObjectives.html#CloudWatch-ServiceLevelObjectives-burn\">Calculate burn rates</a>.</p>"
     },
     "BurnRateConfigurations":{
       "type":"list",
@@ -467,6 +571,24 @@
       "members":{
       }
     },
+    "DependencyConfig":{
+      "type":"structure",
+      "required":[
+        "DependencyKeyAttributes",
+        "DependencyOperationName"
+      ],
+      "members":{
+        "DependencyKeyAttributes":{
+          "shape":"Attributes",
+          "documentation":"<p>This is a string-to-string map. It can include the following fields.</p> <ul> <li> <p> <code>Type</code> designates the type of object this is.</p> </li> <li> <p> <code>ResourceType</code> specifies the type of the resource. This field is used only when the value of the <code>Type</code> field is <code>Resource</code> or <code>AWS::Resource</code>.</p> </li> <li> <p> <code>Name</code> specifies the name of the object. This is used only if the value of the <code>Type</code> field is <code>Service</code>, <code>RemoteService</code>, or <code>AWS::Service</code>.</p> </li> <li> <p> <code>Identifier</code> identifies the resource objects of this resource. This is used only if the value of the <code>Type</code> field is <code>Resource</code> or <code>AWS::Resource</code>.</p> </li> <li> <p> <code>Environment</code> specifies the location where this object is hosted, or what it belongs to.</p> </li> </ul>"
+        },
+        "DependencyOperationName":{
+          "shape":"OperationName",
+          "documentation":"<p>The name of the called operation in the dependency.</p>"
+        }
+      },
+      "documentation":"<p>Identifies the dependency using the <code>DependencyKeyAttributes</code> and <code>DependencyOperationName</code>.</p> <p>When creating a service dependency SLO, you must specify the <code>KeyAttributes</code> of the service, and the <code>DependencyConfig</code> for the dependency. You can specify the <code>OperationName</code> of the service, from which it calls the dependency. Alternatively, you can exclude <code>OperationName</code> and the SLO will monitor all of the service's operations that call the dependency.</p>"
+    },
     "Dimension":{
       "type":"structure",
       "required":[
@@ -516,6 +638,52 @@
         "PeriodBased",
         "RequestBased"
       ]
+    },
+    "ExclusionDuration":{
+      "type":"integer",
+      "box":true,
+      "min":1
+    },
+    "ExclusionReason":{
+      "type":"string",
+      "max":1024,
+      "min":1
+    },
+    "ExclusionWindow":{
+      "type":"structure",
+      "required":["Window"],
+      "members":{
+        "Window":{
+          "shape":"Window",
+          "documentation":"<p>The SLO time window exclusion .</p>"
+        },
+        "StartTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The start of the SLO time window exclusion. Defaults to current time if not specified.</p>"
+        },
+        "RecurrenceRule":{
+          "shape":"RecurrenceRule",
+          "documentation":"<p>The recurrence rule for the SLO time window exclusion. Supports both cron and rate expressions.</p>"
+        },
+        "Reason":{
+          "shape":"ExclusionReason",
+          "documentation":"<p>A description explaining why this time period should be excluded from SLO calculations.</p>"
+        }
+      },
+      "documentation":"<p>The core SLO time window exclusion object that includes Window, StartTime, RecurrenceRule, and Reason.</p>"
+    },
+    "ExclusionWindowErrorCode":{"type":"string"},
+    "ExclusionWindowErrorMessage":{"type":"string"},
+    "ExclusionWindows":{
+      "type":"list",
+      "member":{"shape":"ExclusionWindow"},
+      "max":10,
+      "min":0
+    },
+    "Expression":{
+      "type":"string",
+      "max":1024,
+      "min":1
     },
     "FaultDescription":{"type":"string"},
     "GetServiceInput":{
@@ -775,6 +943,50 @@
         }
       }
     },
+    "ListServiceLevelObjectiveExclusionWindowsInput":{
+      "type":"structure",
+      "required":["Id"],
+      "members":{
+        "Id":{
+          "shape":"ServiceLevelObjectiveId",
+          "documentation":"<p>The ID of the SLO to list exclusion windows for.</p>",
+          "location":"uri",
+          "locationName":"Id"
+        },
+        "MaxResults":{
+          "shape":"ListServiceLevelObjectiveExclusionWindowsMaxResults",
+          "documentation":"<p>The maximum number of results to return in one operation. If you omit this parameter, the default of 50 is used. <pre><code> &lt;/p&gt; </code></pre>",
+          "location":"querystring",
+          "locationName":"MaxResults"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>Include this value, if it was returned by the previous operation, to get the next set of service level objectives. <pre><code> &lt;/p&gt; </code></pre>",
+          "location":"querystring",
+          "locationName":"NextToken"
+        }
+      }
+    },
+    "ListServiceLevelObjectiveExclusionWindowsMaxResults":{
+      "type":"integer",
+      "box":true,
+      "max":10,
+      "min":1
+    },
+    "ListServiceLevelObjectiveExclusionWindowsOutput":{
+      "type":"structure",
+      "required":["ExclusionWindows"],
+      "members":{
+        "ExclusionWindows":{
+          "shape":"ExclusionWindows",
+          "documentation":"<p>A list of exclusion windows configured for the SLO.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>Include this value, if it was returned by the previous operation, to get the next set of service level objectives. <pre><code> &lt;/p&gt; </code></pre>"
+        }
+      }
+    },
     "ListServiceLevelObjectivesInput":{
       "type":"structure",
       "members":{
@@ -788,6 +1000,10 @@
           "location":"querystring",
           "locationName":"OperationName"
         },
+        "DependencyConfig":{
+          "shape":"DependencyConfig",
+          "documentation":"<p>Identifies the dependency using the <code>DependencyKeyAttributes</code> and <code>DependencyOperationName</code>. </p>"
+        },
         "MaxResults":{
           "shape":"ListServiceLevelObjectivesMaxResults",
           "documentation":"<p>The maximum number of results to return in one operation. If you omit this parameter, the default of 50 is used.</p>",
@@ -799,6 +1015,22 @@
           "documentation":"<p>Include this value, if it was returned by the previous operation, to get the next set of service level objectives.</p>",
           "location":"querystring",
           "locationName":"NextToken"
+        },
+        "MetricSourceTypes":{
+          "shape":"MetricSourceTypes",
+          "documentation":"<p>Use this optional field to only include SLOs with the specified metric source types in the output. Supported types are:</p> <ul> <li> <p>Service operation</p> </li> <li> <p>Service dependency</p> </li> <li> <p>CloudWatch metric</p> </li> </ul>"
+        },
+        "IncludeLinkedAccounts":{
+          "shape":"Boolean",
+          "documentation":"<p>If you are using this operation in a monitoring account, specify <code>true</code> to include SLO from source accounts in the returned data. <pre><code> &lt;/p&gt; &lt;p&gt;When you are monitoring an account, you can use Amazon Web Services account ID in &lt;code&gt;KeyAttribute&lt;/code&gt; filter for service source account and &lt;code&gt;SloOwnerawsaccountID&lt;/code&gt; for SLO source account with &lt;code&gt;IncludeLinkedAccounts&lt;/code&gt; to filter the returned data to only a single source account. &lt;/p&gt; </code></pre>",
+          "location":"querystring",
+          "locationName":"IncludeLinkedAccounts"
+        },
+        "SloOwnerAwsAccountId":{
+          "shape":"AwsAccountId",
+          "documentation":"<p>SLO's Amazon Web Services account ID.</p>",
+          "location":"querystring",
+          "locationName":"SloOwnerAwsAccountId"
         }
       }
     },
@@ -921,6 +1153,18 @@
           "documentation":"<p>Include this value, if it was returned by the previous operation, to get the next set of services.</p>",
           "location":"querystring",
           "locationName":"NextToken"
+        },
+        "IncludeLinkedAccounts":{
+          "shape":"Boolean",
+          "documentation":"<p>If you are using this operation in a monitoring account, specify <code>true</code> to include services from source accounts in the returned data. <pre><code> &lt;/p&gt; </code></pre>",
+          "location":"querystring",
+          "locationName":"IncludeLinkedAccounts"
+        },
+        "AwsAccountId":{
+          "shape":"AwsAccountId",
+          "documentation":"<p>Amazon Web Services Account ID.</p>",
+          "location":"querystring",
+          "locationName":"AwsAccountId"
         }
       }
     },
@@ -1077,6 +1321,10 @@
         "MetricName":{
           "shape":"MetricName",
           "documentation":"<p>The name of the metric.</p>"
+        },
+        "AccountId":{
+          "shape":"AwsAccountId",
+          "documentation":"<p>Amazon Web Services account ID.</p>"
         }
       },
       "documentation":"<p>This structure contains information about one CloudWatch metric associated with this entity discovered by Application Signals.</p>"
@@ -1084,6 +1332,20 @@
     "MetricReferences":{
       "type":"list",
       "member":{"shape":"MetricReference"}
+    },
+    "MetricSourceType":{
+      "type":"string",
+      "enum":[
+        "ServiceOperation",
+        "CloudWatchMetric",
+        "ServiceDependency"
+      ]
+    },
+    "MetricSourceTypes":{
+      "type":"list",
+      "member":{"shape":"MetricSourceType"},
+      "max":3,
+      "min":1
     },
     "MetricStat":{
       "type":"structure",
@@ -1147,6 +1409,17 @@
       "type":"integer",
       "box":true,
       "min":1
+    },
+    "RecurrenceRule":{
+      "type":"structure",
+      "required":["Expression"],
+      "members":{
+        "Expression":{
+          "shape":"Expression",
+          "documentation":"<p>A cron or rate expression that specifies the schedule for the exclusion window.</p>"
+        }
+      },
+      "documentation":"<p>The recurrence rule for the SLO time window exclusion .</p>"
     },
     "RequestBasedServiceLevelIndicator":{
       "type":"structure",
@@ -1212,6 +1485,10 @@
         "MonitoredRequestCountMetric":{
           "shape":"MonitoredRequestCountMetricDataQueries",
           "documentation":"<p>This structure defines the metric that is used as the \"good request\" or \"bad request\" value for a request-based SLO. This value observed for the metric defined in <code>TotalRequestCountMetric</code> is divided by the number found for <code>MonitoredRequestCountMetric</code> to determine the percentage of successful requests that this SLO tracks.</p>"
+        },
+        "DependencyConfig":{
+          "shape":"DependencyConfig",
+          "documentation":"<p>Identifies the dependency using the <code>DependencyKeyAttributes</code> and <code>DependencyOperationName</code>. </p>"
         }
       },
       "documentation":"<p>This structure contains the information about the metric that is used for a request-based SLO.</p>"
@@ -1238,6 +1515,10 @@
         "MonitoredRequestCountMetric":{
           "shape":"MonitoredRequestCountMetricDataQueries",
           "documentation":"<p>Use this structure to define the metric that you want to use as the \"good request\" or \"bad request\" value for a request-based SLO. This value observed for the metric defined in <code>TotalRequestCountMetric</code> will be divided by the number found for <code>MonitoredRequestCountMetric</code> to determine the percentage of successful requests that this SLO tracks.</p>"
+        },
+        "DependencyConfig":{
+          "shape":"DependencyConfig",
+          "documentation":"<p>Identifies the dependency using the <code>DependencyKeyAttributes</code> and <code>DependencyOperationName</code>. </p>"
         }
       },
       "documentation":"<p>Use this structure to specify the information for the metric that a period-based SLO will monitor.</p>"
@@ -1469,6 +1750,10 @@
         "MetricDataQueries":{
           "shape":"MetricDataQueries",
           "documentation":"<p>If this SLO monitors a CloudWatch metric or the result of a CloudWatch metric math expression, this structure includes the information about that metric or expression. </p>"
+        },
+        "DependencyConfig":{
+          "shape":"DependencyConfig",
+          "documentation":"<p>Identifies the dependency using the <code>DependencyKeyAttributes</code> and <code>DependencyOperationName</code>. </p>"
         }
       },
       "documentation":"<p>This structure contains the information about the metric that is used for a period-based SLO.</p>"
@@ -1499,6 +1784,10 @@
         "MetricDataQueries":{
           "shape":"MetricDataQueries",
           "documentation":"<p>If this SLO monitors a CloudWatch metric or the result of a CloudWatch metric math expression, use this structure to specify that metric or expression. </p>"
+        },
+        "DependencyConfig":{
+          "shape":"DependencyConfig",
+          "documentation":"<p>Identifies the dependency using the <code>DependencyKeyAttributes</code> and <code>DependencyOperationName</code>. </p>"
         }
       },
       "documentation":"<p>Use this structure to specify the information for the metric that a period-based SLO will monitor.</p>"
@@ -1566,6 +1855,10 @@
         "BurnRateConfigurations":{
           "shape":"BurnRateConfigurations",
           "documentation":"<p>Each object in this array defines the length of the look-back window used to calculate one burn rate metric for this SLO. The burn rate measures how fast the service is consuming the error budget, relative to the attainment goal of the SLO.</p>"
+        },
+        "MetricSourceType":{
+          "shape":"MetricSourceType",
+          "documentation":"<p>Displays the SLI metric source type for this SLO. Supported types are:</p> <ul> <li> <p>Service operation</p> </li> <li> <p>Service dependency</p> </li> <li> <p>CloudWatch metric</p> </li> </ul>"
         }
       },
       "documentation":"<p>A structure containing information about one service level objective (SLO) that has been created in Application Signals. Creating SLOs can help you ensure your services are performing to the level that you expect. SLOs help you set and track a specific target level for the reliability and availability of your applications and services. Each SLO uses a service level indicator (SLI), which is a key performance metric, to calculate how much underperformance can be tolerated before the goal that you set for the SLO is not achieved.</p>"
@@ -1726,9 +2019,21 @@
           "shape":"OperationName",
           "documentation":"<p>If this service level objective is specific to a single operation, this field displays the name of that operation.</p>"
         },
+        "DependencyConfig":{
+          "shape":"DependencyConfig",
+          "documentation":"<p>Identifies the dependency using the <code>DependencyKeyAttributes</code> and <code>DependencyOperationName</code>. </p>"
+        },
         "CreatedTime":{
           "shape":"Timestamp",
           "documentation":"<p>The date and time that this service level objective was created. It is expressed as the number of milliseconds since Jan 1, 1970 00:00:00 UTC.</p>"
+        },
+        "EvaluationType":{
+          "shape":"EvaluationType",
+          "documentation":"<p>Displays whether this is a period-based SLO or a request-based SLO.</p>"
+        },
+        "MetricSourceType":{
+          "shape":"MetricSourceType",
+          "documentation":"<p>Displays the SLI metric source type for this SLO. Supported types are:</p> <ul> <li> <p>Service operation</p> </li> <li> <p>Service dependency</p> </li> <li> <p>CloudWatch metric</p> </li> </ul>"
         }
       },
       "documentation":"<p>A structure that contains information about one service level objective (SLO) created in Application Signals.</p>"
@@ -2004,6 +2309,24 @@
     "WarningThreshold":{
       "type":"double",
       "box":true
+    },
+    "Window":{
+      "type":"structure",
+      "required":[
+        "DurationUnit",
+        "Duration"
+      ],
+      "members":{
+        "DurationUnit":{
+          "shape":"DurationUnit",
+          "documentation":"<p>The unit of time for the exclusion window duration. Valid values: MINUTE, HOUR, DAY, MONTH.</p>"
+        },
+        "Duration":{
+          "shape":"ExclusionDuration",
+          "documentation":"<p>The number of time units for the exclusion window length.</p>"
+        }
+      },
+      "documentation":"<p>The object that defines the time length of an exclusion window.</p>"
     }
   },
   "documentation":"<p>Use CloudWatch Application Signals for comprehensive observability of your cloud-based applications. It enables real-time service health dashboards and helps you track long-term performance trends against your business goals. The application-centric view provides you with unified visibility across your applications, services, and dependencies, so you can proactively monitor and efficiently triage any issues that may arise, ensuring optimal customer experience.</p> <p>Application Signals provides the following benefits:</p> <ul> <li> <p>Automatically collect metrics and traces from your applications, and display key metrics such as call volume, availability, latency, faults, and errors. </p> </li> <li> <p>Create and monitor service level objectives (SLOs). </p> </li> <li> <p>See a map of your application topology that Application Signals automatically discovers, that gives you a visual representation of your applications, dependencies, and their connectivity.</p> </li> </ul> <p>Application Signals works with CloudWatch RUM, CloudWatch Synthetics canaries, and Amazon Web Services Service Catalog AppRegistry, to display your client pages, Synthetics canaries, and application names within dashboards and maps.</p>"

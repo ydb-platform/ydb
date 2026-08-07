@@ -7,13 +7,12 @@
 #include <yql/essentials/public/udf/arrow/args_dechunker.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TWideStreamThrottlerWrapper: public TMutableComputationNode<TWideStreamThrottlerWrapper> {
-    typedef TMutableComputationNode<TWideStreamThrottlerWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TWideStreamThrottlerWrapper>;
 
 public:
     class TStreamValue: public TComputationValue<TStreamValue> {
@@ -27,7 +26,7 @@ public:
         }
 
     private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
             if (Counter_++ % 3) {
                 return NUdf::EFetchStatus::Yield;
             }
@@ -71,7 +70,7 @@ private:
 };
 
 class TWideStreamDethrottlerWrapper: public TMutableComputationNode<TWideStreamDethrottlerWrapper> {
-    typedef TMutableComputationNode<TWideStreamDethrottlerWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TWideStreamDethrottlerWrapper>;
 
 public:
     class TStreamValue: public TComputationValue<TStreamValue> {
@@ -85,7 +84,7 @@ public:
         }
 
     private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
             TUnboxedValueVector items(width);
             for (;;) {
                 switch (OrigStream_.WideFetch(items.data(), width)) {
@@ -237,7 +236,7 @@ NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
             }
             items[width] = MakeBlockCount(holderFactory, chunkLen, NYql::DefaultDatumTestValidationMode);
 
-            listValues = listValues.Append(std::move(tuple));
+            listValues = listValues.Append(tuple);
         }
     }
     return holderFactory.CreateDirectListHolder(std::move(listValues));
@@ -267,7 +266,7 @@ NUdf::TUnboxedValuePod MakeUint64ScalarBlock(TComputationContext& ctx, size_t bl
             items[i] = holderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(item.Get<ui64>())), NYql::DefaultDatumTestValidationMode);
         }
         items[width] = MakeBlockCount(holderFactory, std::min(blockSize, rowsCount - rowOffset), NYql::DefaultDatumTestValidationMode);
-        listValues = listValues.Append(std::move(tuple));
+        listValues = listValues.Append(tuple);
     }
 
     return holderFactory.CreateDirectListHolder(std::move(listValues));
@@ -304,7 +303,7 @@ NUdf::TUnboxedValuePod FromBlocks(TComputationContext& ctx,
                 const auto blockItem = readers[j]->GetItem(*arrayDatum.array(), i);
                 items[j] = converters[j]->MakeValue(blockItem, holderFactory);
             }
-            listValues = listValues.Append(std::move(tuple));
+            listValues = listValues.Append(tuple);
         }
     }
     return holderFactory.CreateDirectListHolder(std::move(listValues));
@@ -324,13 +323,13 @@ TComputationNodeFactory GetNodeFactory() {
 TRuntimeNode ThrottleStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
     TCallableBuilder callableBuilder(pgmBuilder.GetTypeEnvironment(), "WideStreamThrottler", stream.GetStaticType());
     callableBuilder.Add(stream);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode DethrottleStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
     TCallableBuilder callableBuilder(pgmBuilder.GetTypeEnvironment(), "WideStreamDethrottler", stream.GetStaticType());
     callableBuilder.Add(stream);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list) {
@@ -385,7 +384,8 @@ TVector<TString> GenerateValues(size_t level) {
 
 TSet<ui64> GenerateFibonacci(size_t count) {
     TSet<ui64> fibSet;
-    ui64 a = 0, b = 1;
+    ui64 a = 0;
+    ui64 b = 1;
     fibSet.insert(a);
     while (count--) {
         a = std::exchange(b, a + b);
@@ -394,5 +394,4 @@ TSet<ui64> GenerateFibonacci(size_t count) {
     return fibSet;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

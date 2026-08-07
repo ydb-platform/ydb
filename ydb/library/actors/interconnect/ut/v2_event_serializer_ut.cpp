@@ -69,8 +69,8 @@ void CheckIndexedEvent(IEventHandle& outEv, ui16 channel, size_t dataLen, bool w
     }
 }
 
-std::deque<TContiguousSpan> Serialize(TEventSerializer& ser, std::vector<TRcBuf>& bufs) {
-    std::deque<TContiguousSpan> spans;
+std::vector<TContiguousSpan> Serialize(TEventSerializer& ser, std::vector<TRcBuf>& bufs) {
+    std::vector<TContiguousSpan> spans;
 
     for (;;) {
         if (bufs.empty() || bufs.back().size() < 1024) {
@@ -105,7 +105,7 @@ void CheckSerializeThenDeserialize(bool withPayload, bool buffer, ui32 metaLengt
     ser.Push(std::move(h));
 
     std::vector<TRcBuf> bufs;
-    std::deque<TContiguousSpan> spans = Serialize(ser, bufs);
+    std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
 
     TEventDeserializer deser(TScopeId{});
     TEventProcessor processor;
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         }
 
         std::vector<TRcBuf> bufs;
-        std::deque<TContiguousSpan> spans = Serialize(ser, bufs);
+        std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
 
         TString stream;
         for (const TContiguousSpan& s : spans) {
@@ -235,13 +235,13 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
 
         struct TBatch {
             TRcBuf Scratch;
-            std::deque<TContiguousSpan> Spans;
+            std::vector<TContiguousSpan> Spans;
             size_t Bytes;
         };
         std::vector<TBatch> batches;
         for (;;) {
             TRcBuf scratch = TRcBuf::Uninitialized(4096); // small scratch -> many pipelined batches
-            std::deque<TContiguousSpan> spans;
+            std::vector<TContiguousSpan> spans;
             size_t total = 0;
             for (;;) {
                 const size_t produced = ser.ProduceOutputStream(scratch, &spans);
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         }
 
         std::vector<TRcBuf> bufs;
-        std::deque<TContiguousSpan> spans = Serialize(ser, bufs);
+        std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
 
         // feed the produced stream to the deserializer chunk by chunk and record the exact delivery order
         TEventDeserializer deser(TScopeId{});
@@ -445,7 +445,7 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         ser.Push(MakeCordEventHandle(/*channel=*/1, /*cookie=*/7, /*fill=*/'Z', /*size=*/cordSize));
 
         std::vector<TRcBuf> bufs;
-        std::deque<TContiguousSpan> spans = Serialize(ser, bufs);
+        std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
 
         TString stream;
         for (const TContiguousSpan& s : spans) {
@@ -482,7 +482,7 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
 
         struct TBatch {
             TRcBuf Scratch;
-            std::deque<TContiguousSpan> Spans;
+            std::vector<TContiguousSpan> Spans;
             size_t Bytes;
         };
         // One ProduceOutputStream call per batch: Cord aliasing barely consumes scratch, so draining
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         std::vector<TBatch> batches;
         for (;;) {
             TRcBuf scratch = TRcBuf::Uninitialized(512);
-            std::deque<TContiguousSpan> spans;
+            std::vector<TContiguousSpan> spans;
             const size_t produced = ser.ProduceOutputStream(scratch, &spans);
             if (!produced) {
                 break;

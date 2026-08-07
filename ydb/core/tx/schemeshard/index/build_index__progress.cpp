@@ -1232,7 +1232,7 @@ private:
         auto& indexShardStatus = buildInfo.Shards.at(shardIdx);
 
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
-        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+        auto table = Self->Tables.at(path->PathId);
 
         record.SetOwnerId(path->PathId.OwnerId);
         record.SetPathId(path->PathId.LocalPathId);
@@ -2460,7 +2460,7 @@ private:
         LOG_N("TTxBuildProgress: Performing cross shard unique index validation: " << BuildId << " " << buildInfo.State);
 
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
-        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+        auto table = Self->Tables.at(path->PathId);
 
         // Make index columns type info
         std::vector<NScheme::TTypeInfoOrder> indexColumnTypeInfos;
@@ -3052,7 +3052,7 @@ public:
         Y_ENSURE(path.LockedBy() == buildInfo.LockTxId);
         LOG_D("InitiateShards table: " << path.PathString());
 
-        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+        auto table = Self->Tables.at(path->PathId);
 
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         static constexpr std::string_view LogPrefix = "";

@@ -75,7 +75,7 @@ public:
             Y_ABORT_UNLESS(path);
 
             Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-            TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+            auto table = context.SS->Tables.at(pathId);
             Y_ABORT_UNLESS(table);
 
             auto seqNo = context.SS->StartRound(*txState);
@@ -167,7 +167,7 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        auto& table = context.SS->Tables.UpdateUntracked(pathId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -328,12 +328,12 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
+        auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
         Y_ABORT_UNLESS(table->AlterVersion != 0);
 
         Y_ABORT_UNLESS(context.SS->Indexes.contains(indexPath.Base()->PathId));
-        TTableIndexInfo::TPtr index = context.SS->Indexes.at(indexPath.Base()->PathId);
+        auto index = context.SS->Indexes.at(indexPath.Base()->PathId);
 
         Y_ABORT_UNLESS(index->AlterVersion != 0);
         Y_ABORT_UNLESS(!index->AlterData);

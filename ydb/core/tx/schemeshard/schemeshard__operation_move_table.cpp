@@ -112,7 +112,7 @@ public:
 
         TString txBody;
         if (srcPath->IsTable()) {
-            TTableInfo::TPtr srcTable = context.SS->Tables.at(srcPath->PathId);
+            auto srcTable = context.SS->Tables.at(srcPath->PathId);
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             context.SS->FillSeqNo(tx, seqNo);
@@ -182,7 +182,7 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
     srcPath->SetDropped(txState.PlanStep, operationId.GetTxId());
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
     if (srcPath->IsTable()) {
-        context.SS->Tables.at(srcPath->PathId)->DetachShardsStats();
+        context.SS->Tables.UpdateUntracked(srcPath->PathId)->DetachShardsStats();
         context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
     } else if (srcPath->IsColumnTable()) {
         context.SS->PersistColumnTableRemove(db, srcPath->PathId, context.Ctx, /* skipStatsUpdate */ true);
@@ -282,7 +282,7 @@ public:
             tableInfo->AlterVersion += 1;
 
             // copy table info
-            context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
+            context.SS->Tables.SetUntracked(dstPath.Base()->PathId, tableInfo);
             context.SS->PersistTable(db, dstPath.Base()->PathId);
             context.SS->PersistAllTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
             {
@@ -302,7 +302,6 @@ public:
         } else {
             Y_ABORT();
         }
-        context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "move table info");
 
         dstPath->StepCreated = step;
         context.SS->PersistCreateStep(db, dstPath.Base()->PathId, step);
@@ -507,7 +506,7 @@ public:
         MarkSrcDropped(db, context, OperationId, *txState, srcPath);
         if (srcPath->IsTable()) {
             Y_ABORT_UNLESS(context.SS->Tables.contains(dstPath.Base()->PathId));
-            auto tableInfo = context.SS->Tables.at(dstPath.Base()->PathId);
+            auto& tableInfo = context.SS->Tables.UpdateUntracked(dstPath.Base()->PathId);
 
             if (tableInfo->IsTTLEnabled() && !context.SS->TTLEnabledTables.contains(dstPath.Base()->PathId)) {
                 context.SS->TTLEnabledTables[dstPath.Base()->PathId] = tableInfo;
@@ -940,7 +939,6 @@ public:
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->ParentPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabNewIndex(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(dstParent.Base()->PathId);
@@ -973,7 +971,7 @@ public:
 
         // wait splits
         if (srcPath->IsTable()) {
-            TTableInfo::TPtr tableSrc = context.SS->Tables.at(srcPath.Base()->PathId);
+            auto tableSrc = context.SS->Tables.at(srcPath.Base()->PathId);
             for (auto splitTx: tableSrc->GetSplitOpsInFlight()) {
                 context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
             }

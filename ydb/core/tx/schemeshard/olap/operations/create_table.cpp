@@ -618,7 +618,7 @@ public:
             }
 
             if (auto olapStorePath = parentPath.FindOlapStore()) {
-                storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
+                storeInfo = context.SS->OlapStores.UpdateUntracked(olapStorePath->PathId);
                 Y_ABORT_UNLESS(storeInfo, "Unexpected failure to find an tablestore info");
 
                 NSchemeShard::TPath::TChecker storeChecks = olapStorePath.Check();
@@ -751,7 +751,7 @@ public:
             storeInfo->ColumnTablesUnderOperation.insert(pathId);
             context.SS->PersistColumnTable(db, pathId, *pending);
             context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
-            context.SS->IncrementPathDbRefCount(pathId);
+            context.SS->AcquireOwnDbRef(pathId, "type info record");
 
             if (parentPath.Base()->HasActiveChanges()) {
                 TTxId parentTxId = parentPath.Base()->PlannedToCreate()
@@ -805,7 +805,7 @@ public:
 
             context.SS->PersistColumnTable(db, pathId, *pending);
             context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
-            context.SS->IncrementPathDbRefCount(pathId);
+            context.SS->AcquireOwnDbRef(pathId, "type info record");
 
             if (parentPath.Base()->HasActiveChanges()) {
                 TTxId parentTxId = parentPath.Base()->PlannedToCreate()

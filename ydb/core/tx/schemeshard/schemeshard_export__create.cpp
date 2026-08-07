@@ -890,7 +890,7 @@ private:
                 return TStringBuilder() << "Cannot find table: " << itemPathId;
             }
 
-            TColumnTableInfo::TPtr table = Self->ColumnTables.at(itemPathId).GetPtr();
+            auto table = Self->ColumnTables.at(itemPathId);
             return GetIssues(table, itemPathId, backupTxId);
         }
 
@@ -898,7 +898,7 @@ private:
             return TStringBuilder() << "Cannot find table: " << itemPathId;
         }
 
-        TTableInfo::TPtr table = Self->Tables.at(itemPathId);
+        auto table = Self->Tables.at(itemPathId);
         return GetIssues(table, itemPathId, backupTxId);
     }
 

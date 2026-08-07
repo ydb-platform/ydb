@@ -35,7 +35,7 @@ inline TVector<TString> GetFulltextPrefixColumns(const NProtoBuf::RepeatedPtrFie
 }
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NSchemeShard::TTableInfo::TCPtr& baseTableInfo,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     ui32 uniqueKeySize);
@@ -51,7 +51,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NSchemeShard::TTableInfo::TCPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
@@ -67,7 +67,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
     const THashSet<TString>& indexKeyColumns,
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NSchemeShard::TTableInfo::TCPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
@@ -80,14 +80,14 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeBuildOverlapTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NSchemeShard::TTableInfo::TCPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix = {});
 
 NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NSchemeShard::TTableInfo::TCPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
@@ -105,7 +105,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const TVector<TString>& prefixColumns = {});
 
 NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NSchemeShard::TTableInfo::TCPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
@@ -123,7 +123,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     bool isBuild);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NSchemeShard::TTableInfo::TCPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const TString& indexColumn,
@@ -139,7 +139,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NSchemeShard::TTableInfo::TCPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
@@ -153,7 +153,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NSchemeShard::TTableInfo::TCPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
@@ -165,7 +165,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
-    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NSchemeShard::TTableInfo::TCPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
@@ -174,7 +174,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
-TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
+TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TCPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
@@ -186,7 +186,7 @@ void FillIndexTableColumns(
 
 using TColumnTypes = THashMap<TString, NScheme::TTypeInfo>;
 
-bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTypes& columnsTypes, TString& explain);
+bool ExtractTypes(const NSchemeShard::TTableInfo::TCPtr& baseTableInfo, TColumnTypes& columnsTypes, TString& explain);
 bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDesc, TColumnTypes& columnsTypes, TString& explain);
 
 bool IsCompatibleKeyTypes(
@@ -224,7 +224,7 @@ struct TFulltextRowIdClassification {
 // case so the schemeshard can auto-provision it. See EFulltextRowIdPlan. For a non-fulltext index the
 // plan is NotApplicable.
 TFulltextRowIdClassification ClassifyFulltextRowId(
-    const NSchemeShard::TTableInfo::TPtr& tableInfo,
+    const NSchemeShard::TTableInfo::TCPtr& tableInfo,
     const TMap<TString, TPathId>& tableChildren,
     const THashMap<TPathId, NSchemeShard::TTableIndexInfo::TPtr>& indexes,
     const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
@@ -238,7 +238,7 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
 // on the strict path (e.g. the create-build-index sub-operation composer) treat that as a rejection;
 // the auto-provisioning entry point (TTxCreate) uses ClassifyFulltextRowId directly instead.
 bool MaybeEnableFulltextRowIdMode(
-    const NSchemeShard::TTableInfo::TPtr& tableInfo,
+    const NSchemeShard::TTableInfo::TCPtr& tableInfo,
     const TMap<TString, TPathId>& tableChildren,
     const THashMap<TPathId, NSchemeShard::TTableIndexInfo::TPtr>& indexes,
     NKikimrSchemeOp::TIndexCreationConfig& indexDesc,

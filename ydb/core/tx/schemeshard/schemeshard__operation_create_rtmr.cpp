@@ -84,7 +84,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateRtmrVolume);
 
-        auto rtmrVol = context.SS->RtmrVolumes[txState->TargetPathId];
+        auto& rtmrVol = context.SS->RtmrVolumes.UpdateUntracked(txState->TargetPathId);
         Y_VERIFY_S(rtmrVol, "rtmr volume is null. PathId: " << txState->TargetPathId);
         Y_ABORT_UNLESS(rtmrVol->Partitions.size() == txState->Shards.size(),
                  "%" PRIu64 "rtmr shards expected, %" PRIu64 " created",
@@ -302,8 +302,11 @@ public:
             return result;
         }
 
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+        const TPathId pathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, pathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        dstPath.MaterializeLeaf(owner, pathId);
+        result->SetPathId(pathId.LocalPathId);
 
         TPathElement::TPtr newRtmrVolume = dstPath.Base();
         newRtmrVolume->CreateTxId = OperationId.GetTxId();
@@ -328,10 +331,9 @@ public:
         context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
         context.OnComplete.ActivateTx(OperationId);
 
-        context.SS->RtmrVolumes[newRtmrVolume->PathId] = rtmrVolumeInfo;
+        context.SS->RtmrVolumes.Set({.Path = newRtmrVolume->PathId, .Value = rtmrVolumeInfo, .Changes = context.MemChanges});
         context.SS->TabletCounters->Simple()[COUNTER_RTMR_VOLUME_COUNT].Add(1);
         context.SS->TabletCounters->Simple()[COUNTER_RTMR_PARTITIONS_COUNT].Add(rtmrVolumeInfo->Partitions.size());
-        context.SS->IncrementPathDbRefCount(newRtmrVolume->PathId);
 
         if (!acl.empty()) {
             newRtmrVolume->ApplyACL(acl);

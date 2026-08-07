@@ -94,7 +94,7 @@ namespace {
 
         TEventSerializer Serializer;
         TRcBuf Scratch;
-        std::deque<TContiguousSpan> Spans;
+        std::vector<TContiguousSpan> Spans;
     };
 
     struct TDroppingProcessor: TEventDeserializer::IEventProcessor {
@@ -117,7 +117,7 @@ namespace {
 
         TString stream;
         std::vector<TRcBuf> buffers;
-        std::deque<TContiguousSpan> spans;
+        std::vector<TContiguousSpan> spans;
         for (;;) {
             if (buffers.empty() || buffers.back().size() < 1024) {
                 buffers.push_back(TRcBuf::Uninitialized(256 << 10));

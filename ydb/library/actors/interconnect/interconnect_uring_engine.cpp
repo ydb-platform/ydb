@@ -158,7 +158,7 @@ namespace NActors {
             const bool SendPings;
             TRcBuf WriteBuffer;
             size_t WriteBufferSize = 0;
-            std::deque<TContiguousSpan> OutgoingSpans;
+            std::vector<TContiguousSpan> OutgoingSpans;
             iovec Iov[MaxSpansPerWrite];
             size_t IovLen = 0;
             size_t UnsentBytes = 0;
@@ -342,15 +342,17 @@ namespace NActors {
                         NSan::CheckMemIsInitialized(span.data(), span.size());
                     }
                 }
-                for (size_t remaining = num; remaining; OutgoingSpans.pop_front()) {
-                    Y_DEBUG_ABORT_UNLESS(!OutgoingSpans.empty());
-                    if (TContiguousSpan& front = OutgoingSpans.front(); front.size() <= remaining) {
+                size_t index = 0;
+                for (size_t remaining = num; remaining; ++index) {
+                    Y_DEBUG_ABORT_UNLESS(index < OutgoingSpans.size());
+                    if (TContiguousSpan& front = OutgoingSpans[index]; front.size() <= remaining) {
                         remaining -= front.size();
                     } else {
                         front = TContiguousSpan(front.data() + remaining, front.size() - remaining);
                         break;
                     }
                 }
+                OutgoingSpans.erase(OutgoingSpans.begin(), OutgoingSpans.begin() + index);
 
                 Y_ABORT_UNLESS(num <= UnsentBytes, "num# %zu UnsentBytes# %zu", num, UnsentBytes);
                 UnsentBytes -= num;
@@ -624,17 +626,20 @@ namespace NActors {
             NMonitoring::TDynamicCounters::TCounterPtr OutOfOrderProcessed;
             NMonitoring::TDynamicCounters::TCounterPtr DeadPeersDetected;
 
-            NMonitoring::TDynamicCounters::TCounterPtr OtherTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr CompleteWaitTotalTime;
-            NMonitoring::TDynamicCounters::TCounterPtr SubmitWaitTotalTime;
+            NMonitoring::TDynamicCounters::TCounterPtr SubmitTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr ApplyBytesReadTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr ApplyBytesWrittenTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr SerializeEventTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr ReceiveCallbackTotalTime;
+            NMonitoring::TDynamicCounters::TCounterPtr ProcessCompletionsTotalTime;
+            NMonitoring::TDynamicCounters::TCounterPtr ProcessPendingCommandsTotalTime;
+            NMonitoring::TDynamicCounters::TCounterPtr ProcessTouchedSessionsTotalTime;
+            NMonitoring::TDynamicCounters::TCounterPtr SerializeTotalTime;
+            NMonitoring::TDynamicCounters::TCounterPtr DestroyEventsTotalTime;
 
             NMonitoring::THistogramPtr CommandDeliveryTime;
             NMonitoring::THistogramPtr EventToWireTime;
-            NMonitoring::THistogramPtr CompletionWaitTime;
             NMonitoring::THistogramPtr CommandExecTime;
             NMonitoring::THistogramPtr SubmitExecTime;
             NMonitoring::THistogramPtr SerializeTime;
@@ -642,7 +647,7 @@ namespace NActors {
             NMonitoring::THistogramPtr SubmissionsProcessedAtOnce;
 
             ui64 LastActivitySwitchTimestamp = 0;
-            NMonitoring::TDynamicCounters::TCounterPtr *CurrentActivityTime = &OtherTotalTime;
+            NMonitoring::TDynamicCounters::TCounterPtr *CurrentActivityTime = nullptr;
 
             const double Freq = 1e9 * NHPTimer::GetSeconds(1); // nanoseconds per cycle
 
@@ -660,6 +665,22 @@ namespace NActors {
             const ui32 MaxSerializeWindowSize;
 
         private:
+            NMonitoring::TDynamicCounters::TCounterPtr *SwitchActivity(
+                    NMonitoring::TDynamicCounters::TCounterPtr *newActivity, ui64 currentTimestamp) {
+                if (CurrentActivityTime != newActivity) {
+                    const ui64 timestamp = std::exchange(LastActivitySwitchTimestamp, currentTimestamp);
+                    if (CurrentActivityTime) {
+                        **CurrentActivityTime += (LastActivitySwitchTimestamp - timestamp) * Freq;
+                    }
+                }
+                return std::exchange(CurrentActivityTime, newActivity);
+            }
+
+            NMonitoring::TDynamicCounters::TCounterPtr *SwitchActivity(
+                    NMonitoring::TDynamicCounters::TCounterPtr *newActivity) {
+                return SwitchActivity(newActivity, GetCycleCountFast());
+            }
+
             class TActivityMeasure {
                 TShard& Shard;
                 NMonitoring::TDynamicCounters::TCounterPtr *PrevActivityTime;
@@ -667,22 +688,11 @@ namespace NActors {
             public:
                 TActivityMeasure(TShard& shard, NMonitoring::TDynamicCounters::TCounterPtr *activityTime)
                     : Shard(shard)
-                    , PrevActivityTime(std::exchange(shard.CurrentActivityTime, activityTime))
-                {
-                    **PrevActivityTime += UpdateTimestamp();
-                }
+                    , PrevActivityTime(Shard.SwitchActivity(activityTime))
+                {}
 
                 ~TActivityMeasure() {
-                    const ui64 delta = UpdateTimestamp();
-                    if (Shard.CurrentActivityTime) {
-                        **Shard.CurrentActivityTime += delta;
-                    }
-                    Shard.CurrentActivityTime = PrevActivityTime;
-                }
-
-                ui64 UpdateTimestamp() {
-                    const ui64 prevTimestamp = std::exchange(Shard.LastActivitySwitchTimestamp, GetCycleCountFast());
-                    return (Shard.LastActivitySwitchTimestamp - prevTimestamp) * Shard.Freq;
+                    Shard.SwitchActivity(PrevActivityTime);
                 }
             };
 
@@ -842,16 +852,19 @@ namespace NActors {
                 , COUNTER(OutOfOrderProcessed, true)
                 , COUNTER(DeadPeersDetected, true)
 #define TOTAL_TIME(NAME) NAME(shardCounters->GetCounter("TotalTime/" #NAME, true))
-                , TOTAL_TIME(OtherTotalTime)
                 , TOTAL_TIME(CompleteWaitTotalTime)
-                , TOTAL_TIME(SubmitWaitTotalTime)
+                , TOTAL_TIME(SubmitTotalTime)
                 , TOTAL_TIME(ApplyBytesReadTotalTime)
                 , TOTAL_TIME(ApplyBytesWrittenTotalTime)
                 , TOTAL_TIME(SerializeEventTotalTime)
                 , TOTAL_TIME(ReceiveCallbackTotalTime)
+                , TOTAL_TIME(ProcessCompletionsTotalTime)
+                , TOTAL_TIME(ProcessPendingCommandsTotalTime)
+                , TOTAL_TIME(ProcessTouchedSessionsTotalTime)
+                , TOTAL_TIME(SerializeTotalTime)
+                , TOTAL_TIME(DestroyEventsTotalTime)
                 , CommandDeliveryTime(shardCounters->GetNamedHistogram("sensor", "CommandDeliveryTime", TimeCollector()))
                 , EventToWireTime(shardCounters->GetNamedHistogram("sensor", "EventToWireTime", TimeCollector()))
-                , CompletionWaitTime(shardCounters->GetNamedHistogram("sensor", "CompletionWaitTime", TimeCollector()))
                 , CommandExecTime(shardCounters->GetNamedHistogram("sensor", "CommandExecTime", TimeCollector()))
                 , SubmitExecTime(shardCounters->GetNamedHistogram("sensor", "SubmitExecTime", TimeCollector()))
                 , SerializeTime(shardCounters->GetNamedHistogram("sensor", "SerializeTime", TimeCollector()))
@@ -1131,7 +1144,7 @@ namespace NActors {
             void DoSubmit(TRingSlot& slot) {
                 ui64 enterTimestamp;
 
-                ACTIVITY(&SubmitWaitTotalTime) {
+                ACTIVITY(&SubmitTotalTime) {
                     enterTimestamp = LastActivitySwitchTimestamp;
 
                     for (;;) {
@@ -1155,15 +1168,16 @@ namespace NActors {
             void WorkerThread() {
                 pthread_setname_np(pthread_self(), "IC_uring");
 
-                LastActivitySwitchTimestamp = GetCycleCountFast();
-                ui64 loopStartTimestamp = LastActivitySwitchTimestamp;
-
                 // Arm pipe + timer
                 PutEventReadRequest();
                 PutTimer();
 
+                LastActivitySwitchTimestamp = GetCycleCountFast();
+                ui64 loopStartTimestamp = LastActivitySwitchTimestamp;
+
                 for (;;) {
                     // submit any pending SQ's (if we have any)
+                    SwitchActivity(&SubmitTotalTime, loopStartTimestamp);
                     for (auto& slot : Rings) {
                         if (slot.ItemsToSubmit) {
                             DoSubmit(slot);
@@ -1171,9 +1185,11 @@ namespace NActors {
                     }
 
                     // process pending CQ events from every ring
+                    SwitchActivity(&ProcessCompletionsTotalTime);
                     bool progress = ProcessCompletions();
 
                     // process pending events and commands
+                    SwitchActivity(&ProcessPendingCommandsTotalTime);
                     bool stopping = false;
                     progress |= ProcessPendingCommands(&stopping);
                     if (stopping) {
@@ -1181,6 +1197,7 @@ namespace NActors {
                     }
 
                     // process touched sessions
+                    SwitchActivity(&ProcessTouchedSessionsTotalTime);
                     while (!TouchedSessions.Empty()) {
                         TSession *session = TouchedSessions.PopFront();
                         MaybeIssueReadForSession(*session);
@@ -1192,6 +1209,7 @@ namespace NActors {
                     }
 
                     // discard pending events/buffers, if any
+                    SwitchActivity(&DestroyEventsTotalTime);
                     if (!EvDestroyEvents->Events.empty() || !EvDestroyEvents->Buffers.empty()) {
                         const size_t bytes = EvDestroyEvents->CalculateTotalSize();
                         const auto& counter = Engine.Common->DestructorQueueSize;
@@ -1204,22 +1222,19 @@ namespace NActors {
                         EvDestroyEvents = std::make_unique<TEvDestroyEvents>();
                     }
 
-                    ui64 waitStartTimestamp = 0;
-                    if (!progress) { // wait for something to happen -- no progress were made in this loop
+                    // wait for CQ in there is no progress
+                    SwitchActivity(&CompleteWaitTotalTime);
+                    const ui64 waitStartTimestamp = LastActivitySwitchTimestamp;
+                    if (!progress) {
                         WaitingForCQ.store(true, std::memory_order_release);
 
                         // it is critical we first set WaitingForCQ, and then rechecking the queue
                         if (IncomingEventQueue.IsEmpty()) {
+                            // wait for the ring waiting for EventFd
                             io_uring_cqe *cqe;
-                            ui64 enterTimestamp;
-                            ACTIVITY(&CompleteWaitTotalTime) {
-                                waitStartTimestamp = enterTimestamp = LastActivitySwitchTimestamp;
-                                // wait for the ring waiting for EventFd
-                                if (int res = io_uring_wait_cqe(&Rings.front().Ring, &cqe); res && res != -EINTR) {
-                                    Y_ABORT("io_uring_wait_cqe() failed: %s", strerror(-res));
-                                }
+                            if (int res = io_uring_wait_cqe(&Rings.front().Ring, &cqe); res && res != -EINTR) {
+                                Y_ABORT("io_uring_wait_cqe() failed: %s", strerror(-res));
                             }
-                            CompletionWaitTime->Collect((LastActivitySwitchTimestamp - enterTimestamp) * Freq);
                         }
 
                         WaitingForCQ.store(false, std::memory_order_relaxed);
@@ -1227,7 +1242,7 @@ namespace NActors {
 
                     const ui64 loopEndTimestamp = GetCycleCountFast();
                     const ui64 total = loopEndTimestamp - loopStartTimestamp;
-                    const ui64 wait = waitStartTimestamp ? loopEndTimestamp - waitStartTimestamp : 0;
+                    const ui64 wait = loopEndTimestamp - waitStartTimestamp;
                     const ui64 work = wait < total ? total - wait : 0;
                     PublishLoadSample(work, total);
                     loopStartTimestamp = loopEndTimestamp;
@@ -1685,13 +1700,14 @@ namespace NActors {
                     return;
                 }
                 if (session.Serializer.IsTrafficPending()) {
-                    session.Serialize(MinWriteBufferSize, MaxWriteBufferSize);
-                    const ui64 serializeEventTime = session.Serializer.GetSerializeEventTime();
-                    const ui64 prevTimestamp = std::exchange(LastActivitySwitchTimestamp, GetCycleCountFast());
-                    **CurrentActivityTime += (LastActivitySwitchTimestamp - prevTimestamp - serializeEventTime) * Freq;
-                    *SerializeEventTotalTime += serializeEventTime * Freq;
-                    *BytesCopied += session.Serializer.GetBytesCopied();
-                    *BytesAliased += session.Serializer.GetBytesAliased();
+                    ACTIVITY(&SerializeTotalTime) {
+                        session.Serialize(MinWriteBufferSize, MaxWriteBufferSize);
+                        const ui64 serializeEventTime = session.Serializer.GetSerializeEventTime();
+                        LastActivitySwitchTimestamp += serializeEventTime;
+                        *SerializeEventTotalTime += serializeEventTime * Freq;
+                        *BytesCopied += session.Serializer.GetBytesCopied();
+                        *BytesAliased += session.Serializer.GetBytesAliased();
+                    }
                 }
                 if (session.PrepareIovec()) {
                     io_uring_sqe *sqe = GetSQE(&session, kOpWrite, session.PreferredRingIdx);

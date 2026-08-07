@@ -8,6 +8,59 @@ namespace {
 using namespace NYql;
 using namespace NYql::NNodes;
 
+bool IsValidIndex(const TIndexDescription& index) {
+    return index.Type != TIndexDescription::EType::GlobalAsync
+        && index.Type != TIndexDescription::EType::GlobalJson
+        && index.Type != TIndexDescription::EType::GlobalJsonCompact
+        && index.Type != TIndexDescription::EType::LocalMinMax
+        && index.Type != TIndexDescription::EType::LocalBloomFilter
+        && index.Type != TIndexDescription::EType::LocalBloomNgramFilter
+        && index.State == TIndexDescription::EIndexState::Ready;
+}
+
+bool IsCoveringIndex(const TVector<TString>& readColumns, const TVector<TString>& indexColumns) {
+    THashSet<TString> indexColumnSet(indexColumns.begin(), indexColumns.end());
+    for (const auto& column : readColumns) {
+        if (!indexColumnSet.contains(column)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TIntrusivePtr<TKikimrTableMetadata> TryToFindBestIndexForRightSide(const TKikimrTableDescription& mainTableDesc, const TVector<TString>& readColumns,
+                                                                   const THashSet<TString>& rightJoinKeys) {
+    const auto& meta = *mainTableDesc.Metadata;
+    std::optional<TString> bestIndexName;
+    ui32 bestPrefix = 0;
+
+    for (const auto& index : meta.Indexes) {
+        if (!IsValidIndex(index) || !IsCoveringIndex(readColumns, index.KeyColumns)) {
+            continue;
+        }
+
+        ui32 currentPrefix = 0;
+        for (const auto& keyCol : index.KeyColumns) {
+            if (!rightJoinKeys.contains(keyCol)) {
+                break;
+            }
+            ++currentPrefix;
+        }
+
+        // Better prefix wins and ties broken alphabetically by index name.
+        if (currentPrefix > bestPrefix || (currentPrefix == bestPrefix && currentPrefix > 0 && index.Name < *bestIndexName)) {
+            bestPrefix = currentPrefix;
+            bestIndexName = index.Name;
+        }
+    }
+
+    if (bestIndexName.has_value()) {
+        return meta.GetIndexMetadata(*bestIndexName).first;
+    }
+
+    return nullptr;
+}
+
 std::optional<TExpression> BuildFetchedRowFilter(const TOpRead& read, const TIntrusivePtr<TOpFilter>& filter, bool& supported) {
     TVector<TExpression> conjuncts;
     if (read.RangeInfo.has_value()) {
@@ -201,10 +254,40 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         rightFilter = CastOperator<TOpFilter>(rightInput);
         rightInput = rightFilter->GetInput();
     }
+
     if (rightInput->Kind != EOperator::Source || !rightInput->IsSingleConsumer()) {
         return input;
     }
+
     auto read = CastOperator<TOpRead>(rightInput);
+    if (ctx.KqpCtx.Config->IsAutoIndexSelectionForIndexLookupJoinEnabled()) {
+        // We cannot change the right side, if predicate was pushed.
+        if (!read->RangeInfo.has_value()) {
+            const auto table = TKqpTable(read->GetTable());
+            const auto& mainTableDesc = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, table.Path().Value());
+            THashSet<TString> rightJoinKeys;
+            for (const auto& [leftKey, rightKey] : join->JoinKeys) {
+                rightJoinKeys.insert(rightKey.GetColumnName());
+            }
+
+            if (auto index = TryToFindBestIndexForRightSide(mainTableDesc, read->Columns, rightJoinKeys)) {
+                // clang-format off
+                auto indexTableCallable = Build<TKqpTable>(ctx.ExprCtx, read->Pos)
+                    .Path().Build(index->Name)
+                    .PathId().Build(index->PathId.ToString())
+                    .SysView().Build(index->SysView)
+                    .Version().Build(index->SchemaVersion)
+                .Done().Ptr();
+                // clang-format on
+
+                auto rightOriginalType = read->Type;
+                // Update read with choosen index.
+                read = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, indexTableCallable, nullptr, read->Limit,
+                                              std::nullopt, std::nullopt, ESortDir::None, read->Props, read->Pos);
+                read->Type = rightOriginalType;
+            }
+        }
+    }
 
     // Only supports row storage tables.
     if (read->GetTableStorageType() != NYql::EStorageType::RowStorage) {

@@ -620,12 +620,15 @@ contracts below.
 
 Direct `count(distinct x)` is admitted on scalar or grouped,
 phase-`undefined`, non-`DistinctAll` Aggregate when `x` is one exact non-null
-fixed-width signed or unsigned integer, the result is exact non-null `Uint64`,
-`unwrap` is false, and the Aggregate contains at most one direct distinct
-trait. For each emitted group and present input row, the evaluator counts the
-row exactly when it belongs to that group and no earlier present row in the
-same group has an equal input value. Nullable grouping keys retain null-safe
-group equality. Before building value equalities it charges
+fixed-width signed or unsigned integer, or one canonical nullable Decimal;
+the result is exact non-null `Uint64`, `unwrap` is false, and the Aggregate
+contains at most one direct distinct trait. For each emitted group and present
+input row, the evaluator counts a non-NULL value exactly when no earlier
+present row in the same group has the same raw aggregate value code. The raw
+equality is ordinary integer equality for fixed-width inputs and MiniKQL
+Decimal code equality for Decimal, so Decimal NaN deduplicates with itself.
+Nullable grouping keys retain null-safe group equality. Before building value
+equalities it charges
 `candidate_groups * N*(N-1)/2` against the 16,384-pair ceiling in every
 relation representation. Other input types, phases, multiple direct-distinct
 traits, and distinct/unwrap combinations fail closed.
@@ -643,10 +646,27 @@ canonical `Decimal(p,s)`. The exporter records the physical state hidden by the
 logical RBO IU type as
 `{sum_type: "Decimal(35,s)", count_type: "Uint64", nullable:
 <input-nullability>}`; non-AVG traits omit this field. The strict decoder
-requires one direct intermediate-to-final aggregate lineage with identical
-ordered keys and state metadata. Each intermediate state IU must have exactly
-one matching final AVG use, cannot be used as an ordinary scalar or key, and
-may cross StageGraph routing only as payload.
+requires either one direct intermediate-to-final aggregate lineage with
+identical ordered keys and state metadata or the closed staged carrier form
+below. Each intermediate state IU must have exactly one matching final AVG
+use, cannot be used as an ordinary scalar or key, and may cross StageGraph
+routing only as payload.
+
+The staged form is one keyless plain Final aggregate over a binary unordered
+identity-`UnionAll` tree. Every leaf is one unordered Project directly over
+one keyless one-trait Intermediate aggregate. Exactly one leaf has the direct
+same-name matching AVG producer. At the C++ boundary every other leaf must
+contain the exact physical
+`Nothing(Optional<Tuple<Decimal(35,s),Uint64>>)` pad; the exporter certifies
+that expression and normalizes only that pad to the existing logical
+nullable-Decimal NULL. Generic tuple `Nothing` stays unsupported. The Python
+decoder independently accepts only the corresponding normalized logical NULL
+leaf and rechecks the logical carrier topology, ownership, and routing. Across
+the two boundaries, the checks require unique consumers, trace the carrier
+through every Aggregate, Project, Union, and StageGraph hop, and reject
+aliases, project chains, direct aggregate leaves, ordered carriers, fanout,
+extra producers, malformed descriptors, scalar or root exposure, and use as a
+HashShuffle key or Merge order.
 
 Undefined and intermediate phases accumulate one `Decimal(35,s)` sum and one
 `Uint64` count over non-NULL inputs. The final phase adds both components, so
@@ -859,8 +879,11 @@ Implementation sequence:
     factorization remains separate and is implemented by item 73;
 73. M4: exact delayed-Cross factor-local static rejection, literal-false join-slot
     erasure, and certified innermost unique-seed rebasing, moving TPC-DS q4
-    through formula construction without raising a global construction bound.
-    M4 remains current; Milestone 74 is deliberately unselected until a fresh
+    through formula construction without raising a global construction bound;
+74. M4: exact nullable Decimal count-distinct with raw aggregate-code equality
+    plus the independently certified staged Decimal AVG carrier, moving TPC-DS
+    q28 through both exporters, formula construction, and bounded proof.
+    M4 remains current; Milestone 75 is deliberately unselected until a fresh
     blocker audit.
 
 More than two dependencies, broader correlations, coercing and nullable-String
@@ -1399,6 +1422,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   split intermediate/final execution, NULLs, exact 64-bit integer behavior,
   Decimal specials, partial-state bound provenance, same-type Decimal MIN/MAX,
   phase-aware Decimal AVG with explicit `(sum,count)` state, and
+  the closed staged Decimal AVG carrier with one producer and certified
+  physical NULL pads, plus
   cardinality-certified integral AVG with exact `(count,min,max)` ghost state
   for non-NULL count at most two, plus exact same-output-type fixed-width
   signed/unsigned integral MIN/MAX. Integral extrema use a guarded, balanced,
@@ -1413,8 +1438,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   `DistinctAll`
   accepts exact positional aliases of a nonempty ordered key tuple, deduplicates
   null-safely, and remains task-local across intermediate/final phases;
-  direct per-trait distinct remains fail closed except for the exact scalar
-  `COUNT(DISTINCT non-null Int64)` contract.
+  direct per-trait distinct remains fail closed except for the exact
+  fixed-width non-null integer and canonical nullable Decimal
+  `COUNT(DISTINCT ...)` contracts.
 - Side-explicit join-key descriptors preserve left/right operands even when a
   one-sided semi/anti join receives the same IU name from both inputs. Shared
   IUs require an empty `JoinFilters` list and literal-true residual; joins that
@@ -2008,8 +2034,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Its strict version-four input policy and independently versioned
   version-three evaluation enforce one orthogonal preparation-success floor
   and three monotonic semantic depths: TPCH q1, q13, and q16 plus TPC-DS q5,
-  q8, q9, q59, q65, q72, q78, and q80 must reach the verifier, the 90-query
-  formula floor must keep constructing SMT, and the 31-query hermetic
+  q8, q9, q59, q65, q72, q78, and q80 must reach the verifier, the 92-query
+  formula floor must keep constructing SMT, and the 32-query hermetic
   proof floor must remain
   `VERIFIED_BOUNDED`. A verifier-side `UNSUPPORTED` result satisfies only the
   entry tier; later formulas and proofs satisfy every weaker semantic tier
@@ -2630,6 +2656,54 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   `1b34081c5e98dcf9b7f6bfb82d59491d7862b40b4c14a1a3a45711bcfadbefa6`),
   all `VERIFIED_BOUNDED`; the proof floor is unchanged.
 
+  Milestone 74 is implemented by `99557229439`, `36b7dd75d96`, and
+  `8c9c29ceaf7`, with q28 formula policy in `26c6d0387b3` and proof policy in
+  `1545921b5d1`. It adds raw aggregate-code equality for canonical nullable
+  Decimal count-distinct and the closed staged Decimal AVG-carrier theorem
+  defined above. C++ alone certifies each exact physical tuple-`Nothing` pad
+  and normalizes it to logical nullable-Decimal NULL. Python independently
+  validates that normalized logical NULL topology. Together the checks require
+  one producer, a binary unordered identity-Union tree, direct
+  Intermediate/Project leaves, keyless matching aggregate traits, unique
+  ownership, carrier-only routing, and no ordering, hashing, fanout, aliasing,
+  malformed descriptor, or state exposure.
+
+  Validation passes 693/693 Python checks (676 functional, 16 lint, and one
+  import), 267/267 C++ exporter tests, 14/14 policy tests, and the 5/5
+  proof-floor target. The preserved pre-policy focused q28 formula report
+  returns `FORMULA_EMITTED` after 696/1,196 ms (report SHA-256
+  `69fa31b540190c36e08d6b92a10df9a44e66004fd206c9889704d3ade2855c49`)
+  but is formula-construction evidence only: its embedded policy does not
+  require q28. The later focused solver report is `VERIFIED_BOUNDED` after
+  686/11,496 ms (report SHA-256
+  `7b52eaf52dbd17ccded3eb9cb7565a78a9ec1216ffef63b9097be7cfafe5e7a4`).
+  A deliberately corrupted snapshot returns `COUNTEREXAMPLE`, but the
+  production pair proves within the two-row/two-task bound; this is harness
+  evidence, not an optimizer finding or replay, and the cumulative historical
+  defect count remains nine.
+
+  The post-M74 semantic partition is TPCH 20 formula / 0 unsupported /
+  2 no-pair and TPC-DS 72 / 9 / 18. Across both suites, 92/121 queries
+  construct formulas (76.0%), as do 92/101 exact pairs (91.1%), 92/93
+  preparation successes (98.9%), and all 92/92 verifier entrants. The proof
+  floor is 32/121 (26.4%), 32/92 formula-covered queries (34.8%), and 32/32
+  curated obligations.
+
+  The fresh TPCH formula dashboard is 20 / 0 / 2 after 2,996/107,275 ms
+  (report SHA-256
+  `35187d30af02a953f75e94d80922589987432ac970e4930b2f717296141c679a`).
+  The fresh complete TPC-DS formula dashboard reports 72 `FORMULA_EMITTED`,
+  9 `UNSUPPORTED`, and 18 `OPTIMIZER_FAILURE`; preparation is 73 succeeded /
+  26 failed. It spends 71,782/895,806 ms in preparation/verifier work, with
+  q28 at 769/1,245 ms. Its embedded policy is valid with zero violations
+  (report SHA-256
+  `65dfe8400b01a9b4fa66b1907ac9e8569ba47d8d7dcfe459750251450d7d88b4`).
+  Fresh proof-floor reports verify 13/13 TPCH after 1,591/67,583 ms (SHA-256
+  `d8555efcaa715565a44a89f3fa94a1c3d904c170153f4e0182e571b36f093dc5`)
+  and 19/19 TPC-DS after 14,667/126,545 ms (SHA-256
+  `475ebb9751f19d6a3d71fb8dee93a6c2dda082e6c7c72f993a14eac1190454cb`),
+  all `VERIFIED_BOUNDED`; q28's complete-floor row spent 746/13,129 ms.
+
   A focused version-five audit of TPC-DS q12, q20, q49, q51, q53, q63, q89,
   and q98 preserves exact pairs despite failed preparation. All eight are
   semantically unsupported: window callables dominate, q49 first exposes a
@@ -2651,12 +2725,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   removes q31's routed Sort/Merge construction blocker. Milestone 72 removes
   q11/q74's impossible sale-type Cross branches with exact concrete-String
   equality. Milestone 73 removes the last verifier-side construction rejection,
-  q4, through the three exact reductions above. Including exact window
+  q4, through the three exact reductions above. Milestone 74 removes q28's
+  nullable Decimal count-distinct and staged Decimal AVG-carrier blockers.
+  Including exact window
   semantics for the failed-preparation pairs,
   the full captured-pair gap is roughly 6--8 feature families or 8--16
-  milestones. Those workload-targeted estimates now start from 91 formulas and
+  milestones. Those workload-targeted estimates now start from 92 formulas and
   can change as later blockers become visible. A fresh boundary/blocker audit,
-  rather than a preselected feature, will choose Milestone 74. M4 remains
+  rather than a preselected feature, will choose Milestone 75. M4 remains
   current. The 20 no-pair entries require frontend/optimizer progress; the
   present captured-pair ceiling is 101/121, and formula construction is not
   solver proof.
@@ -2899,10 +2975,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   256-node/64-depth/64-KiB budget.
 - A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q11, q12, q13, q14, q15, q16, q18, q19, q21, and q22 plus TPC-DS
-  q3, q8, q9, q16, q34, q38, q42, q48, q52, q55, q69, q73, q87, q90, q93,
+  q3, q8, q9, q16, q28, q34, q38, q42, q48, q52, q55, q69, q73, q87, q90, q93,
   q94, q95, and q96 with a fixed 60-second per-query budget. The current
-  policy covers 13 TPCH and 18 TPC-DS queries, all independently confirmed
-  `VERIFIED_BOUNDED`: 31/31 obligations and 31/121 (25.6%)
+  policy covers 13 TPCH and 19 TPC-DS queries, all independently confirmed
+  `VERIFIED_BOUNDED`: 32/32 obligations and 32/121 (26.4%)
   of the workload. Its complete and focused report hashes are recorded above.
 
   The immediately preceding complete policy gate on source `4c2c1359e28`
@@ -3372,6 +3448,11 @@ construction. Reviewed generic and pushed compiled LIKE now share one audited
 opaque identity; pushed Boolean coalesce is preserved exactly; and one scalar
 or grouped fixed-width integer count-distinct trait is exact. Together those
 slices move TPCH q13/q16 through formula construction and bounded proof.
+The exact checked nullable-String `Unwrap` Project outcome moves TPC-DS q8
+through both exporters and bounded proof. Exact nullable Decimal
+count-distinct plus the closed staged Decimal AVG carrier now moves q28
+through both exporters and bounded proof; generic physical tuple padding
+remains unsupported.
 Broader floating-point semantics and dataflow, coercing
 dynamic `IN`, nullable String and non-positive nullable uses, more than two
 `EXISTS` dependencies, broader correlated predicates, broader range reads, and other
@@ -3388,7 +3469,9 @@ that checkpoint's proof floor remained twenty-seven. The fixed-sequence
 ordered singleton-`Limit` slice adds TPC-DS q9 as obligation twenty-eight at
 the bounded two-row/two-task contract. The compiled-LIKE, grouped integer
 count-distinct, and pushed-coalesce slice adds TPCH q13/q16 as obligations
-twenty-nine and thirty.
+twenty-nine and thirty. The checked nullable-String `Unwrap` slice adds q8 as
+obligation thirty-one, and the exact Decimal count-distinct/staged-AVG slice
+adds q28 as obligation thirty-two.
 
 The audit and solver/real-YDB confirmation workflow have found nine production
 optimizer defects.
@@ -3528,9 +3611,9 @@ regression locks the corrected boundary.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- The 91 formula-construction and 31 curated proof obligations have
+- The 92 formula-construction and 32 curated proof obligations have
   separate checked-in regression floors. The current complete gate confirms all
-  31 as `VERIFIED_BOUNDED`; focused rows retain independent
+  32 as `VERIFIED_BOUNDED`; focused rows retain independent
   evidence for the newly added obligations. Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.

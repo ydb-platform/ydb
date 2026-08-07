@@ -32,6 +32,7 @@
 HWY_BEFORE_NAMESPACE();
 namespace hwy {
 namespace HWY_NAMESPACE {
+namespace {
 
 template <typename T1, typename T2>
 HWY_NOINLINE T1 SimpleDot(const T1* pa, const T2* pb, size_t num) {
@@ -100,7 +101,7 @@ class TestDot {
     const double max = static_cast<double>(8 * 8 * num);
     HWY_ASSERT(-max <= actual && actual <= max);
     const double tolerance =
-        64.0 * ConvertScalarTo<double>(Epsilon<T>()) * HWY_MAX(magnitude, 1.0);
+        96.0 * ConvertScalarTo<double>(Epsilon<T>()) * HWY_MAX(magnitude, 1.0);
     HWY_ASSERT(expected - tolerance <= actual &&
                actual <= expected + tolerance);
   }
@@ -269,19 +270,21 @@ void TestAllDotF32BF16() {
 // Both bf16.
 void TestAllDotBF16() { ForShrinkableVectors<TestDot>()(bfloat16_t()); }
 
+}  // namespace
 // NOLINTNEXTLINE(google-readability-namespace-comments)
 }  // namespace HWY_NAMESPACE
 }  // namespace hwy
 HWY_AFTER_NAMESPACE();
 
 #if HWY_ONCE
-
 namespace hwy {
+namespace {
 HWY_BEFORE_TEST(DotTest);
 HWY_EXPORT_AND_TEST_P(DotTest, TestAllDot);
 HWY_EXPORT_AND_TEST_P(DotTest, TestAllDotF32BF16);
 HWY_EXPORT_AND_TEST_P(DotTest, TestAllDotBF16);
 HWY_AFTER_TEST();
+}  // namespace
 }  // namespace hwy
-
-#endif
+HWY_TEST_MAIN();
+#endif  // HWY_ONCE

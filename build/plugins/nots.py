@@ -895,6 +895,10 @@ def _TS_PROTO_CONFIGURE(unit: ymake.Unit) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _TS_PROTO_AUTO_CONFIGURE(unit: ymake.Unit) -> None:
+    in_package_json = _build_directives(["hide", "input"], ["package.json"])
+    out_lockfile = _build_directives(["hide", "output"], ["pnpm-lock.yaml"])
+    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_package_json, out_lockfile])
+
     deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
     unit.onpeerdir([deps_path])
 

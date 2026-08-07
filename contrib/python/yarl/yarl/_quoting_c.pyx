@@ -308,15 +308,26 @@ cdef class _Quoter:
 
 cdef class _Unquoter:
     cdef str _ignore
+    cdef bint _has_ignore
     cdef str _unsafe
+    cdef bytes _unsafe_bytes
+    cdef Py_ssize_t _unsafe_bytes_len
+    cdef const unsigned char * _unsafe_bytes_char
     cdef bint _qs
+    cdef bint _plus  # to match urllib.parse.unquote_plus
     cdef _Quoter _quoter
     cdef _Quoter _qs_quoter
 
-    def __init__(self, *, ignore="", unsafe="", qs=False):
+    def __init__(self, *, ignore="", unsafe="", qs=False, plus=False):
         self._ignore = ignore
+        self._has_ignore = bool(self._ignore)
         self._unsafe = unsafe
+        # unsafe may only be extended ascii characters (0-255)
+        self._unsafe_bytes = self._unsafe.encode('ascii')
+        self._unsafe_bytes_len = len(self._unsafe_bytes)
+        self._unsafe_bytes_char = self._unsafe_bytes
         self._qs = qs
+        self._plus = plus
         self._quoter = _Quoter()
         self._qs_quoter = _Quoter(qs=True)
 
@@ -383,7 +394,10 @@ cdef class _Unquoter:
                     buflen = 0
                     if self._qs and unquoted in '+=&;':
                         ret.append(self._qs_quoter(unquoted))
-                    elif unquoted in self._unsafe or unquoted in self._ignore:
+                    elif (
+                        (self._unsafe_bytes_len and unquoted in self._unsafe) or
+                        (self._has_ignore and unquoted in self._ignore)
+                    ):
                         ret.append(self._quoter(unquoted))
                     else:
                         ret.append(unquoted)
@@ -397,14 +411,17 @@ cdef class _Unquoter:
                 buflen = 0
 
             if ch == '+':
-                if not self._qs or ch in self._unsafe:
+                if (
+                    (not self._qs and not self._plus) or
+                    (self._unsafe_bytes_len and self._is_char_unsafe(ch))
+                ):
                     ret.append('+')
                 else:
                     changed = 1
                     ret.append(' ')
                 continue
 
-            if ch in self._unsafe:
+            if self._unsafe_bytes_len and self._is_char_unsafe(ch):
                 changed = 1
                 ret.append('%')
                 h = hex(ord(ch)).upper()[2:]
@@ -421,3 +438,9 @@ cdef class _Unquoter:
             ret.append(val[length - buflen * 3 : length])
 
         return ''.join(ret)
+
+    cdef inline bint _is_char_unsafe(self, Py_UCS4 ch):
+        for i in range(self._unsafe_bytes_len):
+            if ch == self._unsafe_bytes_char[i]:
+                return True
+        return False

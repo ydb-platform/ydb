@@ -5,8 +5,8 @@ from collections.abc import Mapping, Sequence
 from enum import Enum
 from functools import _CacheInfo, lru_cache
 from ipaddress import ip_address
-from typing import TYPE_CHECKING, Any, TypedDict, TypeVar, Union, overload
-from urllib.parse import SplitResult, parse_qsl, uses_relative
+from typing import TYPE_CHECKING, Any, NoReturn, TypedDict, TypeVar, Union, overload
+from urllib.parse import SplitResult, uses_relative
 
 import idna
 from multidict import MultiDict, MultiDictProxy
@@ -16,6 +16,7 @@ from ._parse import (
     USES_AUTHORITY,
     SplitURLType,
     make_netloc,
+    query_to_pairs,
     split_netloc,
     split_url,
     unsplit_result,
@@ -100,6 +101,7 @@ class _InternalURLCache(TypedDict, total=False):
     _val: SplitURLType
     _origin: "URL"
     absolute: bool
+    hash: int
     scheme: str
     raw_authority: str
     authority: str
@@ -336,6 +338,7 @@ class URL:
     # absolute-URI  = scheme ":" hier-part [ "?" query ]
     __slots__ = ("_cache", "_scheme", "_netloc", "_path", "_query", "_fragment")
 
+    _cache: _InternalURLCache
     _scheme: str
     _netloc: str
     _path: str
@@ -400,11 +403,11 @@ class URL:
         if query and query_string:
             raise ValueError('Only one of "query" or "query_string" should be passed')
         if (
-            scheme is None
-            or authority is None
-            or host is None
-            or path is None
-            or query_string is None
+            scheme is None  # type: ignore[redundant-expr]
+            or authority is None  # type: ignore[redundant-expr]
+            or host is None  # type: ignore[redundant-expr]
+            or path is None  # type: ignore[redundant-expr]
+            or query_string is None  # type: ignore[redundant-expr]
             or fragment is None
         ):
             raise TypeError(
@@ -466,7 +469,7 @@ class URL:
         self._cache = {}
         return self
 
-    def __init_subclass__(cls):
+    def __init_subclass__(cls) -> NoReturn:
         raise TypeError(f"Inheriting a class {cls!r} from URL is forbidden")
 
     def __str__(self) -> str:
@@ -535,7 +538,7 @@ class URL:
 
     def __truediv__(self, name: str) -> "URL":
         if not isinstance(name, str):
-            return NotImplemented
+            return NotImplemented  # type: ignore[unreachable]
         return self._make_child((str(name),))
 
     def __mod__(self, query: Query) -> "URL":
@@ -547,11 +550,14 @@ class URL:
     def __getstate__(self) -> tuple[SplitResult]:
         return (tuple.__new__(SplitResult, self._val),)
 
-    def __setstate__(self, state):
+    def __setstate__(
+        self, state: Union[tuple[SplitURLType], tuple[None, _InternalURLCache]]
+    ) -> None:
         if state[0] is None and isinstance(state[1], dict):
             # default style pickle
             val = state[1]["_val"]
         else:
+            unused: list[object]
             val, *unused = state
         self._scheme, self._netloc, self._path, self._query, self._fragment = val
         self._cache = {}
@@ -858,7 +864,7 @@ class URL:
     @cached_property
     def _parsed_query(self) -> list[tuple[str, str]]:
         """Parse query part of URL."""
-        return parse_qsl(self._query, keep_blank_values=True)
+        return query_to_pairs(self._query)
 
     @cached_property
     def query(self) -> "MultiDictProxy[str]":
@@ -1246,9 +1252,9 @@ class URL:
             query = get_str_query_from_sequence_iterable(qm.items())
         elif isinstance(in_query, str):
             qstr: MultiDict[str] = MultiDict(self._parsed_query)
-            qstr.update(parse_qsl(in_query, keep_blank_values=True))
+            qstr.update(query_to_pairs(in_query))
             query = get_str_query_from_iterable(qstr.items())
-        elif isinstance(in_query, (bytes, bytearray, memoryview)):
+        elif isinstance(in_query, (bytes, bytearray, memoryview)):  # type: ignore[unreachable]
             msg = "Invalid query type: bytes, bytearray and memoryview are forbidden"
             raise TypeError(msg)
         elif isinstance(in_query, Sequence):
@@ -1355,15 +1361,31 @@ class URL:
         """
         if not isinstance(suffix, str):
             raise TypeError("Invalid suffix type")
-        if suffix and not suffix[0] == "." or suffix == ".":
+        if suffix and not suffix[0] == "." or suffix == "." or "/" in suffix:
             raise ValueError(f"Invalid suffix {suffix!r}")
         name = self.raw_name
         if not name:
             raise ValueError(f"{self!r} has an empty name")
         old_suffix = self.raw_suffix
+        suffix = PATH_QUOTER(suffix)
         name = name + suffix if not old_suffix else name[: -len(old_suffix)] + suffix
+        if name in (".", ".."):
+            raise ValueError(". and .. values are forbidden")
+        parts = list(self.raw_parts)
+        if netloc := self._netloc:
+            if len(parts) == 1:
+                parts.append(name)
+            else:
+                parts[-1] = name
+            parts[0] = ""  # replace leading '/'
+        else:
+            parts[-1] = name
+            if parts[0] == "/":
+                parts[0] = ""  # replace leading '/'
 
-        return self.with_name(name, keep_query=keep_query, keep_fragment=keep_fragment)
+        query = self._query if keep_query else ""
+        fragment = self._fragment if keep_fragment else ""
+        return from_parts(self._scheme, netloc, "/".join(parts), query, fragment)
 
     def join(self, url: "URL") -> "URL":
         """Join URLs
@@ -1577,8 +1599,6 @@ def cache_configure(
         if encode_host_size is UNDEFINED:
             encode_host_size = _DEFAULT_ENCODE_SIZE
 
-    if TYPE_CHECKING:
-        assert not isinstance(encode_host_size, object)
     _encode_host = lru_cache(encode_host_size)(_encode_host.__wrapped__)
     _idna_decode = lru_cache(idna_decode_size)(_idna_decode.__wrapped__)
     _idna_encode = lru_cache(idna_encode_size)(_idna_encode.__wrapped__)

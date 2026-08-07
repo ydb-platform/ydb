@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.18.3)
+VERSION(1.19.0)
 
 LICENSE(Apache-2.0)
 
@@ -24,7 +24,6 @@ PY_SRCS(
     yarl/_query.py
     yarl/_quoters.py
     yarl/_quoting.py
-    yarl/_quoting_c.pyi
     yarl/_quoting_py.py
     yarl/_url.py
     CYTHON_C

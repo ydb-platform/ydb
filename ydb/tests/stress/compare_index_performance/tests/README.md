@@ -86,9 +86,14 @@ into booleans, numeric values into ints/floats; everything else is kept as a
 string. Keys may be dotted paths into nested submessages, e.g.
 `resource_manager.kqp_level_cache_max_size_bytes=314572800`; they are merged
 recursively, so the untouched defaults of that submessage (such as
-`resource_manager.channel_buffer_size`) are preserved. Feature flags are appended
-to the cluster config; the fulltext test additionally enables
+`resource_manager.channel_buffer_size`) are preserved. Feature flags follow the
+same `key=value` convention: a bare `enable_foo` (or `enable_foo=true`) enables
+the flag, `enable_foo=false` disables it. The fulltext test additionally enables
 `enable_fulltext_index` on both sides automatically.
+
+> **A/B a flag that only exists on one side.** A feature flag or config field
+> that a binary doesn't know is rejected as an unknown YAML field, so pass a
+> new/PR-only flag through the *current* input only, not the *main* input.
 
 ## Flamegraphs (optional)
 

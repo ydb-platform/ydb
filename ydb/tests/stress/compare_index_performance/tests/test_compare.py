@@ -315,7 +315,8 @@ class TestCompareIndexPerformance:
         config = KikimrConfigGenerator(
             binary_paths=[ydbd_path],
             erasure=Erasure.from_string(yatest.common.get_param('stress_default_erasure', default='NONE')),
-            extra_feature_flags=flags,
+            extra_feature_flags=[k for k, on in flags.items() if on],
+            disabled_feature_flags=[k for k, on in flags.items() if not on],
         )
         # Merged here rather than via the KikimrConfigGenerator(table_service_config=...)
         # argument: that one does a shallow dict.update(), which would drop the
@@ -758,8 +759,8 @@ class TestCompareIndexPerformance:
         current_ydbd = self._current_ydbd()
 
         # Fulltext requires the feature flag enabled on both clusters.
-        baseline_flags = self.baseline_flags + ["enable_fulltext_index"]
-        current_flags = self.current_flags + ["enable_fulltext_index"]
+        baseline_flags = {**self.baseline_flags, "enable_fulltext_index": True}
+        current_flags = {**self.current_flags, "enable_fulltext_index": True}
 
         main_values = []
         current_values = []

@@ -2260,7 +2260,10 @@ protected:
     }
 
     virtual ui64 CalcMkqlMemoryLimit() {
-        return MemoryLimits.MkqlLightProgramMemoryLimit;
+        auto& opts = Task.GetProgram().GetSettings();
+        return opts.GetHasMapJoin()/* || opts.GetHasSort()*/
+            ? MemoryLimits.MkqlHeavyProgramMemoryLimit
+            : MemoryLimits.MkqlLightProgramMemoryLimit;
     }
 
 protected:

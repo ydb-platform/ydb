@@ -109,6 +109,13 @@ struct TDirectReadRestoreEnv {
     std::atomic<ui64> HoldRestorePreparePublish{0};
     std::atomic<ui64> HeldPrepareOrPublish{0};
     std::atomic<ui64> RestoredDirectReadIdEnsure{0};
+
+    // Hold CmdPrepareReadResult (re-inject later) to race with ResendRecentRequests after pipe restart.
+    std::atomic<ui64> HoldPrepareResponses{0};
+    std::atomic<ui64> HeldPrepareResponses{0};
+    std::atomic<ui64> RequestInflyEnsure{0};
+    TVector<THolder<IEventHandle>> HeldPrepareEvents;
+
     TString EnsureCloseReason;
 
     NActors::TTestActorRuntime& Runtime() {
@@ -169,14 +176,25 @@ struct TDirectReadRestoreEnv {
         auto& runtime = Runtime();
 
         runtime.SetEventFilter([this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (!HoldRestorePreparePublish.load()) {
-                return false;
-            }
             auto* msg = ev->CastAsLocal<TEvPersQueue::TEvResponse>();
             if (!msg || !msg->Record.HasPartitionResponse()) {
                 return false;
             }
             const auto& part = msg->Record.GetPartitionResponse();
+
+            if (HoldPrepareResponses.load() && part.HasCmdPrepareReadResult()) {
+                const ui64 held = ++HeldPrepareResponses;
+                Cerr << "HOLD CmdPrepareReadResult held=" << held
+                     << " cookie=" << part.GetCookie()
+                     << " directReadId=" << part.GetCmdPrepareReadResult().GetDirectReadId()
+                     << Endl;
+                HeldPrepareEvents.emplace_back(ev.Release());
+                return true;
+            }
+
+            if (!HoldRestorePreparePublish.load()) {
+                return false;
+            }
             if (part.HasCmdPrepareReadResult() || part.HasCmdPublishReadResult()) {
                 const ui64 held = ++HeldPrepareOrPublish;
                 Cerr << "DROP restore Prepare/Publish response prepare="
@@ -196,9 +214,33 @@ struct TDirectReadRestoreEnv {
                     Cerr << "Observed CloseSession from RestoredDirectReadId ENSURE: "
                          << msg->Reason << Endl;
                 }
+                // Match verification=RequestInfly, not verification=!RequestInfly.
+                if (msg->Reason.Contains("verification=RequestInfly")) {
+                    EnsureCloseReason = msg->Reason;
+                    ++RequestInflyEnsure;
+                    Cerr << "Observed CloseSession from RequestInfly ENSURE: "
+                         << msg->Reason << Endl;
+                }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+    }
+
+    void ReleaseHeldPrepares() {
+        HoldPrepareResponses.store(0);
+        auto& runtime = Runtime();
+        Cerr << "Release " << HeldPrepareEvents.size() << " held Prepare responses\n";
+        for (auto& ev : HeldPrepareEvents) {
+            runtime.Send(ev.Release(), /*senderNodeIndex=*/0, /*viaActorSystem=*/true);
+        }
+        HeldPrepareEvents.clear();
+    }
+
+    void DropHooks() {
+        auto& runtime = Runtime();
+        runtime.SetEventFilter(&TTestActorRuntimeBase::DefaultFilterFunc);
+        runtime.SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
+        HeldPrepareEvents.clear();
     }
 
     void RebootPqTablet() {
@@ -345,6 +387,33 @@ struct TGrpcDirectReadClient {
     }
 };
 
+void TearDownGrpcAndServer(TDirectReadRestoreEnv& env, TGrpcDirectReadClient& client) {
+    env.DropHooks();
+
+    if (client.ControlContext) {
+        client.ControlContext->TryCancel();
+    }
+    if (client.DirectContext) {
+        client.DirectContext->TryCancel();
+    }
+    client.ControlStream.reset();
+    client.DirectStream.reset();
+    client.Stub.reset();
+    client.Channel.reset();
+
+    auto& runtime = env.Runtime();
+    auto shutdown = NThreading::Async([&] {
+        env.Server->ShutdownGRpc();
+        return true;
+    }, DispatchPool());
+    while (!shutdown.HasValue() && !shutdown.HasException()) {
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+    }
+    shutdown.GetValueSync();
+    env.Server->ShutdownServer();
+    env.Server.reset();
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TDirectReadRestoreRaceTest) {
@@ -400,33 +469,66 @@ Y_UNIT_TEST(RestoredDirectReadIdZeroOnForgetAfterDoubleRestart) {
             << "; held=" << env.HeldPrepareOrPublish.load()
             << "; reason=" << env.EnsureCloseReason);
 
-    // Drop hooks before destroying actors / gRPC — they capture env by raw this.
-    runtime.SetEventFilter(&TTestActorRuntimeBase::DefaultFilterFunc);
-    runtime.SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
+    TearDownGrpcAndServer(env, client);
+}
 
-    // Tear down gRPC under dispatch pump: ShutdownGRpc blocks waiting for inflight
-    // while UseRealThreads=false needs the test thread to DispatchEvents.
-    if (client.ControlContext) {
-        client.ControlContext->TryCancel();
-    }
-    if (client.DirectContext) {
-        client.DirectContext->TryCancel();
-    }
-    client.ControlStream.reset();
-    client.DirectStream.reset();
-    client.Stub.reset();
-    client.Channel.reset();
+// LOGBROKER-10590: after pipe restart with RequestInfly, ResendRecentRequests re-sends Prepare;
+// a late/duplicate CmdPrepareReadResult on the normal path then hits PARTITION_ENSURE(RequestInfly).
+Y_UNIT_TEST(RequestInflyOnDuplicatePrepareAfterPipeRestart) {
+    TDirectReadRestoreEnv env;
+    env.Start();
+    auto& runtime = env.Runtime();
 
-    auto shutdown = NThreading::Async([&] {
-        env.Server->ShutdownGRpc();
+    RunWithDispatch(runtime, [&] {
+        TDriver driver(MakeAsyncDriverConfig(env.Endpoint));
+        auto writer = CreateSimpleWriter(driver, kTopicPath, "src", /*partitionGroup=*/{}, TString("raw"));
+        if (!writer->Write(TString(1_MB, 'x'))) {
+            ythrow yexception() << "write failed";
+        }
+        writer->Close();
+        driver.Stop(true);
         return true;
-    }, DispatchPool());
-    while (!shutdown.HasValue() && !shutdown.HasException()) {
-        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+    });
+
+    TGrpcDirectReadClient client;
+    client.Connect(env.Endpoint);
+    client.InitControlSession(runtime);
+
+    // Hold Prepare before partition starts reading, so RequestInfly stays true across reboot.
+    env.HoldPrepareResponses.store(1);
+
+    client.AcceptAssign(runtime);
+    client.InitDirectSession(runtime);
+    client.StartDirectReadPartition(runtime);
+
+    for (ui32 i = 0; i < 100 && env.HeldPrepareResponses.load() < 1; ++i) {
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
     }
-    shutdown.GetValueSync();
-    env.Server->ShutdownServer();
-    env.Server.reset();
+    UNIT_ASSERT_C(env.HeldPrepareResponses.load() >= 1,
+        "expected at least one held CmdPrepareReadResult before reboot");
+
+    Cerr << "Reboot while Prepare is held (RequestInfly still true, DirectReadResults empty)\n";
+    env.RebootPqTablet();
+
+    // Restore of empty DirectReadResults finishes quickly → ResendRecentRequests → second Prepare.
+    for (ui32 i = 0; i < 100 && env.HeldPrepareResponses.load() < 2; ++i) {
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+    }
+    UNIT_ASSERT_C(env.HeldPrepareResponses.load() >= 2,
+        "expected held Prepare from original read and from ResendRecentRequests after restore"
+            << "; held=" << env.HeldPrepareResponses.load());
+
+    Cerr << "Release both Prepare responses onto the normal path\n";
+    env.ReleaseHeldPrepares();
+    runtime.SimulateSleep(TDuration::Seconds(1));
+
+    // Intentionally asserting the bug exists (repro). Flip after fix.
+    UNIT_ASSERT_C(env.RequestInflyEnsure.load() > 0,
+        "expected PARTITION_ENSURE(RequestInfly) on duplicate Prepare after pipe restart"
+            << "; held=" << env.HeldPrepareResponses.load()
+            << "; reason=" << env.EnsureCloseReason);
+
+    TearDownGrpcAndServer(env, client);
 }
 
 } // Y_UNIT_TEST_SUITE(TDirectReadRestoreRaceTest)

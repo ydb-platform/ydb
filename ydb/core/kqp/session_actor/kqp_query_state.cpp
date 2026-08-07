@@ -204,14 +204,6 @@ bool TKqpQueryState::TryGetFromCache(
         compileResult->PreparedQuery = std::make_shared<TPreparedQueryHolder>(preparedQuery.release(), AppData()->FunctionRegistry);
         YQL_ENSURE(SaveAndCheckCompileResult(compileResult));
 
-        // Treat restored physical graph as a cache hit so that NeedCheckTableVersions()
-        // returns true and the scheme cache navigation (EnsureTableVersions) runs.
-        // This catches cases where a sink/source table was dropped while the streaming
-        // query was stopped: the navigate will return PathErrorUnknown and the session
-        // actor will reply PRECONDITION_FAILED instead of letting the write actor discover
-        // the missing table at runtime as a retriable ABORTED (see YQ-5172).
-        CompileStats.FromCache = true;
-
         return true;
     }
 

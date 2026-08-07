@@ -1,8 +1,13 @@
 #include "security_client.h"
+#include "private.h"
 
 namespace NYT::NApi {
 
 using namespace NYTree;
+
+////////////////////////////////////////////////////////////////////////////////
+
+constinit const auto Logger = ApiLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -56,8 +61,15 @@ TError TCheckPermissionResult::ToError(
             return error;
         }
 
-        default:
-            YT_ABORT();
+        default: {
+            auto error = TError(
+                NSecurityClient::EErrorCode::AuthorizationError,
+                "Unexpected security action %Qlv in permission check result for user %Qv",
+                Action,
+                user);
+            YT_LOG_ALERT(error);
+            return error;
+        }
     }
 }
 

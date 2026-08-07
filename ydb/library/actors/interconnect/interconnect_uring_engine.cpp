@@ -40,16 +40,11 @@ namespace NActors {
     namespace {
         constexpr ui32 RingQueueDepth = 4096;
         constexpr unsigned CqeBatchSize = 64;
-        constexpr size_t ReadBufferSize = 262144;
-        constexpr size_t MinReadBufferSize = 65536;
-        constexpr size_t MinWriteBufferSize = 4096;
-        constexpr size_t MaxWriteBufferSize = 262144;
         constexpr size_t MaxSpansPerWrite = 64;
-        constexpr size_t MinSerializeWindowSize = 4096;
-        constexpr size_t MaxSerializeWindowSize = 262144;
         constexpr TDuration RebalancePeriod = TDuration::MilliSeconds(500); // how often MaybeOffload runs
         constexpr ui32 OffloadBusyThreshold = 700000; // ppm
         constexpr ui32 StealBusyThreshold = 300000; // ppm
+        constexpr int ProvidedBufGroupId = 0;
 
         // The shard timer is the only timing source for pings and dead-peer detection, so its period caps
         // how late either of them can be. Keep it at or below this bound to limit the jitter.
@@ -58,6 +53,19 @@ namespace NActors {
         // Number of ping opportunities that must fit into the dead-peer window, so that a single lost or
         // late ping cannot bring a healthy link down.
         constexpr ui32 PingsPerDeadPeerTimeout = 4;
+
+        ui32 NextPowerOfTwo(ui32 n) {
+            if (n <= 1) {
+                return 1;
+            }
+            --n;
+            n |= n >> 1;
+            n |= n >> 2;
+            n |= n >> 4;
+            n |= n >> 8;
+            n |= n >> 16;
+            return n + 1;
+        }
 
         TDuration CalculateDeadPeerTimeout(const TInterconnectSettings& settings) {
             return settings.DeadPeer ? settings.DeadPeer : DEFAULT_DEADPEER_TIMEOUT;
@@ -142,13 +150,14 @@ namespace NActors {
             TEventSerializer Serializer;
             TEventDeserializer Deserializer;
             TRcBuf ReadBuffer;
+            size_t ReadBufferSize = 0;
             bool Terminated = false;
             bool ReadPending = false;
             bool WritePending = false;
             bool UnregisterRequested = false;
             const bool SendPings;
             TRcBuf WriteBuffer;
-            size_t WriteBufferSize = MinWriteBufferSize;
+            size_t WriteBufferSize = 0;
             std::deque<TContiguousSpan> OutgoingSpans;
             iovec Iov[MaxSpansPerWrite];
             size_t IovLen = 0;
@@ -156,6 +165,8 @@ namespace NActors {
             size_t BytesToWriteLastTime = 0;
             int ReadPendingRingIdx = -1;
             ui32 PreferredRingIdx = 0;
+            // Index into the preferred ring's fixed-file table, or -1 when using the raw socket fd.
+            int FixedFileIndex = -1;
             std::atomic_uint64_t IncomingSeqNo{1};
             ui64 ExpectedSeqNo = 1;
 
@@ -168,7 +179,7 @@ namespace NActors {
 
             std::vector<TIncomingEventQueue::TRecord> PendingRecordsHeap;
 
-            size_t SerializeWindowSize = MinSerializeWindowSize;
+            size_t SerializeWindowSize = 0;
 
             ui64 BytesSent = 0;
             ui64 BytesReceived = 0;
@@ -205,21 +216,51 @@ namespace NActors {
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // deserialization/receiving
 
-            TMutableContiguousSpan GetReadSpan() {
-                if (ReadBuffer.size() < MinReadBufferSize) {
+            TMutableContiguousSpan GetReadSpan(size_t minReadBufferSize) {
+                if (ReadBuffer.size() < minReadBufferSize) {
                     ReadBuffer = TRcBuf::Uninitialized(ReadBufferSize);
+                    NSan::Poison(ReadBuffer.data(), ReadBuffer.size());
                 }
                 return ReadBuffer.UnsafeGetContiguousSpanMut();
             }
 
-            void ApplyBytesRead(size_t num) {
+            void ApplyBytesRead(size_t num, size_t minReadBufferSize, size_t maxReadBufferSize) {
                 BytesReceived += num;
-                LastInputActivityTimestamp = GetCycleCountFast();
-                TRcBuf chunk = {TRcBuf::Piece, ReadBuffer.data(), num, ReadBuffer};
-                Deserializer.Push(std::move(chunk), this, SessionId);
-                Y_ABORT_UNLESS(num <= ReadBuffer.size());
-                const size_t remain = ReadBuffer.size() - num;
+                Y_DEBUG_ABORT_UNLESS(num <= ReadBuffer.size());
+                NSan::Unpoison(ReadBuffer.data(), num);
+                Deserializer.Push(num == ReadBuffer.size()
+                        ? std::move(ReadBuffer)
+                        : TRcBuf(TRcBuf::Piece, ReadBuffer.data(), num, ReadBuffer),
+                    this,
+                    SessionId);
+                const size_t readSpanSize = ReadBuffer.size();
+                const size_t remain = readSpanSize - num;
                 ReadBuffer.TrimFront(remain - remain % 64); // make only this number of bytes remaining in buffer
+
+                if (num == readSpanSize && num >= ReadBufferSize / 2 && ReadBufferSize < maxReadBufferSize) {
+                    // we have read all the provided buffer and it's more than a half of original read buffer
+                    ReadBufferSize *= 2;
+                } else if (num < readSpanSize && readSpanSize >= ReadBufferSize / 2 && ReadBufferSize > minReadBufferSize) {
+                    // we haven't read all the provided buffer and we have asked for more than its half
+                    ReadBufferSize /= 2;
+                    if (ReadBufferSize == minReadBufferSize) {
+                        // reset read buffer so the reads go into the pool
+                        ReadBuffer = {};
+                    }
+                }
+            }
+
+            // Copy-out path for shared-pool completions: pool memory cannot be moved into the deserializer.
+            void ApplyBytesReadCopy(const char *data, size_t num, size_t minReadBufferSize, size_t maxReadBufferSize) {
+                BytesReceived += num;
+                NSan::Unpoison(data, num);
+                Deserializer.Push(TRcBuf::Copy({data, num}), this, SessionId);
+
+                Y_DEBUG_ABORT_UNLESS(num <= minReadBufferSize);
+                if (num == minReadBufferSize && ReadBufferSize < maxReadBufferSize) {
+                    // we have read all the provided buffer and probably have more, so double it
+                    ReadBufferSize *= 2;
+                }
             }
 
             void PushEvent(std::unique_ptr<IEventHandle> ev) override {
@@ -237,11 +278,11 @@ namespace NActors {
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // serialization/sending
 
-            void Serialize() {
+            void Serialize(size_t minWriteBufferSize, size_t maxWriteBufferSize) {
                 Serializer.ResetCounters();
 
                 while (UnsentBytes < SerializeWindowSize && OutgoingSpans.size() < MaxSpansPerWrite) {
-                    if (WriteBuffer.size() < MinWriteBufferSize) { // (re)allocate write buffer
+                    if (WriteBuffer.size() < minWriteBufferSize) { // (re)allocate write buffer
                         WriteBuffer = TRcBuf::Uninitialized(WriteBufferSize);
                     }
                     const size_t numBytesProduced = Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans,
@@ -254,9 +295,9 @@ namespace NActors {
                 }
 
                 const size_t numb = Serializer.GetNumBytesInScratchBuffers();
-                if (numb >= WriteBufferSize * 2 && WriteBufferSize < MaxWriteBufferSize) {
+                if (numb >= WriteBufferSize * 2 && WriteBufferSize < maxWriteBufferSize) {
                     WriteBufferSize *= 2;
-                } else if (numb < WriteBufferSize / 2 && WriteBufferSize > MinWriteBufferSize) {
+                } else if (numb < WriteBufferSize / 2 && WriteBufferSize > minWriteBufferSize) {
                     WriteBufferSize /= 2;
                 }
             }
@@ -279,8 +320,8 @@ namespace NActors {
                 return IovLen != 0;
             }
 
-            void ApplyBytesWritten(size_t num, std::vector<ui64> *eventToWireTime,
-                    std::vector<std::unique_ptr<IEventBase>> *events,
+            void ApplyBytesWritten(size_t num, size_t minSerializeWindowSize, size_t maxSerializeWindowSize,
+                    std::vector<ui64> *eventToWireTime, std::vector<std::unique_ptr<IEventBase>> *events,
                     std::vector<TIntrusivePtr<TEventSerializedData>> *buffers) {
                 BytesSent += num;
 
@@ -288,16 +329,18 @@ namespace NActors {
                 // successfully written, and it was limited by serialization window, we can increase it. If we have
                 // serialized less than the window, we can decrease the window.
                 if (num == BytesToWriteLastTime && BytesToWriteLastTime == SerializeWindowSize) {
-                    SerializeWindowSize = Min(SerializeWindowSize + MinSerializeWindowSize, MaxSerializeWindowSize);
+                    SerializeWindowSize = Min(SerializeWindowSize + minSerializeWindowSize, maxSerializeWindowSize);
                 }  else if (UnsentBytes < SerializeWindowSize) {
-                    SerializeWindowSize = Max(SerializeWindowSize - MinSerializeWindowSize, MinSerializeWindowSize);
+                    SerializeWindowSize = Max(SerializeWindowSize - minSerializeWindowSize, minSerializeWindowSize);
                 }
 
                 // Advance past exactly the bytes the kernel accepted. A writev can be short (e.g. under
                 // backpressure or on a real network), so drop only fully-sent spans and trim the span that
                 // straddles the boundary; the rest stay queued and are retried by the next writev.
-                for (auto& span : OutgoingSpans) {
-                    NSan::CheckMemIsInitialized(span.data(), span.size());
+                if constexpr (NSan::MSanIsOn()) {
+                    for (auto& span : OutgoingSpans) {
+                        NSan::CheckMemIsInitialized(span.data(), span.size());
+                    }
                 }
                 for (size_t remaining = num; remaining; OutgoingSpans.pop_front()) {
                     Y_DEBUG_ABORT_UNLESS(!OutgoingSpans.empty());
@@ -449,6 +492,9 @@ namespace NActors {
                                     PARAM(UnsentBytes)
                                     PARAM(ReadPendingRingIdx)
                                     PARAM(PreferredRingIdx)
+                                    PARAM(FixedFileIndex)
+                                    PARAM2("ReadBuffer size", ReadBuffer.size())
+                                    PARAM(ReadBufferSize)
                                     PARAM2("IncomingSeqNo", IncomingSeqNo.load())
                                     PARAM(ExpectedSeqNo)
                                     PARAM(MigrateTargetShard)
@@ -493,12 +539,28 @@ namespace NActors {
                 kOpWrite,
                 kOpTimer,
                 kOpCancel,
+                kOpProvideBuffers,
             };
             static const ui64 kOpMask = (1 << 3) - 1;
 
             struct TRingSlot {
                 io_uring Ring{};
                 i64 ItemsToSubmit = 0;
+                bool FixedFilesEnabled = false;
+                std::vector<int> FreeIndices;
+
+                // Shared provided-buffer pool (buf_ring and/or legacy provide_buffers).
+                bool ProvidedBuffersEnabled = false;
+                bool BufRingEnabled = false;
+                io_uring_buf_ring *BufRing = nullptr;
+                unsigned BufRingEntries = 0;
+                int BufGroupId = ProvidedBufGroupId;
+                ui32 PoolBufCount = 0;
+                char *PoolMemory = nullptr; // PoolBufCount * MinReadBufferSize contiguous slab
+
+                ~TRingSlot() {
+                    free(PoolMemory);
+                }
             };
 
             TUringEngine& Engine;
@@ -553,6 +615,9 @@ namespace NActors {
             NMonitoring::TDynamicCounters::TCounterPtr PushedTotal;
             NMonitoring::TDynamicCounters::TCounterPtr ReadUnavail;
             NMonitoring::TDynamicCounters::TCounterPtr WriteUnavail;
+            NMonitoring::TDynamicCounters::TCounterPtr ReadsToPool;
+            NMonitoring::TDynamicCounters::TCounterPtr ReadsToBuffer;
+            NMonitoring::TDynamicCounters::TCounterPtr ReadsNoBufs;
             NMonitoring::TDynamicCounters::TCounterPtr SessionsMigratedOut;
             NMonitoring::TDynamicCounters::TCounterPtr SessionsMigratedIn;
             NMonitoring::TDynamicCounters::TCounterPtr OutOfOrderCameIn;
@@ -586,6 +651,13 @@ namespace NActors {
             TShardLoad& Load;
 
             std::unique_ptr<TEvDestroyEvents> EvDestroyEvents = std::make_unique<TEvDestroyEvents>();
+
+            const ui32 MinReadBufferSize;
+            const ui32 MaxReadBufferSize;
+            const ui32 MinWriteBufferSize;
+            const ui32 MaxWriteBufferSize;
+            const ui32 MinSerializeWindowSize;
+            const ui32 MaxSerializeWindowSize;
 
         private:
             class TActivityMeasure {
@@ -636,6 +708,92 @@ namespace NActors {
                 }
             }
 
+            // Reserve a sparse fixed-file table on the ring before the worker starts. Prefer the 5.19+
+            // sparse helper; fall back to registering an array of -1 (supported since ~5.5, covers 5.13).
+            void InitFixedFiles(TRingSlot& slot, ui32 fixedFilesPerRing) {
+                if (!fixedFilesPerRing) {
+                    return;
+                }
+                int ret = io_uring_register_files_sparse(&slot.Ring, fixedFilesPerRing);
+                if (ret != 0) {
+                    std::vector<int> minusOnes(fixedFilesPerRing, -1);
+                    ret = io_uring_register_files(&slot.Ring, minusOnes.data(), minusOnes.size());
+                }
+                if (ret != 0) {
+                    return;
+                }
+                slot.FixedFilesEnabled = true;
+                slot.FreeIndices.resize(fixedFilesPerRing);
+                std::iota(slot.FreeIndices.rbegin(), slot.FreeIndices.rend(), 0);
+            }
+
+            void BindSessionFixedFile(TSession& session) {
+                Y_DEBUG_ABORT_UNLESS(session.FixedFileIndex == -1);
+                Y_DEBUG_ABORT_UNLESS(session.PreferredRingIdx < Rings.size());
+                auto& slot = Rings[session.PreferredRingIdx];
+                if (!slot.FixedFilesEnabled || slot.FreeIndices.empty()) {
+                    return;
+                }
+                session.FixedFileIndex = slot.FreeIndices.back();
+                const int fd = *session.Socket;
+                const int ret = io_uring_register_files_update(&slot.Ring, session.FixedFileIndex, &fd, 1);
+                if (ret != 1) {
+                    session.FixedFileIndex = -1;
+                } else {
+                    slot.FreeIndices.pop_back();
+                }
+            }
+
+            void UnbindSessionFixedFile(TSession& session) {
+                if (session.FixedFileIndex == -1) {
+                    return;
+                }
+                Y_DEBUG_ABORT_UNLESS(session.PreferredRingIdx < Rings.size());
+                auto& slot = Rings[session.PreferredRingIdx];
+                Y_DEBUG_ABORT_UNLESS(slot.FixedFilesEnabled);
+                const int clear = -1;
+                const int ret = io_uring_register_files_update(&slot.Ring, session.FixedFileIndex, &clear, 1);
+                Y_ABORT_UNLESS(ret == 1, "io_uring_register_files_update(clear) failed: %s", strerror(-ret));
+                slot.FreeIndices.push_back(session.FixedFileIndex);
+                session.FixedFileIndex = -1;
+            }
+
+            // Shared recv pool: prefer buf_ring (5.19+), else legacy provide_buffers (5.7+ / 5.13).
+            void InitProvidedBuffers(ui32 ringIdx, TRingSlot& slot, ui32 poolBufCount, bool allowBufRing) {
+                if (!poolBufCount) {
+                    return;
+                }
+                slot.PoolBufCount = poolBufCount;
+                slot.BufGroupId = ProvidedBufGroupId;
+                size_t numb = static_cast<size_t>(MinReadBufferSize) * poolBufCount;
+                slot.PoolMemory = static_cast<char*>(malloc(numb));
+                NSan::Poison(slot.PoolMemory, numb);
+
+                if (allowBufRing) {
+                    const unsigned entries = NextPowerOfTwo(poolBufCount);
+                    int err = 0;
+                    slot.BufRing = io_uring_setup_buf_ring(&slot.Ring, entries, slot.BufGroupId, 0, &err);
+                    if (slot.BufRing) {
+                        slot.BufRingEntries = entries;
+                        slot.BufRingEnabled = true;
+                        const int mask = io_uring_buf_ring_mask(entries);
+                        for (size_t i = 0; i < poolBufCount; ++i) {
+                            char *addr = slot.PoolMemory + i * MinReadBufferSize;
+                            io_uring_buf_ring_add(slot.BufRing, addr, MinReadBufferSize, i, mask, i);
+                        }
+                        io_uring_buf_ring_advance(slot.BufRing, poolBufCount);
+                        slot.ProvidedBuffersEnabled = true;
+                        return;
+                    }
+                }
+
+                // Legacy provide_buffers: one SQE installs the whole contiguous slab.
+                io_uring_sqe *sqe = GetSQE(nullptr, kOpProvideBuffers, ringIdx);
+                Y_ABORT_UNLESS(sqe);
+                io_uring_prep_provide_buffers(sqe, slot.PoolMemory, MinReadBufferSize, poolBufCount, slot.BufGroupId, 0);
+                slot.ProvidedBuffersEnabled = true;
+            }
+
             void PublishLoadSample(ui64 busyDelta, ui64 totalDelta) {
                 // Keep a short EWMA-like window by decaying prior samples and adding the latest slice.
                 constexpr ui64 DecayNum = 3;
@@ -651,8 +809,8 @@ namespace NActors {
                 return NMonitoring::ExponentialHistogram(22, 2, 1000);
             }
 
-            TShard(TUringEngine& engine, ui32 shardIdx, const NMonitoring::TDynamicCounterPtr& shardCounters, bool sqpoll,
-                    ui32 ringsPerShard, ui32 sqThreadIdleMs, TShardLoad& load, TShard *shareRingsWith)
+            TShard(TUringEngine& engine, ui32 shardIdx, const NMonitoring::TDynamicCounterPtr& shardCounters,
+                    const TInterconnectSettings::TV2& v2, TShardLoad& load, TShard *shareRingsWith)
 #define COUNTER(NAME, DERIV) NAME(shardCounters->GetCounter(#NAME, DERIV))
                 : Engine(engine)
                 , ShardIdx(shardIdx)
@@ -675,6 +833,9 @@ namespace NActors {
                 , COUNTER(PushedTotal, true)
                 , COUNTER(ReadUnavail, true)
                 , COUNTER(WriteUnavail, true)
+                , COUNTER(ReadsToPool, true)
+                , COUNTER(ReadsToBuffer, true)
+                , COUNTER(ReadsNoBufs, true)
                 , COUNTER(SessionsMigratedOut, true)
                 , COUNTER(SessionsMigratedIn, true)
                 , COUNTER(OutOfOrderCameIn, true)
@@ -696,19 +857,43 @@ namespace NActors {
                 , SerializeTime(shardCounters->GetNamedHistogram("sensor", "SerializeTime", TimeCollector()))
                 , CompletionsProcessedAtOnce(shardCounters->GetNamedHistogram("sensor", "CompletionsProcessedAtOnce", NMonitoring::ExponentialHistogram(10, 2)))
                 , SubmissionsProcessedAtOnce(shardCounters->GetNamedHistogram("sensor", "SubmissionsProcessedAtOnce", NMonitoring::ExponentialHistogram(12, 2)))
-                , Load(load)
 #undef TOTAL_TIME
 #undef COUNTER
+                , Load(load)
+                , MinReadBufferSize(v2.MinReadBufferSize)
+                , MaxReadBufferSize(v2.MaxReadBufferSize)
+                , MinWriteBufferSize(v2.MinWriteBufferSize)
+                , MaxWriteBufferSize(v2.MaxWriteBufferSize)
+                , MinSerializeWindowSize(v2.MinSerializeWindowSize)
+                , MaxSerializeWindowSize(v2.MaxSerializeWindowSize)
             {
+                const ui32 sqThreadIdleMs = v2.SqThreadIdleMs
+                    ? v2.SqThreadIdleMs
+                    : TUringContext::SqThreadIdleMs;
+
+                const bool allowBufRing = !GetEnv("YDB_IC_V2_DISABLE_BUF_RING");
+
                 EventFd = eventfd(0, 0);
                 if (EventFd == -1) {
                     Y_ABORT("eventfd() failed: %s", strerror(errno));
                 }
 
-                Rings.resize(ringsPerShard);
+                Rings.resize(v2.RingsPerShard);
                 for (ui32 i = 0; i < Rings.size(); ++i) {
                     auto& slot = Rings[i];
-                    InitRing(slot, sqpoll, sqThreadIdleMs, shareRingsWith ? &shareRingsWith->Rings[i] : nullptr);
+
+                    InitRing(slot, v2.EnableSQPOLL, sqThreadIdleMs, shareRingsWith ? &shareRingsWith->Rings[i] : nullptr);
+
+                    // Must run before Start(): io_uring_register waits for the ring to idle, which deadlocks
+                    // if a worker/SQPOLL thread already holds a ref inside io_uring_enter.
+                    if (v2.EnableFixedFiles) {
+                        InitFixedFiles(slot, v2.FixedFilesPerRing);
+                    }
+
+                    if (v2.EnableProvidedBuffers) {
+                        InitProvidedBuffers(i, slot, v2.PoolBufCount, allowBufRing);
+                    }
+
                     if (i > 0) {
                         if (int res = io_uring_register_eventfd(&slot.Ring, EventFd); res < 0) {
                             Y_ABORT("failed to register eventfd along with ring: %s", strerror(-res));
@@ -737,6 +922,10 @@ namespace NActors {
             ~TShard() {
                 Stop(); // joins the worker thread, so no completion will be dispatched after this point
                 for (auto& slot : Rings) {
+                    if (slot.BufRing) {
+                        io_uring_free_buf_ring(&slot.Ring, slot.BufRing, slot.BufRingEntries, slot.BufGroupId);
+                        slot.BufRing = nullptr;
+                    }
                     io_uring_queue_exit(&slot.Ring);
                 }
                 DrainQueue(); // free commands that were enqueued after the worker stopped (teardown races)
@@ -918,7 +1107,9 @@ namespace NActors {
                     uintptr_t sessionId = reinterpret_cast<uintptr_t>(session);
                     Y_ABORT_UNLESS((sessionId & kOpMask) == 0);
                     io_uring_sqe_set_data64(sqe, sessionId | op);
-                    Y_DEBUG_ABORT_UNLESS(op == kOpEvent || op == kOpTimer ? session == nullptr : session != nullptr);
+                    Y_DEBUG_ABORT_UNLESS(op == kOpEvent || op == kOpTimer || op == kOpProvideBuffers
+                        ? session == nullptr
+                        : session != nullptr);
                     ++*SQEAllocated;
                 }
                 return sqe;
@@ -1121,6 +1312,7 @@ namespace NActors {
                         std::unique_ptr<TSession> session(reinterpret_cast<TSession*>(record->Conn));
                         session->PreferredRingIdx = OpShift++ % Rings.size();
                         session->OwnerShard.store(ShardIdx, std::memory_order_release);
+                        BindSessionFixedFile(*session);
                         const auto [it, inserted] = Sessions.emplace(std::move(session));
                         Y_ABORT_UNLESS(inserted);
                         TouchedSessions.PushBack(it->get());
@@ -1192,12 +1384,13 @@ namespace NActors {
             bool ProcessCompletions() {
                 bool progress = false;
                 i64 completionsProcessedAtOnce = 0;
-                for (auto& slot : Rings) {
+                for (ui32 ringIdx = 0; ringIdx < Rings.size(); ++ringIdx) {
+                    auto& slot = Rings[ringIdx];
                     io_uring_cqe *cqes[CqeBatchSize];
                     while (const unsigned n = io_uring_peek_batch_cqe(&slot.Ring, cqes, CqeBatchSize)) {
                         progress = true; // we did something with the queues
                         for (unsigned i = 0; i < n; ++i) {
-                            DispatchCompletion(*cqes[i]);
+                            DispatchCompletion(*cqes[i], ringIdx);
                         }
                         io_uring_cq_advance(&slot.Ring, n);
                         completionsProcessedAtOnce += n;
@@ -1212,7 +1405,7 @@ namespace NActors {
                 return progress;
             }
 
-            void DispatchCompletion(io_uring_cqe& cqe) {
+            void DispatchCompletion(io_uring_cqe& cqe, ui32 ringIdx) {
                 auto *session = reinterpret_cast<TSession*>(uintptr_t(cqe.user_data) & ~uintptr_t(kOpMask));
                 Y_ABORT_UNLESS(!(cqe.flags & IORING_CQE_F_MORE)); // not expecting multiple completions
                 const auto op = static_cast<EOperationType>(cqe.user_data & kOpMask);
@@ -1227,7 +1420,7 @@ namespace NActors {
                         Y_DEBUG_ABORT_UNLESS(session != nullptr);
                         Y_DEBUG_ABORT_UNLESS(session->ReadPendingRingIdx != -1);
                         session->ReadPendingRingIdx = -1;
-                        DispatchRead(*session, cqe.res);
+                        DispatchRead(*session, cqe.res, cqe.flags, ringIdx);
                         break;
 
                     case kOpWrite:
@@ -1243,6 +1436,10 @@ namespace NActors {
 
                     case kOpCancel:
                         // Original op completes with -ECANCELED; the cancel SQE itself needs no action.
+                        break;
+
+                    case kOpProvideBuffers:
+                        // Legacy pool recycle completed; nothing else to do (failure just leaks one slot).
                         break;
                 }
                 ++*CQEProcessed;
@@ -1334,6 +1531,10 @@ namespace NActors {
                     return false;
                 }
 
+                // Drop the fixed-file binding on this shard before handing the session off; the destination
+                // rebinds in its EvRegisterSession handler. Safe: no ops are in flight.
+                UnbindSessionFixedFile(session);
+
                 auto it = Sessions.find(&session);
                 Y_DEBUG_ABORT_UNLESS(it != Sessions.end());
                 auto node = Sessions.extract(it);
@@ -1345,9 +1546,19 @@ namespace NActors {
                 return true;
             }
 
-            void DispatchRead(TSession& session, i32 res) {
+            void DispatchRead(TSession& session, i32 res, ui32 cqeFlags, ui32 ringIdx) {
                 Y_DEBUG_ABORT_UNLESS(session.ReadPending);
                 session.ReadPending = false;
+
+                TRingSlot& slot = Rings[ringIdx];
+
+                unsigned poolBid = 0;
+                char *poolData = nullptr;
+                if (cqeFlags & IORING_CQE_F_BUFFER) {
+                    poolBid = cqeFlags >> IORING_CQE_BUFFER_SHIFT;
+                    Y_ABORT_UNLESS(poolBid < slot.PoolBufCount);
+                    poolData = slot.PoolMemory + static_cast<size_t>(poolBid) * MinReadBufferSize;
+                }
 
                 if (session.Terminated) {
                     // teardown in progress: don't retry the read or re-arm; just let the session drain toward erasure below
@@ -1355,17 +1566,32 @@ namespace NActors {
                     // cancelled without migrate (should be rare); re-arm unless terminating
                 } else if (res == -EAGAIN) {
                     ++*ReadUnavail;
+                } else if (res == -ENOBUFS) {
+                    // no pool buffer available: allocate buffer for ordinary read and retry
+                    ++*ReadsNoBufs;
+                    session.GetReadSpan(MinReadBufferSize);
                 } else if (res < 0) {
                     session.Disconnect(TDisconnectReason::FromErrno(-res));
                 } else if (res == 0) {
                     session.Disconnect(TDisconnectReason::EndOfStream());
                 } else {
                     *BytesReceived += res;
+
                     session.ReceiveCycles = 0;
                     session.EventsReceivedCallback = 0;
                     session.EventsReceivedActorSystem = 0;
                     ACTIVITY(&ApplyBytesReadTotalTime) {
-                        session.ApplyBytesRead(res);
+                        // remember the last time when something came -- used for DeadPeer logic
+                        session.LastInputActivityTimestamp = LastActivitySwitchTimestamp;
+
+                        if (poolData) {
+                            session.ApplyBytesReadCopy(poolData, res, MinReadBufferSize, MaxReadBufferSize);
+                            ++*ReadsToPool;
+                        } else {
+                            session.ApplyBytesRead(res, MinReadBufferSize, MaxReadBufferSize);
+                            ++*ReadsToBuffer;
+                        }
+
                         LastActivitySwitchTimestamp += session.ReceiveCycles;
                         *ReceiveCallbackTotalTime += session.ReceiveCycles * Freq;
                         if (const ui64 n = session.EventsReceivedCallback) {
@@ -1377,6 +1603,19 @@ namespace NActors {
                     }
                 }
 
+                if (poolData) { // recycle processed pool entry, if any
+                    if (slot.BufRingEnabled) {
+                        const int mask = io_uring_buf_ring_mask(slot.BufRingEntries);
+                        io_uring_buf_ring_add(slot.BufRing, poolData, MinReadBufferSize, poolBid, mask, 0);
+                        io_uring_buf_ring_advance(slot.BufRing, 1);
+                    } else {
+                        // Legacy path: re-provide via SQE on the owning ring (completed as kOpProvideBuffers).
+                        io_uring_sqe *sqe = GetSQE(nullptr, kOpProvideBuffers, ringIdx);
+                        Y_ABORT_UNLESS(sqe);
+                        io_uring_prep_provide_buffers(sqe, poolData, MinReadBufferSize, 1, slot.BufGroupId, poolBid);
+                    }
+                }
+
                 TouchedSessions.PushBack(&session);
             }
 
@@ -1385,10 +1624,30 @@ namespace NActors {
                     return;
                 }
 
-                TMutableContiguousSpan span = session.GetReadSpan();
+                auto& slot = Rings[session.PreferredRingIdx];
                 io_uring_sqe *sqe = GetSQE(&session, kOpRead, session.PreferredRingIdx);
                 Y_ABORT_UNLESS(sqe);
+
+                TMutableContiguousSpan span(nullptr, MinReadBufferSize);
+
+                if (session.ReadBufferSize == MinReadBufferSize && slot.ProvidedBuffersEnabled && session.ReadBuffer.empty()) {
+                    // we're reading into automatically located pool buffer
+                    sqe->flags |= IOSQE_BUFFER_SELECT;
+                    sqe->buf_group = slot.BufGroupId;
+                } else {
+                    // we're reading into session's ReadBuffer, so we need to possibly allocate buffer and get its read span
+                    span = session.GetReadSpan(MinReadBufferSize);
+                }
+
+                Y_DEBUG_ABORT_UNLESS(span.size());
+
                 io_uring_prep_read(sqe, *session.Socket, span.data(), span.size(), -1);
+
+                if (session.FixedFileIndex >= 0) {
+                    sqe->fd = session.FixedFileIndex;
+                    sqe->flags |= IOSQE_FIXED_FILE;
+                }
+
                 session.ReadPending = true;
             }
 
@@ -1409,8 +1668,8 @@ namespace NActors {
                 } else {
                     *BytesSent += res;
                     ACTIVITY(&ApplyBytesWrittenTotalTime) {
-                        session.ApplyBytesWritten(res, &EventToWireTimeVec, &EvDestroyEvents->Events,
-                            &EvDestroyEvents->Buffers);
+                        session.ApplyBytesWritten(res, MinSerializeWindowSize, MaxSerializeWindowSize,
+                            &EventToWireTimeVec, &EvDestroyEvents->Events, &EvDestroyEvents->Buffers);
                         for (const ui64 time : EventToWireTimeVec) {
                             EventToWireTime->Collect(time * Freq, 1u);
                         }
@@ -1426,7 +1685,7 @@ namespace NActors {
                     return;
                 }
                 if (session.Serializer.IsTrafficPending()) {
-                    session.Serialize();
+                    session.Serialize(MinWriteBufferSize, MaxWriteBufferSize);
                     const ui64 serializeEventTime = session.Serializer.GetSerializeEventTime();
                     const ui64 prevTimestamp = std::exchange(LastActivitySwitchTimestamp, GetCycleCountFast());
                     **CurrentActivityTime += (LastActivitySwitchTimestamp - prevTimestamp - serializeEventTime) * Freq;
@@ -1437,7 +1696,13 @@ namespace NActors {
                 if (session.PrepareIovec()) {
                     io_uring_sqe *sqe = GetSQE(&session, kOpWrite, session.PreferredRingIdx);
                     Y_ABORT_UNLESS(sqe);
-                    io_uring_prep_writev(sqe, *session.Socket, session.Iov, session.IovLen, -1);
+                    const int fdOrIndex = session.FixedFileIndex >= 0
+                        ? session.FixedFileIndex
+                        : static_cast<int>(*session.Socket);
+                    io_uring_prep_writev(sqe, fdOrIndex, session.Iov, session.IovLen, -1);
+                    if (session.FixedFileIndex >= 0) {
+                        sqe->flags |= IOSQE_FIXED_FILE;
+                    }
                     session.WritePending = true;
                 }
             }
@@ -1455,6 +1720,9 @@ namespace NActors {
             // erase earlier because any pending read/write completion references the session by raw pointer.
             void MaybeEraseSession(TSession& session) {
                 if (session.UnregisterRequested && !session.ReadPending && !session.WritePending) {
+                    // Release the fixed-file slot while the socket is still alive, then drop the session
+                    // (which closes the fd via TStreamSocket's destructor).
+                    UnbindSessionFixedFile(session);
                     auto it = Sessions.find(&session);
                     Y_ABORT_UNLESS(it != Sessions.end());
                     Sessions.erase(it);
@@ -1481,21 +1749,13 @@ namespace NActors {
             , UringCounters(Common->MonCounters->GetSubgroup("subsystem", "uring"))
         {
             const auto& v2 = Common->Settings.V2;
-            const ui32 numShards = Max<ui32>(1, v2.UringEngineThreads);
-            const ui32 ringsPerShard = Max<ui32>(1, v2.UringEngineRingsPerShard);
-            const ui32 sqThreadIdleMs = v2.UringEngineSqThreadIdleMs
-                ? v2.UringEngineSqThreadIdleMs
-                : TUringContext::SqThreadIdleMs;
-
-            ShardLoads = std::vector<TShardLoad>(numShards);
-            Shards.reserve(numShards);
-            for (ui32 i = 0; i < numShards; ++i) {
+            ShardLoads = std::vector<TShardLoad>(v2.Threads);
+            Shards.reserve(v2.Threads);
+            for (ui32 i = 0; i < v2.Threads; ++i) {
                 Shards.push_back(std::make_unique<TShard>(*this,
                     i, // shardIdx
                     UringCounters->GetSubgroup("shard", "0" /*ToString(i)*/),
-                    v2.EnableSQPOLL,
-                    ringsPerShard,
-                    sqThreadIdleMs,
+                    v2,
                     ShardLoads[i],
                     v2.ShareRingsAmongThreads && !Shards.empty() ? Shards.front().get() : nullptr));
             }
@@ -1539,9 +1799,14 @@ namespace NActors {
                 }
             }
 
+            const auto& v2 = Common->Settings.V2;
+
             auto session = std::make_unique<TSession>(shardIdx, std::move(socket), sessionActorId,
                 ChecksumEvents, peerScopeId, std::move(onDisconnectCallback), ActorSystem, sendPings,
                 std::move(clockSkew), std::move(pingRTT));
+            session->ReadBufferSize = v2.MinReadBufferSize;
+            session->WriteBufferSize = v2.MinWriteBufferSize;
+            session->SerializeWindowSize = v2.MinSerializeWindowSize;
             const ui64 conn = reinterpret_cast<ui64>(session.get());
             Shards[shardIdx]->Register(std::move(session));
             return conn;

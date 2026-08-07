@@ -21,13 +21,14 @@ struct TAggregatorSchema : NIceDb::Schema {
         using TColumns = TableColumns<SchemeShardId, Stats>;
     };
 
-    struct ColumnStatistics : Table<3> {
-        struct ColumnTag      : Column<1, NScheme::NTypeIds::Uint32> {};
-        struct CountMinSketch : Column<2, NScheme::NTypeIds::String> {};
-
-        using TKey = TableKey<ColumnTag>;
-        using TColumns = TableColumns<ColumnTag, CountMinSketch>;
-    };
+    // deprecated: ColumnStatistics : Table<3>
+    // struct ColumnStatistics : Table<3> {
+    //     struct ColumnTag      : Column<1, NScheme::NTypeIds::Uint32> {};
+    //     struct CountMinSketch : Column<2, NScheme::NTypeIds::String> {};
+    //
+    //     using TKey = TableKey<ColumnTag>;
+    //     using TColumns = TableColumns<ColumnTag, CountMinSketch>;
+    // };
 
     struct ScheduleTraversals : Table<4> {
         struct OwnerId        : Column<1, NScheme::NTypeIds::Uint64> {};
@@ -95,7 +96,7 @@ struct TAggregatorSchema : NIceDb::Schema {
     using TTables = SchemaTables<
         SysParams,
         BaseStatistics,
-        ColumnStatistics,
+//      ColumnStatistics,
         ScheduleTraversals,
 //      ForceTraversals,
         ForceTraversalOperations,
@@ -108,7 +109,7 @@ struct TAggregatorSchema : NIceDb::Schema {
     >;
 
     static constexpr ui64 SysParam_Database = 1;
-    static constexpr ui64 SysParam_TraversalStartKey = 2;
+    // deprecated 2 (SysParam_TraversalStartKey)
     // deprecated 3
     static constexpr ui64 SysParam_TraversalTableOwnerId = 4;
     static constexpr ui64 SysParam_TraversalTableLocalPathId = 5;
@@ -117,8 +118,8 @@ struct TAggregatorSchema : NIceDb::Schema {
     // deprecated 8
     static constexpr ui64 SysParam_TraversalStartTime = 9;
     // deprecated 10
-    static constexpr ui64 SysParam_TraversalIsColumnTable = 11;
-    static constexpr ui64 SysParam_GlobalTraversalRound = 12;
+    // deprecated 11 (SysParam_TraversalIsColumnTable)
+    // deprecated 12 (SysParam_GlobalTraversalRound)
     static constexpr ui64 SysParam_TraversalTableDatabase = 13;
     static constexpr ui64 SysParam_ForceTraversalOperationId = 14;
 };

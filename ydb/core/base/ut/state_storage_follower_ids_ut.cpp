@@ -112,7 +112,7 @@ void SetupRuntimeAndHive(TTestBasicRuntime& runtime) {
                     : static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())
             );
 
-            auto serviceSet = nodeWardenConfig->BlobStorageConfig.MutableServiceSet();
+            auto serviceSet = nodeWardenConfig->BlobStorageConfig->MutableServiceSet();
             serviceSet->AddAvailabilityDomains(0);
 
             for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {

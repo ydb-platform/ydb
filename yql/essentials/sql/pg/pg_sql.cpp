@@ -2518,14 +2518,8 @@ public:
                 return nullptr;
             }
         } else if (name == "warning") {
-            if (auto langver = NYql::NFeature::PgPragmaWarning.MinLangVer;
-                !NYql::IsBackwardCompatibleFeatureAvailable(
-                    Settings_.LangVer, langver, Settings_.BackportMode))
-            {
-                AddError(
-                    TStringBuilder()
-                    << "VariableSetStmt, Warning pragma is not available "
-                    << "before language version " << NYql::FormatLangVersion(langver));
+            if (auto x = EnsureIsAvailableOn(Settings_.LangVer, Settings_.BackportMode, NYql::NFeature::PgPragmaWarning); !x) {
+                AddError(TString::Join("VariableSetStmt, ", x.error()));
                 return nullptr;
             }
 

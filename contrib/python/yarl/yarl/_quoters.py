@@ -19,6 +19,7 @@ UNQUOTER = _Unquoter()
 PATH_UNQUOTER = _Unquoter(unsafe="+")
 PATH_SAFE_UNQUOTER = _Unquoter(ignore="/%", unsafe="+")
 QS_UNQUOTER = _Unquoter(qs=True)
+UNQUOTER_PLUS = _Unquoter(plus=True)  # to match urllib.parse.unquote_plus
 
 
 def human_quote(s: Union[str, None], unsafe: str) -> Union[str, None]:

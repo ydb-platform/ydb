@@ -223,7 +223,7 @@
 #endif
 
 // SVE[2] require recent clang or gcc versions.
-#if (HWY_COMPILER_CLANG && HWY_COMPILER_CLANG < 1100) || \
+#if (HWY_COMPILER_CLANG && HWY_COMPILER_CLANG < 1900) || \
     (HWY_COMPILER_GCC_ACTUAL && HWY_COMPILER_GCC_ACTUAL < 1000)
 #define HWY_BROKEN_SVE (HWY_SVE | HWY_SVE2 | HWY_SVE_256 | HWY_SVE2_128)
 #else
@@ -265,6 +265,15 @@
 #define HWY_BROKEN_PPC_32BIT 0
 #endif
 
+// HWY_RVV fails to compile with GCC < 13 or Clang < 16.
+#if HWY_ARCH_RISCV &&                                     \
+    ((HWY_COMPILER_CLANG && HWY_COMPILER_CLANG < 1600) || \
+     (HWY_COMPILER_GCC_ACTUAL && HWY_COMPILER_GCC_ACTUAL < 1300))
+#define HWY_BROKEN_RVV (HWY_RVV)
+#else
+#define HWY_BROKEN_RVV 0
+#endif
+
 // Allow the user to override this without any guarantee of success.
 #ifndef HWY_BROKEN_TARGETS
 
@@ -273,7 +282,7 @@
    HWY_BROKEN_AVX3_DL_ZEN4 | HWY_BROKEN_AVX3_SPR |             \
    HWY_BROKEN_ARM7_BIG_ENDIAN | HWY_BROKEN_ARM7_WITHOUT_VFP4 | \
    HWY_BROKEN_NEON_BF16 | HWY_BROKEN_SVE | HWY_BROKEN_PPC10 |  \
-   HWY_BROKEN_PPC_32BIT)
+   HWY_BROKEN_PPC_32BIT | HWY_BROKEN_RVV)
 
 #endif  // HWY_BROKEN_TARGETS
 
@@ -605,12 +614,12 @@
 #endif  // HWY_HAVE_AUXV
 
 #ifndef HWY_HAVE_RUNTIME_DISPATCH_RVV  // allow override
-// The riscv_vector.h in (at least) Clang 16-18 requires compiler flags, see
+// The riscv_vector.h in Clang 16-18 requires compiler flags, and 19 still has
+// some missing intrinsics, see
 // https://github.com/llvm/llvm-project/issues/56592. GCC 13.3 also has an
 // #error check, whereas 14.1 fails with "argument type 'vuint16m8_t' requires
 // the V ISA extension": https://gcc.gnu.org/bugzilla/show_bug.cgi?id=115325.
-// Hence disable runtime dispatch for now.
-#if HWY_ARCH_RISCV && 0
+#if HWY_ARCH_RISCV && HWY_COMPILER_CLANG >= 1900 && 0
 #define HWY_HAVE_RUNTIME_DISPATCH_RVV 1
 #else
 #define HWY_HAVE_RUNTIME_DISPATCH_RVV 0
@@ -738,7 +747,7 @@
 #elif HWY_ARCH_S390X
 #define HWY_ATTAINABLE_TARGETS \
   HWY_ENABLED(HWY_BASELINE_SCALAR | HWY_ATTAINABLE_S390X)
-#elif HWY_ARCH_RVV
+#elif HWY_ARCH_RISCV
 #define HWY_ATTAINABLE_TARGETS \
   HWY_ENABLED(HWY_BASELINE_SCALAR | HWY_ATTAINABLE_RISCV)
 #else

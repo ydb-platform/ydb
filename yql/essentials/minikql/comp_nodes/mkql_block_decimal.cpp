@@ -11,8 +11,7 @@
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -135,7 +134,7 @@ struct TDecimalBlockExec {
             const auto valid2 = (nullCount2 == 0) ? nullptr : arr2.GetValues<uint8_t>(0);
             auto resPtr = reinterpret_cast<NYql::NDecimal::TInt128*>(resArr.buffers[1]->mutable_data());
             auto resValid = res->array()->GetMutableValues<uint8_t>(0);
-            ScalarArrayCore(val1Ptr, nullptr, val2Ptr, valid2, resPtr, resValid, length, 0, arr2.offset);
+            ScalarArrayCore(val1Ptr, /*valid1=*/nullptr, val2Ptr, valid2, resPtr, resValid, length, 0, arr2.offset);
         } else {
             GetBitmap(resArr, 0).SetBitsTo(false);
         }
@@ -157,7 +156,7 @@ struct TDecimalBlockExec {
             const auto val2Ptr = GetScalarValue<TRight>(*arg2.scalar());
             auto resPtr = reinterpret_cast<NYql::NDecimal::TInt128*>(resArr.buffers[1]->mutable_data());
             auto resValid = res->array()->GetMutableValues<uint8_t>(0);
-            ArrayScalarCore(val1Ptr, valid1, val2Ptr, nullptr, resPtr, resValid, length, arr1.offset, 0);
+            ArrayScalarCore(val1Ptr, valid1, val2Ptr, /*valid2=*/nullptr, resPtr, resValid, length, arr1.offset, 0);
         } else {
             GetBitmap(resArr, 0).SetBitsTo(false);
         }
@@ -321,5 +320,4 @@ IComputationNode* WrapBlockDecimalMod(TCallable& callable, const TComputationNod
     return WrapBlockDecimal<TDecimalModBlockExec>("DecimalMod", callable, ctx);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

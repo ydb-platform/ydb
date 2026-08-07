@@ -260,6 +260,8 @@ void THttpRequest::DoProbeDoCountMinSketch(const TNavigate::TEntry& entry) {
         if (tableInfo.Name == columnName) {
             auto request = std::make_unique<TEvStatistics::TEvGetStatistics>();
             request->StatType = EStatType::COUNT_MIN_SKETCH;
+            // Don't set Database — the stat service will derive it from the
+            // navigate result, handling serverless (shared database) correctly.
             TRequest req;
             req.PathId = entry.TableId.PathId;
             req.ColumnTags = static_cast<ui32>(tableInfo.Id);

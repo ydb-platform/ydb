@@ -38,6 +38,7 @@ SRCS(
     demo_tx.cpp
 
     partition_writer_cache_actor_ut.cpp
+    fill_batched_data_offset_ut.cpp
 
     pqtablet_mock.cpp
     kqp_mock.cpp

@@ -60,30 +60,30 @@ class TMatchedVarsValue: public TComputationValue<TMatchedVarsValue<R>> {
         public:
             TIterator(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, const std::vector<R, TMKQLAllocator<R>>& ranges)
                 : TComputationValue<TIterator>(memInfo)
-                , HolderFactory(holderFactory)
-                , Ranges(ranges)
-                , Index(0)
+                , HolderFactory_(holderFactory)
+                , Ranges_(ranges)
+                , Index_(0)
             {
             }
 
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
-                if (Ranges.size() == Index) {
+                if (Ranges_.size() == Index_) {
                     return false;
                 }
-                value = ToValue(HolderFactory, Ranges[Index++]);
+                value = ToValue(HolderFactory_, Ranges_[Index_++]);
                 return true;
             }
-            const THolderFactory& HolderFactory;
-            const std::vector<R, TMKQLAllocator<R>>& Ranges;
-            size_t Index;
+            const THolderFactory& HolderFactory_;
+            const std::vector<R, TMKQLAllocator<R>>& Ranges_;
+            size_t Index_;
         };
 
     public:
         TRangeList(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, const TMatchedVar<R>& v)
             : TComputationValue<TRangeList>(memInfo)
-            , HolderFactory(holderFactory)
-            , Var(v)
+            , HolderFactory_(holderFactory)
+            , Var_(v)
         {
         }
 
@@ -92,37 +92,37 @@ class TMatchedVarsValue: public TComputationValue<TMatchedVarsValue<R>> {
         }
 
         ui64 GetListLength() const override {
-            return Var.size();
+            return Var_.size();
         }
 
         bool HasListItems() const override {
-            return !Var.empty();
+            return !Var_.empty();
         }
 
         NUdf::TUnboxedValue GetListIterator() const override {
-            return HolderFactory.Create<TIterator>(HolderFactory, Var);
+            return HolderFactory_.Create<TIterator>(HolderFactory_, Var_);
         }
 
     private:
-        const THolderFactory& HolderFactory;
-        const TMatchedVar<R>& Var;
+        const THolderFactory& HolderFactory_;
+        const TMatchedVar<R>& Var_;
     };
 
 public:
     TMatchedVarsValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, const std::vector<TMatchedVar<R>, TMKQLAllocator<TMatchedVar<R>>>& vars)
         : TComputationValue<TMatchedVarsValue>(memInfo)
-        , HolderFactory(holderFactory)
-        , Vars(vars)
+        , HolderFactory_(holderFactory)
+        , Vars_(vars)
     {
     }
 
     NUdf::TUnboxedValue GetElement(ui32 index) const override {
-        return HolderFactory.Create<TRangeList>(HolderFactory, Vars[index]);
+        return HolderFactory_.Create<TRangeList>(HolderFactory_, Vars_[index]);
     }
 
 private:
-    const THolderFactory& HolderFactory;
-    const std::vector<TMatchedVar<R>, TMKQLAllocator<TMatchedVar<R>>>& Vars;
+    const THolderFactory& HolderFactory_;
+    const std::vector<TMatchedVar<R>, TMKQLAllocator<TMatchedVar<R>>>& Vars_;
 };
 
 } // namespace NKikimr::NMiniKQL::NMatchRecognize

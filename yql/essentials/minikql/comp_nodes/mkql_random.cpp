@@ -6,8 +6,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <util/random/mersenne.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -15,7 +14,7 @@ class TRandomMTResource: public TComputationValue<TRandomMTResource> {
 public:
     TRandomMTResource(TMemoryUsageInfo* memInfo, ui64 seed)
         : TComputationValue(memInfo)
-        , Gen(seed)
+        , Gen_(seed)
     {
     }
 
@@ -25,51 +24,51 @@ private:
     }
 
     void* GetResource() override {
-        return &Gen;
+        return &Gen_;
     }
 
-    TMersenne<ui64> Gen;
+    TMersenne<ui64> Gen_;
 };
 
 class TNewMTRandWrapper: public TMutableComputationNode<TNewMTRandWrapper> {
-    typedef TMutableComputationNode<TNewMTRandWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TNewMTRandWrapper>;
 
 public:
     TNewMTRandWrapper(TComputationMutables& mutables, IComputationNode* seed)
         : TBaseComputation(mutables)
-        , Seed(seed)
+        , Seed_(seed)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        const ui64 seedValue = Seed->GetValue(compCtx).Get<ui64>();
+        const ui64 seedValue = Seed_->GetValue(compCtx).Get<ui64>();
         return compCtx.HolderFactory.Create<TRandomMTResource>(seedValue);
     }
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Seed);
+        DependsOn(Seed_);
     }
 
-    IComputationNode* const Seed;
+    IComputationNode* const Seed_;
 };
 
 class TNextMTRandWrapper: public TMutableComputationNode<TNextMTRandWrapper> {
-    typedef TMutableComputationNode<TNextMTRandWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TNextMTRandWrapper>;
 
 public:
     TNextMTRandWrapper(TComputationMutables& mutables, IComputationNode* rand)
         : TBaseComputation(mutables)
-        , Rand(rand)
-        , ResPair(mutables)
+        , Rand_(rand)
+        , ResPair_(mutables)
     {
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& compCtx) const {
-        auto rand = Rand->GetValue(compCtx);
+        auto rand = Rand_->GetValue(compCtx);
         Y_DEBUG_ABORT_UNLESS(rand.GetResourceTag() == NUdf::TStringRef(RandomMTResource));
         NUdf::TUnboxedValue* items = nullptr;
-        const auto tuple = ResPair.NewArray(compCtx, 2, items);
+        const auto tuple = ResPair_.NewArray(compCtx, 2, items);
         items[0] = NUdf::TUnboxedValuePod(static_cast<TMersenne<ui64>*>(rand.GetResource())->GenRand());
         items[1] = std::move(rand);
         return tuple;
@@ -77,21 +76,21 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Rand);
+        DependsOn(Rand_);
     }
 
-    IComputationNode* const Rand;
-    const TContainerCacheOnContext ResPair;
+    IComputationNode* const Rand_;
+    const TContainerCacheOnContext ResPair_;
 };
 
 template <ERandom Rnd>
 class TRandomWrapper: public TMutableComputationNode<TRandomWrapper<Rnd>> {
-    typedef TMutableComputationNode<TRandomWrapper<Rnd>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TRandomWrapper<Rnd>>;
 
 public:
     TRandomWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes)
         : TBaseComputation(mutables)
-        , DependentNodes(dependentNodes)
+        , DependentNodes_(dependentNodes)
     {
     }
 
@@ -112,10 +111,10 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TRandomWrapper::DependsOn, this, std::placeholders::_1));
+        std::for_each(DependentNodes_.cbegin(), DependentNodes_.cend(), std::bind(&TRandomWrapper::DependsOn, this, std::placeholders::_1));
     }
 
-    const TComputationNodePtrVector DependentNodes;
+    const TComputationNodePtrVector DependentNodes_;
 };
 
 } // namespace
@@ -156,5 +155,4 @@ template IComputationNode* WrapRandom<ERandom::Number>(TCallable& callable, cons
 
 template IComputationNode* WrapRandom<ERandom::Uuid>(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

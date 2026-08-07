@@ -1,13 +1,15 @@
 #include "cluster_balancing.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/hfunc.h>
-
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/sys_view/common/events.h>
+
+#include <ydb/library/actors/core/actor_coroutine.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <algorithm>
 #include <limits>

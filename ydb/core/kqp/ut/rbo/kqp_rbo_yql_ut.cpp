@@ -3668,21 +3668,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 WHERE t1.SubKey1 = 0 AND t1.SubKey2 = "0"
                 ORDER BY t1.Value1, t2.Value1;
             )",
-            // Choosing a right side index based on join keys is not implemented.
-            // R"(
-            //     -- LookupJoin, PK left / Index21 right (probe t2 by SubKey2 and need t2.Value1)
-            //     SELECT t1.Value1, t2.Value1
-            //     FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.SubKey2 = t2.SubKey2
-            //     WHERE t1.Key = 1
-            //     ORDER BY t1.Value1, t2.Value1;
-            // )",
-            // R"(
-            //     -- LookupJoin, Index212 left / Index212 right
-            //     SELECT t1.Value2, t2.Value2
-            //     FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.SubKey2 = t2.SubKey2
-            //     WHERE t1.SubKey2 >= "0"
-            //     ORDER BY t1.Value2, t2.Value2;
-            // )",
+            R"(
+                -- LookupJoin, PK left / Index21 right (probe t2 by SubKey2 and need t2.Value1)
+                SELECT t1.Value1, t2.Value1
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.SubKey2 = t2.SubKey2
+                WHERE t1.Key = 1
+                ORDER BY t1.Value1, t2.Value1;
+            )",
+            R"(
+                -- LookupJoin, Index212 left / Index212 right
+                SELECT t1.Value2, t2.Value2
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.SubKey2 = t2.SubKey2
+                WHERE t1.SubKey2 >= "0"
+                ORDER BY t1.Value2, t2.Value2;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -3692,8 +3691,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[["2"];["2"]];[["4"];["4"]]])",
             R"([[["1"];["1"]];[["1"];["2"]];[["1"];["3"]];[["1"];["4"]];[["2"];["1"]];[["2"];["2"]];[["2"];["3"]];[["2"];["4"]];[["3"];["1"]];[["3"];["2"]];[["3"];["3"]];[["3"];["4"]];[["4"];["1"]];[["4"];["2"]];[["4"];["3"]];[["4"];["4"]];[["5"];["15"]];[["5"];["16"]];[["5"];["17"]];[["5"];["18"]];[["6"];["15"]];[["6"];["16"]];[["6"];["17"]];[["6"];["18"]];[["7"];["15"]];[["7"];["16"]];[["7"];["17"]];[["7"];["18"]];[["8"];["15"]];[["8"];["16"]];[["8"];["17"]];[["8"];["18"]]])",
             R"([[["1"];["1"]];[["1"];["2"]];[["1"];["3"]];[["1"];["4"]];[["5"];["15"]];[["5"];["16"]];[["5"];["17"]];[["5"];["18"]]])",
-            // R"([[["5"];["1"]];[["5"];["15"]];[["5"];["17"]];[["5"];["3"]];[["6"];["16"]];[["6"];["18"]];[["6"];["2"]];[["6"];["4"]];[["7"];["1"]];[["7"];["15"]];[["7"];["17"]];[["7"];["3"]];[["8"];["16"]];[["8"];["18"]];[["8"];["2"]];[["8"];["4"]]])",
-            // R"([[["1"];["1"]];[["1"];["15"]];[["1"];["17"]];[["1"];["3"]];[["2"];["16"]];[["2"];["18"]];[["2"];["2"]];[["2"];["4"]];[["3"];["1"]];[["3"];["15"]];[["3"];["17"]];[["3"];["3"]];[["4"];["16"]];[["4"];["18"]];[["4"];["2"]];[["4"];["4"]];[["5"];["1"]];[["5"];["15"]];[["5"];["17"]];[["5"];["3"]];[["6"];["16"]];[["6"];["18"]];[["6"];["2"]];[["6"];["4"]];[["7"];["1"]];[["7"];["15"]];[["7"];["17"]];[["7"];["3"]];[["8"];["16"]];[["8"];["18"]];[["8"];["2"]];[["8"];["4"]]])",
+            R"([[["5"];["1"]];[["5"];["15"]];[["5"];["17"]];[["5"];["3"]];[["6"];["16"]];[["6"];["18"]];[["6"];["2"]];[["6"];["4"]];[["7"];["1"]];[["7"];["15"]];[["7"];["17"]];[["7"];["3"]];[["8"];["16"]];[["8"];["18"]];[["8"];["2"]];[["8"];["4"]]])",
+            R"([[["1"];["1"]];[["1"];["15"]];[["1"];["17"]];[["1"];["3"]];[["2"];["16"]];[["2"];["18"]];[["2"];["2"]];[["2"];["4"]];[["3"];["1"]];[["3"];["15"]];[["3"];["17"]];[["3"];["3"]];[["4"];["16"]];[["4"];["18"]];[["4"];["2"]];[["4"];["4"]];[["5"];["1"]];[["5"];["15"]];[["5"];["17"]];[["5"];["3"]];[["6"];["16"]];[["6"];["18"]];[["6"];["2"]];[["6"];["4"]];[["7"];["1"]];[["7"];["15"]];[["7"];["17"]];[["7"];["3"]];[["8"];["16"]];[["8"];["18"]];[["8"];["2"]];[["8"];["4"]]])",
         };
 
         struct TCase {
@@ -3707,8 +3706,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {false, {"Index1_212/indexImplTable", "Index2_212/indexImplTable"}},
             {true,  {}},
             {true,  {"Index1_12/indexImplTable"}},
-            // {true,  {"Index2_21/indexImplTable"}},
-            // {true,  {"Index1_212/indexImplTable", "Index2_212/indexImplTable"}},
+            {true,  {"Index2_21/indexImplTable"}},
+            {true,  {"Index1_212/indexImplTable", "Index2_212/indexImplTable"}},
         };
 
         const std::string header = "PRAGMA ydb.OptDisableAutoIndexSelection = \"false\";\n";
@@ -3778,6 +3777,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             CREATE TABLE `/Root/t4` (
                 a Int32,
                 b String,
+                PRIMARY KEY (a)
+            );
+
+            CREATE TABLE `/Root/t5` (
+                a Int32,
+                b Int32,
+                c Int32,
+                d String,
                 PRIMARY KEY (a)
             );
         )";
@@ -3985,6 +3992,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                     INNER JOIN `/Root/t2` AS t2 ON t1.f = t2.a
                 ORDER BY a;
             )", 0},
+
+            {"inner join with a residual non-key join key", R"(
+                SELECT t1.a AS a, t5.d AS t5d
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t5` AS t5 ON t1.b = t5.a AND t1.c = t5.b
+                ORDER BY a, t5d;
+            )", 1},
+
+            {"left join with a residual non-key join key", R"(
+                SELECT t1.a AS a, t5.d AS t5d
+                FROM `/Root/t1` AS t1
+                    LEFT JOIN `/Root/t5` AS t5 ON t1.b = t5.a AND t1.c = t5.b
+                ORDER BY a, t5d;
+            )", 1},
         };
 
         struct TQueryResult {
@@ -4040,6 +4061,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 }
                 rows.EndList();
                 bulkUpsert("/Root/t4", rows);
+            }
+
+            {
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                for (const auto& [a, b, c, d] : TVector<std::tuple<i32, i32, i32, TString>>{
+                         {1, 1, 10, "m1"}, {1, 2, 20, "m2"}, {2, 2, 30, "m3"}, {3, 4, 40, "m4"}}) {
+                    rows.AddListItem().BeginStruct()
+                        .AddMember("a").OptionalInt32(a)
+                        .AddMember("b").OptionalInt32(b)
+                        .AddMember("c").OptionalInt32(c)
+                        .AddMember("d").OptionalString(d)
+                        .EndStruct();
+                }
+                rows.EndList();
+                bulkUpsert("/Root/t5", rows);
             }
 
             {

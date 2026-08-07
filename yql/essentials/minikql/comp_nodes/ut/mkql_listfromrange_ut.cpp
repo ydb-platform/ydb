@@ -4,8 +4,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 template <bool UseLLVM, typename T>
@@ -30,7 +29,7 @@ Y_UNIT_TEST_LLVM(TestCorrectDate) {
     ui16 start = 140;
     ui16 end = 150;
     i64 step = 86400000000LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -43,7 +42,7 @@ Y_UNIT_TEST_LLVM(TestCorrectDateReverse) {
     ui16 start = 150;
     ui16 end = 140;
     i64 step = -86400000000LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -56,7 +55,7 @@ Y_UNIT_TEST_LLVM(TestCorrectDatetime) {
     ui32 start = 140;
     ui32 end = 150;
     i64 step = 1000000LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -69,7 +68,7 @@ Y_UNIT_TEST_LLVM(TestCorrectTimestamp) {
     ui64 start = 140;
     ui64 end = 150;
     i64 step = 1LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -82,7 +81,7 @@ Y_UNIT_TEST_LLVM(TestWrongIntervalForDate) {
     ui16 start = 140;
     ui16 end = 150;
     i64 step = 86400000001LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -95,7 +94,7 @@ Y_UNIT_TEST_LLVM(TestWrongIntervalForDatetime) {
     ui32 start = 140;
     ui32 end = 150;
     i64 step = 1000003LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -159,7 +158,7 @@ Y_UNIT_TEST_LLVM(TestEmptyListDate) {
     ui16 start = 150;
     ui16 end = 144;
     i64 step = 86400000000LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -190,7 +189,7 @@ Y_UNIT_TEST_LLVM(TestMinOverflowForDate) {
     ui16 start = 4;
     ui16 end = 0;
     i64 step = -518400000000LL; // -6 days
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -203,7 +202,7 @@ Y_UNIT_TEST_LLVM(TestMinOverflowForDatetime) {
     ui32 start = 9;
     ui32 end = 0;
     i64 step = -10000000LL; // -10 seconds
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -216,7 +215,7 @@ Y_UNIT_TEST_LLVM(TestMinOverflowForTimestamp) {
     ui64 start = 100;
     ui64 end = 10;
     i64 step = -110LL; // -110 microseconds
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -230,7 +229,7 @@ Y_UNIT_TEST_LLVM(TestMaxOverflowForDate) {
     ui16 start = 100;
     ui16 end = NYql::NUdf::MAX_DATE - 1;
     i64 step = (NYql::NUdf::MAX_DATE - 1) * 24LL * 60 * 60 * 1000000;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -244,7 +243,7 @@ Y_UNIT_TEST_LLVM(TestMaxOverflowForDatetime) {
     ui32 start = NYql::NUdf::MAX_DATETIME - 123;
     ui32 end = NYql::NUdf::MAX_DATETIME - 1;
     i64 step = (NYql::NUdf::MAX_DATETIME - 1) * 1000000LL;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -258,7 +257,7 @@ Y_UNIT_TEST_LLVM(TestMaxOverflowForTimestamp) {
     ui64 start = NYql::NUdf::MAX_TIMESTAMP - 123;
     ui64 end = NYql::NUdf::MAX_TIMESTAMP - 1;
     i64 step = NYql::NUdf::MAX_TIMESTAMP - 1;
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, /*optional=*/true);
 
     const auto dates = MakeList(setup, start, end, step, dateType);
     const auto graph = setup.BuildGraph(dates);
@@ -269,7 +268,7 @@ Y_UNIT_TEST_LLVM(TestDifferentTimezonesForTzDate) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
     const auto canada = NTest::ConvertValueToLiteralNode(pb, ui16(375U));
     const auto europe = NTest::ConvertValueToLiteralNode(pb, ui16(459U));
     const auto value2 = i64(24LL * 60 * 60 * 1000000); // 1 Day
@@ -297,7 +296,7 @@ Y_UNIT_TEST_LLVM(TestSameTimezonesForTzDate) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
     const auto canada = NTest::ConvertValueToLiteralNode(pb, ui16(375U));
     const auto value2 = i64(24LL * 60 * 60 * 1000000); // 1 Day
     const auto step = pb.NewDataLiteral<NUdf::EDataSlot::Interval>(
@@ -324,7 +323,7 @@ Y_UNIT_TEST_LLVM(TestDifferentTimezonesForTzDatetime) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
     const auto canada = NTest::ConvertValueToLiteralNode(pb, ui16(375U));
     const auto europe = NTest::ConvertValueToLiteralNode(pb, ui16(459U));
     const auto value2 = i64(1000000LL); // 1 Second
@@ -352,7 +351,7 @@ Y_UNIT_TEST_LLVM(TestDifferentTimezonesForTzTimestamp) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Timestamp, /*optional=*/true);
     const auto europe = NTest::ConvertValueToLiteralNode(pb, ui16(459U));
     const auto canada = NTest::ConvertValueToLiteralNode(pb, ui16(375U));
     const auto value2 = i64(1LL); // 1 Microsecond
@@ -417,43 +416,42 @@ void TestFloatStep(TSetup<UseLLVM>& setup, float startVal, float endVal, float s
 
 Y_UNIT_TEST_LLVM(TestFloatSmallStepNoInfiniteLoop) {
     TSetup<LLVM> setup;
-    TestFloatStep(setup, 1.0f, 2.0f, 1e-6f, 1000000);
+    TestFloatStep(setup, 1.0F, 2.0F, 1e-6F, 1000000);
 }
 
 Y_UNIT_TEST_LLVM(TestFloatSmallNegativeStepNoInfiniteLoop) {
     TSetup<LLVM> setup;
-    TestFloatStep(setup, 2.0f, 1.0f, -1e-6f, 1000000);
+    TestFloatStep(setup, 2.0F, 1.0F, -1e-6F, 1000000);
 }
 
 Y_UNIT_TEST_LLVM(TestFloatNegativeStep) {
     TSetup<LLVM> setup;
-    TestFloatStep(setup, 1.0f, 2.0f, -1e-8f, 0);
+    TestFloatStep(setup, 1.0F, 2.0F, -1e-8F, 0);
 }
 
 Y_UNIT_TEST_LLVM(TestFloatWithInfinityEnd) {
     TSetup<LLVM> setup;
-    TestFloatStep(setup, 0.0f, INFINITY, 1.0f, 0);
+    TestFloatStep(setup, 0.0F, INFINITY, 1.0F, 0);
 }
 Y_UNIT_TEST_LLVM(TestFloatWithNegativeInfinityStart) {
     TSetup<LLVM> setup;
-    TestFloatStep(setup, -INFINITY, 2.0f, 1.0f, 0);
+    TestFloatStep(setup, -INFINITY, 2.0F, 1.0F, 0);
 }
 
 Y_UNIT_TEST_LLVM(TestFloatWithInfinityStep) {
     TSetup<LLVM> setup;
-    TestFloatStep(setup, 1.0f, 2.0f, INFINITY, 0);
+    TestFloatStep(setup, 1.0F, 2.0F, INFINITY, 0);
 }
 
 Y_UNIT_TEST_LLVM(TestFloatWithExtraLargeStep) {
     TSetup<LLVM> setup;
-    TestFloatStep(setup, -0.0000000000000000000000000000000116082984f, 0.0000000000000000096245773f, 6925700880000000000000000000000.0f, 1);
+    TestFloatStep(setup, -0.0000000000000000000000000000000116082984F, 0.0000000000000000096245773F, 6925700880000000000000000000000.0F, 1);
 }
 
 Y_UNIT_TEST_LLVM(TestFloatWithLargeNegativeStep) {
     TSetup<LLVM> setup;
-    TestFloatStep(setup, -0.000000000346562223f, -277088.812f, -23368489200000.0f, 1);
+    TestFloatStep(setup, -0.000000000346562223F, -277088.812F, -23368489200000.0F, 1);
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLListFromRangeTest)
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

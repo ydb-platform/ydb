@@ -107,7 +107,7 @@ private:
     void AppendInsertedPortions() {
         for (const auto& [writeId, portion] : GranuleMeta->GetInsertedPortions()) {
             ++TotalPortionsCount;
-            if (portion->IsRemovedFor(Snapshot)) {
+            if (!portion->MayGetForScanAt(Snapshot)) {
                 continue;
             }
 
@@ -136,7 +136,7 @@ private:
     void AppendCommittedPortions() {
         for (const auto& [_, portion] : GranuleMeta->GetPortions()) {
             ++TotalPortionsCount;
-            if (portion->IsRemovedFor(Snapshot)) {
+            if (!portion->MayGetForScanAt(Snapshot)) {
                 continue;
             }
 
@@ -174,7 +174,7 @@ private:
 
         const auto collector = [&](const PortionIntervalTree::TPortionIntervalTree::TRange& /*interval*/,
                                    const std::shared_ptr<TPortionInfo>& portion) -> bool {
-            if (portion->IsRemovedFor(Snapshot)) {
+            if (!portion->MayGetForScanAt(Snapshot)) {
                 return true;
             }
 

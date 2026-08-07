@@ -1,5 +1,14 @@
 # -*- coding: utf-8 -*-
+import logging
+from contextlib import contextmanager
+
 import requests
+
+from ydb.tests.library.common.wait_for import wait_for
+
+logger = logging.getLogger(__name__)
+
+DATABASE = '/Root'
 
 
 def tablet_devui_sid_matrix():
@@ -73,3 +82,99 @@ def _test_endpoints_via_node_proxy(node, path_suffix, expected_statuses_by_token
     endpoint_url = f"{base_url}{full_path}"
     for token, expected_status in expected_statuses_by_token.items():
         _test_endpoint(endpoint_url, full_path, token, expected_status)
+
+
+def mon_base_url(cluster, node_index=1):
+    node = cluster.nodes[node_index]
+    return f'https://{node.host}:{node.mon_port}'
+
+
+def wait_for_viewer_ready(
+    base_url,
+    database=DATABASE,
+    token='root@builtin',
+    timeout_seconds=30,
+    verify=False,
+):
+    """Wait until viewer HTTP handlers are registered and responding."""
+
+    last_failure = {"status": None, "exc": None}
+
+    def ready():
+        try:
+            headers = {}
+            if token is not None:
+                headers["Authorization"] = token
+            response = requests.post(
+                base_url + '/viewer/query',
+                headers=headers,
+                params={'database': database, 'query': 'SELECT 1;', 'schema': 'multi'},
+                verify=verify,
+                timeout=5,
+            )
+            if response.status_code == 200:
+                return True
+            last_failure["status"] = response.status_code
+            last_failure["exc"] = None
+            logger.info(
+                'Viewer not ready yet at %s: /viewer/query returned %s %s',
+                base_url,
+                response.status_code,
+                response.text,
+            )
+            return False
+        except requests.RequestException as exc:
+            last_failure["status"] = None
+            last_failure["exc"] = str(exc)
+            logger.info('Viewer not ready yet at %s: %s', base_url, exc)
+            return False
+
+    if not wait_for(ready, timeout_seconds=timeout_seconds, step_seconds=1):
+        raise AssertionError(
+            f'Viewer at {base_url} is not ready after {timeout_seconds}s; '
+            f'last_status={last_failure["status"]}; last_error={last_failure["exc"]}'
+        )
+
+
+def run_viewer_query(base_url, query, database=DATABASE, token='root@builtin', timeout=5):
+    response = requests.post(
+        base_url + '/viewer/query',
+        headers={'Authorization': token},
+        params={'database': database, 'query': query, 'schema': 'multi'},
+        verify=False,
+        timeout=timeout,
+    )
+    assert response.status_code == 200, response.text
+    return response
+
+
+@contextmanager
+def grants_provided(base_url, object_path, *permissions, database=DATABASE):
+    grantees = '`database@builtin`, `viewer@builtin`, `monitoring@builtin`'
+    perms = ', '.join(f"'{permission}'" for permission in permissions)
+    run_viewer_query(
+        base_url,
+        f"GRANT {perms} ON `{object_path}` TO {grantees};",
+        database=database,
+    )
+    try:
+        yield
+    finally:
+        run_viewer_query(
+            base_url,
+            f"REVOKE {perms} ON `{object_path}` FROM {grantees};",
+            database=database,
+        )
+
+
+def grant_describe_schema_provided(base_url, database=DATABASE):
+    return grants_provided(base_url, database, 'ydb.granular.describe_schema', database=database)
+
+
+@contextmanager
+def with_topic(base_url, topic_name, database=DATABASE):
+    run_viewer_query(base_url, f'CREATE TOPIC `{topic_name}`;', database=database)
+    try:
+        yield f'{database}/{topic_name}'
+    finally:
+        run_viewer_query(base_url, f'DROP TOPIC `{topic_name}`;', database=database)

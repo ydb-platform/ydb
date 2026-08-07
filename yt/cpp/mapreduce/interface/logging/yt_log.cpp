@@ -2,9 +2,13 @@
 
 #include "logger.h"
 
+#include <library/cpp/yt/logging/tagged_payload.h>
+
 #include <util/generic/guid.h>
 
 #include <util/system/mutex.h>
+
+#include <variant>
 
 namespace NYT {
 
@@ -44,13 +48,14 @@ public:
     void Enqueue(TLogEvent&& event) override
     {
         if (auto logger = GetLogger()) {
+            auto message = GetMessageFromTaggedPayload(std::get<TTaggedLogEventPayload>(event.Payload));
             LogMessage(
                 logger,
                 ToImplLevel(event.Level),
                 ::TSourceLocation(event.SourceFile, event.SourceLine),
                 "%.*s",
-                event.MessageRef.size(),
-                event.MessageRef.begin());
+                message.size(),
+                message.begin());
         } else if (auto* defaultLogManager = GetDefaultLogManager()) {
             defaultLogManager->Enqueue(std::move(event));
         }
@@ -92,11 +97,11 @@ private:
         }
     }
 
-    static void LogMessage(const ILoggerPtr& /* logger */, ILogger::ELevel level, const ::TSourceLocation& sourceLocation, const char* format, ...)
+    static void LogMessage(const ILoggerPtr& logger, ILogger::ELevel level, const ::TSourceLocation& sourceLocation, const char* format, ...)
     {
         va_list args;
         va_start(args, format);
-        GetLogger()->Log(level, sourceLocation, format, args);
+        logger->Log(level, sourceLocation, format, args);
         va_end(args);
     }
 

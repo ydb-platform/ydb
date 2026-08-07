@@ -112,33 +112,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricMessagingClientP
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricMessagingClientPublishedMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricMessagingClientPublishedMessages,
                                     descrMetricMessagingClientPublishedMessages,
                                     unitMetricMessagingClientPublishedMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricMessagingClientPublishedMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricMessagingClientPublishedMessages,
                                     descrMetricMessagingClientPublishedMessages,
                                     unitMetricMessagingClientPublishedMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricMessagingClientPublishedMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricMessagingClientPublishedMessages,
                                              descrMetricMessagingClientPublishedMessages,
                                              unitMetricMessagingClientPublishedMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricMessagingClientPublishedMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricMessagingClientPublishedMessages,
                                               descrMetricMessagingClientPublishedMessages,
                                               unitMetricMessagingClientPublishedMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -229,33 +237,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricMessagingProcess
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricMessagingProcessMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricMessagingProcessMessages,
                                     descrMetricMessagingProcessMessages,
                                     unitMetricMessagingProcessMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricMessagingProcessMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricMessagingProcessMessages,
                                     descrMetricMessagingProcessMessages,
                                     unitMetricMessagingProcessMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricMessagingProcessMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricMessagingProcessMessages,
                                              descrMetricMessagingProcessMessages,
                                              unitMetricMessagingProcessMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricMessagingProcessMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricMessagingProcessMessages,
                                               descrMetricMessagingProcessMessages,
                                               unitMetricMessagingProcessMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -274,17 +290,21 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricMessagingPublish
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricMessagingPublishDuration(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricMessagingPublishDuration,
                                       descrMetricMessagingPublishDuration,
                                       unitMetricMessagingPublishDuration);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricMessagingPublishDuration(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricMessagingPublishDuration,
                                       descrMetricMessagingPublishDuration,
                                       unitMetricMessagingPublishDuration);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -304,33 +324,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricMessagingPublish
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricMessagingPublishMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricMessagingPublishMessages,
                                     descrMetricMessagingPublishMessages,
                                     unitMetricMessagingPublishMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricMessagingPublishMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricMessagingPublishMessages,
                                     descrMetricMessagingPublishMessages,
                                     unitMetricMessagingPublishMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricMessagingPublishMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricMessagingPublishMessages,
                                              descrMetricMessagingPublishMessages,
                                              unitMetricMessagingPublishMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricMessagingPublishMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricMessagingPublishMessages,
                                               descrMetricMessagingPublishMessages,
                                               unitMetricMessagingPublishMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -349,17 +377,21 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricMessagingReceive
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricMessagingReceiveDuration(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricMessagingReceiveDuration,
                                       descrMetricMessagingReceiveDuration,
                                       unitMetricMessagingReceiveDuration);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricMessagingReceiveDuration(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricMessagingReceiveDuration,
                                       descrMetricMessagingReceiveDuration,
                                       unitMetricMessagingReceiveDuration);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -379,33 +411,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricMessagingReceive
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricMessagingReceiveMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricMessagingReceiveMessages,
                                     descrMetricMessagingReceiveMessages,
                                     unitMetricMessagingReceiveMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricMessagingReceiveMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricMessagingReceiveMessages,
                                     descrMetricMessagingReceiveMessages,
                                     unitMetricMessagingReceiveMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricMessagingReceiveMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricMessagingReceiveMessages,
                                              descrMetricMessagingReceiveMessages,
                                              unitMetricMessagingReceiveMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricMessagingReceiveMessages(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricMessagingReceiveMessages,
                                               descrMetricMessagingReceiveMessages,
                                               unitMetricMessagingReceiveMessages);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 }  // namespace messaging

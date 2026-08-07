@@ -1478,7 +1478,13 @@ bool TRequestQueue::IsQueueSizeLimitExceeded() const
 
 bool TRequestQueue::IsQueueByteSizeLimitExceeded() const
 {
-    return QueueByteSize_.load(std::memory_order::relaxed) >
+    auto queueByteSizeLimit = QueueByteSizeLimit_.load(std::memory_order::relaxed);
+    if (queueByteSizeLimit >= 0 &&
+        QueueByteSize_.load(std::memory_order::relaxed) > queueByteSizeLimit) {
+        return true;
+    }
+
+    return RuntimeInfo_->QueueByteSize.load(std::memory_order::relaxed) >
         RuntimeInfo_->QueueByteSizeLimit.load(std::memory_order::relaxed);
 }
 
@@ -1491,6 +1497,12 @@ std::optional<int> TRequestQueue::GetQueueSizeLimit() const
 {
     auto queueSizeLimit = QueueSizeLimit_.load(std::memory_order::relaxed);
     return queueSizeLimit >= 0 ? std::optional(queueSizeLimit) : std::nullopt;
+}
+
+std::optional<i64> TRequestQueue::GetQueueByteSizeLimit() const
+{
+    auto queueByteSizeLimit = QueueByteSizeLimit_.load(std::memory_order::relaxed);
+    return queueByteSizeLimit >= 0 ? std::optional(queueByteSizeLimit) : std::nullopt;
 }
 
 i64 TRequestQueue::GetQueueByteSize() const
@@ -1516,6 +1528,16 @@ void TRequestQueue::SetQueueSizeLimit(std::optional<int> limit)
         limit = -1;
     }
     QueueSizeLimit_.store(*limit, std::memory_order::relaxed);
+}
+
+void TRequestQueue::SetQueueByteSizeLimit(std::optional<i64> limit)
+{
+    YT_ASSERT(!limit || *limit >= 0);
+
+    if (!limit) {
+        limit = -1;
+    }
+    QueueByteSizeLimit_.store(*limit, std::memory_order::relaxed);
 }
 
 void TRequestQueue::OnRequestArrived(TServiceBase::TServiceContextPtr context)
@@ -1645,18 +1667,25 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
 void TRequestQueue::IncrementQueueSize(i64 requestTotalSize)
 {
     ++QueueSize_;
-    RuntimeInfo_->QueueSize.fetch_add(1, std::memory_order::relaxed);
     QueueByteSize_.fetch_add(requestTotalSize);
+
+    RuntimeInfo_->QueueSize.fetch_add(1, std::memory_order::relaxed);
+    RuntimeInfo_->QueueByteSize.fetch_add(requestTotalSize);
 }
 
 void TRequestQueue::DecrementQueueSize(i64 requestTotalSize)
 {
     auto newQueueSize = --QueueSize_;
-    RuntimeInfo_->QueueSize.fetch_sub(1, std::memory_order::relaxed);
     auto oldQueueByteSize = QueueByteSize_.fetch_sub(requestTotalSize);
 
     YT_ASSERT(newQueueSize >= 0);
-    YT_ASSERT(oldQueueByteSize >= 0);
+    YT_ASSERT(oldQueueByteSize >= requestTotalSize);
+
+    newQueueSize = RuntimeInfo_->QueueSize.fetch_sub(1, std::memory_order::relaxed);
+    oldQueueByteSize = RuntimeInfo_->QueueByteSize.fetch_sub(requestTotalSize);
+
+    YT_ASSERT(newQueueSize >= 0);
+    YT_ASSERT(oldQueueByteSize >= requestTotalSize);
 }
 
 // Returns true if concurrency limits are not exceeded.
@@ -1894,7 +1923,8 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
         incomingRequest.RuntimeInfo->RequestQueueByteSizeLimitErrorCounter.Increment();
         ReplyError(
             TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue bytes size limit exceeded")
-                << TErrorAttribute("limit", incomingRequest.RuntimeInfo->QueueByteSizeLimit.load())
+                << TErrorAttribute("method_limit", incomingRequest.RuntimeInfo->QueueByteSizeLimit.load(std::memory_order::relaxed))
+                << TErrorAttribute("queue_limit", incomingRequest.RequestQueue->GetQueueByteSizeLimit())
                 << TErrorAttribute("queue", incomingRequest.RequestQueue->GetName())
                 << incomingRequest.ThrottledError,
             std::move(incomingRequest));
@@ -2042,10 +2072,10 @@ void TServiceBase::OnRequestAuthenticated(
     }
 
     const auto& authResult = authResultOrError.Value();
-    auto Logger = RpcServerLogger().WithTag("RequestId: %v, User: %v, Realm: %v",
-        incomingRequest.RequestId,
-        authResult.User,
-        authResult.Realm);
+    auto Logger = RpcServerLogger()
+        .WithTag("RequestId", incomingRequest.RequestId)
+        .WithTag("User", authResult.User)
+        .WithTag("Realm", authResult.Realm);
 
     if (authResult.Warning.IsOK()) {
         YT_LOG_DEBUG("Request authenticated");
@@ -2132,10 +2162,13 @@ TRequestQueue* TServiceBase::GetRequestQueue(
                 // Reporting 0 for a sparse metric effectively hides it.
                 return requestQueue->GetQueueSizeLimit().value_or(0);
             });
+            profiler.AddFuncGauge("/request_queue_byte_size", MakeStrong(this), [=] {
+                return requestQueue->GetQueueByteSize();
+            });
+            profiler.AddFuncGauge("/request_queue_byte_size_limit", MakeStrong(this), [=] {
+                return requestQueue->GetQueueByteSizeLimit().value_or(0);
+            });
         }
-        profiler.AddFuncGauge("/request_queue_byte_size", MakeStrong(this), [=] {
-            return requestQueue->GetQueueByteSize();
-        });
         profiler.AddFuncGauge("/concurrency", MakeStrong(this), [=] {
             return requestQueue->GetConcurrency();
         });

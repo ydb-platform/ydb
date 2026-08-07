@@ -17,17 +17,22 @@ namespace NKikimr {
 
 namespace {
 
-struct TSensitivePairedWords {
-    TStringBuf First;
-    TStringBuf Second;
-};
+using TWordSequence = std::vector<TStringBuf>;
 
 static const std::vector<TString> SensitiveWords = {
     "password",
 };
-static const TSensitivePairedWords SensitivePairedWords[] = {
+// Each sequence is a list of keywords that must appear consecutively (only ASCII
+// whitespace allowed between neighboring words, any amount of it, including
+// newlines/tabs/multiple spaces).
+// The first matching sequence is reported as the marker, so the plain verb pairs
+// come first: they never match the variants with keywords in between.
+static const std::vector<TWordSequence> SensitiveWordSequences = {
     {"create", "secret"},
     {"alter", "secret"},
+    {"create", "or", "replace", "secret"},
+    {"create", "if", "not", "exists", "secret"},
+    {"alter", "if", "exists", "secret"},
 };
 
 bool ContainsCaseInsensitive(TStringBuf text, TStringBuf pattern) {
@@ -48,17 +53,36 @@ bool MatchPrefixIgnoreCase(TStringBuf text, size_t pos, TStringBuf word) {
     return true;
 }
 
-// Two consecutive keywords; only ASCII whitespace between them; case-insensitive.
-bool ContainsAdjacentWordsIgnoreSpaces(TStringBuf text, TStringBuf w1, TStringBuf w2) {
-    for (size_t i = 0; i + w1.size() <= text.size(); ++i) {
-        if (!MatchPrefixIgnoreCase(text, i, w1)) {
+// A sequence of consecutive keywords; only ASCII whitespace (any amount) is
+// allowed between neighboring words; case-insensitive.
+bool ContainsWordSequenceIgnoreSpaces(TStringBuf text, const TWordSequence& words) {
+    if (words.empty()) {
+        return false;
+    }
+    const TStringBuf& first = words.front();
+    for (size_t i = 0; i + first.size() <= text.size(); ++i) {
+        if (!MatchPrefixIgnoreCase(text, i, first)) {
             continue;
         }
-        size_t p = i + w1.size();
-        while (p < text.size() && IsAsciiSpace(static_cast<unsigned char>(text[p]))) {
-            ++p;
+        size_t p = i + first.size();
+        bool matched = true;
+        for (size_t w = 1; w < words.size(); ++w) {
+            size_t spaceStart = p;
+            while (p < text.size() && IsAsciiSpace(static_cast<unsigned char>(text[p]))) {
+                ++p;
+            }
+            if (p == spaceStart) {
+                matched = false;
+                break;
+            }
+            const TStringBuf& word = words[w];
+            if (p + word.size() > text.size() || !MatchPrefixIgnoreCase(text, p, word)) {
+                matched = false;
+                break;
+            }
+            p += word.size();
         }
-        if (p + w2.size() <= text.size() && MatchPrefixIgnoreCase(text, p, w2)) {
+        if (matched) {
             return true;
         }
     }
@@ -71,9 +95,16 @@ TMaybe<TString> FindSensitiveQueryMarker(TStringBuf text) {
             return word;
         }
     }
-    for (const auto& pair : SensitivePairedWords) {
-        if (ContainsAdjacentWordsIgnoreSpaces(text, pair.First, pair.Second)) {
-            return TStringBuilder() << pair.First << ' ' << pair.Second;
+    for (const auto& seq : SensitiveWordSequences) {
+        if (ContainsWordSequenceIgnoreSpaces(text, seq)) {
+            TStringBuilder marker;
+            for (size_t i = 0; i < seq.size(); ++i) {
+                if (i > 0) {
+                    marker << ' ';
+                }
+                marker << seq[i];
+            }
+            return TString(marker);
         }
     }
     return Nothing();
@@ -141,7 +172,7 @@ TString MaskIAMTicket(const TString& token) {
     TVector<TString> parts;
     StringSplitter(token).Split('.').AddTo(&parts);
     parts.erase(
-        std::remove_if(parts.begin(), parts.end(), 
+        std::remove_if(parts.begin(), parts.end(),
                     [](const TString& value) { return value.empty(); }),
         parts.end()
     );

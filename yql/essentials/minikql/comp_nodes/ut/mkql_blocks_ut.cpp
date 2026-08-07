@@ -30,8 +30,7 @@ END_SIMPLE_ARROW_UDF(TInc, TIncKernelExec::Do);
 SIMPLE_MODULE(TBlockUTModule,
               TInc)
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 arrow::Datum ExecuteOneKernel(const IArrowKernelComputationNode* kernelNode,
@@ -151,11 +150,11 @@ Y_UNIT_TEST_LLVM(TestEmpty) {
 }
 
 Y_UNIT_TEST_LLVM(TestSimple) {
-    static const size_t dataCount = 1000;
+    static const size_t DataCount = 1000;
     TSetup<LLVM> setup;
     auto& pb = *setup.PgmBuilder;
 
-    TVector<ui64> data(dataCount);
+    TVector<ui64> data(DataCount);
     std::iota(data.begin(), data.end(), 0ULL);
     const auto list = NTest::ConvertValueToLiteralNode(pb, data);
     const auto sourceFlow = pb.ToFlow(list, {});
@@ -164,7 +163,7 @@ Y_UNIT_TEST_LLVM(TestSimple) {
 
     const auto graph = setup.BuildGraph(pgmReturn);
 
-    TVector<ui64> expected(dataCount);
+    TVector<ui64> expected(DataCount);
     std::iota(expected.begin(), expected.end(), 0ULL);
     AssertUnboxedValueElementEqual(graph->GetValue(), expected);
 }
@@ -258,10 +257,10 @@ void TestChunked(bool withBlockExpand) {
             std::string small(smallStrSize, 'A' + i);
 
             items.push_back(NTest::ConvertValueToLiteralNode(pb, std::tuple<ui64, bool, TStringBuf, NTest::TUtf8>{
-                                                                     ui64(i), true, TStringBuf(big), NTest::TUtf8{TStringBuf(small)}}));
+                                                                     ui64(i), true, TStringBuf(big), NTest::TUtf8{TString(small)}}));
         } else {
             items.push_back(NTest::ConvertValueToLiteralNode(pb, std::tuple<ui64, bool, TStringBuf, NTest::TUtf8>{
-                                                                     ui64(i), false, TStringBuf(""), NTest::TUtf8{TStringBuf("")}}));
+                                                                     ui64(i), false, TStringBuf(""), NTest::TUtf8{TString("")}}));
         }
     }
 
@@ -290,7 +289,8 @@ void TestChunked(bool withBlockExpand) {
     const auto graph = setup.BuildGraph(pgmReturn);
 
     using TRow = std::tuple<ui64, bool, TStringBuf, NTest::TUtf8>;
-    TVector<TString> storedBig, storedSmall;
+    TVector<TString> storedBig;
+    TVector<TString> storedSmall;
     storedBig.reserve(10);
     storedSmall.reserve(10);
     TVector<TRow> expected;
@@ -299,9 +299,9 @@ void TestChunked(bool withBlockExpand) {
         if (i % 2 == 0) {
             storedBig.push_back(TString(bigStrSize, '0' + i));
             storedSmall.push_back(TString(smallStrSize, 'A' + i));
-            expected.push_back(TRow{ui64(i), true, TStringBuf(storedBig.back()), NTest::TUtf8{TStringBuf(storedSmall.back())}});
+            expected.push_back(TRow{ui64(i), true, TStringBuf(storedBig.back()), NTest::TUtf8{TString(storedSmall.back())}});
         } else {
-            expected.push_back(TRow{ui64(i), false, TStringBuf(""), NTest::TUtf8{TStringBuf("")}});
+            expected.push_back(TRow{ui64(i), false, TStringBuf(""), NTest::TUtf8{TString("")}});
         }
     }
 
@@ -407,7 +407,7 @@ Y_UNIT_TEST_LLVM(TestBlockFuncWithNullables) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto optionalUi64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id, true);
+    const auto optionalUi64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id, /*optional=*/true);
     const auto ui64OptBlockType = pb.NewBlockType(optionalUi64Type, TBlockType::EShape::Many);
 
     using TOptPair = std::tuple<TMaybe<ui64>, TMaybe<ui64>>;
@@ -439,7 +439,7 @@ Y_UNIT_TEST_LLVM(TestBlockFuncWithNullableScalar) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto optionalUi64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id, true);
+    const auto optionalUi64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id, /*optional=*/true);
     const auto ui64OptBlockType = pb.NewBlockType(optionalUi64Type, TBlockType::EShape::Many);
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TMaybe<ui64>>{TMaybe<ui64>(10), TMaybe<ui64>(20), TMaybe<ui64>(30)});
@@ -591,7 +591,8 @@ Y_UNIT_TEST(Simple) {
     std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
     {
         arrow::UInt8Builder builder1(execContext.memory_pool());
-        arrow::UInt64Builder builder2(execContext.memory_pool()), builder3(execContext.memory_pool());
+        arrow::UInt64Builder builder2(execContext.memory_pool());
+        arrow::UInt64Builder builder3(execContext.memory_pool());
         ARROW_OK(builder1.Reserve(blockSize));
         ARROW_OK(builder2.Reserve(blockSize));
         ARROW_OK(builder3.Reserve(blockSize));
@@ -627,7 +628,7 @@ Y_UNIT_TEST(WithScalars) {
 
     const auto ui64Type = NTest::ConvertToMinikqlType<ui64>(pb);
     const auto ui64BlocksType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
-    const auto scalar = pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, false));
+    const auto scalar = pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false));
     const auto arg1 = pb.Arg(ui64BlocksType);
     const auto arg2 = pb.Arg(ui64BlocksType);
     const auto ifNode = pb.BlockIf(scalar, arg1, arg2);
@@ -648,7 +649,8 @@ Y_UNIT_TEST(WithScalars) {
     const size_t blockSize = 100000;
     std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
     {
-        arrow::UInt64Builder builder1(execContext.memory_pool()), builder2(execContext.memory_pool());
+        arrow::UInt64Builder builder1(execContext.memory_pool());
+        arrow::UInt64Builder builder2(execContext.memory_pool());
         ARROW_OK(builder1.Reserve(blockSize));
         ARROW_OK(builder2.Reserve(blockSize));
         for (size_t i = 0; i < blockSize; ++i) {
@@ -675,7 +677,7 @@ Y_UNIT_TEST(WithScalars) {
 
 Y_UNIT_TEST(Udf) {
     TVector<TUdfModuleInfo> modules;
-    modules.emplace_back(TUdfModuleInfo{"", "BlockUT", new TBlockUTModule()});
+    modules.emplace_back(TUdfModuleInfo{.LibraryPath = "", .ModuleName = "BlockUT", .Module = new TBlockUTModule()});
     TSetup<false> setup(GetTestFactory(), std::move(modules));
 
     auto& pb = *setup.PgmBuilder;
@@ -747,7 +749,8 @@ Y_UNIT_TEST(ScalarApply) {
     const size_t blockSize = 100000;
     std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
     {
-        arrow::UInt64Builder builder1(execContext.memory_pool()), builder2(execContext.memory_pool());
+        arrow::UInt64Builder builder1(execContext.memory_pool());
+        arrow::UInt64Builder builder2(execContext.memory_pool());
         ARROW_OK(builder1.Reserve(blockSize));
         ARROW_OK(builder2.Reserve(blockSize));
         for (size_t i = 0; i < blockSize; ++i) {
@@ -774,5 +777,4 @@ Y_UNIT_TEST(ScalarApply) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLDirectKernelTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

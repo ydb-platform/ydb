@@ -8,6 +8,7 @@
 #include "flat_sausagecache.h"
 #include "tablet_flat_executor.h"
 #include "flat_executor_snapshot.h"
+#include "flat_direct_part_writer.h"
 #include <ydb/core/util/pb.h>
 #include <util/generic/hash_set.h>
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
@@ -205,7 +206,8 @@ namespace NTabletFlatExecutor {
                 || LoanBundle
                 || LoanTxStatus
                 || BorrowUpdates
-                || LoanConfirmation;
+                || LoanConfirmation
+                || AttachedParts;
         }
 
     protected:
@@ -216,6 +218,7 @@ namespace NTabletFlatExecutor {
             LoanBundle.clear();
             LoanTxStatus.clear();
             LoanConfirmation.clear();
+            AttachedParts.clear();
         }
 
     protected: /* IExecuting, tx stage func implementation */
@@ -262,6 +265,12 @@ namespace NTabletFlatExecutor {
             }
         }
 
+        void AttachPart(ui32 tableId, THolder<TDirectPartResult> result) override
+        {
+            Y_ENSURE(result, "AttachPart called with an empty result");
+            AttachedParts.emplace_back(TAttachedPart{ tableId, std::move(result) });
+        }
+
         void CleanupLoan(const TLogoId &bundle, ui64 from) override
         {
             Y_ENSURE(!DropSnap, "must not drop snapshot and update loan in same transaction");
@@ -302,6 +311,14 @@ namespace NTabletFlatExecutor {
         TVector<THolder<TLoanBundle>> LoanBundle;
         TVector<THolder<TLoanTxStatus>> LoanTxStatus;
         THashMap<TLogoId, TLoanConfirmation> LoanConfirmation;
+
+        /*_ Directly written parts to attach as bottom layers */
+
+        struct TAttachedPart {
+            ui32 TableId;
+            THolder<TDirectPartResult> Result;
+        };
+        TVector<TAttachedPart> AttachedParts;
     };
 
 }

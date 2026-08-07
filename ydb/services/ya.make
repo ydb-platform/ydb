@@ -8,8 +8,8 @@ RECURSE(
     datastreams
     deprecated/persqueue_v0
     discovery
+    distributed_storage
     dynamic_config
-    ext_index
     fq
     kesus
     keyvalue

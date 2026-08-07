@@ -23,6 +23,8 @@ public:
     {
         AddHandler({TPqReadTopic::CallableName()}, Hndl(&TPqDataSourceConstraintTransformer::HandlePqReadTopic));
         AddHandler({TDqPqTopicSource::CallableName()}, Hndl(&TPqDataSourceConstraintTransformer::HandleDqPqTopicSource));
+        AddHandler({TPqParsingWrap::CallableName()}, Hndl(&TPqDataSourceConstraintTransformer::HandleParsingWrap));
+        AddHandler({TDqPqPhyParsingWrap::CallableName()}, Hndl(&TPqDataSourceConstraintTransformer::HandleParsingWrap));
         AddHandler({
             TCoConfigure::CallableName(),
             TPqTopic::CallableName(),
@@ -52,6 +54,14 @@ public:
         if (ReadInStreamingMode(node.Cast<TDqPqTopicSource>().Settings().Ptr(), StreamingTopicRead)) {
             node.MutableRaw()->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
         }
+        return TStatus::Ok;
+    }
+
+    TStatus HandleParsingWrap(TExprBase node, TExprContext& /* ctx */) {
+        if (const auto status = UpdateAllChildLambdasConstraints(node.Ref()); status != TStatus::Ok) {
+            return status;
+        }
+        node.MutableRaw()->CopyConstraints(node.Raw()->Head());
         return TStatus::Ok;
     }
 

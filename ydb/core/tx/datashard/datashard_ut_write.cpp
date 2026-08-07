@@ -1,6 +1,7 @@
 #include "datashard_active_transaction.h"
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common_tx.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/test_tli.h>
@@ -2951,6 +2952,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     Y_UNIT_TEST(WriteUniqueRowsInsertDuplicateAtCommit) {
+        // KQP will flush INSERTs before commit, so this test uses the TTransactionState
+        // helper instead of SQL statements.
+        using namespace NKikimr::NDataShard::NTxHelpers;
+        using TOperation = NKikimr::NDataShard::NTxHelpers::TWriteOperation;
+
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -2963,7 +2969,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSchemeExec(runtime, R"(
                 CREATE TABLE `/Root/counts` (key int, rows int, PRIMARY KEY (key));
-                CREATE TABLE `/Root/rows` (key int, subkey int, value int, PRIMARY KEY (key, subkey));
+                CREATE TABLE `/Root/rows` (key int, subkey int, PRIMARY KEY (key, subkey));
             )"),
             "SUCCESS"
         );
@@ -2971,57 +2977,55 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         ExecSQL(server, sender, R"(
             UPSERT INTO `/Root/counts` (key, rows) VALUES
                 (42, 2);
-            UPSERT INTO `/Root/rows` (key, subkey, value) VALUES
-                (42, 1, 101),
-                (42, 2, 102);
+            UPSERT INTO `/Root/rows` (key, subkey) VALUES
+                (42, 1),
+                (42, 2);
         )");
 
-        TString sessionId1, txId1;
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleBegin(runtime, sessionId1, txId1, R"(
-                UPDATE `/Root/counts` SET rows = rows + 1 WHERE key = 42;
-                SELECT rows FROM `/Root/counts` WHERE key = 42;
-            )"),
-            "{ items { int32_value: 3 } }"
-        );
+        auto getTableInfo = [&](const TString& table) {
+            const auto tableId = ResolveTableId(server, sender, table);
+            UNIT_ASSERT(tableId);
+            const auto shards = GetTableShards(server, sender, table);
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+            return std::pair(tableId, shards[0]);
+        };
 
-        TString sessionId2, txId2;
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleBegin(runtime, sessionId2, txId2, R"(
-                UPDATE `/Root/counts` SET rows = rows + 1 WHERE key = 42;
-                SELECT rows FROM `/Root/counts` WHERE key = 42;
-            )"),
-            "{ items { int32_value: 3 } }"
-        );
+        const auto [countsTableId, countsTableShard] = getTableInfo("/Root/counts");
+        const auto [rowsTableId, rowsTableShard] = getTableInfo("/Root/rows");
+
+        TTransactionState tx1(runtime, NKikimrDataEvents::OPTIMISTIC);
 
         UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleCommit(runtime, sessionId2, txId2, R"(
-                INSERT INTO `/Root/rows` (key, subkey, value) VALUES
-                    (42, 3, 203);
-            )"),
-            "<empty>"
-        );
+            tx1.ReadKey(countsTableId, countsTableShard, 42),
+            "42, 2\n");
 
-        TBlockEvents<NEvents::TDataEvents::TEvWriteResult> blockedLocksBroken(runtime, [&](auto& ev) {
-            auto* msg = ev->Get();
-            if (msg->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN) {
-                return true;
-            }
-            return false;
-        });
-
-        auto commitFuture = KqpSimpleSendCommit(runtime, sessionId1, txId1, R"(
-            INSERT INTO `/Root/rows` (key, subkey, value) VALUES
-                (42, 3, 303);
-        )");
-
-        runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        blockedLocksBroken.Stop().Unblock();
+        TTransactionState tx2(runtime, NKikimrDataEvents::OPTIMISTIC);
 
         UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleWaitCommit(runtime, std::move(commitFuture)),
-            "ERROR: ABORTED"
-        );
+            tx2.ReadKey(countsTableId, countsTableShard, 42),
+            "42, 2\n");
+
+        // Insert the (42, 3) row and commit tx2.
+        {
+            tx2.InitCommit({countsTableShard, rowsTableShard});
+            auto w1 = tx2.PrepareCommit(countsTableId, countsTableShard);
+            auto w2 = tx2.PrepareCommit(rowsTableId, rowsTableShard, TOperation::Insert(42, 3));
+            tx2.SendPlan();
+            UNIT_ASSERT_VALUES_EQUAL(w1.NextString(), "OK");
+            UNIT_ASSERT_VALUES_EQUAL(w2.NextString(), "OK");
+        }
+
+        // Try inserting the (42, 3) row while committing tx1.
+        // The commit should fail with STATUS_LOCKS_BROKEN error and not STATUS_CONSTRAINT_VIOLATION
+        // because the conflicting row didn't exist at the time of tx1 snapshot.
+        {
+            tx1.InitCommit({countsTableShard, rowsTableShard});
+            auto w1 = tx1.PrepareCommit(countsTableId, countsTableShard);
+            auto w2 = tx1.PrepareCommit(rowsTableId, rowsTableShard, TOperation::Insert(42, 3));
+            tx1.SendPlan();
+            UNIT_ASSERT_VALUES_EQUAL(w1.NextString(), "OK");
+            UNIT_ASSERT_VALUES_EQUAL(w2.NextString(), "ERROR: STATUS_LOCKS_BROKEN");
+        }
     }
 
     Y_UNIT_TEST_TWIN(DistributedInsertReadSetWithoutLocks, Volatile) {

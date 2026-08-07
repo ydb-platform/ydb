@@ -4,22 +4,24 @@ yarl
 The module provides handy URL class for URL parsing and changing.
 
 .. image:: https://github.com/aio-libs/yarl/workflows/CI/badge.svg
-  :target: https://github.com/aio-libs/yarl/actions?query=workflow%3ACI
-  :align: right
+   :target: https://github.com/aio-libs/yarl/actions?query=workflow%3ACI
+   :align: right
 
-.. image:: https://codecov.io/gh/aio-libs/yarl/branch/master/graph/badge.svg
-  :target: https://codecov.io/gh/aio-libs/yarl
+.. image:: https://codecov.io/gh/aio-libs/yarl/graph/badge.svg?flag=pytest
+   :target: https://app.codecov.io/gh/aio-libs/yarl?flags[]=pytest
+   :alt: Codecov coverage for the pytest-driven measurements
+
+.. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
+   :target: https://codspeed.io/aio-libs/yarl
 
 .. image:: https://badge.fury.io/py/yarl.svg
-    :target: https://badge.fury.io/py/yarl
-
+   :target: https://badge.fury.io/py/yarl
 
 .. image:: https://readthedocs.org/projects/yarl/badge/?version=latest
-    :target: https://yarl.aio-libs.org
-
+   :target: https://yarl.aio-libs.org
 
 .. image:: https://img.shields.io/pypi/pyversions/yarl.svg
-    :target: https://pypi.python.org/pypi/yarl
+   :target: https://pypi.python.org/pypi/yarl
 
 .. image:: https://img.shields.io/matrix/aio-libs:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
    :target: https://matrix.to/#/%23aio-libs:matrix.org
@@ -28,6 +30,7 @@ The module provides handy URL class for URL parsing and changing.
 .. image:: https://img.shields.io/matrix/aio-libs-space:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs-space%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
    :target: https://matrix.to/#/%23aio-libs-space:matrix.org
    :alt: Matrix Space — #aio-libs-space:matrix.org
+
 
 Introduction
 ------------
@@ -109,9 +112,8 @@ Installation
 The library is Python 3 only!
 
 PyPI contains binary wheels for Linux, Windows and MacOS.  If you want to install
-``yarl`` on another operating system (like *Alpine Linux*, which is not
-manylinux-compliant because of the missing glibc and therefore, cannot be
-used with our wheels) the the tarball will be used to compile the library from
+``yarl`` on another operating system where wheels are not provided,
+the tarball will be used to compile the library from
 the source code. It requires a C compiler and and Python headers installed.
 
 To skip the compilation you must explicitly opt-in by using a PEP 517
@@ -129,7 +131,7 @@ by this variable.
 Dependencies
 ------------
 
-YARL requires multidict_ library.
+YARL requires multidict_ and propcache_ libraries.
 
 
 API documentation
@@ -204,3 +206,5 @@ It's *Apache 2* licensed and freely available.
 .. _GitHub: https://github.com/aio-libs/yarl
 
 .. _multidict: https://github.com/aio-libs/multidict
+
+.. _propcache: https://github.com/aio-libs/propcache

@@ -651,6 +651,12 @@ ui64 AsyncAlterDropColumn(
         const TString& name,
         const TString& colName);
 
+ui64 AsyncAlterSetMetricsLevel(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level);
+
 ui64 AsyncSetEnableFilterByKey(
         Tests::TServer::TPtr server,
         const TString& workingDir,

@@ -352,14 +352,6 @@ void TSkiffFormatConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TYamlFormatConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("write_uint_tag", &TThis::WriteUintTag)
-        .Default(false);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 void TArrowFormatConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("enable_tz_index", &TThis::EnableTzIndex)

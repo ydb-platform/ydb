@@ -6,6 +6,7 @@
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -65,6 +66,8 @@ struct TStageInfo : private TMoveOnly {
 
     ui32 InputsCount = 0;
     ui32 OutputsCount = 0;
+    NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+    TMaybe<ui64> WatermarksIdleTimeoutUs = Nothing();
 
     TVector<ui64> Tasks;
     TStageInfoMeta Meta;
@@ -384,7 +387,7 @@ public:
     }
 
     static bool IsInfiniteSourceType(const TString& sourceType) {
-        return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
+        return sourceType == NYql::PqSource; // Now it is the only infinite source type. Others are finite.
     }
 
     void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {
@@ -451,6 +454,11 @@ public:
 
             NDqProto::EWatermarksMode watermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
             if (enableWatermarks) {
+                const auto& stageInfo = GetStageInfo(task.StageId);
+                if (stageInfo.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
+                    watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                    task.WatermarksIdleTimeoutUs = Max(task.WatermarksIdleTimeoutUs, stageInfo.WatermarksIdleTimeoutUs);
+                }
                 for (auto& input : task.Inputs) {
                     if (input.SourceType) {
                         if (input.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {

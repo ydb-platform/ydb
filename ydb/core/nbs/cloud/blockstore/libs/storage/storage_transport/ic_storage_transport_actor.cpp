@@ -1,5 +1,7 @@
 #include "ic_storage_transport_actor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 
@@ -125,9 +127,12 @@ void RejectRequestsForNode(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TActorId CreateTransportActor(const TString& diskId, ui32 dbgIndex)
+TActorId CreateTransportActor(
+    const TDiskDescription& diskDescription,
+    ui32 dbgIndex)
 {
-    auto actor = std::make_unique<TICStorageTransportActor>(diskId, dbgIndex);
+    auto actor =
+        std::make_unique<TICStorageTransportActor>(diskDescription, dbgIndex);
 
     return TActivationContext::Register(
         actor.release(),
@@ -139,12 +144,14 @@ TActorId CreateTransportActor(const TString& diskId, ui32 dbgIndex)
 ////////////////////////////////////////////////////////////////////////////////
 
 TICStorageTransportActor::TICStorageTransportActor(
-    const TString& diskId,
+    const TDiskDescription& diskDescription,
     ui32 dbgIndex)
     : LogTitle(
           GetCycleCount(),
           TLogTitle::TInterconnectTransport{
-              .DiskId = diskId,
+              .DiskId = diskDescription.DiskId,
+              .TabletId = diskDescription.TabletId,
+              .Generation = diskDescription.Generation,
               .DBGIndex = dbgIndex})
 {}
 
@@ -203,7 +210,8 @@ void TICStorageTransportActor::HandleConnect(
         request.ServiceId,
         std::make_unique<NDDisk::TEvConnect>(request.Credentials),
         requestId,
-        NWilson::TTraceId());
+        NWilson::TTraceId(),
+        ESubscribeOnSession::Yes);
 }
 
 void TICStorageTransportActor::HandleConnectUndelivery(
@@ -227,7 +235,7 @@ void TICStorageTransportActor::HandleConnectUndelivery(
         ConnectRequests.erase(requestId);
     } else {
         // That means that request is already completed
-        LOG_ERROR(
+        LOG_WARN(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "%s ConnectEvent with requestId# %lu not found",
@@ -258,7 +266,7 @@ void TICStorageTransportActor::HandleConnectResult(
         ConnectRequests.erase(requestId);
     } else {
         // That means that request is already completed
-        LOG_ERROR(
+        LOG_WARN(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "%s ConnectEvent with requestId# %lu not found",
@@ -295,19 +303,24 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayload(std::move(rope));
+        request->AddPayloadThenChecksum(std::move(rope));
+        // TODO(RFC 006): checksums should be computed by the Partition and
+        // carried down to here rather than recomputed post-copy; computing it
+        // after SgListCopy only covers corruption from this point on and bakes
+        // in anything already wrong upstream of the copy.
 
         SendWithUndeliveryTracking(
             ctx,
             msg->ServiceId,
             std::move(request),
             requestId,
-            std::move(msg->TraceId));
+            std::move(msg->TraceId),
+            ESubscribeOnSession::No);
 
         return;
     }
 
-    LOG_INFO(
+    LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "%s Sent TEvWriteToPBuffer with requestId# %lu was failed - can't "
@@ -432,14 +445,19 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayload(std::move(rope));
+        request->AddPayloadThenChecksum(std::move(rope));
+        // TODO(RFC 006): checksums should be computed by the Partition and
+        // carried down to here rather than recomputed post-copy; computing it
+        // after SgListCopy only covers corruption from this point on and bakes
+        // in anything already wrong upstream of the copy.
 
         SendWithUndeliveryTracking(
             ctx,
             msg->ServiceId,
             std::move(request),
             requestId,
-            std::move(msg->TraceId));
+            std::move(msg->TraceId),
+            ESubscribeOnSession::No);
         return;
     }
 
@@ -576,7 +594,8 @@ void TICStorageTransportActor::HandleWriteToDDisk(
             msg->ServiceId,
             std::move(request),
             requestId,
-            std::move(msg->TraceId));
+            std::move(msg->TraceId),
+            ESubscribeOnSession::No);
         return;
     }
 
@@ -723,7 +742,8 @@ void TICStorageTransportActor::HandleBarrierErasePersistentBuffer(
         msg->ServiceId,
         std::move(request),
         requestId,
-        std::move(msg->TraceId));
+        std::move(msg->TraceId),
+        ESubscribeOnSession::No);
 }
 
 void TICStorageTransportActor::HandleBatchErasePersistentBufferUndelivery(
@@ -855,7 +875,8 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
         msg->ServiceId,
         std::move(request),
         requestId,
-        std::move(msg->TraceId));
+        std::move(msg->TraceId),
+        ESubscribeOnSession::No);
 }
 
 void TICStorageTransportActor::HandleReadPersistentBufferUndelivery(
@@ -963,7 +984,8 @@ void TICStorageTransportActor::HandleRead(
         msg->ServiceId,
         std::move(request),
         requestId,
-        std::move(msg->TraceId));
+        std::move(msg->TraceId),
+        ESubscribeOnSession::No);
 }
 
 void TICStorageTransportActor::HandleReadUndelivery(
@@ -1016,7 +1038,7 @@ void TICStorageTransportActor::HandleReadResult(
             SgListCopy(CreateSgList(ev->Get()->GetPayload()), sglist);
             request.Promise.SetValue(std::move(ev->Get()->Record));
         } else {
-            LOG_INFO(
+            LOG_DEBUG(
                 ctx,
                 NKikimrServices::NBS_PARTITION,
                 "%s Received TEvReadResult with requestId# %lu was failed - "
@@ -1085,7 +1107,8 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
         msg->ServiceId,
         std::move(request),
         requestId,
-        std::move(msg->TraceId));
+        std::move(msg->TraceId),
+        ESubscribeOnSession::No);
 }
 
 void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
@@ -1164,7 +1187,8 @@ void TICStorageTransportActor::HandleListPersistentBuffer(
         msg->ServiceId,
         std::move(request),
         requestId,
-        NWilson::TTraceId());
+        NWilson::TTraceId(),
+        ESubscribeOnSession::No);
 }
 
 void TICStorageTransportActor::HandleListPersistentBufferUndelivery(

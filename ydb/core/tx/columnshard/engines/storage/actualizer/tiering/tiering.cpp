@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NActualizer {
@@ -158,6 +159,20 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
                 max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
             }
         }
+        if (max == nullptr) {
+            if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMinMax(*TieringColumnId)) {
+                NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
+                const std::vector<TString> data = accessor.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
+                if (!data.empty()) {
+                    auto type = portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type();
+                    auto minmax = NArrow::NAccessor::TMinMax::MakeNull(type);
+                    for (auto&& d : data) {
+                        minmax.UniteWith(NArrow::NAccessor::TMinMax::FromBinaryString(d, type));
+                    }
+                    max = minmax.Max();
+                }
+            }
+        }
         AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
     }
     AddPortionImpl(portion, context.GetNow());
@@ -187,6 +202,7 @@ void TTieringActualizer::DoExtractTasks(
             Counters.SkipEvictionForTooEarly->Add(1);
             continue;
         }
+        // This is a best-effort check, address might differ from the queue key when the task is built
         if (!tasksContext.IsRWAddressAvailable(address)) {
             Counters.SkipEvictionForLimit->Add(1);
             continue;
@@ -211,6 +227,7 @@ void TTieringActualizer::DoExtractTasks(
 
                 switch (tasksContext.AddPortion(portion, std::move(features), info->GetLateness())) {
                     case TTieringProcessContext::EAddPortionResult::TASK_LIMIT_EXCEEDED:
+                        Counters.SkipEvictionForLimit->Add(1);
                         limitEnriched = true;
                         break;
                     case TTieringProcessContext::EAddPortionResult::PORTION_LOCKED:

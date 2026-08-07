@@ -21,7 +21,7 @@ struct TConsumerMeta
     : public NYTree::TYsonStructLite
 {
     std::optional<i64> CumulativeDataWeight;
-    std::optional<ui64> OffsetTimestamp;
+    std::optional<NTransactionClient::TTimestamp> OffsetTimestamp;
 
     REGISTER_YSON_STRUCT_LITE(TConsumerMeta);
 

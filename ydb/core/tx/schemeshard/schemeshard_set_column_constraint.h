@@ -112,7 +112,12 @@ struct TEvSetColumnConstraint {
     struct TEvCancelRequest: public TEventPB<TEvCancelRequest, NKikimrSetColumnConstraint::TEvCancelRequest, EvCancelRequest> {
         TEvCancelRequest() = default;
 
-        explicit TEvCancelRequest(const TString& dbName, ui64 operationId) {
+        explicit TEvCancelRequest(
+            const ui64 txId,
+            const TString& dbName,
+            ui64 operationId)
+        {
+            Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             Record.SetOperationId(operationId);
         }

@@ -5,6 +5,7 @@ GENERATE_ENUM_SERIALIZATION(direct_block_group_impl.h)
 
 SRCS(
     ddisk_data_copier.cpp
+    delete_partition.cpp
     direct_block_group_impl.cpp
     direct_block_group.cpp
     erase_request.cpp
@@ -21,7 +22,6 @@ SRCS(
     part_monitoring.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
-    range_translate.cpp
     read_request_executor.cpp
     read_request_multiple_location.cpp
     read_request_single_location.cpp
@@ -35,6 +35,7 @@ SRCS(
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/bootstrap
     ydb/core/nbs/cloud/blockstore/config/protos
+    ydb/core/nbs/cloud/blockstore/libs/diagnostics
     ydb/core/nbs/cloud/blockstore/libs/storage/api
     ydb/core/nbs/cloud/blockstore/libs/storage/core
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map
@@ -49,7 +50,7 @@ PEERDIR(
     ydb/library/services
 
     ydb/core/mind/bscontroller
-    contrib/libs/opentelemetry-proto
+    contrib/proto/opentelemetry
 
     library/cpp/cgiparam
 )
@@ -63,6 +64,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    benchmark
     partition_ut
     ut
 )

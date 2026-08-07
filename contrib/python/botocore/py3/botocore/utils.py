@@ -39,19 +39,19 @@ import botocore.awsrequest
 import botocore.httpsession
 
 # IP Regexes retained for backwards compatibility
-from botocore.compat import HEX_PAT  # noqa: F401
-from botocore.compat import IPV4_PAT  # noqa: F401
-from botocore.compat import IPV6_ADDRZ_PAT  # noqa: F401
-from botocore.compat import IPV6_PAT  # noqa: F401
-from botocore.compat import LS32_PAT  # noqa: F401
-from botocore.compat import UNRESERVED_PAT  # noqa: F401
-from botocore.compat import ZONE_ID_PAT  # noqa: F401
 from botocore.compat import (
     HAS_CRT,
+    HEX_PAT,  # noqa: F401
+    IPV4_PAT,  # noqa: F401
     IPV4_RE,
+    IPV6_ADDRZ_PAT,  # noqa: F401
     IPV6_ADDRZ_RE,
+    IPV6_PAT,  # noqa: F401
+    LS32_PAT,  # noqa: F401
     MD5_AVAILABLE,
+    UNRESERVED_PAT,  # noqa: F401
     UNSAFE_URL_CHARS,
+    ZONE_ID_PAT,  # noqa: F401
     OrderedDict,
     get_md5,
     get_tzinfo_options,
@@ -86,6 +86,11 @@ from botocore.exceptions import (
     UnsupportedS3ConfigurationError,
     UnsupportedS3ControlArnError,
     UnsupportedS3ControlConfigurationError,
+)
+from botocore.plugin import (
+    PluginContext,
+    reset_plugin_context,
+    set_plugin_context,
 )
 
 logger = logging.getLogger(__name__)
@@ -183,6 +188,15 @@ EVENT_ALIASES = {
 CHECKSUM_HEADER_PATTERN = re.compile(
     r'^X-Amz-Checksum-([a-z0-9]*)$',
     flags=re.IGNORECASE,
+)
+
+PRIORITY_ORDERED_SUPPORTED_PROTOCOLS = (
+    'json',
+    'rest-json',
+    'rest-xml',
+    'smithy-rpc-v2-cbor',
+    'query',
+    'ec2',
 )
 
 
@@ -353,6 +367,18 @@ def is_global_accesspoint(context):
     s3_accesspoint = context.get('s3_accesspoint', {})
     is_global = s3_accesspoint.get('region') == ''
     return is_global
+
+
+def create_nested_client(session, service_name, **kwargs):
+    # If a client is created from within a plugin based on the environment variable,
+    # an infinite loop could arise.  Any clients created from within another client
+    # must use this method to prevent infinite loops.
+    ctx = PluginContext(plugins="DISABLED")
+    token = set_plugin_context(ctx)
+    try:
+        return session.create_client(service_name, **kwargs)
+    finally:
+        reset_plugin_context(token)
 
 
 class _RetriesExceededError(Exception):
@@ -681,7 +707,7 @@ class InstanceMetadataFetcher(IMDSFetcher):
                     f"Attempting credential expiration extension due to a "
                     f"credential service availability issue. A refresh of "
                     f"these credentials will be attempted again within "
-                    f"the next {refresh_interval_with_jitter/60:.0f} minutes."
+                    f"the next {refresh_interval_with_jitter / 60:.0f} minutes."
                 )
         except ValueError:
             logger.debug(
@@ -3238,14 +3264,14 @@ def calculate_md5(body, **kwargs):
 
 def _calculate_md5_from_bytes(body_bytes):
     """This function has been deprecated, but is kept for backwards compatibility."""
-    md5 = get_md5(body_bytes)
+    md5 = get_md5(body_bytes, usedforsecurity=False)
     return md5.digest()
 
 
 def _calculate_md5_from_file(fileobj):
     """This function has been deprecated, but is kept for backwards compatibility."""
     start_position = fileobj.tell()
-    md5 = get_md5()
+    md5 = get_md5(usedforsecurity=False)
     for chunk in iter(lambda: fileobj.read(1024 * 1024), b''):
         md5.update(chunk)
     fileobj.seek(start_position)
@@ -3532,8 +3558,7 @@ class JSONFileCache:
             file_content = self._dumps(value)
         except (TypeError, ValueError):
             raise ValueError(
-                f"Value cannot be cached, must be "
-                f"JSON serializable: {value}"
+                f"Value cannot be cached, must be JSON serializable: {value}"
             )
         if not os.path.isdir(self._working_dir):
             os.makedirs(self._working_dir)
@@ -3559,6 +3584,21 @@ def is_s3express_bucket(bucket):
     if bucket is None:
         return False
     return bucket.endswith('--x-s3')
+
+
+def get_token_from_environment(signing_name, environ=None):
+    if not isinstance(signing_name, str) or not signing_name.strip():
+        return None
+
+    if environ is None:
+        environ = os.environ
+    env_var = _get_bearer_env_var_name(signing_name)
+    return environ.get(env_var)
+
+
+def _get_bearer_env_var_name(signing_name):
+    bearer_name = signing_name.replace('-', '_').replace(' ', '_').upper()
+    return f"AWS_BEARER_TOKEN_{bearer_name}"
 
 
 # This parameter is not part of the public interface and is subject to abrupt

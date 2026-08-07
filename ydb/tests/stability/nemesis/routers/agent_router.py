@@ -1,4 +1,5 @@
 import logging
+import time
 
 from flask import Blueprint, request, jsonify
 
@@ -42,6 +43,32 @@ def create_process_helper(
         payload=payload,
     )
     return {"status": "started"}
+
+
+def wait_for_local_processes(timeout: float = 20.0, poll_interval: float = 0.2) -> int:
+    """Block until locally-started actions finish; return how many are still running.
+
+    Actions run in daemon threads, which the interpreter kills on shutdown — that would drop the
+    teardown extracts for targets on this host.
+    """
+    deadline = time.monotonic() + float(timeout)
+
+    def _running() -> int:
+        return sum(1 for row in manager.get_all() if row.get("status") == "running")
+
+    pending = _running()
+    if not pending:
+        return 0
+    logger.info("waiting up to %.0fs for %d local nemesis action(s) to finish", timeout, pending)
+    while time.monotonic() < deadline:
+        pending = _running()
+        if not pending:
+            return 0
+        time.sleep(poll_interval)
+    pending = _running()
+    if pending:
+        logger.warning("%d local nemesis action(s) still running after %.0fs", pending, timeout)
+    return pending
 
 
 def start_warden_checks_helper():

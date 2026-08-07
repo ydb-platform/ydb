@@ -94,7 +94,7 @@ void IAttributeDictionary::Set(TKeyView key, const T& value)
 
 namespace NMergeableRangeImpl {
 
-inline TMergeableRange TagInvoke(TTagInvokeTag<AsMergeableRange>, const NYTree::IAttributeDictionary& dict)
+inline TMergeableRange TagInvoke(NMpl::TTagInvokeTag<AsMergeableRange>, const NYTree::IAttributeDictionary& dict)
 {
     auto pairs = dict.ListPairs();
 

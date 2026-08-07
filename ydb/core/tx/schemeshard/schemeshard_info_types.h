@@ -11,6 +11,7 @@
 
 #include <util/generic/yexception.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -1017,6 +1018,8 @@ public:
         bool EnableParameterizedDecimal;
         bool EnableDetailedMetrics;
         bool EnableColumnStatistics = false;
+        bool EnableGeneratedStored = false;
+        bool EnableGeneratedVirtual = false;
     };
 
     static TAlterDataPtr CreateAlterData(
@@ -2404,7 +2407,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     bool CheckSmallBlobsQuotas(IQuotaCounters* counters);
 
     /*
-    Rechecks disk space and small blobs quotas in one go. 
+    Rechecks disk space and small blobs quotas in one go.
     Returns true when any flag changed and needs to be persisted and pushed to scheme board.
     */
     bool CheckQuotas(IQuotaCounters* counters);
@@ -2752,6 +2755,14 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         ServerlessComputeResourcesMode = serverlessComputeResourcesMode;
     }
 
+    ETablesMetricsLevel GetTablesMetricsLevel() const {
+        return TablesMetricsLevel;
+    }
+
+    void SetTablesMetricsLevel(ETablesMetricsLevel level) {
+        TablesMetricsLevel = level;
+    }
+
 private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
@@ -2797,6 +2808,8 @@ private:
     ui64 SecurityStateVersion = 0;
 
     TMaybeAuditSettings AuditSettings;
+
+    ETablesMetricsLevel TablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
 
     TVector<TTabletId> FilterPrivateTablets(TTabletTypes::EType type, const THashMap<TShardIdx, TShardInfo>& allShards) const {
         TVector<TTabletId> tablets;
@@ -3103,6 +3116,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+            case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
                 // no specialized index description
                 Y_ASSERT(description.empty());
                 break;
@@ -3171,6 +3185,10 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         return std::visit([]<typename T>(const T& v) {
             if constexpr (std::is_same_v<std::monostate, T>) {
                 return TString{};
+            } else if constexpr (std::is_same_v<NKikimrSchemeOp::TBloomNGrammFilter, T>) {
+                TString str;
+                Y_ENSURE(v.SerializeToString(&str));
+                return str;
             } else {
                 TString str{v.SerializeAsString()};
                 Y_ENSURE(!str.empty());
@@ -3186,7 +3204,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
     static bool IsLocalIndex(EType type) {
         return type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
             || type == NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter
-            || type == NKikimrSchemeOp::EIndexTypeLocalMinMax;
+            || type == NKikimrSchemeOp::EIndexTypeLocalMinMax
+            || type == NKikimrSchemeOp::EIndexTypeLocalCountMinSketch;
     }
 
     static TPtr Create(const NKikimrSchemeOp::TIndexCreationConfig& config, TString& errMsg) {
@@ -3211,6 +3230,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+            case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
                 // no specialized index description
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
@@ -3273,6 +3293,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
                 break;
             case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+            case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
                 alterData->SpecializedIndexDescription = std::monostate{};
                 break;
             default:

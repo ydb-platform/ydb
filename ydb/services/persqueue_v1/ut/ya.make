@@ -34,9 +34,11 @@ SRCS(
     functions_executor_wrapper.cpp
     topic_service_ut.cpp
     topic_deferred_publish_ut.cpp
+    persqueue_v1_gaps_ut.cpp
     demo_tx.cpp
 
     partition_writer_cache_actor_ut.cpp
+    fill_batched_data_offset_ut.cpp
 
     pqtablet_mock.cpp
     kqp_mock.cpp
@@ -49,9 +51,11 @@ PEERDIR(
     library/cpp/digest/md5
     ydb/core/testlib/default
     ydb/library/aclib
+    ydb/core/persqueue/deferred_publish
     ydb/library/persqueue/tests
     ydb/library/persqueue/topic_parser
     ydb/public/api/grpc
+    ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/table

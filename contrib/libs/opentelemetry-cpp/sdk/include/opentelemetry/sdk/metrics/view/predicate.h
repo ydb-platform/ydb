@@ -75,11 +75,13 @@ private:
 
 class MatchEverythingPattern : public Predicate
 {
+public:
   bool Match(opentelemetry::nostd::string_view /* str */) const noexcept override { return true; }
 };
 
 class MatchNothingPattern : public Predicate
 {
+public:
   bool Match(opentelemetry::nostd::string_view /* str */) const noexcept override { return false; }
 };
 }  // namespace metrics

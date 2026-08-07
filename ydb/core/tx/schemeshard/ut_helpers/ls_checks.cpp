@@ -892,6 +892,12 @@ TCheckFunc IndexesCount(ui32 count) {
     };
 }
 
+TCheckFunc ColumnTableIndexesCount(ui32 count) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetColumnTableDescription().GetSchema().IndexesSize(), count);
+    };
+}
+
 TCheckFunc IndexType(NKikimrSchemeOp::EIndexType type) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetType(), type);

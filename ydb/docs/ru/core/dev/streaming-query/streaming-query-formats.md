@@ -18,7 +18,7 @@
 
 [Примеры парсинга данных в пользовательских форматах](#parsing).
 
-В примерах на этой странице `input_topic` и `output_topic` — [топики](../../concepts/datamodel/topic.md) в текущей базе данных, а `output_table` — таблица {{ ydb-short-name }}. Для топиков в другой базе см. [локальные и внешние топики в потоковых запросах](./local-and-external-topics.md).
+В примерах на этой странице `input_topic` и `output_topic` — [топики](../../concepts/datamodel/topic.md) в текущей базе данных, а `output_table` — таблица {{ ydb-short-name }}. Для топиков в другой базе см. [локальные и внешние топики](../../concepts/query_execution/topics.md#local-external-topics).
 
 ## Форматы при записи данных {#write_formats}
 
@@ -68,6 +68,8 @@ END DO
 ```
 
 Подробнее о функциях: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
+
+Если в одном потоковом запросе используется запись в несколько топиков, все выходные топики должны быть различны.
 
 ## Форматы при чтении данных {#read_formats}
 

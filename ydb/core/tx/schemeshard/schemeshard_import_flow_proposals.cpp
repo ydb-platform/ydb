@@ -108,7 +108,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     }
     FillOwner(record, item.Permissions);
 
-    SetSystemOwnerIfNeeded(record, AppData());
+    record.SetOwner(ChooseAppropriateOwner(record, AppData()));
 
     if (!FillACL(modifyScheme, item.Permissions, error)) {
         return nullptr;

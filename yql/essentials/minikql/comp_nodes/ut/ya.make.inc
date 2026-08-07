@@ -25,6 +25,7 @@ SET(ORIG_SRC_DIR yql/essentials/minikql/comp_nodes/ut)
 SET(ORIG_SOURCES
     mkql_test_factory.cpp
     mkql_bit_utils_ut.cpp
+    mkql_block_agg_ut.cpp
     mkql_block_compress_ut.cpp
     mkql_block_coalesce_ut.cpp
     mkql_block_exists_ut.cpp
@@ -43,6 +44,8 @@ SET(ORIG_SOURCES
     mkql_block_variant_ut.cpp
     mkql_block_uuid_ut.cpp
     mkql_block_dynumber_ut.cpp
+    mkql_block_variant_item_ut.cpp
+    mkql_block_variant_node_ut.cpp
     mkql_blocks_ut.cpp
     mkql_callable_ut.cpp
     mkql_combine_ut.cpp
@@ -60,6 +63,7 @@ SET(ORIG_SOURCES
     mkql_multihopping_ut.cpp
     mkql_multimap_ut.cpp
     mkql_fold_ut.cpp
+    mkql_erased_ut.cpp
     mkql_heap_ut.cpp
     mkql_compare_ut.cpp
     mkql_computation_node_ut.cpp
@@ -81,6 +85,7 @@ SET(ORIG_SOURCES
     mkql_switch_ut.cpp
     mkql_time_order_recover_saveload_ut.cpp
     mkql_todict_ut.cpp
+    mkql_udf_profile_ut.cpp
     mkql_udf_ut.cpp
     mkql_variant_ut.cpp
     mkql_wide_chain_map_ut.cpp

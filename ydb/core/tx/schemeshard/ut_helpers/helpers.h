@@ -337,6 +337,7 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterSecret);
     GENERIC_HELPERS(DropSecret);
     DROP_BY_PATH_ID_HELPERS(DropSecret);
+    void TestCreateSecretOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}});
 
     // streaming query
     GENERIC_HELPERS(CreateStreamingQuery);
@@ -805,6 +806,6 @@ namespace NSchemeShardUT_Private {
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 operationId,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
-    NKikimrSetColumnConstraint::TEvCancelResponse TestCancelSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, const TString& dbName, ui64 operationId);
+    NKikimrSetColumnConstraint::TEvCancelResponse TestCancelSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& dbName, ui64 operationId);
     void TestCheckColumnsNotNull(TTestActorRuntime& runtime, const TString& tablePath, const std::map<TString, bool>& expectedColumnNotNullStates);
 } //NSchemeShardUT_Private

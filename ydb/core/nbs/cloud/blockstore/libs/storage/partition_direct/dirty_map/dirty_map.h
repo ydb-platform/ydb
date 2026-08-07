@@ -216,6 +216,7 @@ class TBlocksDirtyMap
     : public ILockableRanges
     , public IReadyQueue
     , public TDisableCopyMove
+    , public std::enable_shared_from_this<TBlocksDirtyMap>
 {
 public:
     enum class EEraseType
@@ -223,6 +224,7 @@ public:
         Standard,
         Belated
     };
+
     TBlocksDirtyMap(
         const TVChunkConfig& vChunkConfig,
         ui32 blockSize,
@@ -231,8 +233,6 @@ public:
 
     // Note. Fresh watermarks are not applying for exists DDisks.
     void UpdateConfig(const TVChunkConfig& vChunkConfig);
-
-    void ResizeHosts(size_t newHostCount);
 
     void RestorePBuffer(ui64 lsn, TBlockRange64 range, THostIndex host);
 
@@ -284,6 +284,7 @@ public:
     [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
     [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
         THostIndex host) const;
+    [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex host) const;
 
     // ILockableRanges implementation
     void LockPBuffer(ui64 lsn) override;
@@ -322,6 +323,16 @@ private:
     using TInflightDDiskReadsMap =
         TBlockRangeMap<ILockableRanges::TLockRangeHandle, THostMask>;
 
+    struct TInfoEraseBelated
+    {
+        ui64 Lsn{};
+        THostMask Hosts;
+
+        bool operator<(const TInfoEraseBelated& other) const;
+    };
+
+    void ResizeHosts(size_t newHostCount);
+
     [[nodiscard]] THostMask FilterLocations(
         THostMask mask,
         TBlockRange64 range) const;
@@ -353,14 +364,6 @@ private:
     // Ranges that are fully transferred to DDisk and can be erased.
     // Using TSet for O(1) min LSN access.
     TSet<ui64> ReadyToErase;
-
-    struct TInfoEraseBelated
-    {
-        ui64 Lsn{};
-        THostMask Hosts;
-
-        bool operator<(const TInfoEraseBelated& other) const;
-    };
 
     TSet<TInfoEraseBelated> ReadyToEraseBelated;
 

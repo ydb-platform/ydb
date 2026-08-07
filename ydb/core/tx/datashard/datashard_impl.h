@@ -217,6 +217,7 @@ class TDataShard
     class TTxGetS3DownloadInfo;
     class TTxStoreS3DownloadInfo;
     class TTxS3UploadRows;
+    class TTxS3DirectWriteFinish;
     class TTxObjectStorageListing;
     class TTxGetRemovedRowVersions;
     class TTxCompactBorrowed;
@@ -325,6 +326,7 @@ class TDataShard
 
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
+    class TTxPersistSubDomainTablesMetricsLevel;
 
     class TTxRequestChangeRecords;
     class TTxRemoveChangeRecords;
@@ -1226,6 +1228,8 @@ class TDataShard
 
             Sys_VacuumCompletedGeneration = 47,
 
+            Sys_SubDomainTablesMetricsLevel = 48,
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -1239,6 +1243,7 @@ class TDataShard
         static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeStep == 39, "SysMvcc_ImmediateWriteEdgeStep changed its value");
         static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeTxId == 40, "SysMvcc_ImmediateWriteEdgeTxId changed its value");
         static_assert(ESysTableKeys::Sys_LastLoanTableTid == 41, "Sys_LastLoanTableTid changed its value");
+        static_assert(ESysTableKeys::Sys_SubDomainTablesMetricsLevel == 48, "Sys_SubDomainTablesMetricsLevel changed its value");
 
         static constexpr ui64 MinLocalTid = TSysTables::SysTableMAX + 1; // 1000
 
@@ -1387,6 +1392,9 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvS3DirectWriteBegin::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvS3DirectWriteAbort::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
@@ -1486,6 +1494,10 @@ class TDataShard
 
     void DoPeriodicTasks(const TActorContext &ctx);
     void DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TActorContext &ctx);
+
+    // Reports the identity of this shard's primary user table to the node's tablet counters
+    // aggregator, so detailed metrics can attribute the executor's counter deltas to a table.
+    void SendTableInfoToCountersAggregator(const TActorContext &ctx);
 
     TDuration GetTxCompleteLag()
     {
@@ -2000,6 +2012,19 @@ public:
     bool IsSubDomainOutOfSpace() const
     {
         return SubDomainOutOfSpace;
+    }
+
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetSubDomainTablesMetricsLevel() const
+    {
+        return SubDomainTablesMetricsLevel;
+    }
+
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetEffectiveMetricsLevel(const TUserTable& table) const
+    {
+        const auto tableLevel = table.GetDetailedMetricsLevel();
+        return tableLevel != NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
+            ? tableLevel
+            : SubDomainTablesMetricsLevel;
     }
 
     ui64 GetExecutorStep() const
@@ -2832,11 +2857,16 @@ private:
     std::optional<TPathId> SubDomainPathId;
     std::optional<TPathId> WatchingSubDomainPathId;
     bool SubDomainOutOfSpace = false;
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel SubDomainTablesMetricsLevel =
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
 
     THashSet<TActorId> Actors;
     TLoanReturnTracker LoanReturnTracker;
     TFollowerState FollowerState;
 
+    // Non-persistent flag that is set just after we waited for all pending transactions to finish
+    // and are starting the split.
+    bool SplitStarted = false;
     bool SplitSnapshotStarted;      // Non-persistent flag that is used to restart snapshot in case of datashard restart
     TSplitSrcSnapshotSender SplitSrcSnapshotSender;
     // TODO: make this persitent
@@ -3370,6 +3400,9 @@ protected:
             HFuncTraced(TEvDataShard::TEvGetS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvStoreS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvS3UploadRowsRequest, Handle);
+            HFuncTraced(TEvDataShard::TEvS3DirectWriteBegin, Handle);
+            HFuncTraced(TEvDataShard::TEvS3DirectWriteFinish, Handle);
+            HFuncTraced(TEvDataShard::TEvS3DirectWriteAbort, Handle);
             HFuncTraced(TEvDataShard::TEvObjectStorageListingRequest, Handle);
             HFuncTraced(TEvDataShard::TEvMigrateSchemeShardRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);

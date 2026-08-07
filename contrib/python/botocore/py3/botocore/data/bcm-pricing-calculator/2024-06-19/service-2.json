@@ -366,7 +366,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Retrieves the current preferences for the Amazon Web Services Cost Explorer service. </p>"
+      "documentation":"<p> Retrieves the current preferences for Pricing Calculator. </p>"
     },
     "GetWorkloadEstimate":{
       "name":"GetWorkloadEstimate",
@@ -671,7 +671,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p> Updates the preferences for the Amazon Web Services Cost Explorer service. </p>",
+      "documentation":"<p> Updates the preferences for Pricing Calculator. </p>",
       "idempotent":true
     },
     "UpdateWorkloadEstimate":{
@@ -2006,7 +2006,8 @@
       "enum":[
         "READY",
         "LOCKED",
-        "FAILED"
+        "FAILED",
+        "STALE"
       ]
     },
     "BillScenarioSummaries":{
@@ -2580,6 +2581,10 @@
         "memberAccountRateTypeSelections":{
           "shape":"RateTypes",
           "documentation":"<p> The preferred rate types for member accounts. </p>"
+        },
+        "standaloneAccountRateTypeSelections":{
+          "shape":"RateTypes",
+          "documentation":"<p> The preferred rate types for a standalone account. </p>"
         }
       }
     },
@@ -3177,7 +3182,7 @@
           "documentation":"<p> A token to retrieve the next page of results. </p>"
         },
         "maxResults":{
-          "shape":"MaxResults",
+          "shape":"WorkloadEstimateUsageMaxResults",
           "documentation":"<p> The maximum number of results to return per page. </p>"
         }
       }
@@ -3281,7 +3286,8 @@
     "MaxResults":{
       "type":"integer",
       "box":true,
-      "max":25
+      "max":25,
+      "min":1
     },
     "NegateReservedInstanceAction":{
       "type":"structure",
@@ -3326,13 +3332,14 @@
       "type":"string",
       "enum":[
         "BEFORE_DISCOUNTS",
-        "AFTER_DISCOUNTS"
+        "AFTER_DISCOUNTS",
+        "AFTER_DISCOUNTS_AND_COMMITMENTS"
       ]
     },
     "RateTypes":{
       "type":"list",
       "member":{"shape":"RateType"},
-      "max":2,
+      "max":3,
       "min":1
     },
     "ReservedInstanceInstanceCount":{
@@ -3631,6 +3638,10 @@
         "memberAccountRateTypeSelections":{
           "shape":"RateTypes",
           "documentation":"<p> The updated preferred rate types for member accounts. </p>"
+        },
+        "standaloneAccountRateTypeSelections":{
+          "shape":"RateTypes",
+          "documentation":"<p> The updated preferred rate types for a standalone account. </p>"
         }
       }
     },
@@ -3644,6 +3655,10 @@
         "memberAccountRateTypeSelections":{
           "shape":"RateTypes",
           "documentation":"<p> The updated preferred rate types for member accounts. </p>"
+        },
+        "standaloneAccountRateTypeSelections":{
+          "shape":"RateTypes",
+          "documentation":"<p> The updated preferred rate types for a standalone account. </p>"
         }
       }
     },
@@ -3856,7 +3871,8 @@
       "type":"string",
       "enum":[
         "BEFORE_DISCOUNTS",
-        "AFTER_DISCOUNTS"
+        "AFTER_DISCOUNTS",
+        "AFTER_DISCOUNTS_AND_COMMITMENTS"
       ]
     },
     "WorkloadEstimateStatus":{
@@ -3990,6 +4006,12 @@
     "WorkloadEstimateUsageItems":{
       "type":"list",
       "member":{"shape":"WorkloadEstimateUsageItem"}
+    },
+    "WorkloadEstimateUsageMaxResults":{
+      "type":"integer",
+      "box":true,
+      "max":300,
+      "min":1
     },
     "WorkloadEstimateUsageQuantity":{
       "type":"structure",

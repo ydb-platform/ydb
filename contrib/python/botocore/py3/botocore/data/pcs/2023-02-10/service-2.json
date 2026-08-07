@@ -264,7 +264,7 @@
         {"shape":"InternalServerException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<important> <p>This API action isn't intended for you to use.</p> </important> <p>Amazon Web Services PCS uses this API action to register the compute nodes it launches in your account.</p>"
+      "documentation":"<p><important> <p>This API action isn't intended for you to use.</p> </important> <p>Amazon Web Services PCS uses this API action to register the compute nodes it launches in your account.</p></p>"
     },
     "TagResource":{
       "name":"TagResource",
@@ -274,6 +274,7 @@
       },
       "input":{"shape":"TagResourceRequest"},
       "errors":[
+        {"shape":"ServiceQuotaExceededException"},
         {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Adds or edits tags on an Amazon Web Services PCS resource. Each tag consists of a tag key and a tag value. The tag key and tag value are case-sensitive strings. The tag value can be an empty (null) string. To add a tag, specify a new tag key and a tag value. To edit a tag, specify an existing tag key and a new tag value.</p>",
@@ -343,6 +344,55 @@
       "documentation":"<p>You don't have permission to perform the action.</p> <p> <u>Examples</u> </p> <ul> <li> <p>The launch template instance profile doesn't pass <code>iam:PassRole</code> verification.</p> </li> <li> <p>There is a mismatch between the account ID and cluster ID.</p> </li> <li> <p>The cluster ID doesn't exist.</p> </li> <li> <p>The EC2 instance isn't present.</p> </li> </ul>",
       "exception":true
     },
+    "Accounting":{
+      "type":"structure",
+      "required":["mode"],
+      "members":{
+        "mode":{
+          "shape":"AccountingMode",
+          "documentation":"<p>The default value for <code>mode</code> is <code>STANDARD</code>. A value of <code>STANDARD</code> means Slurm accounting is enabled.</p>"
+        },
+        "defaultPurgeTimeInDays":{
+          "shape":"AccountingDefaultPurgeTimeInDaysInteger",
+          "documentation":"<p>The default value for all purge settings for <code>slurmdbd.conf</code>. For more information, see the <a href=\"https://slurm.schedmd.com/slurmdbd.conf.html\">slurmdbd.conf documentation at SchedMD</a>.</p> <p>The default value for <code>defaultPurgeTimeInDays</code> is <code>-1</code>.</p> <p>A value of <code>-1</code> means there is no purge time and records persist as long as the cluster exists.</p> <important> <p> <code>0</code> isn't a valid value.</p> </important>"
+        }
+      },
+      "documentation":"<p>The accounting configuration includes configurable settings for Slurm accounting. It's a property of the <b>ClusterSlurmConfiguration</b> object.</p>"
+    },
+    "AccountingDefaultPurgeTimeInDaysInteger":{
+      "type":"integer",
+      "box":true,
+      "max":10000,
+      "min":-1
+    },
+    "AccountingMode":{
+      "type":"string",
+      "enum":[
+        "STANDARD",
+        "NONE"
+      ]
+    },
+    "AccountingRequest":{
+      "type":"structure",
+      "required":["mode"],
+      "members":{
+        "mode":{
+          "shape":"AccountingMode",
+          "documentation":"<p>The default value for <code>mode</code> is <code>STANDARD</code>. A value of <code>STANDARD</code> means Slurm accounting is enabled.</p>"
+        },
+        "defaultPurgeTimeInDays":{
+          "shape":"AccountingRequestDefaultPurgeTimeInDaysInteger",
+          "documentation":"<p>The default value for all purge settings for <code>slurmdbd.conf</code>. For more information, see the <a href=\"https://slurm.schedmd.com/slurmdbd.conf.html\">slurmdbd.conf documentation at SchedMD</a>.</p> <p>The default value for <code>defaultPurgeTimeInDays</code> is <code>-1</code>.</p> <p>A value of <code>-1</code> means there is no purge time and records persist as long as the cluster exists.</p> <important> <p> <code>0</code> isn't a valid value.</p> </important>"
+        }
+      },
+      "documentation":"<p>The accounting configuration includes configurable settings for Slurm accounting. It's a property of the <b>ClusterSlurmConfiguration</b> object.</p>"
+    },
+    "AccountingRequestDefaultPurgeTimeInDaysInteger":{
+      "type":"integer",
+      "box":true,
+      "max":10000,
+      "min":-1
+    },
     "AmiId":{
       "type":"string",
       "pattern":"ami-[a-z0-9]+"
@@ -351,7 +401,7 @@
       "type":"string",
       "max":1011,
       "min":1,
-      "pattern":"arn:aws*:pcs:.*:[0-9]{12}:.*/[a-z0-9_\\-]+"
+      "pattern":"arn:aws.*:pcs:.*:[0-9]{12}:.*/[a-z0-9_\\-]+"
     },
     "BootstrapId":{
       "type":"string",
@@ -387,7 +437,7 @@
         },
         "status":{
           "shape":"ClusterStatus",
-          "documentation":"<p>The provisioning status of the cluster.</p> <note> <p>The provisioning status doesn't indicate the overall health of the cluster.</p> </note>"
+          "documentation":"<p>The provisioning status of the cluster.</p> <note> <p>The provisioning status doesn't indicate the overall health of the cluster.</p> </note> <important> <p>The resource enters the <code>SUSPENDING</code> and <code>SUSPENDED</code> states when the scheduler is beyond end of life and we have suspended the cluster. When in these states, you can't use the cluster. The cluster controller is down and all compute instances are terminated. The resources still count toward your service quotas. You can delete a resource if its status is <code>SUSPENDED</code>. For more information, see <a href=\"https://docs.aws.amazon.com/pcs/latest/userguide/slurm-versions_faq.html\">Frequently asked questions about Slurm versions in PCS</a> in the <i>PCS User Guide</i>.</p> </important>"
         },
         "createdAt":{
           "shape":"SyntheticTimestamp_date_time",
@@ -420,7 +470,7 @@
     },
     "ClusterIdentifier":{
       "type":"string",
-      "pattern":"(pcs_[a-zA-Z0-9]+|[A-Za-z][A-Za-z0-9-]{1,40})"
+      "pattern":"(pcs_[a-zA-Z0-9]+|[A-Za-z][A-Za-z0-9-]{2,40})"
     },
     "ClusterList":{
       "type":"list",
@@ -429,8 +479,8 @@
     "ClusterName":{
       "type":"string",
       "max":40,
-      "min":1,
-      "pattern":"(?!pcs_)^(?![A-Za-z0-9]{10}$)[A-Za-z][A-Za-z0-9-]+"
+      "min":3,
+      "pattern":"(?!pcs_)^[A-Za-z][A-Za-z0-9-]+"
     },
     "ClusterSlurmConfiguration":{
       "type":"structure",
@@ -446,6 +496,10 @@
         "authKey":{
           "shape":"SlurmAuthKey",
           "documentation":"<p>The shared Slurm key for authentication, also known as the <b>cluster secret</b>.</p>"
+        },
+        "accounting":{
+          "shape":"Accounting",
+          "documentation":"<p>The accounting configuration includes configurable settings for Slurm accounting.</p>"
         }
       },
       "documentation":"<p>Additional options related to the Slurm scheduler.</p>"
@@ -460,6 +514,10 @@
         "slurmCustomSettings":{
           "shape":"SlurmCustomSettings",
           "documentation":"<p>Additional Slurm-specific configuration that directly maps to Slurm settings.</p>"
+        },
+        "accounting":{
+          "shape":"AccountingRequest",
+          "documentation":"<p>The accounting configuration includes configurable settings for Slurm accounting.</p>"
         }
       },
       "documentation":"<p>Additional options related to the Slurm scheduler.</p>"
@@ -483,7 +541,9 @@
         "DELETING",
         "CREATE_FAILED",
         "DELETE_FAILED",
-        "UPDATE_FAILED"
+        "UPDATE_FAILED",
+        "SUSPENDING",
+        "SUSPENDED"
       ]
     },
     "ClusterSummary":{
@@ -519,7 +579,7 @@
         },
         "status":{
           "shape":"ClusterStatus",
-          "documentation":"<p>The provisioning status of the cluster.</p> <note> <p>The provisioning status doesn't indicate the overall health of the cluster.</p> </note>"
+          "documentation":"<p>The provisioning status of the cluster.</p> <note> <p>The provisioning status doesn't indicate the overall health of the cluster.</p> </note> <important> <p>The resource enters the <code>SUSPENDING</code> and <code>SUSPENDED</code> states when the scheduler is beyond end of life and we have suspended the cluster. When in these states, you can't use the cluster. The cluster controller is down and all compute instances are terminated. The resources still count toward your service quotas. You can delete a resource if its status is <code>SUSPENDED</code>. For more information, see <a href=\"https://docs.aws.amazon.com/pcs/latest/userguide/slurm-versions_faq.html\">Frequently asked questions about Slurm versions in PCS</a> in the <i>PCS User Guide</i>.</p> </important>"
         }
       },
       "documentation":"<p>The object returned by the <code>ListClusters</code> API action.</p>"
@@ -567,7 +627,7 @@
         },
         "status":{
           "shape":"ComputeNodeGroupStatus",
-          "documentation":"<p>The provisioning status of the compute node group.</p> <note> <p>The provisioning status doesn't indicate the overall health of the compute node group.</p> </note>"
+          "documentation":"<p>The provisioning status of the compute node group.</p> <note> <p>The provisioning status doesn't indicate the overall health of the compute node group.</p> </note> <important> <p>The resource enters the <code>SUSPENDING</code> and <code>SUSPENDED</code> states when the scheduler is beyond end of life and we have suspended the cluster. When in these states, you can't use the cluster. The cluster controller is down and all compute instances are terminated. The resources still count toward your service quotas. You can delete a resource if its status is <code>SUSPENDED</code>. For more information, see <a href=\"https://docs.aws.amazon.com/pcs/latest/userguide/slurm-versions_faq.html\">Frequently asked questions about Slurm versions in PCS</a> in the <i>PCS User Guide</i>.</p> </important>"
         },
         "amiId":{
           "shape":"AmiId",
@@ -616,7 +676,7 @@
     },
     "ComputeNodeGroupIdentifier":{
       "type":"string",
-      "pattern":"(pcs_[a-zA-Z0-9]+|[A-Za-z][A-Za-z0-9-]{1,25})"
+      "pattern":"(pcs_[a-zA-Z0-9]+|[A-Za-z][A-Za-z0-9-]{2,25})"
     },
     "ComputeNodeGroupList":{
       "type":"list",
@@ -625,8 +685,8 @@
     "ComputeNodeGroupName":{
       "type":"string",
       "max":25,
-      "min":1,
-      "pattern":"(?!pcs_)^(?![A-Za-z0-9]{10}$)[A-Za-z][A-Za-z0-9-]+"
+      "min":3,
+      "pattern":"(?!pcs_)^[A-Za-z][A-Za-z0-9-]+"
     },
     "ComputeNodeGroupSlurmConfiguration":{
       "type":"structure",
@@ -658,7 +718,9 @@
         "CREATE_FAILED",
         "DELETE_FAILED",
         "UPDATE_FAILED",
-        "DELETED"
+        "DELETED",
+        "SUSPENDING",
+        "SUSPENDED"
       ]
     },
     "ComputeNodeGroupSummary":{
@@ -699,7 +761,7 @@
         },
         "status":{
           "shape":"ComputeNodeGroupStatus",
-          "documentation":"<p>The provisioning status of the compute node group.</p> <note> <p>The provisioning status doesn't indicate the overall health of the compute node group.</p> </note>"
+          "documentation":"<p>The provisioning status of the compute node group.</p> <note> <p>The provisioning status doesn't indicate the overall health of the compute node group.</p> </note> <important> <p>The resource enters the <code>SUSPENDING</code> and <code>SUSPENDED</code> states when the scheduler is beyond end of life and we have suspended the cluster. When in these states, you can't use the cluster. The cluster controller is down and all compute instances are terminated. The resources still count toward your service quotas. You can delete a resource if its status is <code>SUSPENDED</code>. For more information, see <a href=\"https://docs.aws.amazon.com/pcs/latest/userguide/slurm-versions_faq.html\">Frequently asked questions about Slurm versions in PCS</a> in the <i>PCS User Guide</i>.</p> </important>"
         }
       },
       "documentation":"<p>The object returned by the <code>ListComputeNodeGroups</code> API action.</p>"
@@ -1106,7 +1168,7 @@
     },
     "InstanceProfileArn":{
       "type":"string",
-      "pattern":"arn:aws([a-zA-Z-]{0,10})?:iam::[0-9]{12}:instance-profile/.{1,128}"
+      "pattern":"arn:aws([a-zA-Z-]{0,10})?:iam::[0-9]{12}:instance-profile/[/\\w+=,.@-]{1,128}"
     },
     "Integer":{
       "type":"integer",
@@ -1313,7 +1375,7 @@
         },
         "status":{
           "shape":"QueueStatus",
-          "documentation":"<p>The provisioning status of the queue.</p> <note> <p>The provisioning status doesn't indicate the overall health of the queue.</p> </note>"
+          "documentation":"<p>The provisioning status of the queue.</p> <note> <p>The provisioning status doesn't indicate the overall health of the queue.</p> </note> <important> <p>The resource enters the <code>SUSPENDING</code> and <code>SUSPENDED</code> states when the scheduler is beyond end of life and we have suspended the cluster. When in these states, you can't use the cluster. The cluster controller is down and all compute instances are terminated. The resources still count toward your service quotas. You can delete a resource if its status is <code>SUSPENDED</code>. For more information, see <a href=\"https://docs.aws.amazon.com/pcs/latest/userguide/slurm-versions_faq.html\">Frequently asked questions about Slurm versions in PCS</a> in the <i>PCS User Guide</i>.</p> </important>"
         },
         "computeNodeGroupConfigurations":{
           "shape":"ComputeNodeGroupConfigurationList",
@@ -1328,7 +1390,7 @@
     },
     "QueueIdentifier":{
       "type":"string",
-      "pattern":"(pcs_[a-zA-Z0-9]+|[A-Za-z][A-Za-z0-9-]{1,25})"
+      "pattern":"(pcs_[a-zA-Z0-9]+|[A-Za-z][A-Za-z0-9-]{2,25})"
     },
     "QueueList":{
       "type":"list",
@@ -1337,8 +1399,8 @@
     "QueueName":{
       "type":"string",
       "max":25,
-      "min":1,
-      "pattern":"(?!pcs_)^(?![A-Za-z0-9]{10}$)[A-Za-z][A-Za-z0-9-]+"
+      "min":3,
+      "pattern":"(?!pcs_)^[A-Za-z][A-Za-z0-9-]+"
     },
     "QueueStatus":{
       "type":"string",
@@ -1349,7 +1411,9 @@
         "DELETING",
         "CREATE_FAILED",
         "DELETE_FAILED",
-        "UPDATE_FAILED"
+        "UPDATE_FAILED",
+        "SUSPENDING",
+        "SUSPENDED"
       ]
     },
     "QueueSummary":{
@@ -1390,7 +1454,7 @@
         },
         "status":{
           "shape":"QueueStatus",
-          "documentation":"<p>The provisioning status of the queue.</p> <note> <p> The provisioning status doesn't indicate the overall health of the queue.</p> </note>"
+          "documentation":"<p>The provisioning status of the queue.</p> <note> <p> The provisioning status doesn't indicate the overall health of the queue.</p> </note> <important> <p>The resource enters the <code>SUSPENDING</code> and <code>SUSPENDED</code> states when the scheduler is beyond end of life and we have suspended the cluster. When in these states, you can't use the cluster. The cluster controller is down and all compute instances are terminated. The resources still count toward your service quotas. You can delete a resource if its status is <code>SUSPENDED</code>. For more information, see <a href=\"https://docs.aws.amazon.com/pcs/latest/userguide/slurm-versions_faq.html\">Frequently asked questions about Slurm versions in PCS</a> in the <i>PCS User Guide</i>.</p> </important>"
         }
       },
       "documentation":"<p>The object returned by the <code>ListQueues</code> API action.</p>"
@@ -1541,7 +1605,7 @@
         },
         "version":{
           "shape":"String",
-          "documentation":"<p>The version of the specified scheduling software that Amazon Web Services PCS uses to manage cluster scaling and job scheduling.</p>"
+          "documentation":"<p>The version of the specified scheduling software that Amazon Web Services PCS uses to manage cluster scaling and job scheduling. For more information, see <a href=\"https://docs.aws.amazon.com/pcs/latest/userguide/slurm-versions.html\">Slurm versions in Amazon Web Services PCS</a> in the <i>Amazon Web Services PCS User Guide</i>.</p> <p>Valid Values: <code>23.11 | 24.05 | 24.11</code> </p>"
         }
       },
       "documentation":"<p>The cluster management and job scheduling software associated with the cluster.</p>"
@@ -1559,7 +1623,7 @@
         },
         "version":{
           "shape":"String",
-          "documentation":"<p>The version of the specified scheduling software that Amazon Web Services PCS uses to manage cluster scaling and job scheduling.</p>"
+          "documentation":"<p>The version of the specified scheduling software that Amazon Web Services PCS uses to manage cluster scaling and job scheduling. For more information, see <a href=\"https://docs.aws.amazon.com/pcs/latest/userguide/slurm-versions.html\">Slurm versions in Amazon Web Services PCS</a> in the <i>Amazon Web Services PCS User Guide</i>.</p> <p>Valid Values: <code>23.11 | 24.05 | 24.11</code> </p>"
         }
       },
       "documentation":"<p>The cluster management and job scheduling software associated with the cluster.</p>"

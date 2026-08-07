@@ -143,6 +143,10 @@ bool TKeyValueState::RejectNonExistentStorageChannelEnabled(const TActorContext&
     return RejectNonExistentStorageChannel.Update(ctx.Now()) != 0;
 }
 
+void TKeyValueState::SetTabletInfo(TTabletStorageInfo* tabletInfo) {
+    TabletInfo = tabletInfo;
+}
+
 void TKeyValueState::Clear() {
     IsStatePresent = false;
     IsEmptyDbStart = true;
@@ -157,6 +161,13 @@ void TKeyValueState::Clear() {
     RefCounts.clear();
     CompletedVacuumGeneration = 0;
     CompletedVacuumTrashGeneration = 0;
+
+    MoveDataIsInProgress = false;
+    MoveDataGroups.clear();
+    MoveDataRequestSender = {};
+    ClearMoveDataBlobMovingStage();
+    ClearMoveDataTrashCheckingStage();
+
     Trash.clear();
     TrashForVacuum.clear();
     InFlightForStep.clear();
@@ -325,11 +336,21 @@ void TKeyValueState::CountRequestComplete(NMsgBusProxy::EResponseStatus status,
         TabletCounters->Cumulative()[COUNTER_CMD_GUM_OTHER_ERROR].Increment(stat.Concats);
     }
 
-    for (const auto latency: stat.GetLatencies) {
+    for (const auto& [channel, latency] : stat.GetLatencies) {
         TabletCounters->Percentile()[COUNTER_LATENCY_BS_GET].IncrementFor(latency);
+        ui8 statChannel = channel;
+        if (statChannel >= MaxStatChannels) {
+            statChannel = MaxStatChannels - 1;
+        }
+        TabletCounters->Percentile()[COUNTER_READ_LATENCY_CHANNEL_0 + statChannel].IncrementFor(latency);
     }
-    for (const auto latency: stat.PutLatencies) {
+    for (const auto& [channel, latency] : stat.PutLatencies) {
         TabletCounters->Percentile()[COUNTER_LATENCY_BS_PUT].IncrementFor(latency);
+        ui8 statChannel = channel;
+        if (statChannel >= MaxStatChannels) {
+            statChannel = MaxStatChannels - 1;
+        }
+        TabletCounters->Percentile()[COUNTER_WRITE_LATENCY_CHANNEL_0 + statChannel].IncrementFor(latency);
     }
 }
 
@@ -1208,7 +1229,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
     }
 
     record.CreationUnixTime = request.CreationUnixTime;
-    UpdateKeyValue(request.Key, record, db, ctx);
+    UpdateKeyValue(request.Key, record, db);
 
     if (legacyResponse) {
         legacyResponse->SetStatus(NKikimrProto::OK);
@@ -1224,7 +1245,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
 void TKeyValueState::ProcessCmd(TIntermediate::TPatch &request,
         NKikimrClient::TKeyValueResponse::TPatchResult *legacyResponse,
         NKikimrKeyValue::StorageChannel *response,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime,
+        ISimpleDb &db, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 unixTime,
         TIntermediate* /*intermediate*/)
 {
     TIndexRecord& record = Index[request.PatchedKey];
@@ -1239,7 +1260,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TPatch &request,
     // ctx.Send(ChannelBalancerActorId, new TChannelBalancer::TEvReportWriteLatency(channel, request.Latency));
 
     record.CreationUnixTime = unixTime;
-    UpdateKeyValue(request.PatchedKey, record, db, ctx);
+    UpdateKeyValue(request.PatchedKey, record, db);
 
     if (legacyResponse) {
         legacyResponse->SetStatus(NKikimrProto::OK);
@@ -1263,7 +1284,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TDelete &request,
         stat.Deletes++;
         stat.DeleteBytes += it->second.GetFullValueSize();
         Dereference(it->second, db);
-        THelpers::DbEraseUserKey(it->first, db);
+        EraseKey(it->first, db);
         Index.erase(it);
     });
 
@@ -1275,7 +1296,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TDelete &request,
 void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
         NKikimrClient::TKeyValueResponse::TRenameResult *legacyResponse,
         NKikimrKeyValue::StorageChannel */*response*/,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 /*unixTime*/,
+        ISimpleDb &db, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 /*unixTime*/,
         TIntermediate* /*intermediate*/)
 {
     auto oldIter = Index.find(request.OldKey);
@@ -1287,10 +1308,10 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
     dest.Chain = std::move(source.Chain);
     dest.CreationUnixTime = request.CreationUnixTime;
 
-    THelpers::DbEraseUserKey(oldIter->first, db);
+    EraseKey(oldIter->first, db);
     Index.erase(oldIter);
 
-    UpdateKeyValue(request.NewKey, dest, db, ctx);
+    UpdateKeyValue(request.NewKey, dest, db);
 
     if (legacyResponse) {
         legacyResponse->SetStatus(NKikimrProto::OK);
@@ -1300,7 +1321,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
 void TKeyValueState::ProcessCmd(const TIntermediate::TCopyRange &request,
         NKikimrClient::TKeyValueResponse::TCopyRangeResult *legacyResponse,
         NKikimrKeyValue::StorageChannel */*response*/,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 /*unixTime*/,
+        ISimpleDb &db, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 /*unixTime*/,
         TIntermediate *intermediate)
 {
     TVector<TIndex::iterator> itemsToClone;
@@ -1331,7 +1352,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TCopyRange &request,
         Dereference(record, db);
         record.Chain = sourceRecord.Chain;
         record.CreationUnixTime = sourceRecord.CreationUnixTime;
-        UpdateKeyValue(newKey, record, db, ctx);
+        UpdateKeyValue(newKey, record, db);
     }
 
     if (legacyResponse) {
@@ -1342,7 +1363,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TCopyRange &request,
 void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
         NKikimrClient::TKeyValueResponse::TConcatResult *legacyResponse,
         NKikimrKeyValue::StorageChannel* /*response*/,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat& /*stat*/, ui64 unixTime,
+        ISimpleDb &db, const TActorContext &/*ctx*/, TRequestStat& /*stat*/, ui64 unixTime,
         TIntermediate *intermediate)
 {
     TVector<TIndexRecord::TChainItem> chain;
@@ -1372,7 +1393,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
 
         if (!request.KeepInputs) {
             Dereference(input, db);
-            THelpers::DbEraseUserKey(it->first, db);
+            EraseKey(it->first, db);
             Index.erase(it);
         }
     }
@@ -1381,7 +1402,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
     Dereference(record, db);
     record.Chain = std::move(chain);
     record.CreationUnixTime = unixTime;
-    UpdateKeyValue(request.OutputKey, record, db, ctx);
+    UpdateKeyValue(request.OutputKey, record, db);
 
     if (legacyResponse) {
         legacyResponse->SetStatus(NKikimrProto::OK);
@@ -1881,10 +1902,33 @@ void TKeyValueState::PushTrashBeingCommitted(TVector<TLogoBlobID>& trashBeingCom
     PrepareCollectIfNeeded(ctx);
 }
 
-void TKeyValueState::UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db,
-        const TActorContext& /*ctx*/) {
+void TKeyValueState::UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db) {
     TString value = record.Serialize();
     THelpers::DbUpdateUserKeyValue(key, value, db);
+
+    if (MoveDataBlobMovingIsInProgress) {
+        if (MoveDataKey == key) {
+            MoveDataRecordTouched = true;
+        }
+        for (const auto& item : record.Chain) {
+            if (item.IsInline()) {
+                continue;
+            }
+            if (NeedMoveBlob(item.LogoBlobId)) {
+                MoveDataBlobMovingNeedsAnotherPass = true;
+            }
+        }
+    }
+}
+
+void TKeyValueState::EraseKey(const TString& key, ISimpleDb& db) {
+    THelpers::DbEraseUserKey(key, db);
+
+    if (MoveDataBlobMovingIsInProgress) {
+        if (MoveDataKey == key) {
+            MoveDataRecordTouched = true;
+        }
+    }
 }
 
 void TKeyValueState::OnPeriodicRefresh() {

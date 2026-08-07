@@ -43,8 +43,9 @@ py.install_sources(
   [
     '__init__.py',
     '__init__.pyi',
+    '_linalg.py',
+    '_linalg.pyi',
     'linalg.py',
-    'linalg.pyi',
   ],
   subdir: 'numpy/linalg'
 )
@@ -56,5 +57,6 @@ py.install_sources(
     'tests/test_linalg.py',
     'tests/test_regression.py',
   ],
-  subdir: 'numpy/linalg/tests'
+  subdir: 'numpy/linalg/tests',
+  install_tag: 'tests'
 )

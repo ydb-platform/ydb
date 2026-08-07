@@ -128,6 +128,7 @@ SRCS(
     node_whiteboard.proto
     pdiskfit.proto
     pqconfig.proto
+    pqdata_deferred_publish_destination.proto
     pqdata_mlp.proto
     pqdata_transaction.proto
     pqevents_global.proto
@@ -153,6 +154,7 @@ SRCS(
     subdomains.proto
     sys_view.proto
     sys_view_types.proto
+    table_metrics_settings.proto
     table_service_config.proto
     table_stats.proto
     tablet.proto

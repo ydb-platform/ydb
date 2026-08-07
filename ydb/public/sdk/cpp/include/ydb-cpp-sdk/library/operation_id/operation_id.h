@@ -31,6 +31,7 @@ public:
         COMPACTION = 13,
         FULL_BACKUP = 14,
         ANALYZE = 15,
+        SET_NOT_NULL = 16,
     };
 
     struct TData {

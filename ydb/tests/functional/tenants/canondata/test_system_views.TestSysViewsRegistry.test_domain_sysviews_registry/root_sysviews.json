@@ -374,6 +374,10 @@
       {
         "name": "MaintenanceStatus",
         "type": "Utf8?"
+      },
+      {
+        "name": "ExpectedSlotSize",
+        "type": "Uint64?"
       }
     ],
     "primary_key": [
@@ -997,14 +1001,6 @@
   "resource_pool_classifiers": {
     "columns": [
       {
-        "name": "Action",
-        "type": "Utf8?"
-      },
-      {
-        "name": "HasFullScan",
-        "type": "Utf8?"
-      },
-      {
         "name": "Name",
         "type": "Utf8?"
       },
@@ -1023,6 +1019,22 @@
       {
         "name": "HasAppName",
         "type": "Utf8?"
+      },
+      {
+        "name": "Action",
+        "type": "Utf8?"
+      },
+      {
+        "name": "HasFullScan",
+        "type": "Utf8?"
+      },
+      {
+        "name": "HasPath",
+        "type": "Utf8?"
+      },
+      {
+        "name": "HasStream",
+        "type": "Bool?"
       }
     ],
     "primary_key": [

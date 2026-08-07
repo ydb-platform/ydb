@@ -88,6 +88,7 @@ public:
     NCommon::TConfSetting<TString, Static> OptForceOlapPushdownDistinct;
     NCommon::TConfSetting<ui64, Static> OptForceOlapPushdownDistinctLimit;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownProjections;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownRegexp;
     NCommon::TConfSetting<bool, Static> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, Static> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, Static> OptShuffleElimination;
@@ -98,6 +99,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptDisallowFuseJoins;
     NCommon::TConfSetting<bool, Static> OptCreateStageForAggregation;
     NCommon::TConfSetting<bool, Static> OptValidateStreamingConstraints;
+    NCommon::TConfSetting<bool, Static> OptFallbackToLegacyOptimizer;
 
     // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
     NCommon::TConfSetting<TString, Static> CostBasedOptimization;
@@ -246,6 +248,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableOlapPushdownProjections() const;
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
     bool GetEnableOlapPushdownAggregate() const;
+    bool GetEnableOlapPushdownRegexp() const;
     bool GetUseDqHashCombine() const;
     bool GetUseDqHashAggregate() const;
     bool GetDqHashOperatorsUseBlocks() const;

@@ -652,7 +652,7 @@ void GetKeys(const TJoinLabels& joinLabels, const TExprNode& keys, TExprContext&
     }
 }
 
-TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
+TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationContext& types) {
     if (node.ChildrenSize() > 4U) {
         return SplitEquiJoinToPairs(node, ctx);
     }
@@ -743,7 +743,7 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
         } else if (rightKind){
             keyTypeItems.emplace_back(JoinDryKeyType(keyType2, keyType1, optKey, ctx));
         } else {
-            keyTypeItems.emplace_back(CommonType<true>(node.Pos(), DryType(keyType1, optKey, ctx), DryType(keyType2, optKey, ctx), ctx));
+            keyTypeItems.emplace_back(CommonType<true>(node.Pos(), DryType(keyType1, optKey, ctx), DryType(keyType2, optKey, ctx), ctx, types));
             optKey = optKey && !filter;
         }
         badKey = !keyTypeItems.back();
@@ -987,9 +987,9 @@ TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprCon
         .Ptr();
 }
 
-TExprNode::TPtr ExpandEquiJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
+TExprNode::TPtr ExpandEquiJoin(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& types) {
     YQL_ENSURE(input->ChildrenSize() >= 4);
-    return ExpandEquiJoinImpl(*input, ctx);
+    return ExpandEquiJoinImpl(*input, ctx, types);
 }
 
 template <bool Strong>
@@ -2079,7 +2079,7 @@ TExprNode::TPtr BuildDictOverList(TPositionHandle pos, const TExprNode::TPtr& co
         .Build();
 }
 
-TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnnotationNode*& dictKeyType, TExprContext& ctx)
+TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnnotationNode*& dictKeyType, TExprContext& ctx, const TTypeAnnotationContext& typesCtx)
 {
     const auto pos = collection->Pos();
     const auto tupleType = collection->GetTypeAnn()->Cast<TTupleExprType>();
@@ -2088,7 +2088,7 @@ TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnno
         return nullptr;
     }
     TTypeAnnotationNode::TListType types(tupleType->GetItems());
-    dictKeyType = CommonType(pos, types, ctx);
+    dictKeyType = CommonType(pos, types, ctx, typesCtx);
     YQL_ENSURE(dictKeyType, "Uncompatible collection elements.");
 
     TExprNode::TPtr tuple;
@@ -2111,7 +2111,7 @@ TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnno
     return ctx.NewCallable(pos, "DictFromKeys", {ExpandType(pos, *dictKeyType, ctx), std::move(tuple)});
 }
 
-TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
+TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& types) {
     auto collection = input->HeadPtr();
     auto lookup = input->ChildPtr(1);
     auto options = input->ChildPtr(2);
@@ -2160,7 +2160,7 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
         }
     } else if (collectionType->GetKind() == ETypeAnnotationKind::Tuple) {
         YQL_CLOG(DEBUG, CorePeepHole) << "IN Tuple";
-        dict = BuildDictOverTuple(std::move(collection), dictKeyType, ctx);
+        dict = BuildDictOverTuple(std::move(collection), dictKeyType, ctx, types);
     } else if (collectionType->GetKind() == ETypeAnnotationKind::EmptyDict) {
         YQL_CLOG(DEBUG, CorePeepHole) << "IN EmptyDict";
     } else if (collectionType->GetKind() == ETypeAnnotationKind::EmptyList) {
@@ -3143,6 +3143,30 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
     return ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort));
 }
 
+TExprNode::TPtr ExpandLPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+    return ctx.Builder(node->Pos())
+        .Callable("Block")
+            .Lambda(0)
+                .Param("parent")
+                .Callable("Collect")
+                    .Callable(0, "PartitionsByKeys")
+                        .Callable(0, "Iterator")
+                            .Add(0, node->HeadPtr())
+                            .Callable(1, "DependsOn")
+                                .Arg(0, "parent")
+                            .Seal()
+                        .Seal()
+                        .Add(1, node->ChildPtr(1))
+                        .Add(2, node->ChildPtr(2))
+                        .Add(3, node->ChildPtr(3))
+                        .Add(4, node->ChildPtr(4))
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal().Build();
+}
+
 TExprNode::TPtr ExpandIsKeySwitch(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     return ctx.Builder(node->Pos())
@@ -3209,41 +3233,24 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-bool IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(const TTypeAnnotationContext& types) {
-    static const char Flag[] = "ExpandLMapOrShuffleByKeysViaBlock";
-    return !IsOptimizerDisabled<Flag>(types);
-}
-
-TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
-    if (IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(types)) {
-        return ctx.Builder(node->Pos())
-            .Callable("Block")
-                .Lambda(0)
-                    .Param("parent")
-                    .Callable("Collect")
-                        .Apply(0, node->Tail())
-                            .With(0)
-                                .Callable("Iterator")
-                                    .Add(0, node->HeadPtr())
-                                    .Callable(1, "DependsOn")
-                                        .Arg(0, "parent")
-                                    .Seal()
+    return ctx.Builder(node->Pos())
+        .Callable("Block")
+            .Lambda(0)
+                .Param("parent")
+                .Callable("Collect")
+                    .Apply(0, node->Tail())
+                        .With(0)
+                            .Callable("Iterator")
+                                .Add(0, node->HeadPtr())
+                                .Callable(1, "DependsOn")
+                                    .Arg(0, "parent")
                                 .Seal()
-                            .Done()
-                        .Seal()
+                            .Seal()
+                        .Done()
                     .Seal()
                 .Seal()
-            .Seal().Build();
-    }
-    return ctx.Builder(node->Pos())
-        .Callable("Collect")
-            .Apply(0, node->Tail())
-                .With(0)
-                    .Callable("Iterator")
-                        .Add(0, node->HeadPtr())
-                    .Seal()
-                .Done()
             .Seal()
         .Seal().Build();
 }
@@ -3255,14 +3262,14 @@ bool IsExpandLMapOrShuffleByKeysPromoted(const TTypeAnnotationContext& types) {
 
 TExprNode::TPtr ExpandLMapOrShuffleByKeysAtCommonStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (IsExpandLMapOrShuffleByKeysPromoted(types)) {
-        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+        return ExpandLMapOrShuffleByKeys(node, ctx);
     }
     return node;
 }
 
 TExprNode::TPtr ExpandLMapOrShuffleByKeysAtFinalStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (!IsExpandLMapOrShuffleByKeysPromoted(types)) {
-        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+        return ExpandLMapOrShuffleByKeys(node, ctx);
     }
     return node;
 }
@@ -6453,7 +6460,9 @@ private:
         const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "NoPush", "Likely"});
         bool isSuitableGuess = NKikimr::NMiniKQL::RuntimeVersion >= 79 && node->IsCallable("Guess");
         bool isSuitableWay = NKikimr::NMiniKQL::RuntimeVersion >= 80 && node->IsCallable("Way");
-        if (node->IsList() || rewriteAsIs || isSuitableGuess || isSuitableWay ||
+        bool isSuitableVariant = NKikimr::NMiniKQL::RuntimeVersion >= 81 && node->IsCallable("Variant");
+        bool isSuitableVariantItem = NKikimr::NMiniKQL::RuntimeVersion >= 82 && node->IsCallable("VariantItem");
+        if (node->IsList() || rewriteAsIs || isSuitableGuess || isSuitableWay || isSuitableVariant || isSuitableVariantItem ||
             node->IsCallable({"DecimalMul", "DecimalDiv", "DecimalMod", "And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"})) {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), Ctx_, Types_, /*reportUnspported=*/true)) {
                 YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Type are not supported";
@@ -9323,11 +9332,9 @@ ui64 ToTimestamp(ui64 now) { return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1ULL, n
 
 struct TPeepHoleRules {
     const TPeepHoleOptimizerMap CommonStageRules = {
-        {"EquiJoin", &ExpandEquiJoin},
         {"SafeCast", &ExpandCast<false>},
         {"StrictCast", &ExpandCast<true>},
         {"AlterTo", &ExpandAlterTo},
-        {"SqlIn", &ExpandSqlIn},
         {"Lookup", &RewriteSearchByKeyForTypesMismatch<false>},
         {"Contains", &RewriteSearchByKeyForTypesMismatch<true>},
         {"ListHas", &ExpandListHas},
@@ -9348,6 +9355,7 @@ struct TPeepHoleRules {
         {"Fold1Map", &CleckClosureOnUpperLambdaOverList<1U, 2U>},
         {"Chain1Map", &CleckClosureOnUpperLambdaOverList<1U, 2U>},
         {"PartitionsByKeys", &ExpandPartitionsByKeys},
+        {"LPartitionsByKeys", &ExpandLPartitionsByKeys},
         {"DictItems", &MapForOptionalContainer},
         {"DictKeys", &MapForOptionalContainer},
         {"DictPayloads", &MapForOptionalContainer},
@@ -9408,6 +9416,8 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {
+        {"EquiJoin", &ExpandEquiJoin},
+        {"SqlIn", &ExpandSqlIn},
         {"Aggregate", &ExpandAggregatePeephole},
         {"AggregateCombine", &ExpandAggregatePeephole},
         {"AggregateCombineState", &ExpandAggregatePeephole},

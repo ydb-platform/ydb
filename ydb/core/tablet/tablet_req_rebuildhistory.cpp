@@ -12,15 +12,7 @@
 
 #include "tablet_tracing_signals.h"
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream, marker) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream << " Marker# " << marker)
-#define BLOG_W(stream, marker) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream << " Marker# " << marker)
-#define BLOG_ERROR(stream, marker) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream << " Marker# " << marker)
-#define BLOG_TRACE(stream, marker) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream << " Marker# " << marker)
-#define BLOG_CRIT(stream, marker) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream << " Marker# " << marker)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_MAIN
 
 namespace NKikimr {
 
@@ -228,7 +220,11 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
     void ProcessZeroEntry(ui32 gen, NKikimrTabletBase::TTabletLogEntry &logEntry) {
 
-        BLOG_D("TTabletReqRebuildHistoryGraph::ProcessZeroEntry - generation " << gen, "TRRH01");
+        YDB_LOG_DEBUG("TTabletReqRebuildHistoryGraph::ProcessZeroEntry: processing zero entry",
+            {"tabletId", Info->TabletID},
+            {"isFollower", static_cast<bool>(FollowerCookie)},
+            {"generation", gen},
+            {"marker", "TRRH01"});
         if (IntrospectionTrace) {
             IntrospectionTrace->Attach(MakeHolder<NTracing::TOnProcessZeroEntry>(gen, Snapshot, Confirmed));
         }
@@ -262,7 +258,14 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             const ui32 prevGeneration = confirmed.first;
 
             if (prevGeneration < Snapshot.first) {
-                BLOG_CRIT("snapshot overrun in gen " << gen << " zero entry, declared prev gen " << prevGeneration << " while known snapshot is " << Snapshot.first << ":" << Snapshot.second, "TRRH02");
+                YDB_LOG_CRIT("TTabletReqRebuildHistoryGraph::ProcessZeroEntry: snapshot overrun in zero entry",
+                    {"tabletId", Info->TabletID},
+                    {"isFollower", static_cast<bool>(FollowerCookie)},
+                    {"generation", gen},
+                    {"previousGeneration", prevGeneration},
+                    {"snapshotFirst", Snapshot.first},
+                    {"snapshotSecond", Snapshot.second},
+                    {"marker", "TRRH02"});
 
                 if (IntrospectionTrace)
                     IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorRebuildGraph>(gen, 0));
@@ -343,17 +346,20 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         }
         Y_ABORT_UNLESS(logEntry.HasSnapshot() && logEntry.HasConfirmed());
 
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::TABLET_MAIN, [&](){
+        if (IS_CTX_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::TABLET_MAIN, 0))
+        {
             TStringBuilder sb;
-            sb << "TTabletReqRebuildHistoryGraph::ProcessLogEntry - TabletID: " << id.TabletID() << ", id " << id
-                << ", refs: [";
-
+            sb << "[";
             for (auto&& t : logEntry.GetReferences())
                 sb << LogoBlobIDFromLogoBlobID(t).ToString() << ",";
+            sb << "]";
 
-            sb << "] for " << Info->TabletID;
-            return (TString)sb;
-        }());
+            YDB_LOG_DEBUG("TTabletReqRebuildHistoryGraph::ProcessLogEntry: processing log entry",
+                {"blobTabletId", id.TabletID()},
+                {"blobId", id},
+                {"references", sb},
+                {"tabletId", Info->TabletID});
+        }
 
         const ui32 step = id.Step();
         TGenerationEntry &gx = GenerationInfo(id.Generation());
@@ -406,7 +412,11 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
     void ProcessKeyEntry(const TLogoBlobID &id, const TString &logBody) {
         NKikimrTabletBase::TTabletLogEntry logEntry;
         if (!logEntry.ParseFromString(logBody)) {
-            BLOG_ERROR("TTabletReqRebuildHistoryGraph::ProcessKeyEntry logBody ParseFromString error, id# " << id, "TRRH03");
+            YDB_LOG_ERROR("TTabletReqRebuildHistoryGraph::ProcessKeyEntry: failed to parse log entry body",
+                {"tabletId", Info->TabletID},
+                {"isFollower", static_cast<bool>(FollowerCookie)},
+                {"blobId", id},
+                {"marker", "TRRH03"});
             if (IntrospectionTrace) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorParsingFromString>(id));
             }
@@ -416,9 +426,13 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         LatestKnownStep = std::pair<ui32, ui32>(id.Generation(), id.Step());
         Snapshot = ExpandGenStepPair(logEntry.GetSnapshot());
 
-        BLOG_D("TTabletReqRebuildHistoryGraph::ProcessKeyEntry, LastBlobID: " << id.ToString()
-            << " Snap: " << Snapshot.first << ":" << Snapshot.second
-            << " for " << Info->TabletID, "TRRH04");
+        YDB_LOG_DEBUG("TTabletReqRebuildHistoryGraph::ProcessKeyEntry: processing key entry",
+            {"tabletId", Info->TabletID},
+            {"isFollower", static_cast<bool>(FollowerCookie)},
+            {"lastBlobId", id},
+            {"snapshotGeneration", Snapshot.first},
+            {"snapshotStep", Snapshot.second},
+            {"marker", "TRRH04"});
 
         const bool isZeroStep = id.Step() == 0;
         const bool isSynthEntry = id.Cookie() != 0;
@@ -470,7 +484,11 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
             NKikimrTabletBase::TTabletLogEntry logEntry;
             if (!logEntry.ParseFromString(it->Buffer)) {
-                BLOG_ERROR("TTabletReqRebuildHistoryGraph::ApplyDiscoveryRange it->Buffer ParseFromString error, id# " << id, "TRRH05");
+                YDB_LOG_ERROR("TTabletReqRebuildHistoryGraph::ApplyDiscoveryRange: failed to parse log entry body",
+                    {"tabletId", Info->TabletID},
+                    {"isFollower", static_cast<bool>(FollowerCookie)},
+                    {"blobId", id},
+                    {"marker", "TRRH05"});
                 return ReplyAndDie(NKikimrProto::ERROR, "Log entry parse failed");
             }
 
@@ -498,7 +516,10 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         for (auto &xpair : RefsToCheckByGroup) {
             std::ranges::sort(xpair.second);
             if (!SendRefsCheck(xpair.second, xpair.first)) {
-                BLOG_ERROR("TTabletReqRebuildHistoryGraph::MakeHistory SendRefsCheck A error", "TRRH06");
+                YDB_LOG_ERROR("TTabletReqRebuildHistoryGraph::MakeHistory: SendRefsCheck failed",
+                    {"tabletId", Info->TabletID},
+                    {"isFollower", static_cast<bool>(FollowerCookie)},
+                    {"marker", "TRRH06"});
                 if (IntrospectionTrace) {
                     IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorSendRefsCheck>());
                 }
@@ -600,11 +621,19 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 GroupReadOps[std::make_pair(response.Id.Channel(), msg->GroupId)] += 1;
                 break;
             case NKikimrProto::NODATA:
-                BLOG_W("TTabletReqRebuildHistoryGraph::CheckReferences - NODATA for blob " << response.Id, "TRRH07");
+                YDB_LOG_WARN("TTabletReqRebuildHistoryGraph::CheckReferences: blob has no data",
+                    {"tabletId", Info->TabletID},
+                    {"isFollower", static_cast<bool>(FollowerCookie)},
+                    {"blobId", response.Id},
+                    {"marker", "TRRH07"});
                 break; // must left as unchecked
             default:
-                BLOG_ERROR("TTabletReqRebuildHistoryGraph::CheckReferences - blob " << response.Id
-                            << " Status# " << NKikimrProto::EReplyStatus_Name(response.Status), "TRRH08");
+                YDB_LOG_ERROR("TTabletReqRebuildHistoryGraph::CheckReferences: blob check failed",
+                    {"tabletId", Info->TabletID},
+                    {"isFollower", static_cast<bool>(FollowerCookie)},
+                    {"blobId", response.Id},
+                    {"status", NKikimrProto::EReplyStatus_Name(response.Status)},
+                    {"marker", "TRRH08"});
                 if (IntrospectionTrace) {
                     IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(response.Status, msg->ErrorReason));
                 }
@@ -628,8 +657,13 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             const bool isTailGeneration = LatestKnownStep.first == generation && Confirmed.first == generation;
             bool hasSnapshotInGeneration = (generation == 0);
 
-            BLOG_D("TTabletReqRebuildHistoryGraph::BuildHistory - Process generation " << generation
-                << " from " << (ui32)gx.Base << " with " << gx.Body.size() << " steps", "TRRH09");
+            YDB_LOG_DEBUG("TTabletReqRebuildHistoryGraph::BuildHistory: processing generation",
+                {"tabletId", Info->TabletID},
+                {"isFollower", static_cast<bool>(FollowerCookie)},
+                {"generation", generation},
+                {"generationBase", (ui32)gx.Base},
+                {"bodySize", gx.Body.size()},
+                {"marker", "TRRH09"});
 
             for (ui32 i = 0, e = (ui32)gx.Body.size(); i != e; ++i) {
                 const ui32 step = gx.Base + i;
@@ -671,31 +705,37 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                             if (satisfied) {
                                 entry.Status = TLogEntry::StatusOk;
 
-                                LOG_DEBUG(*TlsActivationContext, NKikimrServices::TABLET_MAIN, [&](){
-                                    TStringBuilder sb;
-                                    sb << "TTabletReqRebuildHistoryGraph::BuildHistory - THE TAIL - ";
+                                if (IS_CTX_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::TABLET_MAIN, 0)) {
 
-                                    sb << "References: [";
+                                    TStringBuilder sbReferences;
+                                    sbReferences << "[";
                                     for (auto&& t : entry.References)
-                                        sb << t.ToString() << ",";
-                                    sb << "] for " << Info->TabletID;
+                                        sbReferences << t.ToString() << ",";
+                                    sbReferences << "]";
 
+                                    TStringBuilder sbGcPlus;
+                                    sbGcPlus << "[";
                                     if (entry.GcDiscovered) {
-                                        sb << ", Gc+: [";
                                         for (auto&& t : entry.GcDiscovered)
-                                            sb << t.ToString() << ",";
-                                        sb << "]";
+                                            sbGcPlus << t.ToString() << ",";
                                     }
+                                    sbGcPlus << "]";
 
+                                    TStringBuilder sbGcMinus;
                                     if (entry.GcLeft) {
-                                        sb << ", Gc-: [";
+                                        sbGcMinus << "[";
                                         for (auto&& t : entry.GcLeft)
-                                            sb << t.ToString() << ",";
-                                        sb << "]";
+                                            sbGcMinus << t.ToString() << ",";
+                                        sbGcMinus << "]";
                                     }
 
-                                    return (TString) sb;
-                                }());
+                                    YDB_LOG_DEBUG("TTabletReqRebuildHistoryGraph::BuildHistory: included tail entry",
+                                        {"references", sbReferences},
+                                        {"tabletId", Info->TabletID},
+                                        {"gcAdded", sbGcPlus},
+                                        {"gcRemoved", sbGcMinus},
+                                    );
+                                }
 
                                 if (entry.EmbeddedLogBody)
                                     graph->AddEntry(id, std::move(entry.EmbeddedLogBody), std::move(entry.GcDiscovered), std::move(entry.GcLeft), std::move(entry.EmbeddedMetadata));
@@ -710,7 +750,12 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                                     hasSnapshotInGeneration = true;
                                 }
                             } else {
-                                BLOG_D("TTabletReqRebuildHistoryGraph::BuildHistory - THE TAIL - miss " << id.first << ":" << id.second, "TRRH10");
+                                YDB_LOG_DEBUG("TTabletReqRebuildHistoryGraph::BuildHistory: tail entry requirements not satisfied",
+                                    {"tabletId", Info->TabletID},
+                                    {"isFollower", static_cast<bool>(FollowerCookie)},
+                                    {"tailGeneration", id.first},
+                                    {"tailStep", id.second},
+                                    {"marker", "TRRH10"});
                             }
                         }
                         break;
@@ -722,18 +767,20 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                         switch (entry.Status) {
                         case TLogEntry::StatusOk:
 
-                            LOG_DEBUG(*TlsActivationContext, NKikimrServices::TABLET_MAIN, [&](){
+                            if (IS_CTX_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::TABLET_MAIN, 0)) {
+
                                 TStringBuilder sb;
-                                sb << "TTabletReqRebuildHistoryGraph::BuildHistory - NOT A TAIL - ";
-                                sb << "References: [";
+                                sb << "[";
                                 for (auto&& t : entry.References) {
                                     sb << t.ToString();
                                     sb << ",";
                                 }
-                                sb << "] for " << Info->TabletID;
+                                sb << "]";
 
-                                return (TString) sb;
-                            }());
+                                YDB_LOG_DEBUG("TTabletReqRebuildHistoryGraph::BuildHistory: included confirmed entry",
+                                    {"references", sb},
+                                    {"tabletId", Info->TabletID});
+                            }
 
                             if (entry.EmbeddedLogBody)
                                 graph->AddEntry(id, std::move(entry.EmbeddedLogBody), std::move(entry.GcDiscovered), std::move(entry.GcLeft), std::move(entry.EmbeddedMetadata));
@@ -810,8 +857,12 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         switch (msg->Status) {
         case NKikimrProto::OK:
             if (FollowerCookie == 0 && msg->Latest.Generation() > BlockedGen) {
-                BLOG_ERROR("TTabletReqRebuildHistoryGraph - Found entry beyond blocked generation"
-                    << " LastBlobID: " << msg->Latest.ToString() << ". Blocked: " << BlockedGen, "TRRH11");
+                YDB_LOG_ERROR("TTabletReqRebuildHistoryGraph::HandleFindLatestLogEntryResult: entry beyond blocked generation",
+                    {"tabletId", Info->TabletID},
+                    {"isFollower", static_cast<bool>(FollowerCookie)},
+                    {"lastBlobId", msg->Latest},
+                    {"blockedGeneration", BlockedGen},
+                    {"marker", "TRRH11"});
                 if (IntrospectionTrace) {
                     IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorEntryBeyondBlocked>(msg->Latest, BlockedGen));
                 }
@@ -827,8 +878,11 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         case NKikimrProto::NODATA:
             return ReplyAndDie(msg->Status, msg->ErrorReason); // valid condition, nothing known in blob-storage
         default:
-            BLOG_ERROR("TTabletReqRebuildHistoryGraph::Handle TEvFindLatestLogEntryResult"
-                << " Status# " << NKikimrProto::EReplyStatus_Name(msg->Status), "TRRH12");
+            YDB_LOG_ERROR("TTabletReqRebuildHistoryGraph::HandleFindLatestLogEntryResult: unexpected status",
+                {"tabletId", Info->TabletID},
+                {"isFollower", static_cast<bool>(FollowerCookie)},
+                {"status", NKikimrProto::EReplyStatus_Name(msg->Status)},
+                {"marker", "TRRH12"});
             if (IntrospectionTrace) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
             }
@@ -846,9 +900,12 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         case NKikimrProto::RACE:
             return ReplyAndDie(NKikimrProto::RACE, msg->ErrorReason);
         default:
-            BLOG_ERROR("TTabletReqRebuildHistoryGraph::HandleDiscover TEvRangeResult"
-                << " Status# " << NKikimrProto::EReplyStatus_Name(msg->Status)
-                << " Result# " << msg->Print(false), "TRRH13");
+            YDB_LOG_ERROR("TTabletReqRebuildHistoryGraph::HandleDiscover TEvRangeResult",
+                {"tabletId", Info->TabletID},
+                {"followerPrefix", (FollowerCookie ? "f " : " ")},
+                {"status", NKikimrProto::EReplyStatus_Name(msg->Status)},
+                {"result", msg->Print(false)},
+                {"marker", "TRRH13"});
             if (IntrospectionTrace) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
             }
@@ -870,9 +927,12 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         case NKikimrProto::RACE:
             return ReplyAndDie(NKikimrProto::RACE, msg->ErrorReason);
         default:
-            BLOG_ERROR("TTabletReqRebuildHistoryGraph::Handle TEvGetResult"
-                << " Status# " << NKikimrProto::EReplyStatus_Name(msg->Status)
-                << " Result# " << msg->Print(false), "TRRH14");
+            YDB_LOG_ERROR("TTabletReqRebuildHistoryGraph::Handle TEvGetResult",
+                {"tabletId", Info->TabletID},
+                {"followerPrefix", (FollowerCookie ? "f " : " ")},
+                {"status", NKikimrProto::EReplyStatus_Name(msg->Status)},
+                {"result", msg->Print(false)},
+                {"marker", "TRRH14"});
             if (IntrospectionTrace) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
             }

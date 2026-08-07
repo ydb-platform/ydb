@@ -852,6 +852,8 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -955,6 +957,8 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -1058,6 +1062,8 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -1162,6 +1168,8 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -1266,6 +1274,8 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -4124,7 +4134,8 @@
                             "Kind": "hdd",
                             "Name": "dynamic_storage_pool:1"
                         }
-                    ]
+                    ],
+                    "TablesMetricsLevel": 0
                 },
                 "Self": {
                     "ACL": "text",
@@ -4262,7 +4273,8 @@
                             "Kind": "hdd",
                             "Name": "/Root/dedicated_db:hdd"
                         }
-                    ]
+                    ],
+                    "TablesMetricsLevel": 0
                 },
                 "Self": {
                     "ACL": "text",
@@ -4383,7 +4395,8 @@
                             "Kind": "hdd",
                             "Name": "/Root/shared_db:hdd"
                         }
-                    ]
+                    ],
+                    "TablesMetricsLevel": 0
                 },
                 "Self": {
                     "ACL": "",
@@ -4520,7 +4533,8 @@
                             "Kind": "hdd",
                             "Name": "/Root/shared_db:hdd"
                         }
-                    ]
+                    ],
+                    "TablesMetricsLevel": 0
                 },
                 "Self": {
                     "ACL": "",
@@ -8755,6 +8769,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -9777,6 +9793,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -11093,6 +11111,8 @@
                 "ChangeTime": "not-zero-number-text",
                 "Device": 1,
                 "EnforcedDynamicSlotSize": "not-zero-number-text",
+                "ExpectedSlotCount": 0,
+                "ExpectedSlotSize": "0",
                 "Guid": "1",
                 "LogTotalSize": "not-zero-number-text",
                 "LogUsedSize": "not-zero-number-text",
@@ -13072,6 +13092,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -13468,6 +13490,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -13864,6 +13888,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -14260,6 +14286,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -14656,6 +14684,8 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
+                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -17476,8 +17506,8 @@
     },
     "test.TestViewer.test_waiting_for_cluster_ready": {},
     "test.TestViewer.test_whoami_database": {
-        "status_code": 403,
-        "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+        "status_code": 400,
+        "text": "`database` is required for /viewer/whoami"
     },
     "test.TestViewer.test_whoami_monitoring": {
         "AuthType": "Login",

@@ -66,6 +66,7 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
 TInflightInfo::~TInflightInfo()
 {
     Y_ABORT_UNLESS(PBuffersLockCount == 0);
+    Y_ABORT_UNLESS(WriteConfirmed.Exclude(WriteRequested).Empty());
 
     ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, false);
 }
@@ -295,7 +296,9 @@ void TInflightInfo::RemoveHosts(THostMask removed)
     EraseConfirmed = EraseConfirmed.Exclude(removed);
 
     // Check if flush became complete after removing hosts.
-    if (State == EState::PBufferFlushing && FlushDesired == FlushConfirmed) {
+    const bool flushDone =
+        !FlushConfirmed.Empty() && FlushDesired == FlushConfirmed;
+    if (State == EState::PBufferFlushing && flushDone) {
         SetState(EState::PBufferFlushed);
     }
 

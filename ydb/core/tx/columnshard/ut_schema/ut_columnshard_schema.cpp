@@ -124,6 +124,15 @@ enum class EExpectedResult {
 
 static constexpr ui32 PORTION_ROWS = 80 * 1000;
 
+// Ticks the shard's mediator time forward by one plan step via an empty PlanCommit (updating planStep
+// in place). Internal TTL/tiering actualization commits at GetOutdatedStep()+1 (i.e. planStep+1); with
+// no coordinator running in these tests, that snapshot never arrives on its own, so we advance it here
+// to make the latest compaction/eviction result visible to reads positioned at the new planStep.
+void AdvancePlanStep(TTestBasicRuntime& runtime, TActorId& sender, TPlanStep& planStep) {
+    planStep = planStep + 1;
+    PlanCommit(runtime, sender, planStep, TSet<ui64>{});
+}
+
 void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::TTypeId ttlColumnTypeId) {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
@@ -202,6 +211,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     };
 
     auto getRowCount = [&]() {
+        AdvancePlanStep(runtime, sender, planStep);
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { ttlColumnName }));
         auto rb = reader.ReadAll();
@@ -584,6 +594,9 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
 
+        // Make the internal eviction result (committed at planStep+1) visible to the read below.
+        AdvancePlanStep(runtime, sender, planStep);
+
         // Read data after eviction
         TString columnToRead = specs[i].TtlColumn;
 
@@ -942,6 +955,78 @@ void TestDropWriteRace() {
     PlanCommit(runtime, sender, planStep + 1, commitTxId);
 }
 
+void TestIsDroppedAtExactDropSnapshot() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    // Create table
+    const auto& planStep = SetupSchema(runtime, sender, tableId, TestTableDescription(), "none", ++txId);
+    Y_UNUSED(planStep);
+
+    // Write data
+    TString data = MakeTestBlob({ 0, PORTION_ROWS }, testYdbSchema);
+    UNIT_ASSERT(data.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
+    std::vector<ui64> writeIds;
+    UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data, testYdbSchema, true, &writeIds));
+    const auto writeTxId = ++txId;
+    const auto writePlanStep = ProposeCommit(runtime, sender, writeTxId, writeIds);
+    const auto writeSnapshot = NOlap::TSnapshot(writePlanStep, writeTxId);
+    PlanCommit(runtime, sender, writeSnapshot);
+
+    // Before the drop the committed data must be readable at its commit snapshot.
+    {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, writeSnapshot);
+        reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        UNIT_ASSERT(rb && rb->num_rows() > 0);
+    }
+
+    // Drop table
+    const auto dropTxId = ++txId;
+    const auto dropPlanStep = SetupSchema(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), dropTxId);
+    const auto dropSnapshot = NOlap::TSnapshot(dropPlanStep, dropTxId);
+
+    // data still readable at commit snapshot
+    {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, writeSnapshot);
+        reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        UNIT_ASSERT(rb && rb->num_rows() > 0);
+    }
+
+    // Read EXACTLY AT drop snapshot -- table MUST be considered dropped (no data).
+    {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, dropSnapshot);
+        reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        UNIT_ASSERT(!rb || !rb->num_rows());
+    }
+
+    // Read Right before drop snapshot -- data must be readable
+    {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, dropSnapshot.GetPreviousSnapshot());
+        reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        UNIT_ASSERT(rb && rb->num_rows() > 0);
+    }
+}
+
 void TestCompaction(std::optional<ui32> numWrites = {}) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -1263,6 +1348,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
     Y_UNIT_TEST(DropWriteRace) {
         TestDropWriteRace();
+    }
+    Y_UNIT_TEST(IsDroppedAtExactDropSnapshot) {
+        TestIsDroppedAtExactDropSnapshot();
     }
 }
 

@@ -3,6 +3,10 @@
 #include "defs.h"
 #include "types.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+
+#include <ydb/library/actors/core/interconnect.h>
+
 namespace NKikimr {
     namespace NBsController {
 
@@ -119,6 +123,7 @@ namespace NKikimr {
                 ui32 NumSlots;
                 const ui32 MaxSlots;
                 const ui32 SlotSizeInUnits;
+                const ui64 SlotSizeInBytes;
                 TStackVec<ui32, 16> Groups;
                 i64 SpaceAvailable;
                 const bool Operational;

@@ -2,6 +2,8 @@
 #include "execution_unit_ctors.h"
 #include "datashard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -170,6 +172,11 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
 bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::TryCastWriteOperation(op);
 
+     // COUNTER_WRITE_COMPLETE / COUNTER_PREPARE_COMPLETE are updated in FinishProposeWrite / FinishPropose respectively
+    auto incOverloaded = [this, writeOp]() {
+        DataShard.IncCounter(writeOp ? COUNTER_WRITE_OVERLOADED : COUNTER_PREPARE_OVERLOADED);
+    };
+
     // Reject operations after receiving EvSplit
     // This is to avoid races when split is in progress
     if (DataShard.GetState() == TShardState::SplitSrcWaitForNoTxInFlight ||
@@ -188,9 +195,10 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Tablet " << DataShard.TabletID() << " rejecting tx due to split");
+        YDB_LOG_NOTICE_CTX(ctx, "Tablet rejecting tx due to split",
+            {"tabletId", DataShard.TabletID()});
 
+        incOverloaded();
         op->Abort();
         return true;
     }
@@ -210,8 +218,9 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
             BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_NOTICE_CTX(ctx, err);
 
+        incOverloaded();
         op->Abort();
         return true;
     }
@@ -227,8 +236,9 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_NOTICE_CTX(ctx, err);
 
+        incOverloaded();
         op->Abort();
         return true;
     }
@@ -246,9 +256,11 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                     ->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-                     "Tablet " << DataShard.TabletID() << " rejecting tx due to changes queue overflow");
+        YDB_LOG_NOTICE_CTX(ctx, "Tablet rejecting tx due to changes queue overflow",
+            {"tabletId", DataShard.TabletID()});
 
+        incOverloaded();
+        DataShard.IncCounter(COUNTER_CHANGE_QUEUE_OVERFLOW_REJECTS);
         op->Abort();
         return true;
     }
@@ -265,8 +277,9 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_NOTICE_CTX(ctx, err);
 
+        // no incOverloaded here as it's treated as BAD_REQUEST, not OVERLOAD
         op->Abort();
         return true;
     }

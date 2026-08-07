@@ -238,6 +238,8 @@ public:
     TControlWrapper AllowServerlessStorageBilling;
     TControlWrapper DisablePublicationsOfDropping;
     TControlWrapper FillAllocatePQ;
+    TControlWrapper TolerateOrphanedPaths;
+    bool HasOrphanPlaceholders = false; // in-memory, set by TTxInit
 
     // Shared with NTabletFlatExecutor::TExecutor
     TControlWrapper MaxCommitRedoMB;
@@ -817,9 +819,10 @@ public:
     void PersistDropStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step, TOperationId opId);
 
     // user attrs
+    void PersistAlterUserAttributes(NIceDb::TNiceDb& db, TPathId pathId);
     void ApplyAndPersistUserAttrs(NIceDb::TNiceDb& db, const TPathId& pathId);
     void PersistUserAttributes(NIceDb::TNiceDb& db, TPathId pathId, TUserAttributes::TPtr oldAttrs, TUserAttributes::TPtr alterAttrs);
-    void PersistAlterUserAttributes(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistRemoveUserAttributesAlter(NIceDb::TNiceDb& db, TPathElement::TPtr pathElement);
 
     // table index
     void PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId);
@@ -929,6 +932,8 @@ public:
     void PersistSubDomainAuditSettingsAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistSubDomainServerlessComputeResourcesMode(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistSubDomainServerlessComputeResourcesModeAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+    void PersistSubDomainTablesMetricsLevel(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+    void PersistSubDomainTablesMetricsLevelAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistKesusInfo(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
     void PersistKesusVersion(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
     void PersistAddKesusAlter(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
@@ -1991,6 +1996,10 @@ public:
     THashMap<TString, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperationsByUid;
     TSet<std::pair<TInstant, TIndexBuildId>> SetColumnConstraintOperationsByTime;
     THashMap<TTxId, TIndexBuildId> TxIdToSetColumnConstraintOperations;
+    // txIds of concurrent operations (e.g. a backup CopyTable) that a
+    // SetColumnConstraint operation is currently waiting on before it can retry
+    // one of its own internal sub-transactions.
+    THashMap<TTxId, THashSet<TIndexBuildId>> TxIdToDependentSetColumnConstraint;
 
     void PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);
     void PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);

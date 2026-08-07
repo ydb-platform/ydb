@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: yarl
-Version: 1.12.1
+Version: 1.19.0
 Summary: Yet another URL library
 Home-page: https://github.com/aio-libs/yarl
 Author: Andrew Svetlov
@@ -24,7 +24,6 @@ Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Programming Language :: Cython
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
@@ -32,12 +31,14 @@ Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Topic :: Internet :: WWW/HTTP
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
-Requires-Python: >=3.8
+Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 License-File: NOTICE
-Requires-Dist: idna >=2.0
-Requires-Dist: multidict >=4.0
+Requires-Dist: idna>=2.0
+Requires-Dist: multidict>=4.0
+Requires-Dist: propcache>=0.2.1
+Dynamic: license-file
 
 yarl
 ====
@@ -45,22 +46,24 @@ yarl
 The module provides handy URL class for URL parsing and changing.
 
 .. image:: https://github.com/aio-libs/yarl/workflows/CI/badge.svg
-  :target: https://github.com/aio-libs/yarl/actions?query=workflow%3ACI
-  :align: right
+   :target: https://github.com/aio-libs/yarl/actions?query=workflow%3ACI
+   :align: right
 
-.. image:: https://codecov.io/gh/aio-libs/yarl/branch/master/graph/badge.svg
-  :target: https://codecov.io/gh/aio-libs/yarl
+.. image:: https://codecov.io/gh/aio-libs/yarl/graph/badge.svg?flag=pytest
+   :target: https://app.codecov.io/gh/aio-libs/yarl?flags[]=pytest
+   :alt: Codecov coverage for the pytest-driven measurements
+
+.. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
+   :target: https://codspeed.io/aio-libs/yarl
 
 .. image:: https://badge.fury.io/py/yarl.svg
-    :target: https://badge.fury.io/py/yarl
-
+   :target: https://badge.fury.io/py/yarl
 
 .. image:: https://readthedocs.org/projects/yarl/badge/?version=latest
-    :target: https://yarl.aio-libs.org
-
+   :target: https://yarl.aio-libs.org
 
 .. image:: https://img.shields.io/pypi/pyversions/yarl.svg
-    :target: https://pypi.python.org/pypi/yarl
+   :target: https://pypi.python.org/pypi/yarl
 
 .. image:: https://img.shields.io/matrix/aio-libs:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
    :target: https://matrix.to/#/%23aio-libs:matrix.org
@@ -69,6 +72,7 @@ The module provides handy URL class for URL parsing and changing.
 .. image:: https://img.shields.io/matrix/aio-libs-space:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs-space%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
    :target: https://matrix.to/#/%23aio-libs-space:matrix.org
    :alt: Matrix Space — #aio-libs-space:matrix.org
+
 
 Introduction
 ------------
@@ -150,9 +154,8 @@ Installation
 The library is Python 3 only!
 
 PyPI contains binary wheels for Linux, Windows and MacOS.  If you want to install
-``yarl`` on another operating system (like *Alpine Linux*, which is not
-manylinux-compliant because of the missing glibc and therefore, cannot be
-used with our wheels) the the tarball will be used to compile the library from
+``yarl`` on another operating system where wheels are not provided,
+the tarball will be used to compile the library from
 the source code. It requires a C compiler and and Python headers installed.
 
 To skip the compilation you must explicitly opt-in by using a PEP 517
@@ -170,7 +173,7 @@ by this variable.
 Dependencies
 ------------
 
-YARL requires multidict_ library.
+YARL requires multidict_ and propcache_ libraries.
 
 
 API documentation
@@ -246,6 +249,8 @@ It's *Apache 2* licensed and freely available.
 
 .. _multidict: https://github.com/aio-libs/multidict
 
+.. _propcache: https://github.com/aio-libs/propcache
+
 =========
 Changelog
 =========
@@ -261,6 +266,702 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+1.19.0
+======
+
+*(2025-04-05)*
+
+
+Bug fixes
+---------
+
+- Fixed entire name being re-encoded when using ``yarl.URL.with_suffix()`` -- by `@NTFSvolume <https://github.com/sponsors/NTFSvolume>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1468 <https://github.com/aio-libs/yarl/issues/1468>`__.
+
+
+Features
+--------
+
+- Started building armv7l wheels for manylinux -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1495 <https://github.com/aio-libs/yarl/issues/1495>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- GitHub Actions CI/CD is now configured to manage caching pip-ecosystem
+  dependencies using `re-actors/cache-python-deps`_ -- an action by
+  `@webknjaz <https://github.com/sponsors/webknjaz>`__ that takes into account ABI stability and the exact
+  version of Python runtime.
+
+  .. _`re-actors/cache-python-deps`:
+     https://github.com/marketplace/actions/cache-python-deps
+
+  *Related issues and pull requests on GitHub:*
+  `#1471 <https://github.com/aio-libs/yarl/issues/1471>`__.
+
+- Increased minimum `propcache`_ version to 0.2.1 to fix failing tests -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  .. _`propcache`:
+     https://github.com/aio-libs/propcache
+
+  *Related issues and pull requests on GitHub:*
+  `#1479 <https://github.com/aio-libs/yarl/issues/1479>`__.
+
+- Added all hidden folders to pytest's ``norecursedirs`` to prevent it
+  from trying to collect tests there -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1480 <https://github.com/aio-libs/yarl/issues/1480>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved accuracy of type annotations -- by `@Dreamsorcerer <https://github.com/sponsors/Dreamsorcerer>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1484 <https://github.com/aio-libs/yarl/issues/1484>`__.
+
+- Improved performance of parsing query strings -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1493 <https://github.com/aio-libs/yarl/issues/1493>`__, `#1497 <https://github.com/aio-libs/yarl/issues/1497>`__.
+
+- Improved performance of the C unquoter -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1496 <https://github.com/aio-libs/yarl/issues/1496>`__, `#1498 <https://github.com/aio-libs/yarl/issues/1498>`__.
+
+
+----
+
+
+1.18.3
+======
+
+*(2024-12-01)*
+
+
+Bug fixes
+---------
+
+- Fixed uppercase ASCII hosts being rejected by ``URL.build()()`` and ``yarl.URL.with_host()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#954 <https://github.com/aio-libs/yarl/issues/954>`__, `#1442 <https://github.com/aio-libs/yarl/issues/1442>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performances of multiple path properties on cache miss -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1443 <https://github.com/aio-libs/yarl/issues/1443>`__.
+
+
+----
+
+
+1.18.2
+======
+
+*(2024-11-29)*
+
+
+No significant changes.
+
+
+----
+
+
+1.18.1
+======
+
+*(2024-11-29)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved cache performance when ``~yarl.URL`` objects are constructed from ``yarl.URL.build()`` with ``encoded=True`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1432 <https://github.com/aio-libs/yarl/issues/1432>`__.
+
+- Improved cache performance for operations that produce a new ``~yarl.URL`` object -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1434 <https://github.com/aio-libs/yarl/issues/1434>`__, `#1436 <https://github.com/aio-libs/yarl/issues/1436>`__.
+
+
+----
+
+
+1.18.0
+======
+
+*(2024-11-21)*
+
+
+Features
+--------
+
+- Added ``keep_query`` and ``keep_fragment`` flags in the ``yarl.URL.with_path()``, ``yarl.URL.with_name()`` and ``yarl.URL.with_suffix()`` methods, allowing users to optionally retain the query string and fragment in the resulting URL when replacing the path -- by `@paul-nameless <https://github.com/sponsors/paul-nameless>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#111 <https://github.com/aio-libs/yarl/issues/111>`__, `#1421 <https://github.com/aio-libs/yarl/issues/1421>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- Started running downstream ``aiohttp`` tests in CI -- by `@Cycloctane <https://github.com/sponsors/Cycloctane>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1415 <https://github.com/aio-libs/yarl/issues/1415>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of converting ``~yarl.URL`` to a string -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1422 <https://github.com/aio-libs/yarl/issues/1422>`__.
+
+
+----
+
+
+1.17.2
+======
+
+*(2024-11-17)*
+
+
+Bug fixes
+---------
+
+- Stopped implicitly allowing the use of Cython pre-release versions when
+  building the distribution package -- by `@ajsanchezsanz <https://github.com/sponsors/ajsanchezsanz>`__ and
+  `@markgreene74 <https://github.com/sponsors/markgreene74>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1411 <https://github.com/aio-libs/yarl/issues/1411>`__, `#1412 <https://github.com/aio-libs/yarl/issues/1412>`__.
+
+- Fixed a bug causing ``~yarl.URL.port`` to return the default port when the given port was zero
+  -- by `@gmacon <https://github.com/sponsors/gmacon>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1413 <https://github.com/aio-libs/yarl/issues/1413>`__.
+
+
+Features
+--------
+
+- Make error messages include details of incorrect type when ``port`` is not int in ``yarl.URL.build()``.
+  -- by `@Cycloctane <https://github.com/sponsors/Cycloctane>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1414 <https://github.com/aio-libs/yarl/issues/1414>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Stopped implicitly allowing the use of Cython pre-release versions when
+  building the distribution package -- by `@ajsanchezsanz <https://github.com/sponsors/ajsanchezsanz>`__ and
+  `@markgreene74 <https://github.com/sponsors/markgreene74>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1411 <https://github.com/aio-libs/yarl/issues/1411>`__, `#1412 <https://github.com/aio-libs/yarl/issues/1412>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of the ``yarl.URL.joinpath()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1418 <https://github.com/aio-libs/yarl/issues/1418>`__.
+
+
+----
+
+
+1.17.1
+======
+
+*(2024-10-30)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of many ``~yarl.URL`` methods -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1396 <https://github.com/aio-libs/yarl/issues/1396>`__, `#1397 <https://github.com/aio-libs/yarl/issues/1397>`__, `#1398 <https://github.com/aio-libs/yarl/issues/1398>`__.
+
+- Improved performance of passing a `dict` or `str` to ``yarl.URL.extend_query()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1401 <https://github.com/aio-libs/yarl/issues/1401>`__.
+
+
+----
+
+
+1.17.0
+======
+
+*(2024-10-28)*
+
+
+Features
+--------
+
+- Added ``~yarl.URL.host_port_subcomponent`` which returns the ``3986#section-3.2.2`` host and ``3986#section-3.2.3`` port subcomponent -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1375 <https://github.com/aio-libs/yarl/issues/1375>`__.
+
+
+----
+
+
+1.16.0
+======
+
+*(2024-10-21)*
+
+
+Bug fixes
+---------
+
+- Fixed blocking I/O to load Python code when creating a new ``~yarl.URL`` with non-ascii characters in the network location part -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1342 <https://github.com/aio-libs/yarl/issues/1342>`__.
+
+
+Removals and backward incompatible breaking changes
+---------------------------------------------------
+
+- Migrated to using a single cache for encoding hosts -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  Passing ``ip_address_size`` and ``host_validate_size`` to ``yarl.cache_configure()`` is deprecated in favor of the new ``encode_host_size`` parameter and will be removed in a future release. For backwards compatibility, the old parameters affect the ``encode_host`` cache size.
+
+  *Related issues and pull requests on GitHub:*
+  `#1348 <https://github.com/aio-libs/yarl/issues/1348>`__, `#1357 <https://github.com/aio-libs/yarl/issues/1357>`__, `#1363 <https://github.com/aio-libs/yarl/issues/1363>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of constructing ``~yarl.URL`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1336 <https://github.com/aio-libs/yarl/issues/1336>`__.
+
+- Improved performance of calling ``yarl.URL.build()`` and constructing unencoded ``~yarl.URL`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1345 <https://github.com/aio-libs/yarl/issues/1345>`__.
+
+- Reworked the internal encoding cache to improve performance on cache hit -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1369 <https://github.com/aio-libs/yarl/issues/1369>`__.
+
+
+----
+
+
+1.15.5
+======
+
+*(2024-10-18)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of the ``yarl.URL.joinpath()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1304 <https://github.com/aio-libs/yarl/issues/1304>`__.
+
+- Improved performance of the ``yarl.URL.extend_query()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1305 <https://github.com/aio-libs/yarl/issues/1305>`__.
+
+- Improved performance of the ``yarl.URL.origin()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1306 <https://github.com/aio-libs/yarl/issues/1306>`__.
+
+- Improved performance of the ``yarl.URL.with_path()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1307 <https://github.com/aio-libs/yarl/issues/1307>`__.
+
+- Improved performance of the ``yarl.URL.with_query()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1308 <https://github.com/aio-libs/yarl/issues/1308>`__, `#1328 <https://github.com/aio-libs/yarl/issues/1328>`__.
+
+- Improved performance of the ``yarl.URL.update_query()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1309 <https://github.com/aio-libs/yarl/issues/1309>`__, `#1327 <https://github.com/aio-libs/yarl/issues/1327>`__.
+
+- Improved performance of the ``yarl.URL.join()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1313 <https://github.com/aio-libs/yarl/issues/1313>`__.
+
+- Improved performance of ``~yarl.URL`` equality checks -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1315 <https://github.com/aio-libs/yarl/issues/1315>`__.
+
+- Improved performance of ``~yarl.URL`` methods that modify the network location -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1316 <https://github.com/aio-libs/yarl/issues/1316>`__.
+
+- Improved performance of the ``yarl.URL.with_fragment()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1317 <https://github.com/aio-libs/yarl/issues/1317>`__.
+
+- Improved performance of calculating the hash of ``~yarl.URL`` objects -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1318 <https://github.com/aio-libs/yarl/issues/1318>`__.
+
+- Improved performance of the ``yarl.URL.relative()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1319 <https://github.com/aio-libs/yarl/issues/1319>`__.
+
+- Improved performance of the ``yarl.URL.with_name()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1320 <https://github.com/aio-libs/yarl/issues/1320>`__.
+
+- Improved performance of ``~yarl.URL.parent`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1321 <https://github.com/aio-libs/yarl/issues/1321>`__.
+
+- Improved performance of the ``yarl.URL.with_scheme()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1322 <https://github.com/aio-libs/yarl/issues/1322>`__.
+
+
+----
+
+
+1.15.4
+======
+
+*(2024-10-16)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of the quoter when all characters are safe -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1288 <https://github.com/aio-libs/yarl/issues/1288>`__.
+
+- Improved performance of unquoting strings -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1292 <https://github.com/aio-libs/yarl/issues/1292>`__, `#1293 <https://github.com/aio-libs/yarl/issues/1293>`__.
+
+- Improved performance of calling ``yarl.URL.build()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1297 <https://github.com/aio-libs/yarl/issues/1297>`__.
+
+
+----
+
+
+1.15.3
+======
+
+*(2024-10-15)*
+
+
+Bug fixes
+---------
+
+- Fixed ``yarl.URL.build()`` failing to validate paths must start with a ``/`` when passing ``authority`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  The validation only worked correctly when passing ``host``.
+
+  *Related issues and pull requests on GitHub:*
+  `#1265 <https://github.com/aio-libs/yarl/issues/1265>`__.
+
+
+Removals and backward incompatible breaking changes
+---------------------------------------------------
+
+- Removed support for Python 3.8 as it has reached end of life -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1203 <https://github.com/aio-libs/yarl/issues/1203>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of constructing ``~yarl.URL`` when the net location is only the host -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1271 <https://github.com/aio-libs/yarl/issues/1271>`__.
+
+
+----
+
+
+1.15.2
+======
+
+*(2024-10-13)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of converting ``~yarl.URL`` to a string -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1234 <https://github.com/aio-libs/yarl/issues/1234>`__.
+
+- Improved performance of ``yarl.URL.joinpath()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1248 <https://github.com/aio-libs/yarl/issues/1248>`__, `#1250 <https://github.com/aio-libs/yarl/issues/1250>`__.
+
+- Improved performance of constructing query strings from ``~multidict.MultiDict`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1256 <https://github.com/aio-libs/yarl/issues/1256>`__.
+
+- Improved performance of constructing query strings with ``int`` values -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1259 <https://github.com/aio-libs/yarl/issues/1259>`__.
+
+
+----
+
+
+1.15.1
+======
+
+*(2024-10-12)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of calling ``yarl.URL.build()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1222 <https://github.com/aio-libs/yarl/issues/1222>`__.
+
+- Improved performance of all ``~yarl.URL`` methods that create new ``~yarl.URL`` objects -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1226 <https://github.com/aio-libs/yarl/issues/1226>`__.
+
+- Improved performance of ``~yarl.URL`` methods that modify the network location -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1229 <https://github.com/aio-libs/yarl/issues/1229>`__.
+
+
+----
+
+
+1.15.0
+======
+
+*(2024-10-11)*
+
+
+Bug fixes
+---------
+
+- Fixed validation with ``yarl.URL.with_scheme()`` when passed scheme is not lowercase -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1189 <https://github.com/aio-libs/yarl/issues/1189>`__.
+
+
+Features
+--------
+
+- Started building ``armv7l`` wheels -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1204 <https://github.com/aio-libs/yarl/issues/1204>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of constructing unencoded ``~yarl.URL`` objects -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1188 <https://github.com/aio-libs/yarl/issues/1188>`__.
+
+- Added a cache for parsing hosts to reduce overhead of encoding ``~yarl.URL`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1190 <https://github.com/aio-libs/yarl/issues/1190>`__.
+
+- Improved performance of constructing query strings from ``~collections.abc.Mapping`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1193 <https://github.com/aio-libs/yarl/issues/1193>`__.
+
+- Improved performance of converting ``~yarl.URL`` objects to strings -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1198 <https://github.com/aio-libs/yarl/issues/1198>`__.
+
+
+----
+
+
+1.14.0
+======
+
+*(2024-10-08)*
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Switched to using the ``propcache`` package for property caching
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  The ``propcache`` package is derived from the property caching
+  code in ``yarl`` and has been broken out to avoid maintaining it for multiple
+  projects.
+
+  *Related issues and pull requests on GitHub:*
+  `#1169 <https://github.com/aio-libs/yarl/issues/1169>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- Started testing with Hypothesis -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__ and `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  Special thanks to `@Zac-HD <https://github.com/sponsors/Zac-HD>`__ for helping us get started with this framework.
+
+  *Related issues and pull requests on GitHub:*
+  `#860 <https://github.com/aio-libs/yarl/issues/860>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of ``yarl.URL.is_default_port()`` when no explicit port is set -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1168 <https://github.com/aio-libs/yarl/issues/1168>`__.
+
+- Improved performance of converting ``~yarl.URL`` to a string when no explicit port is set -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1170 <https://github.com/aio-libs/yarl/issues/1170>`__.
+
+- Improved performance of the ``yarl.URL.origin()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1175 <https://github.com/aio-libs/yarl/issues/1175>`__.
+
+- Improved performance of encoding hosts -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1176 <https://github.com/aio-libs/yarl/issues/1176>`__.
+
+
+----
+
+
+1.13.1
+======
+
+*(2024-09-27)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of calling ``yarl.URL.build()`` with ``authority`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1163 <https://github.com/aio-libs/yarl/issues/1163>`__.
+
+
+----
+
+
+1.13.0
+======
+
+*(2024-09-26)*
+
+
+Bug fixes
+---------
+
+- Started rejecting ASCII hostnames with invalid characters. For host strings that
+  look like authority strings, the exception message includes advice on what to do
+  instead -- by `@mjpieters <https://github.com/sponsors/mjpieters>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#880 <https://github.com/aio-libs/yarl/issues/880>`__, `#954 <https://github.com/aio-libs/yarl/issues/954>`__.
+
+- Fixed IPv6 addresses missing brackets when the ``~yarl.URL`` was converted to a string -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1157 <https://github.com/aio-libs/yarl/issues/1157>`__, `#1158 <https://github.com/aio-libs/yarl/issues/1158>`__.
+
+
+Features
+--------
+
+- Added ``~yarl.URL.host_subcomponent`` which returns the ``3986#section-3.2.2`` host subcomponent -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  The only current practical difference between ``~yarl.URL.raw_host`` and ``~yarl.URL.host_subcomponent`` is that IPv6 addresses are returned bracketed.
+
+  *Related issues and pull requests on GitHub:*
+  `#1159 <https://github.com/aio-libs/yarl/issues/1159>`__.
+
+
+----
+
 
 1.12.1
 ======

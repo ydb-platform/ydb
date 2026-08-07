@@ -1,7 +1,6 @@
 #pragma once
 
 #include "yson_struct.h"
-
 #include "yson_schema.h"
 
 namespace NYT::NYTree {
@@ -46,7 +45,7 @@ template <class TEnum, TEnum Default, TEnum... TArgs>
 constexpr bool CIsThereDefaultInMapping = ((Default == TArgs) || ...);
 
 template <class TEnum, std::same_as<TEnum>... TArgs>
-consteval bool AllDifferentValues(TArgs... args);
+consteval bool AreAllValuesDifferent(TArgs... args);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -97,7 +96,7 @@ struct TPolymorphicMapping<TypeFieldNameValue, TEnum, TOptionalValue<TEnum, Defa
     : public TMappingLeaf<TEnum, Values, TBase, TDerived>...
 {
     // NB(apachee): Chose to do as static_assert rather than template requirement as it provided better error message.
-    static_assert(AllDifferentValues<TEnum>(Values...), "All values in the mapping must be different");
+    static_assert(AreAllValuesDifferent<TEnum>(Values...), "All values in the mapping must be different");
 
     static constexpr std::string_view TypeFieldName = TypeFieldNameValue;
 
@@ -210,7 +209,14 @@ public:
     template <TKey Value>
     TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> TryGetConcrete() const;
 
-    TKey GetCurrentType() const;
+    //! Same as TryGetConcrete but fails on mismatch.
+    template <std::derived_from<TBase> TConcrete>
+    TIntrusivePtr<TConcrete> GetConcrete() const;
+
+    template <TKey Value>
+    TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> GetConcrete() const;
+
+    TKey GetType() const;
 
     TBase* operator->();
     const TBase* operator->() const;

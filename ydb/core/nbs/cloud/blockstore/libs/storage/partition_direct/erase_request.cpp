@@ -23,7 +23,8 @@ TEraseRequestExecutor::TEraseRequestExecutor(
     : ActorSystem(actorSystem)
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
-          {{"t", "BatchErase"}, {"h", PrintHostIndex(host)}}))
+          {{"t", "BatchErase"},
+           {"h", PrintHostAndNodeId(host, directBlockGroup->GetNodeId(host))}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Span(std::move(span))
@@ -85,7 +86,7 @@ void TEraseRequestExecutor::OnEraseResponse(const TDBGEraseResponse& response)
             NKikimrServices::NBS_PARTITION,
             "%s Erase failed: %s",
             LogTitle.GetWithTime().c_str(),
-            FormatError(response.Error).c_str());
+            FormatError(response.Error).Quote().c_str());
 
         Reply({}, MakeLsnVector(Hint.Segments));
         return;

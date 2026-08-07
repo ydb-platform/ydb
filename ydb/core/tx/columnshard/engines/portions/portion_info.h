@@ -366,8 +366,8 @@ public:
         }
     }
 
-    bool CheckForCleanup(const TSnapshot& snapshot) const {
-        return IsRemovedFor(snapshot);
+    virtual bool MayGetForScanAt(const TSnapshot& snapshot) const {
+        return !IsRemovedFor(snapshot);
     }
 
     bool CheckForCleanup() const {

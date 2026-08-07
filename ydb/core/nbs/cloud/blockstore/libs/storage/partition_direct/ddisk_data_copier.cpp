@@ -1,8 +1,11 @@
 #include "ddisk_data_copier.h"
 
+#include "partition_direct_service.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
@@ -12,6 +15,15 @@
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NThreading;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+constexpr auto MinBackoff = TDuration::MilliSeconds(100);
+constexpr auto MaxBackoff = TDuration::Seconds(10);
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -44,25 +56,33 @@ struct TDDiskDataCopier::TCopyRangeRequestState
 
 TDDiskDataCopier::TDDiskDataCopier(
     NActors::TActorSystem* actorSystem,
+    ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
+    const TDiskDescription& diskDescription,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    TBlocksDirtyMap* dirtyMap,
+    TBlocksDirtyMapPtr dirtyMap,
     THostIndex destination)
     : ActorSystem(actorSystem)
-    , PartitionDirectService(partitionDirectService)
+    , TraceService(traceService)
     , VChunkConfig(vChunkConfig)
     , VolumeConfig(partitionDirectService->GetVolumeConfig())
     , DirectBlockGroup(std::move(directBlockGroup))
     , Destination(destination)
-    , DirtyMap(dirtyMap)
+    , DirtyMap(std::move(dirtyMap))
     , LogTitle{
           GetCycleCount(),
           TLogTitle::TDDiskDataCopier{
-              .DiskId = VolumeConfig->DiskId,
+              .DiskId = diskDescription.DiskId,
+              .TabletId = diskDescription.TabletId,
+              .Generation = diskDescription.Generation,
+              .DBGIndex = VChunkConfig.GetDBGIndex(),
+              .VChunkIndex = VChunkConfig.GetVChunkIndex(),
               .Destination = static_cast<int>(Destination)}}
+    , BackoffDelayProvider(MinBackoff, MaxBackoff)
 {
-    Y_ASSERT(Destination < VChunkConfig.GetHostCount());
+    Y_ABORT_UNLESS(traceService);
+    Y_ABORT_UNLESS(Destination < VChunkConfig.GetHostCount());
 }
 
 TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Start()
@@ -110,7 +130,7 @@ TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Stop()
 
 NWilson::TSpan TDDiskDataCopier::CreateSpan() const
 {
-    auto span = PartitionDirectService->CreteRootSpan("CopyRange");
+    auto span = TraceService->CreateRootSpan("CopyRange");
     span.Attribute("DiskId", VolumeConfig->DiskId);
     span.Attribute("From", static_cast<i64>(FreshWatermark));
     span.Attribute("Length", static_cast<i64>(CopyRangeSize));
@@ -150,7 +170,21 @@ void TDDiskDataCopier::StartCopyRange()
     DirtyMap->SetFlushWatermark(Destination, futureWatermark);
 
     auto readHint = DirtyMap->MakeReadHint(range);
-    Y_ABORT_UNLESS(!readHint.RangeHints.empty());
+    if (readHint.RangeHints.empty()) {
+        auto waitReadyFuture = readHint.WaitReady;
+        Y_ABORT_UNLESS(!waitReadyFuture.HasValue());
+        waitReadyFuture.Subscribe(
+            [weakSelf = weak_from_this()]   //
+            (const NThreading::TFuture<void>& f)
+            {
+                Y_UNUSED(f);
+
+                if (auto self = weakSelf.lock()) {
+                    self->StartCopyRange();
+                }
+            });
+        return;
+    }
 
     const ui64 requestId = Random();
     std::shared_ptr<TReadBlocksLocalRequest> readRequest =
@@ -196,11 +230,16 @@ void TDDiskDataCopier::OnRangeRead(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TDDiskDataCopier. %s Read error: %s",
+            "%s %s Read error: %s",
+            LogTitle.GetWithTime().c_str(),
             copyRangeState->Range.Print().c_str(),
-            FormatError(response.Error).c_str());
+            FormatError(response.Error).Quote().c_str());
 
-        Complete.SetValue(EResult::Error);
+        if (IsNeverRetriableError(response.Error)) {
+            Complete.SetValue(EResult::Error);
+        } else {
+            ScheduleStartCopyRange(BackoffDelayProvider.GetDelayAndIncrease());
+        }
         return;
     }
 
@@ -231,14 +270,20 @@ void TDDiskDataCopier::OnRangeWritten(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TDDiskDataCopier. %s Write error: %s",
+            "%s %s Write error: %s",
+            LogTitle.GetWithTime().c_str(),
             copyRangeState->Range.Print().c_str(),
-            FormatError(response.Error).c_str());
+            FormatError(response.Error).Quote().c_str());
 
-        Complete.SetValue(EResult::Error);
+        if (IsNeverRetriableError(response.Error)) {
+            Complete.SetValue(EResult::Error);
+        } else {
+            ScheduleStartCopyRange(BackoffDelayProvider.GetDelayAndIncrease());
+        }
         return;
     }
 
+    BackoffDelayProvider.Reset();
     FreshWatermark = (copyRangeState->Range.End + 1) * VolumeConfig->BlockSize;
     DirtyMap->SetReadWatermark(Destination, FreshWatermark);
     Y_ABORT_UNLESS(VolumeConfig->VChunkSize > 0);
@@ -247,6 +292,18 @@ void TDDiskDataCopier::OnRangeWritten(
     } else {
         Complete.SetValue(EResult::Ok);
     }
+}
+
+void TDDiskDataCopier::ScheduleStartCopyRange(TDuration delay)
+{
+    DirectBlockGroup->Schedule(
+        delay,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->StartCopyRange();
+            }
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -41,7 +41,10 @@ namespace NKikimr::NSqsTopic::V1 {
     using namespace NGRpcProxy::V1;
 
     template <class TEvRequest>
-    class TNotImplementedRequestActor: public TRpcSchemeRequestActor<TNotImplementedRequestActor<TEvRequest>, TEvRequest> {
+    class TNotImplementedRequestActor
+        : public TRpcSchemeRequestActor<TNotImplementedRequestActor<TEvRequest>, TEvRequest>
+        , public NActors::IActorExceptionHandler
+    {
         using TBase = TRpcSchemeRequestActor<TNotImplementedRequestActor, TEvRequest>;
 
     public:
@@ -56,6 +59,24 @@ namespace NKikimr::NSqsTopic::V1 {
             this->Request_->RaiseIssue(FillIssue("Method is not implemented yet", static_cast<size_t>(NYds::EErrorCodes::ERROR)));
             this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNSUPPORTED);
             this->Die(ctx);
+        }
+
+        bool OnUnhandledException(const std::exception& exc) override {
+            const auto& ctx = this->ActorContext();
+            YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::SQS, "Unhandled exception in SQS topic actor",
+                {"typeName", TypeName(exc)},
+                {"exception", exc.what()},
+                {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
+
+            const auto error = MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Internal error");
+            NYql::TIssue issue(error.GetMessage());
+            issue.SetCode(
+                NSQS::TErrorClass::GetId(error.GetErrorCode()),
+                NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR);
+            this->Request_->RaiseIssue(issue);
+            this->Request_->ReplyWithYdbStatus(Ydb::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED);
+            this->Die(ctx);
+            return true;
         }
     };
 } // namespace NKikimr::NSqsTopic::V1

@@ -13,7 +13,9 @@
 #include "opentelemetry/logs/logger_provider.h"
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/nostd/string_view.h"
+#include "opentelemetry/sdk/instrumentationscope/scope_configurator.h"
 #include "opentelemetry/sdk/logs/logger.h"
+#include "opentelemetry/sdk/logs/logger_config.h"
 #include "opentelemetry/sdk/logs/logger_context.h"
 #include "opentelemetry/sdk/logs/processor.h"
 #include "opentelemetry/sdk/resource/resource.h"
@@ -106,6 +108,20 @@ public:
    * This must not be a nullptr.
    */
   void AddProcessor(std::unique_ptr<LogRecordProcessor> processor) noexcept;
+
+  /**
+   * Update the LoggerConfigurator for this provider. Updates the LoggerConfig for all existing
+   * loggers.
+   *
+   * @param logger_configurator The new configurator.
+   *
+   * @note Calling LoggerProvider::GetLogger from within the
+   * ScopeConfigurator<LoggerConfig>::ComputeConfig function (as a scope_matcher callback set with
+   * ScopeConfigurator<LoggerConfig>::AddCondition) is not supported and will result in a deadlock.
+   */
+  void UpdateLoggerConfigurator(
+      std::unique_ptr<instrumentationscope::ScopeConfigurator<LoggerConfig>>
+          logger_configurator) noexcept;
 
   /**
    * Obtain the resource associated with this logger provider.

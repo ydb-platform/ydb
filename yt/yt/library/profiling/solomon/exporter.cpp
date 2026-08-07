@@ -166,6 +166,13 @@ void TSolomonExporter::Stop()
     EncodingOffloadThreadPool_->Shutdown();
 }
 
+void TSolomonExporter::Reconfigure(const TSolomonExporterDynamicConfigPtr& dynamicConfig)
+{
+    auto config = Config_->ApplyDynamic(dynamicConfig);
+    OffloadThreadPool_->SetThreadCount(config->ThreadPoolSize);
+    OffloadThreadPool_->SetPollingPeriod(config->ThreadPoolPollingPeriod);
+}
+
 void TSolomonExporter::TransferSensors()
 {
     std::vector<std::pair<TFuture<TSharedRef>, TIntrusivePtr<TRemoteProcess>>> remoteFutures;
@@ -494,7 +501,7 @@ void TSolomonExporter::DoHandleShard(
 {
     TPromise<TSharedRef> responsePromise = NewPromise<TSharedRef>();
 
-    auto Logger = NProfiling::Logger().WithTag("Shard: %v", name);
+    auto Logger = NProfiling::Logger().WithTag("Shard", name);
 
     try {
         auto outputEncodingContext = CreateOutputEncodingContextFromHeaders(req->GetHeaders());

@@ -10,7 +10,6 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/stub
     yql/essentials/sql
-    yql/essentials/sql/v1
     yql/essentials/sql/pg
     yql/essentials/sql/v1/ide/completion/check
     yql/essentials/sql/v1/format
@@ -20,6 +19,7 @@ PEERDIR(
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
+    yql/essentials/sql/v1/translation
     yql/essentials/utils
     yql/essentials/core/pg_ext
     yql/essentials/providers/common/gateways_utils

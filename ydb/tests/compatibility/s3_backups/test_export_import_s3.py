@@ -22,9 +22,13 @@ class TestExportImportS3(MixedClusterFixture):
     class SchemeObject(Enum):
         TABLE = 0
         TOPIC = 1
+        COLUMN_TABLE = 2
 
     def _is_topic_export_avaliable(self):
         return min(self.versions) >= (25, 3)
+
+    def _is_column_table_export_available(self):
+        return min(self.versions) >= (26, 2, 1)
 
     @pytest.fixture(autouse=True)
     def setup(self):
@@ -35,6 +39,7 @@ class TestExportImportS3(MixedClusterFixture):
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
         self.prefix = "tables"
         self.prefix_topics = "topics"
+        self.prefix_column_tables = "column_tables"
         self.s3_config = self.setup_s3()
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
         self.settings = (
@@ -46,7 +51,7 @@ class TestExportImportS3(MixedClusterFixture):
         )
 
         yield from self.setup_cluster(
-            extra_feature_flags=["enable_export_auto_dropping"]
+            extra_feature_flags=["enable_export_auto_dropping", "enable_column_tables_backup"]
         )
 
     @staticmethod
@@ -56,7 +61,13 @@ class TestExportImportS3(MixedClusterFixture):
         s3_secret_key = "minio123"
         s3_bucket = "export_test_bucket"
 
-        resource = boto3.resource("s3", endpoint_url=s3_endpoint, aws_access_key_id=s3_access_key, aws_secret_access_key=s3_secret_key)
+        resource = boto3.resource(
+            "s3",
+            endpoint_url=s3_endpoint,
+            aws_access_key_id=s3_access_key,
+            aws_secret_access_key=s3_secret_key,
+            region_name="us-east-1",
+        )
 
         bucket = resource.Bucket(s3_bucket)
         bucket.create()
@@ -109,9 +120,36 @@ class TestExportImportS3(MixedClusterFixture):
                     )
                     self.settings = self.settings.with_source_and_destination(topic_name, topic_name)
 
+    def _create_column_tables(self):
+        if not self._is_column_table_export_available():
+            return
+        with ydb.QuerySessionPool(self.driver) as pool:
+            for num in range(1, 6):
+                table_name = f"/Root/{self.prefix_column_tables}/sample_column_table_{num}"
+                pool.execute_with_retries(
+                    f"""CREATE TABLE `{table_name}` (
+                        id Uint64 NOT NULL,
+                        payload Utf8,
+                        PRIMARY KEY(id)
+                    ) WITH (
+                        STORE = COLUMN
+                    );"""
+                )
+
+                pool.execute_with_retries(
+                    f"""INSERT INTO `{table_name}` (id, payload) VALUES
+                        (1, 'Payload 1 for column table {num}'),
+                        (2, 'Payload 2 for column table {num}'),
+                        (3, 'Payload 3 for column table {num}'),
+                        (4, 'Payload 4 for column table {num}'),
+                        (5, 'Payload 5 for column table {num}');"""
+                )
+                self.settings = self.settings.with_source_and_destination(table_name, table_name)
+
     def _create_items(self):
         self._create_tables()
         self._create_topics()
+        self._create_column_tables()
 
     def _export_check(self, scheme_objects=[scheme_object.name for scheme_object in SchemeObject]):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
@@ -126,7 +164,13 @@ class TestExportImportS3(MixedClusterFixture):
         while progress_export != "DONE":
             progress_export = self.client.get_export_to_s3_operation(export_id).progress.name
 
-        s3_resource = boto3.resource("s3", endpoint_url=s3_endpoint, aws_access_key_id=s3_access_key, aws_secret_access_key=s3_secret_key)
+        s3_resource = boto3.resource(
+            "s3",
+            endpoint_url=s3_endpoint,
+            aws_access_key_id=s3_access_key,
+            aws_secret_access_key=s3_secret_key,
+            region_name="us-east-1",
+        )
 
         keys_expected = set()
         for num in range(1, 6):
@@ -141,6 +185,13 @@ class TestExportImportS3(MixedClusterFixture):
                     topic_name = f"Root/{self.prefix_topics}/sample_topic_{num}"
                     keys_expected.add(topic_name + "/create_topic.pb")
 
+            if self._is_column_table_export_available():
+                if "COLUMN_TABLE" in scheme_objects:
+                    table_name = f"Root/{self.prefix_column_tables}/sample_column_table_{num}"
+                    keys_expected.add(table_name + "/data_00.csv")
+                    keys_expected.add(table_name + "/metadata.json")
+                    keys_expected.add(table_name + "/scheme.pb")
+
         bucket = s3_resource.Bucket(s3_bucket)
         keys = set()
         for x in list(bucket.objects.all()):
@@ -153,6 +204,9 @@ class TestExportImportS3(MixedClusterFixture):
 
     def _export_check_topic(self):
         self._export_check(["TOPIC"])
+
+    def _export_check_column_table(self):
+        self._export_check(["COLUMN_TABLE"])
 
     def _import_check(self, scheme_objects=[scheme_object.name for scheme_object in SchemeObject]):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
@@ -177,6 +231,12 @@ class TestExportImportS3(MixedClusterFixture):
                     imported_topic_name = f"/Root/{imported_prefix}/sample_topic_{num}"
                     import_settings = import_settings.with_source_and_destination(topic_name, imported_topic_name)
 
+            if self._is_column_table_export_available():
+                if "COLUMN_TABLE" in scheme_objects:
+                    table_name = f"Root/{self.prefix_column_tables}/sample_column_table_{num}"
+                    imported_table_name = f"/Root/{imported_prefix}/sample_column_table_{num}"
+                    import_settings = import_settings.with_source_and_destination(table_name, imported_table_name)
+
         import_client = ImportClient(self.driver)
         result_import = import_client.import_from_s3(import_settings)
         import_id = result_import.id
@@ -200,11 +260,20 @@ class TestExportImportS3(MixedClusterFixture):
                             desc = TopicClient(self.driver, None).describe_topic(imported_topic_name)
                             assert desc is not None, f"Topic {imported_topic_name} not found after import"
 
+                    if self._is_column_table_export_available():
+                        if "COLUMN_TABLE" in scheme_objects:
+                            imported_table_name = f"/Root/{imported_prefix}/sample_column_table_{num}"
+                            desc = session.describe_table(imported_table_name)
+                            assert desc is not None, f"Column table {imported_table_name} not found after import"
+
     def _import_check_table(self):
         self._import_check(["TABLE"])
 
     def _import_check_topic(self):
         self._import_check(["TOPIC"])
+
+    def _import_check_column_table(self):
+        self._import_check(["COLUMN_TABLE"])
 
     def test_tables(self):
         self._create_tables()
@@ -218,6 +287,14 @@ class TestExportImportS3(MixedClusterFixture):
         self._create_topics()
         self._export_check_topic()
         self._import_check_topic()
+
+    def test_column_tables(self):
+        if not self._is_column_table_export_available():
+            pytest.skip("Column table export is available since 26-2-1")
+
+        self._create_column_tables()
+        self._export_check_column_table()
+        self._import_check_column_table()
 
     def test_all_scheme_objects(self):
         self._create_items()

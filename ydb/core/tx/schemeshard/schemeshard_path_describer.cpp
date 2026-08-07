@@ -136,6 +136,10 @@ static void FillColumns(
                 Y_ABORT_UNLESS(colDescr->MutableDefaultFromLiteral()->ParseFromString(
                     cinfo.DefaultValue));
                 break;
+            case ETableColumnDefaultKind::FromExpression:
+                Y_ABORT_UNLESS(colDescr->MutableDefaultFromExpression()->ParseFromString(
+                    cinfo.DefaultValue));
+                break;
         }
     }
 }
@@ -211,6 +215,8 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                     return TPathElement::EPathSubType::EPathSubTypeLocalBloomNgramFilterIndex;
                 case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                     return TPathElement::EPathSubType::EPathSubTypeLocalMinMaxIndex;
+                case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+                    return TPathElement::EPathSubType::EPathSubTypeLocalCountMinSketchIndex;
                 case NKikimrSchemeOp::EIndexTypeInvalid:
                 case NKikimrSchemeOp::EIndexTypeGlobal:
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -600,6 +606,8 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
                 }
                 break;
             case ETableColumnDefaultKind::FromLiteral:
+                break;
+            case ETableColumnDefaultKind::FromExpression:
                 break;
         }
     }
@@ -997,6 +1005,8 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
         entry->MutableAuditSettings()->CopyFrom(*auditSettings);
     }
+
+    entry->SetTablesMetricsLevel(subDomainInfo->GetTablesMetricsLevel());
 
     if (const auto& serverlessComputeResourcesMode = subDomainInfo->GetServerlessComputeResourcesMode()) {
         entry->SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
@@ -1584,6 +1594,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
         case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+        case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
             // no specialized index description
             Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
             break;

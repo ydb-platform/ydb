@@ -61,6 +61,7 @@ public:
 private:
     IWriteClientWeakPtr WriteClient;
     std::shared_ptr<TWriteBlocksLocalRequest> Request;
+    TGuardedSgList SgList;
     NWilson::TSpan Span;
     TCallContextPtr CallContext;
     TBlockRange64 VChunkRange;

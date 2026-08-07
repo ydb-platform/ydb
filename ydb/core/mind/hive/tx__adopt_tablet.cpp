@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -37,7 +39,13 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_ADOPT_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxAdoptTablet::Execute");
+        YDB_LOG_DEBUG("THive::TTxAdoptTablet::Execute adopting tablet",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId},
+            {"prevOwnerId", PrevOwner},
+            {"prevOwnerIdx", PrevOwnerIdx},
+            {"ownerId", Owner},
+            {"ownerIdx", OwnerIdx});
         NIceDb::TNiceDb db(txc.DB);
 
         const TOwnerIdxType::TValueType prevOwner(PrevOwner, PrevOwnerIdx);
@@ -111,9 +119,11 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxAdoptTablet::Complete TabletId: " << TabletId <<
-               " Status: " << NKikimrProto::EReplyStatus_Name(Status) <<
-               " Explain: " << Explain);
+        YDB_LOG_DEBUG("THive::TTxAdoptTablet::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId},
+            {"status", NKikimrProto::EReplyStatus_Name(Status)},
+            {"explain", Explain});
 
         ctx.Send(Sender, new TEvHive::TEvAdoptTabletReply(Status, TabletId, Owner, OwnerIdx, Explain, Self->TabletID()), 0, Cookie);;
     }

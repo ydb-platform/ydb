@@ -4,7 +4,13 @@
 #include "node_warden.h"
 #include "node_warden_events.h"
 
-#include <ydb/core/protos/bridge.pb.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+
+#include <ydb/core/protos/config.pb.h>
+
+#include <ydb/core/base/bridge.h>
+#include <ydb/core/util/backoff.h>
 #include <util/generic/hash_multi_map.h>
 #include <ydb/core/mind/bscontroller/group_mapper.h>
 
@@ -65,6 +71,12 @@ struct THash<NKikimr::NStorage::TStorageConfigMeta> {
         return MultiHash(m.GetGeneration(), m.GetFingerprint());
     }
 };
+
+namespace NKikimrConfig {
+
+    class TStateStorageConfig;
+
+} // NKikimrConfig
 
 namespace NKikimr::NStorage {
 
@@ -476,17 +488,34 @@ namespace NKikimr::NStorage {
 
         std::optional<TString> GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
 
-        void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, TGroupId groupId, ui32 groupGeneration,
-            TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
-            const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
-            std::optional<NKikimrBlobStorage::EPDiskType> pdiskType,
-            THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
-            const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
-            i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
-            bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit, TBridgePileId bridgePileId,
-            std::optional<TGroupId> bridgeProxyGroupId,
-            const NProtoBuf::RepeatedField<ui32>& selfHealAllowedNodes = {},
-            bool applyNodeAllowList = false);
+        struct TStaticGroupReassignment {
+            std::optional<NKikimrBlobStorage::TVSlotId> SourceSlotId;
+            std::optional<NKikimrBlobStorage::TVSlotId> TargetSlotId;
+        };
+
+        using TStaticGroupReassignments = THashMap<TVDiskIdShort, TStaticGroupReassignment>;
+
+        struct TAllocateStaticGroupParams {
+            NKikimrBlobStorage::TStorageConfig *Config = nullptr;
+            TGroupId GroupId;
+            ui32 GroupGeneration = 0;
+            TBlobStorageGroupType GroupType;
+            THashMap<TVDiskIdShort, NBsController::TPDiskId> ReplacedDisks;
+            NBsController::TGroupMapper::TForbiddenPDisks ForbiddenPDisks;
+            i64 RequiredSpace = 0;
+            const NKikimrBlobStorage::TBaseConfig *BaseConfig = nullptr;
+            bool ConvertToDonor = false;
+            bool IgnoreVSlotQuotaCheck = false;
+            bool AllowUnusableDisks = false;
+            bool SettleOnlyOnOperationalDisks = false;
+            bool IsSelfHealReasonDecommit = false;
+            TBridgePileId BridgePileId;
+            std::optional<TGroupId> BridgeProxyGroupId;
+            bool ApplySelfHealNodeAllowList = false;
+            TStaticGroupReassignments *Reassignments = nullptr;
+        };
+
+        void AllocateStaticGroup(TAllocateStaticGroupParams params);
 
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 
@@ -515,10 +544,12 @@ namespace NKikimr::NStorage {
 
         std::unordered_map<ui32, ui32> SelfHealNodesState;
 
-        bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
+        bool GenerateStateStorageConfig(NKikimrConfig::TStateStorageConfig *ss
             , const NKikimrBlobStorage::TStorageConfig& baseConfig
             , std::unordered_set<ui32>& usedNodes
-            , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig = {}
+            , const std::unordered_set<ui32>& nodesToUse = {}
+            , const NKikimrConfig::TStateStorageConfig *oldConfig = nullptr
+            , bool automaticManagement = true
             , ui32 overrideReplicasInRingCount = 0
             , ui32 overrideRingsCount = 0
             , ui32 replicasSpecificVolume = 200

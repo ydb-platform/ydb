@@ -109,20 +109,25 @@ class WorkloadBase:
 
         funcs = self.get_workload_thread_funcs()
 
-        def wrapper(f):
-            try:
-                f()
-            except Exception as e:
-                logger.exception(f"FATAL: {e}")
-                os._exit(1)
-
         entity_factory = multiprocessing.Process if self.use_multiprocessing else threading.Thread
         for f in funcs:
+<<<<<<< HEAD
             p = entity_factory(target=lambda: wrapper(f))
+=======
+            p = entity_factory(target=lambda f=f: self.run_with_fatal_handler(f))
+>>>>>>> d3836ee2581 (improve secondary indexes stress test (#49001))
             p.start()
             self.workload_entities.append(p)
 
         return True
+
+    @staticmethod
+    def run_with_fatal_handler(f):
+        try:
+            f()
+        except Exception as e:
+            logger.exception(f"FATAL: {e}")
+            os._exit(1)
 
     def join(self, timeout: Optional[float] = None):
         for t in self.workload_entities:

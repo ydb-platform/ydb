@@ -30,8 +30,7 @@ namespace NKikimr {
                         2.0,
                         0.5,
                         TDuration::Minutes(5),
-                        TDuration::Seconds(1),
-                        true)) // AddHeader
+                        TDuration::Seconds(1)))
             , LevelIndexSettings(
                 HullCtx,
                 8u,                         // Level0MaxSstsAtOnce

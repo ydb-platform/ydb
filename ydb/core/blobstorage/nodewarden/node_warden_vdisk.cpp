@@ -226,6 +226,8 @@ namespace NKikimr::NStorage {
         vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
 
         vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
+        vdiskConfig->EnableChecksumReadValidationOnVDisk = EnableChecksumReadValidationOnVDisk;
+        vdiskConfig->EnableChecksumWriteValidationOnVDisk = EnableChecksumWriteValidationOnVDisk;
 
         vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 

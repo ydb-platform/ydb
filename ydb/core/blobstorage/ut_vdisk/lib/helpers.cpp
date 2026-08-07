@@ -263,7 +263,7 @@ class TManyPuts : public TActorBootstrapped<TManyPuts> {
                 const TInstant deadline = noTimeout ? TInstant::Max() : TInstant::Now() + RequestTimeout;
                 ctx.Send(QueueActorId,
                          new TEvBlobStorage::TEvVPut(logoBlobID, TRope(put.Data), VDiskInfo.VDiskID, false,
-                                                     nullptr, deadline, HandleClassGen->GetHandleClass()));
+                                                     nullptr, deadline, HandleClassGen->GetHandleClass(), false));
                 return;
             } else {
                 BadSteps->insert(put.Step);
@@ -448,12 +448,12 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
             if (Step % 100 == 0)
                 LOG_NOTICE(ctx, NActorsServices::TEST, "PUT Step=%u", Step);
 
-            TLogoBlobID logoBlobID(TabletId, Gen, Steps[Step], Channel, MsgData.size(), 0, 1);
-            TVDiskIdShort mainVDiskId = TIngress::GetMainReplica(&Conf->GroupInfo->GetTopology(), logoBlobID);
-            if (mainVDiskId == VDiskInfo.VDiskID) {
-                ui64 cookieValue = Step;
-                vMultiPut->AddVPut(logoBlobID, TRcBuf(MsgData), &cookieValue, nullptr, NWilson::TTraceId());
-                putCount++;
+                TLogoBlobID logoBlobID(TabletId, Gen, Steps[Step], Channel, MsgData.size(), 0, 1);
+                TVDiskIdShort mainVDiskId = TIngress::GetMainReplica(&Conf->GroupInfo->GetTopology(), logoBlobID);
+                if (mainVDiskId == VDiskInfo.VDiskID) {
+                    ui64 cookieValue = Step;
+                    vMultiPut->AddVPut(logoBlobID, TRcBuf(MsgData), &cookieValue, nullptr, NWilson::TTraceId(), false);
+                    putCount++;
 
                 Step++;
                 if (putCount == BatchSize) {
@@ -1412,7 +1412,7 @@ NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, T
 void PutLogoBlobToVDisk(const TActorContext &ctx, const TActorId &actorID, const TVDiskID &vdiskID,
                         const TLogoBlobID &id, const TString &data, NKikimrBlobStorage::EPutHandleClass cls) {
     LOG_DEBUG(ctx, NActorsServices::TEST, "  Sending TEvPut: id=%s data='%s'", id.ToString().data(), LimitData(data).data());
-    ctx.Send(actorID, new TEvBlobStorage::TEvVPut(id, TRope(data), vdiskID, false, nullptr, TInstant::Max(), cls));
+    ctx.Send(actorID, new TEvBlobStorage::TEvVPut(id, TRope(data), vdiskID, false, nullptr, TInstant::Max(), cls, false));
 }
 
 // returns number of messages sent
@@ -2096,5 +2096,3 @@ NActors::IActor *ManyPutsToCorrespondingVDisks(const NActors::TActorId &notifyID
     return new TManyPutsToCorrespondingVDisksActor(notifyID, conf, dataSet, hndl, inFlight);
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-

@@ -181,7 +181,7 @@ namespace NKikimr {
         const NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
         const ui64 bufSize = record.HasBuffer() ? record.GetBuffer().size() : ev.GetPayload(0).GetSize();
 
-        NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, bufSize, true);
+        NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, bufSize);
         if (handleType == NPriPut::Log) {
             *logPutInternalQueue = true;
             return SmallWriteCost(bufSize);
@@ -198,7 +198,7 @@ namespace NKikimr {
         ui64 cost = 0;
         for (ui64 idx = 0; idx < record.ItemsSize(); ++idx) {
             const ui64 size = ev.GetBufferBytes(idx);
-            NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, size, true);
+            NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, size);
             if (handleType == NPriPut::Log) {
                 cost += SmallWriteCost(size);
             } else {
@@ -265,7 +265,7 @@ namespace NKikimr {
             cost += MovedPatchCostBySize(essence.MovedPatchBlobSize);
         }
         for (ui64 size : essence.PutBufferSizes) {
-            NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, essence.HandleClass, size, true);
+            NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, essence.HandleClass, size);
             if (handleType == NPriPut::Log) {
                 cost += SmallWriteCost(size);
             } else {

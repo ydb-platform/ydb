@@ -360,4 +360,5 @@ message TFeatureFlags {
     optional bool EnableKafkaServerlessTransactions = 307 [default = false];
     optional bool EnableGeneratedStored = 308 [default = false];
     optional bool EnableGeneratedVirtual = 309 [default = false];
+    optional bool EnableTruncateColumnTable = 310 [default = false];
 }

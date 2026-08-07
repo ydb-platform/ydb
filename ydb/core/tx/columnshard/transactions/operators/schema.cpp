@@ -108,7 +108,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
     auto lastSeqNo = owner.LastSchemaSeqNo;
 
-    // Independent seq no for CopyTable and DropTable
+    // Independent seq no for path-specific schema ops (Drop / Copy / Truncate)
     std::optional<ui64> targetPathId;
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
@@ -116,6 +116,9 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
             targetPathId = SchemaTxBody.GetCopyTable().GetDstPathId();
+            break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable:
+            targetPathId = SchemaTxBody.GetTruncateTable().GetPathId();
             break;
         default:
             break;
@@ -174,6 +177,52 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
             break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            if (!owner.TablesManager.IsGenerateInternalPathId()) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,
+                    "Cannot truncate column table without GenerateInternalPathId");
+            }
+            // TRUNCATE is only supported for standalone column tables. Tables that belong to a column
+            // store are not supported yet (see the matching rejection in the SchemeShard operation).
+            if (owner.TablesManager.IsStoreTablet()) {
+                return TProposeResult(
+                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TRUNCATE is not supported for tables in a column store");
+            }
+            const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
+            if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
+                if (owner.TablesManager.HasTable(*internalPathId)) {
+                    const auto& table = owner.TablesManager.GetTable(*internalPathId);
+                    if (table.IsReadOnly(schemeShardLocalPathId)) {
+                        return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,
+                            TStringBuilder() << "Cannot truncate read-only table " << schemeShardLocalPathId);
+                    }
+                    // A copied path aliases the same InternalPathId. Truncating the source would take
+                    // DropTable's partial-drop path and corrupt shared storage / MVCC history.
+                    if (table.GetPathIds().size() > 1) {
+                        return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,
+                            TStringBuilder() << "Cannot truncate table that shares storage with a copy "
+                                             << schemeShardLocalPathId);
+                    }
+                    if (const auto ttl = owner.TablesManager.GetTableTtl(*internalPathId)) {
+                        if (!ttl->GetUsedTiers().empty()) {
+                            return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,
+                                "Cannot truncate column table with tiering");
+                        }
+                    }
+                }
+            }
+            // Fence the path like MoveTablePropose: new EvWrites and CommitWriteLock fail with
+            // "unknown table" until plan applies the generation swap. Without this, a write that
+            // resolved the old InternalPathId before PREPARED could commit into PathsToDrop.
+            if (owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
+                owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);
+            }
+            auto txIdsToWait = owner.GetProgressTxController().GetTxs();   //TODO #8650 Get transactions for truncated pathId only
+            if (!txIdsToWait.empty()) {
+                AFL_VERIFY(!txIdsToWait.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIdsToWait));
+                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
+            }
+        } break;
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
@@ -317,6 +366,34 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
             break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            AFL_VERIFY(owner.TablesManager.IsGenerateInternalPathId())("error", "truncate requires GenerateInternalPathId");
+            if (owner.TablesManager.IsStoreTablet()) {
+                break;
+            }
+            const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
+            // After restart TruncatingLocalToInternal is empty and SchemeShardLocalToInternal is
+            // rebuilt from DB. Re-fence the path (same as MoveTablePropose replay) so writes stay
+            // blocked while TRUNCATE is still pending.
+            if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
+                if (owner.TablesManager.HasTable(*internalPathId)) {
+                    const auto& table = owner.TablesManager.GetTable(*internalPathId);
+                    // Propose rejects these; on restart skip re-fence / wait setup.
+                    if (table.IsReadOnly(schemeShardLocalPathId) || table.GetPathIds().size() > 1) {
+                        break;
+                    }
+                    if (const auto ttl = owner.TablesManager.GetTableTtl(*internalPathId); ttl && !ttl->GetUsedTiers().empty()) {
+                        break;
+                    }
+                }
+                owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);
+            }
+            auto txIdsToWait = owner.GetProgressTxController().GetTxs();
+            AFL_VERIFY(txIdsToWait.erase(GetTxId()));
+            if (!txIdsToWait.empty()) {
+                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
+            }
+        } break;
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
@@ -354,6 +431,28 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
 }
 
 void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
+}
+
+bool TSchemaTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
+    switch (SchemaTxBody.TxBody_case()) {
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
+            owner.TablesManager.TruncateTableAbortPropose(schemeShardLocalPathId);
+        } break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
+            const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
+            owner.TablesManager.MoveTableAbortPropose(srcSchemeShardLocalPathId);
+        } break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable: {
+            // CopyTablePropose only stages CopyingLocalToInternal (does not fence the live map).
+            // Clear the staging entry so a later copy of the same source can propose again.
+            const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetSrcPathId());
+            owner.TablesManager.CopyTableAbortPropose(srcSchemeShardLocalPathId);
+        } break;
+        default:
+            break;
+    }
+    return true;
 }
 
 }   //namespace NKikimr::NColumnShard

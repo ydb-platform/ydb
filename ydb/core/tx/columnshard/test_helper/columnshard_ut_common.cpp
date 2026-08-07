@@ -667,6 +667,27 @@ NTxUT::TPlanStep PrepareTablet(
     return SetupSchema(runtime, sender, tableId, tableDescription);
 }
 
+NTxUT::TPlanStep PrepareStandaloneTablet(
+    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
+    using namespace NTxUT;
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    TestTableDescription tableDescription;
+    tableDescription.Schema = schema;
+    tableDescription.InStore = false;   // standalone (inline-schema) table
+    tableDescription.Pk = {};
+    for (ui64 i = 0; i < keySize; ++i) {
+        Y_ABORT_UNLESS(i < schema.size());
+        tableDescription.Pk.push_back(schema[i]);
+    }
+    TActorId sender = runtime.AllocateEdgeActor();
+    return SetupSchema(runtime, sender, tableId, tableDescription);
+}
+
 NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody) {
     using namespace NTxUT;
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);

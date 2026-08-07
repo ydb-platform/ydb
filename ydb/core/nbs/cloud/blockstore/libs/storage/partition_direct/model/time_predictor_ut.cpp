@@ -370,6 +370,84 @@ Y_UNIT_TEST_SUITE(TTimePredictorTest)
 
         UNIT_ASSERT_VALUES_EQUAL(TDuration(), predictor.Predict(0));
     }
+
+    Y_UNIT_TEST(GetLatencyStatsEmptyWindow)
+    {
+        TTimePredictor predictor(
+            TimePredictionHistorySize,
+            TimePredictionNthFromEnd);
+
+        const auto stats = predictor.GetLatencyStats(0);
+        UNIT_ASSERT_VALUES_EQUAL(0u, stats.Count);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration(), stats.Min);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration(), stats.P50);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration(), stats.P90);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration(), stats.P99);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration(), stats.Max);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<size_t>(TimePredictionHistorySize),
+            predictor.GetCapacity());
+    }
+
+    Y_UNIT_TEST(GetLatencyStatsExactPercentiles)
+    {
+        TTimePredictor predictor(
+            TimePredictionHistorySize,
+            TimePredictionNthFromEnd);
+
+        // 10 samples: 10, 20, ..., 100 ms. Indices 0..9.
+        // nearest-rank: ceil(p*n)-1
+        // p50 -> ceil(5)-1 = 4 -> 50ms
+        // p90 -> ceil(9)-1 = 8 -> 90ms
+        // p99 -> ceil(9.9)-1 = 9 -> 100ms
+        for (size_t i = 0; i < TimePredictionHistorySize; ++i) {
+            predictor.Add(THostIndex(0), TDuration::MilliSeconds(10 * (i + 1)));
+        }
+
+        const auto stats = predictor.GetLatencyStats(0);
+        UNIT_ASSERT_VALUES_EQUAL(10u, stats.Count);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(10), stats.Min);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(50), stats.P50);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(90), stats.P90);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(100), stats.P99);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(100), stats.Max);
+    }
+
+    Y_UNIT_TEST(GetLatencyStatsEvictionMovesPercentiles)
+    {
+        TTimePredictor predictor(
+            TimePredictionHistorySize,
+            TimePredictionNthFromEnd);
+
+        for (size_t i = 0; i < TimePredictionHistorySize; ++i) {
+            predictor.Add(THostIndex(0), TDuration::MilliSeconds(10 * (i + 1)));
+        }
+
+        // Evict 10ms by pushing 200ms.
+        // Window: 20..100, 200. Min=20, Max=200.
+        // p50 -> idx 4 -> 60ms; p90 -> idx 8 -> 100ms; p99 -> idx 9 -> 200ms
+        predictor.Add(THostIndex(0), TDuration::MilliSeconds(200));
+
+        const auto stats = predictor.GetLatencyStats(0);
+        UNIT_ASSERT_VALUES_EQUAL(10u, stats.Count);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(20), stats.Min);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(60), stats.P50);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(100), stats.P90);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(200), stats.P99);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(200), stats.Max);
+    }
+
+    Y_UNIT_TEST(GetLatencyStatsZeroCapacity)
+    {
+        TTimePredictor predictor(/*capacity*/ 0, /*nthFromEnd*/ 0);
+
+        predictor.Add(THostIndex(0), TDuration::MilliSeconds(50));
+        predictor.Add(THostIndex(0), TDuration::MilliSeconds(100));
+
+        const auto stats = predictor.GetLatencyStats(0);
+        UNIT_ASSERT_VALUES_EQUAL(0u, stats.Count);
+        UNIT_ASSERT_VALUES_EQUAL(0u, predictor.GetCapacity());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

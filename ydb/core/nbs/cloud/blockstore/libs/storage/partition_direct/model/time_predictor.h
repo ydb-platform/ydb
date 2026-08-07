@@ -11,6 +11,19 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TLatencyStats
+{
+    // Samples currently in the sliding window (0 => no data).
+    size_t Count = 0;
+    TDuration Min;
+    TDuration P50;
+    TDuration P90;
+    TDuration P99;
+    TDuration Max;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TTimePredictor
 {
 public:
@@ -22,6 +35,11 @@ public:
     [[nodiscard]] TDuration Predict(THostIndex host) const;
     [[nodiscard]] TDuration Predict(THostMask hostMask) const;
 
+    // Exact percentiles over the samples currently in the host's window.
+    // Empty / out-of-range host yields a default-constructed TLatencyStats.
+    [[nodiscard]] TLatencyStats GetLatencyStats(THostIndex host) const;
+    [[nodiscard]] size_t GetCapacity() const;
+
 private:
     struct THistory
     {
@@ -32,6 +50,7 @@ private:
 
         void Add(TDuration time);
         [[nodiscard]] TDuration Predict(size_t nthFromEnd) const;
+        [[nodiscard]] TLatencyStats GetLatencyStats() const;
     };
 
     const size_t Capacity;

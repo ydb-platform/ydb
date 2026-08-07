@@ -397,8 +397,9 @@ public:
     }
 
     static NGrpcActorClient::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TYdbStorageConfig& connection) {
-        NGrpcActorClient::TGrpcClientSettings settings("fq_compute_database_service_actor");
+        NGrpcActorClient::TGrpcClientSettings settings;
         settings.Endpoint = connection.GetEndpoint();
+        settings.UserAgentHint = "fq_compute_database_service_actor";
         settings.EnableSsl = connection.GetUseSsl();
         if (connection.GetCertificateFile()) {
             settings.CertificateRootCA = StripString(TFileInput(connection.GetCertificateFile()).ReadAll());
@@ -407,8 +408,9 @@ public:
     }
 
     static NGrpcActorClient::TGrpcClientSettings CreateGrpcClientSettings(const auto& connection) {
-        NGrpcActorClient::TGrpcClientSettings settings("fq_compute_database_service_actor");
+        NGrpcActorClient::TGrpcClientSettings settings;
         settings.Endpoint = connection.GetEndpoint();
+        settings.UserAgentHint = "fq_compute_database_service_actor";
         settings.EnableSsl = connection.GetUseSsl();
         if (connection.GetCertificateFile()) {
             settings.CertificateRootCA = StripString(TFileInput(connection.GetCertificateFile()).ReadAll());

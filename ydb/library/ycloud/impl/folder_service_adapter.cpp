@@ -138,8 +138,7 @@ class TFolderServiceAdapter: public NActors::TActorBootstrapped<TFolderServiceAd
     }
 
     void RegisterFolderService() {
-        // TODO(vlad-serikov): Remove
-        NCloud::TFolderServiceSettings settings("");
+        NCloud::TFolderServiceSettings settings;
         if (!Config.GetPathToRootCA().empty())
             settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
         settings.Endpoint = Config.GetResourceManagerEndpoint();
@@ -148,8 +147,7 @@ class TFolderServiceAdapter: public NActors::TActorBootstrapped<TFolderServiceAd
     }
 
     void RegisterTransitionalFolderService() {
-        // TODO(vlad-serikov): Remove
-        NCloud::TFolderServiceTransitionalSettings settings("");
+        NCloud::TFolderServiceTransitionalSettings settings;
         if (!Config.GetPathToRootCA().empty())
             settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
         settings.Endpoint = Config.GetEndpoint();

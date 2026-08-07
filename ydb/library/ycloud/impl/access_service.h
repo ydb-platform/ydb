@@ -6,23 +6,22 @@ namespace NCloud {
 
 using namespace NKikimr;
 
-struct TAccessServiceSettings : NGrpcActorClient::TGrpcClientSettings {
-    using NGrpcActorClient::TGrpcClientSettings::TGrpcClientSettings;
-
-};
+struct TAccessServiceSettings : NGrpcActorClient::TGrpcClientSettings {};
 
 IActor* CreateAccessServiceV1(const TAccessServiceSettings& settings);
 IActor* CreateAccessServiceV2(const TAccessServiceSettings& settings);
 
-inline IActor* CreateAccessServiceV1(const TString& endpoint, const TString& userAgentHint) {
-    TAccessServiceSettings settings(userAgentHint);
-    settings.Endpoint = endpoint;
+inline IActor* CreateAccessServiceV1(TString endpoint, TString userAgentHint) {
+    TAccessServiceSettings settings;
+    settings.Endpoint = std::move(endpoint);
+    settings.UserAgentHint = std::move(userAgentHint);
     return CreateAccessServiceV1(settings);
 }
 
-inline IActor* CreateAccessServiceV2(const TString& endpoint, const TString& userAgentHint) {
-    TAccessServiceSettings settings(userAgentHint);
-    settings.Endpoint = endpoint;
+inline IActor* CreateAccessServiceV2(TString endpoint, TString userAgentHint) {
+    TAccessServiceSettings settings;
+    settings.Endpoint = std::move(endpoint);
+    settings.UserAgentHint = std::move(userAgentHint);
     return CreateAccessServiceV2(settings);
 }
 

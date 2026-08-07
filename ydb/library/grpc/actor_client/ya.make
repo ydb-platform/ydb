@@ -3,7 +3,7 @@ LIBRARY()
 SRCS(
     grpc_service_cache.h
     grpc_service_client.h
-    grpc_service_settings.cpp
+    grpc_service_settings.h
 )
 
 PEERDIR(

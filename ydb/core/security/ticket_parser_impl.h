@@ -2362,7 +2362,8 @@ protected:
 
         if (Config.GetUseAccessService()) {
             if (Config.GetAccessServiceType() == "Yandex_v2") {
-                NCloud::TAccessServiceSettings settings("ticket_parser");
+                NCloud::TAccessServiceSettings settings;
+                settings.UserAgentHint = "ticket_parser";
                 FillAccessServiceSettings(settings);
 
                 AccessServiceValidatorV1 = Register(NCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
@@ -2397,7 +2398,8 @@ protected:
                                                             TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
                 }
             } else if (Config.GetAccessServiceType() == "Nebius_v1") {
-                NNebiusCloud::TAccessServiceSettings settings("ticket_parser");
+                NNebiusCloud::TAccessServiceSettings settings;
+                settings.UserAgentHint = "ticket_parser";
                 FillAccessServiceSettings(settings);
                 NebiusAccessServiceValidator = Register(NNebiusCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             } else {
@@ -2406,8 +2408,9 @@ protected:
         }
 
         if (Config.GetUseUserAccountService()) {
-            NCloud::TUserAccountServiceSettings settings("ticket_parser");
+            NCloud::TUserAccountServiceSettings settings;
             settings.Endpoint = Config.GetUserAccountServiceEndpoint();
+            settings.UserAgentHint = "ticket_parser";
             if (Config.GetUseUserAccountServiceTLS()) {
                 settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
                 settings.SslTargetNameOverride = Config.GetUserAccountServiceSslTargetNameOverride();
@@ -2423,8 +2426,9 @@ protected:
         }
 
         if (Config.GetUseServiceAccountService()) {
-            NCloud::TServiceAccountServiceSettings settings("ticket_parser");
+            NCloud::TServiceAccountServiceSettings settings;
             settings.Endpoint = Config.GetServiceAccountServiceEndpoint();
+            settings.UserAgentHint = "ticket_parser";
             if (Config.GetUseServiceAccountServiceTLS()) {
                 settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
                 settings.SslTargetNameOverride = Config.GetServiceAccountServiceSslTargetNameOverride();

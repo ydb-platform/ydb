@@ -57,8 +57,9 @@ public:
     }
 
     TString Call(const TString& userAgentHint) {
-        NGrpcActorClient::TGrpcClientSettings settings(userAgentHint);
+        NGrpcActorClient::TGrpcClientSettings settings;
         settings.Endpoint = Endpoint;
+        settings.UserAgentHint = userAgentHint;
         const auto config = TClient::InitGrpcConfig(settings);
         auto channel = NYdbGrpc::CreateChannelInterface(config);
         auto stub = Draft::Dummy::DummyService::NewStub(channel);

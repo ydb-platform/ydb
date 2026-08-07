@@ -54,8 +54,9 @@ struct TTestSetup {
         Client->InitRootScheme();
         EdgeActor = GetRuntime()->AllocateEdgeActor();
 
-        NCloud::TAccessServiceSettings sets("access_service_ut");
+        NCloud::TAccessServiceSettings sets;
         sets.Endpoint = "localhost:" + ToString(ServicePort);
+        sets.UserAgentHint = "access_service_ut";
         AccessServiceActor = NCloud::CreateAccessServiceWithCache(sets, EnableV2Interface);
         GetRuntime()->Register(AccessServiceActor);
     }

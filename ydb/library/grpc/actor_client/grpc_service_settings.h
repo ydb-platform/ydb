@@ -1,6 +1,5 @@
 #pragma once
 
-#include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
@@ -19,8 +18,6 @@ struct TGrpcClientSettings {
     std::unordered_map<TString, TString> Headers;
     TString SslTargetNameOverride;
     TString UserAgentHint;
-
-    explicit TGrpcClientSettings(TString userAgentHint);
 };
 
 } // namespace NGrpcActorClient

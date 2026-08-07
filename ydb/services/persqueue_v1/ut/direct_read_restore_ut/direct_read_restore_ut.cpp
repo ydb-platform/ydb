@@ -60,6 +60,13 @@ auto RunWithDispatch(NActors::TTestActorRuntime& runtime, TFunc&& func) {
     return static_cast<NKikimr::TTestActorRuntime&>(runtime).WaitFuture(std::move(future));
 }
 
+template <typename TCondition>
+void WaitUntil(NActors::TTestActorRuntime& runtime, TCondition&& condition, TDuration deadline = TDuration::Seconds(10)) {
+    TDispatchOptions opts;
+    opts.CustomFinalCondition = std::forward<TCondition>(condition);
+    UNIT_ASSERT_C(runtime.DispatchEvents(opts, deadline), "WaitUntil condition not met before deadline");
+}
+
 TDriverConfig MakeAsyncDriverConfig(const TString& endpoint) {
     TDriverConfig config;
     config.SetEndpoint(endpoint);
@@ -435,9 +442,9 @@ Y_UNIT_TEST(RestoredDirectReadIdZeroOnForgetAfterDoubleRestart) {
     env.HoldRestorePreparePublish.store(1);
     env.RebootPqTablet();
 
-    for (ui32 i = 0; i < 50 && env.HeldPrepareOrPublish.load() == 0; ++i) {
-        runtime.SimulateSleep(TDuration::MilliSeconds(50));
-    }
+    WaitUntil(runtime, [&] {
+        return env.HeldPrepareOrPublish.load() > 0;
+    });
     UNIT_ASSERT_C(env.HeldPrepareOrPublish.load() > 0,
         "expected dropped CmdPrepareReadResult/CmdPublishReadResult during restore");
 
@@ -486,18 +493,18 @@ Y_UNIT_TEST(RequestInflyOnDuplicatePrepareAfterPipeRestart) {
     client.InitDirectSession(runtime);
     client.StartDirectReadPartition(runtime);
 
-    for (ui32 i = 0; i < 100 && env.HeldPrepareResponses.load() < 1; ++i) {
-        runtime.SimulateSleep(TDuration::MilliSeconds(50));
-    }
+    WaitUntil(runtime, [&] {
+        return env.HeldPrepareResponses.load() >= 1;
+    });
     UNIT_ASSERT_C(env.HeldPrepareResponses.load() >= 1,
         "expected at least one held CmdPrepareReadResult before reboot");
 
     env.RebootPqTablet();
 
     // Restore of empty DirectReadResults finishes quickly → ResendRecentRequests → second Prepare.
-    for (ui32 i = 0; i < 100 && env.HeldPrepareResponses.load() < 2; ++i) {
-        runtime.SimulateSleep(TDuration::MilliSeconds(50));
-    }
+    WaitUntil(runtime, [&] {
+        return env.HeldPrepareResponses.load() >= 2;
+    });
     UNIT_ASSERT_C(env.HeldPrepareResponses.load() >= 2,
         "expected held Prepare from original read and from ResendRecentRequests after restore"
             << "; held=" << env.HeldPrepareResponses.load());
@@ -546,17 +553,17 @@ Y_UNIT_TEST(HasCmdPublishReadResultOnPrepareDuringPublishRestore) {
 
     env.RebootPqTablet();
 
-    for (ui32 i = 0; i < 100 && env.HeldPrepareResponses.load() < 1; ++i) {
-        runtime.SimulateSleep(TDuration::MilliSeconds(50));
-    }
+    WaitUntil(runtime, [&] {
+        return env.HeldPrepareResponses.load() >= 1;
+    });
     UNIT_ASSERT_C(env.HeldPrepareResponses.load() >= 1,
         "expected held Prepare from first restore attempt");
 
     env.RebootPqTablet();
 
-    for (ui32 i = 0; i < 100 && env.HeldPrepareResponses.load() < 2; ++i) {
-        runtime.SimulateSleep(TDuration::MilliSeconds(50));
-    }
+    WaitUntil(runtime, [&] {
+        return env.HeldPrepareResponses.load() >= 2;
+    });
     UNIT_ASSERT_C(env.HeldPrepareResponses.load() >= 2,
         "expected two held Prepares from nested restore attempts"
             << "; held=" << env.HeldPrepareResponses.load());

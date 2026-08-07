@@ -160,6 +160,7 @@ public:
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
         TasksGraph.GetMeta().StatsMode = Request.StatsMode;
+        TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
         for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {
             TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
         }

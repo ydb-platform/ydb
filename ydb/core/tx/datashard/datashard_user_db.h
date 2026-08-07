@@ -286,6 +286,7 @@ private:
     YDB_ACCESSOR_DEF(ui64, LockTxId);
     YDB_ACCESSOR_DEF(ui32, LockNodeId);
     YDB_ACCESSOR(ELockMode, LockMode, ELockMode::Optimistic);
+    YDB_ACCESSOR_DEF(bool, CollectAffectedRows);
     YDB_ACCESSOR_DEF(ui64, VolatileTxId);
     YDB_ACCESSOR_DEF(bool, IsImmediateTx);
     YDB_ACCESSOR_DEF(bool, IsWriteTx);

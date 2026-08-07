@@ -259,7 +259,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::CheckTras
         {"keyValue", TabletId},
         {"marker", "KV96"});
 
-    TSet<TLogoBlobID>& trashBin = Trash;
+    TSet<TLogoBlobID>* trashBin = &Trash;
 
     TMap<ui64, TSet<TLogoBlobID>>::iterator itTrashBin;
     bool finished = false;
@@ -274,7 +274,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::CheckTras
             finished = true;
             return;
         }
-        trashBin = itTrashBin->second;
+        trashBin = &itTrashBin->second;
         MoveDataTrashCheckingVacuumGeneration = itTrashBin->first;
         MoveDataTrashCheckingBlobId = TLogoBlobID();
     };
@@ -287,21 +287,21 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::CheckTras
                 return TEvKeyValue::TEvAdvanceMoveDataResult::Success();
             }
         } else {
-            trashBin = itTrashBin->second;
+            trashBin = &itTrashBin->second;
         }
     }
 
     ui64 checkedBlobsCount = 0;
     while (!finished) {
-        auto itTrash = trashBin.lower_bound(MoveDataTrashCheckingBlobId);
-        if (itTrash == trashBin.end()) {
+        auto itTrash = trashBin->lower_bound(MoveDataTrashCheckingBlobId);
+        if (itTrash == trashBin->end()) {
             nextTrashBin();
             if (finished) {
                 break;
             }
-            itTrash = trashBin.begin();
+            itTrash = trashBin->begin();
         }
-        for (; itTrash != trashBin.end(); ++itTrash, ++checkedBlobsCount) {
+        for (; itTrash != trashBin->end(); ++itTrash, ++checkedBlobsCount) {
             MoveDataTrashCheckingBlobId = *itTrash;
             if (checkedBlobsCount >= MaxMoveDataTrashCheckingBlobs) {
                 return TEvKeyValue::TEvAdvanceMoveDataResult::CheckTrash();

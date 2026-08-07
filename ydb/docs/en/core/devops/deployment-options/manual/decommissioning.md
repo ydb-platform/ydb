@@ -1,4 +1,10 @@
-# Decommissioning a Part of Cluster
+# Data Center Decommissioning
+
+{% note info %}
+
+Use this procedure only to decommission an entire data center.
+
+{% endnote %}
 
 Decommissioning is the procedure for moving a VDisk from a PDisk that needs to be decommissioned.
 

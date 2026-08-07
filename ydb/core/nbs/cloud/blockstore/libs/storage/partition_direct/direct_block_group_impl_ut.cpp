@@ -1414,7 +1414,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         WaitReady(initialReady);
 
         // DDisks
-        for (const auto& ddiskId : ddisks) {
+        for (const auto& ddiskId: ddisks) {
             const auto credentials = transportPtr->GetConnectCredentials(
                 EConnectionType::DDisk,
                 ddiskId);
@@ -1426,7 +1426,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         }
 
         // PBuffers
-        for (const auto& pbufferId : pbuffers) {
+        for (const auto& pbufferId: pbuffers) {
             const auto credentials = transportPtr->GetConnectCredentials(
                 EConnectionType::PBuffer,
                 pbufferId);

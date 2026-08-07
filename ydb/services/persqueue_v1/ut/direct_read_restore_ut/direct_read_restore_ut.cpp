@@ -473,7 +473,7 @@ Y_UNIT_TEST(RestoredDirectReadIdZeroOnForgetAfterDoubleRestart) {
 }
 
 // LOGBROKER-10590: after pipe restart with RequestInfly, ResendRecentRequests re-sends Prepare;
-// a late/duplicate CmdPrepareReadResult on the normal path then hits PARTITION_ENSURE(RequestInfly).
+// a late/duplicate CmdPrepareReadResult on the normal path must be ignored (not ENSURE).
 Y_UNIT_TEST(RequestInflyOnDuplicatePrepareAfterPipeRestart) {
     TDirectReadRestoreEnv env;
     env.Start();
@@ -522,9 +522,8 @@ Y_UNIT_TEST(RequestInflyOnDuplicatePrepareAfterPipeRestart) {
     env.ReleaseHeldPrepares();
     runtime.SimulateSleep(TDuration::Seconds(1));
 
-    // Intentionally asserting the bug exists (repro). Flip after fix.
-    UNIT_ASSERT_C(env.RequestInflyEnsure.load() > 0,
-        "expected PARTITION_ENSURE(RequestInfly) on duplicate Prepare after pipe restart"
+    UNIT_ASSERT_C(env.RequestInflyEnsure.load() == 0,
+        "duplicate Prepare after pipe restart must not hit PARTITION_ENSURE(RequestInfly)"
             << "; held=" << env.HeldPrepareResponses.load()
             << "; reason=" << env.EnsureCloseReason);
 

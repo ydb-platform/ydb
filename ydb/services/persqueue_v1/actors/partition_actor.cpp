@@ -830,6 +830,19 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
     if (!PipeClient)
         return; // Pipe was already destroyed, direct read session is being restored. Will resend this request afterwards;
 
+    // Duplicate/stale Prepare is possible after pipe restart: ResendRecentRequests may
+    // re-send CurrentRequest while a previous CmdPrepareReadResult is still delivered.
+    // First response clears RequestInfly; ignore the rest (same as unwaited cookie).
+    if (!RequestInfly) {
+        YDB_LOG_DEBUG_CTX(ctx, "Unwaited prepare-response for direct read id",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition},
+            {"directReadId", res.GetDirectReadId()},
+            {"readOffset", ReadOffset},
+            {"readGuid", ReadGuid});
+        return;
+    }
+
     EndOffset = res.GetEndOffset();
     SizeLag = res.GetSizeLag();
     WTime = res.GetWriteTimestampMS();
@@ -848,8 +861,6 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
         {"directReadId", DirectReadId});
 
     SendPublishDirectRead(DirectReadId, ctx);
-
-    PARTITION_ENSURE(RequestInfly);
 
     CurrentRequest.Clear();
     RequestInfly = false;

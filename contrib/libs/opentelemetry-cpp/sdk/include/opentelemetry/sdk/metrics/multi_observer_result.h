@@ -40,7 +40,7 @@ protected:
 private:
   // This is _different_ to opentelemetry::metrics::ObserverResult because this variant is
   // a variant directly of ObserverResultT, not of _pointers_ to ObserverResultT.
-  // This allows us to avoid an unnescessary layer of inderection and a bunch of allocations.
+  // This allows us to avoid an unnecessary layer of indirection and a bunch of allocations.
   using ObserverResultDirect =
       nostd::variant<nostd::monostate, ObserverResultT<double>, ObserverResultT<int64_t>>;
   std::unordered_map<opentelemetry::metrics::ObservableInstrument *, ObserverResultDirect>

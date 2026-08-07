@@ -31,6 +31,9 @@ struct TTextDocumentSyncOptions {
     TMaybe<ETextDocumentSyncKind> Change;
 };
 
+struct TDocumentFormattingOptions {
+};
+
 struct TCompletionOptions {
     TMaybe<TVector<TString>> TriggerCharacters;
 };
@@ -38,6 +41,7 @@ struct TCompletionOptions {
 struct TServerCapabilities {
     TMaybe<TTextDocumentSyncOptions> TextDocumentSync;
     TMaybe<TCompletionOptions> CompletionProvider;
+    TMaybe<TDocumentFormattingOptions> DocumentFormattingProvider;
 };
 
 struct TServerInfo {
@@ -72,6 +76,7 @@ JSON_DECLARE_FROM(NLsp::TInitializeParams, json);
 JSON_DECLARE_TO(NLsp::ETextDocumentSyncKind, value);
 JSON_DECLARE_TO(NLsp::TTextDocumentSyncOptions, value);
 JSON_DECLARE_TO(NLsp::TCompletionOptions, value);
+JSON_DECLARE_TO(NLsp::TDocumentFormattingOptions, value);
 JSON_DECLARE_TO(NLsp::TServerCapabilities, value);
 JSON_DECLARE_TO(NLsp::TServerInfo, value);
 JSON_DECLARE_TO(NLsp::TInitializeResult, value);

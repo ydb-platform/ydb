@@ -2,6 +2,9 @@ import os
 import pytest
 import time
 import tempfile
+import math
+from datetime import timedelta
+from uuid import UUID
 
 import logging
 import yatest.common
@@ -308,6 +311,9 @@ class TestSqlExportImportFormats(object):
                 "enable_immediate_writing_on_bulk_upsert": True,
                 "enable_cs_overloads_subscription_retries": True,
                 "enable_columnshard_bool": True,
+                "enable_columnshard_interval": True,
+                "enable_columnshard_uuid": True,
+                "enable_columnshard_dy_number": True,
             },
             column_shard_config={
                 "alter_object_enabled": True,
@@ -344,6 +350,9 @@ class TestSqlExportImportFormats(object):
                 name Utf8,
                 val Int32,
                 flag Bool,
+                duration Interval,
+                uid Uuid,
+                dyn DyNumber,
                 PRIMARY KEY (id)
             )
             WITH (
@@ -358,9 +367,18 @@ class TestSqlExportImportFormats(object):
 
     def _fetch_ordered_rows(self, path: str):
         rs = self.ydb_client.query(
-            f"SELECT id, name, val, flag FROM `{path}` ORDER BY id"
+            f"SELECT id, name, val, flag, duration, uid, dyn FROM `{path}` ORDER BY id"
         )[0]
         return [dict(r) for r in rs.rows]
+
+    def _assert_rows_equal(self, got, exp):
+        assert got["id"] == exp["id"]
+        assert got["name"] == exp["name"]
+        assert got["val"] == exp["val"]
+        assert got["flag"] == exp["flag"]
+        assert got["duration"] == timedelta(microseconds=exp["duration"])
+        assert got["uid"] == exp["uid"]
+        assert math.isclose(float(got["dyn"]), float(exp["dyn"]), rel_tol=1e-3)
 
     @pytest.mark.parametrize("export_kind", ["csv", "json"])
     def test_sql_export_then_import_roundtrip(self, export_kind):
@@ -375,18 +393,51 @@ class TestSqlExportImportFormats(object):
         column_types.add_column("name", ydb.PrimitiveType.Utf8)
         column_types.add_column("val", ydb.PrimitiveType.Int32)
         column_types.add_column("flag", ydb.PrimitiveType.Bool)
+        column_types.add_column("duration", ydb.PrimitiveType.Interval)
+        column_types.add_column("uid", ydb.PrimitiveType.UUID)
+        column_types.add_column("dyn", ydb.PrimitiveType.DyNumber)
 
         expected_rows = [
-            {"id": 1, "name": "a", "val": 10, "flag": True},
-            {"id": 2, "name": "b", "val": 20, "flag": False},
-            {"id": 3, "name": "c", "val": 30, "flag": True},
+            {
+                "id": 1,
+                "name": "a",
+                "val": 10,
+                "flag": True,
+                "duration": 1_000_000,
+                "uid": UUID("30015678-e89b-12d3-a456-556642440000"),
+                "dyn": "1e1",
+            },
+            {
+                "id": 2,
+                "name": "b",
+                "val": 20,
+                "flag": False,
+                "duration": 2_000_000,
+                "uid": UUID("30025678-e89b-12d3-a456-556642440000"),
+                "dyn": "2e1",
+            },
+            {
+                "id": 3,
+                "name": "c",
+                "val": 30,
+                "flag": True,
+                "duration": 3_000_000,
+                "uid": UUID("30035678-e89b-12d3-a456-556642440000"),
+                "dyn": "3e1",
+            },
         ]
 
         self.ydb_client.bulk_upsert(source, column_types, expected_rows)
 
-        assert len(self._fetch_ordered_rows(source)) == len(expected_rows)
+        source_rows = self._fetch_ordered_rows(source)
+        assert len(source_rows) == len(expected_rows)
+        for got, exp in zip(source_rows, expected_rows):
+            self._assert_rows_equal(got, exp)
 
-        select_sql = f"SELECT `id`, `name`, `val`, `flag` FROM `{source}` ORDER BY `id`"
+        select_sql = (
+            f"SELECT `id`, `name`, `val`, `flag`, `duration`, `uid`, `dyn` "
+            f"FROM `{source}` ORDER BY `id`"
+        )
         fmt = "csv" if export_kind == "csv" else "json-unicode"
         export_cmd = self._ydb_cli_base_cmd() + ["sql", "-s", select_sql, "--format", fmt]
         export_res = yatest.common.execute(export_cmd, wait=True)
@@ -399,6 +450,10 @@ class TestSqlExportImportFormats(object):
             tmp.write(payload)
             export_path = tmp.name
 
+        # Column-table DescribeColumns order may differ from CREATE/SELECT order,
+        # so CSV import must get an explicit column list matching the export.
+        csv_columns = "id,name,val,flag,duration,uid,dyn"
+
         try:
             self._create_table(dest)
             if export_kind == "csv":
@@ -408,6 +463,8 @@ class TestSqlExportImportFormats(object):
                     "csv",
                     "-p",
                     dest,
+                    "--columns",
+                    csv_columns,
                     export_path,
                 ]
             else:
@@ -426,10 +483,7 @@ class TestSqlExportImportFormats(object):
             imported = self._fetch_ordered_rows(dest)
             assert len(imported) == len(expected_rows)
             for got, exp in zip(imported, expected_rows):
-                assert got["id"] == exp["id"]
-                assert got["name"] == exp["name"]
-                assert got["val"] == exp["val"]
-                assert got["flag"] == exp["flag"]
+                self._assert_rows_equal(got, exp)
         finally:
             try:
                 os.unlink(export_path)

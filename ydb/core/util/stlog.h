@@ -2,6 +2,7 @@
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <library/cpp/json/json_writer.h>
 #include <google/protobuf/text_format.h>

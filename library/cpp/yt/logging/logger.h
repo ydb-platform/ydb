@@ -140,7 +140,7 @@ struct TLoggingContext
     TFiberId FiberId;
     TTraceId TraceId;
     TRequestId RequestId;
-    TStringBuf TraceLoggingTag;
+    TLoggingTagListPayloadView TraceLoggingTags;
 };
 
 TLoggingContext GetLoggingContext();
@@ -227,8 +227,6 @@ public:
     TLogger& AddTags(const TLoggingTagList& tags);
     template <class TValue>
     TLogger& AddTag(TLoggingTagKey key, const TValue& value);
-    template <class TValue>
-    TLogger& AddTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec);
     template <class... TArgs>
     TLogger& AddTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args);
 
@@ -243,10 +241,6 @@ public:
     [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value) const &;
     template <class TValue>
     [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value) &&;
-    template <class TValue>
-    [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) const &;
-    template <class TValue>
-    [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) &&;
     template <class... TArgs>
     [[nodiscard]] TLogger WithTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) const &;
     template <class... TArgs>
@@ -478,15 +472,13 @@ void LogStructuredEvent(
 ////////////////////////////////////////////////////////////////////////////////
 // Tagged logging
 //
-// Tags are supplied via a fluent |.With(name, value)| (or |.With(name, value, "%spec")|)
-// chain; they are carried as structured key/value pairs in the event payload. A single-
-// argument |.With(value)| attaches the value under a statically known key resolved by ADL
-// (e.g. |.With(error)| under the "Error" key). |.WithFormat(name, format, args...)| composes
-// one tag out of several values:
+// Tags are supplied via a fluent |.With(name, value)| chain; they are carried as structured
+// key/value pairs in the event payload. A single-argument |.With(value)| attaches the value
+// under a statically known key resolved by ADL (e.g. |.With(error)| under the "Error" key).
 //
 //     YT_TLOG_INFO("Message")
 //         .With("Key", value)
-//         .With("Count", count, "%08x")
+//         .WithFormat("Count", "%08x", count)
 //         .WithFormat("Method", "%v.%v", service, method)
 //         .With(error);
 //

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 
@@ -26,7 +27,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpReadActor(con
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const NWilson::TTraceId& traceId,
-    TIntrusivePtr<TKqpCounters> counters);
+    TIntrusivePtr<TKqpCounters> counters,
+    // Pre-parsed point lookups handed over in-process, in place of the settings'
+    // serialized KeyPoints (which each cost a copy plus a cell re-parse to load).
+    // Mutually exclusive with ranges/points in the settings proto.
+    TVector<TSerializedCellVec> keyPoints = {});
 void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory&, TIntrusivePtr<TKqpCounters>);
 void InterceptReadActorPipeCache(NActors::TActorId);
 

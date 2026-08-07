@@ -412,7 +412,8 @@ void TPartitionActor::HandleFastPathServiceReady(
             .StripeSize = StorageConfig->GetStripeSize(),
             .BlocksCount = blockCount,
             .VChunkSize = StorageConfig->GetVChunkSize(),
-            .VhostQueuesCount = StorageConfig->GetVhostQueuesCount()};
+            .VhostQueuesCount = StorageConfig->GetVhostQueuesCount(),
+            .Generation = Executor()->Generation()};
         service->VhostServer->StartEndpoint(
             GetSocketPath(),
             FastPathService,
@@ -710,6 +711,8 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvPoison,
             HandlePoisonByBlockedGeneration);
+
+        HFunc(TEvService::TEvDeletePartitionRequest, HandleDeletePartition);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

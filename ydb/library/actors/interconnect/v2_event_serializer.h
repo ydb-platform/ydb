@@ -120,6 +120,7 @@ namespace NActors {
             TEventQueue Events;
             std::deque<TRcBuf> SystemRequests;
             TEventHeader EventHeader;
+            size_t SerializedBytesPending = 0;
             size_t EventHeaderOffset = 0;
             TIntrusivePtr<TEventSerializedData> Buffer;
             TRope::TConstIterator Iter;
@@ -147,14 +148,15 @@ namespace NActors {
             std::unique_ptr<IEventBase> Event;
             TRcBuf Scratch;
             size_t ScratchBytesUsed = 0;
-            ui64 EventReceivedTimestamp;
+            ui64 EventReceivedTimestamp = 0;
+            std::vector<y_absl::Cord> Cords; // keeping ownership of the following cords referring the data
         };
         std::deque<TRefcountItem> RefcountItems;
         size_t NumBytesInScratchBuffers = 0;
         ui64 CumulativeProduced = 0; // total bytes ever produced into the output stream
         ui64 CumulativeCommitted = 0; // total bytes ever reported as sent via CommitProducedBytes
 
-        ui64 Timestamp;
+        ui64 Timestamp = 0;
         ui64 SerializeEventTime = 0;
         ui64 BytesCopied = 0;
         ui64 BytesAliased = 0;

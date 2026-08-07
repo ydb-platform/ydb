@@ -3,6 +3,8 @@
 #include "yql_yt_op_hash.h"
 #include "yql_yt_optimize.h"
 
+#include <functional>
+
 #include <yt/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
 #include <yt/yql/providers/yt/provider/yql_yt_layers_integration.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
@@ -13,11 +15,13 @@
 #include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/core/yql_expr_csee.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
@@ -173,7 +177,7 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
 
     if (lambdaBody.IsCallable("WithWorld")) {
         syncList.emplace(lambdaBody.ChildPtr(1), syncList.size());
-        return true;
+        return IsYtIsolatedLambdaImpl(lambdaBody.Head(), syncList, usedCluster, supportsDq, mode, visited);
     }
 
     if (!lambdaBody.GetTypeAnn()->IsComposable()) {
@@ -598,7 +602,7 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
     TExprNode::TPtr output = input;
 
     TNodeOnNodeOwnedMap remaps;
-    VisitExpr(output, [&remaps, &ctx](const TExprNode::TPtr& node) {
+    std::function<bool(const TExprNode::TPtr&)> visitor = [&remaps, &ctx, &visitor](const TExprNode::TPtr& node) -> bool {
         if (TYtLength::Match(node.Get())) {
             return false;
         }
@@ -622,6 +626,7 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
 
         if (node->IsCallable("WithWorld")) {
             remaps[node.Get()] = node->HeadPtr();
+            VisitExpr(node->HeadPtr(), visitor);
             return false;
         }
 
@@ -669,7 +674,8 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
         }
 
         return true;
-    });
+    };
+    VisitExpr(output, visitor);
 
     if (output->IsLambda() && TYtOutput::Match(output->Child(1))) {
         remaps[output->Child(1)] = Build<TYtTableContent>(ctx, output->Child(1)->Pos())
@@ -751,6 +757,26 @@ TYtOutputOpBase GetOutputOp(TYtOutput output, bool takeFirstInHybrid) {
         return tr.Cast().Second();
     }
     return output.Operation().Cast<TYtOutputOpBase>();
+}
+
+TMaybe<TStringBuf> FindReservedColumnName(const TTypeAnnotationNode& rowType, const TYtState& state) {
+    if (rowType.GetKind() != ETypeAnnotationKind::Struct) {
+        return Nothing();
+    }
+
+    const bool defaultForbid = IsAvailableLangVersion(NFeature::YtReservedColumnPrefix.MinLangVer, state.Types->LangVer);
+    const bool forbid = state.Configuration->_ForbidReservedColumns.Get().GetOrElse(defaultForbid);
+    if (!forbid) {
+        return Nothing();
+    }
+
+    for (auto item: rowType.Cast<TStructExprType>()->GetItems()) {
+        if (IsSystemMember(item->GetName())) {
+            return item->GetName();
+        }
+    }
+
+    return Nothing();
 }
 
 TVector<TYtTableBaseInfo::TPtr> GetInputTableInfos(TExprBase input) {
@@ -2543,6 +2569,22 @@ ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& con
     const auto useNativeYtTypes = config.UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
     const auto nativeTypeCompatibility = config.NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
     return useNativeYtTypes ? nativeTypeCompatibility : NTCF_NONE;
+}
+
+void ReportNonWritableBareYsonError(const TPosition& pos, const TStructExprType& rowType, TExprContext& ctx) {
+    TStringBuilder columns;
+    for (auto item: rowType.GetItems()) {
+        if (!item->GetItemType()->HasBareYson()) {
+            continue;
+        }
+        if (!columns.empty()) {
+            columns << ", ";
+        }
+        columns << TString{item->GetName()}.Quote() << ": " << *item->GetItemType();
+    }
+    YQL_ENSURE(!columns.empty(), "Expected at least one column with strict Yson, but got " << static_cast<const TTypeAnnotationNode&>(rowType));
+    ctx.AddError(TIssue(pos, TStringBuilder()
+        << "Strict Yson type is not allowed to write, please use Optional<Yson> for column(s): " << columns));
 }
 
 } // NYql

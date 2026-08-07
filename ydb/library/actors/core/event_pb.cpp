@@ -58,23 +58,29 @@ namespace NActors {
         return true;
     }
 
-    void TCoroutineChunkSerializer::Produce(const void* data, size_t size,
+    void TCoroutineChunkSerializer::Produce(const void* data, ssize_t size,
             const NInterconnect::NRdma::TMemRegion* memRegion) {
-        Y_ABORT_UNLESS(size <= TotalSizeRemain);
+        Y_ABORT_UNLESS(size < 0 || static_cast<size_t>(size) <= TotalSizeRemain);
         TotalSizeRemain -= size;
         TotalSerializedDataSize += size;
 
-        if (!Chunks.empty()) {
-            auto& last = Chunks.back();
-            if (last.Buf + last.Size == data && last.MemRegion == memRegion) {
-                last.Size += size; // just extend the last buffer
-                return;
+        if (LastChunk.Buf + LastChunk.Size == data && LastChunk.MemRegion == memRegion) {
+            Y_ABORT_UNLESS(size > 0 || static_cast<size_t>(-size) <= LastChunk.Size);
+            LastChunk.Size += size;
+            if (LastChunk.Size == 0) {
+                Chunks.pop_back();
+                LastChunk = Chunks.empty() ? TChunk{nullptr, 0, nullptr} : Chunks.back();
+            } else {
+                Chunks.back().Size += size;
             }
+            return;
         }
 
-        Chunks.emplace_back(TChunk{
+        Y_ABORT_UNLESS(size > 0);
+
+        LastChunk = Chunks.emplace_back(TChunk{
             .Buf = static_cast<const char*>(data),
-            .Size = size,
+            .Size = static_cast<size_t>(size),
             .MemRegion = memRegion,
         });
     }
@@ -88,38 +94,61 @@ namespace NActors {
         Y_ABORT_UNLESS(!CancelFlag);
         Y_ABORT_UNLESS(!AbortFlag);
         Y_ABORT_UNLESS(size >= 0);
-        NSan::CheckMemIsInitialized(data, size);
-        while (size) {
-            const bool copyAliased = !memRegion && AliasedMode == EAliasedMode::CopyToBuffer;
-            const size_t bytesToAppend = copyAliased
-                ? Min<size_t>(size, TotalSizeRemain, Buffer.size())
-                : Min<size_t>(size, TotalSizeRemain);
-            if (bytesToAppend) {
-                const void *produce = data;
-                const NInterconnect::NRdma::TMemRegion* producedMemRegion = memRegion;
-                const bool canGlue = !Chunks.empty() &&
-                    Chunks.back().Buf + Chunks.back().Size == data &&
-                    Chunks.back().MemRegion == memRegion;
-                if (!memRegion && (copyAliased ||
-                        ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
-                            !canGlue &&
-                            Buffer.size() >= bytesToAppend))) {
-                    Y_ABORT_UNLESS(Buffer.size() >= bytesToAppend);
-                    memcpy(Buffer.data(), data, bytesToAppend);
-                    produce = Buffer.data();
-                    Buffer = Buffer.SubSpan(bytesToAppend, Max<size_t>());
-                    producedMemRegion = nullptr;
+
+        if (Y_UNLIKELY(memRegion || AliasedMode == EAliasedMode::CopyToBuffer)) { 
+            while (size) {
+                const bool copyAliased = !memRegion && AliasedMode == EAliasedMode::CopyToBuffer;
+                const size_t bytesToAppend = copyAliased
+                    ? Min<size_t>(size, TotalSizeRemain, Buffer.size())
+                    : Min<size_t>(size, TotalSizeRemain);
+                if (bytesToAppend) {
+                    const void *produce = data;
+                    const NInterconnect::NRdma::TMemRegion* producedMemRegion = memRegion;
+                    const bool canGlue = !Chunks.empty() &&
+                        Chunks.back().Buf + Chunks.back().Size == data &&
+                        Chunks.back().MemRegion == memRegion;
+                    if (!memRegion && (copyAliased ||
+                            ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
+                                !canGlue &&
+                                Buffer.size() >= bytesToAppend))) {
+                        Y_ABORT_UNLESS(Buffer.size() >= bytesToAppend);
+                        memcpy(Buffer.data(), data, bytesToAppend);
+                        produce = Buffer.data();
+                        Buffer = Buffer.SubSpan(bytesToAppend, Max<size_t>());
+                        producedMemRegion = nullptr;
+                    }
+                    Produce(produce, bytesToAppend, producedMemRegion);
+                    data = static_cast<const char*>(data) + bytesToAppend;
+                    size -= bytesToAppend;
+                } else {
+                    InnerContext.SwitchTo(BufFeedContext);
+                    if (CancelFlag || AbortFlag) {
+                        return false;
+                    }
                 }
-                Produce(produce, bytesToAppend, producedMemRegion);
-                data = static_cast<const char*>(data) + bytesToAppend;
-                size -= bytesToAppend;
-            } else {
-                InnerContext.SwitchTo(BufFeedContext);
-                if (CancelFlag || AbortFlag) {
-                    return false;
+            }
+        } else { // pass-through copy, no memRegion
+            while (size) {
+                if (const size_t bytesToAppend = Min<size_t>(size, TotalSizeRemain)) {
+                    const void *produce = data;
+                    // if the data is on the same cache line, we better copy it to the buffer
+                    if ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 && Buffer.size() >= bytesToAppend) {
+                        memcpy(Buffer.data(), data, bytesToAppend);
+                        produce = Buffer.data();
+                        Buffer = {Buffer.data() + bytesToAppend, Buffer.size() - bytesToAppend};
+                    }
+                    Produce(produce, bytesToAppend, nullptr);
+                    data = static_cast<const char*>(data) + bytesToAppend;
+                    size -= bytesToAppend;
+                } else {
+                    InnerContext.SwitchTo(BufFeedContext);
+                    if (CancelFlag || AbortFlag) {
+                        return false;
+                    }
                 }
             }
         }
+
         return true;
     }
 
@@ -152,19 +181,11 @@ namespace NActors {
         if (!count) {
             return;
         }
-        Y_ABORT_UNLESS(count > 0);
-        Y_ABORT_UNLESS(!Chunks.empty());
-        TChunk& buf = Chunks.back();
-        Y_ABORT_UNLESS((size_t)count <= buf.Size, "count# %d buf.Size# %zu", count, buf.Size);
-        Y_ABORT_UNLESS(buf.Buf + buf.Size == Buffer.data(), "buf# %p:%zu Buffer.data# %p Buffer.size# %zu"
-            " NumChunks# %zu", buf.Buf, buf.Size, Buffer.data(), Buffer.size(), Chunks.size());
-        buf.Size -= count;
-        if (!buf.Size) {
-            Chunks.pop_back();
-        }
-        Buffer = {Buffer.data() - count, Buffer.size() + count};
-        TotalSizeRemain += count;
-        TotalSerializedDataSize -= count;
+        Produce(Buffer.data(), -count, nullptr);
+        Buffer = {
+            Buffer.data() - count,
+            Buffer.size() + count,
+        };
     }
 
     void TCoroutineChunkSerializer::Resume() {
@@ -189,6 +210,38 @@ namespace NActors {
         return WriteAliasedRaw(s->data(), s->length());
     }
 
+    bool TCoroutineChunkSerializer::WriteCord(const y_absl::Cord& cord) {
+        if (WithCord) {
+            for (const y_absl::string_view& chunk : cord.Chunks()) {
+                if (!WriteAliasedRawImpl(chunk.data(), chunk.size(), nullptr)) {
+                    return false;
+                }
+            }
+            // retain ownership of the cord
+            Cords.push_back(cord);
+        } else {
+            for (const y_absl::string_view& chunk : cord.Chunks()) {
+                const char *chunkData = chunk.data();
+                size_t chunkSize = chunk.size();
+                while (chunkSize) {
+                    void *buffer;
+                    int bufferSize;
+                    if (!Next(&buffer, &bufferSize)) {
+                        return false;
+                    }
+                    size_t numBytesToCopy = Min<size_t>(chunkSize, bufferSize);
+                    memcpy(buffer, chunkData, numBytesToCopy);
+                    chunkData += numBytesToCopy;
+                    chunkSize -= numBytesToCopy;
+                    buffer = (char*)buffer + numBytesToCopy;
+                    bufferSize -= numBytesToCopy;
+                    BackUp(bufferSize);
+                }
+            }
+        }
+        return true;
+    }
+
     std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(void* data, size_t size,
             EAliasedMode aliasedMode) {
         TMutableContiguousSpan buffer(static_cast<char*>(data), size);
@@ -205,7 +258,9 @@ namespace NActors {
         // transfer control to the coroutine
         Y_ABORT_UNLESS(Event);
         Chunks.clear();
+        LastChunk = {nullptr, 0, nullptr};
         AliasedMode = aliasedMode;
+        Y_ABORT_UNLESS(Cords.empty());
         Resume();
 
         Y_DEBUG_ABORT_UNLESS(Buffer.data() >= buffer->data() &&
@@ -214,12 +269,13 @@ namespace NActors {
         return Chunks;
     }
 
-    void TCoroutineChunkSerializer::SetSerializingEvent(const IEventBase *event, bool withCachedSizes) {
+    void TCoroutineChunkSerializer::SetSerializingEvent(const IEventBase *event, bool withCachedSizes, bool withCord) {
         Y_ABORT_UNLESS(Event == nullptr);
         Event = event;
         TotalSerializedDataSize = 0;
         AbortFlag = false;
         WithCachedSizes = withCachedSizes;
+        WithCord = withCord;
     }
 
     void TCoroutineChunkSerializer::Abort() {
@@ -335,15 +391,6 @@ namespace NActors {
         return true;
     }
 
-    bool SerializePayloadCommon(const TVector<TRope> &payload, std::function<bool(TRope)> append) {
-        for (const TRope& rope : payload) {
-            if (!append(rope)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload) {
         // serialize payload first
         void *data;
@@ -369,17 +416,11 @@ namespace NActors {
         if (size) {
             chunker->BackUp(std::exchange(size, 0));
         }
-
-        auto appendRope = [&](TRope rope) {
+        for (const TRope& rope : payload) {
             if (!chunker->WriteRope(&rope)) {
                 return false;
             }
-            return true;
-        };
-        if (!SerializePayloadCommon(payload, appendRope)) {
-            return false;
         }
-
         return true;
     }
 
@@ -400,11 +441,9 @@ namespace NActors {
             SerializeHeaderCommon(payload, append);
             result.Insert(result.End(), std::move(headerBuf));
 
-            auto appendRope = [&](TRope rope) {
-                result.Insert(result.End(), std::move(rope));
-                return true;
-            };
-            SerializePayloadCommon(payload, appendRope);
+            for (const TRope& rope : payload) {
+                result.Insert(result.End(), TRope(rope));
+            }
         }
 
         {
@@ -496,8 +535,7 @@ namespace NActors {
 
     bool IsRdma(const TRope &rope) {
         for (auto it = rope.Begin(); it != rope.End(); ++it) {
-            const TRcBuf& chunk = it.GetChunk();
-            if (NInterconnect::NRdma::TryExtractFromRcBuf(chunk).Empty()) {
+            if (!it.GetChunk().IsRdma()) {
                 return false;
             }
         }

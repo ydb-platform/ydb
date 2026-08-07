@@ -5161,7 +5161,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         if (auto ret = MemberOverRenamingFlatMap(node, ctx); ret != node) {
-            return ret;
+            return KeepWorld(ret, *node, ctx, *optCtx.Types);
         }
 
         if (auto ret = MemberOverFilterSkipNullMembers(node, ctx); ret != node) {
@@ -7480,7 +7480,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
             TExprNode::TPtr sequence = KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx);
             auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, sequence).Seal().Build();
-            return lambdaResult;
+            return KeepWorld(lambdaResult, *node, ctx, *optCtx.Types);
         }
         return node;
     };
@@ -7502,7 +7502,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             } else if (lambdaType->GetKind() == ETypeAnnotationKind::Stream || lambdaType->GetKind() == ETypeAnnotationKind::Flow) {
                 lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ForwardList", { lambdaResult });
             }
-            return lambdaResult;
+            return KeepWorld(lambdaResult, *node, ctx, *optCtx.Types);
         }
         return node;
     };

@@ -304,7 +304,7 @@
         {"shape":"RepositoryNotFoundException"},
         {"shape":"ImageNotFoundException"}
       ],
-      "documentation":"<p>Returns metadata about the images in a repository.</p> <note> <p>Starting with Docker version 1.9, the Docker client compresses image layers before pushing them to a V2 Docker registry. The output of the <code>docker images</code> command shows the uncompressed image size. Therefore, Docker might return a larger image than the image shown in the Amazon Web Services Management Console.</p> </note>"
+      "documentation":"<p>Returns metadata about the images in a repository.</p> <note> <p>Starting with Docker version 1.9, the Docker client compresses image layers before pushing them to a V2 Docker registry. The output of the <code>docker images</code> command shows the uncompressed image size. Therefore, Docker might return a larger image than the image shown in the Amazon Web Services Management Console.</p> </note> <important> <p>The new version of Amazon ECR <i>Basic Scanning</i> doesn't use the <a>ImageDetail$imageScanFindingsSummary</a> and <a>ImageDetail$imageScanStatus</a> attributes from the API response to return scan results. Use the <a>DescribeImageScanFindings</a> API instead. For more information about Amazon Web Services native basic scanning, see <a href=\"https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-scanning.html\"> Scan images for software vulnerabilities in Amazon ECR</a>.</p> </important>"
     },
     "DescribePullThroughCacheRules":{
       "name":"DescribePullThroughCacheRules",
@@ -918,6 +918,14 @@
           "shape":"Date",
           "documentation":"<p>The date and time the Amazon ECR container image was pushed.</p>"
         },
+        "lastInUseAt":{
+          "shape":"Date",
+          "documentation":"<p>The most recent date and time a cluster was running the image.</p>"
+        },
+        "inUseCount":{
+          "shape":"InUseCount",
+          "documentation":"<p>The number of Amazon ECS or Amazon EKS clusters currently running the image.</p>"
+        },
         "registry":{
           "shape":"RegistryId",
           "documentation":"<p>The registry the Amazon ECR container image belongs to.</p>"
@@ -1223,6 +1231,10 @@
           "shape":"ImageTagMutability",
           "documentation":"<p>The tag mutability setting for the repository. If this parameter is omitted, the default setting of <code>MUTABLE</code> will be used which will allow image tags to be overwritten. If <code>IMMUTABLE</code> is specified, all image tags within the repository will be immutable which will prevent them from being overwritten.</p>"
         },
+        "imageTagMutabilityExclusionFilters":{
+          "shape":"ImageTagMutabilityExclusionFilters",
+          "documentation":"<p>Creates a repository creation template with a list of filters that define which image tags can override the default image tag mutability setting.</p>"
+        },
         "repositoryPolicy":{
           "shape":"RepositoryPolicyText",
           "documentation":"<p>The repository policy to apply to repositories created using the template. A repository policy is a permissions policy associated with a repository to control access permissions. </p>"
@@ -1273,6 +1285,10 @@
         "imageTagMutability":{
           "shape":"ImageTagMutability",
           "documentation":"<p>The tag mutability setting for the repository. If this parameter is omitted, the default setting of <code>MUTABLE</code> will be used which will allow image tags to be overwritten. If <code>IMMUTABLE</code> is specified, all image tags within the repository will be immutable which will prevent them from being overwritten.</p>"
+        },
+        "imageTagMutabilityExclusionFilters":{
+          "shape":"ImageTagMutabilityExclusionFilters",
+          "documentation":"<p>Creates a repository with a list of filters that define which image tags can override the default image tag mutability setting.</p>"
         },
         "imageScanningConfiguration":{
           "shape":"ImageScanningConfiguration",
@@ -1459,8 +1475,7 @@
     },
     "DeleteRegistryPolicyRequest":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteRegistryPolicyResponse":{
       "type":"structure",
@@ -1729,8 +1744,7 @@
     },
     "DescribeRegistryRequest":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DescribeRegistryResponse":{
       "type":"structure",
@@ -2073,7 +2087,7 @@
         },
         "maxResults":{
           "shape":"LifecyclePreviewMaxResults",
-          "documentation":"<p>The maximum number of repository results returned by <code>GetLifecyclePolicyPreviewRequest</code> in&#x2028; paginated output. When this parameter is used, <code>GetLifecyclePolicyPreviewRequest</code> only returns&#x2028; <code>maxResults</code> results in a single page along with a <code>nextToken</code>&#x2028; response element. The remaining results of the initial request can be seen by sending&#x2028; another <code>GetLifecyclePolicyPreviewRequest</code> request with the returned <code>nextToken</code>&#x2028; value. This value can be between 1 and 1000. If this&#x2028; parameter is not used, then <code>GetLifecyclePolicyPreviewRequest</code> returns up to&#x2028; 100 results and a <code>nextToken</code> value, if&#x2028; applicable. This option cannot be used when you specify images with <code>imageIds</code>.</p>"
+          "documentation":"<p>The maximum number of repository results returned by <code>GetLifecyclePolicyPreviewRequest</code> in&#x2028; paginated output. When this parameter is used, <code>GetLifecyclePolicyPreviewRequest</code> only returns&#x2028; <code>maxResults</code> results in a single page along with a <code>nextToken</code>&#x2028; response element. The remaining results of the initial request can be seen by sending&#x2028; another <code>GetLifecyclePolicyPreviewRequest</code> request with the returned <code>nextToken</code>&#x2028; value. This value can be between 1 and 100. If this&#x2028; parameter is not used, then <code>GetLifecyclePolicyPreviewRequest</code> returns up to&#x2028;100 results and a <code>nextToken</code> value, if&#x2028; applicable. This option cannot be used when you specify images with <code>imageIds</code>.</p>"
         },
         "filter":{
           "shape":"LifecyclePolicyPreviewFilter",
@@ -2151,8 +2165,7 @@
     },
     "GetRegistryPolicyRequest":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "GetRegistryPolicyResponse":{
       "type":"structure",
@@ -2169,8 +2182,7 @@
     },
     "GetRegistryScanningConfigurationRequest":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "GetRegistryScanningConfigurationResponse":{
       "type":"structure",
@@ -2545,12 +2557,52 @@
       "type":"string",
       "enum":[
         "MUTABLE",
-        "IMMUTABLE"
+        "IMMUTABLE",
+        "IMMUTABLE_WITH_EXCLUSION",
+        "MUTABLE_WITH_EXCLUSION"
       ]
+    },
+    "ImageTagMutabilityExclusionFilter":{
+      "type":"structure",
+      "required":[
+        "filterType",
+        "filter"
+      ],
+      "members":{
+        "filterType":{
+          "shape":"ImageTagMutabilityExclusionFilterType",
+          "documentation":"<p>Specifies the type of filter to use for excluding image tags from the repository's mutability setting.</p>"
+        },
+        "filter":{
+          "shape":"ImageTagMutabilityExclusionFilterValue",
+          "documentation":"<p>The value to use when filtering image tags. Must be either a regular expression pattern or a tag prefix value based on the specified filter type.</p>"
+        }
+      },
+      "documentation":"<p>Overrides the default image tag mutability setting of the repository for image tags that match the specified filters.</p>"
+    },
+    "ImageTagMutabilityExclusionFilterType":{
+      "type":"string",
+      "enum":["WILDCARD"]
+    },
+    "ImageTagMutabilityExclusionFilterValue":{
+      "type":"string",
+      "max":128,
+      "min":1,
+      "pattern":"^[0-9a-zA-Z._*-]{1,128}$"
+    },
+    "ImageTagMutabilityExclusionFilters":{
+      "type":"list",
+      "member":{"shape":"ImageTagMutabilityExclusionFilter"},
+      "max":5,
+      "min":1
     },
     "ImageTagsList":{
       "type":"list",
       "member":{"shape":"ImageTag"}
+    },
+    "InUseCount":{
+      "type":"long",
+      "min":0
     },
     "InitiateLayerUploadRequest":{
       "type":"structure",
@@ -3256,6 +3308,10 @@
         "imageTagMutability":{
           "shape":"ImageTagMutability",
           "documentation":"<p>The tag mutability setting for the repository. If <code>MUTABLE</code> is specified, image tags can be overwritten. If <code>IMMUTABLE</code> is specified, all image tags within the repository will be immutable which will prevent them from being overwritten.</p>"
+        },
+        "imageTagMutabilityExclusionFilters":{
+          "shape":"ImageTagMutabilityExclusionFilters",
+          "documentation":"<p>Creates or updates a repository with filters that define which image tags can override the default image tag mutability setting.</p>"
         }
       }
     },
@@ -3273,6 +3329,10 @@
         "imageTagMutability":{
           "shape":"ImageTagMutability",
           "documentation":"<p>The image tag mutability setting for the repository.</p>"
+        },
+        "imageTagMutabilityExclusionFilters":{
+          "shape":"ImageTagMutabilityExclusionFilters",
+          "documentation":"<p>Returns a list of filters that were defined for a repository. These filters determine which image tags can override the default image tag mutability setting of the repository.</p>"
         }
       }
     },
@@ -3587,6 +3647,10 @@
           "shape":"ImageTagMutability",
           "documentation":"<p>The tag mutability setting for the repository.</p>"
         },
+        "imageTagMutabilityExclusionFilters":{
+          "shape":"ImageTagMutabilityExclusionFilters",
+          "documentation":"<p>The image tag mutability exclusion filters associated with the repository. These filters specify which image tags can override the repository's default image tag mutability setting.</p>"
+        },
         "imageScanningConfiguration":{"shape":"ImageScanningConfiguration"},
         "encryptionConfiguration":{
           "shape":"EncryptionConfiguration",
@@ -3627,7 +3691,11 @@
         },
         "imageTagMutability":{
           "shape":"ImageTagMutability",
-          "documentation":"<p>The tag mutability setting for the repository. If this parameter is omitted, the default setting of MUTABLE will be used which will allow image tags to be overwritten. If IMMUTABLE is specified, all image tags within the repository will be immutable which will prevent them from being overwritten.</p>"
+          "documentation":"<p>The tag mutability setting for the repository. If this parameter is omitted, the default setting of <code>MUTABLE</code> will be used which will allow image tags to be overwritten. If <code>IMMUTABLE</code> is specified, all image tags within the repository will be immutable which will prevent them from being overwritten.</p>"
+        },
+        "imageTagMutabilityExclusionFilters":{
+          "shape":"ImageTagMutabilityExclusionFilters",
+          "documentation":"<p>Defines the image tag mutability exclusion filters to apply when creating repositories from this template. These filters specify which image tags can override the repository's default image tag mutability setting.</p>"
         },
         "repositoryPolicy":{
           "shape":"RepositoryPolicyText",
@@ -4129,8 +4197,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagStatus":{
       "type":"string",
@@ -4239,8 +4306,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdatePullThroughCacheRuleRequest":{
       "type":"structure",
@@ -4313,6 +4379,10 @@
         "imageTagMutability":{
           "shape":"ImageTagMutability",
           "documentation":"<p>Updates the tag mutability setting for the repository. If this parameter is omitted, the default setting of <code>MUTABLE</code> will be used which will allow image tags to be overwritten. If <code>IMMUTABLE</code> is specified, all image tags within the repository will be immutable which will prevent them from being overwritten.</p>"
+        },
+        "imageTagMutabilityExclusionFilters":{
+          "shape":"ImageTagMutabilityExclusionFilters",
+          "documentation":"<p>Updates a repository with filters that define which image tags can override the default image tag mutability setting.</p>"
         },
         "repositoryPolicy":{
           "shape":"RepositoryPolicyText",

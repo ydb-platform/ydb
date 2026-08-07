@@ -2,8 +2,6 @@
 
 #include <yql/essentials/tools/yql_language_server/lsp/message/completion.h>
 
-#include <library/cpp/threading/future/future.h>
-
 namespace NLsp {
 
 class ICompletionApi {

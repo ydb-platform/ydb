@@ -1,8 +1,7 @@
 #pragma once
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapRangeCreate(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapRangeUnion(TCallable& callable, const TComputationNodeFactoryContext& ctx);
@@ -10,5 +9,4 @@ IComputationNode* WrapRangeIntersect(TCallable& callable, const TComputationNode
 IComputationNode* WrapRangeMultiply(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapRangeFinalize(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

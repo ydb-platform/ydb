@@ -28,7 +28,7 @@ def get_dstool_binary_path():
     return yatest.common.binary_path(os.getenv('YDB_DSTOOL_BINARY'))
 
 
-def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True):
+def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True, return_process=False):
     full_cmd = [get_dstool_binary_path(), '--endpoint', f'grpc://{cluster_endpoint(cluster)}']
     full_cmd += cmd
 
@@ -37,4 +37,6 @@ def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True):
         assert (
             False
         ), f'Command\n{full_cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err.decode("utf-8")}\n\nstdout:\n{proc_result.std_out.decode("utf-8")}'
+    if return_process:
+        return proc_result
     return proc_result.std_out

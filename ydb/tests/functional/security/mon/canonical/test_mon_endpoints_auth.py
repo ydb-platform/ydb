@@ -22,6 +22,10 @@ TOKENS = [
 DATABASE = '/Root'
 TENANT_DATABASE = '/Root/Tenant'
 
+_NO_QUERY_PARAMS = [
+    {},
+]
+
 _DEFAULT_QUERIES = [
     {},
     {'database': DATABASE},
@@ -117,8 +121,12 @@ ENDPOINT_SPECS = [
     {'path': '/operation/cancel'},
     {'path': '/operation/forget'},
     {'path': '/operation/get'},
+    # The legacy /X/json/Y alias must be protected exactly like the /X/Y path above.
+    {'path': '/operation/json/get'},
     {'path': '/operation/list'},
     {'path': '/pdisk/info', 'queries': _PDISK_INFO_QUERIES},
+    # The legacy /X/json/Y alias must be protected exactly like the /X/Y path above.
+    {'path': '/pdisk/json/info', 'queries': _PDISK_INFO_QUERIES},
     {'path': '/pdisk/restart'},
     {'path': '/pdisk/status'},
     {'path': '/ping'},
@@ -140,6 +148,9 @@ ENDPOINT_SPECS = [
     {'path': '/tablet'},
     {'path': '/tablets'},
     {'path': '/trace'},
+    # There is no handler for this path, so it must be not found for monitoring and admin levels
+    # and it must be unauthorized for database and viewer level (by default they don't have access to http handlers)
+    {'path': '/unexisted', 'queries': _NO_QUERY_PARAMS, 'methods': ('GET',)},
     {'path': '/vdisk/blobindexstat', 'queries': _VDISK_READ_QUERIES},
     {'path': '/vdisk/evict'},
     {'path': '/vdisk/getblob', 'queries': _VDISK_READ_QUERIES},

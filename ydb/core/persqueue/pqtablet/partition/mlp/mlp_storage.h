@@ -341,6 +341,7 @@ private:
     TSlowMessagesMap::iterator RemoveMessageFromSlowZone(TSlowMessagesMap::iterator it);
     void RemoveMessageFromSlowZone(ui64 offset);
     void RemoveFirstMessageFromFastZone();
+    void MoveFirstMessageFromFastZoneToSlowZone();
     void UpdateMessageMetrics(const TMessage& message);
 
     std::optional<ui32> GetRetentionDeadlineDelta() const;

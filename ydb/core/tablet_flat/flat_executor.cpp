@@ -4144,7 +4144,8 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
+            FollowerId));
 
         if (ResourceMetrics) {
             ResourceMetrics->TryUpdate(ctx);
@@ -4173,7 +4174,8 @@ void TExecutor::ForceSendCounters() {
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
+            FollowerId));
     }
 }
 
@@ -5568,7 +5570,9 @@ void TExecutor::VacuumComplete(TVacuumGeneration generation, const TActorContext
     }
     MoveDataVacuumInProgress = false;
     for (const auto& actor : MoveDataSubscribers) {
-        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(TabletId()));
+        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(
+            TabletId(),
+            NKikimrTabletBase::TEvMoveDataResponse::Success));
     }
     MoveDataSubscribers.clear();
 }

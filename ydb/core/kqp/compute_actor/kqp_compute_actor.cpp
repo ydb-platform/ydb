@@ -11,6 +11,7 @@
 #include <ydb/core/kqp/runtime/kqp_sequencer_factory.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
 #include <ydb/core/kqp/runtime/kqp_vector_actor.h>
+#include <ydb/core/kqp/runtime/kqp_vector_search_actor.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor.h>
 #include <ydb/core/kqp/runtime/kqp_full_text_source.h>
 #include <ydb/core/kqp/runtime/kqp_sys_view_source.h>
@@ -174,11 +175,12 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache
     ) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    RegisterStreamLookupActorFactory(*factory, counters, std::move(vectorIndexLevelsCache));
+    RegisterStreamLookupActorFactory(*factory, counters, vectorIndexLevelsCache);
     RegisterKqpReadActor(*factory, counters);
     RegisterKqpWriteActor(*factory, counters);
     RegisterSequencerActorFactory(*factory, counters);
     RegisterKqpVectorResolveActor(*factory, counters);
+    RegisterKqpVectorSearchActor(*factory, counters, std::move(vectorIndexLevelsCache));
     RegisterKqpFullTextSource(*factory, counters);
     RegisterKqpSysViewSource(*factory, counters);
     NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory);

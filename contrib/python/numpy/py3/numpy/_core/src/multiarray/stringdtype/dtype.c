@@ -17,6 +17,7 @@
 #include "gil_utils.h"
 #include "conversion_utils.h"
 #include "npy_import.h"
+#include "multiarraymodule.h"
 
 /*
  * Internal helper to create new instances
@@ -33,7 +34,6 @@ new_stringdtype_instance(PyObject *na_object, int coerce)
 
     char *default_string_buf = NULL;
     char *na_name_buf = NULL;
-    char array_owned = 0;
 
     npy_string_allocator *allocator = NpyString_new_allocator(PyMem_RawMalloc, PyMem_RawFree,
                                                               PyMem_RawRealloc);
@@ -138,7 +138,7 @@ fail:
     if (na_name_buf != NULL) {
         PyMem_RawFree(na_name_buf);
     }
-    if (allocator != NULL && array_owned != 2) {
+    if (allocator != NULL) {
         NpyString_free_allocator(allocator);
     }
     return NULL;
@@ -675,7 +675,7 @@ stringdtype_dealloc(PyArray_StringDTypeObject *self)
 {
     Py_XDECREF(self->na_object);
     // this can be null if an error happens while initializing an instance
-    if (self->allocator != NULL && self->array_owned != 2) {
+    if (self->allocator != NULL) {
         NpyString_free_allocator(self->allocator);
     }
     PyMem_RawFree((char *)self->na_name.buf);
@@ -708,8 +708,6 @@ stringdtype_repr(PyArray_StringDTypeObject *self)
     return ret;
 }
 
-static PyObject *_convert_to_stringdtype_kwargs = NULL;
-
 // implementation of __reduce__ magic method to reconstruct a StringDType
 // object from the serialized data in the pickle. Uses the python
 // _convert_to_stringdtype_kwargs for convenience because this isn't
@@ -717,19 +715,21 @@ static PyObject *_convert_to_stringdtype_kwargs = NULL;
 static PyObject *
 stringdtype__reduce__(PyArray_StringDTypeObject *self, PyObject *NPY_UNUSED(args))
 {
-    npy_cache_import("numpy._core._internal", "_convert_to_stringdtype_kwargs",
-                     &_convert_to_stringdtype_kwargs);
-
-    if (_convert_to_stringdtype_kwargs == NULL) {
+    if (npy_cache_import_runtime(
+                "numpy._core._internal", "_convert_to_stringdtype_kwargs",
+                &npy_runtime_imports._convert_to_stringdtype_kwargs) == -1) {
         return NULL;
     }
 
     if (self->na_object != NULL) {
-        return Py_BuildValue("O(iO)", _convert_to_stringdtype_kwargs,
-                             self->coerce, self->na_object);
+        return Py_BuildValue(
+                "O(iO)", npy_runtime_imports._convert_to_stringdtype_kwargs,
+                self->coerce, self->na_object);
     }
 
-    return Py_BuildValue("O(i)", _convert_to_stringdtype_kwargs, self->coerce);
+    return Py_BuildValue(
+            "O(i)", npy_runtime_imports._convert_to_stringdtype_kwargs,
+            self->coerce);
 }
 
 static PyMethodDef PyArray_StringDType_methods[] = {

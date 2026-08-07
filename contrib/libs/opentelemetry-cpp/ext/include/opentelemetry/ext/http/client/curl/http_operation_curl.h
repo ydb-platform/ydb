@@ -39,9 +39,9 @@ namespace client
 {
 namespace curl
 {
-const std::chrono::milliseconds kDefaultHttpConnTimeout(5000);  // ms
-const std::string kHttpStatusRegexp = "HTTP\\/\\d\\.\\d (\\d+)\\ .*";
-const std::string kHttpHeaderRegexp = "(.*)\\: (.*)\\n*";
+constexpr std::chrono::milliseconds kDefaultHttpConnTimeout{5000};  // ms
+constexpr const char *kHttpStatusRegexp = "HTTP\\/\\d\\.\\d (\\d+)\\ .*";
+constexpr const char *kHttpHeaderRegexp = "(.*)\\: (.*)\\n*";
 
 /**
  * Default max HTTP Response size.

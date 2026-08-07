@@ -180,18 +180,6 @@ TEST(TTaggedApiTest, Tags)
     EXPECT_EQ(decoded.Tags[1], std::pair(std::string("Arg2"), std::string("test")));
 }
 
-TEST(TTaggedApiTest, CustomSpec)
-{
-    TMockLogManager manager;
-    TLogger Logger(&manager, "Test");
-    YT_TLOG_INFO("Message")
-        .With("Arg1", 256, "%x");
-
-    auto decoded = DecodeSingleEvent(manager);
-    ASSERT_EQ(decoded.Tags.size(), 1u);
-    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Arg1"), std::string("100")));
-}
-
 TEST(TTaggedApiTest, WithFormat)
 {
     TMockLogManager manager;
@@ -207,6 +195,37 @@ TEST(TTaggedApiTest, WithFormat)
     EXPECT_EQ(decoded.Tags[1], std::pair(std::string("Arg1"), std::string("123")));
 }
 
+TEST(TTaggedApiTest, WithIf)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+    YT_TLOG_INFO("Message")
+        .WithIf(true, "Kept", 1)
+        .WithIf(false, "Dropped", 2)
+        .With("After", 3);
+
+    auto decoded = DecodeSingleEvent(manager);
+    EXPECT_EQ(decoded.Message, "Message");
+    ASSERT_EQ(decoded.Tags.size(), 2u);
+    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Kept"), std::string("1")));
+    EXPECT_EQ(decoded.Tags[1], std::pair(std::string("After"), std::string("3")));
+}
+
+TEST(TTaggedApiTest, WithFormatIf)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+    YT_TLOG_INFO("Message")
+        .WithFormatIf(true, "Kept", "%v.%v", "MyService", "MyMethod")
+        .WithFormatIf(false, "Dropped", "%v.%v", "Other", "Method")
+        .With("After", 3);
+
+    auto decoded = DecodeSingleEvent(manager);
+    ASSERT_EQ(decoded.Tags.size(), 2u);
+    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Kept"), std::string("MyService.MyMethod")));
+    EXPECT_EQ(decoded.Tags[1], std::pair(std::string("After"), std::string("3")));
+}
+
 TEST(TTaggedApiTest, TagList)
 {
     TMockLogManager manager;
@@ -215,7 +234,7 @@ TEST(TTaggedApiTest, TagList)
     auto tags = TLoggingTagList()
         .With("Address", "localhost:1234")
         .With("ConnectionId", 42)
-        .With("Flags", 256, "%x")
+        .WithFormat("Flags", "%x", 256)
         .WithFormat("Method", "%v.%v", "MyService", "MyMethod");
 
     YT_TLOG_INFO("Message")
@@ -505,12 +524,13 @@ TEST(TStructuredApiTest, MultipleEvents)
     EXPECT_EQ(GetStructuredYson(manager.GetEvents()[1]), "\"i\"=1");
 }
 
-TEST(TTaggedApiTest, TraceTagMimicsLegacyRendering)
+TEST(TTaggedApiTest, TraceTagsSpliced)
 {
     auto logger = TLogger("Test").WithTag("LoggerTag", 1);
 
+    auto traceTags = TLoggingTagList().With("TraceContextTag", 1);
     TLoggingContext loggingContext{};
-    loggingContext.TraceLoggingTag = "TraceContextTag: 1";
+    loggingContext.TraceLoggingTags = AsView(traceTags.GetPayload());
 
     TTaggedPayloadWriter writer;
     writer.BeginMessage()->AppendString("Message"_sb);
@@ -518,7 +538,7 @@ TEST(TTaggedApiTest, TraceTagMimicsLegacyRendering)
     NDetail::AppendContextualTags(&writer, loggingContext, logger);
     auto payload = writer.Finish();
 
-    // The trace tag travels as a real record, under the key renderers recognize...
+    // Trace tags are ordinary keyed records, spliced after the logger's own.
     TTaggedPayloadReader reader(payload);
     EXPECT_EQ(reader.ReadMessage(), "Message");
     auto loggerTag = reader.TryReadTag();
@@ -526,10 +546,10 @@ TEST(TTaggedApiTest, TraceTagMimicsLegacyRendering)
     EXPECT_EQ(loggerTag->Key, "LoggerTag");
     auto traceTag = reader.TryReadTag();
     ASSERT_TRUE(traceTag);
-    EXPECT_EQ(traceTag->Key, TraceLoggingTagKey);
-    EXPECT_EQ(traceTag->Value, "TraceContextTag: 1");
+    EXPECT_EQ(traceTag->Key, "TraceContextTag");
+    EXPECT_EQ(traceTag->Value, "1");
+    EXPECT_FALSE(reader.TryReadTag());
 
-    // ...yet renders exactly as the legacy path, which folds it into the message text.
     EXPECT_EQ(
         FormatTaggedPayload(payload),
         std::string(GetMessageFromTaggedPayload(

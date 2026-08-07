@@ -160,10 +160,10 @@ Y_UNIT_TEST(PrimitivesEqual) {
 }
 
 Y_UNIT_TEST(PrimitivesNotEqual) {
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValuePod(i64(42)), i64(43)));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValuePod(i32(0)), i32(1)));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValuePod(true), false));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValuePod(double(1.0)), double(2.0)));
+    UNIT_ASSERT(!CompareValues(TUnboxedValuePod(i64(42)), i64(43)));
+    UNIT_ASSERT(!CompareValues(TUnboxedValuePod(i32(0)), i32(1)));
+    UNIT_ASSERT(!CompareValues(TUnboxedValuePod(true), false));
+    UNIT_ASSERT(!CompareValues(TUnboxedValuePod(double(1.0)), double(2.0)));
 }
 
 Y_UNIT_TEST(StringEqual) {
@@ -173,9 +173,9 @@ Y_UNIT_TEST(StringEqual) {
 }
 
 Y_UNIT_TEST(StringNotEqual) {
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValue::Embedded("hello"), TString("world")));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValue::Embedded("abc"), TString("ab")));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValue::Embedded(""), TString("x")));
+    UNIT_ASSERT(!CompareValues(TUnboxedValue::Embedded("hello"), TString("world")));
+    UNIT_ASSERT(!CompareValues(TUnboxedValue::Embedded("abc"), TString("ab")));
+    UNIT_ASSERT(!CompareValues(TUnboxedValue::Embedded(""), TString("x")));
 }
 
 Y_UNIT_TEST(StringBufEqual) {
@@ -185,46 +185,46 @@ Y_UNIT_TEST(StringBufEqual) {
 }
 
 Y_UNIT_TEST(StringBufNotEqual) {
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValue::Embedded("hello"), TStringBuf("world")));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValue::Embedded("abc"), TStringBuf("ab")));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValue::Embedded(""), TStringBuf("x")));
+    UNIT_ASSERT(!CompareValues(TUnboxedValue::Embedded("hello"), TStringBuf("world")));
+    UNIT_ASSERT(!CompareValues(TUnboxedValue::Embedded("abc"), TStringBuf("ab")));
+    UNIT_ASSERT(!CompareValues(TUnboxedValue::Embedded(""), TStringBuf("x")));
 }
 
 Y_UNIT_TEST(MaybeNothing) {
     TUnboxedValuePod nothing;
     AssertUnboxedValueElementEqual(nothing, TMaybe<i32>{});
     AssertUnboxedValueElementEqual(nothing, TMaybe<TString>{});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(nothing, TMaybe<i32>{42}));
+    UNIT_ASSERT(!CompareValues(nothing, TMaybe<i32>{42}));
 }
 
 Y_UNIT_TEST(MaybeDefined) {
     TUnboxedValuePod opt = TUnboxedValuePod(i32(42)).MakeOptional();
     AssertUnboxedValueElementEqual(opt, TMaybe<i32>{42});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(opt, TMaybe<i32>{}));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(opt, TMaybe<i32>{43}));
+    UNIT_ASSERT(!CompareValues(opt, TMaybe<i32>{}));
+    UNIT_ASSERT(!CompareValues(opt, TMaybe<i32>{43}));
 }
 
 Y_UNIT_TEST(MaybeDefinedString) {
     TUnboxedValue str = TUnboxedValue::Embedded("hi");
     TUnboxedValuePod opt = str.MakeOptional();
     AssertUnboxedValueElementEqual(opt, TMaybe<TString>{"hi"});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(opt, TMaybe<TString>{"bye"}));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(opt, TMaybe<TString>{}));
+    UNIT_ASSERT(!CompareValues(opt, TMaybe<TString>{"bye"}));
+    UNIT_ASSERT(!CompareValues(opt, TMaybe<TString>{}));
 }
 
 Y_UNIT_TEST(MaybeNested) {
     TUnboxedValuePod inner = TUnboxedValuePod(i32(7)).MakeOptional();
     TUnboxedValuePod outer = inner.MakeOptional();
     AssertUnboxedValueElementEqual(outer, TMaybe<TMaybe<i32>>{TMaybe<i32>{7}});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(outer, TMaybe<TMaybe<i32>>{TMaybe<i32>{}}));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(outer, TMaybe<TMaybe<i32>>{}));
+    UNIT_ASSERT(!CompareValues(outer, TMaybe<TMaybe<i32>>{TMaybe<i32>{}}));
+    UNIT_ASSERT(!CompareValues(outer, TMaybe<TMaybe<i32>>{}));
 }
 
 Y_UNIT_TEST(MaybeNestedSecondLevel) {
     TUnboxedValuePod value = TUnboxedValuePod().MakeOptional();
     AssertUnboxedValueElementEqual(value, TMaybe<TMaybe<i32>>{TMaybe<i32>{}});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(value, TMaybe<TMaybe<i32>>{TMaybe<i32>{7}}));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(value, TMaybe<TMaybe<i32>>{}));
+    UNIT_ASSERT(!CompareValues(value, TMaybe<TMaybe<i32>>{TMaybe<i32>{7}}));
+    UNIT_ASSERT(!CompareValues(value, TMaybe<TMaybe<i32>>{}));
 }
 
 Y_UNIT_TEST(TupleEqual) {
@@ -234,8 +234,8 @@ Y_UNIT_TEST(TupleEqual) {
 
 Y_UNIT_TEST(TupleNotEqual) {
     auto tuple = MakeTuple({TUnboxedValuePod(i32(1)), TUnboxedValue::Embedded("x")});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(tuple, std::tuple{i32(2), TString("x")}));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(tuple, std::tuple{i32(1), TString("y")}));
+    UNIT_ASSERT(!CompareValues(tuple, std::tuple{i32(2), TString("x")}));
+    UNIT_ASSERT(!CompareValues(tuple, std::tuple{i32(1), TString("y")}));
 }
 
 Y_UNIT_TEST(TupleNested) {
@@ -244,42 +244,42 @@ Y_UNIT_TEST(TupleNested) {
     using TInner = std::tuple<i32, bool>;
     using TOuter = std::tuple<TInner, TString>;
     AssertUnboxedValueElementEqual(outer, TOuter{TInner{i32(5), true}, TString("z")});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(outer, TOuter{TInner{i32(5), false}, TString("z")}));
+    UNIT_ASSERT(!CompareValues(outer, TOuter{TInner{i32(5), false}, TString("z")}));
 }
 
 Y_UNIT_TEST(TupleWithMaybe) {
     TUnboxedValuePod opt = TUnboxedValuePod(i64(99)).MakeOptional();
     auto tuple = MakeTuple({opt, TUnboxedValuePod(i32(1))});
     AssertUnboxedValueElementEqual(tuple, std::tuple{TMaybe<i64>{99}, i32(1)});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(tuple, std::tuple{TMaybe<i64>{}, i32(1)}));
+    UNIT_ASSERT(!CompareValues(tuple, std::tuple{TMaybe<i64>{}, i32(1)}));
 }
 
 Y_UNIT_TEST(VariantFirstAlternative) {
     auto var = MakeVariant(0, TUnboxedValuePod(i32(42)));
     using TVar = std::variant<i32, TString>;
     AssertUnboxedValueElementEqual(var, TVar{i32(42)});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(var, TVar{TString("x")}));
+    UNIT_ASSERT(!CompareValues(var, TVar{TString("x")}));
 }
 
 Y_UNIT_TEST(VariantSecondAlternative) {
     auto var = MakeVariant(1, TUnboxedValue::Embedded("hello"));
     using TVar = std::variant<i32, TString>;
     AssertUnboxedValueElementEqual(var, TVar{TString("hello")});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(var, TVar{i32(0)}));
+    UNIT_ASSERT(!CompareValues(var, TVar{i32(0)}));
 }
 
 Y_UNIT_TEST(VariantWrongIndex) {
     auto var = MakeVariant(0, TUnboxedValuePod(i32(42)));
     using TVar = std::variant<i32, TString>;
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(var, TVar{TString("42")}));
+    UNIT_ASSERT(!CompareValues(var, TVar{TString("42")}));
 }
 
 Y_UNIT_TEST(VariantThreeAlternatives) {
     auto var = MakeVariant(1, TUnboxedValuePod(double(3.14)));
     using TVar = std::variant<i32, double, TString>;
     AssertUnboxedValueElementEqual(var, TVar{double(3.14)});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(var, TVar{i32(0)}));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(var, TVar{TString("3.14")}));
+    UNIT_ASSERT(!CompareValues(var, TVar{i32(0)}));
+    UNIT_ASSERT(!CompareValues(var, TVar{TString("3.14")}));
 }
 
 Y_UNIT_TEST(VectorEqual) {
@@ -289,43 +289,112 @@ Y_UNIT_TEST(VectorEqual) {
 
 Y_UNIT_TEST(VectorNotEqual) {
     auto list = MakeList({TUnboxedValuePod(i32(1)), TUnboxedValuePod(i32(2))});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(list, TVector<i32>{1, 3}));
+    UNIT_ASSERT(!CompareValues(list, TVector<i32>{1, 3}));
 }
 
 Y_UNIT_TEST(VectorTooShort) {
     auto list = MakeList({TUnboxedValuePod(i32(1))});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(list, TVector<i32>{1, 2}));
+    UNIT_ASSERT(!CompareValues(list, TVector<i32>{1, 2}));
 }
 
 Y_UNIT_TEST(VectorTooLong) {
     auto list = MakeList({TUnboxedValuePod(i32(1)), TUnboxedValuePod(i32(2))});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(list, TVector<i32>{1}));
+    UNIT_ASSERT(!CompareValues(list, TVector<i32>{1}));
 }
 
 Y_UNIT_TEST(VectorEmpty) {
     auto list = MakeList({});
     AssertUnboxedValueElementEqual(list, TVector<i32>{});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(list, TVector<i32>{0}));
+    UNIT_ASSERT(!CompareValues(list, TVector<i32>{0}));
 }
 
 Y_UNIT_TEST(VectorOfStrings) {
     auto list = MakeList({TUnboxedValue::Embedded("foo"), TUnboxedValue::Embedded("bar")});
     AssertUnboxedValueElementEqual(list, TVector<TString>{"foo", "bar"});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(list, TVector<TString>{"foo", "baz"}));
+    UNIT_ASSERT(!CompareValues(list, TVector<TString>{"foo", "baz"}));
+}
+
+Y_UNIT_TEST(VectorUnorderedEqual) {
+    auto list = MakeList({TUnboxedValuePod(i32(3)), TUnboxedValuePod(i32(1)), TUnboxedValuePod(i32(2))});
+    AssertUnboxedValueElementEqualUnordered(list, TVector<i32>{1, 2, 3});
+}
+
+Y_UNIT_TEST(VectorUnorderedEmpty) {
+    auto list = MakeList({});
+    AssertUnboxedValueElementEqualUnordered(list, TVector<i32>{});
+}
+
+Y_UNIT_TEST(VectorUnorderedWithDuplicates) {
+    auto list = MakeList({TUnboxedValuePod(i32(1)), TUnboxedValuePod(i32(1)), TUnboxedValuePod(i32(2))});
+    AssertUnboxedValueElementEqualUnordered(list, TVector<i32>{1, 2, 1});
+    UNIT_ASSERT(!CompareValuesUnordered(list, TVector<i32>{1, 1, 1}));
+}
+
+Y_UNIT_TEST(VectorUnorderedDifferentMultiset) {
+    auto list = MakeList({TUnboxedValuePod(i32(1)), TUnboxedValuePod(i32(2))});
+    UNIT_ASSERT(!CompareValuesUnordered(list, TVector<i32>{1, 3}));
+}
+
+Y_UNIT_TEST(VectorUnorderedSizeMismatch) {
+    auto list = MakeList({TUnboxedValuePod(i32(1))});
+    UNIT_ASSERT(!CompareValuesUnordered(list, TVector<i32>{1, 1}));
+}
+
+Y_UNIT_TEST(VectorUnorderedOfStrings) {
+    auto list = MakeList({TUnboxedValue::Embedded("bar"), TUnboxedValue::Embedded("foo")});
+    AssertUnboxedValueElementEqualUnordered(list, TVector<TString>{"foo", "bar"});
+}
+
+Y_UNIT_TEST(VectorUnorderedNestedStillOrdered) {
+    auto list = MakeList({
+        MakeList({TUnboxedValuePod(i32(1)), TUnboxedValuePod(i32(2))}),
+        MakeList({TUnboxedValuePod(i32(3)), TUnboxedValuePod(i32(4))}),
+    });
+    using TInner = TVector<i32>;
+    AssertUnboxedValueElementEqualUnordered(list, TVector<TInner>{TInner{3, 4}, TInner{1, 2}});
+    UNIT_ASSERT(!CompareValuesUnordered(list, TVector<TInner>{TInner{4, 3}, TInner{1, 2}}));
 }
 
 Y_UNIT_TEST(VectorOfMaybe) {
     auto list = MakeList({TUnboxedValuePod(i32(5)).MakeOptional(), TUnboxedValuePod()});
     AssertUnboxedValueElementEqual(list, TVector<TMaybe<i32>>{5, {}});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(list, TVector<TMaybe<i32>>{{}, 5}));
+    UNIT_ASSERT(!CompareValues(list, TVector<TMaybe<i32>>{{}, 5}));
+}
+
+// TStringBuf (a view) nested inside a container: the converter must own the bytes internally
+// (TConvertedValueType), since the per-element holder here is a single reused local variable
+// that gets overwritten on every iteration — a bare view into it would show the wrong element.
+Y_UNIT_TEST(VectorOfStringBuf) {
+    auto list = MakeList({TUnboxedValue::Embedded("foo"), TUnboxedValue::Embedded("bar")});
+    AssertUnboxedValueElementEqual(list, TVector<TStringBuf>{"foo", "bar"});
+    UNIT_ASSERT(!CompareValues(list, TVector<TStringBuf>{"foo", "baz"}));
+}
+
+Y_UNIT_TEST(TupleOfStringBuf) {
+    auto tuple = MakeTuple({TUnboxedValue::Embedded("x"), TUnboxedValue::Embedded("y")});
+    AssertUnboxedValueElementEqual(tuple, std::tuple{TStringBuf("x"), TStringBuf("y")});
+    UNIT_ASSERT(!CompareValues(tuple, std::tuple{TStringBuf("x"), TStringBuf("z")}));
+}
+
+Y_UNIT_TEST(MaybeOfStringBuf) {
+    TUnboxedValuePod opt = TUnboxedValue::Embedded("hi").MakeOptional();
+    AssertUnboxedValueElementEqual(opt, TMaybe<TStringBuf>{"hi"});
+    UNIT_ASSERT(!CompareValues(opt, TMaybe<TStringBuf>{"bye"}));
+}
+
+Y_UNIT_TEST(VariantOfStringBuf) {
+    auto var = MakeVariant(1, TUnboxedValue::Embedded("hello"));
+    using TVar = std::variant<i32, TStringBuf>;
+    AssertUnboxedValueElementEqual(var, TVar{TStringBuf("hello")});
+    UNIT_ASSERT(!CompareValues(var, TVar{TStringBuf("world")}));
 }
 
 Y_UNIT_TEST(BlockItemPrimitives) {
     AssertUnboxedValueElementEqual(TBlockItem(i64(42)), i64(42));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(TBlockItem(i64(42)), i64(43)));
+    UNIT_ASSERT(!CompareValues(TBlockItem(i64(42)), i64(43)));
     AssertUnboxedValueElementEqual(TBlockItem(ui32(7U)), ui32(7U));
     AssertUnboxedValueElementEqual(TBlockItem(true), true);
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(TBlockItem(false), true));
+    UNIT_ASSERT(!CompareValues(TBlockItem(false), true));
 }
 
 Y_UNIT_TEST(StreamViewEqual) {
@@ -335,17 +404,17 @@ Y_UNIT_TEST(StreamViewEqual) {
 
 Y_UNIT_TEST(StreamViewNotEqual) {
     auto stream = MakeStream({TUnboxedValuePod(i32(1)), TUnboxedValuePod(i32(2))});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(stream, TUnboxedValueComparatorStreamView<i32>({1, 99})));
+    UNIT_ASSERT(!CompareValues(stream, TUnboxedValueComparatorStreamView<i32>({1, 99})));
 }
 
 Y_UNIT_TEST(StreamViewTooShort) {
     auto stream = MakeStream({TUnboxedValuePod(i32(1))});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(stream, TUnboxedValueComparatorStreamView<i32>({1, 2})));
+    UNIT_ASSERT(!CompareValues(stream, TUnboxedValueComparatorStreamView<i32>({1, 2})));
 }
 
 Y_UNIT_TEST(StreamViewTooLong) {
     auto stream = MakeStream({TUnboxedValuePod(i32(1)), TUnboxedValuePod(i32(2))});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(stream, TUnboxedValueComparatorStreamView<i32>({1})));
+    UNIT_ASSERT(!CompareValues(stream, TUnboxedValueComparatorStreamView<i32>({1})));
 }
 
 Y_UNIT_TEST(StreamViewEmpty) {
@@ -377,14 +446,14 @@ Y_UNIT_TEST(StructEqual) {
 
 Y_UNIT_TEST(StructNotEqual) {
     auto structUnboxedValue = MakeStruct({TUnboxedValuePod(ui32(42)), TUnboxedValue::Embedded("hello")});
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(structUnboxedValue,
-                                            NTest::TStructType<
-                                                NTest::TStructMember<"value", TStringBuf>,
-                                                NTest::TStructMember<"key", ui32>>{{{"hello"}, {ui32(7)}}}));
-    UNIT_ASSERT(!IsUnboxedValueElementEqual(structUnboxedValue,
-                                            NTest::TStructType<
-                                                NTest::TStructMember<"key", ui32>,
-                                                NTest::TStructMember<"value", TStringBuf>>{{{ui32(42)}, {TStringBuf("world")}}}));
+    UNIT_ASSERT(!CompareValues(structUnboxedValue,
+                               NTest::TStructType<
+                                   NTest::TStructMember<"value", TStringBuf>,
+                                   NTest::TStructMember<"key", ui32>>{{{"hello"}, {ui32(7)}}}));
+    UNIT_ASSERT(!CompareValues(structUnboxedValue,
+                               NTest::TStructType<
+                                   NTest::TStructMember<"key", ui32>,
+                                   NTest::TStructMember<"value", TStringBuf>>{{{ui32(42)}, {TStringBuf("world")}}}));
 }
 
 Y_UNIT_TEST(StructWithMaybe) {
@@ -393,6 +462,36 @@ Y_UNIT_TEST(StructWithMaybe) {
                                    NTest::TStructType<
                                        NTest::TStructMember<"a", TMaybe<i64>>,
                                        NTest::TStructMember<"b", TMaybe<i32>>>{{{TMaybe<i64>{99}}, {TMaybe<i32>{}}}});
+}
+
+// TGUID (16 bytes) doesn't fit TUnboxedValuePod's embedded buffer (14 bytes), so these use
+// TBlockItem's raw-pointer string constructor, which has no size limit, to hold the bytes.
+Y_UNIT_TEST(GuidEqual) {
+    TGUID guid{.dw = {1, 2, 3, 4}};
+    TBlockItem item(TStringRef(reinterpret_cast<const char*>(&guid), sizeof(TGUID)));
+    AssertUnboxedValueElementEqual(item, guid);
+}
+
+Y_UNIT_TEST(GuidNotEqual) {
+    TGUID guid{.dw = {1, 2, 3, 4}};
+    TGUID other{.dw = {9, 0, 0, 0}};
+    TBlockItem item(TStringRef(reinterpret_cast<const char*>(&guid), sizeof(TGUID)));
+    UNIT_ASSERT(!CompareValues(item, other));
+}
+
+// DyNumber has one canonical byte encoding but many textual spellings decode to it
+// (e.g. "1.5" and "1.50"), so equality must be checked on both forms.
+Y_UNIT_TEST(DyNumberEqual) {
+    const auto bytes = *NKikimr::NDyNumber::ParseDyNumberString("1.5");
+    TBlockItem item{TStringRef(bytes)};
+    AssertUnboxedValueElementEqual(item, NTest::TTestDyNumber("1.5"));
+    AssertUnboxedValueElementEqual(item, NTest::TTestDyNumber("1.50"));
+}
+
+Y_UNIT_TEST(DyNumberNotEqual) {
+    const auto bytes = *NKikimr::NDyNumber::ParseDyNumberString("1.5");
+    TBlockItem item{TStringRef(bytes)};
+    UNIT_ASSERT(!CompareValues(item, NTest::TTestDyNumber("2.5")));
 }
 
 } // Y_UNIT_TEST_SUITE(TUdfValueComparatorTest)

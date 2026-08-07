@@ -1304,7 +1304,8 @@
       "enum": [
         "LC",
         "HEV1",
-        "HEV2"
+        "HEV2",
+        "XHE"
       ]
     },
     "AacCodingMode": {
@@ -1316,6 +1317,14 @@
         "CODING_MODE_1_1",
         "CODING_MODE_2_0",
         "CODING_MODE_5_1"
+      ]
+    },
+    "AacLoudnessMeasurementMode": {
+      "type": "string",
+      "documentation": "Choose the loudness measurement mode for your audio content. For music or advertisements: We recommend that you keep the default value, Program. For speech or other content: We recommend that you choose Anchor. When you do, MediaConvert optimizes the loudness of your output for clarify by applying speech gates.",
+      "enum": [
+        "PROGRAM",
+        "ANCHOR"
       ]
     },
     "AacRateControlMode": {
@@ -1357,6 +1366,16 @@
           "locationName": "codingMode",
           "documentation": "The Coding mode that you specify determines the number of audio channels and the audio channel layout metadata in your AAC output. Valid coding modes depend on the Rate control mode and Profile that you select. The following list shows the number of audio channels and channel layout for each coding mode. * 1.0 Audio Description (Receiver Mix): One channel, C. Includes audio description data from your stereo input. For more information see ETSI TS 101 154 Annex E. * 1.0 Mono: One channel, C. * 2.0 Stereo: Two channels, L, R. * 5.1 Surround: Six channels, C, L, R, Ls, Rs, LFE."
         },
+        "LoudnessMeasurementMode": {
+          "shape": "AacLoudnessMeasurementMode",
+          "locationName": "loudnessMeasurementMode",
+          "documentation": "Choose the loudness measurement mode for your audio content. For music or advertisements: We recommend that you keep the default value, Program. For speech or other content: We recommend that you choose Anchor. When you do, MediaConvert optimizes the loudness of your output for clarify by applying speech gates."
+        },
+        "RapInterval": {
+          "shape": "__integerMin2000Max30000",
+          "locationName": "rapInterval",
+          "documentation": "Specify the RAP (Random Access Point) interval for your xHE-AAC audio output. A RAP allows a decoder to decode audio data mid-stream, without the need to reference previous audio frames, and perform adaptive audio bitrate switching. To specify the RAP interval: Enter an integer from 2000 to 30000, in milliseconds. Smaller values allow for better seeking and more frequent stream switching, while large values improve compression efficiency. To have MediaConvert automatically determine the RAP interval: Leave blank."
+        },
         "RateControlMode": {
           "shape": "AacRateControlMode",
           "locationName": "rateControlMode",
@@ -1376,6 +1395,11 @@
           "shape": "AacSpecification",
           "locationName": "specification",
           "documentation": "Use MPEG-2 AAC instead of MPEG-4 AAC audio for raw or MPEG-2 Transport Stream containers."
+        },
+        "TargetLoudnessRange": {
+          "shape": "__integerMin6Max16",
+          "locationName": "targetLoudnessRange",
+          "documentation": "Specify the xHE-AAC loudness target. Enter an integer from 6 to 16, representing \"loudness units\". For more information, see the following specification: Supplementary information for R 128 EBU Tech 3342-2023."
         },
         "VbrQuality": {
           "shape": "AacVbrQuality",
@@ -1724,8 +1748,7 @@
     },
     "AssociateCertificateResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "AudioChannelTag": {
       "type": "string",
@@ -2033,7 +2056,7 @@
           "documentation": "The bit depth of the audio track."
         },
         "BitRate": {
-          "shape": "__integer",
+          "shape": "__long",
           "locationName": "bitRate",
           "documentation": "The bit rate of the audio track, in bits per second."
         },
@@ -2116,7 +2139,7 @@
         "SelectorType": {
           "shape": "AudioSelectorType",
           "locationName": "selectorType",
-          "documentation": "Specifies the type of the audio selector."
+          "documentation": "Specify how MediaConvert selects audio content within your input. The default is Track. PID: Select audio by specifying the Packet Identifier (PID) values for MPEG Transport Stream inputs. Use this when you know the exact PID values of your audio streams. Track: Default. Select audio by track number. This is the most common option and works with most input container formats. Language code: Select audio by language using ISO 639-2 or ISO 639-3 three-letter language codes. Use this when your source has embedded language metadata and you want to select tracks based on their language. HLS rendition group: Select audio from an HLS rendition group. Use this when your input is an HLS package with multiple audio renditions and you want to select specific rendition groups. All PCM: Select all uncompressed PCM audio tracks from your input automatically. This is useful when you want to include all PCM audio tracks without specifying individual track numbers."
         },
         "Tracks": {
           "shape": "__listOf__integerMin1Max2147483647",
@@ -2139,12 +2162,13 @@
     },
     "AudioSelectorType": {
       "type": "string",
-      "documentation": "Specifies the type of the audio selector.",
+      "documentation": "Specify how MediaConvert selects audio content within your input. The default is Track. PID: Select audio by specifying the Packet Identifier (PID) values for MPEG Transport Stream inputs. Use this when you know the exact PID values of your audio streams. Track: Default. Select audio by track number. This is the most common option and works with most input container formats. Language code: Select audio by language using ISO 639-2 or ISO 639-3 three-letter language codes. Use this when your source has embedded language metadata and you want to select tracks based on their language. HLS rendition group: Select audio from an HLS rendition group. Use this when your input is an HLS package with multiple audio renditions and you want to select specific rendition groups. All PCM: Select all uncompressed PCM audio tracks from your input automatically. This is useful when you want to include all PCM audio tracks without specifying individual track numbers.",
       "enum": [
         "PID",
         "TRACK",
         "LANGUAGE_CODE",
-        "HLS_RENDITION_GROUP"
+        "HLS_RENDITION_GROUP",
+        "ALL_PCM"
       ]
     },
     "AudioTypeControl": {
@@ -2197,7 +2221,7 @@
         "MaxQualityLevel": {
           "shape": "__doubleMin1Max10",
           "locationName": "maxQualityLevel",
-          "documentation": "Optional. Specify the QVBR quality level to use for all renditions in your automated ABR stack. To have MediaConvert automatically determine the quality level: Leave blank. To manually specify a quality level: Enter an integer from 1 to 10. MediaConvert will use a quality level up to the value that you specify, depending on your source. For more information about QVBR quality levels, see: https://docs.aws.amazon.com/mediaconvert/latest/ug/qvbr-guidelines.html"
+          "documentation": "Optional. Specify the QVBR quality level to use for all renditions in your automated ABR stack. To have MediaConvert automatically determine the quality level: Leave blank. To manually specify a quality level: Enter a value from 1 to 10. MediaConvert will use a quality level up to the value that you specify, depending on your source. For more information about QVBR quality levels, see: https://docs.aws.amazon.com/mediaconvert/latest/ug/qvbr-guidelines.html"
         },
         "MaxRenditions": {
           "shape": "__integerMin3Max15",
@@ -2350,6 +2374,11 @@
           "locationName": "numberBFramesBetweenReferenceFrames",
           "documentation": "Specify from the number of B-frames, in the range of 0-15. For AV1 encoding, we recommend using 7 or 15. Choose a larger number for a lower bitrate and smaller file size; choose a smaller number for better video quality."
         },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
+        },
         "QvbrSettings": {
           "shape": "Av1QvbrSettings",
           "locationName": "qvbrSettings",
@@ -2476,6 +2505,11 @@
           "shape": "AvcIntraInterlaceMode",
           "locationName": "interlaceMode",
           "documentation": "Choose the scan line type for the output. Keep the default value, Progressive to create a progressive output, regardless of the scan type of your input. Use Top field first or Bottom field first to create an output that's interlaced with the same field polarity throughout. Use Follow, default top or Follow, default bottom to produce outputs with the same field polarity as the source. For jobs that have multiple inputs, the output field polarity might change over the course of the output. Follow behavior depends on the input scan type. If the source is interlaced, the output will be interlaced with the same polarity as the source. If the source is progressive, the output will be interlaced with top field bottom field first, depending on which of the Follow options you choose."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "ScanTypeConversionMode": {
           "shape": "AvcIntraScanTypeConversionMode",
@@ -2835,8 +2869,7 @@
     },
     "CancelJobResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "CaptionDescription": {
       "type": "structure",
@@ -3086,6 +3119,14 @@
         "NULL_SOURCE",
         "IMSC",
         "WEBVTT"
+      ]
+    },
+    "CaptionSourceUpconvertSTLToTeletext": {
+      "type": "string",
+      "documentation": "Specify whether this set of input captions appears in your outputs in both STL and Teletext format. If you choose Upconvert, MediaConvert includes the captions data in two ways: it passes the STL data through using the Teletext compatibility bytes fields of the Teletext wrapper, and it also translates the STL data into Teletext.",
+      "enum": [
+        "UPCONVERT",
+        "DISABLED"
       ]
     },
     "ChannelMapping": {
@@ -3704,6 +3745,7 @@
         "AV1",
         "AVC",
         "HEVC",
+        "JPEG2000",
         "MJPEG",
         "MP4V",
         "MPEG2",
@@ -3906,7 +3948,7 @@
         "Format": {
           "shape": "Format",
           "locationName": "format",
-          "documentation": "The format of your media file. For example: MP4, QuickTime (MOV), Matroska (MKV), or WebM. Note that this will be blank if your media file has a format that the MediaConvert Probe operation does not recognize."
+          "documentation": "The format of your media file. For example: MP4, QuickTime (MOV), Matroska (MKV), WebM or MXF. Note that this will be blank if your media file has a format that the MediaConvert Probe operation does not recognize."
         },
         "Tracks": {
           "shape": "__listOfTrack",
@@ -4006,7 +4048,7 @@
         "BillingTagsSource": {
           "shape": "BillingTagsSource",
           "locationName": "billingTagsSource",
-          "documentation": "Optional. Choose a tag type that AWS Billing and Cost Management will use to sort your AWS Elemental MediaConvert costs on any billing report that you set up. Any transcoding outputs that don't have an associated tag will appear in your billing report unsorted. If you don't choose a valid value for this field, your job outputs will appear on the billing report unsorted."
+          "documentation": "Optionally choose a Billing tags source that AWS Billing and Cost Management will use to display tags for individual output costs on any billing report that you set up. Leave blank to use the default value, Job."
         },
         "ClientRequestToken": {
           "shape": "__string",
@@ -4628,18 +4670,15 @@
     },
     "DeleteJobTemplateResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "DeletePolicyRequest": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "DeletePolicyResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "DeletePresetRequest": {
       "type": "structure",
@@ -4657,8 +4696,7 @@
     },
     "DeletePresetResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "DeleteQueueRequest": {
       "type": "structure",
@@ -4676,8 +4714,7 @@
     },
     "DeleteQueueResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "DescribeEndpointsMode": {
       "type": "string",
@@ -4755,8 +4792,7 @@
     },
     "DisassociateCertificateResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "DolbyVision": {
       "type": "structure",
@@ -4906,7 +4942,7 @@
         "DdsHandling": {
           "shape": "DvbddsHandling",
           "locationName": "ddsHandling",
-          "documentation": "Specify how MediaConvert handles the display definition segment (DDS). To exclude the DDS from this set of captions: Keep the default, None. To include the DDS: Choose Specified. When you do, also specify the offset coordinates of the display window with DDS x-coordinate and DDS y-coordinate. To include the DDS, but not include display window data: Choose No display window. When you do, you can write position metadata to the page composition segment (PCS) with DDS x-coordinate and DDS y-coordinate. For video resolutions with a height of 576 pixels or less, MediaConvert doesn't include the DDS, regardless of the value you choose for DDS handling. All burn-in and DVB-Sub font settings must match."
+          "documentation": "Specify how MediaConvert handles the display definition segment (DDS). To exclude the DDS from this set of captions: Keep the default, None. To include the DDS: Choose Specified. When you do, also specify the offset coordinates of the display window with DDS x-coordinate and DDS y-coordinate. To include the DDS, but not include display window data: Choose No display window. When you do, you can write position metadata to the page composition segment (PCS) with DDS x-coordinate and DDS y-coordinate. For video resolutions with a height of 576 pixels or less, MediaConvert doesn't include the DDS, regardless of the value you choose for DDS handling. All burn-in and DVB-Sub font settings must match. To include the DDS, with optimized subtitle placement and reduced data overhead: We recommend that you choose Specified (optimal). This option provides the same visual positioning as Specified while using less bandwidth. This also supports resolutions higher than 1080p while maintaining full DVB-Sub compatibility. When you do, also specify the offset coordinates of the display window with DDS x-coordinate and DDS y-coordinate."
         },
         "DdsXCoordinate": {
           "shape": "__integerMin0Max2147483647",
@@ -5165,11 +5201,12 @@
     },
     "DvbddsHandling": {
       "type": "string",
-      "documentation": "Specify how MediaConvert handles the display definition segment (DDS). To exclude the DDS from this set of captions: Keep the default, None. To include the DDS: Choose Specified. When you do, also specify the offset coordinates of the display window with DDS x-coordinate and DDS y-coordinate. To include the DDS, but not include display window data: Choose No display window. When you do, you can write position metadata to the page composition segment (PCS) with DDS x-coordinate and DDS y-coordinate. For video resolutions with a height of 576 pixels or less, MediaConvert doesn't include the DDS, regardless of the value you choose for DDS handling. All burn-in and DVB-Sub font settings must match.",
+      "documentation": "Specify how MediaConvert handles the display definition segment (DDS). To exclude the DDS from this set of captions: Keep the default, None. To include the DDS: Choose Specified. When you do, also specify the offset coordinates of the display window with DDS x-coordinate and DDS y-coordinate. To include the DDS, but not include display window data: Choose No display window. When you do, you can write position metadata to the page composition segment (PCS) with DDS x-coordinate and DDS y-coordinate. For video resolutions with a height of 576 pixels or less, MediaConvert doesn't include the DDS, regardless of the value you choose for DDS handling. All burn-in and DVB-Sub font settings must match. To include the DDS, with optimized subtitle placement and reduced data overhead: We recommend that you choose Specified (optimal). This option provides the same visual positioning as Specified while using less bandwidth. This also supports resolutions higher than 1080p while maintaining full DVB-Sub compatibility. When you do, also specify the offset coordinates of the display window with DDS x-coordinate and DDS y-coordinate.",
       "enum": [
         "NONE",
         "SPECIFIED",
-        "NO_DISPLAY_WINDOW"
+        "NO_DISPLAY_WINDOW",
+        "SPECIFIED_OPTIMAL"
       ]
     },
     "DynamicAudioSelector": {
@@ -5201,7 +5238,7 @@
           "documentation": "Specify which audio tracks to dynamically select from your source. To select all audio tracks: Keep the default value, All tracks. To select all audio tracks with a specific language code: Choose Language code. When you do, you must also specify a language code under the Language code setting. If there is no matching Language code in your source, then no track will be selected."
         }
       },
-      "documentation": "Use Dynamic audio selectors when you do not know the track layout of your source when you submit your job, but want to select multiple audio tracks. When you include an audio track in your output and specify this Dynamic audio selector as the Audio source, MediaConvert creates an output audio track for each dynamically selected track. Note that when you include a Dynamic audio selector for two or more inputs, each input must have the same number of audio tracks and audio channels."
+      "documentation": "Use Dynamic audio selectors when you do not know the track layout of your source when you submit your job, but want to select multiple audio tracks. When you include an audio track in your output and specify this Dynamic audio selector as the Audio source, MediaConvert creates an audio track within that output for each dynamically selected track. Note that when you include a Dynamic audio selector for two or more inputs, each input must have the same number of audio tracks and audio channels."
     },
     "DynamicAudioSelectorType": {
       "type": "string",
@@ -5877,6 +5914,11 @@
           "shape": "FileSourceTimeDeltaUnits",
           "locationName": "timeDeltaUnits",
           "documentation": "When you use the setting Time delta to adjust the sync between your sidecar captions and your video, use this setting to specify the units for the delta that you specify. When you don't specify a value for Time delta units, MediaConvert uses seconds by default."
+        },
+        "UpconvertSTLToTeletext": {
+          "shape": "CaptionSourceUpconvertSTLToTeletext",
+          "locationName": "upconvertSTLToTeletext",
+          "documentation": "Specify whether this set of input captions appears in your outputs in both STL and Teletext format. If you choose Upconvert, MediaConvert includes the captions data in two ways: it passes the STL data through using the Teletext compatibility bytes fields of the Teletext wrapper, and it also translates the STL data into Teletext."
         }
       },
       "documentation": "If your input captions are SCC, SMI, SRT, STL, TTML, WebVTT, or IMSC 1.1 in an xml file, specify the URI of the input caption source file. If your caption source is IMSC in an IMF package, use TrackSourceSettings instead of FileSoureSettings."
@@ -5903,7 +5945,7 @@
           "documentation": "Specify the number of channels in this output audio track. Choosing Mono on the console gives you 1 output channel; choosing Stereo gives you 2. In the API, valid values are between 1 and 8."
         },
         "SampleRate": {
-          "shape": "__integerMin22050Max48000",
+          "shape": "__integerMin22050Max192000",
           "locationName": "sampleRate",
           "documentation": "Sample rate in Hz."
         }
@@ -5955,7 +5997,8 @@
         "mp4",
         "quicktime",
         "matroska",
-        "webm"
+        "webm",
+        "mxf"
       ]
     },
     "FrameCaptureSettings": {
@@ -5983,6 +6026,18 @@
         }
       },
       "documentation": "Required when you set Codec to the value FRAME_CAPTURE."
+    },
+    "FrameMetricType": {
+      "type": "string",
+      "documentation": "* PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode.",
+      "enum": [
+        "PSNR",
+        "SSIM",
+        "MS_SSIM",
+        "PSNR_HVS",
+        "VMAF",
+        "QVBR"
+      ]
     },
     "FrameRate": {
       "type": "structure",
@@ -6050,8 +6105,7 @@
     },
     "GetPolicyRequest": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "GetPolicyResponse": {
       "type": "structure",
@@ -6515,6 +6569,11 @@
           "shape": "__integerMin1Max2147483647",
           "locationName": "parNumerator",
           "documentation": "Required when you set Pixel aspect ratio to SPECIFIED. On the console, this corresponds to any value other than Follow source. When you specify an output pixel aspect ratio (PAR) that is different from your input video PAR, provide your output PAR as a ratio. For example, for D1/DV NTSC widescreen, you would specify the ratio 40:33. In this example, the value for parNumerator is 40."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "QualityTuningLevel": {
           "shape": "H264QualityTuningLevel",
@@ -7009,6 +7068,11 @@
           "shape": "__integerMin1Max2147483647",
           "locationName": "parNumerator",
           "documentation": "Required when you set Pixel aspect ratio to SPECIFIED. On the console, this corresponds to any value other than Follow source. When you specify an output pixel aspect ratio (PAR) that is different from your input video PAR, provide your output PAR as a ratio. For example, for D1/DV NTSC widescreen, you would specify the ratio 40:33. In this example, the value for parNumerator is 40."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "QualityTuningLevel": {
           "shape": "H265QualityTuningLevel",
@@ -7959,7 +8023,7 @@
         "FileInput": {
           "shape": "__stringMax2048PatternS3Https",
           "locationName": "fileInput",
-          "documentation": "Specify the source file for your transcoding job. You can use multiple inputs in a single job. The service concatenates these inputs, in the order that you specify them in the job, to create the outputs. If your input format is IMF, specify your input by providing the path to your CPL. For example, \"s3://bucket/vf/cpl.xml\". If the CPL is in an incomplete IMP, make sure to use *Supplemental IMPs* to specify any supplemental IMPs that contain assets referenced by the CPL."
+          "documentation": "Specify the source file for your transcoding job. You can use multiple inputs in a single job. The service concatenates these inputs, in the order that you specify them in the job, to create the outputs. For standard inputs, provide the path to your S3, HTTP, or HTTPS source file. For example, s3://amzn-s3-demo-bucket/input.mp4 for an Amazon S3 input or https://example.com/input.mp4 for an HTTPS input. For TAMS inputs, specify the HTTPS endpoint of your TAMS server. For example, https://tams-server.example.com . When you do, also specify Source ID, Timerange, GAP handling, and the Authorization connection ARN under TAMS settings. (Don't include these parameters in the Input file URL.) For IMF inputs, specify your input by providing the path to your CPL. For example, s3://amzn-s3-demo-bucket/vf/cpl.xml . If the CPL is in an incomplete IMP, make sure to use Supplemental IMPsto specify any supplemental IMPs that contain assets referenced by the CPL."
         },
         "FilterEnable": {
           "shape": "InputFilterEnable",
@@ -8005,6 +8069,11 @@
           "shape": "__listOf__stringPatternS3ASSETMAPXml",
           "locationName": "supplementalImps",
           "documentation": "Provide a list of any necessary supplemental IMPs. You need supplemental IMPs if the CPL that you're using for your input is in an incomplete IMP. Specify either the supplemental IMP directories with a trailing slash or the ASSETMAP.xml files. For example [\"s3://bucket/ov/\", \"s3://bucket/vf2/ASSETMAP.xml\"]. You don't need to specify the IMP that contains your input CPL, because the service automatically detects it."
+        },
+        "TamsSettings": {
+          "shape": "InputTamsSettings",
+          "locationName": "tamsSettings",
+          "documentation": "Specify a Time Addressable Media Store (TAMS) server as an input source. TAMS is an open-source API specification that provides access to time-segmented media content. Use TAMS to retrieve specific time ranges from live or archived media streams. When you specify TAMS settings, MediaConvert connects to your TAMS server, retrieves the media segments for your specified time range, and processes them as a single input. This enables workflows like extracting clips from live streams or processing specific portions of archived content. To use TAMS, you must: 1. Have access to a TAMS-compliant server 2. Specify the server URL in the Input file URL field 3. Provide the required SourceId and Timerange parameters 4. Configure authentication, if your TAMS server requires it"
         },
         "TimecodeSource": {
           "shape": "InputTimecodeSource",
@@ -8144,6 +8213,32 @@
         "AUTO",
         "PSF"
       ]
+    },
+    "InputTamsSettings": {
+      "type": "structure",
+      "members": {
+        "AuthConnectionArn": {
+          "shape": "__stringPatternArnAwsAZ09EventsAZ090912ConnectionAZAZ09AF0936",
+          "locationName": "authConnectionArn",
+          "documentation": "Specify the ARN (Amazon Resource Name) of an EventBridge Connection to authenticate with your TAMS server. The EventBridge Connection stores your authentication credentials securely. MediaConvert assumes your job's IAM role to access this connection, so ensure the role has the events:RetrieveConnectionCredentials, secretsmanager:DescribeSecret, and secretsmanager:GetSecretValue permissions. Format: arn:aws:events:region:account-id:connection/connection-name/unique-id"
+        },
+        "GapHandling": {
+          "shape": "TamsGapHandling",
+          "locationName": "gapHandling",
+          "documentation": "Specify how MediaConvert handles gaps between media segments in your TAMS source. Gaps can occur in live streams due to network issues or other interruptions. Choose from the following options: * Skip gaps - Default. Skip over gaps and join segments together. This creates a continuous output with no blank frames, but may cause timeline discontinuities. * Fill with black - Insert black frames to fill gaps between segments. This maintains timeline continuity but adds black frames where content is missing. * Hold last frame - Repeat the last frame before a gap until the next segment begins. This maintains visual continuity during gaps."
+        },
+        "SourceId": {
+          "shape": "__string",
+          "locationName": "sourceId",
+          "documentation": "Specify the unique identifier for the media source in your TAMS server. MediaConvert uses this source ID to locate the appropriate flows containing the media segments you want to process. The source ID corresponds to a specific media source registered in your TAMS server. This source must be of type urn:x-nmos:format:multi, and can can reference multiple flows for audio, video, or combined audio/video content. MediaConvert automatically selects the highest quality flows available for your job. This setting is required when include TAMS settings in your job."
+        },
+        "Timerange": {
+          "shape": "__stringPattern019090190908019090190908",
+          "locationName": "timerange",
+          "documentation": "Specify the time range of media segments to retrieve from your TAMS server. MediaConvert fetches only the segments that fall within this range. Use the format specified by your TAMS server implementation. This must be two timestamp values with the format {sign?}{seconds}:{nanoseconds}, separated by an underscore, surrounded by either parentheses or square brackets.  Example: [15:0_35:0) This setting is required when include TAMS settings in your job."
+        }
+      },
+      "documentation": "Specify a Time Addressable Media Store (TAMS) server as an input source. TAMS is an open-source API specification that provides access to time-segmented media content. Use TAMS to retrieve specific time ranges from live or archived media streams. When you specify TAMS settings, MediaConvert connects to your TAMS server, retrieves the media segments for your specified time range, and processes them as a single input. This enables workflows like extracting clips from live streams or processing specific portions of archived content. To use TAMS, you must: 1. Have access to a TAMS-compliant server 2. Specify the server URL in the Input file URL field 3. Provide the required SourceId and Timerange parameters 4. Configure authentication, if your TAMS server requires it"
     },
     "InputTemplate": {
       "type": "structure",
@@ -10165,6 +10260,14 @@
       },
       "documentation": "Required when you set Codec, under AudioDescriptions>CodecSettings, to the value MP3."
     },
+    "Mp4C2paManifest": {
+      "type": "string",
+      "documentation": "When enabled, a C2PA compliant manifest will be generated, signed and embeded in the output. For more information on C2PA, see https://c2pa.org/specifications/specifications/2.1/index.html",
+      "enum": [
+        "INCLUDE",
+        "EXCLUDE"
+      ]
+    },
     "Mp4CslgAtom": {
       "type": "string",
       "documentation": "When enabled, file composition times will start at zero, composition times in the 'ctts' (composition time to sample) box for B-frames will be negative, and a 'cslg' (composition shift least greatest) box will be included per 14496-1 amendment 1. This improves compatibility with Apple players and tools.",
@@ -10197,6 +10300,16 @@
           "locationName": "audioDuration",
           "documentation": "Specify this setting only when your output will be consumed by a downstream repackaging workflow that is sensitive to very small duration differences between video and audio. For this situation, choose Match video duration. In all other cases, keep the default value, Default codec duration. When you choose Match video duration, MediaConvert pads the output audio streams with silence or trims them to ensure that the total duration of each audio stream is at least as long as the total duration of the video stream. After padding or trimming, the audio stream duration is no more than one frame longer than the video stream. MediaConvert applies audio padding or trimming only to the end of the last segment of the output. For unsegmented outputs, MediaConvert adds padding only to the end of the file. When you keep the default value, any minor discrepancies between audio and video duration will depend on your output audio codec."
         },
+        "C2paManifest": {
+          "shape": "Mp4C2paManifest",
+          "locationName": "c2paManifest",
+          "documentation": "When enabled, a C2PA compliant manifest will be generated, signed and embeded in the output. For more information on C2PA, see https://c2pa.org/specifications/specifications/2.1/index.html"
+        },
+        "CertificateSecret": {
+          "shape": "__stringMin1Max2048PatternArnAZSecretsmanagerWD12SecretAZAZ09",
+          "locationName": "certificateSecret",
+          "documentation": "Specify the name or ARN of the AWS Secrets Manager secret that contains your C2PA public certificate chain in PEM format. Provide a valid secret name or ARN. Note that your MediaConvert service role must allow access to this secret. The public certificate chain is added to the COSE header (x5chain) for signature validation. Include the signer's certificate and all intermediate certificates. Do not include the root certificate. For details on COSE, see: https://opensource.contentauthenticity.org/docs/manifest/signing-manifests"
+        },
         "CslgAtom": {
           "shape": "Mp4CslgAtom",
           "locationName": "cslgAtom",
@@ -10221,6 +10334,11 @@
           "shape": "__string",
           "locationName": "mp4MajorBrand",
           "documentation": "Overrides the \"Major Brand\" field in the output file. Usually not necessary to specify."
+        },
+        "SigningKmsKey": {
+          "shape": "__stringMin1PatternArnAwsUsGovCnKmsAZ26EastWestCentralNorthSouthEastWest1912D12KeyAFAF098AFAF094AFAF094AFAF094AFAF0912MrkAFAF0932",
+          "locationName": "signingKmsKey",
+          "documentation": "Specify the ID or ARN of the AWS KMS key used to sign the C2PA manifest in your MP4 output. Provide a valid KMS key ARN. Note that your MediaConvert service role must allow access to this key."
         }
       },
       "documentation": "These settings relate to your MP4 output container. You can create audio only outputs with this container. For more information, see https://docs.aws.amazon.com/mediaconvert/latest/ug/supported-codecs-containers-audio-only.html#output-codecs-and-containers-supported-for-audio-only."
@@ -10600,6 +10718,11 @@
           "shape": "__integerMin1Max2147483647",
           "locationName": "parNumerator",
           "documentation": "Required when you set Pixel aspect ratio to SPECIFIED. On the console, this corresponds to any value other than Follow source. When you specify an output pixel aspect ratio (PAR) that is different from your input video PAR, provide your output PAR as a ratio. For example, for D1/DV NTSC widescreen, you would specify the ratio 40:33. In this example, the value for parNumerator is 40."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "QualityTuningLevel": {
           "shape": "Mpeg2QualityTuningLevel",
@@ -11296,6 +11419,11 @@
           "locationName": "msSmoothGroupSettings",
           "documentation": "Settings related to your Microsoft Smooth Streaming output package. For more information, see https://docs.aws.amazon.com/mediaconvert/latest/ug/outputs-file-ABR.html."
         },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
+        },
         "Type": {
           "shape": "OutputGroupType",
           "locationName": "type",
@@ -11665,6 +11793,11 @@
           "shape": "__integerMin1Max2147483647",
           "locationName": "parNumerator",
           "documentation": "Required when you set Pixel aspect ratio to SPECIFIED. On the console, this corresponds to any value other than Follow source. When you specify an output pixel aspect ratio (PAR) that is different from your input video PAR, provide your output PAR as a ratio. For example, for D1/DV NTSC widescreen, you would specify the ratio 40:33. In this example, the value for parNumerator is 40."
+        },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
         },
         "ScanTypeConversionMode": {
           "shape": "ProresScanTypeConversionMode",
@@ -12390,8 +12523,16 @@
     },
     "TagResourceResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
+    },
+    "TamsGapHandling": {
+      "type": "string",
+      "documentation": "Specify how MediaConvert handles gaps between media segments in your TAMS source. Gaps can occur in live streams due to network issues or other interruptions. Choose from the following options: * Skip gaps - Default. Skip over gaps and join segments together. This creates a continuous output with no blank frames, but may cause timeline discontinuities. * Fill with black - Insert black frames to fill gaps between segments. This maintains timeline continuity but adds black frames where content is missing. * Hold last frame - Repeat the last frame before a gap until the next segment begins. This maintains visual continuity during gaps.",
+      "enum": [
+        "SKIP_GAPS",
+        "FILL_WITH_BLACK",
+        "HOLD_LAST_FRAME"
+      ]
     },
     "TeletextDestinationSettings": {
       "type": "structure",
@@ -12836,8 +12977,7 @@
     },
     "UntagResourceResponse": {
       "type": "structure",
-      "members": {
-      }
+      "members": {}
     },
     "UpdateJobTemplateRequest": {
       "type": "structure",
@@ -13140,7 +13280,7 @@
         "Codec": {
           "shape": "VideoCodec",
           "locationName": "codec",
-          "documentation": "Specifies the video codec. This must be equal to one of the enum values defined by the object VideoCodec. To passthrough the video stream of your input JPEG2000, VC-3, AVC-INTRA or Apple ProRes video without any video encoding: Choose Passthrough. If you have multiple input videos, note that they must have identical encoding attributes. When you choose Passthrough, your output container must be MXF or QuickTime MOV."
+          "documentation": "Specifies the video codec. This must be equal to one of the enum values defined by the object VideoCodec. To passthrough the video stream of your input without any video encoding: Choose Passthrough. More information about passthrough codec support and job settings requirements, see: https://docs.aws.amazon.com/mediaconvert/latest/ug/video-passthrough-feature-restrictions.html"
         },
         "FrameCaptureSettings": {
           "shape": "FrameCaptureSettings",
@@ -13310,6 +13450,11 @@
     "VideoOverlay": {
       "type": "structure",
       "members": {
+        "Crop": {
+          "shape": "VideoOverlayCrop",
+          "locationName": "crop",
+          "documentation": "Specify a rectangle of content to crop and use from your video overlay's input video. When you do, MediaConvert uses the cropped dimensions that you specify under X offset, Y offset, Width, and Height."
+        },
         "EndTimecode": {
           "shape": "__stringPattern010920405090509092",
           "locationName": "endTimecode",
@@ -13342,6 +13487,37 @@
         }
       },
       "documentation": "Overlay one or more videos on top of your input video. For more information, see https://docs.aws.amazon.com/mediaconvert/latest/ug/video-overlays.html"
+    },
+    "VideoOverlayCrop": {
+      "type": "structure",
+      "members": {
+        "Height": {
+          "shape": "__integerMin0Max2147483647",
+          "locationName": "height",
+          "documentation": "Specify the height of the video overlay cropping rectangle. To use the same height as your overlay input video: Keep blank, or enter 0. To specify a different height for the cropping rectangle: Enter an integer representing the Unit type that you choose, either Pixels or Percentage. For example, when you enter 100 and choose Pixels, the cropping rectangle will be 100 pixels high. When you enter 10, choose Percentage, and your overlay input video is 1920x1080, the cropping rectangle will be 108 pixels high."
+        },
+        "Unit": {
+          "shape": "VideoOverlayUnit",
+          "locationName": "unit",
+          "documentation": "Specify the Unit type to use when you enter a value for X position, Y position, Width, or Height. You can choose Pixels or Percentage. Leave blank to use the default value, Pixels."
+        },
+        "Width": {
+          "shape": "__integerMin0Max2147483647",
+          "locationName": "width",
+          "documentation": "Specify the width of the video overlay cropping rectangle. To use the same width as your overlay input video: Keep blank, or enter 0. To specify a different width for the cropping rectangle: Enter an integer representing the Unit type that you choose, either Pixels or Percentage. For example, when you enter 100 and choose Pixels, the cropping rectangle will be 100 pixels wide. When you enter 10, choose Percentage, and your overlay input video is 1920x1080, the cropping rectangle will be 192 pixels wide."
+        },
+        "X": {
+          "shape": "__integerMin0Max2147483647",
+          "locationName": "x",
+          "documentation": "Specify the distance between the cropping rectangle and the left edge of your overlay video's frame. To position the cropping rectangle along the left edge: Keep blank, or enter 0. To position the cropping rectangle to the right, relative to the left edge of your overlay video's frame: Enter an integer representing the Unit type that you choose, either Pixels or Percentage. For example, when you enter 10 and choose Pixels, the cropping rectangle will be positioned 10 pixels from the left edge of the overlay video's frame. When you enter 10, choose Percentage, and your overlay input video is 1920x1080, the cropping rectangle will be positioned 192 pixels from the left edge of the overlay video's frame."
+        },
+        "Y": {
+          "shape": "__integerMin0Max2147483647",
+          "locationName": "y",
+          "documentation": "Specify the distance between the cropping rectangle and the top edge of your overlay video's frame. To position the cropping rectangle along the top edge: Keep blank, or enter 0. To position the cropping rectangle down, relative to the top edge of your overlay video's frame: Enter an integer representing the Unit type that you choose, either Pixels or Percentage. For example, when you enter 10 and choose Pixels, the cropping rectangle will be positioned 10 pixels from the top edge of the overlay video's frame. When you enter 10, choose Percentage, and your overlay input video is 1920x1080, the cropping rectangle will be positioned 108 pixels from the top edge of the overlay video's frame."
+        }
+      },
+      "documentation": "Specify a rectangle of content to crop and use from your video overlay's input video. When you do, MediaConvert uses the cropped dimensions that you specify under X offset, Y offset, Width, and Height."
     },
     "VideoOverlayInput": {
       "type": "structure",
@@ -13508,7 +13684,7 @@
           "documentation": "The bit depth of the video track."
         },
         "BitRate": {
-          "shape": "__integer",
+          "shape": "__long",
           "locationName": "bitRate",
           "documentation": "The bit rate of the video track, in bits per second."
         },
@@ -14300,6 +14476,11 @@
           "locationName": "framerateNumerator",
           "documentation": "When you use the API for transcode jobs that use frame rate conversion, specify the frame rate as a fraction. For example, 24000 / 1001 = 23.976 fps. Use FramerateNumerator to specify the numerator of this fraction. In this example, use 24000 for the value of FramerateNumerator. When you use the console for transcode jobs that use frame rate conversion, provide the value as a decimal number for Framerate. In this example, specify 23.976."
         },
+        "PerFrameMetrics": {
+          "shape": "__listOfFrameMetricType",
+          "locationName": "perFrameMetrics",
+          "documentation": "Optionally choose one or more per frame metric reports to generate along with your output. You can use these metrics to analyze your video output according to one or more commonly used image quality metrics. You can specify per frame metrics for output groups or for individual outputs. When you do, MediaConvert writes a CSV (Comma-Separated Values) file to your S3 output destination, named after the output name and metric type. For example: videofile_PSNR.csv Jobs that generate per frame metrics will take longer to complete, depending on the resolution and complexity of your output. For example, some 4K jobs might take up to twice as long to complete. Note that when analyzing the video quality of your output, or when comparing the video quality of multiple different outputs, we generally also recommend a detailed visual review in a controlled environment. You can choose from the following per frame metrics: * PSNR: Peak Signal-to-Noise Ratio * SSIM: Structural Similarity Index Measure * MS_SSIM: Multi-Scale Similarity Index Measure * PSNR_HVS: Peak Signal-to-Noise Ratio, Human Visual System * VMAF: Video Multi-Method Assessment Fusion * QVBR: Quality-Defined Variable Bitrate. This option is only available when your output uses the QVBR rate control mode."
+        },
         "Profile": {
           "shape": "XavcProfile",
           "locationName": "profile",
@@ -14736,6 +14917,16 @@
       "min": 1,
       "max": 8
     },
+    "__integerMin2000Max30000": {
+      "type": "integer",
+      "min": 2000,
+      "max": 30000
+    },
+    "__integerMin22050Max192000": {
+      "type": "integer",
+      "min": 22050,
+      "max": 192000
+    },
     "__integerMin22050Max48000": {
       "type": "integer",
       "min": 22050,
@@ -14830,6 +15021,11 @@
       "type": "integer",
       "min": 64000,
       "max": 640000
+    },
+    "__integerMin6Max16": {
+      "type": "integer",
+      "min": 6,
+      "max": 16
     },
     "__integerMin8000Max192000": {
       "type": "integer",
@@ -14990,6 +15186,12 @@
       "type": "list",
       "member": {
         "shape": "ForceIncludeRenditionSize"
+      }
+    },
+    "__listOfFrameMetricType": {
+      "type": "list",
+      "member": {
+        "shape": "FrameMetricType"
       }
     },
     "__listOfHlsAdMarkers": {
@@ -15388,6 +15590,11 @@
       "max": 50,
       "pattern": "^[a-zA-Z0-9_\\/_+=.@-]*$"
     },
+    "__stringMin1PatternArnAwsUsGovCnKmsAZ26EastWestCentralNorthSouthEastWest1912D12KeyAFAF098AFAF094AFAF094AFAF094AFAF0912MrkAFAF0932": {
+      "type": "string",
+      "min": 1,
+      "pattern": "^(arn:aws(-us-gov|-cn)?:kms:[a-z-]{2,6}-(east|west|central|((north|south)(east|west)?))-[1-9]{1,2}:\\d{12}:key/)?[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}|mrk-[a-fA-F0-9]{32}$"
+    },
     "__stringMin24Max512PatternAZaZ0902": {
       "type": "string",
       "min": 24,
@@ -15442,6 +15649,10 @@
       "type": "string",
       "pattern": "^([01][0-9]|2[0-4]):[0-5][0-9]:[0-5][0-9][:;][0-9]{2}(@[0-9]+(\\.[0-9]+)?(:[0-9]+)?)?$"
     },
+    "__stringPattern019090190908019090190908": {
+      "type": "string",
+      "pattern": "^(\\[|\\()?(-?(0|[1-9][0-9]*):(0|[1-9][0-9]{0,8}))?(_(-?(0|[1-9][0-9]*):(0|[1-9][0-9]{0,8}))?)?(\\]|\\))?$"
+    },
     "__stringPattern01D20305D205D": {
       "type": "string",
       "pattern": "^((([0-1]\\d)|(2[0-3]))(:[0-5]\\d){2}([:;][0-5]\\d))$"
@@ -15473,6 +15684,10 @@
     "__stringPatternAZaZ23AZaZ09": {
       "type": "string",
       "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9-]+)?$"
+    },
+    "__stringPatternArnAwsAZ09EventsAZ090912ConnectionAZAZ09AF0936": {
+      "type": "string",
+      "pattern": "^arn:aws[a-z0-9-]*:events:[a-z0-9-]+:[0-9]{12}:connection/[a-zA-Z0-9-]+/[a-f0-9-]{36}$"
     },
     "__stringPatternArnAwsUsGovAcm": {
       "type": "string",

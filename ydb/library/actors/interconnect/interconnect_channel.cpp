@@ -174,7 +174,7 @@ namespace NActors {
                         State = EState::BODY;
                         IEventBase *base = event.Event.Get();
                         if (event.EventSerializedSize) {
-                            Chunker.SetSerializingEvent(base, /*withCachedSizes=*/ true);
+                            Chunker.SetSerializingEvent(base, /*withCachedSizes=*/ true, /*withCord=*/ false);
                         }
                         SerializationInfoContainer = base->CreateSerializationInfo(Params.UseExternalDataChannel);
                         SerializationInfo = &SerializationInfoContainer;
@@ -310,7 +310,14 @@ namespace NActors {
         bool complete = false;
         if (event.Event) {
             while (!complete) {
-                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>().SubSpan(0, PartLenRemain);
+                Y_ABORT_UNLESS(event.EventActuallySerialized <= MaxSerializedEventSize);
+                const size_t limitRemain = MaxSerializedEventSize - event.EventActuallySerialized;
+                if (!limitRemain) {
+                    throw TExSerializedEventTooLarge(event.Descr.Type);
+                }
+
+                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>()
+                    .SubSpan(0, Min(PartLenRemain, limitRemain));
                 if (!out.size()) {
                     break;
                 }

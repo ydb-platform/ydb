@@ -11,6 +11,8 @@
 
 namespace NKikimr::NOlap::NReader {
 
+constexpr TStringBuf NoScanIteratorDiagnostics = "NO";
+
 NKqp::TScanStatistics TColumnShardScan::GetScanStats() {
     TVector<NKqp::TPerStepScanStatistics> timesPerStep = [&] {
         auto cnt = ScanCountersPool.ReadStepsCounters();
@@ -590,7 +592,7 @@ void TColumnShardScan::SendScanError(const TString& reason) {
 
 void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish status) {
     if (AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {
-        auto scanIteratorDiagnostics = ScanIterator->DebugString(true);
+        auto scanIteratorDiagnostics = ScanIterator ? ScanIterator->DebugString(true) : TString(NoScanIteratorDiagnostics);
         Send(ScanDiagnosticsActorId,
             std::make_unique<NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics>(RequestCookie, std::move(scanIteratorDiagnostics)));
     }

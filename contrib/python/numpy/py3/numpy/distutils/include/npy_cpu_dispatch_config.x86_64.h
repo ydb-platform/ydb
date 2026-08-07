@@ -402,4 +402,8 @@ NPY__CPU_EXPAND(EXEC_CB(AVX512_ICL, __VA_ARGS__)) \
 #ifdef NPY_HAVE_NEON
     #include <arm_neon.h>
 #endif
+
+#ifdef NPY_HAVE_RVV
+#error    #include <riscv_vector.h>
+#endif
 #endif // NPY__CPU_DISPATCHER_CONF_H_

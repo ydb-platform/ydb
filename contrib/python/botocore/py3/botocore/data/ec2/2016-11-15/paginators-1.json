@@ -901,6 +901,24 @@
       "limit_key": "MaxResults",
       "output_token": "NextToken",
       "result_key": "RouteServers"
+    },
+    "DescribeMacModificationTasks": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "MacModificationTasks"
+    },
+    "DescribeCapacityBlockStatus": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "CapacityBlockStatuses"
+    },
+    "DescribeCapacityBlocks": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "CapacityBlocks"
     }
   }
 }

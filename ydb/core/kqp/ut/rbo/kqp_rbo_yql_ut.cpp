@@ -831,6 +831,75 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(mergeConnection->GetMapSafe().contains("SortColumns"), sortPlan);
     }
 
+    Y_UNIT_TEST(TopSortPushedToRowReadAndKept) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeRes = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Uint64,
+                b String,
+                PRIMARY KEY (a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeRes.IsSuccess(), schemeRes.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (ui64 i = 0; i < 5; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Uint64(i)
+                .AddMember("b").String(TStringBuilder() << "v" << i)
+                .EndStruct();
+        }
+        rows.EndList();
+        auto upsertRes = db.BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertRes.IsSuccess(), upsertRes.GetIssues().ToString());
+
+        auto explainAst = [&](const TString& query) -> TString {
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return TString(result.GetAst());
+        };
+
+        // ORDER BY a (PK) LIMIT 3: order is pushed into the read ("Sorted"), but the
+        // WideTopSort operator must stay in the AST.
+        {
+            auto ast = explainAst("SELECT a FROM `/Root/t1` ORDER BY a LIMIT 3;");
+            UNIT_ASSERT_C(ast.Contains("'\"Sorted\""),
+                "Expected the \"Sorted\" pushdown into the read settings, AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("WideTopSort"),
+                "WideTopSort must stay after the TopSort pushdown to the row read "
+                "(merge connection for row storage is not produced yet), AST: " << ast);
+        }
+
+        // ORDER BY a DESC (PK) LIMIT 3: the ascending direction is not pushed here, so
+        // WideTopSort stays and the read settings must not carry "Sorted".
+        {
+            auto ast = explainAst("SELECT a FROM `/Root/t1` ORDER BY a DESC LIMIT 3;");
+            UNIT_ASSERT_C(!ast.Contains("'\"Sorted\""),
+                "ASC-only pushdown; DESC must not push \"Sorted\" into the read, AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("WideTopSort"),
+                "WideTopSort must stay for ORDER BY PK DESC LIMIT, AST: " << ast);
+        }
+
+        // Negative control: ORDER BY b (non-PK) LIMIT 3 -> no pushdown, WideTopSort stays,
+        // the read settings must not carry "Sorted".
+        {
+            auto ast = explainAst("SELECT a FROM `/Root/t1` ORDER BY b LIMIT 3;");
+            UNIT_ASSERT_C(!ast.Contains("'\"Sorted\""),
+                "no pushdown for ORDER BY non-PK; read must not carry \"Sorted\", AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("WideTopSort"),
+                "WideTopSort must stay for ORDER BY non-PK LIMIT, AST: " << ast);
+        }
+    }
+
     Y_UNIT_TEST(ExplainReadPushdown) {
         TExplainPlanTestContext testContext;
         auto& session = testContext.GetSession();
@@ -3052,6 +3121,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 WHERE SubKey1 = 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
+            R"(
+                -- используется Index212 (not Index21), since the sort is free due to key order of covering Index212
+                SELECT Key, SubKey1, SubKey2
+                FROM Table
+                WHERE SubKey2 = "1"
+                ORDER BY SubKey2, Key, SubKey1
+                LIMIT 2;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -3064,6 +3141,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]];[[1];[0];["1"];["6"];["6"]];[[1];[1];["1"];["8"];["8"]]])",
             R"([[["1"]];[["3"]];[["5"]];[["7"]]])",
             R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
+            R"([[[0];[0];["1"]];[[0];[1];["1"]]])",
         };
 
         std::vector<TString> expectedIndexes = {
@@ -3076,6 +3154,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "Index21",
             "Index212",
             "Index12",
+            "Index212",
         };
 
         const std::string header = "PRAGMA ydb.OptDisableAutoIndexSelection = \"false\";\n";
@@ -3218,6 +3297,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 WHERE SubKey1 = 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
+            R"(
+                -- используется Index212 (not Index21), since the sort is free due to key order of covering Index212
+                SELECT Key, SubKey1, SubKey2
+                FROM Table
+                WHERE SubKey2 = "1"
+                ORDER BY SubKey2, Key, SubKey1
+                LIMIT 2;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -3230,6 +3317,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]];[[1];[0];["1"];["6"];["6"]];[[1];[1];["1"];["8"];["8"]]])",
             R"([[["1"]];[["3"]];[["5"]];[["7"]]])",
             R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
+            R"([[[0];[0];["1"]];[[0];[1];["1"]]])",
         };
 
         std::vector<TString> expectedIndexes = {
@@ -3242,6 +3330,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "Index21",
             "Index212",
             "Index12",
+            "Index212",
         };
 
         const std::string header = "PRAGMA ydb.OptDisableAutoIndexSelection = \"false\";\n";
@@ -3691,6 +3780,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 b String,
                 PRIMARY KEY (a)
             );
+
+            CREATE TABLE `/Root/t5` (
+                a Int32,
+                b Int32,
+                c Int32,
+                d String,
+                PRIMARY KEY (a)
+            );
         )";
 
         struct TCase {
@@ -3698,6 +3795,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             TString Query;
             // How many joins are expected to be executed as a stream lookup join.
             ui32 LookupJoins;
+            // Set when the old optimizer cannot be used as a reference for the result.
+            const char* ExpectedYson = nullptr;
         };
 
         const TVector<TCase> cases = {
@@ -3765,8 +3864,121 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY a;
             )", 1},
 
-            // The join key is the second key column of t3, so a lookup would have to scan the whole
-            // table for every left row.
+            {"point predicate ahead of the join key", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t3` AS t3 ON t1.d = t3.b
+                WHERE t3.a = 1
+                ORDER BY a, t3c;
+            )", 1},
+
+            {"inner join over a subquery with a point predicate", R"(
+                SELECT t1.a AS a, t3.b AS t3b
+                FROM `/Root/t1` AS t1
+                    INNER JOIN (SELECT a, b FROM `/Root/t3` WHERE a = 1) AS t3 ON t1.d = t3.b
+                ORDER BY a, t3b;
+            )", 1},
+
+            // Point predicate is ok with 2 points for inner join.
+            {"several point predicates ahead of the join key", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t3` AS t3 ON t1.d = t3.b
+                WHERE t3.a IN (1, 2)
+                ORDER BY a, t3c;
+            )", 1},
+
+            {"null point predicate ahead of the join key", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t3` AS t3 ON t1.d = t3.b
+                WHERE t3.a IS NULL
+                ORDER BY a, t3c;
+            )", 1},
+
+            {"point predicate on a join key", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t3` AS t3 ON t1.c = t3.a AND t1.d = t3.b
+                WHERE t3.a = 1
+                ORDER BY a, t3c;
+            )", 1},
+
+            {"left join with a point predicate ahead of the join key", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    LEFT JOIN (SELECT * FROM `/Root/t3` WHERE a = 2) AS t3 ON t1.d = t3.b
+                ORDER BY a, t3c;
+            )", 1},
+
+            // Here is a bug for old optimizer, we cannot use stream lookup join for point predicates > 1 with left joins.
+            {"left join with several point predicates ahead of the join key", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    LEFT JOIN (SELECT * FROM `/Root/t3` WHERE a IN (1, 2)) AS t3 ON t1.d = t3.b
+                ORDER BY a, t3c;
+            )", 0,
+             R"([[[1];["p1a"]];[[1];["p2a"]];[[2];["p1b"]];[[3];["p1a"]];[[3];["p2a"]];[[4];["p1a"]];)"
+             R"([[4];["p2a"]];[[5];["p1a"]];[[5];["p2a"]];[[6];["p1a"]];[[6];["p2a"]];[[7];["p1a"]];[[7];["p2a"]]])"},
+
+            {"semi join from an in subplan", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.c IN (SELECT a FROM `/Root/t3`)
+                ORDER BY a;
+            )", 1},
+
+            {"left only join from subselect", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.a NOT IN (SELECT a FROM `/Root/t2`)
+                ORDER BY a;
+            )", 1},
+
+            {"semi join with a filtered probed side", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.c IN (SELECT a FROM `/Root/t3` WHERE d >= 30)
+                ORDER BY a;
+            )", 1},
+
+            {"left only join with a filtered probed side", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.a NOT IN (SELECT a FROM `/Root/t3` WHERE d >= 30 AND d <= 50)
+                ORDER BY a;
+            )", 1},
+
+            {"semi join with a point predicate ahead of the join key", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.d IN (SELECT b FROM `/Root/t3` WHERE a = 2)
+                ORDER BY a;
+            )", 1},
+
+            {"left only join with a point predicate ahead of the join key", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.d NOT IN (SELECT b FROM `/Root/t3` WHERE a = 2)
+                ORDER BY a;
+            )", 1},
+
+            {"semi join with several point predicates ahead of the join key", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.d IN (SELECT b FROM `/Root/t3` WHERE a IN (1, 2))
+                ORDER BY a;
+            )", 0,
+             R"([[[1]];[[2]];[[3]];[[4]];[[5]];[[6]];[[7]]])"},
+
+            {"left only join with several point predicates ahead of the join key", R"(
+                SELECT t1.a AS a
+                FROM `/Root/t1` AS t1
+                WHERE t1.d NOT IN (SELECT b FROM `/Root/t3` WHERE a IN (1, 2))
+                ORDER BY a;
+            )", 0,
+             R"([])"},
+
             {"join key is not a key prefix", R"(
                 SELECT t1.a AS a, t3.c AS t3c
                 FROM `/Root/t1` AS t1
@@ -3774,13 +3986,27 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY a, t3c;
             )", 0},
 
-            // The lookup key would have to be cast to the type of the probed column first.
+            // Need support for cast.
             {"join key types differ", R"(
                 SELECT t1.a AS a, t2.b AS t2b
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t2` AS t2 ON t1.f = t2.a
                 ORDER BY a;
             )", 0},
+
+            {"inner join with a residual non-key join key", R"(
+                SELECT t1.a AS a, t5.d AS t5d
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t5` AS t5 ON t1.b = t5.a AND t1.c = t5.b
+                ORDER BY a, t5d;
+            )", 1},
+
+            {"left join with a residual non-key join key", R"(
+                SELECT t1.a AS a, t5.d AS t5d
+                FROM `/Root/t1` AS t1
+                    LEFT JOIN `/Root/t5` AS t5 ON t1.b = t5.a AND t1.c = t5.b
+                ORDER BY a, t5d;
+            )", 1},
         };
 
         struct TQueryResult {
@@ -3807,6 +4033,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 auto result = db.BulkUpsert(table, rows.Build()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             };
+            // For debugging.
+            const bool enableAstDump = false;
 
             {
                 NYdb::TValueBuilder rows;
@@ -3839,6 +4067,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {
                 NYdb::TValueBuilder rows;
                 rows.BeginList();
+                for (const auto& [a, b, c, d] : TVector<std::tuple<i32, i32, i32, TString>>{
+                         {1, 1, 10, "m1"}, {1, 2, 20, "m2"}, {2, 2, 30, "m3"}, {3, 4, 40, "m4"}}) {
+                    rows.AddListItem().BeginStruct()
+                        .AddMember("a").OptionalInt32(a)
+                        .AddMember("b").OptionalInt32(b)
+                        .AddMember("c").OptionalInt32(c)
+                        .AddMember("d").OptionalString(d)
+                        .EndStruct();
+                }
+                rows.EndList();
+                bulkUpsert("/Root/t5", rows);
+            }
+
+            {
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
                 for (const auto& [a, b, c, d, e] : TVector<std::tuple<i32, TString, TString, i32, i32>>{
                          {1, "a", "p1a", 10, 10}, {1, "b", "p1b", 20, 20}, {2, "a", "p2a", 30, 10},
                          {3, "a", "p3a", 40, 20}, {4, "a", "p4a", 50, 99}}) {
@@ -3850,6 +4094,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                         .AddMember("e").OptionalInt32(e)
                         .EndStruct();
                 }
+                rows.EndList();
+                bulkUpsert("/Root/t3", rows);
+            }
+
+            {
+                // A null in the first key column: a point predicate can select it, so the constant
+                // cell of a lookup key prefix has to be allowed to hold a null.
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                rows.AddListItem().BeginStruct()
+                    .AddMember("a").OptionalInt32(std::nullopt)
+                    .AddMember("b").OptionalString("a")
+                    .AddMember("c").OptionalString("pna")
+                    .AddMember("d").OptionalInt32(60)
+                    .AddMember("e").OptionalInt32(30)
+                    .EndStruct();
                 rows.EndList();
                 bulkUpsert("/Root/t3", rows);
             }
@@ -3892,6 +4152,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
                 results.push_back({FormatResultSetYson(result.GetResultSet(0)), TString{*explained.GetStats()->GetAst()},
                                    TString{*explained.GetStats()->GetPlan()}});
+
+                if (enableAstDump && newRbo && getenv("DUMP_AST") && TString(testCase.Name) == getenv("DUMP_AST")) {
+                    Cout << "=== AST DUMP [" << testCase.Name << "] ===\n"
+                         << *explained.GetStats()->GetAst() << "\n=== AST DUMP END ===\n";
+                }
             }
             return results;
         };
@@ -3914,7 +4179,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             const auto& newRbo = newRboResults[i];
 
             // Check that results are the same.
-            UNIT_ASSERT_VALUES_EQUAL_C(newRbo.Yson, yqlResults[i].Yson, testCase.Name);
+            if (testCase.ExpectedYson) {
+                UNIT_ASSERT_VALUES_EQUAL_C(newRbo.Yson, TString(testCase.ExpectedYson), testCase.Name);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(newRbo.Yson, yqlResults[i].Yson, testCase.Name);
+            }
 
             const auto lookupJoins = countOccurrences(newRbo.Ast, "KqpIndexLookupJoin");
             UNIT_ASSERT_VALUES_EQUAL_C(lookupJoins, testCase.LookupJoins, testCase.Name << ", ast:\n" << newRbo.Ast);

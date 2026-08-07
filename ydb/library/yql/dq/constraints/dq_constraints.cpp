@@ -53,7 +53,7 @@ TStatus ConstraintDqCnMerge(const TExprNode::TPtr& input, TExprContext& ctx, boo
         return TStatus::Error;
     }
 
-    TCopyConstraints::Do<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(connection.Output().Ref(), connection.MutableRef());
+    TCopyConstraints::Do<TSortedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode>(connection.Output().Ref(), connection.MutableRef());
     return TStatus::Ok;
 }
 
@@ -239,12 +239,7 @@ TStatus ConstraintDqConnection(const TExprNode::TPtr& input, TExprContext& /* ct
 
 TStatus ConstraintDqCnUnionAll(const TExprNode::TPtr& input, TExprContext& /* ctx */) {
     const TDqConnection connection(input);
-    auto constraints = connection.Output().Ref().GetConstraintSet();
-    constraints.RemoveConstraint(TSortedConstraintNode::Name());
-    constraints.RemoveConstraint(TPartOfSortedConstraintNode::Name());
-    constraints.RemoveConstraint(TChoppedConstraintNode::Name());
-    constraints.RemoveConstraint(TPartOfChoppedConstraintNode::Name());
-    connection.MutableRef().SetConstraints(constraints);
+    TCopyConstraints::Do<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TStreamingConstraintNode>(connection.Output().Ref(), connection.MutableRef());
     return TStatus::Ok;
 }
 
@@ -431,7 +426,7 @@ TStatus ConstraintDqJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
         }
 
         if (lStreaming && rStreaming) {
-            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), TStringBuilder() << "Stream Join is unsupported"));
+            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Stream X Stream Join is unsupported"));
             return IGraphTransformer::TStatus::Error;
         } else if (lStreaming) {
             const auto* renamed = leftRename ? lStreaming->RenameFields(ctx, leftRename) : lStreaming;

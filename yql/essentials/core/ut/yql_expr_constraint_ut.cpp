@@ -2470,7 +2470,7 @@ Y_UNIT_TEST(MapJoinLeftOnly) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '()) '('One 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'LeftOnly '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'value1 'value) '() '() '()))
+    (let join (MapJoinCore (ToFlow list1) dict 'LeftOnly '('key1 'subkey1) '('key2 'subkey2) '('value1 'value) '() '() '()))
     (let list (Collect join))
 
     (let res (DataSink 'result))
@@ -2484,7 +2484,7 @@ Y_UNIT_TEST(MapJoinLeftOnly) {
     const auto exprRoot = ParseAndAnnotate(s, exprCtx);
     CheckConstraint<TUniqueConstraintNode>(exprRoot, "Collect", "Unique((value))");
     CheckConstraint<TDistinctConstraintNode>(exprRoot, "Collect", "Distinct((value))");
-    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Collect", "Streaming(key)");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Collect", "Streaming");
 }
 
 Y_UNIT_TEST(EquiJoinWithRenames) {
@@ -4850,8 +4850,10 @@ Y_UNIT_TEST(DirectStreamingConstraintWithSwitch) {
 
 (let data (Switch (Iterator data) '0 '('0) (lambda '(s) (FlatMap s (lambda '(item) (Just item)))) '('1) (lambda '(s) s)))
 
+(let stripped (RemovePrefixMembers data '('event_)))
 (let result (Nth (Demux data) '1))
 
+(let world (Write! world res (Key) (Collect stripped) '()))
 (let world (Write! world res (Key) (Collect result) '()))
 (let world (Commit! world res))
 (return world)
@@ -4859,10 +4861,12 @@ Y_UNIT_TEST(DirectStreamingConstraintWithSwitch) {
 
     TExprContext exprCtx;
     const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Switch", "");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Mux", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Switch", "Streaming");
     CheckConstraint<TMultiConstraintNode>(exprRoot, "Switch", "Multi(0:{Streaming(event_time)},1:{Streaming(event_time)})");
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "FlatMap", "Streaming(event_time)");
-    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Demux", "");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "RemovePrefixMembers", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Demux", "Streaming");
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "Nth", "Streaming(event_time)");
 }
 
@@ -4879,6 +4883,21 @@ Y_UNIT_TEST(DetailedStreamingConstraintWithNonVariantSwitch) {
     TExprContext exprCtx;
     const auto exprRoot = ParseAndAnnotate(s, exprCtx);
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "Switch", "Streaming(ts)");
+}
+
+Y_UNIT_TEST(StreamingConstraintSimplificationForTuple) {
+    TExprContext ctx;
+    const auto* itemType = ctx.MakeType<TDataExprType>(EDataSlot::Timestamp);
+    TVector<const TTypeAnnotationNode*> tupleItems = {
+        ctx.MakeType<TListExprType>(itemType),
+        ctx.MakeType<TListExprType>(itemType),
+    };
+    const auto* tupleType = ctx.MakeType<TTupleExprType>(tupleItems);
+    const auto* detailed = ctx.MakeConstraint<TStreamingConstraintNode>(TPartOfConstraintBase::TPathType{"event_time"});
+
+    const auto* simplified = detailed->GetSimplifiedForType(*tupleType, ctx);
+    UNIT_ASSERT(!simplified->GetEventTime().Defined());
+    UNIT_ASSERT(simplified->IsApplicableToType(*tupleType));
 }
 
 Y_UNIT_TEST(MultiItemStreamingConstraintWithSwitch) {
@@ -4911,11 +4930,11 @@ Y_UNIT_TEST(MultiItemStreamingConstraintWithSwitch) {
 
     TExprContext exprCtx;
     const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Mux", "");
-    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Switch", "");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Mux", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Switch", "Streaming");
     CheckConstraint<TMultiConstraintNode>(exprRoot, "Switch", "Multi(0:{},1:{Streaming(event_time)})");
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "FlatMap", "");
-    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Demux", "");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Demux", "Streaming");
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "Nth", "Streaming(event_time)");
 }
 

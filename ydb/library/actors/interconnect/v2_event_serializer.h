@@ -172,7 +172,8 @@ namespace NActors {
         bool HasOutOfBandTraffic() const { return !SystemChannelQueue.SystemRequests.empty(); }
 
         // this function generates output stream for transmission; it returns number of bytes added to output spans
-        size_t ProduceOutputStream(TRcBuf& buffer, std::deque<TContiguousSpan> *out, size_t maxBytesToProduce = Max<size_t>());
+        size_t ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
+            size_t maxBytesToProduce = Max<size_t>());
 
         // notification issued when N produced bytes have been sent to the other party
         void CommitProducedBytes(size_t numBytes, std::vector<ui64> *eventToWireTime = nullptr,
@@ -197,8 +198,8 @@ namespace NActors {
                 channel == TChunkHeader::SystemChannel ? SystemChannelQueue : PerChannelQueueMap[channel];
         }
 
-        size_t ProduceOutputStreamForQueue(ui16 channel, TPerChannelQueue& queue, size_t maxBytesToProduce, TRcBuf& buffer,
-            std::deque<TContiguousSpan> *out, ui64 *bufferProduced);
+        size_t ProduceOutputStreamForQueue(ui16 channel, TPerChannelQueue& queue, size_t maxBytesToProduce,
+            TMutableContiguousSpan& buffer, std::vector<TContiguousSpan> *out, ui64 *bufferProduced);
 
         ui64 UpdateTimestamp();
     };

@@ -14,6 +14,7 @@ export default {
     const { computed, ref } = Vue
 
     const showTypes = ref(false)
+    const showProbe = ref(false)
     const showProblems = ref(true)
 
     const available = computed(() => props.scheduler?.available === true)
@@ -35,6 +36,7 @@ export default {
     const enabledTypes = computed(() => props.scheduler?.enabled_types || [])
     const budget = computed(() => props.scheduler?.failure_budget || {})
     const probe = computed(() => props.scheduler?.recovery_probe || null)
+    const probeFaults = computed(() => probe.value?.faults || [])
 
     const intervalText = computed(() => {
       const base = props.scheduler?.base_interval
@@ -66,6 +68,17 @@ export default {
         ? 'badge-error' : 'badge-warning'
     }
 
+    function probePhaseBadgeClass(phase, stuck) {
+      if (stuck) return 'badge-error'
+      return phase === 'confirm' ? 'badge-warning' : 'badge-ghost'
+    }
+
+    function shortHost(host) {
+      if (!host) return '-'
+      const bare = String(host).split('.')[0]
+      return bare || host
+    }
+
     return {
       available,
       running,
@@ -74,13 +87,17 @@ export default {
       enabledTypes,
       budget,
       probe,
+      probeFaults,
       intervalText,
       impairedDomains,
       slotsText,
       problemList,
       problemsByKind,
       problemBadgeClass,
+      probePhaseBadgeClass,
+      shortHost,
       showTypes,
+      showProbe,
       showProblems,
       start: () => emit('start'),
       stop: () => emit('stop')
@@ -161,13 +178,31 @@ export default {
               </div>
               <div>
                 <div class="opacity-60">Probe tracked / confirm / stuck</div>
-                <div class="font-mono" :class="probe && (probe.stuck || probe.blind) ? 'text-error' : ''">
+                <div class="font-mono cursor-pointer link link-hover"
+                     :class="probe && (probe.stuck || probe.blind) ? 'text-error' : ''"
+                     @click="showProbe = !showProbe">
                   {{ probe ? probe.tracked : '-' }} / {{ probe ? (probe.confirming ?? 0) : '-' }} / {{ probe ? probe.stuck : '-' }}
                 </div>
               </div>
             </div>
             <div v-if="impairedDomains.length > 0" class="flex flex-wrap gap-1 pt-1">
               <span v-for="d in impairedDomains" :key="d" class="badge badge-warning badge-xs font-mono">{{ d }}</span>
+            </div>
+            <div v-if="showProbe" class="pt-1 space-y-1">
+              <div v-if="probeFaults.length === 0" class="text-xs opacity-50">no faults tracked</div>
+              <div v-for="f in probeFaults" :key="f.identity_key"
+                   class="flex flex-wrap items-center gap-1 text-xs">
+                <span class="badge badge-outline badge-xs font-mono">{{ f.nemesis_type }}</span>
+                <span class="font-mono opacity-80" :title="f.identity_key">{{ shortHost(f.host) }}</span>
+                <span class="badge badge-xs font-mono"
+                      :class="probePhaseBadgeClass(f.phase, f.stuck)"
+                      :title="f.phase === 'confirm'
+                        ? 'extract dispatched, waiting for healthcheck confirm'
+                        : (f.toggle ? 'holding until auto-extract' : 'waiting for recovery predicate')">
+                  {{ f.stuck ? 'stuck' : f.phase }}
+                </span>
+                <span class="opacity-50 font-mono">{{ Math.round(f.held_sec) }}s</span>
+              </div>
             </div>
           </div>
 

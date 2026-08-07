@@ -26,6 +26,8 @@ TOGGLE_TYPES = (
     "SuspendNodeNemesis",
     "SafelyBreakDiskNemesis",
     "SafelyCleanupDisksNemesis",
+    "NetworkNemesis",
+    "DnsNemesis",
     "TimeSkewNemesis",
 )
 

@@ -76,6 +76,7 @@ class RecoveryProbe:
         min_hold_sec: float = DEFAULT_MIN_HOLD_SEC,
         max_hc_age_sec: float = DEFAULT_MAX_HC_AGE_SEC,
         clock: Callable[[], float] = time.monotonic,
+        metrics=None,
     ) -> None:
         self._guard = guard
         self._hc_source = hc_source  # duck-typed: .last_results (dict), .last_update (monotonic)
@@ -86,6 +87,7 @@ class RecoveryProbe:
         self._min_hold_sec = float(min_hold_sec)
         self._max_hc_age_sec = float(max_hc_age_sec)
         self._clock = clock
+        self._metrics = metrics
         self._lock = threading.Lock()
         self._pending: dict[str, _Pending] = {}
         self._blind = False
@@ -94,6 +96,9 @@ class RecoveryProbe:
         self._ever_fresh = False
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+
+    def set_metrics(self, metrics) -> None:
+        self._metrics = metrics
 
     # -- healthcheck view -----------------------------------------------------
 
@@ -201,18 +206,26 @@ class RecoveryProbe:
                     logger.exception("on_stuck callback raised")
         return stuck
 
-    def drain_extracts(self) -> int:
-        """Extract toggles still needing it (HOLD, or CONFIRM after a failed recover_action)."""
+    def drain_extracts(self, nemesis_type: str | None = None) -> int:
+        """Extract toggles still needing it (HOLD, or CONFIRM after a failed recover_action).
+
+        If ``nemesis_type`` is set, only that type is drained (legacy per-type schedule disable).
+        """
         with self._lock:
             pending = [
                 p
                 for p in self._pending.values()
                 if p.recover_action is not None
+                and (nemesis_type is None or p.nemesis_type == nemesis_type)
                 and (p.phase == PHASE_HOLD or (p.phase == PHASE_CONFIRM and not p.extract_ok))
             ]
         if not pending:
             return 0
-        logger.info("draining %d pending extract(s) on shutdown", len(pending))
+        logger.info(
+            "draining %d pending extract(s)%s",
+            len(pending),
+            f" for {nemesis_type}" if nemesis_type else " on shutdown",
+        )
         now = self._clock()
         for p in pending:
             self._dispatch_extract(p, now, reason="drained on shutdown")
@@ -237,21 +250,56 @@ class RecoveryProbe:
             return list(self._pending.values())
 
     def snapshot(self) -> dict:
+        now = self._clock()
         with self._lock:
+            faults = [
+                {
+                    "nemesis_type": p.nemesis_type,
+                    "host": p.target.host,
+                    "identity_key": p.target.identity_key(),
+                    "phase": p.phase,
+                    "held_sec": round(now - p.reserved_at, 1),
+                    "stuck": p.stuck_reported,
+                    "toggle": p.recover_action is not None,
+                }
+                for p in self._pending.values()
+            ]
+            faults.sort(key=lambda f: (-f["held_sec"], f["nemesis_type"], f["identity_key"]))
             return {
                 "tracked": len(self._pending),
                 "stuck": sum(1 for p in self._pending.values() if p.stuck_reported),
                 "confirming": sum(1 for p in self._pending.values() if p.phase == PHASE_CONFIRM),
                 "blind": self._blind,
+                "faults": faults,
             }
 
     # -- internals ----------------------------------------------------------------
 
     def _release(self, p: _Pending, held: float) -> None:
-        # Lease may already be gone (manual extract raced us); drop the pending either way.
-        self._guard.release(p.lease_id)
+        # Skip if manual extract already untracked us (avoids double fault_ended).
         with self._lock:
+            if self._pending.get(p.lease_id) is not p:
+                return
             self._pending.pop(p.lease_id, None)
+        released = self._guard.release(
+            p.lease_id,
+            reason="recovered",
+            target=p.target,
+            nemesis_type=p.nemesis_type,
+            source="probe",
+        )
+        metrics = self._metrics
+        if metrics is not None and released:
+            metrics.fault_ended(
+                target=p.target,
+                nemesis_type=p.nemesis_type,
+                reason="recovered",
+                lease_id=p.lease_id,
+                execution_id=p.lease_id,
+                held_sec=held,
+                source="probe",
+                guard_mode="full",
+            )
         logger.info(
             "recovered: %s (%s) after %.0fs [%s]; budget released",
             p.target.host, p.nemesis_type, held, p.phase,
@@ -300,6 +348,17 @@ class RecoveryProbe:
             "fault did not recover within %.0fs [%s]; holding budget: %s (%s)",
             timeout_sec, p.phase, p.target.host, p.nemesis_type,
         )
+        metrics = self._metrics
+        if metrics is not None:
+            metrics.fault_stuck(
+                target=p.target,
+                nemesis_type=p.nemesis_type,
+                lease_id=p.lease_id,
+                held_sec=held,
+                timeout_sec=timeout_sec,
+                phase=p.phase,
+                source="probe",
+            )
         return StuckFault(
             lease_id=p.lease_id,
             nemesis_type=p.nemesis_type,

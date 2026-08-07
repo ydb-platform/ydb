@@ -61,6 +61,8 @@ class OrchestratorNemesisSchedule:
         inventory=None,
         predicate_for: Callable = hc_predicate_for,
         stuck_timeout_for: Callable[[str], float] = stuck_timeout_for,
+        metrics=None,
+        resolve_http_host: Callable[[str], str] | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self._tasks: dict[str, dict] = {}
@@ -75,6 +77,11 @@ class OrchestratorNemesisSchedule:
         self._inventory = inventory
         self._predicate_for = predicate_for
         self._stuck_timeout_for = stuck_timeout_for
+        self._metrics = metrics
+        self._resolve_http_host = resolve_http_host or (lambda h: h)
+
+    def set_metrics(self, metrics) -> None:
+        self._metrics = metrics
 
     @property
     def lock(self) -> threading.RLock:
@@ -206,8 +213,11 @@ class OrchestratorNemesisSchedule:
             stopped.append(process_type)
         return stopped
 
-    def dispatch_command(self, cmd: DispatchCommand, *, track_history: bool) -> None:
-        """POST (or local helper) to start one execution on cmd.host."""
+    def dispatch_command(self, cmd: DispatchCommand, *, track_history: bool) -> bool:
+        """POST (or local helper) to start one execution on cmd.host. Returns False on failure."""
+        metrics = self._metrics
+        mode = guard_mode_for(cmd.nemesis_type)
+        guard_mode_val = mode.value if mode is not None else None
         try:
             payload = dict(cmd.payload or {})
             payload["host"] = cmd.host
@@ -232,11 +242,13 @@ class OrchestratorNemesisSchedule:
                 )
             else:
                 port = self._get_app_port()
-                requests.post(
-                    f"http://{cmd.host}:{port}/api/processes",
+                http_host = self._resolve_http_host(cmd.host)
+                resp = requests.post(
+                    f"http://{http_host}:{port}/api/processes",
                     json=body,
                     timeout=5,
                 )
+                resp.raise_for_status()
 
             if track_history:
                 self.append_executions_history(
@@ -250,19 +262,65 @@ class OrchestratorNemesisSchedule:
                         "timestamp": datetime.utcnow().isoformat() + "Z",
                     }
                 )
+            if metrics is not None:
+                lease_id = cmd.lease_id or cmd.execution_id
+                if cmd.action == "inject" and mode is not GuardMode.BYPASS:
+                    metrics.fault_started(
+                        target=cmd.target,
+                        nemesis_type=cmd.nemesis_type,
+                        execution_id=cmd.execution_id,
+                        scenario_id=cmd.scenario_id,
+                        lease_id=lease_id,
+                        source="dispatch",
+                        guard_mode=guard_mode_val,
+                    )
+                elif cmd.action == "extract":
+                    metrics.fault_extract_dispatched(
+                        target=cmd.target,
+                        nemesis_type=cmd.nemesis_type,
+                        execution_id=cmd.execution_id,
+                        scenario_id=cmd.scenario_id,
+                        lease_id=lease_id,
+                        source="dispatch",
+                    )
+            return True
         except Exception as e:
             logger.error("Failed to dispatch %s to %s: %s", cmd.nemesis_type, cmd.host, e)
+            if metrics is not None:
+                metrics.fault_dispatch_failed(
+                    target=cmd.target,
+                    nemesis_type=cmd.nemesis_type,
+                    action=cmd.action,
+                    execution_id=cmd.execution_id,
+                    scenario_id=cmd.scenario_id,
+                    source="dispatch",
+                    error=str(e),
+                )
+            return False
 
     def flush_disable_extracts(self, process_type: str) -> None:
-        """Plan and run extract on all tracked hosts when schedule is turned off."""
+        """Extract still-held faults when schedule is turned off.
+
+        Planner ``extract_all_on_disable`` covers types that bookkeep hosts themselves.
+        Extract-mode toggles (Network/Dns/TimeSkew) inject via ``_direct_commands`` and never
+        fill that set — the recovery probe is the source of truth for those.
+        """
         if process_type not in NEMESIS_TYPES:
             return
         cmds = self._chaos_store.plan_disable_schedule(process_type)
-        if not cmds:
-            return
-        logger.info("Disable schedule: %d extract dispatch(es) for %s", len(cmds), process_type)
-        for cmd in cmds:
-            self._dispatch_and_record(cmd)
+        if cmds:
+            logger.info("Disable schedule: %d extract dispatch(es) for %s", len(cmds), process_type)
+            for cmd in cmds:
+                self._dispatch_and_record(cmd)
+        probe = self._recovery_probe
+        if probe is not None:
+            drained = probe.drain_extracts(nemesis_type=process_type)
+            if drained:
+                logger.info(
+                    "Disable schedule: drained %d probe toggle(s) for %s",
+                    drained,
+                    process_type,
+                )
 
     def _extract_action(self, nemesis_type: str, cmd: DispatchCommand) -> Callable[[], None]:
         """Probe-driven extract for toggle faults (lease blocks planner toggle-back)."""
@@ -270,7 +328,10 @@ class OrchestratorNemesisSchedule:
 
         def _recover() -> None:
             for extract_cmd in self._chaos_store.plan_extract_target(nemesis_type, target):
-                self.dispatch_command(extract_cmd, track_history=True)
+                if not self.dispatch_command(extract_cmd, track_history=True):
+                    raise RuntimeError(
+                        f"extract dispatch failed for {nemesis_type} on {target.identity_key()}"
+                    )
 
         return _recover
 
@@ -291,16 +352,40 @@ class OrchestratorNemesisSchedule:
                     cmd.nemesis_type, cmd.target.identity_key(),
                 )
                 return
-        self.dispatch_command(cmd, track_history=True)
+        if not self.dispatch_command(cmd, track_history=True):
+            return
         if not full:
             return
         if cmd.action == "extract":
-            guard.record_extract(cmd.execution_id, cmd.target, scope)
+            guard.record_extract(
+                cmd.execution_id,
+                cmd.target,
+                scope,
+                nemesis_type=cmd.nemesis_type,
+                source="legacy",
+            )
             if probe is not None:
                 probe.untrack_identity(cmd.target.identity_key())
+            metrics = self._metrics
+            if metrics is not None:
+                metrics.fault_ended(
+                    target=cmd.target,
+                    nemesis_type=cmd.nemesis_type,
+                    reason="extract",
+                    lease_id=cmd.execution_id,
+                    execution_id=cmd.execution_id,
+                    source="legacy",
+                    guard_mode="full",
+                )
         elif cmd.action == "inject":
             # Held until HC confirms; toggle also gets a timed extract via the probe.
-            guard.record_inject(cmd.execution_id, cmd.target, scope)
+            guard.record_inject(
+                cmd.execution_id,
+                cmd.target,
+                scope,
+                nemesis_type=cmd.nemesis_type,
+                source="legacy",
+            )
             if probe is not None:
                 track_kwargs: dict = {}
                 if recovery_mode_for(cmd.nemesis_type) == "extract":
@@ -316,6 +401,7 @@ class OrchestratorNemesisSchedule:
                     recovered=self._predicate_for(
                         cmd.target, kind=kind, scope=scope,
                         inventory=self._inventory, baseline=baseline,
+                        nemesis_type=cmd.nemesis_type,
                     ),
                     stuck_timeout_sec=self._stuck_timeout_for(cmd.nemesis_type),
                     **track_kwargs,

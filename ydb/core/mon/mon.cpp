@@ -11,6 +11,8 @@
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/counters/proxy_counters.h>
+#include <ydb/core/grpc_services/base/http_database_access_verdict.h>
 #include <ydb/core/mon/audit/audit.h>
 #include <ydb/core/protos/mon.pb.h>
 #include <ydb/core/util/wildcard.h>
@@ -75,6 +77,16 @@ void LogAuthorizedHttpRequest(
     const TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
     const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
     const TString accessLevel = ToString(GetHighestAccessLevel(appData, userToken));
+    const NGRpcService::EHttpDatabaseAccessVerdict verdict = result
+        ? result->DatabaseAccessVerdict
+        : NGRpcService::EHttpDatabaseAccessVerdict::Ok;
+    const bool wouldDeny = verdict != NGRpcService::EHttpDatabaseAccessVerdict::Ok;
+    const TString verdictStr(ToString(verdict));
+    if (wouldDeny && userToken &&
+        IsStrictDatabaseOnlyToken(appData, userToken->GetSerializedToken()))
+    {
+        NGRpcService::CreateGRpcProxyCounters(appData->Counters)->IncDatabaseHttpAccessDenyCounter();
+    }
     YDB_LOG_NOTICE(
         "Send request"
             << " [" << address << "]"
@@ -82,13 +94,17 @@ void LogAuthorizedHttpRequest(
             << " " << request.Method
             << " " << request.URL
             << " highest_access_level=" << accessLevel
-            << " database=" << database,
+            << " database=" << database
+            << " database_access_verdict=" << verdictStr
+            << " would_deny=" << (wouldDeny ? 1 : 0),
         {"address", address},
         {"user", user},
         {"method", request.Method},
         {"url", request.URL},
         {"highest_access_level", accessLevel},
-        {"database", database});
+        {"database", database},
+        {"database_access_verdict", verdictStr},
+        {"would_deny", wouldDeny ? "1" : "0"});
 }
 
 const Ydb::Issue::IssueMessage* FindDeepestIssue(const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues) {

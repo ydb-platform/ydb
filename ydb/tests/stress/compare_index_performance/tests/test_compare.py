@@ -59,7 +59,16 @@ def _truthy(raw):
 
 
 def _parse_feature_flags(raw):
-    return [f for f in raw.split(',') if f]
+    flags = {}
+    for f in raw.split(','):
+        if not f:
+            continue
+        if '=' in f:
+            k, v = f.split('=', 1)
+            flags[k] = v.lower() not in ('false', '0', 'no', 'off')
+        else:
+            flags[f] = True
+    return flags
 
 
 def _coerce_config_value(v):

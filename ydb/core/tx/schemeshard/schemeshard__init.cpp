@@ -2181,13 +2181,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 streamingQuery->AlterVersion = rowset.GetValue<Schema::StreamingQueryState::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD streamingQuery->Properties.ParseFromString(rowset.GetValue<Schema::StreamingQueryState::Properties>());
                 Self->IncrementPathDbRefCount(pathId);
-                // Skip streaming queries that are still being created (StepCreated not yet persisted).
-                // CalcPathState (which would set PathState=EPathStateCreate) runs later in TTxInit,
-                // so PlannedToCreate() is not reliable here. Instead, use StepCreated == InvalidStepId
-                // as the indicator: PersistCreateStep is called in HandleReply after the plan step is
-                // committed, so an unfinished create has StepCreated==InvalidStepId.
-                // Those entries will be counted by CreateStreamingQuery::TPropose::HandleReply when
-                // the plan step is eventually committed (possibly after restart).
+                
                 const auto pathIt = Self->PathsById.find(pathId);
                 if (pathIt == Self->PathsById.end() || pathIt->second->StepCreated != InvalidStepId) {
                     Self->TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Add(1);

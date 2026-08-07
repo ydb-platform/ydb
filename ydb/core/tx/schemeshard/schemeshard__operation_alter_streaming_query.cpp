@@ -259,8 +259,6 @@ public:
     }
 
 private:
-    // Delta to apply to COUNTER_RUNNING_STREAMING_QUERY_COUNT when the alter is committed.
-    // Set in Propose(); remains 0 on restart (init already loaded the post-alter state).
     i64 RunDelta_ = 0;
 };
 

@@ -1,7 +1,7 @@
 #include "dq_state_load_plan.h"
 
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
-#include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 #include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
@@ -90,7 +90,7 @@ struct TGraphBuilder {
 
 TTaskInputBuilder& TTaskInputBuilder::TopicSource(const TString& topic, ui64 partitionsCount, ui64 dqPartitionsCount, ui64 eachPartition) {
     auto* src = In->MutableSource();
-    src->SetType(TString(NYql::PqSource));
+    src->SetType(TString(PqSource));
 
     NYql::NPq::NProto::TDqPqTopicSource topicSrcSettings;
     topicSrcSettings.SetDatabase("DB");
@@ -188,7 +188,7 @@ struct TTestCase : public NUnitTest::TBaseTestCase {
                     const auto& taskInput = task.GetInputs(sourcePlan.GetInputIndex());
                     UNIT_ASSERT_C(taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource, "Task " << task.GetId() << " plan: " << taskPlan);
                     // State type is foreign => source type is pq
-                    UNIT_ASSERT_C(sourcePlan.GetStateType() != NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN || taskInput.GetSource().GetType() == NYql::PqSource, "Task " << task.GetId() << " plan: " << taskPlan << ". Task input: " << taskInput);
+                    UNIT_ASSERT_C(sourcePlan.GetStateType() != NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN || taskInput.GetSource().GetType() == PqSource, "Task " << task.GetId() << " plan: " << taskPlan << ". Task input: " << taskInput);
                     if (sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
                         UNIT_ASSERT_C(sourcePlan.ForeignTasksSourcesSize() > 0, "Task " << task.GetId() << " plan: " << taskPlan);
                         const TMaybe<NPq::TTopicPartitionsSet> partitionsSet = NPq::GetTopicPartitionsSet(task.GetMeta());
@@ -198,7 +198,7 @@ struct TTestCase : public NUnitTest::TBaseTestCase {
                             UNIT_ASSERT_C(taskSource.GetInputIndex() < srcTask.InputsSize(), "Task " << srcTask.GetId() << " plan: " << taskPlan);
                             const auto& srcTaskInput = srcTask.GetInputs(taskSource.GetInputIndex());
                             UNIT_ASSERT_C(srcTaskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource, "Task " << srcTask.GetId() << " plan: " << taskPlan);
-                            UNIT_ASSERT_C(srcTaskInput.GetSource().GetType() == NYql::PqSource, "Task " << srcTask.GetId() << " plan: " << taskPlan);
+                            UNIT_ASSERT_C(srcTaskInput.GetSource().GetType() == PqSource, "Task " << srcTask.GetId() << " plan: " << taskPlan);
                             const TMaybe<NPq::TTopicPartitionsSet> srcTaskPartitionsSet = NPq::GetTopicPartitionsSet(task.GetMeta());
                             UNIT_ASSERT_C(srcTaskPartitionsSet, "Task " << srcTask.GetId() << " plan: " << taskPlan);
                             UNIT_ASSERT_C(partitionsSet->Intersects(*srcTaskPartitionsSet), "Task " << srcTask.GetId() << " plan: " << taskPlan);

@@ -1,7 +1,7 @@
 #include "dq_state_load_plan.h"
 
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
-#include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
 
@@ -72,7 +72,7 @@ void AddForceWarningOrError(const TString& message, TIssues& issues, bool force)
 }
 
 bool IsTopicInput(const NYql::NDqProto::TTaskInput& taskInput) {
-    return taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == NYql::PqSource;
+    return taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == PqSource;
 }
 
 bool ParseTopicInput(

@@ -204,14 +204,14 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
     // Use appropriate field names based on breaker vs victim
     if (isBreaker) {
         YDB_LOG_UPDATE_MESSAGE(message,
-            {"BreakerQueryText", EscapeC(params.QueryText)},
-            {"BreakerQueryTexts", EscapeC(params.QueryTexts)});
+            {"breakerQueryText", EscapeC(params.QueryText)},
+            {"breakerQueryTexts", EscapeC(params.QueryTexts)});
     } else {
         YDB_LOG_UPDATE_MESSAGE(message,
-            {"VictimQueryText", EscapeC(params.VictimQueryText)},
-            {"VictimQueryTexts", EscapeC(params.QueryTexts)});
+            {"victimQueryText", EscapeC(params.VictimQueryText)},
+            {"victimQueryTexts", EscapeC(params.QueryTexts)});
     }
-    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TLI, "", message);
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "", message);
 }
 
 }

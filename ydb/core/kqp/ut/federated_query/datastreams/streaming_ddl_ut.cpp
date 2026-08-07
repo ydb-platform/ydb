@@ -1310,8 +1310,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
     }
 
-    Y_UNIT_TEST_QUAD_F(StreamingQueryWithStreamLookupJoinLocalTable, WithFeatureFlag, WithFullscanFlag, TStreamingTestFixture) {
-        if (!WithFeatureFlag && WithFullscanFlag) {
+    Y_UNIT_TEST_OCTET_F(StreamingQueryWithStreamLookupJoinLocalTable, WithFeatureFlag, WithFullscanFlag, WithColumns, TStreamingTestFixture) {
+        if (!WithFeatureFlag && (WithFullscanFlag || WithColumns)) {
             // legal, but nothing to check
             return;
         }
@@ -1339,11 +1339,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char ydbTable[] = "lookup";
         ExecQuery(fmt::format(R"(
             CREATE TABLE `{table}` (
-                fqdn String,
+                fqdn String NOT NULL,
                 payload String,
                 PRIMARY KEY (fqdn)
-            ))",
-            "table"_a = ydbTable
+            ) {with_columns})",
+            "table"_a = ydbTable,
+            "with_columns"_a = WithColumns ? "WITH (STORE = COLUMN)" : ""
         ));
 
         ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P1"))",

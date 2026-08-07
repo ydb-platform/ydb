@@ -30,7 +30,7 @@ namespace NYql::NDq {
         TDqMemoryQuota(::NMonitoring::TDynamicCounters::TCounterPtr& mkqlMemoryQuota, ui64 initialMkqlMemoryLimit, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NYql::NDq::TTxId txId, ui64 taskId, bool profileStats, bool canAllocateExtraMemory, NActors::TActorSystem* actorSystem)
             : MkqlMemoryQuota(mkqlMemoryQuota)
             , InitialMkqlMemoryLimit(initialMkqlMemoryLimit)
-            , MkqlMemoryLimit(initialMkqlMemoryLimit)
+            , MkqlMemoryLimit(0)
             , MemoryLimits(memoryLimits)
             , TxId(txId)
             , TaskId(taskId)
@@ -38,9 +38,11 @@ namespace NYql::NDq {
             , CanAllocateExtraMemory(canAllocateExtraMemory)
             , ActorSystem(actorSystem) {
 
-            Y_ABORT_UNLESS(MemoryLimits.MemoryQuotaManager->AllocateQuota(MkqlMemoryLimit));
-            if (MkqlMemoryQuota) {
-                MkqlMemoryQuota->Add(MkqlMemoryLimit);
+            if (MemoryLimits.MemoryQuotaManager->AllocateQuota(InitialMkqlMemoryLimit)) {
+                MkqlMemoryLimit = InitialMkqlMemoryLimit;
+                if (MkqlMemoryQuota) {
+                    MkqlMemoryQuota->Add(MkqlMemoryLimit);
+                }
             }
         }
 

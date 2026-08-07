@@ -442,11 +442,18 @@ message StreamReadMessage {
             repeated MetadataItem metadata_items = 8;
         }
 
+        message EncodedBatchData {
+            int32 uncompressed_size = 1;
+
+            // Encoded batch data.
+            bytes data = 2;
+        }
+
         // Representation of sequence of client messages from one write session.
         message Batch {
             // List of client messages.
             repeated MessageData message_data = 1;
-            repeated bytes encoded_batches = 7; // may be message with metadata if need?
+            repeated EncodedBatchData encoded_batches = 7; // may be message with metadata if need?
 
             // Producer identifier provided by client for this batch of client messages.
             string producer_id = 2 [(Ydb.length).le = 2048];

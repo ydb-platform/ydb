@@ -1,6 +1,7 @@
 from __future__ import annotations
 from enum import StrEnum
 from os import getenv
+from pathlib import Path
 from time import time
 from .conftest import LoadSuiteBase
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
@@ -141,9 +142,22 @@ class TpccSuiteBase(LoadSuiteBase):
             ])
         return measurements
 
+    @staticmethod
+    def _signal_tpcc_load_started() -> None:
+        """Notify flamegraph collector that import/setup is done and load begins."""
+        marker = getenv('FLAMEGRAPH_LOAD_MARKER')
+        if not marker:
+            return
+        path = Path(marker)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f'{time()}\n', encoding='utf-8')
+        logging.info('FLAMEGRAPH_LOAD_MARKER written: %s', marker)
+
     def test(self):
         assert len(self.get_users()) == 1, 'multiuser TPC-C not supported'
         self.save_nodes_state()
+        # After setup_class import/compaction — right before TPC-C load (warmup+measure).
+        self._signal_tpcc_load_started()
         result = YdbCliHelper.run_tpcc(
             remote_cli_path=self._remote_cli_path,
             users=self.get_users(),

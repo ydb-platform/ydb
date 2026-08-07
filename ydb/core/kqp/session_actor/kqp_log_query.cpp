@@ -21,10 +21,10 @@ namespace {
 // Part-1 budget: 64 B log prefix + 950 B envelope/completed fields + 6 KB data + 1 KB issues = 8182 B.
 constexpr size_t RSYSLOG_MAX_MESSAGE_SIZE = 8_KB;
 constexpr size_t LOG_LINE_OVERHEAD = 64;
-constexpr size_t PART1_JSON_OVERHEAD = 950;
+constexpr size_t PART1_JSON_OVERHEAD = 982;
 
-constexpr size_t QUERY_TEXT_LIMIT = 6_KB;
-constexpr size_t SQL_TEXT_MAX_SIZE = 6_KB;
+constexpr size_t QUERY_TEXT_LIMIT = 6_KB - 32;
+constexpr size_t SQL_TEXT_MAX_SIZE = 6_KB - 32;
 constexpr size_t ISSUES_CHUNK_WITH_DATA = 1_KB;
 constexpr size_t ISSUES_CHUNK_SOLO = SQL_TEXT_MAX_SIZE + ISSUES_CHUNK_WITH_DATA;
 constexpr size_t ISSUES_TEXT_MAX_TOTAL = 64_KB;
@@ -63,6 +63,7 @@ struct TCompletedFields {
     TInstant StartedAt;
     TString Status;
     std::optional<bool> QueryTextExpected;
+    bool IsStreamingQuery = false;
     ui64 DurationUs = 0;
     ui64 ResultsSize = 0;
     ui64 QueuedTimeUs = 0;
@@ -100,6 +101,7 @@ void WriteCompletedFields(NJsonWriter::TBuf& json, const TCompletedFields& f) {
     if (f.QueryTextExpected) {
         json.WriteKey("query_text_expected").WriteBool(*f.QueryTextExpected);
     }
+    json.WriteKey("is_streaming").WriteBool(f.IsStreamingQuery);
     json.WriteKey("duration_us").WriteULongLong(f.DurationUs);
     json.WriteKey("results_size").WriteULongLong(f.ResultsSize);
     if (f.QueuedTimeUs) {
@@ -297,6 +299,7 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
         fields.QueryLen = origQueryLen;
         fields.StartedAt = state.StartTime;
         fields.Status = TString{Ydb::StatusIds::StatusCode_Name(status)};
+        fields.IsStreamingQuery = userCtx && userCtx->IsStreamingQuery;
         if (queryText.empty() && IsTransactionControlAction(state.GetAction())) {
             fields.QueryTextExpected = false;
         }

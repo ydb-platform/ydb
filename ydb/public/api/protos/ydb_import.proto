@@ -121,6 +121,11 @@ message ImportFromS3Settings {
     // - Patterns are matched against the database object names stored in the backup listing.
     // - Object is excluded from import operation if it matches any of the specified exclude regexps.
     repeated string exclude_regexps = 17;
+
+    // Format of data being imported.
+    // Server must support reading from this format.
+    // If not specified, server attempts to autodetect by file extension.
+    Ydb.Export.ExportToS3Settings.DataFormat data_format = 18;
 }
 
 message ImportFromS3Result {

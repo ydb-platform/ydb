@@ -3,6 +3,10 @@
 #include "import_common.h"
 #include "import_s3.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -41,6 +45,13 @@ protected:
         case NKikimrSchemeOp::TRestoreTask::kS3Settings:
         case NKikimrSchemeOp::TRestoreTask::kFSSettings:
         #ifndef KIKIMR_DISABLE_S3_OPS
+            if (restore.HasS3Settings()
+                && restore.GetS3Settings().GetDataFormat() == NKikimrSchemeOp::TS3Settings::PARQUET
+                && !AppData(ctx)->FeatureFlags.GetEnableParquetForS3Import()) {
+                Abort(op, ctx, "Parquet import from S3 is disabled");
+                return false;
+            }
+
             tx->SetAsyncJobActor(ctx.Register(
                 CreateS3Downloader(DataShard.SelfId(), op->GetTxId(), restore, tableInfo),
                 TMailboxType::HTSwap,

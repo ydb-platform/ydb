@@ -17,7 +17,7 @@ const TString TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX = TStringBuilder() << "/" <<
 
 } // namespace
 
-bool IsTabletDevUiSecurePath(TStringBuf pathInfo) {
+bool IsTabletDevUiSecurePath(const TStringBuf pathInfo) {
     if (pathInfo == TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX) {
         return true;
     }

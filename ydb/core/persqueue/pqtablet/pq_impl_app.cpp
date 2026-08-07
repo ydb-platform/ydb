@@ -35,7 +35,7 @@ namespace {
         return tx.State == NKikimrPQ::TTransaction_EState_WAIT_RS;
     }
 
-    bool IsKnownPublicPersQueueDevUiParam(TStringBuf name) {
+    bool IsKnownPublicPersQueueDevUiParam(const TStringBuf name) {
         static constexpr TStringBuf names[] = {
             "TabletID",
             "FollowerID",

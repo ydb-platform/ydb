@@ -117,7 +117,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     TString RenderSendReadSetHtmlForms(
         const TDistributedTransaction& tx,
         const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter,
-        TStringBuf pathInfo) const;
+        const TStringBuf pathInfo) const;
 
     void HandleDie(const TActorContext& ctx) override;
 

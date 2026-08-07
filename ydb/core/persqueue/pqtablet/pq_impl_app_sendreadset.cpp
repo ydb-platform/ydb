@@ -10,7 +10,7 @@ namespace NKikimr::NPQ {
 
 namespace {
 
-TString BuildSendReadSetFormAction(TStringBuf pathInfo, ui64 tabletId, bool enableSecurePath) {
+TString BuildSendReadSetFormAction(const TStringBuf pathInfo, ui64 tabletId, bool enableSecurePath) {
     if (!enableSecurePath || IsTabletDevUiSecurePath(pathInfo)) {
         return "?";
     }
@@ -54,7 +54,7 @@ static TVector<T> GetParameters(const TCgiParameters& cgi, const TStringBuf name
 TString TPersQueue::RenderSendReadSetHtmlForms(
     const TDistributedTransaction& tx,
     const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter,
-    TStringBuf pathInfo) const
+    const TStringBuf pathInfo) const
 {
     const TString formAction = BuildSendReadSetFormAction(
         pathInfo,

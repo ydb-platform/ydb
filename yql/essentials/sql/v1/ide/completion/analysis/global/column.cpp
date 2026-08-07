@@ -62,11 +62,15 @@ public:
     }
 
     std::any visitSelect_stmt(SQLv1::Select_stmtContext* ctx) override {
-        return AccumulatingVisit(ctx->select_stmt_core()->select_stmt_intersect());
+        auto context = AccumulatingVisit(ctx->select_stmt_core()->select_stmt_intersect());
+        SortUnique(context.Columns);
+        return context;
     }
 
     std::any visitSelect_stmt_intersect(SQLv1::Select_stmt_intersectContext* ctx) override {
-        return AccumulatingVisit(ctx->select_kind_parenthesis());
+        auto context = AccumulatingVisit(ctx->select_kind_parenthesis());
+        SortUnique(context.Columns);
+        return context;
     }
 
     std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
@@ -134,7 +138,7 @@ public:
 
     std::any visitWithout_column_list(SQLv1::Without_column_listContext* ctx) override {
         return AccumulatingVisit(ctx->without_column_name());
-    };
+    }
 
     std::any visitWithout_column_name(SQLv1::Without_column_nameContext* ctx) override {
         TString table = GetObjectId(ctx->an_id(0)).GetOrElse("");

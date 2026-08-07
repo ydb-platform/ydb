@@ -26,7 +26,7 @@ void Move(TColumnContext& lhs, TColumnContext& rhs, C TColumnContext::*member) {
 
     lhsM.reserve(lhsM.size() + rhsM.size());
     std::move(rhsM.begin(), rhsM.end(), std::back_inserter(lhsM));
-    SortUnique(lhsM);
+    Sort(lhsM);
 }
 
 } // namespace

@@ -1495,6 +1495,226 @@ Y_UNIT_TEST(ColumnsAtSubquery) {
     }
 }
 
+Y_UNIT_TEST(QualifiedColumnFromSubquery) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT *
+            FROM (SELECT 1 AS a, 2 AS xb) AS x
+            JOIN (SELECT 1 AS a, 2 AS yb) AS y ON 1 = 1
+            JOIN (SELECT 1 AS a, 2 AS yb) AS z ON x.a = z.#
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "yb"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT *
+            FROM (SELECT 1 AS a, 2 AS xb) AS x
+            JOIN (SELECT 1 AS a, 2 AS yb) AS y ON 1 = 1
+            JOIN (SELECT 1 AS a, 2 AS yb) AS z ON x.a = x.#
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "xb"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query), expected);
+    }
+}
+
+Y_UNIT_TEST(DuplicateColumnsFromNamedSubqueries) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS xb) AS x
+            JOIN (SELECT 1 AS a, 2 AS yb) AS y ON 1 = 1
+            JOIN (SELECT 1 AS a, 2 AS yb) AS z ON 1 = 1
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "xb"},
+            {.Kind = ColumnName, .Content = "x.a"},
+            {.Kind = ColumnName, .Content = "x.xb"},
+            {.Kind = ColumnName, .Content = "y.a"},
+            {.Kind = ColumnName, .Content = "y.yb"},
+            {.Kind = ColumnName, .Content = "z.a"},
+            {.Kind = ColumnName, .Content = "z.yb"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+}
+
+Y_UNIT_TEST(DuplicateColumnsFromNamedAndUnnamedSources) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b)
+            JOIN (SELECT 1 AS a, 3 AS c) AS x ON 1 = 1
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "x.a"},
+            {.Kind = ColumnName, .Content = "x.c"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b) AS x
+            JOIN (SELECT 1 AS a, 3 AS c) ON 1 = 1
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "x.a"},
+            {.Kind = ColumnName, .Content = "x.b"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+}
+
+Y_UNIT_TEST(DuplicateColumnsFromUnnamedSubqueries) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b)
+            JOIN (SELECT 1 AS a, 3 AS c) ON 1 = 1
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+}
+
+Y_UNIT_TEST(DuplicateJoinUnion) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT *
+                FROM (SELECT 1 AS a, 2 AS b)
+                JOIN (SELECT 1 AS a, 3 AS c) ON 1 = 1
+            UNION
+                SELECT *
+                FROM (SELECT 1 AS a, 2 AS b)
+                JOIN (SELECT 1 AS a, 3 AS c) ON 1 = 1
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                    SELECT *
+                    FROM (SELECT 1 AS a, 2 AS b) AS t1
+                    JOIN (SELECT 1 AS a, 3 AS c) AS t2 ON 1 = 1
+                UNION
+                    SELECT *
+                    FROM (SELECT 1 AS a, 2 AS b) AS t3
+                    JOIN (SELECT 1 AS a, 3 AS c) AS t4 ON 1 = 1
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT * FROM (
+                    SELECT #
+                    FROM (SELECT 1 AS a, 2 AS b) AS t1
+                    JOIN (SELECT 1 AS a, 3 AS c) AS t2 ON 1 = 1
+                UNION
+                    SELECT *
+                    FROM (SELECT 1 AS a, 2 AS b) AS t3
+                    JOIN (SELECT 1 AS a, 3 AS c) AS t4 ON 1 = 1
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "t1.a"},
+            {.Kind = ColumnName, .Content = "t1.b"},
+            {.Kind = ColumnName, .Content = "t2.a"},
+            {.Kind = ColumnName, .Content = "t2.c"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+}
+
+Y_UNIT_TEST(DuplicateTableAlias) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b) AS x
+            JOIN (SELECT 1 AS c, 3 AS d) AS x ON 1 = 1
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "d"},
+            {.Kind = ColumnName, .Content = "x.a"},
+            {.Kind = ColumnName, .Content = "x.b"},
+            {.Kind = ColumnName, .Content = "x.c"},
+            {.Kind = ColumnName, .Content = "x.d"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b) AS x
+            JOIN (SELECT 1 AS a, 3 AS b) AS x ON 1 = 1
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "x.a"},
+            {.Kind = ColumnName, .Content = "x.b"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+}
+
 Y_UNIT_TEST(ColumnsFromNamedExpr) {
     auto engine = MakeSqlCompletionEngineUT();
     {

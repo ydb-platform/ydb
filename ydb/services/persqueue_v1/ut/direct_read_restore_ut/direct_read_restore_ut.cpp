@@ -108,21 +108,20 @@ struct TDirectReadRestoreEnv {
 
     std::atomic<ui64> HoldRestorePreparePublish{0};
     std::atomic<ui64> HeldPrepareOrPublish{0};
-    std::atomic<ui64> RestoredDirectReadIdEnsure{0};
 
     // Hold CmdPrepareReadResult (re-inject later) to race with ResendRecentRequests after pipe restart.
     std::atomic<ui64> HoldPrepareResponses{0};
     std::atomic<ui64> HeldPrepareResponses{0};
-    std::atomic<ui64> RequestInflyEnsure{0};
     TVector<THolder<IEventHandle>> HeldPrepareEvents;
 
     // Hold CmdPublishReadResult to keep restore stuck in Publish stage.
     std::atomic<ui64> HoldPublishResponses{0};
     std::atomic<ui64> HeldPublishResponses{0};
-    std::atomic<ui64> HasCmdPublishReadResultEnsure{0};
     TVector<THolder<IEventHandle>> HeldPublishEvents;
 
-    TString EnsureCloseReason;
+    // PARTITION_ENSURE → OnUnhandledException → CloseSession("unexpected error: ...").
+    std::atomic<ui64> UnexpectedErrorCloseSession{0};
+    TString UnexpectedErrorCloseReason;
 
     NActors::TTestActorRuntime& Runtime() {
         return *Server->CleverServer->GetRuntime();
@@ -224,23 +223,11 @@ struct TDirectReadRestoreEnv {
 
         runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = ev->CastAsLocal<NGRpcProxy::V1::TEvPQProxy::TEvCloseSession>()) {
-                if (msg->Reason.Contains("RestoredDirectReadId")) {
-                    EnsureCloseReason = msg->Reason;
-                    ++RestoredDirectReadIdEnsure;
-                    Cerr << "Observed CloseSession from RestoredDirectReadId ENSURE: "
-                         << msg->Reason << Endl;
-                }
-                // Match verification=RequestInfly, not verification=!RequestInfly.
-                if (msg->Reason.Contains("verification=RequestInfly")) {
-                    EnsureCloseReason = msg->Reason;
-                    ++RequestInflyEnsure;
-                    Cerr << "Observed CloseSession from RequestInfly ENSURE: "
-                         << msg->Reason << Endl;
-                }
-                if (msg->Reason.Contains("HasCmdPublishReadResult")) {
-                    EnsureCloseReason = msg->Reason;
-                    ++HasCmdPublishReadResultEnsure;
-                    Cerr << "Observed CloseSession from HasCmdPublishReadResult ENSURE: "
+                // OnUnhandledException always prefixes with "unexpected error:".
+                if (msg->Reason.Contains("unexpected error:")) {
+                    UnexpectedErrorCloseReason = msg->Reason;
+                    ++UnexpectedErrorCloseSession;
+                    Cerr << "Observed CloseSession from unhandled exception: "
                          << msg->Reason << Endl;
                 }
             }
@@ -487,10 +474,10 @@ Y_UNIT_TEST(RestoredDirectReadIdZeroOnForgetAfterDoubleRestart) {
     env.HoldRestorePreparePublish.store(0);
     runtime.SimulateSleep(TDuration::Seconds(1));
 
-    UNIT_ASSERT_C(env.RestoredDirectReadIdEnsure.load() == 0,
-        "Forget after nested restart must not hit PARTITION_ENSURE(RestoredDirectReadId != 0)"
+    UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
+        "Forget after nested restart must not kill partition actor via unhandled exception"
             << "; held=" << env.HeldPrepareOrPublish.load()
-            << "; reason=" << env.EnsureCloseReason);
+            << "; reason=" << env.UnexpectedErrorCloseReason);
 
     TearDownGrpcAndServer(env, client);
 }
@@ -545,10 +532,10 @@ Y_UNIT_TEST(RequestInflyOnDuplicatePrepareAfterPipeRestart) {
     env.ReleaseHeldPrepares();
     runtime.SimulateSleep(TDuration::Seconds(1));
 
-    UNIT_ASSERT_C(env.RequestInflyEnsure.load() == 0,
-        "duplicate Prepare after pipe restart must not hit PARTITION_ENSURE(RequestInfly)"
+    UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
+        "duplicate Prepare after pipe restart must not kill partition actor via unhandled exception"
             << "; held=" << env.HeldPrepareResponses.load()
-            << "; reason=" << env.EnsureCloseReason);
+            << "; reason=" << env.UnexpectedErrorCloseReason);
 
     TearDownGrpcAndServer(env, client);
 }
@@ -607,11 +594,11 @@ Y_UNIT_TEST(HasCmdPublishReadResultOnPrepareDuringPublishRestore) {
     env.ReleaseHeldPrepares();
     runtime.SimulateSleep(TDuration::Seconds(1));
 
-    UNIT_ASSERT_C(env.HasCmdPublishReadResultEnsure.load() == 0,
-        "late Prepare during Publish restore must not hit PARTITION_ENSURE(result.HasCmdPublishReadResult())"
+    UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
+        "late Prepare during Publish restore must not kill partition actor via unhandled exception"
             << "; heldPrepare=" << env.HeldPrepareResponses.load()
             << "; heldPublish=" << env.HeldPublishResponses.load()
-            << "; reason=" << env.EnsureCloseReason);
+            << "; reason=" << env.UnexpectedErrorCloseReason);
 
     TearDownGrpcAndServer(env, client);
 }

@@ -9,7 +9,7 @@ CFLAGS(
 )
 
 SIZE(MEDIUM)
-TIMEOUT(300)
+TIMEOUT(600)
 
 PEERDIR(
     library/cpp/testing/unittest

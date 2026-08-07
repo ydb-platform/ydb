@@ -27,6 +27,10 @@
 #include <util/system/mutex.h>
 #include <util/system/type_name.h>
 
+#if defined(_asan_enabled_) || defined(_lsan_enabled_)
+#include <sanitizer/lsan_interface.h>
+#endif
+
 #include <memory>
 #include <exception>
 #include <list>
@@ -235,11 +239,14 @@ IR::Module ParseWast(TStringBuf wast)
     irModule.featureSpec.table64 = true;
     irModule.featureSpec.exceptionHandling = true;
 
+    // WAVM's WAST lexer requires a trailing NUL and reads it; TStringBuf does not
+    // guarantee one (e.g. substring views).
+    const TString terminated(wast);
     auto wastErrors = std::vector<WAST::Error>();
 
     bool succeeded = WAST::parseModule(
-        wast.data(),
-        wast.size() + 1, // String must be zero-terminated.
+        terminated.data(),
+        terminated.size() + 1,
         irModule,
         wastErrors);
 
@@ -1155,7 +1162,7 @@ void TWebAssemblyCompartment::InstantiateModule(
             Compartment_,
             wavmModule,
             Runtime::ImportBindings{linkResult.resolvedImports},
-            debugName.data());
+            std::string(debugName.data(), debugName.size()));
     } catch (WAVM::Runtime::Exception* ex) {
         const auto description = WAVM::Runtime::describeException(ex);
         WAVM::Runtime::destroyException(ex);
@@ -1406,6 +1413,21 @@ std::unique_ptr<TWebAssemblyCompartment> CreateImage(EKnownImage image)
     return compartment;
 }
 
+// Intentionally never destroyed: TWebAssemblyCompartment dtor collects WAVM state and
+// races process/WAVM teardown in unittests. Disable LSan for the nested allocations —
+// WAVM GCPointer roots are invisible to the leak checker.
+static TWebAssemblyCompartment* CreateLeakyImageSingleton(EKnownImage image)
+{
+#if defined(_asan_enabled_) || defined(_lsan_enabled_)
+    __lsan_disable();
+#endif
+    TWebAssemblyCompartment* singleton = CreateImage(image).release();
+#if defined(_asan_enabled_) || defined(_lsan_enabled_)
+    __lsan_enable();
+#endif
+    return singleton;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TCachedSdkImage
@@ -1537,22 +1559,30 @@ std::unique_ptr<IWebAssemblyCompartment> CreateImageFromSdk(const TModuleBytecod
 
     // Leaky like CreateEmptyImage / CreateStandardRuntimeImage: destroying the
     // cache at static teardown races WAVM Module shutdown in unittests.
-    static auto* cache = New<TSdkImageCache>().Release();
+    // LSan: see CreateLeakyImageSingleton.
+    static auto* cache = []() -> TSdkImageCache* {
+#if defined(_asan_enabled_) || defined(_lsan_enabled_)
+        __lsan_disable();
+#endif
+        auto* result = New<TSdkImageCache>().Release();
+#if defined(_asan_enabled_) || defined(_lsan_enabled_)
+        __lsan_enable();
+#endif
+        return result;
+    }();
     auto image = cache->GetOrCreate(bytecode);
     return image->Compartment->Clone();
 }
 
 std::unique_ptr<IWebAssemblyCompartment> CreateEmptyImage()
 {
-    // Intentionally leaked: unique_ptr dtor at static teardown races WAVM runtime shutdown.
-    static auto* leakyImageSingleton = CreateImage(EKnownImage::Empty).release();
+    static auto* leakyImageSingleton = CreateLeakyImageSingleton(EKnownImage::Empty);
     return leakyImageSingleton->Clone();
 }
 
 std::unique_ptr<IWebAssemblyCompartment> CreateMinimalRuntimeImage()
 {
-    // Intentionally leaked: unique_ptr dtor at static teardown races WAVM runtime shutdown.
-    static auto* leakyImageSingleton = CreateImage(EKnownImage::MinimalRuntime).release();
+    static auto* leakyImageSingleton = CreateLeakyImageSingleton(EKnownImage::MinimalRuntime);
     return leakyImageSingleton->Clone();
 }
 
@@ -1560,8 +1590,7 @@ std::unique_ptr<IWebAssemblyCompartment> CreateStandardRuntimeImage()
 {
     THROW_ERROR_EXCEPTION_IF(!EnableSystemLibraries(), "WebAssembly runtime libraries are not supported by this build");
 
-    // Intentionally leaked: unique_ptr dtor at static teardown races WAVM runtime shutdown.
-    static auto* leakyImageSingleton = CreateImage(EKnownImage::Standard).release();
+    static auto* leakyImageSingleton = CreateLeakyImageSingleton(EKnownImage::Standard);
     return leakyImageSingleton->Clone();
 }
 
@@ -1569,8 +1598,7 @@ std::unique_ptr<IWebAssemblyCompartment> CreateQueryLanguageImage()
 {
     THROW_ERROR_EXCEPTION_IF(!EnableSystemLibraries(), "WebAssembly runtime libraries are not supported by this build");
 
-    // Intentionally leaked: unique_ptr dtor at static teardown races WAVM runtime shutdown.
-    static auto* leakyImageSingleton = CreateImage(EKnownImage::QueryLanguage).release();
+    static auto* leakyImageSingleton = CreateLeakyImageSingleton(EKnownImage::QueryLanguage);
     return leakyImageSingleton->Clone();
 }
 

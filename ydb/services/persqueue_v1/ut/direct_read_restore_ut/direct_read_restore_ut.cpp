@@ -349,8 +349,8 @@ struct TGrpcDirectReadClient {
 
 Y_UNIT_TEST_SUITE(TDirectReadRestoreRaceTest) {
 
-// LOGBROKER-10590: forget-first after nested pipe restart with RestoredDirectReadId==0.
-// Without the fix PARTITION_ENSURE(RestoredDirectReadId != 0) fires on Forget stage.
+// LOGBROKER-10590: forget-first after nested pipe restart with RestoredDirectReadId==0
+// must not kill the partition actor (Forget stage must tolerate RestoredDirectReadId==0).
 Y_UNIT_TEST(RestoredDirectReadIdZeroOnForgetAfterDoubleRestart) {
     TDirectReadRestoreEnv env;
     env.Start();
@@ -395,8 +395,8 @@ Y_UNIT_TEST(RestoredDirectReadIdZeroOnForgetAfterDoubleRestart) {
     env.HoldRestorePreparePublish.store(0);
     runtime.SimulateSleep(TDuration::Seconds(1));
 
-    UNIT_ASSERT_C(env.RestoredDirectReadIdEnsure.load() > 0,
-        "expected PARTITION_ENSURE(RestoredDirectReadId != 0) on Forget after nested restart"
+    UNIT_ASSERT_C(env.RestoredDirectReadIdEnsure.load() == 0,
+        "Forget after nested restart must not hit PARTITION_ENSURE(RestoredDirectReadId != 0)"
             << "; held=" << env.HeldPrepareOrPublish.load()
             << "; reason=" << env.EnsureCloseReason);
 

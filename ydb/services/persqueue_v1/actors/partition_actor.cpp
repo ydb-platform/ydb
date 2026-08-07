@@ -804,8 +804,8 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
             }
             return;
         case EDirectReadRestoreStage::Forget:
-            PARTITION_ENSURE(RestoredDirectReadId != 0)
-                ("restored_direct_read_id", RestoredDirectReadId);
+            // RestoredDirectReadId may be 0: forget-first after nested pipe restart does not
+            // assign it (see SendNextRestorePrepareOrForget), while DirectReadsToForget is kept.
             PARTITION_ENSURE(result.HasCmdForgetReadResult())
                 ("result", result.ShortDebugString());
             PARTITION_ENSURE(*DirectReadsToForget.begin() == result.GetCmdForgetReadResult().GetDirectReadId())

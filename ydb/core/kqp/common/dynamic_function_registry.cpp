@@ -209,10 +209,9 @@ public:
         NUdf::TUniquePtr<NUdf::IUdfModule> module) override
     {
         TString libraryPathStr(libraryPath);
-        auto inserted = LoadedLibraries_.insert({libraryPathStr, nullptr});
-        if (!inserted.second) {
-            return;
-        }
+        // Track the path for RemoveModule cleanup; multiple in-memory modules may
+        // share one synthetic path (unlike LoadUdfs which opens a real .so once).
+        LoadedLibraries_.emplace(libraryPathStr, nullptr);
 
         TUdfModuleRemappings remappings;
         TUdfModuleLoader loader(
@@ -224,6 +223,8 @@ public:
     }
 
     void RemoveModule(const TStringBuf& moduleName) override {
+        // Only UdfModules_ / LoadedLibraries_. SystemModulePaths_ is a separate
+        // catalog and must survive unload so FindUdfPath can still resolve it.
         auto it = UdfModules_.find(TString(moduleName));
         if (it == UdfModules_.end()) {
             return;

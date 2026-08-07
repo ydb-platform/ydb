@@ -8,8 +8,10 @@ class IDynamicFunctionRegistry: public NMiniKQL::IMutableFunctionRegistry {
 public:
     using TPtr = TIntrusivePtr<IDynamicFunctionRegistry>;
 
-    //! Removes a previously registered module by YQL module name. No-op if missing.
-    //! Also drops the libraryPath entry when no modules from that path remain.
+    //! Unloads a dynamically registered module by YQL module name. No-op if missing.
+    //! Drops the LoadedLibraries_ entry when no modules from that path remain.
+    //! Does not modify SystemModulePaths_: FindUdfPath may still return a system
+    //! catalog path after unload (same as for never-loaded system modules).
     virtual void RemoveModule(const TStringBuf& moduleName) = 0;
 };
 

@@ -126,7 +126,7 @@ def get_sensors(cluster: KiKiMR, node_id: int, counters: str) -> Sensors:
 def get_checkpoint_coordinator_metric(
     cluster: KiKiMR, path: str, metric_name: str, expect_counters_exist: bool = False
 ) -> int:
-    sum = 0
+    sensor_sum = 0
     found = False
     for node_id in cluster.nodes:
         sensor = get_sensors(cluster, node_id, "kqp").find_sensor(
@@ -134,9 +134,9 @@ def get_checkpoint_coordinator_metric(
         )
         if sensor is not None:
             found = True
-            sum += sensor
+            sensor_sum += sensor
     assert found or not expect_counters_exist, f"Metric '{metric_name}' not found on path '{path}'"
-    return sum
+    return sensor_sum
 
 
 def get_completed_checkpoints(cluster: KiKiMR, path: str, expect_counters_exist: bool = False) -> int:

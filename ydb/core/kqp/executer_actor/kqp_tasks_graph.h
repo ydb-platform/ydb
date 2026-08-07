@@ -415,6 +415,8 @@ public:
     TVector<TString> GetStageIntrospection(const NYql::NDq::TStageId& stageId) const;
     TString DumpToString() const;
 
+    void FillExternalSourceSecureParams(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
+
 private:
     void FillStages();
 

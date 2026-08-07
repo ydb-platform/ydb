@@ -2,7 +2,12 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/ring_buffer.h>
+
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/set.h>
+#include <util/random/fast.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -369,6 +374,76 @@ Y_UNIT_TEST_SUITE(TTimePredictorTest)
         predictor.Add(THostIndex(0), TDuration::MilliSeconds(30));
 
         UNIT_ASSERT_VALUES_EQUAL(TDuration(), predictor.Predict(0));
+    }
+
+    Y_UNIT_TEST(ZeroCapacityPredictsZero)
+    {
+        // Default config: history size 0. Add is a no-op, Predict is always
+        // zero.
+        TTimePredictor predictor(0, 0);
+
+        predictor.Add(THostIndex(0), TDuration::MilliSeconds(100));
+        predictor.Add(THostIndex(0), TDuration::MilliSeconds(200));
+
+        UNIT_ASSERT_VALUES_EQUAL(TDuration(), predictor.Predict(0));
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration(),
+            predictor.Predict(THostMask::MakeOne(0)));
+    }
+
+    Y_UNIT_TEST(RandomizedMatchesMultisetReference)
+    {
+        // Cross-check the sorted-vector THistory against an independent
+        // TMultiSet + TRingBuffer reference for a few thousand random steps.
+        constexpr size_t Capacity = 100;
+        constexpr size_t Steps = 5000;
+        constexpr size_t NthFromEnd = 1;
+
+        struct TReference
+        {
+            TRingBuffer<TDuration> History;
+            TMultiSet<TDuration> Durations;
+
+            explicit TReference(size_t capacity)
+                : History(capacity)
+            {}
+
+            void Add(TDuration time)
+            {
+                Durations.insert(time);
+                if (auto extracted = History.PushBack(time)) {
+                    Durations.erase(Durations.find(*extracted));
+                }
+            }
+
+            TDuration Predict(size_t nthFromEnd) const
+            {
+                auto it = Durations.rbegin();
+                for (size_t i = 0; i < nthFromEnd; ++i) {
+                    if (it == Durations.rend()) {
+                        return {};
+                    }
+                    ++it;
+                }
+                return it == Durations.rend() ? TDuration() : *it;
+            }
+        };
+
+        TTimePredictor predictor(Capacity, NthFromEnd);
+        TReference reference(Capacity);
+        TReallyFastRng32 rng(42);
+
+        for (size_t step = 0; step < Steps; ++step) {
+            const TDuration time =
+                TDuration::MicroSeconds(rng.Uniform(1, 10000));
+            predictor.Add(THostIndex(0), time);
+            reference.Add(time);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                reference.Predict(NthFromEnd),
+                predictor.Predict(0),
+                "mismatch at step " << step);
+        }
     }
 
     Y_UNIT_TEST(GetLatencyStatsEmptyWindow)

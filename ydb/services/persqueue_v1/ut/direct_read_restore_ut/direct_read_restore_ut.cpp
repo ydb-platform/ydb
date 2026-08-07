@@ -65,7 +65,6 @@ TDriverConfig MakeAsyncDriverConfig(const TString& endpoint) {
     config.SetEndpoint(endpoint);
     config.SetDatabase("/Root");
     config.SetAuthToken("root@builtin");
-    config.SetLog(std::make_unique<TStreamLogBackend>(&Cerr));
     config.SetDiscoveryMode(EDiscoveryMode::Async);
     return config;
 }
@@ -174,7 +173,6 @@ struct TDirectReadRestoreEnv {
         });
 
         PqTabletId = ResolvePqTabletId(*Server, kTopicPath);
-        Cerr << "PQ tablet id=" << PqTabletId << Endl;
     }
 
     void InstallHooks() {
@@ -188,21 +186,13 @@ struct TDirectReadRestoreEnv {
             const auto& part = msg->Record.GetPartitionResponse();
 
             if (HoldPrepareResponses.load() && part.HasCmdPrepareReadResult()) {
-                const ui64 held = ++HeldPrepareResponses;
-                Cerr << "HOLD CmdPrepareReadResult held=" << held
-                     << " cookie=" << part.GetCookie()
-                     << " directReadId=" << part.GetCmdPrepareReadResult().GetDirectReadId()
-                     << Endl;
+                ++HeldPrepareResponses;
                 HeldPrepareEvents.emplace_back(ev.Release());
                 return true;
             }
 
             if (HoldPublishResponses.load() && part.HasCmdPublishReadResult()) {
-                const ui64 held = ++HeldPublishResponses;
-                Cerr << "DROP CmdPublishReadResult held=" << held
-                     << " cookie=" << part.GetCookie()
-                     << " directReadId=" << part.GetCmdPublishReadResult().GetDirectReadId()
-                     << Endl;
+                ++HeldPublishResponses;
                 return true; // drop — keep restore stuck in Publish
             }
 
@@ -210,11 +200,7 @@ struct TDirectReadRestoreEnv {
                 return false;
             }
             if (part.HasCmdPrepareReadResult() || part.HasCmdPublishReadResult()) {
-                const ui64 held = ++HeldPrepareOrPublish;
-                Cerr << "DROP restore Prepare/Publish response prepare="
-                     << part.HasCmdPrepareReadResult()
-                     << " publish=" << part.HasCmdPublishReadResult()
-                     << " held=" << held << Endl;
+                ++HeldPrepareOrPublish;
                 return true; // drop — keep restore stuck in Prepare
             }
             return false;
@@ -226,8 +212,6 @@ struct TDirectReadRestoreEnv {
                 if (msg->Reason.Contains("unexpected error:")) {
                     UnexpectedErrorCloseReason = msg->Reason;
                     ++UnexpectedErrorCloseSession;
-                    Cerr << "Observed CloseSession from unhandled exception: "
-                         << msg->Reason << Endl;
                 }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -237,7 +221,6 @@ struct TDirectReadRestoreEnv {
     void ReleaseHeldPrepares() {
         HoldPrepareResponses.store(0);
         auto& runtime = Runtime();
-        Cerr << "Release " << HeldPrepareEvents.size() << " held Prepare responses\n";
         for (auto& ev : HeldPrepareEvents) {
             runtime.Send(ev.Release(), /*senderNodeIndex=*/0, /*viaActorSystem=*/true);
         }
@@ -254,7 +237,6 @@ struct TDirectReadRestoreEnv {
     void RebootPqTablet() {
         auto& runtime = Runtime();
         const auto edge = runtime.AllocateEdgeActor();
-        Cerr << "RebootTablet " << PqTabletId << Endl;
         RebootTablet(runtime, PqTabletId, edge);
         // Partition actor schedules pipe restart with RESTART_PIPE_DELAY_MS=100.
         runtime.SimulateSleep(TDuration::MilliSeconds(250));
@@ -377,7 +359,6 @@ struct TGrpcDirectReadClient {
                     || resp.direct_read_response().partition_session_id() != static_cast<i64>(AssignId)) {
                 ythrow yexception() << "unexpected DirectReadResponse: " << resp.ShortDebugString();
             }
-            Cerr << "Got DirectReadResponse id=" << expectedDirectReadId << Endl;
             return true;
         });
     }
@@ -388,7 +369,6 @@ struct TGrpcDirectReadClient {
             auto& ack = *req.mutable_direct_read_ack();
             ack.set_partition_session_id(AssignId);
             ack.set_direct_read_id(directReadId);
-            Cerr << "Send DirectReadAck id=" << directReadId << Endl;
             DR_ENSURE(ControlStream->Write(req));
             return true;
         });
@@ -452,7 +432,6 @@ Y_UNIT_TEST(RestoredDirectReadIdZeroOnForgetAfterDoubleRestart) {
     client.StartDirectReadPartition(runtime);
     client.ReadDataNoAck(runtime, /*expectedDirectReadId=*/1);
 
-    Cerr << "Arm hold of restore Prepare/Publish and reboot tablet\n";
     env.HoldRestorePreparePublish.store(1);
     env.RebootPqTablet();
 
@@ -462,11 +441,9 @@ Y_UNIT_TEST(RestoredDirectReadIdZeroOnForgetAfterDoubleRestart) {
     UNIT_ASSERT_C(env.HeldPrepareOrPublish.load() > 0,
         "expected dropped CmdPrepareReadResult/CmdPublishReadResult during restore");
 
-    Cerr << "Ack during held Prepare (queues DirectReadsToForget, clears DirectReadResults)\n";
     client.SendDirectReadAckNoWait(runtime, 1);
     runtime.SimulateSleep(TDuration::MilliSeconds(50));
 
-    Cerr << "Second reboot while Prepare is still held\n";
     env.RebootPqTablet();
     // Allow Session→Forget path to run; do not hold Forget responses.
     env.HoldRestorePreparePublish.store(0);
@@ -515,7 +492,6 @@ Y_UNIT_TEST(RequestInflyOnDuplicatePrepareAfterPipeRestart) {
     UNIT_ASSERT_C(env.HeldPrepareResponses.load() >= 1,
         "expected at least one held CmdPrepareReadResult before reboot");
 
-    Cerr << "Reboot while Prepare is held (RequestInfly still true, DirectReadResults empty)\n";
     env.RebootPqTablet();
 
     // Restore of empty DirectReadResults finishes quickly → ResendRecentRequests → second Prepare.
@@ -526,7 +502,6 @@ Y_UNIT_TEST(RequestInflyOnDuplicatePrepareAfterPipeRestart) {
         "expected held Prepare from original read and from ResendRecentRequests after restore"
             << "; held=" << env.HeldPrepareResponses.load());
 
-    Cerr << "Release both Prepare responses onto the normal path\n";
     env.ReleaseHeldPrepares();
     runtime.SimulateSleep(TDuration::Seconds(1));
 
@@ -569,7 +544,6 @@ Y_UNIT_TEST(HasCmdPublishReadResultOnPrepareDuringPublishRestore) {
     env.HoldPrepareResponses.store(1);
     env.HoldPublishResponses.store(1);
 
-    Cerr << "First reboot: restore sends Prepare for published DirectReadId=1\n";
     env.RebootPqTablet();
 
     for (ui32 i = 0; i < 100 && env.HeldPrepareResponses.load() < 1; ++i) {
@@ -578,7 +552,6 @@ Y_UNIT_TEST(HasCmdPublishReadResultOnPrepareDuringPublishRestore) {
     UNIT_ASSERT_C(env.HeldPrepareResponses.load() >= 1,
         "expected held Prepare from first restore attempt");
 
-    Cerr << "Second reboot while Prepare is still held: restore re-sends Prepare for the same id\n";
     env.RebootPqTablet();
 
     for (ui32 i = 0; i < 100 && env.HeldPrepareResponses.load() < 2; ++i) {
@@ -588,7 +561,6 @@ Y_UNIT_TEST(HasCmdPublishReadResultOnPrepareDuringPublishRestore) {
         "expected two held Prepares from nested restore attempts"
             << "; held=" << env.HeldPrepareResponses.load());
 
-    Cerr << "Release both Prepares: first advances to Publish, second arrives on Publish stage\n";
     env.ReleaseHeldPrepares();
     runtime.SimulateSleep(TDuration::Seconds(1));
 

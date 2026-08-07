@@ -1,0 +1,56 @@
+{
+  "schema": "perf-duty-context/v1",
+  "generated_at": "2026-07-24T12:00:00.000Z",
+  "report": {
+    "kind": "tpcc",
+    "url": "https://example.test/tpcc-report.html",
+    "window": ["2026-06-24", "2026-07-24"],
+    "generated_at": "2026-07-24T11:00:00Z",
+    "source": "perfomance/tpcc"
+  },
+  "selection": {
+    "branch": "main",
+    "db": "perf9",
+    "suite": "serializable_default@16000",
+    "family": "serializable",
+    "warehouses": 16000,
+    "wh_label": "16k",
+    "run_type": "default",
+    "focus_run": {
+      "label": "2026-07-16_e5c6883",
+      "day": "2026-07-16",
+      "sha": "e5c6883d5449",
+      "ts": "2026-07-16T15:08:40",
+      "tpmc": 179657.0,
+      "lat90": 5174.0,
+      "lat_capped": false,
+      "report": "https://proxy.sandbox.yandex-team.ru/12924732106/index.html"
+    }
+  },
+  "suite_now": {
+    "issue": "regression",
+    "status": "regression",
+    "kind": "slow",
+    "lat_now": 5174.0,
+    "lat_base": 4200.0,
+    "lat_pct": 23.2,
+    "tpmc_now": 179657.0,
+    "tpmc_base": 204000.0,
+    "tpmc_pct": -12.0,
+    "capped_now": false,
+    "reasons": ["lat outlier >3× (last run)", "tpmC -12% vs prev 1 (last run)"],
+    "display_mode": "alert"
+  },
+  "queries": [],
+  "sticky_query": null,
+  "suite_history": {
+    "labels": ["d1", "d2", "d3", "d4"],
+    "days": ["2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16"],
+    "lat90": [4000, 4100, 4050, 5174],
+    "tpmc": [200000, 202000, 204000, 179657],
+    "versions": ["a", "b", "c", "e5c6883"]
+  },
+  "compare": { "wave_id": null },
+  "links": { "datalens": "https://datalens.yandex/wf5xdbbl923ok?tab=9l5" },
+  "hints": { "react": ["hard"], "wave_view": "finished" }
+}

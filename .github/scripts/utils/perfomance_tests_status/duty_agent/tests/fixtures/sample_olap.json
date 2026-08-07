@@ -1,0 +1,56 @@
+{
+  "schema": "perf-duty-context/v1",
+  "generated_at": "2026-07-24T12:00:00.000Z",
+  "report": {
+    "kind": "olap",
+    "url": "https://example.test/olap-report.html",
+    "window": ["2026-06-24", "2026-07-24"],
+    "generated_at": "2026-07-24T11:00:00Z",
+    "source": "perfomance/olap/fast_results_siutes"
+  },
+  "selection": {
+    "branch": "main",
+    "db": "sas_small_column",
+    "suite": "TpchParallelS100T10",
+    "family": "Tpch",
+    "focus_run": {
+      "label": "2026-07-08_da957bd",
+      "ci_version": "trunk.r20245012",
+      "sha": "da957bd",
+      "ts": "2026-07-08T05:32:58",
+      "fail_rate": 1.0,
+      "report": null
+    }
+  },
+  "suite_now": {
+    "issue": "failing",
+    "status": "failing",
+    "fail_rate_now": 0.38,
+    "fail_rate_base": 0.38,
+    "ydb_now": null,
+    "ydb_base": 178605,
+    "ydb_pct": null,
+    "reasons": ["fail rate hot"]
+  },
+  "queries": [
+    { "test": "Query05", "kind": "fail", "error_class": "other", "ydb_pct": null }
+  ],
+  "sticky_query": "Query05",
+  "sticky_detail": {
+    "test": "Query05",
+    "kind": "fail",
+    "error_class": "other",
+    "history": {
+      "labels": ["a", "b", "c", "d"],
+      "fail_rate": [0.0, 0.0, 1.0, 1.0],
+      "versions": ["aaa", "bbb", "ccc", "ddd"]
+    }
+  },
+  "suite_history": {
+    "labels": ["w1", "w2", "w3", "w4", "w5"],
+    "fail_rate": [0.3, 0.35, 0.38, 0.38, 0.38],
+    "versions": ["v1", "v2", "v3", "v4", "v5"]
+  },
+  "compare": { "wave_id": null },
+  "hints": { "react": ["fail"], "wave_view": "finished" }
+}

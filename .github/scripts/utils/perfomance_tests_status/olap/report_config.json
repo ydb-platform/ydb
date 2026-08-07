@@ -1,0 +1,40 @@
+{
+  "kind": "olap",
+  "window_days": 30,
+  "suite_window_days": 30,
+  "runs_window_days": 30,
+  "now_runs": 1,
+  "display_runs": 7,
+  "baseline_runs": 7,
+  "expected_lookback_days": 14,
+  "expected_min_share": 0.5,
+  "wave_complete_hours": 6,
+  "wave_coverage_done": 0.85,
+  "stale_hours": 36,
+  "history_max_points": 100,
+  "inbox_limit": 80,
+  "inbox_per_kind": {
+    "missing": 20,
+    "in_progress": 15,
+    "failing": 30,
+    "both": 15,
+    "slower": 20,
+    "stale": 10
+  },
+  "focus_prefixes": [
+    "Clickbench",
+    "Tpch",
+    "Tpcds",
+    "UploadTpch",
+    "WorkloadManager"
+  ],
+  "focus_dbs": [
+    "sas_big_column",
+    "sas_small_column",
+    "cloud_slonnn_64_column",
+    "cloud_slonnn_128_column",
+    "vla_big_column",
+    "vla_small_column",
+    "vla_3_node_column"
+  ]
+}

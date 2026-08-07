@@ -392,18 +392,6 @@ class TMockPqGateway final : public IMockPqGateway {
             : Self(self)
         {}
 
-        NYdb::TAsyncStatus CreateTopic(const TString& /*path*/, const NYdb::NTopic::TCreateTopicSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
-        }
-
-        NYdb::TAsyncStatus AlterTopic(const TString& /*path*/, const NYdb::NTopic::TAlterTopicSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
-        }
-
-        NYdb::TAsyncStatus DropTopic(const TString& /*path*/, const NYdb::NTopic::TDropTopicSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
-        }
-
         NYdb::NTopic::TAsyncDescribeTopicResult DescribeTopic(const TString& /*path*/, const NYdb::NTopic::TDescribeTopicSettings& /*settings*/) final {
             Ydb::Topic::DescribeTopicResult describe;
             describe.add_partitions();

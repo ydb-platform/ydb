@@ -315,11 +315,11 @@ public:
     TRuntimeNode BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BlockCombineAll(TRuntimeNode flow, std::optional<ui32> filterColumn,
                                  const TArrayRef<const TAggInfo>& aggs, TType* returnType);
-    TRuntimeNode BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
+    TRuntimeNode BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn, TArrayRef<const ui32> keys,
                                     const TArrayRef<const TAggInfo>& aggs, TType* returnType);
-    TRuntimeNode BlockMergeFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+    TRuntimeNode BlockMergeFinalizeHashed(TRuntimeNode flow, TArrayRef<const ui32> keys,
                                           const TArrayRef<const TAggInfo>& aggs, TType* returnType);
-    TRuntimeNode BlockMergeManyFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+    TRuntimeNode BlockMergeManyFinalizeHashed(TRuntimeNode flow, TArrayRef<const ui32> keys,
                                               const TArrayRef<const TAggInfo>& aggs, ui32 streamIndex, const TVector<TVector<ui32>>& streams, TType* returnType);
 
     // udfs
@@ -834,10 +834,10 @@ private:
     TRuntimeNode BuildBlockCombineAll(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
                                       const TArrayRef<const TAggInfo>& aggs, TType* returnType);
     TRuntimeNode BuildBlockCombineHashed(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
-                                         const TArrayRef<ui32>& keys, const TArrayRef<const TAggInfo>& aggs, TType* returnType);
-    TRuntimeNode BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
+                                         TArrayRef<const ui32> keys, const TArrayRef<const TAggInfo>& aggs, TType* returnType);
+    TRuntimeNode BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, TArrayRef<const ui32> keys,
                                                const TArrayRef<const TAggInfo>& aggs, TType* returnType);
-    TRuntimeNode BuildBlockMergeManyFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
+    TRuntimeNode BuildBlockMergeManyFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, TArrayRef<const ui32> keys,
                                                    const TArrayRef<const TAggInfo>& aggs, ui32 streamIndex, const TVector<TVector<ui32>>& streams, TType* returnType);
 
     TRuntimeNode If(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch, TType* resultType);

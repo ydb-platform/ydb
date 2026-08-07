@@ -70,6 +70,7 @@ std::shared_ptr<arrow::ArrayData> ConvertYqlOffsetsToArrowStandard(
     }
 
     std::vector<std::shared_ptr<arrow::ArrayData>> children;
+    children.reserve(result->child_data.size());
     for (const auto& child : result->child_data) {
         children.push_back(ConvertYqlOffsetsToArrowStandard(*child));
     }

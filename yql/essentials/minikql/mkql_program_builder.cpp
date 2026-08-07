@@ -6542,7 +6542,7 @@ TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode flow, std::optional<u
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockCombineHashed(const std::string_view& callableName, TRuntimeNode input,
-                                                      std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
+                                                      std::optional<ui32> filterColumn, TArrayRef<const ui32> keys,
                                                       const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     const auto inputType = input.GetStaticType();
     MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
@@ -6579,7 +6579,7 @@ TRuntimeNode TProgramBuilder::BuildBlockCombineHashed(const std::string_view& ca
 }
 
 TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn,
-                                                 const TArrayRef<ui32>& keys,
+                                                 TArrayRef<const ui32> keys,
                                                  const TArrayRef<const TAggInfo>& aggs,
                                                  TType* returnType) {
     MKQL_ENSURE(flow.GetStaticType()->IsStream(), "Expected stream as input type");
@@ -6589,7 +6589,7 @@ TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, std::optiona
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input,
-                                                            const TArrayRef<ui32>& keys,
+                                                            TArrayRef<const ui32> keys,
                                                             const TArrayRef<const TAggInfo>& aggs,
                                                             TType* returnType) {
     const auto inputType = input.GetStaticType();
@@ -6620,7 +6620,7 @@ TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_vi
     return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, TArrayRef<const ui32> keys,
                                                        const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     MKQL_ENSURE(flow.GetStaticType()->IsStream(), "Expected stream as input type");
     MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
@@ -6629,7 +6629,7 @@ TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, const 
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockMergeManyFinalizeHashed(const std::string_view& callableName, TRuntimeNode input,
-                                                                const TArrayRef<ui32>& keys,
+                                                                TArrayRef<const ui32> keys,
                                                                 const TArrayRef<const TAggInfo>& aggs,
                                                                 ui32 streamIndex,
                                                                 const TVector<TVector<ui32>>& streams, TType* returnType) {
@@ -6673,7 +6673,7 @@ TRuntimeNode TProgramBuilder::BuildBlockMergeManyFinalizeHashed(const std::strin
     return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMergeManyFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockMergeManyFinalizeHashed(TRuntimeNode flow, TArrayRef<const ui32> keys,
                                                            const TArrayRef<const TAggInfo>& aggs,
                                                            ui32 streamIndex,
                                                            const TVector<TVector<ui32>>& streams,

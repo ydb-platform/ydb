@@ -326,12 +326,12 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         bool foundInputActorResult = false;
         for (const auto& row : logRows) {
             // Check for InputActorResult log (tx1's read acquiring a lock)
-            if (row.Contains("Component: Executer, Type: InputActorResult")) {
+            if (row.Contains("component=Executer") && row.Contains("type=InputActorResult")) {
                 foundInputActorResult = true;
             }
 
             // Check for the abort response log
-            if (row.Contains("Status: ABORTED") && row.Contains("Transaction locks invalidated")) {
+            if (row.Contains("status=ABORTED") && row.Contains("Transaction locks invalidated")) {
                 foundAbortLog = true;
             }
         }

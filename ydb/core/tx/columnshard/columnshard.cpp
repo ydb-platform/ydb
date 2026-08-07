@@ -164,12 +164,8 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     NormalizerController.SetDataAccessorsManager(DataAccessorsManager);
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();
 
-    // Local config copy + CMS subscription before DB load, so planners get RuntimeSettings at creation.
     ColumnShardConfig = AppData(ctx)->ColumnShardConfig;
-    ApplyColumnShardConfig();
-    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({ (ui32)NKikimrConsole::TConfigItem::ColumnShardConfigItem }),
-        IEventHandle::FlagTrackDelivery);
+    SubscribeToColumnShardConfig();
 
     Execute(CreateTxInitSchema(), ctx);
 }
@@ -188,6 +184,18 @@ void TColumnShard::Handle(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, const TA
 void TColumnShard::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& /*ev*/) {
     YDB_LOG_DEBUG("",
         {"event", "subscribed_for_columnshard_config"});
+}
+
+void TColumnShard::SubscribeToColumnShardConfig() {
+    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({ (ui32)NKikimrConsole::TConfigItem::ColumnShardConfigItem }),
+        IEventHandle::FlagTrackDelivery);
+}
+
+void TColumnShard::Handle(TEvPrivate::TEvRetryConfigSubscription::TPtr& /*ev*/) {
+    YDB_LOG_WARN("",
+        {"event", "retry_columnshard_config_subscription"});
+    SubscribeToColumnShardConfig();
 }
 
 void TColumnShard::ApplyColumnShardConfig() {

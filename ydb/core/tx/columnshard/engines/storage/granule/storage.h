@@ -148,13 +148,6 @@ public:
         return OptimizerRuntimeSettings;
     }
 
-    void SetOptimizerRuntimeSettings(const std::shared_ptr<NStorageOptimizer::TOptimizerRuntimeSettings>& settings) {
-        OptimizerRuntimeSettings = settings;
-        for (auto&& [_, granule] : Tables) {
-            granule->SetOptimizerRuntimeSettings(settings);
-        }
-    }
-
     std::vector<TCSMetadataRequest> CollectMetadataRequests() {
         std::vector<TCSMetadataRequest> result;
         for (auto&& i : Tables) {

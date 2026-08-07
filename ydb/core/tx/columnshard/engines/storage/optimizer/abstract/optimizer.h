@@ -152,6 +152,7 @@ public:
 
     void LoadFromAppData();
     void ApplyFromConfig(const NKikimrConfig::TColumnShardConfig& config);
+    void RefreshNodePortionsCountLimitCounter() const;
 
     static std::shared_ptr<TOptimizerRuntimeSettings> MakeDefault() {
         auto settings = std::make_shared<TOptimizerRuntimeSettings>();
@@ -233,8 +234,14 @@ public:
         return DynamicPortionsCountLimit.load() * NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit;
     }
 
+    static ui64 GetDefaultNodePortionsCountLimit() {
+        return DynamicPortionsCountLimit.load();
+    }
+
     void SetRuntimeSettings(const std::shared_ptr<TOptimizerRuntimeSettings>& runtimeSettings) {
         RuntimeSettings = runtimeSettings;
+        Counters->NodePortionsCountLimit->Set(GetNodePortionsCountLimit());
+        Counters->BadPortionsCountLimit->Set(GetBadPortionsLimit());
     }
 
     const std::shared_ptr<TOptimizerRuntimeSettings>& GetRuntimeSettings() const {

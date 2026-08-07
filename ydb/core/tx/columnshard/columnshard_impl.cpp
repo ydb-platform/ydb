@@ -1268,12 +1268,13 @@ void TColumnShard::Die(const TActorContext& ctx) {
     IActor::Die(ctx);
 }
 
-void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&) {
+void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
     ui32 eventType = ev->Get()->SourceType;
     switch (eventType) {
         case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
             YDB_LOG_CRIT("",
                 {"event", "failed_to_deliver_config_subscription_request"});
+            ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRetryConfigSubscription());
             break;
         case NConsole::TEvConsole::EvConfigNotificationResponse:
             YDB_LOG_ERROR("",
@@ -1899,6 +1900,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
         HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        hFunc(TEvPrivate::TEvRetryConfigSubscription, Handle);
         HFunc(NActors::TEvents::TEvUndelivered, Handle);
         default:
             YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",

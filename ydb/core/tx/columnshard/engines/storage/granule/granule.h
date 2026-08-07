@@ -185,11 +185,6 @@ public:
         return *OptimizerPlanner;
     }
 
-    void SetOptimizerRuntimeSettings(const std::shared_ptr<NStorageOptimizer::TOptimizerRuntimeSettings>& settings) {
-        AFL_VERIFY(!!OptimizerPlanner);
-        OptimizerPlanner->SetRuntimeSettings(settings);
-    }
-
     std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
     bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
 

@@ -1,3 +1,4 @@
+#include "counters.h"
 #include "optimizer.h"
 
 #include <ydb/core/protos/config.pb.h>
@@ -47,12 +48,17 @@ ui64 IOptimizerPlanner::GetNodePortionsCountLimit() const {
     return NodePortionsCountLimit.value_or(DynamicPortionsCountLimit.load());
 }
 
+void TOptimizerRuntimeSettings::RefreshNodePortionsCountLimitCounter() const {
+    TGlobalCounters::GetNodePortionsCountLimit()->Set(NodePortionsCountLimit.value_or(IOptimizerPlanner::GetDefaultNodePortionsCountLimit()));
+}
+
 void TOptimizerRuntimeSettings::LoadFromAppData() {
     if (HasAppData() && AppDataVerified().ColumnShardConfig.HasNodePortionsCountLimit()) {
         SetNodePortionsCountLimit(AppDataVerified().ColumnShardConfig.GetNodePortionsCountLimit());
     } else {
         SetNodePortionsCountLimit(std::nullopt);
     }
+    RefreshNodePortionsCountLimitCounter();
 }
 
 void TOptimizerRuntimeSettings::ApplyFromConfig(const NKikimrConfig::TColumnShardConfig& config) {
@@ -61,6 +67,7 @@ void TOptimizerRuntimeSettings::ApplyFromConfig(const NKikimrConfig::TColumnShar
     } else {
         SetNodePortionsCountLimit(std::nullopt);
     }
+    RefreshNodePortionsCountLimitCounter();
 }
 
 ui64 IOptimizerPlanner::GetBadPortionsLimit() const {

@@ -87,6 +87,36 @@ class LocalCluster:
         port_allocator = DefaultFirstNodePortAllocator(base_offset=self.port_offset)
 
         nbs_database_name = "/Root/NBS"
+        # Based on ydb/tests/library/harness/resources/default_yaml.yml
+        system_tablets = {
+            "default_node": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+            "dbs_controller": [
+                {
+                    "info": {"tablet_id": 72057594037936132},
+                    "node": [1, 2, 3, 4, 5, 6, 7, 8, 9]
+                }
+            ],
+            "flat_tx_coordinator": [
+                {
+                    "node": [1, 2, 3, 4, 5, 6, 7, 8, 9]
+                }
+            ],
+            "tx_allocator": [
+                {
+                    "node": [1, 2, 3, 4, 5, 6, 7, 8, 9]
+                }
+            ],
+            "tx_mediator": [
+                {
+                    "node": [1, 2, 3, 4, 5, 6, 7, 8, 9]
+                }
+            ],
+            "flat_schemeshard": [
+                {
+                    "info": {"tablet_id": 72057594046678944}
+                }
+            ]
+        }
         configurator = kikimr_config.KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             port_allocator=port_allocator,
@@ -94,6 +124,7 @@ class LocalCluster:
             binary_paths=[self.binary_path],
             enable_nbs=self.enable_nbs,
             nbs_database_name=nbs_database_name,
+            system_tablets=system_tablets,
         )
 
         self.cluster = kikimr_runner.KiKiMR(

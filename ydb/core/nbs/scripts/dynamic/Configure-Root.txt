@@ -540,6 +540,37 @@ ConfigureRequest {
                 }
               }
             }
+            Tablet {
+              Type: DBS_CONTROLLER
+              Node: 1
+              Info {
+                TabletID: 72057594037936132
+                Channels {
+                  Channel: 0
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 1
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 2
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+              }
+            }
           }
           VDiskConfig {
             VDiskKinds {

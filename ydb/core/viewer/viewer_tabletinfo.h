@@ -324,6 +324,7 @@ public:
                         Tablets[MakeNodeBrokerID()] = NKikimrTabletBase::TTabletTypes::NodeBroker;
                         Tablets[MakeTenantSlotBrokerID()] = NKikimrTabletBase::TTabletTypes::TenantSlotBroker;
                         Tablets[MakeCmsID()] = NKikimrTabletBase::TTabletTypes::Cms;
+                        Tablets[MakeDbsControllerID()] = NKikimrTabletBase::TTabletTypes::DbsController;
                         for (TTabletId tabletId : domain->Coordinators) {
                             Tablets[tabletId] = NKikimrTabletBase::TTabletTypes::Coordinator;
                         }

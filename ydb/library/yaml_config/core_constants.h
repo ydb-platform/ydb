@@ -22,7 +22,7 @@ constexpr inline TStringBuf EPHEMERAL_POOL_CONFIG_PATH = "/storage_pool_types/*"
 
 constexpr inline TStringBuf ERASURE_SPECIES_FIELD = "erasure_species";
 
-const inline std::array<std::pair<TString, ui32>, 10> DEFAULT_TABLETS{
+const inline std::array<std::pair<TString, ui32>, 11> DEFAULT_TABLETS{
     std::pair{TString{"FlatHive"}, 1},
     std::pair{TString{"FlatBsController"}, 1},
     std::pair{TString{"FlatSchemeshard"}, 1},
@@ -33,6 +33,7 @@ const inline std::array<std::pair<TString, ui32>, 10> DEFAULT_TABLETS{
     std::pair{TString{"NodeBroker"}, 1},
     std::pair{TString{"TenantSlotBroker"}, 1},
     std::pair{TString{"Console"}, 1},
+    std::pair{TString{"DbsController"}, 1},
 };
 
 const inline std::map<TString, ui64> GetTablets(ui64 idx) {

@@ -150,6 +150,11 @@ system_tablets:
       tablet_id: 72057594037936131
     node:
     - 1
+  dbs_controller:
+  - info:
+      tablet_id: 72057594037936132
+    node:
+    - 1
 blob_storage_config:
   service_set:
     pdisks:

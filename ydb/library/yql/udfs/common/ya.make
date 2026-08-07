@@ -3,5 +3,6 @@ RECURSE(
     hybrid_search
     knn
     roaring
+    uuid
 )
 

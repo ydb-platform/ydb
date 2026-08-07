@@ -24,6 +24,15 @@ enum class EMonPage
     Dbg,
     LocalDb,
     VChunk,
+    Latency,
+};
+
+enum class ELatencyPercentile
+{
+    P50,
+    P90,
+    P99,
+    Max,
 };
 
 struct TTabletInfo
@@ -52,6 +61,7 @@ struct THostSnapshot
     TInflightByOperation InflightByOperation{};
     THostStat::TErrorsInfo Errors;
     ui64 PBufferUsedSize = 0;
+    TLatencyByOperation LatencyByOperation{};
 };
 
 struct TConnectionSnapshot
@@ -69,6 +79,8 @@ struct TDbgSnapshot
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
+    // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
+    size_t LatencyHistoryCapacity = 0;
 };
 
 struct TVChunkSnapshot
@@ -106,6 +118,10 @@ struct TMonPageData
     // snapshot (absent => no such vchunk).
     std::optional<ui32> SelectedVChunk;
     std::optional<TVChunkSnapshot> VChunk;
+    // Latency tab: which percentile colors the heatmap / slot grid, and
+    // which operation filters the slot grid (absent => worst across ops).
+    ELatencyPercentile SelectedPercentile = ELatencyPercentile::P99;
+    std::optional<EOperation> SelectedLatencyOperation;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

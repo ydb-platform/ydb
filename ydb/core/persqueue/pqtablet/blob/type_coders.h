@@ -218,7 +218,7 @@ public:
 
 protected:
     void DoAddData(const char* data, size_t size) override {
-        AFL_ENSURE(size == sizeof(TType));
+        AFL_ENSURE(size == sizeof(TType))("size", size)("expected", sizeof(TType));
         Mask.AddNonNull();
         DataSize += ValueCoder.Save(Output, ReadUnaligned<TType>(data));
     }

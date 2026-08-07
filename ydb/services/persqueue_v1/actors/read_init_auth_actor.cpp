@@ -52,7 +52,7 @@ void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bo
     TVector<NPersQueue::TDiscoveryConverterPtr> topics;
     for (const auto& topic : Topics) {
         topics.push_back(topic.second.DiscoveryConverter);
-        AFL_ENSURE(topic.second.DiscoveryConverter->IsValid());
+        AFL_ENSURE(topic.second.DiscoveryConverter->IsValid())("topic", topic.first)("session", Session);
     }
 
     //LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " describe topics: " << JoinSeq(", ", topicNames));
@@ -114,7 +114,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         THashMap<TString, TTopicHolder>::iterator topicsIter,
         const TActorContext& ctx
 ) {
-    AFL_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
+    AFL_ENSURE(entry.PQGroupInfo)("reason", "PQ group info expected")("session", Session);
     auto& pqDescr = entry.PQGroupInfo->Description;
     topicsIter->second.TabletID = pqDescr.GetBalancerTabletID();
     topicsIter->second.CloudId = pqDescr.GetPQTabletConfig().GetYcCloudId();
@@ -141,7 +141,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         AppData(ctx)->PQConfig.GetTestDatabaseRoot(),
         topicsIter->second.CdcStreamPath
     );
-    AFL_ENSURE(topicsIter->second.FullConverter->IsValid());
+    AFL_ENSURE(topicsIter->second.FullConverter->IsValid())("topic", topicsIter->first)("session", Session);
     return CheckTopicACL(entry, topicsIter->first, ctx);
 }
 
@@ -156,10 +156,10 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
     for (const auto& entry : ev->Get()->Result->ResultSet) {
         const auto& path = topicsRequested[i++]->GetOriginalPath();
         auto it = Topics.find(path);
-        AFL_ENSURE(it != Topics.end());
+        AFL_ENSURE(it != Topics.end())("path", path)("session", Session)("topics_size", Topics.size());
 
         if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-            AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
+            AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1)("children_size", entry.ListNodeEntry->Children.size())("path", path)("session", Session);
             const auto& topic = entry.ListNodeEntry->Children.at(0);
 
             // primary path used to re-describe
@@ -247,7 +247,7 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
     TEvTxProxySchemeCache::TEvNavigateKeySetResult* msg = ev->Get();
     const NSchemeCache::TSchemeCacheNavigate* navigate = msg->Request.Get();
 
-    AFL_ENSURE(navigate->ResultSet.size() == 1);
+    AFL_ENSURE(navigate->ResultSet.size() == 1)("result_set_size", navigate->ResultSet.size())("session", Session)("client_path", ClientPath);
     auto& entry = navigate->ResultSet.front();
     auto path = "/" + JoinPath(entry.Path); // ToDo [migration] - through converter ?
     if (navigate->ErrorCount > 0) {

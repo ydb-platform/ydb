@@ -114,7 +114,7 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
 
     TString dataStr;
     bool res = proto.SerializeToString(&dataStr);
-    AFL_ENSURE(res);
+    AFL_ENSURE(res)("reason", "failed to serialize MLP message")("data_size", item.MessageBody.size())("attributes", item.Attributes.size());
     cmdWrite.SetData(dataStr);
 
     return totalSize;
@@ -141,7 +141,7 @@ void TWriterActor::DoWrite() {
             partition = TopicInfo->PartitionChooser->GetRandomPartition();
         }
 
-        AFL_ENSURE(partition)("t", TopicInfo->Description.GetName());
+        AFL_ENSURE(partition)("reason", "partition must be resolved")("topic", TopicInfo->Description.GetName());
 
         PendingMessages.push_back({
             .Index = message.Index,
@@ -174,7 +174,7 @@ void TWriterActor::DoWrite() {
         }
 
         const auto* node = TopicInfo->PartitionGraph->GetPartition(partitionId);
-        AFL_ENSURE(node)("p", partitionId);
+        AFL_ENSURE(node)("reason", "partition graph node must exist")("partition_id", partitionId)("topic", TopicInfo->Description.GetName());
         SendToTablet(node->TabletId, request.release());
         ++PendingRequests;
     }

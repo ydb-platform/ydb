@@ -12,7 +12,7 @@ static TString MakeReadSetData(bool commit)
     data.SetDecision(commit ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT);
 
     TString encoded;
-    AFL_ENSURE(data.SerializeToString(&encoded));
+    AFL_ENSURE(data.SerializeToString(&encoded))("reason", "failed to serialize read set");
 
     return encoded;
 }

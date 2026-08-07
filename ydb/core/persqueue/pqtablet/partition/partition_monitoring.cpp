@@ -226,7 +226,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                     ui32 size  = headKeys[p].Size;
                                     while (currentLevel + 1 < TotalLevels && size < CompactLevelBorder[currentLevel + 1])
                                         ++currentLevel;
-                                    PQ_ENSURE(size < CompactLevelBorder[currentLevel]);
+                                    PQ_ENSURE(size < CompactLevelBorder[currentLevel])("size", size)("border", CompactLevelBorder[currentLevel])("currentLevel", currentLevel);
                                     TABLER() {
                                         TABLED() {out << encoderName << "DataHead[" << currentLevel << "]";}
                                         TABLED() {out << i++;}

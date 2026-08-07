@@ -93,8 +93,8 @@ public:
 
 protected:
     static inline void VerifySignature(const TDataRef& data) {
-        AFL_ENSURE(data.Size() >= sizeof(TCodecSig));
-        AFL_ENSURE(ReadUnaligned<TCodecSig>(data.Data()) == Sig());
+        AFL_ENSURE(data.Size() >= sizeof(TCodecSig))("data_size", data.Size())("sig_size", sizeof(TCodecSig));
+        AFL_ENSURE(ReadUnaligned<TCodecSig>(data.Data()) == Sig())("reason", "codec signature mismatch")("data_size", data.Size());
     }
 };
 
@@ -195,12 +195,12 @@ private:
         TDataRef Next() override {
             const char* data = Current;
             Current += Size;
-            AFL_ENSURE(Current <= End);
+            AFL_ENSURE(Current <= End)("remaining", End - Current);
             return MaskIter.Next() ? TDataRef(data, Size) : TDataRef();
         }
 
         TDataRef Peek() const override {
-            AFL_ENSURE(Current + Size <= End);
+            AFL_ENSURE(Current + Size <= End)("Size", Size)("remaining", End - Current);
             return MaskIter.IsNotNull() ? TDataRef(Current, Size) : TDataRef();
         }
 
@@ -239,7 +239,7 @@ public:
 
     TDataRef GetValue(size_t index) const override {
         if (Mask.IsNotNull(index)) {
-            AFL_ENSURE(ReadUnaligned<ui32>(Sizes + index) + sizeof(TCodecSig) <= Data.Size() - Mask.Size());
+            AFL_ENSURE(ReadUnaligned<ui32>(Sizes + index) + sizeof(TCodecSig) <= Data.Size() - Mask.Size())("index", index)("data_size", Data.Size())("mask_size", Mask.Size());
             ui32 begin = index ? ReadUnaligned<ui32>(Sizes + index - 1) : 0;
             return TDataRef(Data.Data() + sizeof(TCodecSig) + begin, ReadUnaligned<ui32>(Sizes + index) - begin);
         }
@@ -266,7 +266,7 @@ private:
 
                 const char* data = Current;
                 Current += size;
-                AFL_ENSURE(data + size <= End);
+                AFL_ENSURE(data + size <= End)("size", size)("remaining", End - data);
                 return TDataRef(data, size);
             }
             ++CurrentOffset;
@@ -275,7 +275,7 @@ private:
 
         TDataRef Peek() const override {
             if (MaskIter.IsNotNull()) {
-                AFL_ENSURE(Current + ReadUnaligned<ui32>(CurrentOffset) - LastOffset <= End);
+                AFL_ENSURE(Current + ReadUnaligned<ui32>(CurrentOffset) - LastOffset <= End)("LastOffset", LastOffset)("remaining", End - Current);
                 return TDataRef(Current, ReadUnaligned<ui32>(CurrentOffset) - LastOffset);
             }
             return TDataRef();
@@ -305,14 +305,14 @@ public:
     inline TType Peek(const char* data, const char* end) const {
         i64 value;
         auto bytes = in_long(value, data);
-        AFL_ENSURE(data + bytes <= end);
+        AFL_ENSURE(data + bytes <= end)("bytes", bytes)("remaining", end - data);
         return value;
     }
 
     inline size_t Load(const char* data, const char* end, TType& value) const {
         i64 loaded = 0;
         auto bytes = in_long(loaded, data);
-        AFL_ENSURE(data + bytes <= end);
+        AFL_ENSURE(data + bytes <= end)("bytes", bytes)("remaining", end - data);
         value = loaded;
         return bytes;
     }
@@ -327,14 +327,14 @@ public:
     inline TType Peek(const char* data, const char* end) const {
         i64 value;
         auto bytes = in_long(value, data);
-        AFL_ENSURE(data + bytes <= end);
+        AFL_ENSURE(data + bytes <= end)("bytes", bytes)("remaining", end - data);
         return ZigZagDecode(static_cast<TUnsigned>(value));
     }
 
     inline size_t Load(const char* data, const char* end, TType& value) const {
         i64 loaded = 0;
         auto bytes = in_long(loaded, data);
-        AFL_ENSURE(data + bytes <= end);
+        AFL_ENSURE(data + bytes <= end)("bytes", bytes)("remaining", end - data);
         value = ZigZagDecode(static_cast<TUnsigned>(loaded));
         return bytes;
     }

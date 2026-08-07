@@ -501,12 +501,12 @@ void SetBatchWriteTimestampMS(Topic::StreamReadMessage::ReadResponse::Batch* bat
 }
 
 TString GetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch) {
-    AFL_ENSURE(batch);
+    AFL_ENSURE(batch)("reason", "batch pointer expected");
     return batch->source_id();
 }
 
 TString GetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch) {
-    AFL_ENSURE(batch);
+    AFL_ENSURE(batch)("reason", "batch pointer expected");
     return batch->producer_id();
 }
 

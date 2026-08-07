@@ -109,11 +109,11 @@ struct TMessage {
             return Body.index() == i; \
         } \
         const auto& Get##name() const { \
-            AFL_ENSURE(Is##name()); \
+            AFL_ENSURE(Is##name())("reason", "wrong message body variant")("expected", #name)("index", Body.index()); \
             return std::get<i>(Body); \
         } \
         auto& Get##name() { \
-            AFL_ENSURE(Is##name()); \
+            AFL_ENSURE(Is##name())("reason", "wrong message body variant")("expected", #name)("index", Body.index()); \
             return std::get<i>(Body); \
         }
 

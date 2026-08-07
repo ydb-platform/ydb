@@ -161,7 +161,7 @@ TDiscoveryConverter::TDiscoveryConverter(bool firstClass,
     auto name = pqTabletConfig.GetTopicName();
     auto path = pqTabletConfig.GetTopicPath();
     if (name.empty()) {
-        AFL_ENSURE(!path.empty())("topic_path", path)("topic_name", name);
+        AFL_ENSURE(!path.empty())("reason", "topic path required when topic name is empty");
         TStringBuf pathBuf(path), fst, snd;
         auto res = pathBuf.TryRSplit("/", fst, snd);
         AFL_ENSURE(res)("topic_path", path);

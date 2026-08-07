@@ -1,7 +1,7 @@
 /*
  * ngtcp2
  *
- * Copyright (c) 2016 ngtcp2 contributors
+ * Copyright (c) 2026 ngtcp2 contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -22,30 +22,34 @@
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef NGTCP2_VERSION_H
-#define NGTCP2_VERSION_H
+#ifndef NGTCP2_WF_H
+#define NGTCP2_WF_H
 
-/**
- * @macrosection
- *
- * Library version macros
+#ifdef HAVE_CONFIG_H
+#  include <config.h>
+#endif /* defined(HAVE_CONFIG_H) */
+
+#include <ngtcp2/ngtcp2.h>
+
+/*
+ * ngtcp2_wf implements Kathleen Nichols's windowed min/max tracking
+ * algorithm.
  */
 
-/**
- * @macro
- *
- * Version number of the ngtcp2 library release.
- */
-#define NGTCP2_VERSION "1.24.0"
+typedef struct ngtcp2_wf_sample {
+  uint64_t value;
+  uint64_t ts;
+} ngtcp2_wf_sample;
 
-/**
- * @macro
- *
- * Numerical representation of the version number of the ngtcp2
- * library release. This is a 24 bit number with 8 bits for major
- * number, 8 bits for minor and 8 bits for patch. Version 1.2.3
- * becomes 0x010203.
- */
-#define NGTCP2_VERSION_NUM 0x011800
+typedef struct ngtcp2_wf {
+  uint64_t win;
+  ngtcp2_wf_sample samples[3];
+} ngtcp2_wf;
 
-#endif /* !defined(NGTCP2_VERSION_H) */
+void ngtcp2_wf_init(ngtcp2_wf *wf, uint64_t win);
+
+void ngtcp2_wf_update(ngtcp2_wf *wf, uint64_t value, uint64_t ts);
+
+uint64_t ngtcp2_wf_get_best(const ngtcp2_wf *wf);
+
+#endif /* !defined(NGTCP2_WF_H) */

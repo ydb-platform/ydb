@@ -192,6 +192,7 @@ namespace NKikimr::NBlobDepot {
         TActorId HttpProxyId;
         TActorId PipeId;
         bool PipeConnected = false;
+        bool RefreshInFlight = false;
 
         TRouterStats Stats;
 
@@ -354,6 +355,9 @@ namespace NKikimr::NBlobDepot {
         }
 
         void IssueBalancerRequest() {
+            if (RefreshInFlight || !BalancerEnabled()) {
+                return;
+            }
             if (!HttpProxyId) {
                 HttpProxyId = Register(NHttp::CreateHttpProxy());
             }
@@ -367,6 +371,7 @@ namespace NKikimr::NBlobDepot {
             Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
                 NHttp::THttpOutgoingRequest::CreateRequestGet(url),
                 TDuration::Seconds(10)));
+            RefreshInFlight = true;
             BalancerRequestStartedAt = TActivationContext::Monotonic();
             ++Stats.BalancerResolveRequests;
         }
@@ -388,10 +393,14 @@ namespace NKikimr::NBlobDepot {
                 {"currentEndpoint", CurrentEndpoint});
 
             ++Stats.FiveXxRefreshTriggers;
-            IssueBalancerRequest();
+
+            if (!RefreshInFlight) {
+                IssueBalancerRequest();
+            }
         }
 
         void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev) {
+            RefreshInFlight = false;
             const TDuration latency = TActivationContext::Monotonic() - BalancerRequestStartedAt;
             Stats.BalancerResolveLatency.Record(latency.MilliSeconds());
 
@@ -431,17 +440,14 @@ namespace NKikimr::NBlobDepot {
 
                 ++Stats.BalancerResolveFailures;
             }
+            ScheduleNextRefresh();
         }
 
         void Forward(STATEFN_SIG) {
             if (!InnerWrapperId) {
                 return;
             }
-
             TActivationContext::Send(ev->Forward(InnerWrapperId));
-            if (BalancerEnabled()) {
-                IssueBalancerRequest();
-            }
         }
 
     public:

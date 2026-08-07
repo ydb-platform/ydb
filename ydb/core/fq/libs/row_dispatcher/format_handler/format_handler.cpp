@@ -134,6 +134,7 @@ private:
             , Columns(Client->GetColumns())
             , LogPrefix(TStringBuilder() << Self.LogPrefix << "TClientHandler " << Client->GetClientId() << ": ")
             , FilteredRow(Columns.size())
+            , WatermarkGranularityUs(Client->GetWatermarkGranularityUs() ? Client->GetWatermarkGranularityUs() : 1)
         {
             ColumnsIds.reserve(Columns.size());
         }
@@ -236,7 +237,8 @@ private:
             if (!maybeWatermark) {
                 return;
             }
-            const auto watermark = TInstant::MicroSeconds(*maybeWatermark);
+            const auto watermarkUs = *maybeWatermark;
+            const auto watermark = TInstant::MicroSeconds(watermarkUs - (watermarkUs % WatermarkGranularityUs));
             if (Watermark < watermark) {
                 Watermark = watermark;
             }
@@ -378,6 +380,7 @@ private:
         TVector<ui64> FilteredOffsets;  // Offsets of current batch in DataPacker
         TMaybe<TInstant> Watermark;
         TQueue<TDataBatch> ClientData;
+        const ui64 WatermarkGranularityUs;
     };
 
 public:

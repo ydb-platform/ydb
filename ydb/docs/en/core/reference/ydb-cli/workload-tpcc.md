@@ -118,17 +118,7 @@ We recommend starting with a multiplier of 5. If YDB is underutilized during the
 
 ### Results
 
-Benchmark results include tpmC, efficiency, and per-transaction-type latencies.
-
-In JSON output (`--format Json`), each transaction type reports three latency percentile maps:
-
-* `percentiles` — **full** latency, including wait for an available session / inflight slot;
-* `percentiles_ms` — latency without that queue wait (closer to classical BenchBase-style measurements);
-* `percentiles_pure` — time spent inside the transaction queries only.
-
-When `--warmup` is omitted, warmup duration is chosen automatically from the warehouse count (about 30 minutes for scales above 1000 warehouses).
-
-As stated by the official specification:
+Benchmark results include tpmC, efficiency, and per-transaction-type latencies. As stated by the official specification:
 
 > “The performance metric reported by TPC-C is a “business throughput” measuring the number of orders processed per minute. Multiple transactions are used to simulate the business activity of processing an order, and each transaction is subject to a response time constraint. The performance metric for this benchmark is expressed in transactions-per-minute-C (tpmC).”
 

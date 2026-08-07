@@ -41,7 +41,9 @@ void TTimePredictor::THistory::Add(TDuration time)
         std::move_backward(insertAt, eraseAt, eraseAt + 1);
         *insertAt = time;
     } else {
-        std::move(eraseAt + 1, insertAt, eraseAt);
+        // Close the gap at eraseAt with an overlap-safe rotate, then place
+        // the new value in the vacated slot at insertAt - 1.
+        std::rotate(eraseAt, eraseAt + 1, insertAt);
         *(insertAt - 1) = time;
     }
 }

@@ -671,6 +671,7 @@ ydb/services/metadata/secret/ut Secret.ValidationQueryService
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestWriteStat1stClassTopicAPI
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.FailWithoutGrants
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.GetInParallel
+ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.MixedGrantsInBatch
 ydb/services/test_shard/ut unittest.sole chunk
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTableTopicTransferPath
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTopicAbsoluteTransferPath

@@ -39,6 +39,9 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
     enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
+    enable_dq_source_stream_lookup_join_local_lookups = param.get("enable_dq_source_stream_lookup_join_local_lookups", False)
+    enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
+    enable_dq_source_stream_lookup_join_shuffle_mode = param.get("enable_dq_source_stream_lookup_join_shuffle_mode", True)
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -51,6 +54,12 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
+    if enable_dq_source_stream_lookup_join_local_lookups:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_local_lookups")
+    if enable_dq_source_stream_lookup_join_fullscan:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_fullscan")
+    if enable_dq_source_stream_lookup_join_shuffle_mode:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_shuffle_mode")
 
     disabled_feature_flags = []
     if enable_user_attributes_in_topic_query:

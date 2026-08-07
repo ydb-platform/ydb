@@ -1279,7 +1279,8 @@ void TICStorageTransportActor::HandleDeleteTabletChunks(
         msg->ServiceId,
         std::move(request),
         requestId,
-        NWilson::TTraceId());
+        NWilson::TTraceId(),
+        ESubscribeOnSession::No);
 }
 
 void TICStorageTransportActor::HandleDeleteTabletChunksUndelivery(

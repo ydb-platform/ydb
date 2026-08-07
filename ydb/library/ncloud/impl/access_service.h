@@ -6,12 +6,14 @@ namespace NNebiusCloud {
 
 using namespace NKikimr;
 
-struct TAccessServiceSettings : NGrpcActorClient::TGrpcClientSettings {};
+struct TAccessServiceSettings : NGrpcActorClient::TGrpcClientSettings {
+    using NGrpcActorClient::TGrpcClientSettings::TGrpcClientSettings;
+};
 
 IActor* CreateAccessServiceV1(const TAccessServiceSettings& settings);
 
-inline IActor* CreateAccessServiceV1(const TString& endpoint) {
-    TAccessServiceSettings settings;
+inline IActor* CreateAccessServiceV1(const TString& endpoint, const TString& userAgentHint) {
+    TAccessServiceSettings settings(userAgentHint);
     settings.Endpoint = endpoint;
     return CreateAccessServiceV1(settings);
 }

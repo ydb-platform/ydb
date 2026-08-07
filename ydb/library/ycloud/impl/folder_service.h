@@ -6,12 +6,14 @@ namespace NCloud {
 
 using namespace NKikimr;
 
-struct TFolderServiceSettings : NGrpcActorClient::TGrpcClientSettings {};
+struct TFolderServiceSettings : NGrpcActorClient::TGrpcClientSettings {
+    using NGrpcActorClient::TGrpcClientSettings::TGrpcClientSettings;
+};
 
 IActor* CreateFolderService(const TFolderServiceSettings& settings);
 
-inline IActor* CreateFolderService(const TString& endpoint) {
-    TFolderServiceSettings settings;
+inline IActor* CreateFolderService(const TString& endpoint, const TString& userAgentHint) {
+    TFolderServiceSettings settings(userAgentHint);
     settings.Endpoint = endpoint;
     return CreateFolderService(settings);
 }

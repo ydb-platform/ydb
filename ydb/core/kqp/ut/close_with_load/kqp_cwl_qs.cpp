@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             if (id == (i32)sessions.size()) {
                 Sleep(WaitDuration);
                 Cerr << "start sessions close....." << Endl;
-                auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr->GetEndpoint());
+                auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr->GetEndpoint(), "kqp_cwl_qs");
                 for (ui32 i = 0; i < sessions.size(); ++i) {
                     bool allDoneOk = true;
                     NTestHelpers::CheckDelete(clientConfig, TString{sessions[i].GetId()}, Ydb::StatusIds::SUCCESS, allDoneOk);

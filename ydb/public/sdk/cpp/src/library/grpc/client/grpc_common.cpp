@@ -1,6 +1,9 @@
 #include "grpc_common.h"
 
 #include <library/cpp/openssl/holders/holder.h>
+#include <library/cpp/svnversion/svnversion.h>
+
+#include <util/string/builder.h>
 
 #include <openssl/bio.h>
 #include <openssl/err.h>
@@ -9,6 +12,7 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -16,6 +20,39 @@ namespace NYdbGrpc {
 inline namespace Dev {
 
 namespace {
+
+constexpr TStringBuf PREFIX = "ydb";
+
+TString GetRevision() {
+    TString version = std::invoke([]() {
+        TString res = GetTag();
+        return res.empty() ? GetBranch() : res;
+    });
+
+    if (const auto pos = version.rfind('/'); pos != TString::npos) {
+        return version.substr(pos + 1);
+    }
+
+    if (TString commitId = GetProgramCommitId(); !commitId.empty()) {
+        if (commitId.size() > 7) {
+            commitId = commitId.substr(0, 7);
+        }
+
+        if (version.empty()) {
+            version = commitId;
+        } else {
+            version += '.' + commitId;
+        }
+    }
+
+    return version.empty() ? "unknown" : version;
+}
+
+TString BuildUserAgent(const TStringBuf userAgentHint) {
+    return userAgentHint.empty()
+        ? TStringBuilder() << PREFIX << '/' << GetRevision()
+        : TStringBuilder() << PREFIX << '-' << userAgentHint << '/' << GetRevision();
+}
 
 std::string DrainOpenSslErrors() {
     std::string out;
@@ -78,6 +115,30 @@ bool ValidateRootCertificates(const std::string& pemRootCerts, std::string& erro
 }
 
 } // namespace
+
+TGRpcClientConfig::TGRpcClientConfig(
+    const std::string& locator,
+    const std::string& userAgentHint,
+    TDuration timeout,
+    ui64 maxMessageSize,
+    ui32 maxInFlight,
+    const std::string& caCert,
+    const std::string& clientCert,
+    const std::string& clientPrivateKey,
+    grpc_compression_algorithm compressionAlgorithm,
+    bool enableSsl)
+    : Locator(locator)
+    , Timeout(timeout)
+    , MaxMessageSize(maxMessageSize)
+    , MaxInFlight(maxInFlight)
+    , EnableSsl(enableSsl)
+    , SslCredentials{.pem_root_certs = NYdb::TStringType{caCert},
+                     .pem_private_key = NYdb::TStringType{clientPrivateKey},
+                     .pem_cert_chain = NYdb::TStringType{clientCert}}
+    , CompressionAlgorithm(compressionAlgorithm)
+    , UserAgentPrefix(BuildUserAgent(userAgentHint))
+    , UseXds((Locator.starts_with("xds:///")))
+{}
 
 bool ValidateTlsCredentials(const grpc::SslCredentialsOptions& sslCredentials, std::string& errorMessage) {
     errorMessage.clear();

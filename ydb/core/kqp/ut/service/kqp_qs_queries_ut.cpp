@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     void DoClosedSessionRemovedWhileActiveTest(bool withQuery) {
         auto kikimr = DefaultKikimrRunner();
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint(), "kqp_qs_queries_ut");
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         {
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(PeriodicTaskInSessionPool) {
         auto kikimr = DefaultKikimrRunner();
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint(), "kqp_qs_queries_ut");
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         {
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(PeriodicTaskInSessionPoolSessionCloseByIdle) {
         auto kikimr = DefaultKikimrRunner();
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint(), "kqp_qs_queries_ut");
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         {
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     // Check closed session removed while its in the session pool
     Y_UNIT_TEST(ClosedSessionRemovedFromPool) {
         auto kikimr = DefaultKikimrRunner();
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint(), "kqp_qs_queries_ut");
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         {
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     // From sdk perspective check no dataraces
     Y_UNIT_TEST(ReturnAndCloseSameTime) {
         auto kikimr = DefaultKikimrRunner();
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint(), "kqp_qs_queries_ut");
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         size_t iterations = 999;
@@ -1700,7 +1700,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto driver = TDriver(driverConfig);
         auto client = NYdb::NQuery::TQueryClient(driver);
 
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint(), "kqp_qs_queries_ut");
 
         TString TempDirName;
         {
@@ -1793,7 +1793,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(false);
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint(), "kqp_qs_queries_ut");
         auto client = kikimr.GetQueryClient();
 
         TString SessionId;
@@ -1821,7 +1821,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint(), "kqp_qs_queries_ut");
         auto client = kikimr.GetQueryClient();
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
             .StatsMode(NYdb::NQuery::EStatsMode::Basic);
@@ -1981,7 +1981,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint(), "kqp_qs_queries_ut");
         auto client = kikimr.GetQueryClient();
 
         auto session = client.GetSession().GetValueSync().GetSession();

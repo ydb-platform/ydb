@@ -6,12 +6,14 @@ namespace NCloud {
 
 using namespace NKikimr;
 
-struct TFolderServiceTransitionalSettings : NGrpcActorClient::TGrpcClientSettings {};
+struct TFolderServiceTransitionalSettings : NGrpcActorClient::TGrpcClientSettings {
+    using NGrpcActorClient::TGrpcClientSettings::TGrpcClientSettings;
+};
 
 IActor* CreateFolderServiceTransitional(const TFolderServiceTransitionalSettings& settings);
 
-inline IActor* CreateFolderServiceTransitional(const TString& endpoint) {
-    TFolderServiceTransitionalSettings settings;
+inline IActor* CreateFolderServiceTransitional(const TString& endpoint, const TString& userAgentHint) {
+    TFolderServiceTransitionalSettings settings(userAgentHint);
     settings.Endpoint = endpoint;
     return CreateFolderServiceTransitional(settings);
 }

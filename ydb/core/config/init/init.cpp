@@ -911,7 +911,7 @@ bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& app
 
 NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env) {
     TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
-    NYdbGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
+    NYdbGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, "dynnode_init", TDuration::Seconds(5));
     grpcConfig.LoadBalancingPolicy = "round_robin";
     if (endpoint.EnableSsl.Defined() && endpoint.EnableSsl.GetRef()) {
         grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef();

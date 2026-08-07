@@ -242,7 +242,7 @@ IActor* CreateSqsAccessService(const TString& address, const TString& pathToRoot
         return new TSqsAccessServiceMock();
     }
 
-    NCloud::TAccessServiceSettings settings;
+    NCloud::TAccessServiceSettings settings("ymq_auth_mock");
     settings.Endpoint = address;
     settings.CertificateRootCA = TUnbufferedFileInput(pathToRootCA).ReadAll();
 

@@ -2362,7 +2362,7 @@ protected:
 
         if (Config.GetUseAccessService()) {
             if (Config.GetAccessServiceType() == "Yandex_v2") {
-                NCloud::TAccessServiceSettings settings;
+                NCloud::TAccessServiceSettings settings("ticket_parser");
                 FillAccessServiceSettings(settings);
 
                 AccessServiceValidatorV1 = Register(NCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
@@ -2397,7 +2397,7 @@ protected:
                                                             TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
                 }
             } else if (Config.GetAccessServiceType() == "Nebius_v1") {
-                NNebiusCloud::TAccessServiceSettings settings;
+                NNebiusCloud::TAccessServiceSettings settings("ticket_parser");
                 FillAccessServiceSettings(settings);
                 NebiusAccessServiceValidator = Register(NNebiusCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             } else {
@@ -2406,7 +2406,7 @@ protected:
         }
 
         if (Config.GetUseUserAccountService()) {
-            NCloud::TUserAccountServiceSettings settings;
+            NCloud::TUserAccountServiceSettings settings("ticket_parser");
             settings.Endpoint = Config.GetUserAccountServiceEndpoint();
             if (Config.GetUseUserAccountServiceTLS()) {
                 settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
@@ -2423,7 +2423,7 @@ protected:
         }
 
         if (Config.GetUseServiceAccountService()) {
-            NCloud::TServiceAccountServiceSettings settings;
+            NCloud::TServiceAccountServiceSettings settings("ticket_parser");
             settings.Endpoint = Config.GetServiceAccountServiceEndpoint();
             if (Config.GetUseServiceAccountServiceTLS()) {
                 settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();

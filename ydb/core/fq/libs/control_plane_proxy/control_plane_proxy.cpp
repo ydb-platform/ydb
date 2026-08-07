@@ -580,7 +580,7 @@ public:
 
         const auto& accessServiceProto = Config.Proto.GetAccessService();
         if (accessServiceProto.GetEnable()) {
-            NCloud::TAccessServiceSettings asSettings;
+            NCloud::TAccessServiceSettings asSettings("fq_control_plane_proxy");
             asSettings.Endpoint = accessServiceProto.GetEndpoint();
             if (accessServiceProto.GetPathToRootCA()) {
                 asSettings.CertificateRootCA = TUnbufferedFileInput(accessServiceProto.GetPathToRootCA()).ReadAll();

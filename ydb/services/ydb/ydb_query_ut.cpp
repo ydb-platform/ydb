@@ -44,6 +44,8 @@ struct TMockMonHttpRequest : NMonitoring::IMonHttpRequest {
 
 } // namespace
 
+// TODO(vlad-serikov): Test user agent
+
 Y_UNIT_TEST_SUITE(YdbQueryService) {
     Y_UNIT_TEST(TestCreateAndAttachSession) {
         TKikimrWithGrpcAndRootSchema server;
@@ -51,7 +53,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_query_ut");
         bool allDoneOk = true;
 
         TString sessionId = CreateQuerySession(clientConfig);
@@ -100,7 +102,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_query_ut");
         bool allDoneOk = true;
 
         TString sessionId = CreateQuerySession(clientConfig);
@@ -123,7 +125,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_query_ut");
 
         TString sessionId = CreateQuerySession(clientConfig);
 
@@ -162,7 +164,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_query_ut");
         bool allDoneOk = true;
 
         TString sessionId = CreateQuerySession(clientConfig);
@@ -191,7 +193,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_query_ut");
         bool allDoneOk = true;
 
         TString sessionId = CreateQuerySession(clientConfig);
@@ -233,7 +235,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_query_ut");
         bool allDoneOk = true;
 
         TString sessionId = CreateQuerySession(clientConfig);
@@ -268,7 +270,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_query_ut");
         bool allDoneOk = true;
 
         TString sessionId = CreateQuerySession(clientConfig);

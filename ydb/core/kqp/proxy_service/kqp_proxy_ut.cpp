@@ -620,7 +620,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
 
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "kqp_proxy_ut");
         bool allDoneOk = false;
 
         {
@@ -720,7 +720,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "kqp_proxy_ut");
 
         const ui32 ThreadCount = 10;
         const ui32 SessionsPerThread = 100;

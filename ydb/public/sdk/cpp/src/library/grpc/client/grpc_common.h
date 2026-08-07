@@ -28,6 +28,7 @@ struct TGRpcClientConfig {
     ui64 MemQuota = 0;
     std::unordered_map<std::string, std::string> StringChannelParams;
     std::unordered_map<std::string, int> IntChannelParams;
+    std::string UserAgentPrefix = { };
     std::string LoadBalancingPolicy = { };
     std::string SslTargetNameOverride = { };
     bool UseXds = false;
@@ -38,29 +39,30 @@ struct TGRpcClientConfig {
     TGRpcClientConfig& operator=(const TGRpcClientConfig&) = default;
     TGRpcClientConfig& operator=(TGRpcClientConfig&&) = default;
 
-    TGRpcClientConfig(const std::string& locator, TDuration timeout = TDuration::Max(),
-            ui64 maxMessageSize = NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, ui32 maxInFlight = 0, const std::string& caCert = "", const std::string& clientCert = "",
-            const std::string& clientPrivateKey = "", grpc_compression_algorithm compressionAlgorithm = GRPC_COMPRESS_NONE, bool enableSsl = false)
-        : Locator(locator)
-        , Timeout(timeout)
-        , MaxMessageSize(maxMessageSize)
-        , MaxInFlight(maxInFlight)
-        , EnableSsl(enableSsl)
-        , SslCredentials{.pem_root_certs = NYdb::TStringType{caCert},
-                         .pem_private_key = NYdb::TStringType{clientPrivateKey},
-                         .pem_cert_chain = NYdb::TStringType{clientCert}}
-        , CompressionAlgorithm(compressionAlgorithm)
-        , UseXds((Locator.starts_with("xds:///")))
-    {}
+    TGRpcClientConfig(
+        const std::string& locator,
+        const std::string& userAgentHint,
+        TDuration timeout = TDuration::Max(),
+        ui64 maxMessageSize = NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT,
+        ui32 maxInFlight = 0,
+        const std::string& caCert = "",
+        const std::string& clientCert = "",
+        const std::string& clientPrivateKey = "",
+        grpc_compression_algorithm compressionAlgorithm = GRPC_COMPRESS_NONE,
+        bool enableSsl = false);
 };
 
 bool ValidateTlsCredentials(const grpc::SslCredentialsOptions& sslCredentials, std::string& errorMessage);
 
-inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRpcClientConfig& config, grpc_socket_mutator* mutator = nullptr){
+inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(
+    const TGRpcClientConfig& config,
+    grpc_socket_mutator* mutator = nullptr)
+{
     grpc::ChannelArguments args;
     args.SetMaxReceiveMessageSize(config.MaxInboundMessageSize ? config.MaxInboundMessageSize : config.MaxMessageSize);
     args.SetMaxSendMessageSize(config.MaxOutboundMessageSize ? config.MaxOutboundMessageSize : config.MaxMessageSize);
     args.SetCompressionAlgorithm(config.CompressionAlgorithm);
+    args.SetUserAgentPrefix(NYdb::TStringType{config.UserAgentPrefix});
 
     for (const auto& kvp: config.StringChannelParams) {
         args.SetString(NYdb::TStringType{kvp.first}, NYdb::TStringType{kvp.second});

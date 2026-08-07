@@ -156,13 +156,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService)
         UNIT_ASSERT(res.GetEndpointsInfo().size() > 2);
 
         // Create and attach to session on the node #0
-        auto sessionId = CreateQuerySession(TGRpcClientConfig(CreateHostWithPort(res.GetEndpointsInfo()[0])));
+        auto sessionId = CreateQuerySession(TGRpcClientConfig(CreateHostWithPort(res.GetEndpointsInfo()[0]), "kqp_query_svc"));
 
         bool allDoneOk = true;
 
         NYdbGrpc::TGRpcClientLow clientLow;
 
-        auto p = CheckAttach(clientLow, TGRpcClientConfig(CreateHostWithPort(res.GetEndpointsInfo()[0])), sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+        auto p = CheckAttach(clientLow, TGRpcClientConfig(CreateHostWithPort(res.GetEndpointsInfo()[0]), "kqp_query_svc"), sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
 
         Y_DEFER {
             p->Cancel();
@@ -174,16 +174,16 @@ Y_UNIT_TEST_SUITE(KqpQueryService)
 
         {
             // Check range for chunk size settings
-            ExecuteQuery(clientLow, TGRpcClientConfig(CreateHostWithPort(res.GetEndpointsInfo()[1])),
-                sessionId, query, 48_MB, Ydb::StatusIds::BAD_REQUEST, allDoneOk); 
+            ExecuteQuery(clientLow, TGRpcClientConfig(CreateHostWithPort(res.GetEndpointsInfo()[1]), "kqp_query_svc"),
+                sessionId, query, 48_MB, Ydb::StatusIds::BAD_REQUEST, allDoneOk);
 
             UNIT_ASSERT(allDoneOk);
         }
 
         {
             // Check range for chunk size settings
-            auto stats = ExecuteQuery(clientLow, TGRpcClientConfig(CreateHostWithPort(res.GetEndpointsInfo()[1])),
-                sessionId, query, 10000, Ydb::StatusIds::SUCCESS, allDoneOk); 
+            auto stats = ExecuteQuery(clientLow, TGRpcClientConfig(CreateHostWithPort(res.GetEndpointsInfo()[1]), "kqp_query_svc"),
+                sessionId, query, 10000, Ydb::StatusIds::SUCCESS, allDoneOk);
 
             UNIT_ASSERT(allDoneOk);
             UNIT_ASSERT_VALUES_EQUAL(stats.TotalRows, 100000);

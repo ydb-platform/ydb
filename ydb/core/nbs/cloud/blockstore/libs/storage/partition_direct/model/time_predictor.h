@@ -5,7 +5,7 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/ring_buffer.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/set.h>
+#include <util/generic/vector.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -26,7 +26,10 @@ private:
     struct THistory
     {
         TRingBuffer<TDuration> History;
-        TMultiSet<TDuration> Durations;
+        // Sorted ascending, sized to capacity. Count is the logical size —
+        // must be sized (not reserved) so copies keep the capacity.
+        TVector<TDuration> Durations;
+        size_t Count = 0;
 
         explicit THistory(size_t capacity);
 

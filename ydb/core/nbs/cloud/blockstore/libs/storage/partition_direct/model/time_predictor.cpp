@@ -4,32 +4,52 @@
 
 #include <util/generic/algorithm.h>
 
+#include <algorithm>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TTimePredictor::THistory::THistory(size_t capacity)
     : History(capacity)
+    , Durations(capacity)
 {}
 
 void TTimePredictor::THistory::Add(TDuration time)
 {
-    Durations.insert(time);
-    if (auto extracted = History.PushBack(time)) {
-        Durations.erase(Durations.find(*extracted));
+    if (Durations.empty()) {
+        // capacity == 0 - nothing is ever remembered, and Predict returns
+        // zero unconditionally.
+        return;
+    }
+
+    const auto begin = Durations.begin();
+    const auto end = begin + Count;
+    const auto insertAt = LowerBound(begin, end, time);
+
+    const auto extracted = History.PushBack(time);
+    if (!extracted) {
+        std::move_backward(insertAt, end, end + 1);
+        *insertAt = time;
+        ++Count;
+        return;
+    }
+
+    const auto eraseAt = LowerBound(begin, end, *extracted);
+    Y_DEBUG_ABORT_UNLESS(eraseAt != end);
+    if (insertAt <= eraseAt) {
+        std::move_backward(insertAt, eraseAt, eraseAt + 1);
+        *insertAt = time;
+    } else {
+        std::move(eraseAt + 1, insertAt, eraseAt);
+        *(insertAt - 1) = time;
     }
 }
 
 TDuration TTimePredictor::THistory::Predict(size_t nthFromEnd) const
 {
-    auto it = Durations.rbegin();
-    for (size_t i = 0; i < nthFromEnd; ++i) {
-        if (it == Durations.rend()) {
-            return {};
-        }
-        ++it;
-    }
-    return it == Durations.rend() ? TDuration() : *it;
+    return nthFromEnd >= Count ? TDuration()
+                               : Durations[Count - 1 - nthFromEnd];
 }
 
 ////////////////////////////////////////////////////////////////////////////////

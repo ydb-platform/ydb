@@ -106,6 +106,7 @@ struct TDirectReadRestoreEnv {
     TString Endpoint;
     ui64 PqTabletId = 0;
 
+    // Drop restore Prepare/Publish responses to keep restore stuck in Prepare (Forget race).
     std::atomic<ui64> HoldRestorePreparePublish{0};
     std::atomic<ui64> HeldPrepareOrPublish{0};
 
@@ -117,7 +118,6 @@ struct TDirectReadRestoreEnv {
     // Hold CmdPublishReadResult to keep restore stuck in Publish stage.
     std::atomic<ui64> HoldPublishResponses{0};
     std::atomic<ui64> HeldPublishResponses{0};
-    TVector<THolder<IEventHandle>> HeldPublishEvents;
 
     // PARTITION_ENSURE → OnUnhandledException → CloseSession("unexpected error: ...").
     std::atomic<ui64> UnexpectedErrorCloseSession{0};
@@ -199,12 +199,11 @@ struct TDirectReadRestoreEnv {
 
             if (HoldPublishResponses.load() && part.HasCmdPublishReadResult()) {
                 const ui64 held = ++HeldPublishResponses;
-                Cerr << "HOLD CmdPublishReadResult held=" << held
+                Cerr << "DROP CmdPublishReadResult held=" << held
                      << " cookie=" << part.GetCookie()
                      << " directReadId=" << part.GetCmdPublishReadResult().GetDirectReadId()
                      << Endl;
-                HeldPublishEvents.emplace_back(ev.Release());
-                return true;
+                return true; // drop — keep restore stuck in Publish
             }
 
             if (!HoldRestorePreparePublish.load()) {
@@ -250,7 +249,6 @@ struct TDirectReadRestoreEnv {
         runtime.SetEventFilter(&TTestActorRuntimeBase::DefaultFilterFunc);
         runtime.SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
         HeldPrepareEvents.clear();
-        HeldPublishEvents.clear();
     }
 
     void RebootPqTablet() {

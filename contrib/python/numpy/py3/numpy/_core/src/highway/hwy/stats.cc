@@ -31,7 +31,7 @@ void Stats::Assimilate(const Stats& other) {
   min_ = std::min(min_, other.min_);
   max_ = std::max(max_, other.max_);
 
-  product_ *= other.product_;
+  sum_log_ += other.sum_log_;
 
   const double product_n = n_ * other.n_;
   const double n2 = n_ * n_;
@@ -82,10 +82,10 @@ std::string Stats::ToString(int exclude) const {
   if ((exclude & kNoMeanSD) == 0) {
     const float sd = StandardDeviation();
     if (sd > 100) {
-      ret = snprintf(buf + pos, sizeof(buf) - pos, "Mean=%8.2E SD=%7.1E ",
+      ret = snprintf(buf + pos, sizeof(buf) - pos, "Mean=%8.2e SD=%7.1e ",
                      Mean(), sd);
     } else {
-      ret = snprintf(buf + pos, sizeof(buf) - pos, "Mean=%8.6f SD=%7.5f ",
+      ret = snprintf(buf + pos, sizeof(buf) - pos, "Mean=%8.6e SD=%7.5e ",
                      Mean(), sd);
     }
     HWY_ASSERT(ret > 0);

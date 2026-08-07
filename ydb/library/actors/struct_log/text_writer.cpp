@@ -38,8 +38,17 @@ void TTextWriter::TValueWriter::operator()(const TString& value) const {
     }
     outputText << "=";
     auto str = TTypesMapping::ToString(value);
-    SubstGlobal(str, "\n", " ");
-    outputText << str;
+    if (SubstGlobal(str, "\n", "\\n") !=0 ||
+        SubstGlobal(str, "\"", "\\\"") !=0  ||
+        SubstGlobal(str, "'", "\\'") !=0 ||
+        str.Contains(" ") ||
+        str.Contains("=")) {
+        outputText << "\"";
+        outputText << str;
+        outputText << "\"";
+    } else {
+        outputText << str;
+    }
 }
 
 }  // namespace NActors::NStructuredLog

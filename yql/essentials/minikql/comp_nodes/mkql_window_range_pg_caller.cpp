@@ -56,7 +56,7 @@ bool TPgWindowRangeCaller::IsBelongToInterval(EInfBoundary infBoundary, EDirecti
                           },
                           [&](const std::pair<IComputationNode*, NYql::TPgInRange>& pair) -> bool {
                               bool less = EInfBoundary::Left == infBoundary;
-                              bool sub = direction == EDirection::Preceding ? true : false;
+                              bool sub = direction == EDirection::Preceding;
                               auto& state = GetInRangeState(pair.second, ctx, CtxIndex_);
                               return state.Call(from, to, pair.first->GetValue(ctx), sub, less).Get<bool>();
                           }}, Delta_);

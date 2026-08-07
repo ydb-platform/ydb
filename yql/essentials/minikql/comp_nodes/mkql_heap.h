@@ -1,8 +1,7 @@
 #pragma once
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapMakeHeap(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapPushHeap(TCallable& callable, const TComputationNodeFactoryContext& ctx);
@@ -13,5 +12,4 @@ IComputationNode* WrapStableSort(TCallable& callable, const TComputationNodeFact
 
 IComputationNode* WrapNthElement(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapPartialSort(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

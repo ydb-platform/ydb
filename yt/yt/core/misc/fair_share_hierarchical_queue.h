@@ -408,6 +408,12 @@ public:
         TFairShareHierarchicalSchedulerPtr<TTag> hierarchicalScheduler,
         NProfiling::TProfiler profiler);
 
+    // Creates a slot without adding it to the queue.
+    TFairShareHierarchicalSlotQueueSlotPtr<TTag> CreateSlot(
+        i64 size,
+        std::vector<IFairShareHierarchicalSlotQueueResourcePtr> resources,
+        std::vector<TFairShareHierarchyLevel<TTag>> levels);
+
     // The slot is added in several main stages. The first stage is the allocation of resources
     // for the slot, the set of resources is arbitrary. If the resources have been allocated,
     // then the insertion takes place without displacement. If it failed, then the minimum item
@@ -421,6 +427,7 @@ public:
         i64 size,
         std::vector<IFairShareHierarchicalSlotQueueResourcePtr> resources,
         std::vector<TFairShareHierarchyLevel<TTag>> levels);
+    TErrorOr<TFairShareHierarchicalSlotQueueSlotPtr<TTag>> EnqueueSlot(TFairShareHierarchicalSlotQueueSlotPtr<TTag> slot);
 
     // The slot is deleted at the user's request. This should usually mean that the
     // request has completed and stopped using resources.

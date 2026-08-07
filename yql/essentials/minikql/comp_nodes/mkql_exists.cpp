@@ -2,16 +2,15 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TExistsWrapper: public TDecoratorCodegeneratorNode<TExistsWrapper> {
-    typedef TDecoratorCodegeneratorNode<TExistsWrapper> TBaseComputation;
+    using TBaseComputation = TDecoratorCodegeneratorNode<TExistsWrapper>;
 
 public:
-    TExistsWrapper(IComputationNode* optional)
+    explicit TExistsWrapper(IComputationNode* optional)
         : TBaseComputation(optional)
     {
     }
@@ -39,5 +38,4 @@ IComputationNode* WrapExists(TCallable& callable, const TComputationNodeFactoryC
     return new TExistsWrapper(LocateNode(ctx.NodeLocator, callable, 0));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

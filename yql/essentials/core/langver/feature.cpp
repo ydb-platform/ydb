@@ -14,6 +14,10 @@ std::expected<std::monostate, TError> GetAvailability(
     EBackportCompatibleFeaturesMode mode,
     const TFeature& feature)
 {
+    if (!feature.IsBackportAllowed) {
+        mode = EBackportCompatibleFeaturesMode::None;
+    }
+
     if (auto v = feature.MinLangVer; !IsBackwardCompatibleFeatureAvailable(current, v, mode)) {
         if constexpr (std::is_same_v<TError, TString>) {
             return std::unexpected(

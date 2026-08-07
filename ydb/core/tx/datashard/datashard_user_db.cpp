@@ -1096,7 +1096,7 @@ void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) {
             Self.SysLocksTable().BreakSetLocks();
         }
         MvccReadConflict = true;
-    } else if (rowVersion > SnapshotVersion && LockMode == ELockMode::OptimisticSnapshotIsolation) {
+    } else if (rowVersion > SnapshotVersion) {
         // During commit we read at the current mvcc version, however we may
         // notice there have been changes between the snapshot and current
         // commit version. This is not necessarily an error, but indicates

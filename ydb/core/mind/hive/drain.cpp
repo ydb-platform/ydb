@@ -31,6 +31,7 @@ protected:
 
     void PassAway() override {
         if (DomainHivePipeClient) {
+            Hive->Requests.FinishRequests(DomainHivePipeClient);
             NTabletPipe::CloseClient(SelfId(), DomainHivePipeClient);
         }
         Hive->RemoveSubActor(this);
@@ -126,6 +127,7 @@ protected:
     void DomainDrainCompleted(ui32 movements = 0) {
         Movements += movements;
         if (DomainHivePipeClient) {
+            Hive->Requests.FinishRequests(DomainHivePipeClient);
             NTabletPipe::CloseClient(SelfId(), DomainHivePipeClient);
             DomainHivePipeClient = {};
         }
@@ -172,6 +174,7 @@ protected:
                 {"selfId", SelfId()},
                 {"domainHiveId", DomainHiveId});
             if (DomainHivePipeClient) {
+                Hive->Requests.FinishRequests(DomainHivePipeClient);
                 NTabletPipe::CloseClient(SelfId(), DomainHivePipeClient);
             }
             Y_ABORT_UNLESS(std::holds_alternative<TNodeId>(Target));
@@ -192,7 +195,8 @@ protected:
         event->Record.SetPersist(Settings.Persist);
         event->Record.SetDrainInFlight(Settings.DrainInFlight);
         event->Record.SetSeqNo(SeqNo);
-        NTabletPipe::SendData(SelfId(), DomainHivePipeClient, event.Release());
+        ui32 cookie = Hive->Requests.AddRequest(event.Get(), DomainHivePipeClient);
+        NTabletPipe::SendData(SelfId(), DomainHivePipeClient, event.Release(), cookie);
         YDB_LOG_INFO("Drain forwarded for node to domain hive",
             {"logPrefix", GetLogPrefix()},
             {"selfId", SelfId()},

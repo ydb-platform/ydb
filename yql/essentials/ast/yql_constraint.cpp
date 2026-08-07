@@ -2110,6 +2110,20 @@ NYT::TNode TStreamingConstraintNode::ToYson() const {
 }
 
 bool TStreamingConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) const {
+    if (type.GetKind() == ETypeAnnotationKind::Tuple) {
+        if (EventTime_.Defined()) {
+            return false;
+        }
+
+        for (const auto* item : type.Cast<TTupleExprType>()->GetItems()) {
+            if (!IsIn({ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, item->GetKind())) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     if (!IsIn({ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind())) {
         return false;
     }
@@ -2170,7 +2184,7 @@ const TConstraintWithFieldsNode* TStreamingConstraintNode::DoGetComplicatedForTy
 }
 
 const TConstraintWithFieldsNode* TStreamingConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const {
-    if (!IsIn({ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind())) {
+    if (!IsIn({ETypeAnnotationKind::Tuple, ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind())) {
         return this;
     }
 

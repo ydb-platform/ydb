@@ -559,7 +559,6 @@ message TTableServiceConfig {
 
     // Defer join-filter inlining until after cost-based optimization.
     optional bool EnableInlineJoinFiltersAfterCBO = 140 [default = true, (InvalidateCompileCache) = true];
-
-    // Use the specialized vector search actor instead of the legacy StreamLookup chain.
     optional bool EnableVectorSearchActor = 141 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableOlapPushdownRegexp = 142 [default = false, (InvalidateCompileCache) = true];
 };

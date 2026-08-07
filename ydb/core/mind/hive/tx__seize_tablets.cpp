@@ -168,7 +168,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxSeizeTablets::Complete",
             {"logPrefix", GetLogPrefix()},
             {"requestRecord", Request->Get()->Record});
-        txc.Send(Request->Sender, Response.Release());
+        txc.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
     }
 };
 

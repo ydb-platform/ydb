@@ -86,6 +86,33 @@ class TestFailureModelIsMandatory:
             with pytest.raises(FailureModelConfigError):
                 ClusterTopologyModel(path)
 
+    @pytest.mark.parametrize(
+        "doc",
+        [
+            {"static_erasure": "block-4-2", "hosts": _hosts([("h1", "r1", "dc1")])},
+            {"erasure": "block-4-2", "hosts": _hosts([("h1", "r1", "dc1")])},
+            {"config": {"static_erasure": "block-4-2", "hosts": _hosts([("h1", "r1", "dc1")])}},
+            {"config": {"erasure": "block-4-2", "hosts": _hosts([("h1", "r1", "dc1")])}},
+        ],
+        ids=["top_static_erasure", "top_erasure", "nested_static_erasure", "nested_erasure"],
+    )
+    def test_accepts_every_erasure_spelling_and_nesting(self, tmp_path, doc):
+        """``ydb/tools/cfg`` takes ``static_erasure`` or ``erasure``, and a V2 config nests both the
+        erasure mode and ``hosts`` under ``config:`` — all four must build the same model."""
+        path = tmp_path / "cluster.yaml"
+        path.write_text(yaml.safe_dump(doc), encoding="utf-8")
+        topology = ClusterTopologyModel(str(path))
+        assert topology.tolerance.erasure == "block-4-2"
+        assert topology.domain_of("h1") == fail_domain_key("dc1", "r1")
+
+    def test_missing_erasure_names_where_it_looked(self, tmp_path):
+        path = tmp_path / "cluster.yaml"
+        path.write_text(
+            yaml.safe_dump({"config": {"hosts": _hosts([("h1", "r1", "dc1")])}}), encoding="utf-8"
+        )
+        with pytest.raises(FailureModelConfigError, match="no erasure mode found"):
+            ClusterTopologyModel(str(path))
+
     def test_mirror3dc_requires_datacenter(self):
         # Realms may be sacrificed whole, so a host with an unknown realm is not decidable.
         with pytest.raises(FailureModelConfigError, match="data_center"):

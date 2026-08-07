@@ -1726,6 +1726,13 @@ private:
             return TStatus::Error;
         }
 
+        if (auto reserved = FindReservedColumnName(*itemType, *State_)) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                << "Cannot write column " << TString{*reserved}.Quote() << " with reserved prefix "
+                << TString{SystemMemberPrefix}.Quote()));
+            return TStatus::Error;
+        }
+
         auto content =  writeTable.Content().Ptr();
         status = ValidateTableWrite(ctx.GetPosition(input->Pos()), table, content, itemType, {}, cluster, *settings, ctx);
         if (TStatus::Error == status.Level) {

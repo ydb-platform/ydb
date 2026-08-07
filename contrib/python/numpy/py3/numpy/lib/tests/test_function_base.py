@@ -20,8 +20,9 @@ from numpy import (
 from numpy.exceptions import AxisError
 from numpy.testing import (
     assert_, assert_equal, assert_array_equal, assert_almost_equal,
-    assert_array_almost_equal, assert_raises, assert_allclose, IS_PYPY,
-    assert_warns, assert_raises_regex, suppress_warnings, HAS_REFCOUNT, IS_WASM
+    assert_array_almost_equal, assert_raises, assert_allclose,
+    assert_warns, assert_raises_regex, suppress_warnings, HAS_REFCOUNT,
+    IS_WASM, NOGIL_BUILD
     )
 import numpy.lib._function_base_impl as nfb
 from numpy.random import rand
@@ -694,7 +695,8 @@ class TestPtp:
 
 class TestCumsum:
 
-    def test_basic(self):
+    @pytest.mark.parametrize("cumsum", [np.cumsum, np.cumulative_sum])
+    def test_basic(self, cumsum):
         ba = [1, 2, 10, 11, 6, 5, 4]
         ba2 = [[1, 2, 3, 4], [5, 6, 7, 9], [10, 3, 4, 5]]
         for ctype in [np.int8, np.uint8, np.int16, np.uint16, np.int32,
@@ -704,15 +706,15 @@ class TestCumsum:
             a2 = np.array(ba2, ctype)
 
             tgt = np.array([1, 3, 13, 24, 30, 35, 39], ctype)
-            assert_array_equal(np.cumsum(a, axis=0), tgt)
+            assert_array_equal(cumsum(a, axis=0), tgt)
 
             tgt = np.array(
                 [[1, 2, 3, 4], [6, 8, 10, 13], [16, 11, 14, 18]], ctype)
-            assert_array_equal(np.cumsum(a2, axis=0), tgt)
+            assert_array_equal(cumsum(a2, axis=0), tgt)
 
             tgt = np.array(
                 [[1, 3, 6, 10], [5, 11, 18, 27], [10, 13, 17, 22]], ctype)
-            assert_array_equal(np.cumsum(a2, axis=1), tgt)
+            assert_array_equal(cumsum(a2, axis=1), tgt)
 
 
 class TestProd:
@@ -737,7 +739,8 @@ class TestProd:
 
 class TestCumprod:
 
-    def test_basic(self):
+    @pytest.mark.parametrize("cumprod", [np.cumprod, np.cumulative_prod])
+    def test_basic(self, cumprod):
         ba = [1, 2, 10, 11, 6, 5, 4]
         ba2 = [[1, 2, 3, 4], [5, 6, 7, 9], [10, 3, 4, 5]]
         for ctype in [np.int16, np.uint16, np.int32, np.uint32,
@@ -745,21 +748,50 @@ class TestCumprod:
             a = np.array(ba, ctype)
             a2 = np.array(ba2, ctype)
             if ctype in ['1', 'b']:
-                assert_raises(ArithmeticError, np.cumprod, a)
-                assert_raises(ArithmeticError, np.cumprod, a2, 1)
-                assert_raises(ArithmeticError, np.cumprod, a)
+                assert_raises(ArithmeticError, cumprod, a)
+                assert_raises(ArithmeticError, cumprod, a2, 1)
+                assert_raises(ArithmeticError, cumprod, a)
             else:
-                assert_array_equal(np.cumprod(a, axis=-1),
+                assert_array_equal(cumprod(a, axis=-1),
                                    np.array([1, 2, 20, 220,
                                              1320, 6600, 26400], ctype))
-                assert_array_equal(np.cumprod(a2, axis=0),
+                assert_array_equal(cumprod(a2, axis=0),
                                    np.array([[1, 2, 3, 4],
                                              [5, 12, 21, 36],
                                              [50, 36, 84, 180]], ctype))
-                assert_array_equal(np.cumprod(a2, axis=-1),
+                assert_array_equal(cumprod(a2, axis=-1),
                                    np.array([[1, 2, 6, 24],
                                              [5, 30, 210, 1890],
                                              [10, 30, 120, 600]], ctype))
+
+
+def test_cumulative_include_initial():
+    arr = np.arange(8).reshape((2, 2, 2))
+
+    expected = np.array([
+        [[0, 0], [0, 1], [2, 4]], [[0, 0], [4, 5], [10, 12]]
+    ])
+    assert_array_equal(
+        np.cumulative_sum(arr, axis=1, include_initial=True), expected
+    )
+
+    expected = np.array([
+        [[1, 0, 0], [1, 2, 6]], [[1, 4, 20], [1, 6, 42]]
+    ])
+    assert_array_equal(
+        np.cumulative_prod(arr, axis=2, include_initial=True), expected
+    )
+
+    out = np.zeros((3, 2), dtype=np.float64)
+    expected = np.array([[0, 0], [1, 2], [4, 6]], dtype=np.float64)
+    arr = np.arange(1, 5).reshape((2, 2))
+    np.cumulative_sum(arr, axis=0, out=out, include_initial=True)
+    assert_array_equal(out, expected)
+
+    expected = np.array([1, 2, 4])
+    assert_array_equal(
+        np.cumulative_prod(np.array([2, 2]), include_initial=True), expected
+    )
 
 
 class TestDiff:
@@ -1921,6 +1953,9 @@ class TestLeaks:
             return 0
 
     @pytest.mark.skipif(not HAS_REFCOUNT, reason="Python lacks refcounts")
+    @pytest.mark.skipif(NOGIL_BUILD,
+                        reason=("Functions are immortalized if a thread is "
+                                "launched, making this test flaky"))
     @pytest.mark.parametrize('name, incr', [
             ('bound', A.iters),
             ('unbound', 0),
@@ -2812,6 +2847,11 @@ class TestBincount:
         x = np.array([], dtype=int)
         y = np.bincount(x, minlength=5)
         assert_array_equal(y, np.zeros(5, dtype=int))
+
+    @pytest.mark.parametrize('minlength', [0, 3])
+    def test_empty_list(self, minlength):
+        assert_array_equal(np.bincount([], minlength=minlength),
+                           np.zeros(minlength, dtype=int))
 
     def test_with_incorrect_minlength(self):
         x = np.array([], dtype=int)
@@ -3969,6 +4009,17 @@ class TestQuantile:
                     y[i, :, j], alpha, method=method, weights=w[i, :, j]
                 )
         assert_allclose(q, q_res)
+
+    @pytest.mark.parametrize("method", methods_supporting_weights)
+    def test_quantile_weights_min_max(self, method):
+        # Test weighted quantile at 0 and 1 with leading and trailing zero
+        # weights.
+        w = [0, 0, 1, 2, 3, 0]
+        y = np.arange(6)
+        y_min = np.quantile(y, 0, weights=w, method="inverted_cdf")
+        y_max = np.quantile(y, 1, weights=w, method="inverted_cdf")
+        assert y_min == y[2]  # == 2
+        assert y_max == y[4]  # == 4
 
     def test_quantile_weights_raises_negative_weights(self):
         y = [1, 2]

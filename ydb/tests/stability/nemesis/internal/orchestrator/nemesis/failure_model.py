@@ -1,6 +1,7 @@
 """Failure-model guard: keep chaos within the cluster's declared fault tolerance.
 
-Budget per ``static_erasure`` from ``cluster.yaml``::
+Budget per erasure mode from ``cluster.yaml`` (``static_erasure`` or ``erasure``, top level or under
+``config:`` — see :func:`_find_erasure`)::
 
     mirror-3-dc : 1 realm fully + 1 domain in another realm
     block-4-2   : any 2 domains
@@ -66,6 +67,24 @@ DEFAULT_SLOT_FRACTION: float = 0.3
 
 _UNKNOWN_DC = "?"                      # host with no ``location.data_center``
 _SYNTHETIC_DOMAIN_PREFIX = "__host__:"  # host with no rack in ``cluster.yaml``
+
+# ``ydb/tools/cfg`` accepts either spelling of the erasure mode -- see the ``anyOf`` on
+# CLUSTER_DETAILS_SCHEMA in ``ydb/tools/cfg/validation.py`` -- and a V2 config renames
+# ``static_erasure`` to ``erasure`` (``kikimr_config.py``). Both spellings may sit at the top level
+# or under ``config:``, the same two places ``hosts`` is looked up.
+_ERASURE_KEYS = ("static_erasure", "erasure")
+
+
+def _find_erasure(doc: dict) -> tuple[str, str | None]:
+    """``(erasure mode, the key it came from)``, or ``("", None)`` when no spelling is present."""
+    for root_name, root in (("", doc), ("config", doc.get("config"))):
+        if not isinstance(root, dict):
+            continue
+        for key in _ERASURE_KEYS:
+            value = root.get(key)
+            if value is not None:
+                return value, f"{root_name}.{key}" if root_name else key
+    return "", None
 
 
 def _slots_within_budget(active_slots: int, add_slots: int, max_slots: int) -> bool:
@@ -149,10 +168,17 @@ class ClusterTopologyModel:
 
     def _parse(self) -> None:
         doc = self._load_doc(self.yaml_path)
-        self.tolerance = FailureTolerance.from_erasure(doc.get("static_erasure", ""))
+        erasure, erasure_key = _find_erasure(doc)
+        self.tolerance = FailureTolerance.from_erasure(erasure)
         if not self.tolerance.guards:
+            if erasure_key is None:
+                raise FailureModelConfigError(
+                    f"{self.yaml_path}: no erasure mode found — looked for "
+                    f"{' / '.join(_ERASURE_KEYS)} at the top level and under 'config:' "
+                    f"(expected mirror-3-dc, block-4-2 or none)"
+                )
             raise FailureModelConfigError(
-                f"{self.yaml_path}: static_erasure={doc.get('static_erasure')!r} is not a mode the "
+                f"{self.yaml_path}: {erasure_key}={erasure!r} is not a mode the "
                 f"failure model understands (expected mirror-3-dc, block-4-2 or none)"
             )
 

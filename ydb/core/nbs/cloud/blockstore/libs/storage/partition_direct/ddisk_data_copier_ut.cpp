@@ -137,10 +137,11 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             DirtyMap->DebugPrintDDiskState());
     }
 
-    Y_UNIT_TEST_F(ShouldStopOnReadError, TFixture)
+    Y_UNIT_TEST_F(ShouldRetryOnReadError, TFixture)
     {
         Init();
 
+        size_t readsCount = 0;
         DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
             (ui32 vChunkIndex,
              THostIndex hostIndex,
@@ -154,8 +155,12 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             Y_UNUSED(guardedSglist);
             Y_UNUSED(traceId);
 
+            ++readsCount;
+
+            // ReadExecutor will respond with E_REJECTED even if all replicas
+            // returned a non-retriable error.
             return MakeFuture<TDBGReadBlocksResponse>(
-                {.Error = MakeError(E_REJECTED)});
+                {.Error = MakeError(E_IO)});
         };
 
         // Mark DDisk#1 completely fresh.
@@ -165,12 +170,12 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
         auto complete = Copier->Start();
 
-        // Data copying should be completed with error.
-        UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());
-        UNIT_ASSERT_VALUES_EQUAL(
-            TDDiskDataCopier::EResult::Error,
-            complete.GetValue());
+        // Wait for read retry scheduled.
+        WaitScheduledTasks(1, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(3, readsCount);
 
+        // Data copying should not be advanced.
+        UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
         UNIT_ASSERT_VALUES_EQUAL(0, *DirtyMap->GetFreshWatermark(FreshDDisk));
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -182,7 +187,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             DirtyMap->DebugPrintDDiskState());
     }
 
-    Y_UNIT_TEST_F(ShouldStopOnWriteError, TFixture)
+    Y_UNIT_TEST_F(ShouldStopOnNonRetriableWriteError, TFixture)
     {
         Init();
 
@@ -201,7 +206,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             Y_UNUSED(traceId);
 
             return MakeFuture<TDBGWriteBlocksResponse>(
-                {.Error = MakeError(E_REJECTED)});
+                {.Error = MakeError(E_IO_SILENT)});
         };
 
         // Mark DDisk#1 completely fresh.
@@ -222,6 +227,75 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         UNIT_ASSERT_VALUES_EQUAL(0, *DirtyMap->GetFreshWatermark(FreshDDisk));
 
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768,32768};"
+            "H1*{Fresh,0,256};"   // Watermarks
+            "H2*{Operational,32768,32768};"
+            "H3*{Operational,32768,32768};"
+            "H4+{Disabled,0,0};",
+            DirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST_F(ShouldRetryOnRetriableWriteError, TFixture)
+    {
+        Init();
+
+        size_t readsCount = 0;
+        DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
+            (ui32 vChunkIndex,
+             THostIndex hostIndex,
+             TBlockRange64 range,
+             const TGuardedSgList& guardedSglist,
+             const NWilson::TTraceId& traceId)
+        {
+            Y_UNUSED(vChunkIndex);
+            Y_UNUSED(hostIndex);
+            Y_UNUSED(range);
+            Y_UNUSED(guardedSglist);
+            Y_UNUSED(traceId);
+
+            ++readsCount;
+
+            return MakeFuture<TDBGReadBlocksResponse>(
+                {.Error = MakeError(S_OK)});
+        };
+
+        size_t writesCount = 0;
+        // Will response with error for write requests.
+        DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
+            (ui32 vChunkIndex,
+             THostIndex hostIndex,
+             TBlockRange64 range,
+             const TGuardedSgList& guardedSglist,
+             const NWilson::TTraceId& traceId)
+        {
+            Y_UNUSED(vChunkIndex);
+            Y_UNUSED(hostIndex);
+            Y_UNUSED(range);
+            Y_UNUSED(guardedSglist);
+            Y_UNUSED(traceId);
+
+            ++writesCount;
+
+            return MakeFuture<TDBGWriteBlocksResponse>(
+                {.Error = MakeError(E_REJECTED)});
+        };
+
+        // Mark DDisk#1 completely fresh.
+        DirtyMap->MarkFresh(FreshDDisk, 0);
+
+        // Start data copy
+        ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
+        auto complete = Copier->Start();
+
+        // Wait for copy range retry scheduled.
+        WaitScheduledTasks(1, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1, readsCount);
+        UNIT_ASSERT_VALUES_EQUAL(1, writesCount);
+
+        // Data copying should not be advanced.
+        UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
+        UNIT_ASSERT_VALUES_EQUAL(0, *DirtyMap->GetFreshWatermark(FreshDDisk));
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768,32768};"
             "H1*{Fresh,0,256};"   // Watermarks

@@ -3,8 +3,7 @@
 
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -174,5 +173,4 @@ Y_UNIT_TEST_LLVM(ChildClosureWithCollect) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLCallableTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

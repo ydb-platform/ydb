@@ -3951,52 +3951,52 @@ TNodePtr TSqlTranslation::DictLiteral(const TRule_dict_literal& node) {
     return new TAstListNodeImpl(Ctx_.Pos(), std::move(values));
 }
 
-TSQLStatus TSqlTranslation::StructLiteralItem(TVector<TNodePtr>& labels, const TRule_expr& label, TVector<TNodePtr>& values, const TRule_expr& value) {
+bool TSqlTranslation::StructLiteralItem(TVector<TNodePtr>& labels, const TRule_expr& label, TVector<TNodePtr>& values, const TRule_expr& value) {
     // label expr
     {
         TColumnRefScope scope(Ctx_, EColumnRefState::AsStringLiteral, /* topLevel */ false);
         TSqlExpression sqlExpr(*this);
-        if (auto result = Expr(sqlExpr, labels, label); !result) {
-            return std::unexpected(result.error());
+        if (!Unwrap(Expr(sqlExpr, labels, label))) {
+            return false;
         }
 
         TDeferredAtom atom;
         MakeTableFromExpression(Ctx_.Pos(), Ctx_, labels.back(), atom);
         labels.back() = atom.Build();
         if (!labels.back()) {
-            return std::unexpected(ESQLError::Basic);
+            return false;
         }
     }
 
     // value expr
     {
         TSqlExpression sqlExpr(*this);
-        if (auto result = Expr(sqlExpr, values, value); !result) {
-            return std::unexpected(result.error());
+        if (!Unwrap(Expr(sqlExpr, values, value))) {
+            return false;
         }
     }
 
-    return std::monostate();
+    return true;
 }
 
-TNodeResult TSqlTranslation::StructLiteral(const TRule_struct_literal& node) {
+TNodePtr TSqlTranslation::StructLiteral(const TRule_struct_literal& node) {
     TVector<TNodePtr> labels;
     TVector<TNodePtr> values;
     TPosition pos = Ctx_.TokenPosition(node.GetToken1());
     if (node.HasBlock2()) {
         const auto& list = node.GetBlock2().GetRule_expr_struct_list1();
 
-        if (auto status = StructLiteralItem(labels, list.GetRule_expr1(), values, list.GetRule_expr3()); !status) {
-            return std::unexpected(status.error());
+        if (!StructLiteralItem(labels, list.GetRule_expr1(), values, list.GetRule_expr3())) {
+            return {};
         }
 
         for (auto& b : list.GetBlock4()) {
-            if (auto status = StructLiteralItem(labels, b.GetRule_expr2(), values, b.GetRule_expr4()); !status) {
-                return std::unexpected(status.error());
+            if (!StructLiteralItem(labels, b.GetRule_expr2(), values, b.GetRule_expr4())) {
+                return {};
             }
         }
     }
-    return Wrap(BuildStructure(pos, values, labels));
+    return BuildStructure(pos, values, labels);
 }
 
 bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc) {

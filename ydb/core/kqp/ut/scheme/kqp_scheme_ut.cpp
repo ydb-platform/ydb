@@ -33,6 +33,7 @@
 #include <util/generic/serialized_enum.h>
 #include <util/generic/size_literals.h>
 #include <util/string/printf.h>
+#include <util/system/sanitizers.h>
 
 #include <fmt/format.h>
 
@@ -15915,6 +15916,17 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(TenThousandColumns) {
         using namespace NArrow;
 
+        // Under sanitizers (tsan/asan/msan) the BulkUpsert of a wide (9901-column)
+        // x 10000-row batch cannot complete within the 5-minute RPC timeout due to
+        // the 5-15x instrumentation overhead (see GitHub issue #48623). Keep the
+        // full column count (the test validates wide-schema behavior) but reduce
+        // the row count so the BulkUpsert fits within the timeout. See
+        // NSan::PlainOrUnderSanitizer.
+        const ui64 numColumns = 9900;
+        const ui64 numRows = NSan::PlainOrUnderSanitizer<ui64>(10000, 100);
+        const ui64 alterColumnsFrom = 9900;
+        const ui64 alterColumnsTo = 9999;
+
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
@@ -15923,7 +15935,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
         };
 
-        for (ui64 i = 0; i < 9900; ++i) {
+        for (ui64 i = 0; i < numColumns; ++i) {
             schema.emplace_back(TTestHelper::TColumnSchema().SetName("column" + ToString(i)).SetType(NScheme::NTypeIds::Int32).SetNullable(true));
         }
 
@@ -15936,19 +15948,19 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         for (ui64 i = 1; i < schema.size(); ++i) {
             dataBuilders.push_back(std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>(schema[i].GetName()));
         }
-        auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(10000);
+        auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(numRows);
         testHelper.BulkUpsert(testTable, batch);
 
-        testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[10000u]]");
+        testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", TStringBuilder() << "[[" << numRows << "u]]");
 
-        for (ui64 i = 9900; i < 9999; ++i) {
+        for (ui64 i = alterColumnsFrom; i < alterColumnsTo; ++i) {
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN column" << i << " Uint64;";
             Cerr << alterQuery << Endl;
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
 
-        testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[10000u]]");
+        testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", TStringBuilder() << "[[" << numRows << "u]]");
     }
 
     Y_UNIT_TEST(NullKeySchema) {

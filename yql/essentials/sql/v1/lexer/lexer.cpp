@@ -273,7 +273,7 @@ void SplitByStatements(TTokenIterator begin, TTokenIterator end, TVector<TTokenI
 } // namespace
 
 bool SplitQueryToStatements(
-    const TString& query, NSQLTranslation::ILexer::TPtr& lexer,
+    const TString& query, const NSQLTranslation::ILexer::TPtr& lexer,
     TVector<TString>& statements, NYql::TIssues& issues, const TString& file,
     bool areBlankSkipped) {
     TParsedTokenList allTokens;

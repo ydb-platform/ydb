@@ -305,7 +305,7 @@ private:
 class TEnclosingSelectVisitor: public NSQLPureAST::TSQLv1NarrowingVisitor {
 public:
     explicit TEnclosingSelectVisitor(const TParsedInput& input)
-        : NSQLPureAST::TSQLv1NarrowingVisitor(input.Tokens, input.Original.CursorPosition)
+        : NSQLPureAST::TSQLv1NarrowingVisitor(&input.ParseTree->Tokens(), input.CursorPosition)
     {
     }
 
@@ -329,7 +329,7 @@ private:
 class TVisitor: public NSQLPureAST::TSQLv1NarrowingVisitor {
 public:
     TVisitor(const TParsedInput& input, const INamedNodes* nodes)
-        : NSQLPureAST::TSQLv1NarrowingVisitor(input.Tokens, input.Original.CursorPosition)
+        : NSQLPureAST::TSQLv1NarrowingVisitor(&input.ParseTree->Tokens(), input.CursorPosition)
         , Nodes_(nodes)
     {
     }
@@ -375,12 +375,14 @@ private:
 };
 
 antlr4::ParserRuleContext* Enclosing(const TParsedInput& input) {
+    auto* root = input.ParseTree->Root();
+
     TEnclosingSelectVisitor visitor(input);
-    visitor.visit(input.SqlQuery);
+    visitor.visit(root);
 
     antlr4::ParserRuleContext* ctx = std::move(visitor).GetEnclosing();
     if (!ctx) {
-        ctx = input.SqlQuery;
+        ctx = root;
     }
 
     return ctx;

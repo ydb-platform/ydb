@@ -1,6 +1,6 @@
 #include "sql_complete.h"
-#include <yql/essentials/sql/v1/ide/completion/syntax/grammar.h>
 
+#include <yql/essentials/sql/v1/ide/completion/syntax/grammar.h>
 #include <yql/essentials/sql/v1/ide/completion/name/cache/local/cache.h>
 #include <yql/essentials/sql/v1/ide/completion/name/cluster/static/discovery.h>
 #include <yql/essentials/sql/v1/ide/completion/name/object/simple/schema.h>
@@ -19,13 +19,20 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
 
+#include <yql/essentials/utils/string/trim_indent.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/iterator/iterate_keys.h>
 #include <library/cpp/iterator/functools.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/unicode/utf8_char/utf8_char.h>
+#include <library/cpp/unicode/utf8_iter/utf8_iter.h>
 
 #include <util/charset/utf8.h>
+#include <util/thread/pool.h>
+
+#include <thread>
 
 using namespace NSQLComplete;
 
@@ -2308,53 +2315,58 @@ Y_UNIT_TEST(NoBindingAtQuoted) {
 }
 
 Y_UNIT_TEST(Typing) {
-    const auto queryUtf16 = TUtf16String::FromUtf8(
-        "SELECT \n"
-        "  123467, \"Hello, {name}! 编码\"}, \n"
-        "  (1 + (5 * 1 / 0)), MIN(identifier), \n"
-        "  Bool(field), Math::Sin(var) \n"
-        "FROM `local/test/space/table` JOIN test;");
+    TString input = NYql::TrimIndent(R"sql(
+        SELECT
+          123467, \"Hello, {name}! 编码\"},
+          (1 + (5 * 1 / 0)), MIN(identifier),
+          Bool(field), Math::Sin(var)
+        FROM `local/test/space/table` JOIN test;
+    )sql");
 
     auto engine = MakeSqlCompletionEngineUT();
 
-    for (std::size_t size = 0; size <= queryUtf16.size(); ++size) {
-        const TWtringBuf prefixUtf16(queryUtf16, 0, size);
-        TCompletion completion = engine->Complete({.Text = TString::FromUtf16(prefixUtf16)}).GetValueSync();
+    const auto check = [&](TStringBuf prefix) {
+        TCompletionInput input = {.Text = prefix};
+        TCompletion completion = engine->Complete(input).GetValueSync();
         Y_DO_NOT_OPTIMIZE_AWAY(completion);
+    };
+
+    TString prefix(Reserve(input.size()));
+    for (wchar32 c : TUtfIterCode(input)) {
+        check(prefix);
+        prefix += TUtf8Char(c);
     }
+    check(prefix);
 }
 
 Y_UNIT_TEST(Tabbing) {
-    TString query = R"(
-USE example;
+    TString query = NYql::TrimIndent(R"sql(
+        USE example;
 
-SELECT
-    123467, \"Hello, {name}! 编码\"},
-    (1 + (5 * 1 / 0)), MIN(identifier),
-    Bool(field), Math::Sin(var)
-FROM `local/test/space/table`
-JOIN yt:$cluster_name.test;
-)";
-
+        SELECT
+            123467, \"Hello, {name}! 编码\"},
+            (1 + (5 * 1 / 0)), MIN(identifier),
+            Bool(field), Math::Sin(var)
+        FROM `local/test/space/table`
+        JOIN yt:$cluster_name.test;
+    )sql");
     query += query + ";";
     query += query + ";";
 
     auto engine = MakeSqlCompletionEngineUT();
 
-    const auto* begin = reinterpret_cast<const unsigned char*>(query.c_str());
-    const auto* end = reinterpret_cast<const unsigned char*>(begin + query.size());
-    const auto* ptr = begin;
-
-    wchar32 rune;
-    while (ptr < end) {
-        Y_ENSURE(ReadUTF8CharAndAdvance(rune, ptr, end) == RECODE_OK);
-        TCompletionInput input = {
-            .Text = query,
-            .CursorPosition = static_cast<size_t>(std::distance(begin, ptr)),
-        };
+    const auto check = [&](size_t position) {
+        TCompletionInput input = {.Text = query, .CursorPosition = position};
         TCompletion completion = engine->Complete(input).GetValueSync();
         Y_DO_NOT_OPTIMIZE_AWAY(completion);
+    };
+
+    size_t position = 0;
+    for (wchar32 c : TUtfIterCode(query)) {
+        check(position);
+        position += TUtf8Char(c).length();
     }
+    check(position);
 }
 
 Y_UNIT_TEST(CaseInsensitivity) {
@@ -2638,6 +2650,34 @@ Y_UNIT_TEST(NoStackOverflowOnDeeplyNestedSubquery) {
 
     UNIT_ASSERT_EXCEPTION_CONTAINS(
         Complete(engine, query), std::exception, "Maximum parse tree depth exceeded");
+}
+
+Y_UNIT_TEST(ThreadSafetyStressTyping) {
+    const size_t concurrency = std::max<size_t>(4, std::thread::hardware_concurrency());
+
+    TString input = NYql::TrimIndent(R"sql(
+        SELECT
+          123467, \"Hello, {name}! 编码\"},
+          (1 + (5 * 1 / 0)), MIN(identifier),
+          Bool(field), Math::Sin(var)
+        FROM `local/test/space/table` JOIN test;
+    )sql");
+
+    auto engine = MakeSqlCompletionEngineUT();
+
+    auto pool = CreateThreadPool(/*threadCount=*/concurrency);
+    for (size_t i = 0; i < concurrency; ++i) {
+        pool->SafeAddFunc([&] {
+            TString prefix(Reserve(input.size()));
+            for (wchar32 c : TUtfIterCode(input)) {
+                TCompletionInput input = {.Text = prefix};
+                TCompletion completion = engine->Complete(input).GetValueSync();
+                Y_DO_NOT_OPTIMIZE_AWAY(completion);
+
+                prefix += TUtf8Char(c);
+            }
+        });
+    }
 }
 
 } // Y_UNIT_TEST_SUITE(SqlCompleteTests)

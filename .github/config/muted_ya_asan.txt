@@ -564,6 +564,7 @@ ydb/core/persqueue/public/mlp/ut TMLPWriterTests.Deduplicated_Reboot
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteToAutopartitioningTopic
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
 ydb/core/persqueue/public/schema/ut SchemaOps.AddAndRemoveConsumerActors
+ydb/core/persqueue/public/schema/ut SchemaOps.AlterCdcAllowsRetentionAndWriteLimits
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMessagesPerSecond
 ydb/core/persqueue/public/schema/ut SchemaOps.CreateAlterDropSmoke
 ydb/core/persqueue/ut PQCountersLabeled.PartitionReadCounters
@@ -578,6 +579,7 @@ ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_ColumnTable
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
 ydb/core/transfer/ut/large unittest.sole chunk
+ydb/core/tx/columnshard/backup/iscan/ut unittest.sole chunk
 ydb/core/tx/columnshard/data_accessor/ut unittest.sole chunk
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranuleStrKey_PKUtf8
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKDatetime
@@ -602,6 +604,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.DimensionMismatchEr
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardValidateUniqueIndexScan.RunScan
 ydb/core/tx/datashard/build_index/ut unittest.sole chunk
+ydb/core/tx/datashard/ut_export ExportS3BufferTest.MinBufferSizeWithCompressionAndEncryption-parquet
 ydb/core/tx/datashard/ut_export unittest.sole chunk
 ydb/core/tx/datashard/ut_lock_rows DataShardLockRows.RandomizedDeadlockDetection
 ydb/core/tx/datashard/ut_lock_rows unittest.[*/*] chunk

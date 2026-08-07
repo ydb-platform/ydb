@@ -293,6 +293,48 @@
             "uri": "https://{canondata_backend}/1847551/c9103bf55cc11afa84471242d8aeba02b20d6dea/resource.tar.gz#test.test_blocks-agg_by_key_mixed_distinct-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[blocks-dynamic_variant_struct-default.txt-Debug]": [
+        {
+            "checksum": "b3e5ec46f0ca513d944d53c3b03b8346",
+            "size": 734,
+            "uri": "https://{canondata_backend}/1924537/f045038b8330d391f7c2353b80bf684f6d2ee472/resource.tar.gz#test.test_blocks-dynamic_variant_struct-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-dynamic_variant_struct-default.txt-Peephole]": [
+        {
+            "checksum": "e772c3c91e22100cdba800f3b8e1c468",
+            "size": 917,
+            "uri": "https://{canondata_backend}/1871182/db455a443c761c19dd1481879cd0a13d8ef0b7d0/resource.tar.gz#test.test_blocks-dynamic_variant_struct-default.txt-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-dynamic_variant_struct-default.txt-Results]": [
+        {
+            "checksum": "5b95493870d2287b955eda65589a320c",
+            "size": 2346,
+            "uri": "https://{canondata_backend}/1871182/db455a443c761c19dd1481879cd0a13d8ef0b7d0/resource.tar.gz#test.test_blocks-dynamic_variant_struct-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[blocks-dynamic_variant_tuple_optional-default.txt-Debug]": [
+        {
+            "checksum": "daae884854c4b66b324abe693de942cb",
+            "size": 762,
+            "uri": "https://{canondata_backend}/1924537/f045038b8330d391f7c2353b80bf684f6d2ee472/resource.tar.gz#test.test_blocks-dynamic_variant_tuple_optional-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-dynamic_variant_tuple_optional-default.txt-Peephole]": [
+        {
+            "checksum": "1a3397fb50da4c48e3363d32c8c1e21f",
+            "size": 944,
+            "uri": "https://{canondata_backend}/1871182/db455a443c761c19dd1481879cd0a13d8ef0b7d0/resource.tar.gz#test.test_blocks-dynamic_variant_tuple_optional-default.txt-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-dynamic_variant_tuple_optional-default.txt-Results]": [
+        {
+            "checksum": "ffa0666ed3f237f3d1cc757826dfebb8",
+            "size": 2845,
+            "uri": "https://{canondata_backend}/1871182/db455a443c761c19dd1481879cd0a13d8ef0b7d0/resource.tar.gz#test.test_blocks-dynamic_variant_tuple_optional-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[blocks-ifpresent_scalar-default.txt-Debug]": [
         {
             "checksum": "d08dee0c91067f39fc561437eec9a3c9",

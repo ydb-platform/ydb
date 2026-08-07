@@ -17,6 +17,7 @@ SET(ORIG_SOURCES
     mkql_block_coalesce.cpp
     mkql_block_container.cpp
     mkql_block_decimal.cpp
+    mkql_block_dynamic_variant.cpp
     mkql_block_exists.cpp
     mkql_block_getelem.cpp
     mkql_block_guess.cpp

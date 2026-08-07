@@ -121,6 +121,26 @@ Y_UNIT_TEST(StructVariant_Optional_MixedNull) {
     TestBlockWay(items, expected);
 }
 
+Y_UNIT_TEST(StructVariant_Optional_NoNull) {
+    using TFirstMember = NTest::TStructMember<"x", ui32>;
+    using TSecondMember = NTest::TStructMember<"y", ui64>;
+    using TVariant = NTest::TStructVariant<TFirstMember, TSecondMember>;
+
+    auto elem1 = TMaybe<TVariant>(TFirstMember{1});
+    auto elem2 = TMaybe<TVariant>(TSecondMember{2});
+    auto elem3 = TMaybe<TVariant>(TFirstMember{3});
+
+    TVector<TMaybe<TVariant>> items = {elem1, elem2, elem3};
+
+    TVector<TMaybe<TUtf8>> expected = {
+        TMaybe<TUtf8>{"x"},
+        TMaybe<TUtf8>{"y"},
+        TMaybe<TUtf8>{"x"},
+    };
+
+    TestBlockWay(items, expected);
+}
+
 Y_UNIT_TEST(StructVariant_LongNames_ChunkedOutput) {
     constexpr size_t ItemsPerIteration = 10000;
     constexpr size_t NameLength = 100;

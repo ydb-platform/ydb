@@ -309,6 +309,7 @@ public:
     TRuntimeNode BlockVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType);
     TRuntimeNode BlockVariant(TRuntimeNode item, const std::string_view& memberName, TType* variantType);
     TRuntimeNode BlockVariantItem(TRuntimeNode variant);
+    TRuntimeNode BlockDynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType);
     TRuntimeNode BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch);
     TRuntimeNode BlockJust(TRuntimeNode data);
 

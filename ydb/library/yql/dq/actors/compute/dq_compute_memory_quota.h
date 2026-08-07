@@ -43,6 +43,8 @@ namespace NYql::NDq {
                 if (MkqlMemoryQuota) {
                     MkqlMemoryQuota->Add(MkqlMemoryLimit);
                 }
+            } else {
+                CAMQ_LOG_W("[Mem] initial memory allocation of " << InitialMkqlMemoryLimit << " failed, starting with 0");
             }
         }
 

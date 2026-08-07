@@ -81,6 +81,7 @@ namespace NKikimr::NBlobDepot {
         TString CurrentEndpoint;
         TActorId InnerWrapperId;
         TActorId HttpProxyId;
+        bool RefreshInFlight = false;
 
         ui32 RefreshSecMin() const {
             return Settings.HasBalancerRefreshSecMin() ? Settings.GetBalancerRefreshSecMin() : 10;
@@ -140,6 +141,9 @@ namespace NKikimr::NBlobDepot {
         }
 
         void IssueBalancerRequest() {
+            if (RefreshInFlight || !BalancerEnabled()) {
+                return;
+            }
             if (!HttpProxyId) {
                 HttpProxyId = Register(NHttp::CreateHttpProxy());
             }
@@ -147,6 +151,7 @@ namespace NKikimr::NBlobDepot {
             Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
                 NHttp::THttpOutgoingRequest::CreateRequestGet(url),
                 TDuration::Seconds(10)));
+            RefreshInFlight = true;
         }
 
         void ScheduleNextRefresh() {
@@ -160,10 +165,13 @@ namespace NKikimr::NBlobDepot {
         }
 
         void HandleRefreshNow() {
-            IssueBalancerRequest();
+            if (!RefreshInFlight) {
+                IssueBalancerRequest();
+            }
         }
 
         void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev) {
+            RefreshInFlight = false;
             const auto& msg = *ev->Get();
             if (msg.Response && msg.Response->Status.StartsWith("2")) {
                 TString host = TString(StripString(msg.Response->Body));
@@ -180,17 +188,14 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
             }
+            ScheduleNextRefresh();
         }
 
         void Forward(STATEFN_SIG) {
             if (!InnerWrapperId) {
                 return;
             }
-
             TActivationContext::Send(ev->Forward(InnerWrapperId));
-            if (BalancerEnabled()) {
-                IssueBalancerRequest();
-            }
         }
 
     public:

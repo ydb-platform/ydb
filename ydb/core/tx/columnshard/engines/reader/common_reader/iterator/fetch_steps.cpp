@@ -117,7 +117,8 @@ TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(const std:
     , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
     , StageIndex(stageIndex)
     , NeedNextStep(needNextStep)
-    , ScheduleContinuation(scheduleContinuation) {
+    , ScheduleContinuation(scheduleContinuation)
+{
 }
 
 void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {

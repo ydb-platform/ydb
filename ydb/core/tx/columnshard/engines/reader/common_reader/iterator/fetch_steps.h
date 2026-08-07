@@ -17,7 +17,8 @@ private:
     public:
         TColumnsPack(const TColumnsSetIds& columns, const EMemType memType)
             : Columns(columns)
-            , MemType(memType) {
+            , MemType(memType)
+        {
         }
     };
 
@@ -79,14 +80,16 @@ public:
 
     TAllocateMemoryStep(const TColumnsSetIds& columns, const EMemType memType, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex)
         : TBase("ALLOCATE_MEMORY::" + ::ToString(stageIndex))
-        , StageIndex(stageIndex) {
+        , StageIndex(stageIndex)
+    {
         AddAllocation(columns, memType);
     }
 
     TAllocateMemoryStep(const ui64 memSize, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex)
         : TBase("ALLOCATE_MEMORY::" + ::ToString(stageIndex))
         , StageIndex(stageIndex)
-        , PredefinedSize(memSize) {
+        , PredefinedSize(memSize)
+    {
     }
 };
 
@@ -108,7 +111,8 @@ public:
 
     TAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("ASSEMBLER" + (specName ? "::" + specName : ""))
-        , Columns(columns) {
+        , Columns(columns)
+    {
         AFL_VERIFY(Columns);
         AFL_VERIFY(Columns->GetColumnsCount());
     }
@@ -122,7 +126,8 @@ public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const override;
 
     TBuildStageResultStep()
-        : TBase("BUILD_STAGE_RESULT") {
+        : TBase("BUILD_STAGE_RESULT")
+    {
     }
 };
 
@@ -142,7 +147,8 @@ public:
 
     TOptionalAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("OPTIONAL_ASSEMBLER" + (specName ? "::" + specName : ""))
-        , Columns(columns) {
+        , Columns(columns)
+    {
         AFL_VERIFY(Columns);
         AFL_VERIFY(Columns->GetColumnsCount());
     }
@@ -167,7 +173,8 @@ public:
 
     TColumnBlobsFetchingStep(const TColumnsSetIds& columns)
         : TBase("FETCHING_COLUMNS")
-        , Columns(columns) {
+        , Columns(columns)
+    {
         AFL_VERIFY(Columns.GetColumnsCount());
     }
 };

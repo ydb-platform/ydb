@@ -76,10 +76,11 @@ struct TEvTabletCounters {
         const ui64 SchemaVersion;
         // plain to keep this free of the schemeshard proto header
         const ui32 MetricsLevel;
+        const TString MonitoringProjectId;
 
         TEvTabletSetTableInfo(ui64 tabletID, TPathId tenantPathId,
             ui32 followerId, TPathId tableId, const TString& tablePath, ui64 schemaVersion,
-            ui32 metricsLevel)
+            ui32 metricsLevel, const TString& monitoringProjectId)
             : TabletID(tabletID)
             , TenantPathId(tenantPathId)
             , FollowerId(followerId)
@@ -87,6 +88,7 @@ struct TEvTabletCounters {
             , TablePath(tablePath)
             , SchemaVersion(schemaVersion)
             , MetricsLevel(metricsLevel)
+            , MonitoringProjectId(monitoringProjectId)
         {}
     };
 

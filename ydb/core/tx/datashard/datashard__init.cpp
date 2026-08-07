@@ -377,6 +377,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             static_cast<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel>(subDomainTablesMetricsLevel);
     }
 
+    LOAD_SYS_BYTES(db, Schema::Sys_SubDomainMonitoringProjectId, Self->SubDomainMonitoringProjectId);
+
     {
         TString rawProcessingParams;
         LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams);

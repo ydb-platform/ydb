@@ -21,6 +21,7 @@ constexpr TStringBuf ATTR_DOCUMENT_API_VERSION = "__document_api_version";
 constexpr TStringBuf ATTR_ASYNC_REPLICATION = "__async_replication";
 constexpr TStringBuf ATTR_ASYNC_REPLICA = "__async_replica";
 constexpr TStringBuf ATTR_INCREMENTAL_BACKUP = "__incremental_backup";
+constexpr TStringBuf ATTR_MONITORING_PROJECT_ID = "__monitoring_project_id";
 
 enum class EAttribute {
     USER,
@@ -38,6 +39,7 @@ enum class EAttribute {
     ASYNC_REPLICA,
     INCREMENTAL_BACKUP,
     FILESTORE_SPACE_LIMIT_SSD_SYSTEM,
+    MONITORING_PROJECT_ID,
 };
 
 enum class EUserAttributesOp {
@@ -101,6 +103,7 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
     static bool CheckValueStringWeak(const TString& name, const TString& value, TString& errStr);
     static bool CheckValueUint64(const TString& name, const TString& value, TString& errStr, ui64 minValue = 0, ui64 maxValue = Max<ui64>());
     static bool CheckValueJson(const TString& name, const TString& value, TString& errStr);
+    static bool CheckMonitoringProjectIdOp(EUserAttributesOp op, const TString& name, TString& errStr);
 };
 
 }

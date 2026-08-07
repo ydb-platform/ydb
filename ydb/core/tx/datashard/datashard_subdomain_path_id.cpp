@@ -1,6 +1,7 @@
 #include "datashard_impl.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/tx/schemeshard/user_attributes.h>
 
 #include <util/random/random.h>
 
@@ -167,14 +168,21 @@ private:
     const bool OutOfSpace;
 };
 
-class TDataShard::TTxPersistSubDomainTablesMetricsLevel : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+// Persists everything the subdomain description carries for detailed metrics in
+// a single write
+class TDataShard::TTxPersistSubDomainDetailedMetricsSettings : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxPersistSubDomainTablesMetricsLevel(TDataShard* self, NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level)
+    TTxPersistSubDomainDetailedMetricsSettings(
+        TDataShard* self,
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level,
+        const TString& monitoringProjectId
+    )
         : TTransactionBase(self)
         , Level(level)
+        , MonitoringProjectId(monitoringProjectId)
     { }
 
-    TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_TABLES_METRICS_LEVEL; }
+    TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_DETAILED_METRICS_SETTINGS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
@@ -182,6 +190,11 @@ public:
         if (Self->SubDomainTablesMetricsLevel != Level) {
             Self->PersistSys(db, Schema::Sys_SubDomainTablesMetricsLevel, ui64(Level));
             Self->SubDomainTablesMetricsLevel = Level;
+        }
+
+        if (Self->SubDomainMonitoringProjectId != MonitoringProjectId) {
+            Self->PersistSys(db, Schema::Sys_SubDomainMonitoringProjectId, MonitoringProjectId);
+            Self->SubDomainMonitoringProjectId = MonitoringProjectId;
         }
 
         return true;
@@ -193,12 +206,27 @@ public:
 
 private:
     const NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel Level;
+    const TString MonitoringProjectId;
 };
+
+// The monitoring project is a well-known user attribute of the database path
+// (NSchemeShard::ATTR_MONITORING_PROJECT_ID), not a field of the subdomain
+// description. An absent attribute and an empty value both mean "no project".
+static TString ExtractMonitoringProjectId(const NKikimrSchemeOp::TPathDescription& pathDescription) {
+    for (const auto& attr : pathDescription.GetUserAttributes()) {
+        if (attr.GetKey() == NSchemeShard::ATTR_MONITORING_PROJECT_ID) {
+            return attr.GetValue();
+        }
+    }
+
+    return {};
+}
 
 void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
-        const auto& domainDescription = msg->Result->GetPathDescription().GetDomainDescription();
+        const auto& pathDescription = msg->Result->GetPathDescription();
+        const auto& domainDescription = pathDescription.GetDomainDescription();
 
         const bool outOfSpace = domainDescription.GetDomainState().GetDiskQuotaExceeded();
 
@@ -208,17 +236,23 @@ void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, 
 
         Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
 
-        // Persisted so that a restart keeps emitting detailed metrics without
-        // waiting for the next subdomain publish.
+        // Persisted so that a restart keeps emitting detailed metrics, with the
+        // correct project, without waiting for the next subdomain publish.
         const auto tablesMetricsLevel = domainDescription.GetTablesMetricsLevel();
+        const TString monitoringProjectId = ExtractMonitoringProjectId(pathDescription);
 
-        if (tablesMetricsLevel != SubDomainTablesMetricsLevel) {
+        if (tablesMetricsLevel != SubDomainTablesMetricsLevel
+            || monitoringProjectId != SubDomainMonitoringProjectId)
+        {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Discovered subdomain " << msg->PathId << " tablesMetricsLevel = "
                 << NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel_Name(tablesMetricsLevel)
+                << ", monitoringProjectId = " << monitoringProjectId
                 << " at datashard " << TabletID());
 
-            Execute(new TTxPersistSubDomainTablesMetricsLevel(this, tablesMetricsLevel), ctx);
+            Execute(
+                new TTxPersistSubDomainDetailedMetricsSettings(this, tablesMetricsLevel, monitoringProjectId),
+                ctx);
         }
     }
 }

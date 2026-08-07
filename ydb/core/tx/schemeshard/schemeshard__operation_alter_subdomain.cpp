@@ -308,10 +308,11 @@ public:
             alterData->ApplyAuditSettings(settings.GetAuditSettings());
         }
 
+        const bool isRootDomain = subDomain->IsRoot() && context.SS->IsDomainSchemeShard;
+
         // alterData is copy-constructed from subDomainInfo, so the current
         // level is already carried over; only an explicit request changes it.
         if (settings.HasTablesMetricsLevel()) {
-            const bool isRootDomain = subDomain->IsRoot() && context.SS->IsDomainSchemeShard;
             if (!CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), isRootDomain, errStr)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;

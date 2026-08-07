@@ -272,7 +272,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     }
 
     void PromoteExpiredPortions(const TInstant currentInstant) {
-        if (!Settings.AgingSettings.Enabled || State == EState::COMPATIBILITY) {
+        if (!Settings.AgingSettings.Enabled || State == EState::COMPATIBILITY || IsOverloaded()) {
             return;
         }
 

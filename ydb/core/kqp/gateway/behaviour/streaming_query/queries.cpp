@@ -2534,7 +2534,7 @@ protected:
         if (status == Ydb::StatusIds::SUCCESS) {
             Controller->OnAlteringFinished();
         } else {
-            Controller->OnAlteringFinishedWithStatus(TStreamingQueryConfig::TStatus::Fail(YdbStatusToYqlStatus(status), TBase::Issues.ToString()));
+            Controller->OnAlteringFinishedWithStatus(TStreamingQueryConfig::TStatus::Fail(NYql::NDq::YdbStatusToYqlStatus(status), TBase::Issues.ToString()));
         }
     }
 
@@ -2548,30 +2548,6 @@ protected:
     }
 
 private:
-    static NYql::EYqlIssueCode YdbStatusToYqlStatus(Ydb::StatusIds::StatusCode status) {
-        switch (status) {
-            case Ydb::StatusIds::UNDETERMINED:
-            case Ydb::StatusIds::STATUS_CODE_UNSPECIFIED: return NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN;
-            case Ydb::StatusIds::ALREADY_EXISTS:
-            case Ydb::StatusIds::SCHEME_ERROR: return NYql::TIssuesIds::KIKIMR_SCHEME_ERROR;
-            case Ydb::StatusIds::SESSION_BUSY:
-            case Ydb::StatusIds::SESSION_EXPIRED: return NYql::TIssuesIds::KIKIMR_BAD_OPERATION;
-            case Ydb::StatusIds::SUCCESS: return NYql::TIssuesIds::SUCCESS;
-            case Ydb::StatusIds::BAD_REQUEST: return NYql::TIssuesIds::KIKIMR_BAD_REQUEST;
-            case Ydb::StatusIds::UNAUTHORIZED: return NYql::TIssuesIds::KIKIMR_ACCESS_DENIED;
-            case Ydb::StatusIds::INTERNAL_ERROR: return NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR;
-            case Ydb::StatusIds::ABORTED: return NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED;
-            case Ydb::StatusIds::UNAVAILABLE: return NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
-            case Ydb::StatusIds::OVERLOADED: return NYql::TIssuesIds::KIKIMR_OVERLOADED;
-            case Ydb::StatusIds::TIMEOUT: return NYql::TIssuesIds::KIKIMR_TIMEOUT;
-            case Ydb::StatusIds::BAD_SESSION: return NYql::TIssuesIds::KIKIMR_TOO_MANY_TRANSACTIONS;
-            case Ydb::StatusIds::PRECONDITION_FAILED: return NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED;
-            case Ydb::StatusIds::CANCELLED: return NYql::TIssuesIds::KIKIMR_OPERATION_CANCELLED;
-            case Ydb::StatusIds::UNSUPPORTED: return NYql::TIssuesIds::KIKIMR_UNSUPPORTED;
-            case Ydb::StatusIds::NOT_FOUND: return NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND;
-            default: return NYql::TIssuesIds::DEFAULT_ERROR;
-        }
-    }
 
 private:
     const IStreamingQueryOperationController::TPtr Controller;

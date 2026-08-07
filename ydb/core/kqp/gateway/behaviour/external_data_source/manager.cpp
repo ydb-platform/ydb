@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
@@ -11,6 +12,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/external_sources/iceberg_fields.h>
 #include <ydb/services/scheme_secret/resolver.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 
 namespace NKikimr::NKqp {
 
@@ -31,7 +33,8 @@ TAsyncStatus ValidateExternalDatasourceSecrets(const NKikimrSchemeOp::TExternalD
         externalDataSourceDesc.GetAuth(),
         userToken ? new NACLib::TUserToken(*userToken) : nullptr,
         externalData.GetDatabase(),
-        externalData.GetActorSystem()
+        externalData.GetActorSystem(),
+        true
     );
 
     return describeFuture.Apply([secrets](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& f) {
@@ -370,9 +373,11 @@ TAsyncStatus TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSc
 }
 
 namespace {
+bool IsIamAuth(const auto& schemeTx) {
+    return schemeTx.GetCreateExternalDataSource().GetAuth().identity_case() == NKikimrSchemeOp::TAuth::kIam;
+}
 bool IsResolveResourceIdNeeded(const auto& schemeTx) {
-    return schemeTx.GetCreateExternalDataSource().GetAuth().identity_case() == NKikimrSchemeOp::TAuth::kIam
-        && !schemeTx.GetCreateExternalDataSource().GetAuth().GetIam().HasResourceId();
+    return !schemeTx.GetCreateExternalDataSource().GetAuth().GetIam().HasResourceId();
 }
 
 TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
@@ -417,19 +422,52 @@ TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDat
             });
     });
 }
+
+TYqlConclusionStatus YqlConclusionFromGrpcStatus(const NYdbGrpc::TGrpcStatus& grpcStatus) {
+    if (grpcStatus.Ok()) {
+        return TYqlConclusionStatus::Success();
+    }
+    if (grpcStatus.InternalError) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Grpc internal error: "<< grpcStatus.Msg);
+    }
+    return TYqlConclusionStatus::Fail(NYql::NDq::YdbStatusToYqlStatus(NKikimr::NRpcService::GrpcStatusToYdbStatus(static_cast<grpc::StatusCode>(grpcStatus.GRpcStatusCode))), grpcStatus.ToDebugString());
+}
+
+TAsyncStatus ValidateServiceAccount(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
+    auto actorSystem = context.GetActorSystem();
+    return ChainFeatures(validationFuture, [schemeTxState, actorSystem, secrets] {
+        Y_ENSURE(secrets && secrets->size() == 1);
+        auto& iamAuth = schemeTxState->GetCreateExternalDataSource().GetAuth().GetIam();
+        return AuthorizeServiceAccountUse(iamAuth.GetServiceAccountId(),
+                (*secrets)[0],
+                actorSystem
+        ).Apply([](const NThreading::TFuture<NYdbGrpc::TGrpcStatus>& future) {
+            try {
+                auto grpcStatus = future.GetValueSync();
+                return YqlConclusionFromGrpcStatus(grpcStatus);
+            } catch (std::exception&) {
+                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
+            }
+        });
+    });
+}
 } // namespace {
 
 TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
     TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
     auto schemeTxState = std::make_shared<NKikimrSchemeOp::TModifyScheme>(schemeTx);
     if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
-        bool isResolveResourceIdNeeded = IsResolveResourceIdNeeded(schemeTx);
-        auto secrets = isResolveResourceIdNeeded ? std::make_shared<std::vector<TString>>() : nullptr;
+        bool isIamAuth = IsIamAuth(schemeTx);
+        bool isResolveResourceIdNeeded = isIamAuth && IsResolveResourceIdNeeded(schemeTx);
+        auto secrets = isIamAuth ? std::make_shared<std::vector<TString>>() : nullptr;
         validationFuture = ChainFeatures(validationFuture, [schemeTxState, context, secrets] {
             return ValidateExternalDatasourceSecrets(schemeTxState->GetCreateExternalDataSource(), context, secrets);
         });
         if (isResolveResourceIdNeeded) {
             validationFuture = ResolveResourceId(validationFuture, context, schemeTxState, secrets);
+        }
+        if (isIamAuth) {
+            validationFuture = ValidateServiceAccount(validationFuture, context, schemeTxState, secrets);
         }
     }
     return ChainFeatures(validationFuture, [schemeTxState, context] {

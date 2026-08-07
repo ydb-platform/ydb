@@ -68,6 +68,39 @@ ALTER TABLE `series`
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
+<<<<<<< HEAD
+=======
+[JSON-индекс](../../../../dev/json-indexes.md):
+
+```yql
+ALTER TABLE `series`
+  ADD INDEX json_idx GLOBAL USING json
+  ON (metadata);
+```
+
+[Блум-индекс](../../../../dev/bloom-skip-indexes.md):
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_bloom LOCAL USING bloom_filter
+  ON (resource_id)
+  WITH (false_positive_probability = 0.01);
+```
+
+Блум n-граммный индекс:
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+  ON (message)
+  WITH (
+    ngram_size = 3,
+    false_positive_probability = 0.01,
+    case_sensitive = true
+  );
+```
+
+>>>>>>> b8ff2112edd (Ydbdocs 2400 specify available secondary index parameters during creation (#44927))
 ## Изменение параметров индекса {#alter-index}
 
 Индексы имеют параметры, зависящие от типа, которые можно настраивать. Глобальные индексы, [синхронные]({{ concept_secondary_index }}#sync) или [асинхронные]({{ concept_secondary_index }}#async), реализованы в виде скрытых таблиц, и их параметры автоматического партиционирования и реплик можно регулировать так же, как и настройки обычных таблиц.

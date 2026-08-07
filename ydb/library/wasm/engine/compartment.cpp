@@ -391,7 +391,7 @@ public:
 
                 auto loadError = WASM::LoadError();
                 bool succeeded = WASM::loadBinaryModule(
-                    std::bit_cast<U8*>(bytecode.Data.begin()),
+                    std::bit_cast<const U8*>(bytecode.Data.begin()),
                     bytecode.Data.size(),
                     irModule,
                     &loadError);
@@ -440,7 +440,7 @@ public:
 
                 auto loadError = WASM::LoadError();
                 bool succeeded = WASM::loadBinaryModule(
-                    std::bit_cast<U8*>(bytecode.Data.begin()),
+                    std::bit_cast<const U8*>(bytecode.Data.begin()),
                     bytecode.Data.size(),
                     irModule,
                     &loadError);
@@ -548,7 +548,7 @@ public:
         THROW_ERROR_EXCEPTION_IF(
             !RuntimeLibraryInstance_,
             "WebAssembly FreeBytes failed: no runtime library (AddSdk) linked");
-        auto* freeFunction = getTypedInstanceExport(RuntimeLibraryInstance_, "free", signature);
+        auto* freeFunction = Runtime::getTypedInstanceExport(RuntimeLibraryInstance_, "free", signature);
         THROW_ERROR_EXCEPTION_IF(
             freeFunction == nullptr,
             "WebAssembly FreeBytes failed: runtime has no \"free\" export with signature (i64)->()");
@@ -1001,6 +1001,10 @@ private:
                 continue;
             }
             if (exportedDataEntry.name == objectName) {
+                if (exportedDataEntry.index < IncomingModule_->globals.imports.size()) {
+                    // Re-export of an imported global — no entry in globals.defs.
+                    continue;
+                }
                 auto globalType = asGlobalType(type);
                 globalType.isMutable = true;
                 auto outObject = Runtime::createGlobal(
@@ -1120,10 +1124,8 @@ void TWebAssemblyCompartment::AddExportsToGlobalOffsetTable(IR::Module& irModule
         }
 
         const auto& global = irModule.globals.getDef(exportedDataEntry.index);
-        i64 offset = 0;
-        i64 value = offset + global.initializer.i64;
         auto demangled = CppDemangle(TString(exportedDataEntry.name));
-        GlobalOffsetTableElements_.DataEntries[demangled] = value;
+        GlobalOffsetTableElements_.DataEntries[demangled] = global.initializer.i64;
     }
 }
 
@@ -1236,7 +1238,9 @@ void TWebAssemblyCompartment::Clone(const TWebAssemblyCompartment& source, TWebA
         destination->Instances_.push_back(destination->RuntimeLibraryInstance_);
     }
 
-    for (int index = 2; index < std::ssize(destination->Compartment_->instances); ++index) {
+    // Without a runtime library, user modules start at index 1 (index 0 is intrinsics).
+    const int startIndex = source.RuntimeLibraryInstance_ ? 2 : 1;
+    for (int index = startIndex; index < std::ssize(destination->Compartment_->instances); ++index) {
         destination->Instances_.push_back(*destination->Compartment_->instances.get(index));
     }
 
@@ -1247,6 +1251,7 @@ void TWebAssemblyCompartment::Clone(const TWebAssemblyCompartment& source, TWebA
     destination->MemoryLayoutData_.MemoryBases = source.MemoryLayoutData_.MemoryBases;
     destination->MemoryLayoutData_.TableBases = source.MemoryLayoutData_.TableBases;
     destination->Modules_ = source.Modules_;
+    destination->Stripped_ = source.Stripped_;
 
     if (source.ExceptionType_) {
         destination->ExceptionType_ = destination->Compartment_->exceptionTypes[source.ExceptionType_->id];
@@ -1292,7 +1297,7 @@ Runtime::ModuleRef LoadBuiltinSdk()
 
     auto loadError = WASM::LoadError();
     bool succeeded = WASM::loadBinaryModule(
-        std::bit_cast<U8*>(bytecode.Data.begin()),
+        std::bit_cast<const U8*>(bytecode.Data.begin()),
         bytecode.Data.size(),
         irModule,
         &loadError);
@@ -1539,13 +1544,15 @@ std::unique_ptr<IWebAssemblyCompartment> CreateImageFromSdk(const TModuleBytecod
 
 std::unique_ptr<IWebAssemblyCompartment> CreateEmptyImage()
 {
-    static std::unique_ptr<TWebAssemblyCompartment> leakyImageSingleton = CreateImage(EKnownImage::Empty);
+    // Intentionally leaked: unique_ptr dtor at static teardown races WAVM runtime shutdown.
+    static auto* leakyImageSingleton = CreateImage(EKnownImage::Empty).release();
     return leakyImageSingleton->Clone();
 }
 
 std::unique_ptr<IWebAssemblyCompartment> CreateMinimalRuntimeImage()
 {
-    static std::unique_ptr<TWebAssemblyCompartment> leakyImageSingleton = CreateImage(EKnownImage::MinimalRuntime);
+    // Intentionally leaked: unique_ptr dtor at static teardown races WAVM runtime shutdown.
+    static auto* leakyImageSingleton = CreateImage(EKnownImage::MinimalRuntime).release();
     return leakyImageSingleton->Clone();
 }
 
@@ -1553,7 +1560,8 @@ std::unique_ptr<IWebAssemblyCompartment> CreateStandardRuntimeImage()
 {
     THROW_ERROR_EXCEPTION_IF(!EnableSystemLibraries(), "WebAssembly runtime libraries are not supported by this build");
 
-    static std::unique_ptr<TWebAssemblyCompartment> leakyImageSingleton = CreateImage(EKnownImage::Standard);
+    // Intentionally leaked: unique_ptr dtor at static teardown races WAVM runtime shutdown.
+    static auto* leakyImageSingleton = CreateImage(EKnownImage::Standard).release();
     return leakyImageSingleton->Clone();
 }
 
@@ -1561,7 +1569,8 @@ std::unique_ptr<IWebAssemblyCompartment> CreateQueryLanguageImage()
 {
     THROW_ERROR_EXCEPTION_IF(!EnableSystemLibraries(), "WebAssembly runtime libraries are not supported by this build");
 
-    static std::unique_ptr<TWebAssemblyCompartment> leakyImageSingleton = CreateImage(EKnownImage::QueryLanguage);
+    // Intentionally leaked: unique_ptr dtor at static teardown races WAVM runtime shutdown.
+    static auto* leakyImageSingleton = CreateImage(EKnownImage::QueryLanguage).release();
     return leakyImageSingleton->Clone();
 }
 

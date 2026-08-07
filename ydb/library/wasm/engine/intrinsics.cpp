@@ -88,7 +88,7 @@ REGISTER_WEB_ASSEMBLY_INTRINSIC(emscripten_dbg_backtrace);
 i32 args_sizes_get(i64* argc, i64* argvBufSize)
 {
     auto* compartment = GetCurrentCompartment();
-    *(PtrFromVM(compartment, argc)) = 1;
+    *(PtrFromVM(compartment, argc)) = 0;
     *(PtrFromVM(compartment, argvBufSize)) = 0;
     return 0;
 }
@@ -97,7 +97,7 @@ REGISTER_WEB_ASSEMBLY_INTRINSIC(args_sizes_get);
 i32 environ_sizes_get(i64* argc, i64* argvBufSize)
 {
     auto* compartment = GetCurrentCompartment();
-    *(PtrFromVM(compartment, argc)) = 1;
+    *(PtrFromVM(compartment, argc)) = 0;
     *(PtrFromVM(compartment, argvBufSize)) = 0;
     return 0;
 }

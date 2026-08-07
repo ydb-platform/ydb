@@ -37,7 +37,11 @@ TWebAssemblyMemoryPool::TWebAssemblyMemoryPool(TWebAssemblyMemoryPool&& other) n
 TWebAssemblyMemoryPool& TWebAssemblyMemoryPool::operator=(TWebAssemblyMemoryPool&& other) noexcept
 {
     if (this != &other) {
-        Clear();
+        try {
+            Clear();
+        } catch (...) {
+            // FreeBytes may throw; never throw from noexcept move-assignment.
+        }
         Compartment_ = std::exchange(other.Compartment_, nullptr);
         Size_ = std::exchange(other.Size_, 0);
         Allocations_ = std::move(other.Allocations_);

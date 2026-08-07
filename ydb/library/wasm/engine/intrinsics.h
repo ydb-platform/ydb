@@ -208,7 +208,7 @@ WAVM_DECLARE_INTRINSIC_MODULE(standard);
     DECLARE_WEB_ASSEMBLY_SYSCALL(emscripten_dbg_backtrace, void, i64);
     FOREACH_WEB_ASSEMBLY_SYSCALL(DECLARE_WEB_ASSEMBLY_SYSCALL); // NOLINT
 
-#undef DECLARE_WEB_ASSEMBLY_SYSCALL_STUB
+#undef DECLARE_WEB_ASSEMBLY_SYSCALL
 
 ////////////////////////////////////////////////////////////////////////////////
 

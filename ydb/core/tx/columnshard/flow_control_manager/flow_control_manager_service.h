@@ -12,27 +12,26 @@ namespace NKikimr::NColumnShard::NFlowControl {
 
 class TFlowControlManagerServiceOperator {
 public:
-    // Drain-rate control is fully outcome-driven: growth is decided from per-request
-    // write outcomes (TEvWriteOutcome) accumulated into cohorts, never from wall clock.
-    // Hence there are no AimdGrow / AimdHold / AimdFeedback durations here anymore.
+    // Drain-rate control is outcome-driven with CUBIC recovery after cuts.
+    // Growth uses W(t) toward Wmax over CubicRecoveryTargetSec, then ProbePercent of Wmax
+    // per clean cohort — never absolute admits/s or MB/s nails.
     struct TDrainRateParams {
         // Count bucket (requests/sec). RMin/RMax default to 0 = "unset": the actor treats
-        // an unset floor as a tiny non-zero value and an unset ceiling as +inf, letting AIMD
-        // self-regulate instead of pinning the rate to arbitrary config nails. Burst is gone —
-        // the token bucket now uses a soft one-cohort cap (see RefillTokens).
+        // an unset floor as 1 req/s and an unset ceiling as +inf.
         double RMin = 0.0;
         double RMax = 0.0;
         double RStart = 10.0;
-        // Percent of current rate per clean cohort (5 ⇒ +5%). Shared by count and bytes buckets.
-        double AimdAdd = 5.0;
+        // Shared cut / CUBIC β (both buckets).
         double AimdBeta = 0.5;
+        // Shared CUBIC recovery time target (seconds) and post-Wmax probe (% of Wmax).
+        double CubicRecoveryTargetSec = 10.0;
+        double CubicProbePercent = 5.0;
 
         // Bytes bucket (bytes/sec). Same unset-bound semantics.
         double RMinBytes = 0.0;
         double RMaxBytes = 0.0;
         double RStartBytes = 10'000'000.0;
-        // Filled from AimdAdd / AimdBeta by GetDrainRateParams (shared AIMD).
-        double AimdAddBytes = 5.0;
+        // Filled from AimdBeta by GetDrainRateParams (shared).
         double AimdBetaBytes = 0.5;
     };
 

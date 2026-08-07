@@ -23,19 +23,19 @@ std::atomic<ui32> WaitTimeoutPercent{ 10 };
 std::atomic<ui32> DelayedRejectTimeoutPercent{ 10 };
 
 // Count bucket. RMin/RMax default to 0 = unset (no floor / no ceiling); the actor's
-// EffectiveRMin()/EffectiveRMax() supply a tiny floor and +inf ceiling in that case.
+// EffectiveRMin()/EffectiveRMax() supply a 1 req/s floor and +inf ceiling in that case.
 std::atomic<ui64> DrainRMinMilli{ 0 };
 std::atomic<ui64> DrainRMaxMilli{ 0 };
 std::atomic<ui64> DrainRStartMilli{ 50'000 };
-std::atomic<ui64> DrainAimdAddMilli{ 5'000 };   // 5.0 = +5% of current count rate
 std::atomic<ui64> DrainAimdBetaMilli{ 500 };
+std::atomic<ui64> DrainCubicRecoveryTargetSecMilli{ 10'000 };   // 10.0 s
+std::atomic<ui64> DrainCubicProbePercentMilli{ 5'000 };   // 5.0 %
 
 // Bytes bucket. Same unset-bound semantics. Encoded in the same milli-rate units.
 std::atomic<ui64> DrainRMinBytesMilli{ 0 };
 std::atomic<ui64> DrainRMaxBytesMilli{ 0 };
 std::atomic<ui64> DrainRStartBytesMilli{ 10'000'000'000 };   // 10 MB/sec
-std::atomic<ui64> DrainAimdAddBytesMilli{ 5'000 };   // 5.0 = +5% of current bytes rate
-std::atomic<ui64> DrainAimdBetaBytesMilli{ 500 };   // 0.5
+std::atomic<ui64> DrainAimdBetaBytesMilli{ 500 };   // 0.5 (mirrors count)
 
 double MilliToRate(ui64 milli) {
     return static_cast<double>(milli) / 1000.0;
@@ -127,14 +127,15 @@ TInstant TFlowControlManagerServiceOperator::ComputeWaitDeadline(TInstant deadli
 
 TFlowControlManagerServiceOperator::TDrainRateParams TFlowControlManagerServiceOperator::GetDrainRateParams() {
     // Start from process-wide atomics (0 RMin/RMax = unset). Overlay only fields explicitly
-    // set on ColumnShardConfig.FlowControl (Has*). DrainAimdAdd / DrainAimdBeta are shared
-    // across count and bytes — no separate bytes AIMD config.
+    // set on ColumnShardConfig.FlowControl (Has*). DrainAimdBeta / CUBIC knobs are shared
+    // across count and bytes — no separate bytes AIMD/CUBIC config.
     TDrainRateParams params;
     params.RMin = MilliToRate(DrainRMinMilli.load());
     params.RMax = MilliToRate(DrainRMaxMilli.load());
     params.RStart = MilliToRate(DrainRStartMilli.load());
-    params.AimdAdd = MilliToRate(DrainAimdAddMilli.load());
     params.AimdBeta = MilliToRate(DrainAimdBetaMilli.load());
+    params.CubicRecoveryTargetSec = MilliToRate(DrainCubicRecoveryTargetSecMilli.load());
+    params.CubicProbePercent = MilliToRate(DrainCubicProbePercentMilli.load());
     params.RMinBytes = MilliToRate(DrainRMinBytesMilli.load());
     params.RMaxBytes = MilliToRate(DrainRMaxBytesMilli.load());
     params.RStartBytes = MilliToRate(DrainRStartBytesMilli.load());
@@ -146,14 +147,20 @@ TFlowControlManagerServiceOperator::TDrainRateParams TFlowControlManagerServiceO
         if (cfg->HasDrainRateMax()) {
             params.RMax = cfg->GetDrainRateMax();
         }
-        if (cfg->HasDrainRateStart()) {
+        // Start <= 0 means unset (proto default for StartBytes is 0; configs often nail 0
+        // meaning "default"). Applying 0 cold-starts the actor at EffectiveRMin* and stalls
+        // the wait queue after a process restart.
+        if (cfg->HasDrainRateStart() && cfg->GetDrainRateStart() > 0.0) {
             params.RStart = cfg->GetDrainRateStart();
-        }
-        if (cfg->HasDrainAimdAdd()) {
-            params.AimdAdd = cfg->GetDrainAimdAdd();
         }
         if (cfg->HasDrainAimdBeta()) {
             params.AimdBeta = cfg->GetDrainAimdBeta();
+        }
+        if (cfg->HasDrainCubicRecoveryTargetSec()) {
+            params.CubicRecoveryTargetSec = cfg->GetDrainCubicRecoveryTargetSec();
+        }
+        if (cfg->HasDrainCubicProbePercent()) {
+            params.CubicProbePercent = cfg->GetDrainCubicProbePercent();
         }
         if (cfg->HasDrainRateMinBytes()) {
             params.RMinBytes = cfg->GetDrainRateMinBytes();
@@ -161,12 +168,11 @@ TFlowControlManagerServiceOperator::TDrainRateParams TFlowControlManagerServiceO
         if (cfg->HasDrainRateMaxBytes()) {
             params.RMaxBytes = cfg->GetDrainRateMaxBytes();
         }
-        if (cfg->HasDrainRateStartBytes()) {
+        if (cfg->HasDrainRateStartBytes() && cfg->GetDrainRateStartBytes() > 0.0) {
             params.RStartBytes = cfg->GetDrainRateStartBytes();
         }
     }
 
-    params.AimdAddBytes = params.AimdAdd;
     params.AimdBetaBytes = params.AimdBeta;
     return params;
 }
@@ -195,29 +201,32 @@ void TFlowControlManagerServiceOperator::SetDrainRateParams(const TDrainRatePara
     // only clamp/order them when a caller actually set positive bounds.
     const double rMin = Max(0.0, params.RMin);
     const double rMax = params.RMax > 0.0 ? Max(rMin, params.RMax) : 0.0;
-    const double rStartLo = rMin > 0.0 ? rMin : 0.001;
+    const double rStartLo = rMin > 0.0 ? rMin : 1.0;
     const double rStartHi = rMax > 0.0 ? rMax : params.RStart;
-    const double rStart = Min(Max(params.RStart, rStartLo), Max(rStartHi, rStartLo));
-    const double add = Max(0.0, params.AimdAdd);
+    const double rStartRaw = params.RStart > 0.0 ? params.RStart : rStartLo;
+    const double rStart = Min(Max(rStartRaw, rStartLo), Max(rStartHi, rStartLo));
     const double beta = Min(1.0, Max(0.01, params.AimdBeta));
+    const double kTarget = Max(0.001, params.CubicRecoveryTargetSec);
+    const double probePct = Max(0.0, params.CubicProbePercent);
 
     DrainRMinMilli.store(RateToMilli(rMin));
     DrainRMaxMilli.store(RateToMilli(rMax));
     DrainRStartMilli.store(RateToMilli(rStart));
-    DrainAimdAddMilli.store(RateToMilli(add));
     DrainAimdBetaMilli.store(RateToMilli(beta));
+    DrainCubicRecoveryTargetSecMilli.store(RateToMilli(kTarget));
+    DrainCubicProbePercentMilli.store(RateToMilli(probePct));
 
-    // Bytes bucket bounds/start. AIMD add/beta are shared with the count bucket.
+    // Bytes bucket bounds/start. Beta is shared with the count bucket.
     const double rMinB = Max(0.0, params.RMinBytes);
     const double rMaxB = params.RMaxBytes > 0.0 ? Max(rMinB, params.RMaxBytes) : 0.0;
-    const double rStartBLo = rMinB > 0.0 ? rMinB : 1.0;
+    const double rStartBLo = rMinB > 0.0 ? rMinB : 1'000'000.0;
     const double rStartBHi = rMaxB > 0.0 ? rMaxB : params.RStartBytes;
-    const double rStartB = Min(Max(params.RStartBytes, rStartBLo), Max(rStartBHi, rStartBLo));
+    const double rStartBRaw = params.RStartBytes > 0.0 ? params.RStartBytes : rStartBLo;
+    const double rStartB = Min(Max(rStartBRaw, rStartBLo), Max(rStartBHi, rStartBLo));
 
     DrainRMinBytesMilli.store(RateToMilli(rMinB));
     DrainRMaxBytesMilli.store(RateToMilli(rMaxB));
     DrainRStartBytesMilli.store(RateToMilli(rStartB));
-    DrainAimdAddBytesMilli.store(RateToMilli(add));
     DrainAimdBetaBytesMilli.store(RateToMilli(beta));
 }
 

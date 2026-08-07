@@ -23,10 +23,15 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr DrainTokensBytes;
     NMonitoring::TDynamicCounters::TCounterPtr ObservedRateCount;
     NMonitoring::TDynamicCounters::TCounterPtr ObservedRateBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr ServedRateCount;
+    NMonitoring::TDynamicCounters::TCounterPtr ServedRateBytes;
     NMonitoring::TDynamicCounters::TCounterPtr ObservationTransitionCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainAllowedCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainRateCutCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainRateGrowCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainRateDecayCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainGrowthBlockedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainAnchorGiveBackCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainCohortAbortedCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainOutcomeOkCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainOutcomeOverloadedCount;
@@ -70,10 +75,15 @@ public:
         , DrainTokensBytes(TBase::GetValue("FlowControl/Drain/TokensBytes"))
         , ObservedRateCount(TBase::GetValue("FlowControl/Observe/RateCount"))
         , ObservedRateBytes(TBase::GetValue("FlowControl/Observe/RateBytes"))
+        , ServedRateCount(TBase::GetValue("FlowControl/Drain/ServedRateCount"))
+        , ServedRateBytes(TBase::GetValue("FlowControl/Drain/ServedRateBytes"))
         , ObservationTransitionCount(TBase::GetDeriviative("FlowControl/Observe/Transition/Count"))
         , DrainAllowedCount(TBase::GetDeriviative("FlowControl/Drain/Allowed/Count"))
         , DrainRateCutCount(TBase::GetDeriviative("FlowControl/Drain/RateCut/Count"))
         , DrainRateGrowCount(TBase::GetDeriviative("FlowControl/Drain/RateGrow/Count"))
+        , DrainRateDecayCount(TBase::GetDeriviative("FlowControl/Drain/RateDecay/Count"))
+        , DrainGrowthBlockedCount(TBase::GetDeriviative("FlowControl/Drain/GrowthBlocked/Count"))
+        , DrainAnchorGiveBackCount(TBase::GetDeriviative("FlowControl/Drain/AnchorGiveBack/Count"))
         , DrainCohortAbortedCount(TBase::GetDeriviative("FlowControl/Drain/CohortAborted/Count"))
         , DrainOutcomeOkCount(TBase::GetDeriviative("FlowControl/Drain/Outcome/Ok/Count"))
         , DrainOutcomeOverloadedCount(TBase::GetDeriviative("FlowControl/Drain/Outcome/Overloaded/Count"))
@@ -210,6 +220,17 @@ public:
         ObservedRateBytes->Set(rate);
     }
 
+    // Throughput FCM actually admits (fast path + drains), measured over closed windows.
+    // The drain rates are anchored to it, so RefillRate* far above these means the
+    // buckets are slack and the rate is meaningless.
+    void SetServedRateCount(ui64 rate) const {
+        ServedRateCount->Set(rate);
+    }
+
+    void SetServedRateBytes(ui64 rate) const {
+        ServedRateBytes->Set(rate);
+    }
+
     // A wait queue went from empty to non-empty and the drain rates were seeded from the
     // observed fast-path throughput.
     void OnObservationTransition() const {
@@ -226,6 +247,22 @@ public:
 
     void OnDrainRateGrow() const {
         DrainRateGrowCount->Inc();
+    }
+
+    // Continuous multiplicative decay applied while at least one node is hot.
+    void OnDrainRateDecay() const {
+        DrainRateDecayCount->Inc();
+    }
+
+    // A growth opportunity was suppressed (hot node, hot cooldown, recent overloaded
+    // outcome, or the per-period growth budget was already spent).
+    void OnDrainGrowthBlocked() const {
+        DrainGrowthBlockedCount->Inc();
+    }
+
+    // The rate was above the served-throughput anchor and was pulled back toward it.
+    void OnDrainAnchorGiveBack() const {
+        DrainAnchorGiveBackCount->Inc();
     }
 
     // A cohort completed but contained at least one overloaded write, so no growth.

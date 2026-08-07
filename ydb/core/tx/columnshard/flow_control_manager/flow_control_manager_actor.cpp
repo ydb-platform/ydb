@@ -254,14 +254,20 @@ TFlowControlManager::TFlowControlManager(TIntrusivePtr<::NMonitoring::TDynamicCo
     RMin = params.RMin;
     RMax = params.RMax;
     RefillRateR = params.RStart;
-    AimdAdd = params.AimdAdd;
     AimdBeta = params.AimdBeta;
+    CubicRecoveryTargetSec = params.CubicRecoveryTargetSec;
+    CubicProbePercent = params.CubicProbePercent;
     // Bytes bucket seed (mirrors count bucket).
     RMinBytes = params.RMinBytes;
     RMaxBytes = params.RMaxBytes;
     RefillRateBytesR = params.RStartBytes;
-    AimdAddBytes = params.AimdAddBytes;
     AimdBetaBytes = params.AimdBetaBytes;
+    // Start in probe phase at the seed rates (no recovery curve until a meaningful cut).
+    WmaxCount = RefillRateR;
+    WmaxBytes = RefillRateBytesR;
+    CubicCCount = 0.0;
+    CubicCBytes = 0.0;
+    CubicEpochStart = TInstant::Zero();
     // Seed both buckets to the soft one-cohort cap (ceil(rate)) rather than a tunable Burst:
     // the first cohort may release immediately, then pacing takes over. This is bounded (never
     // more than one cohort) so it is not an idle-accumulated burst, and it avoids adding a full
@@ -285,15 +291,15 @@ void TFlowControlManager::SyncDrainBounds() {
     const auto params = TFlowControlManagerServiceOperator::GetDrainRateParams();
     RMin = params.RMin;
     RMax = params.RMax;
-    AimdAdd = params.AimdAdd;
     AimdBeta = params.AimdBeta;
+    CubicRecoveryTargetSec = params.CubicRecoveryTargetSec;
+    CubicProbePercent = params.CubicProbePercent;
     // Keep the live rate inside the (possibly updated) bounds. Unset bounds (0) become a
     // tiny floor / +inf ceiling via EffectiveR*, so an unset config never pins the rate.
     RefillRateR = Min(EffectiveRMax(), Max(EffectiveRMin(), RefillRateR));
 
     RMinBytes = params.RMinBytes;
     RMaxBytes = params.RMaxBytes;
-    AimdAddBytes = params.AimdAddBytes;
     AimdBetaBytes = params.AimdBetaBytes;
     RefillRateBytesR = Min(EffectiveRMaxBytes(), Max(EffectiveRMinBytes(), RefillRateBytesR));
 }
@@ -312,6 +318,8 @@ void TFlowControlManager::PublishDrainGauges() const {
     Counters.SetDrainTokensBytes(static_cast<ui64>(std::llround(TokensBytes)));
     Counters.SetObservedRateCount(static_cast<ui64>(std::llround(ObservedRateCount)));
     Counters.SetObservedRateBytes(static_cast<ui64>(std::llround(ObservedRateBytes)));
+    Counters.SetServedRateCount(static_cast<ui64>(std::llround(ServedRateCount)));
+    Counters.SetServedRateBytes(static_cast<ui64>(std::llround(ServedRateBytes)));
 }
 
 TVector<ui32> TFlowControlManager::CollectDestinationNodes(const TVector<ui64>& tabletIds) const {
@@ -466,17 +474,201 @@ void TFlowControlManager::RefillTokens(TInstant now) {
     }
 }
 
-double TFlowControlManager::BytesSoftCap() const {
-    double cap = Max(1.0, std::ceil(RefillRateBytesR));
+double TFlowControlManager::FrontWaiterBatchSize() const {
+    const TInstant now = TActivationContext::Now();
     for (const ui64 waiterId : WaitQueueOrder) {
         const auto* waiter = Waiters.FindPtr(waiterId);
         if (!waiter || waiter->DrainScheduled) {
             continue;
         }
-        cap = Max(cap, static_cast<double>(waiter->BatchSize));
-        break;   // only the FIFO head matters for liveness
+        // Expired heads are skipped by ScheduleDrainEligible; do not let their BatchSize
+        // pin a cap below a still-eligible waiter further back in the FIFO.
+        if (now >= waiter->WaitDeadline) {
+            continue;
+        }
+        return static_cast<double>(waiter->BatchSize);
     }
-    return cap;
+    return 0.0;
+}
+
+double TFlowControlManager::BytesSoftCap() const {
+    return Max(Max(1.0, std::ceil(RefillRateBytesR)), FrontWaiterBatchSize());
+}
+
+double TFlowControlManager::GrowthPeriodSec() const {
+    // Growth is clocked by wall time, not by outcome arrivals: one TEvWriteOutcome is
+    // emitted per *shard* write, so a single client request feeding N shards closes a
+    // cohort N times faster than the loop assumes.
+    return Max(0.1, CubicRecoveryTargetSec / 10.0);
+}
+
+double TFlowControlManager::HotCooldownSec() const {
+    // Quiet period the system must sustain (no hot node, no overloaded outcome) before
+    // growth is allowed again — plain hysteresis around the READY flap.
+    return Max(0.2, CubicRecoveryTargetSec / 5.0);
+}
+
+double TFlowControlManager::HotDecayTauSec() const {
+    return Max(0.1, CubicRecoveryTargetSec / 10.0);
+}
+
+void TFlowControlManager::NoteAdmitted(TInstant now, ui64 batchSize) {
+    AccrueBusyTime(now);
+    if (ServedWindowStart == TInstant::Zero()) {
+        ServedWindowStart = now;
+    }
+    ServedAccumCount += 1.0;
+    ServedAccumBytes += static_cast<double>(batchSize);
+    CloseServedWindow(now);
+}
+
+void TFlowControlManager::AccrueBusyTime(TInstant now) {
+    const TInstant last = LastBusySampleAt;
+    LastBusySampleAt = now;
+    if (last == TInstant::Zero() || now <= last) {
+        return;
+    }
+    // Demand present and admits permitted: whatever we deliver in this interval is the
+    // rate FCM itself is imposing, which is what the anchor must track.
+    if (!Waiters.empty() && HotNodes.empty()) {
+        ServedBusySec += (now - last).SecondsFloat();
+    }
+}
+
+void TFlowControlManager::CloseServedWindow(TInstant now) {
+    if (ServedWindowStart == TInstant::Zero()) {
+        ServedWindowStart = now;
+        return;
+    }
+    const double dt = (now - ServedWindowStart).SecondsFloat();
+    if (dt < ServedWindowSec) {
+        return;
+    }
+    const double busy = Min(dt, ServedBusySec);
+    const double count = ServedAccumCount;
+    const double bytes = ServedAccumBytes;
+    ServedAccumCount = 0.0;
+    ServedAccumBytes = 0.0;
+    ServedBusySec = 0.0;
+    ServedWindowStart = now;
+    if (busy < dt * ServedBusyMinFraction || busy <= 0.0) {
+        // Mostly idle or mostly gated: no capacity information, keep the previous estimate.
+        return;
+    }
+    const double alpha = 1.0 - std::exp(-dt / ServedTauSec);
+    ServedRateCount = alpha * (count / busy) + (1.0 - alpha) * ServedRateCount;
+    ServedRateBytes = alpha * (bytes / busy) + (1.0 - alpha) * ServedRateBytes;
+}
+
+double TFlowControlManager::AnchorMaxCount() const {
+    if (ServedRateCount <= 0.0) {
+        return std::numeric_limits<double>::infinity();
+    }
+    return Max(EffectiveRMin(), AnchorFactor * ServedRateCount);
+}
+
+double TFlowControlManager::AnchorMaxBytes() const {
+    if (ServedRateBytes <= 0.0) {
+        return std::numeric_limits<double>::infinity();
+    }
+    return Max(EffectiveRMinBytes(), AnchorFactor * ServedRateBytes);
+}
+
+void TFlowControlManager::ApplyHotDecay(TInstant now) {
+    if (HotNodes.empty()) {
+        LastHotDecayAt = TInstant::Zero();
+        return;
+    }
+    LastHotAt = now;
+    if (LastHotDecayAt == TInstant::Zero()) {
+        LastHotDecayAt = now;
+        return;
+    }
+    const double dt = (now - LastHotDecayAt).SecondsFloat();
+    if (dt <= 0.0) {
+        return;
+    }
+    LastHotDecayAt = now;
+    // The empty→non-empty hot edge cuts once; if the node stays hot that single cut was
+    // evidently not enough, so keep applying it continuously (AimdBeta per tau) until the
+    // pressure clears or the configured floor is reached.
+    const double beta = Min(0.999, Max(0.01, AimdBeta));
+    const double factor = std::pow(beta, dt / HotDecayTauSec());
+    const double prev = RefillRateR;
+    const double prevBytes = RefillRateBytesR;
+    RefillRateR = Max(EffectiveRMin(), RefillRateR * factor);
+    RefillRateBytesR = Max(EffectiveRMinBytes(), RefillRateBytesR * factor);
+    if (RefillRateR < prev || RefillRateBytesR < prevBytes) {
+        // Keep Wmax at the decayed level: the pre-cut peak is known-bad under this pressure.
+        WmaxCount = Min(WmaxCount, RefillRateR);
+        WmaxBytes = Min(WmaxBytes, RefillRateBytesR);
+        Counters.OnDrainRateDecay();
+        ClampTokensToSoftCap();
+        PublishDrainGauges();
+    }
+}
+
+void TFlowControlManager::MaybeApplyAnchor(TInstant now) {
+    // Pull a runaway rate back toward measured throughput. This is deliberately not tied
+    // to cohort completion: the cohort target is ceil(RefillRateR), so the more inflated
+    // the rate is, the longer a cohort takes to close — exactly when the correction is
+    // most needed. One step per GrowthPeriodSec, on its own clock.
+    if (LastAnchorAt != TInstant::Zero() && (now - LastAnchorAt).SecondsFloat() < GrowthPeriodSec()) {
+        return;
+    }
+    LastAnchorAt = now;
+    const double capCount = AnchorMaxCount();
+    const double capBytes = AnchorMaxBytes();
+    bool gaveBack = false;
+    if (RefillRateR > capCount) {
+        RefillRateR = Max(capCount, RefillRateR * AnchorGiveBackFactor);
+        gaveBack = true;
+    }
+    if (RefillRateBytesR > capBytes) {
+        RefillRateBytesR = Max(capBytes, RefillRateBytesR * AnchorGiveBackFactor);
+        gaveBack = true;
+    }
+    if (gaveBack) {
+        WmaxCount = Min(WmaxCount, RefillRateR);
+        WmaxBytes = Min(WmaxBytes, RefillRateBytesR);
+        Counters.OnDrainAnchorGiveBack();
+        ClampTokensToSoftCap();
+        PublishDrainGauges();
+    }
+}
+
+bool TFlowControlManager::IsQuietSinceHot(TInstant now) const {
+    if (!HotNodes.empty()) {
+        return false;
+    }
+    if (LastHotAt != TInstant::Zero() && (now - LastHotAt).SecondsFloat() < HotCooldownSec()) {
+        return false;
+    }
+    if (LastOverloadOutcomeAt != TInstant::Zero() && (now - LastOverloadOutcomeAt).SecondsFloat() < HotCooldownSec()) {
+        return false;
+    }
+    return true;
+}
+
+bool TFlowControlManager::CanGrowNow(TInstant now) const {
+    if (!IsQuietSinceHot(now)) {
+        return false;
+    }
+    if (LastGrowthAt != TInstant::Zero() && (now - LastGrowthAt).SecondsFloat() < GrowthPeriodSec()) {
+        return false;
+    }
+    return true;
+}
+
+void TFlowControlManager::ClampTokensAfterReady() {
+    Tokens = Min(Tokens, Max(1.0, std::ceil(RefillRateR * ReadyDumpFraction)));
+    TokensBytes = Min(TokensBytes, Max(FrontWaiterBatchSize(), RefillRateBytesR * ReadyDumpFraction));
+    // Restart the refill clock: the time the node spent hot must not be credited back as
+    // tokens right after the clamp, or the drain loop immediately undoes it.
+    const TInstant now = TActivationContext::Now();
+    LastRefillAt = now;
+    LastRefillBytesAt = now;
+    PublishDrainGauges();
 }
 
 void TFlowControlManager::UpdateObservedThroughput(TInstant now, ui64 batchSize) {
@@ -504,12 +696,27 @@ void TFlowControlManager::InitializeRatesFromObservation(ui64 firstBatchSize) {
     // fast path. Seed the drain rates from the observed throughput (× safety factor), or more
     // cautiously if we saw any overload while the queue was still empty. With no observation
     // yet (cold start) keep the current seeded rate.
+    // The fast-path EWMA is spacing-based (1/dt), so bursty arrivals read high; cap the seed
+    // with the anchor, which is measured over whole windows while the queue was actually
+    // busy. Cold start has no anchor yet and keeps the raw observation.
+    // Seeding may only raise the rate in a quiet window: right after a hot episode the
+    // decayed rate is the current verdict, and re-seeding from fast-path traffic would
+    // hand the pressure right back.
     const double factor = ObservedOverload ? ObserveOverloadFactor : ObserveSafetyFactor;
+    const bool mayRaise = IsQuietSinceHot(TActivationContext::Now());
     if (ObservedRateCount > 0.0) {
-        RefillRateR = Min(EffectiveRMax(), Max(EffectiveRMin(), ObservedRateCount * factor));
+        const double cap = Min(EffectiveRMax(), AnchorMaxCount());
+        const double seed = Min(cap, Max(EffectiveRMin(), ObservedRateCount * factor));
+        if (mayRaise || seed < RefillRateR) {
+            RefillRateR = seed;
+        }
     }
     if (ObservedRateBytes > 0.0) {
-        RefillRateBytesR = Min(EffectiveRMaxBytes(), Max(EffectiveRMinBytes(), ObservedRateBytes * factor));
+        const double capBytes = Min(EffectiveRMaxBytes(), AnchorMaxBytes());
+        const double seedBytes = Min(capBytes, Max(EffectiveRMinBytes(), ObservedRateBytes * factor));
+        if (mayRaise || seedBytes < RefillRateBytesR) {
+            RefillRateBytesR = seedBytes;
+        }
     }
     // Seed to the soft one-cohort cap so the first waiter can drain immediately, then pace.
     // Raise the bytes seed to firstBatchSize so a single large first waiter is not stuck
@@ -518,6 +725,16 @@ void TFlowControlManager::InitializeRatesFromObservation(ui64 firstBatchSize) {
     TokensBytes = Max(Max(1.0, std::ceil(RefillRateBytesR)), static_cast<double>(firstBatchSize));
     LastRefillAt = TActivationContext::Now();
     LastRefillBytesAt = LastRefillAt;
+    // A real observation seed replaces the recovery curve. If we have no EWMA yet (cold
+    // empty→non-empty with no fast-path samples), keep any in-flight CUBIC epoch so a brief
+    // empty queue between drain rounds does not throw away Wmax / KTarget progress.
+    if (ObservedRateCount > 0.0 || ObservedRateBytes > 0.0) {
+        WmaxCount = RefillRateR;
+        WmaxBytes = RefillRateBytesR;
+        CubicCCount = 0.0;
+        CubicCBytes = 0.0;
+        CubicEpochStart = TInstant::Zero();
+    }
     ObservedOverload = false;
     Counters.OnObservationTransition();
     PublishDrainGauges();
@@ -550,21 +767,19 @@ void TFlowControlManager::NoteCohortRelease() {
 
 void TFlowControlManager::NoteCohortOutcome(bool overloaded) {
     Counters.OnWriteOutcome(overloaded);
-    // Outcomes are the *only* driver of rate changes (both growth in CloseCohort() and cuts in
-    // CutRateByOverloadFraction()). They arrive on the TEvWriteOutcome path, which is independent
-    // of the drain cycle, so bounds must be re-read here as well: otherwise RMax/RMin/AimdAdd/
-    // AimdBeta stay at their construction-time seed and a config merged after construction is
-    // ignored (this is what let RefillRateR climb far above drain_rate_max in production).
+    // Outcomes drive growth/cuts together with HotNodes edges (see Handle NodeOverloadStatus).
+    // Re-read bounds here: otherwise RMax/RMin/CUBIC knobs stay at construction-time seed.
     SyncDrainBounds();
+    if (overloaded) {
+        // Opens the same cooldown a hot node does: growth must wait for a quiet window.
+        LastOverloadOutcomeAt = TActivationContext::Now();
+    }
     if (!CohortOpen) {
         // Outcome of a write that was not part of an open cohort (e.g. a fast-path admit
         // with no queueing, or an in-flight write that finished between cohorts). Overload
         // still matters as a cut signal, but a *single* stray overload must not apply the
         // full AimdBeta: treat it as 1/notionalCohort of a dirty round so severity matches
-        // in-cohort proportional cuts. Using fraction=1.0 here previously halved both rates
-        // per overloaded shard-writer outcome and, with fan-out + sticky WasEverOverloaded,
-        // cascaded RefillRateBytesR down by orders of magnitude in seconds — starving the
-        // wait queue for minutes with no sustained HotNodes/OM overload signal.
+        // in-cohort proportional cuts.
         if (overloaded) {
             const double notional = Max(1.0, std::ceil(RefillRateR));
             CutRateByOverloadFraction(1.0 / notional);
@@ -579,6 +794,36 @@ void TFlowControlManager::NoteCohortOutcome(bool overloaded) {
     if (CohortOkCount + CohortOverloadCount >= CohortTarget) {
         CloseCohort();
     }
+}
+
+double TFlowControlManager::CubicW(double c, double wmax, double tSec, double kTarget) {
+    const double dt = tSec - kTarget;
+    return c * dt * dt * dt + wmax;
+}
+
+void TFlowControlManager::EnsureCubicProbeEpoch(TInstant now) {
+    // No recovery curve yet: treat current rates as Wmax and start in the probe region
+    // (t >= K) so clean cohorts add ProbePercent * Wmax without a convex climb from zero.
+    if (CubicEpochStart != TInstant::Zero()) {
+        return;
+    }
+    WmaxCount = Max(WmaxCount, RefillRateR);
+    WmaxBytes = Max(WmaxBytes, RefillRateBytesR);
+    CubicCCount = 0.0;
+    CubicCBytes = 0.0;
+    const double k = Max(0.001, CubicRecoveryTargetSec);
+    CubicEpochStart = now - TDuration::Seconds(k);
+}
+
+void TFlowControlManager::StartCubicEpoch(TInstant now, double prevCount, double newCount, double prevBytes, double newBytes) {
+    WmaxCount = prevCount;
+    WmaxBytes = prevBytes;
+    const double k = Max(0.001, CubicRecoveryTargetSec);
+    const double k3 = k * k * k;
+    // C from the actual drop so W(0) == post-cut rate and W(K) == Wmax (handles partial cuts).
+    CubicCCount = k3 > 0.0 ? Max(0.0, WmaxCount - newCount) / k3 : 0.0;
+    CubicCBytes = k3 > 0.0 ? Max(0.0, WmaxBytes - newBytes) / k3 : 0.0;
+    CubicEpochStart = now;
 }
 
 void TFlowControlManager::CloseCohort() {
@@ -596,18 +841,58 @@ void TFlowControlManager::CloseCohort() {
     }
 
     if (!overloads) {
-        // Clean round: grow BOTH buckets by AimdAdd / AimdAddBytes **percent** of the current
-        // rate (traffic-related). Absolute +N admits/s or +N MB/s nails would under-grow large
-        // clusters and over-grow small ones. No clock is consulted.
+        // Clean round: CUBIC recovery toward Wmax, then fractional probe above it.
+        // A clean cohort is necessary but not sufficient — growth is additionally clocked
+        // (one step per GrowthPeriodSec) and gated on a quiet window, because outcomes
+        // arrive per shard write and would otherwise fire growth at the fan-out rate.
+        const TInstant now = TActivationContext::Now();
+        if (!CanGrowNow(now)) {
+            Counters.OnDrainGrowthBlocked();
+            PublishDrainGauges();
+            return;
+        }
+        LastGrowthAt = now;
+
+        // Never grow past what the system actually takes from us (MaybeApplyAnchor pulls
+        // the rate back down when it is already above).
+        const double capCount = Min(EffectiveRMax(), AnchorMaxCount());
+        const double capBytes = Min(EffectiveRMaxBytes(), AnchorMaxBytes());
+
+        EnsureCubicProbeEpoch(now);
+        const double k = Max(0.001, CubicRecoveryTargetSec);
+        const double t = Max(0.0, (now - CubicEpochStart).SecondsFloat());
         bool grew = false;
-        if (RefillRateR < EffectiveRMax() && AimdAdd > 0.0) {
+
+        if (RefillRateR < capCount) {
             const double prev = RefillRateR;
-            RefillRateR = Min(EffectiveRMax(), RefillRateR * (1.0 + AimdAdd / 100.0));
+            if (t < k && CubicCCount > 0.0) {
+                RefillRateR = Min(capCount, Max(EffectiveRMin(), CubicW(CubicCCount, WmaxCount, t, k)));
+            } else {
+                // Post-Wmax (or no recovery curve): lift to Wmax, then add ProbePercent of that peak.
+                // Do not raise Wmax here — it is the last loss peak until the next meaningful cut.
+                if (WmaxCount <= 0.0) {
+                    WmaxCount = RefillRateR;
+                }
+                RefillRateR = Max(RefillRateR, Min(capCount, WmaxCount));
+                if (CubicProbePercent > 0.0) {
+                    RefillRateR = Min(capCount, RefillRateR + CubicProbePercent / 100.0 * WmaxCount);
+                }
+            }
             grew = grew || (RefillRateR > prev);
         }
-        if (RefillRateBytesR < EffectiveRMaxBytes() && AimdAddBytes > 0.0) {
+        if (RefillRateBytesR < capBytes) {
             const double prevBytes = RefillRateBytesR;
-            RefillRateBytesR = Min(EffectiveRMaxBytes(), RefillRateBytesR * (1.0 + AimdAddBytes / 100.0));
+            if (t < k && CubicCBytes > 0.0) {
+                RefillRateBytesR = Min(capBytes, Max(EffectiveRMinBytes(), CubicW(CubicCBytes, WmaxBytes, t, k)));
+            } else {
+                if (WmaxBytes <= 0.0) {
+                    WmaxBytes = RefillRateBytesR;
+                }
+                RefillRateBytesR = Max(RefillRateBytesR, Min(capBytes, WmaxBytes));
+                if (CubicProbePercent > 0.0) {
+                    RefillRateBytesR = Min(capBytes, RefillRateBytesR + CubicProbePercent / 100.0 * WmaxBytes);
+                }
+            }
             grew = grew || (RefillRateBytesR > prevBytes);
         }
         if (grew) {
@@ -624,9 +909,8 @@ void TFlowControlManager::CloseCohort() {
 void TFlowControlManager::CutRateByOverloadFraction(double overloadFraction) {
     // Proportional multiplicative decrease: a single overloaded write out of many need
     // not halve the rate, while an all-overloaded round applies the full AimdBeta.
-    // Possible only because outcomes are per request; the node-level signal could not
-    // express severity. Both buckets are cut by the same effectiveBeta, since an overload
-    // pushes back on both count and bytes at once.
+    // Both buckets are cut by the same effectiveBeta. A meaningful drop resets the CUBIC
+    // epoch (Wmax = pre-cut rates); tiny out-of-cohort nicks do not.
     const double fraction = Min(1.0, Max(0.0, overloadFraction));
     if (fraction <= 0.0) {
         return;
@@ -636,16 +920,33 @@ void TFlowControlManager::CutRateByOverloadFraction(double overloadFraction) {
     RefillRateR = Max(EffectiveRMin(), RefillRateR * effectiveBeta);
 
     const double effectiveBetaBytes = 1.0 - fraction * (1.0 - AimdBetaBytes);
+    const double prevBytes = RefillRateBytesR;
     RefillRateBytesR = Max(EffectiveRMinBytes(), RefillRateBytesR * effectiveBetaBytes);
 
-    if (RefillRateR < prev) {
+    const bool meaningfulCount = prev > 0.0 && (prev / Max(RefillRateR, EffectiveRMin())) >= MeaningfulCutRatio;
+    const bool meaningfulBytes = prevBytes > 0.0 && (prevBytes / Max(RefillRateBytesR, EffectiveRMinBytes())) >= MeaningfulCutRatio;
+    if (meaningfulCount || meaningfulBytes) {
+        StartCubicEpoch(TActivationContext::Now(), prev, RefillRateR, prevBytes, RefillRateBytesR);
+    }
+
+    if (RefillRateR < prev || RefillRateBytesR < prevBytes) {
         Counters.OnDrainRateCut();
     }
+    ClampTokensToSoftCap();
     PublishDrainGauges();
+}
+
+void TFlowControlManager::ClampTokensToSoftCap() {
+    Tokens = Min(Max(1.0, std::ceil(RefillRateR)), Tokens);
+    TokensBytes = Min(BytesSoftCap(), TokensBytes);
 }
 
 void TFlowControlManager::ScheduleDrainEligible(const TActorContext& ctx) {
     const TInstant now = TActivationContext::Now();
+    AccrueBusyTime(now);
+    CloseServedWindow(now);
+    ApplyHotDecay(now);
+    MaybeApplyAnchor(now);
     RefillTokens(now);
 
     bool moreEligibleWithoutToken = false;
@@ -675,7 +976,15 @@ void TFlowControlManager::ScheduleDrainEligible(const TActorContext& ctx) {
         TokensBytes -= static_cast<double>(waiter->BatchSize);
         waiter->DrainScheduled = true;
         waiter->TokenReserved = true;
-        const TDuration jitter = TFlowControlManagerServiceOperator::PickDrainJitter();
+        TDuration jitter = TFlowControlManagerServiceOperator::PickDrainJitter();
+        // Never schedule past the waiter's deadline: jitter > remaining time makes every
+        // DrainWaiter miss, refund, and retry until the helper times out (Drained=0).
+        if (jitter != TDuration::Zero() && waiter->WaitDeadline > now) {
+            const TDuration remaining = waiter->WaitDeadline - now;
+            if (jitter >= remaining) {
+                jitter = remaining > TDuration::MilliSeconds(1) ? remaining - TDuration::MilliSeconds(1) : TDuration::Zero();
+            }
+        }
         if (jitter == TDuration::Zero()) {
             ctx.Send(ctx.SelfID, new TEvDrainWaiter(waiterId));
         } else {
@@ -700,10 +1009,17 @@ void TFlowControlManager::ScheduleDrainEligible(const TActorContext& ctx) {
         }
     }
 
-    if (moreEligibleWithoutToken && !DrainWakeupScheduled) {
+    // While a node is hot nothing is drainable, so the pacing wakeup above never fires —
+    // keep a slow tick alive to integrate the decay. Stop once both rates sit on their
+    // floors: there is nothing left to decay and the timer would run forever.
+    const bool hotTick = !HotNodes.empty() && (RefillRateR > EffectiveRMin() || RefillRateBytesR > EffectiveRMinBytes());
+    if ((moreEligibleWithoutToken || hotTick) && !DrainWakeupScheduled) {
         DrainWakeupScheduled = true;
         // Wake when the *more depleted* bucket will next admit the front waiter: the time for
         // one count token, or the time to accrue the bytes deficit of the front waiter.
+        // Cap the delay so a floor-rate / large-batch deficit cannot park ContinueDrain for
+        // hours while the queue only ages into timeouts.
+        constexpr ui64 MaxContinueDrainDelayMs = 1000;
         ui64 delayCountMs = 100;
         if (RefillRateR > 0) {
             delayCountMs = Max<ui64>(1, static_cast<ui64>(std::llround(1000.0 / RefillRateR)));
@@ -725,7 +1041,7 @@ void TFlowControlManager::ScheduleDrainEligible(const TActorContext& ctx) {
                 break;   // first eligible waiter is the one the pacing timer must serve
             }
         }
-        const ui64 delayMs = Max(delayCountMs, delayBytesMs);
+        const ui64 delayMs = moreEligibleWithoutToken ? Min(MaxContinueDrainDelayMs, Max(delayCountMs, delayBytesMs)) : HotDecayTickMs;
         ctx.Schedule(TDuration::MilliSeconds(delayMs), new TEvContinueDrain());
     }
 
@@ -750,6 +1066,7 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, cons
         // admit's spacing and size into the EWMA that will seed the drain rates when the
         // queue first fills.
         UpdateObservedThroughput(TActivationContext::Now(), batchSize);
+        NoteAdmitted(TActivationContext::Now(), batchSize);
         ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::Allow));
         return;
     }
@@ -825,9 +1142,13 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, cons
     Counters.OnWaitQueueEnqueue();
     PublishMapSizes();
     ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::Wait, waiterId, waitDeadline));
+    // Kick the drain loop: without this, a newly enqueued waiter only moves when some other
+    // event (outcome / prior DrainWaiter / READY) happens to call ScheduleDrainEligible —
+    // so Tokens/RefillRate can climb while the queue sits idle.
+    ScheduleDrainEligible(ctx);
 }
 
-void TFlowControlManager::Handle(const NFlowControl::TEvCancelWait::TPtr& ev, const TActorContext& /*ctx*/) {
+void TFlowControlManager::Handle(const NFlowControl::TEvCancelWait::TPtr& ev, const TActorContext& ctx) {
     const ui64 waiterId = ev->Get()->GetWaiterId();
     // Only count against the wait-queue gauge/derivatives if the waiter was
     // actually present (EraseWaiter is a no-op for an unknown id).
@@ -839,7 +1160,11 @@ void TFlowControlManager::Handle(const NFlowControl::TEvCancelWait::TPtr& ev, co
     } else {
         Counters.OnWaitQueueCancelled();
     }
+    // EraseWaiter refunds a reserved drain token if any; re-run eligibility so another
+    // waiter can take that budget (and so a timed-out DrainScheduled waiter does not stall
+    // the drain chain until an unrelated outcome arrives).
     EraseWaiter(waiterId);
+    ScheduleDrainEligible(ctx);
 }
 
 void TFlowControlManager::Handle(const NFlowControl::TEvContinueDrain::TPtr& /*ev*/, const TActorContext& ctx) {
@@ -851,6 +1176,10 @@ void TFlowControlManager::Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, c
     const ui64 waiterId = ev->Get()->GetWaiterId();
     auto* waiter = Waiters.FindPtr(waiterId);
     if (!waiter) {
+        // Waiter was cancelled/timed out after Schedule(jitter); the reserved token was
+        // already refunded in EraseWaiter. Still wake the drain loop — otherwise each
+        // timed-out in-flight DrainWaiter permanently drops a wakeup.
+        ScheduleDrainEligible(ctx);
         return;
     }
 
@@ -868,14 +1197,18 @@ void TFlowControlManager::Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, c
         RefundDrainToken(*waiter);
         waiter->DrainScheduled = false;
         PublishDrainGauges();
+        // Destination went hot after we reserved the token: try the next eligible waiter.
+        ScheduleDrainEligible(ctx);
         return;
     }
 
     const TActorId helper = waiter->Helper;
     const TDuration waited = now - waiter->EnqueuedAt;
+    const ui64 batchSize = waiter->BatchSize;
     // Token already reserved at schedule time; clear flag before erase so EraseWaiter does not refund.
     waiter->TokenReserved = false;
     EraseWaiter(waiterId);
+    NoteAdmitted(now, batchSize);
     NoteCohortRelease();
     Counters.OnWaitQueueDrain(waited);
     Counters.OnAdmitAllowed(TDuration::Zero());
@@ -885,7 +1218,7 @@ void TFlowControlManager::Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, c
 }
 
 void TFlowControlManager::Handle(const NFlowControl::TEvWriteOutcome::TPtr& ev, const TActorContext& ctx) {
-    // Closed-loop feedback: this is the only input that changes the drain rate.
+    // Closed-loop feedback together with HotNodes edges in Handle(TEvNodeOverloadStatus).
     // If it arrives while the queue is empty (fast-path traffic), remember that the
     // observed throughput was already causing overload, so the next empty→non-empty
     // transition seeds the rates more cautiously.
@@ -903,24 +1236,60 @@ void TFlowControlManager::Handle(const NFlowControl::TEvNodeOverloadStatus::TPtr
     const ui64 generation = record.GetGeneration();
 
     switch (record.GetStatus()) {
-        case NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED:
-            // Gating signal only: it marks the node hot so admits are withheld. The drain
-            // rate itself is driven exclusively by per-request outcomes, which are exactly
-            // attributable to our own traffic.
+        case NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED: {
+            // Gate admits to this node, and when HotNodes goes empty→non-empty also cut the
+            // drain rate. Compaction overload is published here even when writes complete
+            // successfully (no / high in-flight limit), so write outcomes alone never cut.
+            const bool firstHot = HotNodes.empty();
             HotNodes[nodeId] = Max(HotNodes[nodeId], generation);
             Counters.OnStatusOverloaded();
-            // A node reporting overload while our queue is empty means the current fast-path
-            // throughput is already too high: seed cautiously at the next transition.
+            LastHotAt = TActivationContext::Now();
             if (WasQueueEmpty) {
                 ObservedOverload = true;
             }
+            if (firstHot) {
+                SyncDrainBounds();
+                // Drop an in-flight cohort: its clean OK outcomes are not a valid sample of
+                // the post-cut rate under compaction pressure.
+                CohortOpen = false;
+                CohortTarget = 0;
+                CohortReleased = 0;
+                CohortOkCount = 0;
+                CohortOverloadCount = 0;
+                const double prev = RefillRateR;
+                const double prevBytes = RefillRateBytesR;
+                CutRateByOverloadFraction(1.0);
+                // Compaction hot is not a discovered link limit — do not CUBIC-recover to
+                // the pre-cut peak (with β≈0.8 that undoes the cut within KTarget and then
+                // probes above it, recreating the sawtooth). Pin Wmax at the post-cut rate
+                // so the next cool window only probes from here. Skip when RMin absorbed the
+                // cut (rate unchanged) so a write-outcome CUBIC epoch is preserved.
+                if (RefillRateR < prev || RefillRateBytesR < prevBytes) {
+                    WmaxCount = RefillRateR;
+                    WmaxBytes = RefillRateBytesR;
+                    CubicCCount = 0.0;
+                    CubicCBytes = 0.0;
+                    const double k = Max(0.001, CubicRecoveryTargetSec);
+                    CubicEpochStart = TActivationContext::Now() - TDuration::Seconds(k);
+                }
+            }
+            // Start the decay integrator and keep a tick alive while hot.
+            ScheduleDrainEligible(ctx);
             break;
+        }
         case NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY: {
             auto it = HotNodes.find(nodeId);
             if (it != HotNodes.end() && generation >= it->second) {
                 HotNodes.erase(it);
             }
             Counters.OnStatusReady();
+            if (HotNodes.empty()) {
+                // Hot → cool edge: waiters piled up while admits were gated, and tokens kept
+                // accruing to the soft cap. Releasing all of that in one instant is exactly
+                // what drives the next compaction overload, so trim the carried-over budget.
+                LastHotAt = TActivationContext::Now();
+                ClampTokensAfterReady();
+            }
             ScheduleDrainEligible(ctx);
             break;
         }

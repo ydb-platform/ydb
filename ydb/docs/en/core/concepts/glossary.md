@@ -740,7 +740,7 @@ Domain failures are handled automatically by {{ ydb-short-name }} without shutti
 
 #### Distributed storage channel {#channel}
 
-A **channel** is a logical connection between a [tablet](#tablet) and [Distributed storage](#distributed-storage) group. The tablet can write data to different channels, and each channel is mapped to a specific [storage group](#storage-group). Having multiple channels allows the tablet to:
+A **distributed storage channel**, **DS channel**, or **channel** is a logical connection between a [tablet](#tablet) and a [storage group](#storage-group). A tablet can write data to different channels, and each channel maps to a specific storage group. Having multiple channels allows a tablet to:
 
 * Record more data than one storage group can contain.
 * Store different [LogoBlobs](#logoblob) on different storage groups, with different properties like erasure encoding or on different storage media (HDD, SSD, NVMe).

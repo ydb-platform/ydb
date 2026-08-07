@@ -876,7 +876,7 @@ def allure_test_description(
     ci_launch_url = os.getenv('CI_LAUNCH_URL') or ''
     if ci_launch_url:
         test_info['ci_launch_url'] = (
-            f"<a target='_blank' href='{ci_launch_url}'>{ci_launch_url}</a>"
+            f"<a target='_blank' href='{ci_launch_url}'>arcadia run</a>"
         )
 
     _set_monitoring(test_info, start_time, end_time)

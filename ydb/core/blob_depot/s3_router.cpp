@@ -165,9 +165,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void HandleRefreshNow() {
-            if (!RefreshInFlight) {
-                IssueBalancerRequest();
-            }
+            IssueBalancerRequest();
         }
 
         void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev) {
@@ -195,7 +193,9 @@ namespace NKikimr::NBlobDepot {
             if (!InnerWrapperId) {
                 return;
             }
+
             TActivationContext::Send(ev->Forward(InnerWrapperId));
+            IssueBalancerRequest();
         }
 
     public:

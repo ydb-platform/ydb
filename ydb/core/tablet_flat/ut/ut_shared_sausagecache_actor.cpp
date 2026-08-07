@@ -68,7 +68,7 @@ struct TPageCollectionMock : public IPageCollection {
         return { Page(page).Size, { page, 0 }, { page, ui32(Page(page).Size) } };
     }
 
-    TBorder Bounds(TPageLocation location) const override {
+    TBorder Bounds(const TPageLocation& location) const override {
         return Bounds(location.Offset.AsPageIndex());
     }
 
@@ -80,7 +80,7 @@ struct TPageCollectionMock : public IPageCollection {
         Y_TABLET_ERROR("Unexpected Verify(...) call");
     }
 
-    bool Verify(TPageLocation location, TArrayRef<const char> data) const override {
+    bool Verify(const TPageLocation& location, TArrayRef<const char> data) const override {
         return data.size() == location.Size;
     }
 
@@ -198,7 +198,7 @@ struct TSharedPageCacheMock {
     TSharedPageCacheMock& Provide(TIntrusiveConstPtr<TPageCollectionMock> collection, TVector<TPageLocation> locations, ui64 eventCookie = NO_QUEUE_COOKIE) { // event cookie -> queue type
         auto data = new NBlockIO::TEvData(NKikimrProto::OK, collection, locations.size() * 10); // fetch cookie -> requested size
         for (auto& loc : locations) {
-            data->Pages.emplace_back(loc, TSharedData::Copy(TString(10, 'x')));
+            data->Pages.emplace_back(loc.Offset, TSharedData::Copy(TString(10, 'x')));
         }
         Send(BlockIoSender, data, eventCookie);
 
@@ -275,8 +275,8 @@ struct TSharedPageCacheMock {
             auto& result = *r->Get();
             actual.push_back(TFetch{result.Cookie, result.PageCollection, {}});
             for (auto& p : r->Get()->Pages) {
-                actual.back().Pages.push_back(p.Location);
-                pages.emplace(p.Location.Offset.AsPageIndex(), p.Page);
+                actual.back().Pages.push_back(r->Get()->PageCollection->GetLocation(p.Offset.AsPageIndex()));
+                pages.emplace(p.Offset.AsPageIndex(), p.Page);
             }
         }
         Results.clear();
@@ -386,7 +386,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 4);
 
         auto data = new NBlockIO::TEvData(NKikimrProto::ERROR, sharedCache.Collection1, 30);
-        data->Pages = {{_P(1), TSharedData{}}, {_P(2), TSharedData{}}, {_P(3), TSharedData{}}};
+        data->Pages = {TLoadedPageData(_P(1).Offset, TSharedData{}), TLoadedPageData(_P(2).Offset, TSharedData{}), TLoadedPageData(_P(3).Offset, TSharedData{})};
         sharedCache.Send(sharedCache.BlockIoSender, data, NO_QUEUE_COOKIE);
         sharedCache.CheckResults({
             TFetch{1, sharedCache.Collection1, {}},
@@ -496,7 +496,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 4);
 
         auto data = new NBlockIO::TEvData(NKikimrProto::ERROR, sharedCache.Collection1, 10);
-        data->Pages = {{_P(1), TSharedData{}}};
+        data->Pages = {TLoadedPageData(_P(1).Offset, TSharedData{})};
         sharedCache.Send(sharedCache.BlockIoSender, data, ASYNC_QUEUE_COOKIE);
         sharedCache.CheckResults({
             TFetch{1, sharedCache.Collection1, {}},

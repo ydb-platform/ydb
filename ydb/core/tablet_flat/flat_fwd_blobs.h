@@ -39,7 +39,7 @@ namespace NFwd {
 
         TResult Get(IPageLoadingQueue *head, TPageOffset offset, EPage, ui64 lower) override
         {
-            auto pageId = offset.AsPageIndex();
+            auto pageId = offset.AsPageIndex(); // blob pages are always page-index-addressed
 
             Y_ENSURE(pageId >= Lower, "Cannot handle backward blob reads");
 
@@ -73,6 +73,7 @@ namespace NFwd {
 
             Stat.Saved += page.Data.size();
             OnFetch -= page.Data.size();
+            // blob pages are always page-index-addressed
             OnHold += Lookup(page.Location.Offset.AsPageIndex()).Settle(page, std::move(sharedPageRef));
 
             Shrink(false /* do not drop loading pages */);

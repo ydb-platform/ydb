@@ -420,11 +420,10 @@ public:
         InstantiateModule(wavmModule, linkResult, name);
     }
 
-    void AddPrecompiledModule(const TModuleBytecode& bytecode, TStringBuf name = "") override
+    void AddSdk(const TModuleBytecode& bytecode) override
     {
-        if (!bytecode.ObjectCode) {
-            THROW_ERROR_EXCEPTION("Precompiled module object code is required");
-        }
+        YT_ASSERT(!RuntimeLibraryInstance_);
+        YT_ASSERT(Compartment_->instances.size() == 1);
 
         if (bytecode.ObjectCode) {
             AddPrecompiledModule(bytecode, "env");

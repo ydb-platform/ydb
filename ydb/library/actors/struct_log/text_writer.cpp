@@ -38,12 +38,15 @@ void TTextWriter::TValueWriter::operator()(const TString& value) const {
     }
     outputText << "=";
     auto str = TTypesMapping::ToString(value);
-    auto substNewLines = SubstGlobal(str, "\n", "\\n");
-    auto substDoubleQuote = SubstGlobal(str, "\"", "\\\"");
-
-    if ( substNewLines!=0 || substDoubleQuote!=0 || str.Contains(" ") || str.Contains("=") || str.Contains("'")) {
+    if (str.find_first_of(" ='\"\\\n")!=std::string::npos)
+    {
         outputText << "\"";
-        outputText << str;
+        for(std::string::size_type pos = 0;pos < str.size();pos++) {
+            if (str[pos]=='"') outputText << "\\\"";
+            else if (str[pos]=='\\') outputText << "\\\\";
+            else if (str[pos]=='\n') outputText << "\\n";
+            else outputText << str[pos];
+        }
         outputText << "\"";
     } else {
         outputText << str;

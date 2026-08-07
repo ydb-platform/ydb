@@ -584,15 +584,26 @@ private:
             const auto sampledString = CallMetadata_.Find(TracingSampledMetadataKey);
             const auto debugString = CallMetadata_.Find(TracingDebugMetadataKey);
 
+            NTracing::NProto::TTracingExt traceContext{};
             if (!traceIdString &&
                 !spanIdString &&
                 !sampledString &&
                 !debugString)
             {
+                auto traceParentString = CallMetadata_.Find(TracingTraceParentMetadataKey);
+                NTracing::TSpanContext spanContext;
+                if (!traceParentString || !NTracing::TryParseTraceParent(traceParentString, spanContext)) {
+                    return;
+                }
+
+                ToProto(traceContext.mutable_trace_id(), spanContext.TraceId);
+                traceContext.set_span_id(spanContext.SpanId);
+                traceContext.set_sampled(spanContext.Sampled);
+                traceContext.set_debug(spanContext.Debug);
+                TraceContext_.emplace(std::move(traceContext));
                 return;
             }
 
-            NTracing::NProto::TTracingExt traceContext{};
             if (traceIdString) {
                 TGuid traceId;
                 if (!TGuid::FromString(traceIdString, &traceId)) {

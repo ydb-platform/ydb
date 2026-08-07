@@ -24,6 +24,9 @@
 
 #include <library/cpp/yt/misc/tls.h>
 
+#include <util/string/cast.h>
+#include <util/string/split.h>
+
 #include <atomic>
 #include <mutex>
 
@@ -227,6 +230,45 @@ void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStri
         context.TraceId,
         context.SpanId,
         (context.Sampled ? 1u : 0) | (context.Debug ? 2u : 0));
+}
+
+bool TryParseTraceParent(TStringBuf traceParent, TSpanContext& spanContext)
+{
+    // An adaptation of https://github.com/census-instrumentation/opencensus-go/blob/ae11cd04b/plugin/ochttp/propagation/tracecontext/propagation.go#L49-L106.
+
+    auto parts = StringSplitter(traceParent).Split('-').ToList<std::string>();
+    if (parts.size() < 3 || parts.size() > 4) {
+        return false;
+    }
+
+    // NB: We support the legacy three-part form in which version is assumed to be zero.
+    ui8 version = 0;
+    if (parts.size() == 4) {
+        if (parts[0].size() != 2 || !TryIntFromString<16>(parts[0], version) || version == 0xff) {
+            return false;
+        }
+        parts.erase(parts.begin());
+    }
+
+    if (!TTraceId::FromStringHex32(parts[0], &spanContext.TraceId) || spanContext.TraceId == InvalidTraceId) {
+        return false;
+    }
+
+    if (parts[1].size() != 16 ||
+        !TryIntFromString<16>(parts[1], spanContext.SpanId) ||
+        spanContext.SpanId == InvalidSpanId)
+    {
+        return false;
+    }
+
+    ui8 options = 0;
+    if (parts[2].size() != 2 || !TryIntFromString<16>(parts[2], options)) {
+        return false;
+    }
+    spanContext.Sampled = static_cast<bool>(options & 1u);
+    spanContext.Debug = static_cast<bool>(options & 2u);
+
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

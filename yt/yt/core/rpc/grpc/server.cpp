@@ -151,7 +151,8 @@ private:
                     THROW_ERROR_EXCEPTION("Error configuring server to listen at %Qv",
                         addressConfig->Address);
                 }
-                YT_LOG_DEBUG("Server address configured (Address: %v)", addressConfig->Address);
+                YT_TLOG_DEBUG("Server address configured")
+                    .With("Address", addressConfig->Address);
             }
         } catch (const std::exception& ex) {
             Cleanup();
@@ -466,7 +467,7 @@ private:
         {
             if (!success) {
                 // This normally happens on server shutdown.
-                YT_LOG_DEBUG("Server accept failed");
+                YT_TLOG_DEBUG("Server accept failed");
                 Unref();
                 return;
             }
@@ -476,9 +477,9 @@ private:
             ParseRequestId();
 
             if (!TryParsePeerAddress()) {
-                YT_LOG_WARNING("Malformed peer address (PeerAddress: %v, RequestId: %v)",
-                    PeerAddressString_,
-                    RequestId_);
+                YT_TLOG_WARNING("Malformed peer address")
+                    .With("PeerAddress", PeerAddressString_)
+                    .With("RequestId", RequestId_);
                 Unref();
                 return;
             }
@@ -497,16 +498,17 @@ private:
                 SslCredentialsExt_ = WaitFor(ParseSslCredentials())
                     .ValueOrThrow();
             } catch (const std::exception& ex) {
-                YT_LOG_DEBUG(ex, "Failed to parse ssl credentials (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Failed to parse ssl credentials")
+                    .With("RequestId", RequestId_)
+                    .With(TError(ex));
                 Unref();
                 return;
             }
 
             if (!TryParseRoutingParameters()) {
-                YT_LOG_DEBUG("Malformed request routing parameters (RawMethod: %v, RequestId: %v)",
-                    ToStringBuf(CallDetails_->method),
-                    RequestId_);
+                YT_TLOG_DEBUG("Malformed request routing parameters")
+                    .With("RawMethod", ToStringBuf(CallDetails_->method))
+                    .With("RequestId", RequestId_);
                 Unref();
                 return;
             }
@@ -521,24 +523,15 @@ private:
                 return;
             }
 
-            YT_LOG_DEBUG("Request accepted (RequestId: %v, Host: %v, Method: %v.%v, %v%vPeerAddress: %v, Timeout: %v, ProtocolVersion: %v)",
-                RequestId_,
-                ToStringBuf(CallDetails_->host),
-                ServiceName_,
-                MethodName_,
-                MakeFormatterWrapper([&] (auto* builder) {
-                    if (User_) {
-                        builder->AppendFormat("User: %v, ", *User_);
-                    }
-                }),
-                MakeFormatterWrapper([&] (auto* builder) {
-                    if (User_ && UserTag_ && *UserTag_ != *User_) {
-                        builder->AppendFormat("UserTag: %v, ", *UserTag_);
-                    }
-                }),
-                PeerAddressString_,
-                Timeout_,
-                ProtocolVersion_);
+            YT_TLOG_DEBUG("Request accepted")
+                .With("RequestId", RequestId_)
+                .With("Host", ToStringBuf(CallDetails_->host))
+                .WithFormat("Method", "%v.%v", ServiceName_, MethodName_)
+                .WithIf(User_.has_value(), "User", User_)
+                .WithIf(User_ && UserTag_ && *UserTag_ != *User_, "UserTag", UserTag_)
+                .With("PeerAddress", PeerAddressString_)
+                .With("Timeout", Timeout_)
+                .With("ProtocolVersion", ProtocolVersion_);
 
             Service_ = Owner_->FindService(TServiceId(ServiceName_));
 
@@ -641,9 +634,9 @@ private:
 
             if (!TRequestId::FromString(idString, &RequestId_)) {
                 RequestId_ = TRequestId::Create();
-                YT_LOG_WARNING("Malformed request id, using a random one (MalformedRequestId: %v, RequestId: %v)",
-                    idString,
-                    RequestId_);
+                YT_TLOG_WARNING("Malformed request id, using a random one")
+                    .With("MalformedRequestId", idString)
+                    .With("RequestId", RequestId_);
             }
         }
 
@@ -686,15 +679,15 @@ private:
 
             int intCodecId;
             if (!TryFromString(requestCodecString, intCodecId)) {
-                YT_LOG_WARNING("Failed to parse request codec from request metadata (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_WARNING("Failed to parse request codec from request metadata")
+                    .With("RequestId", RequestId_);
                 return;
             }
             auto codecId = TryCheckedEnumCast<NCompression::ECodec>(intCodecId);
             if (!codecId) {
-                YT_LOG_WARNING("Request codec %v is not supported (RequestId: %v)",
-                    intCodecId,
-                    RequestId_);
+                YT_TLOG_WARNING("Request codec is not supported")
+                    .With("Codec", intCodecId)
+                    .With("RequestId", RequestId_);
                 return;
             }
 
@@ -710,15 +703,15 @@ private:
 
             int intCodecId;
             if (!TryFromString(responseCodecString, intCodecId)) {
-                YT_LOG_WARNING("Failed to parse response codec from request metadata (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_WARNING("Failed to parse response codec from request metadata")
+                    .With("RequestId", RequestId_);
                 return;
             }
             auto codecId = TryCheckedEnumCast<NCompression::ECodec>(intCodecId);
             if (!codecId) {
-                YT_LOG_WARNING("Response codec is not supported (RequestId: %v, Codec: %v)",
-                    RequestId_,
-                    intCodecId);
+                YT_TLOG_WARNING("Response codec is not supported")
+                    .With("RequestId", RequestId_)
+                    .With("Codec", intCodecId);
                 return;
             }
 
@@ -897,8 +890,9 @@ private:
             try {
                 RequestMessageBodySize_ = FromString<ui32>(messageBodySizeString);
             } catch (const std::exception& ex) {
-                YT_LOG_WARNING(ex, "Failed to parse message body size from request metadata (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_WARNING("Failed to parse message body size from request metadata")
+                    .With("RequestId", RequestId_)
+                    .With(TError(ex));
                 return false;
             }
 
@@ -915,8 +909,9 @@ private:
             try {
                 ProtocolVersion_ = TProtocolVersion::FromString(protocolVersionString);
             } catch (const std::exception& ex) {
-                YT_LOG_WARNING(ex, "Failed to parse protocol version from string (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_WARNING("Failed to parse protocol version from string")
+                    .With("RequestId", RequestId_)
+                    .With(TError(ex));
                 return false;
             }
 
@@ -926,15 +921,15 @@ private:
         void OnRequestReceived(bool success)
         {
             if (!success) {
-                YT_LOG_DEBUG("Failed to receive request body (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Failed to receive request body")
+                    .With("RequestId", RequestId_);
                 Unref();
                 return;
             }
 
             if (!RequestBodyBuffer_) {
-                YT_LOG_DEBUG("Empty request body received (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Empty request body received")
+                    .With("RequestId", RequestId_);
                 Unref();
                 return;
             }
@@ -980,8 +975,9 @@ private:
                     RequestMessageBodySize_,
                     !header->has_request_codec());
             } catch (const std::exception& ex) {
-                YT_LOG_DEBUG(ex, "Failed to receive request body (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Failed to receive request body")
+                    .With("RequestId", RequestId_)
+                    .With(TError(ex));
                 Unref();
                 return;
             }
@@ -991,8 +987,8 @@ private:
                 Stage_ = EServerCallStage::SendingInitialMetadata;
             }
 
-            YT_LOG_DEBUG("Request received (RequestId: %v)",
-                RequestId_);
+            YT_TLOG_DEBUG("Request received")
+                .With("RequestId", RequestId_);
 
             InitialMetadataBuilder_.Add(RequestIdMetadataKey, ToString(RequestId_));
 
@@ -1047,8 +1043,8 @@ private:
         void OnInitialMetadataSent(bool success)
         {
             if (!success) {
-                YT_LOG_DEBUG("Failed to send initial metadata (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Failed to send initial metadata")
+                    .With("RequestId", RequestId_);
                 Unref();
                 return;
             }
@@ -1081,8 +1077,8 @@ private:
             Stage_ = EServerCallStage::SendingResponse;
             guard.Release();
 
-            YT_LOG_DEBUG("Sending response (RequestId: %v)",
-                RequestId_);
+            YT_TLOG_DEBUG("Sending response")
+                .With("RequestId", RequestId_);
 
             {
                 auto guard = Guard(TraceContextSpinLock_);
@@ -1143,11 +1139,11 @@ private:
             }
 
             if (success) {
-                YT_LOG_DEBUG("Response sent (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Response sent")
+                    .With("RequestId", RequestId_);
             } else {
-                YT_LOG_DEBUG("Failed to send response (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Failed to send response")
+                    .With("RequestId", RequestId_);
             }
 
             Unref();
@@ -1159,12 +1155,12 @@ private:
                 if (RawCanceled_) {
                     OnCanceled();
                 } else {
-                    YT_LOG_DEBUG("Request closed (RequestId: %v)",
-                        RequestId_);
+                    YT_TLOG_DEBUG("Request closed")
+                        .With("RequestId", RequestId_);
                 }
             } else {
-                YT_LOG_DEBUG("Failed to close request (RequestId: %v)",
-                    RequestId_);
+                YT_TLOG_DEBUG("Failed to close request")
+                    .With("RequestId", RequestId_);
             }
 
             Unref();
@@ -1172,8 +1168,8 @@ private:
 
         void OnCanceled()
         {
-            YT_LOG_DEBUG("Request cancelation received (RequestId: %v)",
-                RequestId_);
+            YT_TLOG_DEBUG("Request cancelation received")
+                .With("RequestId", RequestId_);
 
             if (Service_) {
                 Service_->HandleRequestCancellation(RequestId_);

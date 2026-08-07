@@ -132,17 +132,17 @@ TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext)
     auto delta = now - traceContextTimingCheckpoint;
 
     if (oldContext && newContext) {
-        YT_LOG_TRACE("Switching context (OldContext: %v, NewContext: %v, CpuTimeDelta: %v)",
-            oldContext,
-            newContext,
-            NProfiling::CpuDurationToDuration(delta));
+        YT_TLOG_TRACE("Switching context")
+            .With("OldContext", oldContext)
+            .With("NewContext", newContext)
+            .With("CpuTimeDelta", NProfiling::CpuDurationToDuration(delta));
     } else if (oldContext) {
-        YT_LOG_TRACE("Uninstalling context (Context: %v, CpuTimeDelta: %v)",
-            oldContext,
-            NProfiling::CpuDurationToDuration(delta));
+        YT_TLOG_TRACE("Uninstalling context")
+            .With("Context", oldContext)
+            .With("CpuTimeDelta", NProfiling::CpuDurationToDuration(delta));
     } else if (newContext) {
-        YT_LOG_TRACE("Installing context (Context: %v)",
-            newContext);
+        YT_TLOG_TRACE("Installing context")
+            .With("Context", newContext);
     }
 
     if (oldContext) {
@@ -390,9 +390,9 @@ void TTraceContext::CheckForLeak(TCpuInstant now)
 {
     if (now > LeakDeadline_) [[unlikely]] {
         if (!LeakDetected_.exchange(true)) {
-            YT_LOG_DEBUG("Trace context leak detected (TraceId: %v, StartTime: %v)",
-                GetTraceId(),
-                GetStartTime());
+            YT_TLOG_DEBUG("Trace context leak detected")
+                .With("TraceId", GetTraceId())
+                .With("StartTime", GetStartTime());
             NDetail::TraceContextsLeakedCounter().Increment();
         }
     }
@@ -732,9 +732,9 @@ void FlushCurrentTraceContextElapsedTime()
 
     auto now = GetApproximateCpuInstant();
     auto delta = std::max(now - traceContextTimingCheckpoint, static_cast<TCpuInstant>(0));
-    YT_LOG_TRACE("Flushing context time (Context: %v, CpuTimeDelta: %v)",
-        context,
-        NProfiling::CpuDurationToDuration(delta));
+    YT_TLOG_TRACE("Flushing context time")
+        .With("Context", context)
+        .With("CpuTimeDelta", NProfiling::CpuDurationToDuration(delta));
     context->IncrementElapsedCpuTime(delta);
     traceContextTimingCheckpoint = now;
 }

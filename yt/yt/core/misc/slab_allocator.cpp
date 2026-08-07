@@ -157,9 +157,9 @@ public:
 
         size_t totalSize = segmentCount * (sizeof(TFreeListItem) + ObjectSize_ * ObjectCount_);
 
-        YT_LOG_TRACE("Destroying arena (ObjectSize: %v, TotalSize: %v)",
-            ObjectSize_,
-            totalSize);
+        YT_TLOG_TRACE("Destroying arena")
+            .With("ObjectSize", ObjectSize_)
+            .With("TotalSize", totalSize);
 
         if (MemoryTracker_) {
             MemoryTracker_->Release(totalSize);
@@ -248,12 +248,12 @@ private:
         auto refCount = GetRefCounter(this)->GetRefCount();
         constexpr auto& Logger = LockFreeLogger;
 
-        YT_LOG_TRACE("Allocating segment (ObjectSize: %v, RefCount: %v, SegmentCount: %v, TotalObjectCapacity: %v, TotalSize: %v)",
-            ObjectSize_,
-            refCount,
-            segmentCount,
-            segmentCount * ObjectCount_,
-            segmentCount * totalSize);
+        YT_TLOG_TRACE("Allocating segment")
+            .With("ObjectSize", ObjectSize_)
+            .With("RefCount", refCount)
+            .With("SegmentCount", segmentCount)
+            .With("TotalObjectCapacity", segmentCount * ObjectCount_)
+            .With("TotalSize", segmentCount * totalSize);
 
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
         TRefCountedTrackerFacade::AllocateSpace(GetRefCountedTypeCookie<TSmallArena>(), totalSize);

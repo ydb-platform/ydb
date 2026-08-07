@@ -1031,9 +1031,9 @@ public:
 
         UpdateLocalHostName(config);
 
-        YT_LOG_INFO("Localhost name determined via system call (LocalHostName: %v, ResolveHostNameIntoFqdn: %v)",
-            GetLocalHostName(),
-            config->ResolveHostNameIntoFqdn);
+        YT_TLOG_INFO("Localhost name determined via system call")
+            .With("LocalHostName", GetLocalHostName())
+            .With("ResolveHostNameIntoFqdn", config->ResolveHostNameIntoFqdn);
     }
 
     bool IsLocalAddress(const TNetworkAddress& address)
@@ -1049,7 +1049,7 @@ public:
     void PurgeCache()
     {
         Clear();
-        YT_LOG_INFO("Address cache purged");
+        YT_TLOG_INFO("Address cache purged");
     }
 
     void Configure(TAddressResolverConfigPtr config)
@@ -1061,8 +1061,8 @@ public:
 
         if (config->LocalHostNameOverride) {
             SetLocalHostName(*config->LocalHostNameOverride);
-            YT_LOG_INFO("Localhost name configured via config override (LocalHostName: %v)",
-                config->LocalHostNameOverride);
+            YT_TLOG_INFO("Localhost name configured via config override")
+                .With("LocalHostName", config->LocalHostNameOverride);
         }
 
         UpdateLoopbackAddress(config);

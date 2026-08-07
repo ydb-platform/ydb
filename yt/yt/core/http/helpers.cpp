@@ -151,8 +151,9 @@ public:
         } catch(const std::exception& ex) {
             TError error(ex);
 
-            YT_LOG_DEBUG(error, "Error handling HTTP request (Path: %v)",
-                req->GetUrl().Path);
+            YT_TLOG_DEBUG("Error handling HTTP request")
+                .With("Path", req->GetUrl().Path)
+                .With(error);
 
             FillYTErrorHeaders(rsp, error);
             rsp->SetStatus(EStatusCode::InternalServerError);

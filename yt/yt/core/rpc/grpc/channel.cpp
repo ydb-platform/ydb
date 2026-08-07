@@ -283,11 +283,10 @@ private:
 
         void Initialize()
         {
-            YT_LOG_DEBUG("Sending request (RequestId: %v, Method: %v.%v, Timeout: %v)",
-                Request_->GetRequestId(),
-                Request_->GetService(),
-                Request_->GetMethod(),
-                Options_.Timeout);
+            YT_TLOG_DEBUG("Sending request")
+                .With("RequestId", Request_->GetRequestId())
+                .WithFormat("Method", "%v.%v", Request_->GetService(), Request_->GetMethod())
+                .With("Timeout", Options_.Timeout);
 
             {
                 auto completionQueueGuard = GuardedCompletionQueue_->TryLock();
@@ -458,7 +457,8 @@ private:
             auto result = grpc_call_cancel(Call_.Unwrap(), nullptr);
             YT_VERIFY(result == GRPC_CALL_OK);
 
-            YT_LOG_DEBUG("Request canceled (RequestId: %v)", Request_->GetRequestId());
+            YT_TLOG_DEBUG("Request canceled")
+                .With("RequestId", Request_->GetRequestId());
 
             NotifyError(
                 TStringBuf("Request canceled"),
@@ -556,10 +556,9 @@ private:
                 return;
             }
 
-            YT_LOG_DEBUG("Request sent (RequestId: %v, Method: %v.%v)",
-                Request_->GetRequestId(),
-                Request_->GetService(),
-                Request_->GetMethod());
+            YT_TLOG_DEBUG("Request sent")
+                .With("RequestId", Request_->GetRequestId())
+                .WithFormat("Method", "%v.%v", Request_->GetService(), Request_->GetMethod());
 
             ProfileRequest(RequestBody_);
 
@@ -586,8 +585,8 @@ private:
             }
 
             ProfileAcknowledgement();
-            YT_LOG_DEBUG("Initial response metadata received (RequestId: %v)",
-                Request_->GetRequestId());
+            YT_TLOG_DEBUG("Initial response metadata received")
+                .With("RequestId", Request_->GetRequestId());
 
             Stage_ = EClientCallStage::ReceivingResponse;
 
@@ -736,11 +735,10 @@ private:
             }
 
             auto elapsed = ProfileComplete();
-            YT_LOG_DEBUG("Response received (RequestId: %v, Method: %v.%v, TotalTime: %v)",
-                Request_->GetRequestId(),
-                Request_->GetService(),
-                Request_->GetMethod(),
-                elapsed);
+            YT_TLOG_DEBUG("Response received")
+                .With("RequestId", Request_->GetRequestId())
+                .WithFormat("Method", "%v.%v", Request_->GetService(), Request_->GetMethod())
+                .With("TotalTime", elapsed);
 
             responseHandler->HandleResponse(
                 std::move(message),

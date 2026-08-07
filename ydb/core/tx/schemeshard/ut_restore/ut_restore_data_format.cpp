@@ -142,7 +142,7 @@ struct TTestData {
     TDataWithChecksum RawData;
     TString Data;
     TString YsonStr;
-    EDataFormat DataFormat = EDataFormat::Csv;
+    EDataFormat DataFormat = EDataFormat::YdbDump;
 
     TTestData(TString csvData, TString ysonStr)
         : RawData(std::move(csvData))
@@ -159,7 +159,7 @@ struct TTestData {
 
     TString Ext() const {
         switch (DataFormat) {
-        case EDataFormat::Csv:
+        case EDataFormat::YdbDump:
             return ".csv";
         case EDataFormat::Parquet:
             return ".parquet";

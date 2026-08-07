@@ -140,11 +140,18 @@ def get_checkpoint_coordinator_metric(
 
 
 def get_completed_checkpoints(cluster: KiKiMR, path: str, expect_counters_exist: bool = False) -> int:
-    return get_checkpoint_coordinator_metric(cluster, path, "CompletedCheckpoints", expect_counters_exist=expect_counters_exist)
+    return get_checkpoint_coordinator_metric(
+        cluster, path, "CompletedCheckpoints", expect_counters_exist=expect_counters_exist
+    )
 
 
 def wait_completed_checkpoints(
-    cluster: KiKiMR, path: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), checkpoints_count=2, wait_delta: bool = True, expect_counters_exist: bool = False
+    cluster: KiKiMR,
+    path: str,
+    timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
+    checkpoints_count=2,
+    wait_delta: bool = True,
+    expect_counters_exist: bool = False,
 ) -> None:
     if wait_delta:
         current = get_completed_checkpoints(cluster, path, expect_counters_exist=expect_counters_exist)
@@ -336,7 +343,9 @@ class StreamingTestBase(TestYdsBase):
     def wait_completed_checkpoints(
         self, kikimr: Kikimr, path: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), checkpoints_count=2
     ) -> None:
-        wait_completed_checkpoints(kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True)
+        wait_completed_checkpoints(
+            kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
+        )
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(

@@ -47,6 +47,7 @@ public:
     TReplyStatusE WriteToPBufferStatus = TReplyStatus::OK;
     TReplyStatusE WriteToManyPBufferStatus = TReplyStatus::OK;
     TReplyStatusE SyncWithPBufferStatus = TReplyStatus::OK;
+    TReplyStatusE DeleteTabletChunksStatus = TReplyStatus::OK;
 
     // When set, WriteToManyPBuffers replies only for the first (coordinator)
     // DDisk in the request with the given status, emulating the node
@@ -165,6 +166,9 @@ public:
         NWilson::TSpan* span) override;
 
     NThreading::TFuture<TEvListPersistentBufferResult> ListPBufferEntries(
+        const THostConnection& connection) override;
+
+    NThreading::TFuture<TEvDeleteTabletChunksResult> DeleteTabletChunks(
         const THostConnection& connection) override;
 
 private:

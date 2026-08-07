@@ -78,6 +78,9 @@ public:
     NThreading::TFuture<TEvListPersistentBufferResult> ListPBufferEntries(
         const THostConnection& connection) override;
 
+    NThreading::TFuture<TEvDeleteTabletChunksResult> DeleteTabletChunks(
+        const THostConnection& connection) override;
+
 private:
     using EConnectionType = THostConnection::EConnectionType;
 

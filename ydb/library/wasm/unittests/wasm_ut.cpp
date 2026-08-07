@@ -1551,7 +1551,7 @@ TEST_F(TWebAssemblyTest, PureVirtualFunctionCall)
             backtrace += item;
             backtrace += '\n';
         }
-        ASSERT_TRUE(backtrace.contains("wasm!!__cxa_pure_virtual"));
+        ASSERT_NE(backtrace.find("wasm!!__cxa_pure_virtual"), std::string::npos);
         WAVM::Runtime::destroyException(exception);
     }
 }

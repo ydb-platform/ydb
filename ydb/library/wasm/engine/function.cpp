@@ -17,6 +17,11 @@ void WavmInvoke(
     TWavmPodValue* result,
     TRange<TWavmPodValue> arguments)
 {
+    // TODO: GetFunction(name) may return null (typo / missing export). Passing
+    // null into invokeFunction crashes inside WAVM. Before throwing here, find
+    // a catch site so the process does not terminate on an uncaught exception
+    // (TCompartmentFunction callers / actor boundaries currently do not catch
+    // yexception from this path).
     const auto wavmType = IR::FunctionType(
         IR::FunctionType::Encoding{
             std::bit_cast<Uptr>(type)});

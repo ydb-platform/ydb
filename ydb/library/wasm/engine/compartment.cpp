@@ -1089,6 +1089,9 @@ void TWebAssemblyCompartment::AddExportsToGlobalOffsetTable(IR::Module& irModule
         }
     }
 
+    // TODO: Index from evaluated active elem segment baseOffset (__table_base /
+    // const), not table capacity. Min GOT size is 2048 while segments land at
+    // table_base (often 0), so getTableNumElements() mis-records GOT.func slots.
     Uptr baseOffset = Runtime::getTableNumElements(GetGlobalOffsetTable());
     for (const auto& elementSegment : irModule.elemSegments) {
         if (elementSegment.type != IR::ElemSegment::Type::active) {
@@ -1149,6 +1152,7 @@ void TWebAssemblyCompartment::InstantiateModule(
         const Uptr tableBase = MemoryLayoutData_.TableBases.back();
         Uptr requiredTableSize = tableBase;
         for (const auto& elemSegment : wavmModule->ir.elemSegments) {
+            // TODO: Use evaluated active segment baseOffset + size (see MemoryBases TODO).
             requiredTableSize = std::max(
                 requiredTableSize,
                 tableBase + GetActiveElemSegmentSize(elemSegment));
@@ -1173,6 +1177,10 @@ void TWebAssemblyCompartment::InstantiateModule(
     Instances_.push_back(instance);
 
     {
+        // TODO: Advance by max end of *active* segments from evaluated baseOffset
+        // (i32/i64.const or global.get __memory_base), not sum of all payload sizes.
+        // Passive segments and sparse offsets (e.g. base+1024) otherwise overlap
+        // the next module's __memory_base. Reject unsupported initializer forms.
         Uptr lastMemoryBase = MemoryLayoutData_.MemoryBases.back();
         Uptr newMemoryBase = lastMemoryBase;
         for (auto& dataSegment : wavmModule->ir.dataSegments) {
@@ -1182,6 +1190,8 @@ void TWebAssemblyCompartment::InstantiateModule(
     }
 
     {
+        // TODO: Same as MemoryBases — max end of active elem segments via evaluated
+        // __table_base offset, not sum of segment sizes (ignore passive).
         Uptr lastTableBase = MemoryLayoutData_.TableBases.back();
         Uptr newTableBase = lastTableBase;
         for (auto& elemSegment : wavmModule->ir.elemSegments) {

@@ -116,6 +116,12 @@ struct TDirectReadRestoreEnv {
     std::atomic<ui64> RequestInflyEnsure{0};
     TVector<THolder<IEventHandle>> HeldPrepareEvents;
 
+    // Hold CmdPublishReadResult to keep restore stuck in Publish stage.
+    std::atomic<ui64> HoldPublishResponses{0};
+    std::atomic<ui64> HeldPublishResponses{0};
+    std::atomic<ui64> HasCmdPublishReadResultEnsure{0};
+    TVector<THolder<IEventHandle>> HeldPublishEvents;
+
     TString EnsureCloseReason;
 
     NActors::TTestActorRuntime& Runtime() {
@@ -192,6 +198,16 @@ struct TDirectReadRestoreEnv {
                 return true;
             }
 
+            if (HoldPublishResponses.load() && part.HasCmdPublishReadResult()) {
+                const ui64 held = ++HeldPublishResponses;
+                Cerr << "HOLD CmdPublishReadResult held=" << held
+                     << " cookie=" << part.GetCookie()
+                     << " directReadId=" << part.GetCmdPublishReadResult().GetDirectReadId()
+                     << Endl;
+                HeldPublishEvents.emplace_back(ev.Release());
+                return true;
+            }
+
             if (!HoldRestorePreparePublish.load()) {
                 return false;
             }
@@ -221,6 +237,12 @@ struct TDirectReadRestoreEnv {
                     Cerr << "Observed CloseSession from RequestInfly ENSURE: "
                          << msg->Reason << Endl;
                 }
+                if (msg->Reason.Contains("HasCmdPublishReadResult")) {
+                    EnsureCloseReason = msg->Reason;
+                    ++HasCmdPublishReadResultEnsure;
+                    Cerr << "Observed CloseSession from HasCmdPublishReadResult ENSURE: "
+                         << msg->Reason << Endl;
+                }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -241,6 +263,7 @@ struct TDirectReadRestoreEnv {
         runtime.SetEventFilter(&TTestActorRuntimeBase::DefaultFilterFunc);
         runtime.SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
         HeldPrepareEvents.clear();
+        HeldPublishEvents.clear();
     }
 
     void RebootPqTablet() {
@@ -525,6 +548,71 @@ Y_UNIT_TEST(RequestInflyOnDuplicatePrepareAfterPipeRestart) {
     UNIT_ASSERT_C(env.RequestInflyEnsure.load() == 0,
         "duplicate Prepare after pipe restart must not hit PARTITION_ENSURE(RequestInfly)"
             << "; held=" << env.HeldPrepareResponses.load()
+            << "; reason=" << env.EnsureCloseReason);
+
+    TearDownGrpcAndServer(env, client);
+}
+
+// LOGBROKER-10590: nested pipe restart re-sends restore Prepare for the same DirectReadId;
+// if the first Prepare arrives only after the second has already moved restore to Publish,
+// PARTITION_ENSURE(result.HasCmdPublishReadResult()) fires (Prepare stage soft-ignores, Publish does not).
+Y_UNIT_TEST(HasCmdPublishReadResultOnPrepareDuringPublishRestore) {
+    TDirectReadRestoreEnv env;
+    env.Start();
+    auto& runtime = env.Runtime();
+
+    RunWithDispatch(runtime, [&] {
+        TDriver driver(MakeAsyncDriverConfig(env.Endpoint));
+        auto writer = CreateSimpleWriter(driver, kTopicPath, "src", /*partitionGroup=*/{}, TString("raw"));
+        if (!writer->Write(TString(1_MB, 'x'))) {
+            ythrow yexception() << "write failed";
+        }
+        writer->Close();
+        driver.Stop(true);
+        return true;
+    });
+
+    TGrpcDirectReadClient client;
+    client.Connect(env.Endpoint);
+    client.InitControlSession(runtime);
+    client.AcceptAssign(runtime);
+    client.InitDirectSession(runtime);
+    client.StartDirectReadPartition(runtime);
+    client.ReadDataNoAck(runtime, /*expectedDirectReadId=*/1);
+
+    // Hold Prepare (and Publish) so nested restart can queue a second real Prepare
+    // before either response is delivered — same shape as late pipe replies in prod.
+    env.HoldPrepareResponses.store(1);
+    env.HoldPublishResponses.store(1);
+
+    Cerr << "First reboot: restore sends Prepare for published DirectReadId=1\n";
+    env.RebootPqTablet();
+
+    for (ui32 i = 0; i < 100 && env.HeldPrepareResponses.load() < 1; ++i) {
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+    }
+    UNIT_ASSERT_C(env.HeldPrepareResponses.load() >= 1,
+        "expected held Prepare from first restore attempt");
+
+    Cerr << "Second reboot while Prepare is still held: restore re-sends Prepare for the same id\n";
+    env.RebootPqTablet();
+
+    for (ui32 i = 0; i < 100 && env.HeldPrepareResponses.load() < 2; ++i) {
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+    }
+    UNIT_ASSERT_C(env.HeldPrepareResponses.load() >= 2,
+        "expected two held Prepares from nested restore attempts"
+            << "; held=" << env.HeldPrepareResponses.load());
+
+    Cerr << "Release both Prepares: first advances to Publish, second arrives on Publish stage\n";
+    env.ReleaseHeldPrepares();
+    runtime.SimulateSleep(TDuration::Seconds(1));
+
+    // Intentionally asserting the bug exists (repro). Flip after fix.
+    UNIT_ASSERT_C(env.HasCmdPublishReadResultEnsure.load() > 0,
+        "expected PARTITION_ENSURE(result.HasCmdPublishReadResult()) on late Prepare during Publish"
+            << "; heldPrepare=" << env.HeldPrepareResponses.load()
+            << "; heldPublish=" << env.HeldPublishResponses.load()
             << "; reason=" << env.EnsureCloseReason);
 
     TearDownGrpcAndServer(env, client);

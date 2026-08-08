@@ -1842,13 +1842,15 @@ TPartOfConstraintNode<TOriginalConstraintNode>::GetCommonMapping(const TOriginal
     }
 
     if (complete) {
-        auto& part = mapping[complete];
-        for (const auto& path : complete->GetFullSet()) {
-            auto key = path;
-            if (!field.empty()) {
-                key.emplace_front(field);
+        if (const auto fullSet = complete->GetFullSet(); !fullSet.empty()) {
+            auto& part = mapping[complete];
+            for (const auto& path : fullSet) {
+                auto key = path;
+                if (!field.empty()) {
+                    key.emplace_front(field);
+                }
+                part.insert_unique(std::make_pair(key, path));
             }
-            part.insert_unique(std::make_pair(key, path));
         }
     }
 
@@ -1996,15 +1998,50 @@ const TEmptyConstraintNode* TEmptyConstraintNode::MakeCommon(const std::vector<c
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+ui64 AddPathToHash(ui64 hash, const TPartOfConstraintBase::TPathType& path) {
+    for (const auto& part : path) {
+        hash = MurmurHash(part.data(), part.size(), hash);
+    }
+    const ui64 separator = path.size();
+    hash = MurmurHash(&separator, sizeof(separator), hash);
+    return hash;
+}
+
+} // anonymous namespace
+
 TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx)
-    : TConstraintNode(ctx, Name())
+    : TConstraintWithFieldsT(ctx, Name())
 {
 }
 
-TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
-    : TConstraintNode(ctx, Name())
+TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, TPartOfConstraintBase::TPathType eventTime)
+    : TConstraintWithFieldsT(ctx, Name())
+    , EventTime_(std::move(eventTime))
 {
-    YQL_ENSURE(serialized.IsEntity(), "Unexpected serialized content of " << Name() << " constraint");
+    for (auto& part : *EventTime_) {
+        part = ctx.AppendString(part);
+    }
+
+    Hash_ = AddPathToHash(Hash_, *EventTime_);
+}
+
+TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
+    : TConstraintWithFieldsT(ctx, Name())
+{
+    if (serialized.IsEntity()) {
+        return;
+    }
+
+    try {
+        YQL_ENSURE(serialized.IsList() || serialized.IsString(), "Unexpected serialized content of " << Name() << " constraint");
+        EventTime_ = NodeToPath(ctx, serialized);
+    } catch (...) {
+        YQL_ENSURE(false, "Cannot deserialize " << Name() << " constraint: " << CurrentExceptionMessage());
+    }
+
+    Hash_ = AddPathToHash(Hash_, *EventTime_);
 }
 
 bool TStreamingConstraintNode::Equals(const TConstraintNode& node) const {
@@ -2014,20 +2051,151 @@ bool TStreamingConstraintNode::Equals(const TConstraintNode& node) const {
     if (GetHash() != node.GetHash()) {
         return false;
     }
-    return GetName() == node.GetName();
+    if (GetName() != node.GetName()) {
+        return false;
+    }
+    const auto that = dynamic_cast<const TStreamingConstraintNode*>(&node);
+    return that && this->GetEventTime() == that->GetEventTime();
+}
+
+bool TStreamingConstraintNode::Includes(const TConstraintNode& node) const {
+    const auto that = dynamic_cast<const TStreamingConstraintNode*>(&node);
+    if (!that) {
+        return false;
+    }
+
+    if (!that->GetEventTime().Defined()) {
+        return true;
+    }
+
+    return this->GetEventTime() == that->GetEventTime();
+}
+
+const TStreamingConstraintNode* TStreamingConstraintNode::MakeCommon(const TStreamingConstraintNode* other, TExprContext& ctx) const {
+    if (!other) {
+        return nullptr;
+    }
+
+    if (this == other || EventTime_ == other->EventTime_) {
+        return this;
+    }
+
+    return ctx.MakeConstraint<TStreamingConstraintNode>();
+}
+
+void TStreamingConstraintNode::Out(IOutputStream& out) const {
+    TConstraintNode::Out(out);
+    if (EventTime_.Defined()) {
+        out.Write('(');
+        out.Write(JoinSeq(';', *EventTime_));
+        out.Write(')');
+    }
 }
 
 void TStreamingConstraintNode::ToJson(NJson::TJsonWriter& out) const {
-    out.Write(true);
+    if (!EventTime_.Defined()) {
+        out.Write(true);
+        return;
+    }
+
+    out.Write(JoinSeq(';', *EventTime_));
 }
 
 NYT::TNode TStreamingConstraintNode::ToYson() const {
-    return NYT::TNode::CreateEntity();
+    if (!EventTime_.Defined()) {
+        return NYT::TNode::CreateEntity();
+    }
+
+    return PathToNode(*EventTime_);
 }
 
 bool TStreamingConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) const {
-    return IsIn({ETypeAnnotationKind::Tuple, ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind());
+    if (type.GetKind() == ETypeAnnotationKind::Tuple) {
+        if (EventTime_.Defined()) {
+            return false;
+        }
+
+        for (const auto* item : type.Cast<TTupleExprType>()->GetItems()) {
+            if (!IsIn({ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, item->GetKind())) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    if (!IsIn({ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind())) {
+        return false;
+    }
+
+    if (!EventTime_.Defined()) {
+        return true;
+    }
+
+    const auto& itemType = GetSeqItemType(type);
+    return TPartOfConstraintBase::GetSubTypeByPath(*EventTime_, itemType);
 }
+
+TPartOfConstraintBase::TSetType TStreamingConstraintNode::GetFullSet() const {
+    TSetType paths;
+    if (EventTime_.Defined()) {
+        paths.insert_unique(*EventTime_);
+    }
+    return paths;
+}
+
+void TStreamingConstraintNode::FilterUncompleteReferences(TSetType& references) const {
+    if (!EventTime_.Defined()) {
+        references.clear();
+        return;
+    }
+
+    if (!references.contains(*EventTime_)) {
+        references.clear();
+    }
+}
+
+const TConstraintWithFieldsNode* TStreamingConstraintNode::DoFilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
+    if (!EventTime_.Defined() || !predicate) {
+        return this;
+    }
+
+    return predicate(*EventTime_) ? this : ctx.MakeConstraint<TStreamingConstraintNode>();
+}
+
+const TConstraintWithFieldsNode* TStreamingConstraintNode::DoRenameFields(TExprContext& ctx, const TPathReduce& reduce) const {
+    if (!EventTime_.Defined() || !reduce) {
+        return this;
+    }
+
+    auto renamed = reduce(*EventTime_);
+    if (renamed.size() != 1U) {
+        if (const auto original = std::find(renamed.cbegin(), renamed.cend(), *EventTime_);
+            renamed.cend() != original) {
+            return ctx.MakeConstraint<TStreamingConstraintNode>(*original);
+        }
+        return ctx.MakeConstraint<TStreamingConstraintNode>();
+    }
+    return ctx.MakeConstraint<TStreamingConstraintNode>(std::move(renamed.front()));
+}
+
+const TConstraintWithFieldsNode* TStreamingConstraintNode::DoGetComplicatedForType(const TTypeAnnotationNode&, TExprContext&) const {
+    return this;
+}
+
+const TConstraintWithFieldsNode* TStreamingConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const {
+    if (!IsIn({ETypeAnnotationKind::Tuple, ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind())) {
+        return this;
+    }
+
+    if (!IsApplicableToType(type)) {
+        return ctx.MakeConstraint<TStreamingConstraintNode>();
+    }
+
+    return this;
+}
+
+template class TPartOfConstraintNode<TStreamingConstraintNode>;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2519,6 +2687,11 @@ void Out<NYql::TPartOfUniqueConstraintNode>(IOutputStream& out, const NYql::TPar
 
 template <>
 void Out<NYql::TPartOfDistinctConstraintNode>(IOutputStream& out, const NYql::TPartOfDistinctConstraintNode& value) {
+    value.Out(out);
+}
+
+template <>
+void Out<NYql::TPartOfStreamingConstraintNode>(IOutputStream& out, const NYql::TPartOfStreamingConstraintNode& value) {
     value.Out(out);
 }
 

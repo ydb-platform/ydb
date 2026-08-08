@@ -192,11 +192,12 @@ public:
             const bool useSharedReading = AnyOf(settings, [](const TCoNameValueTuple& setting) {
                 return Name(setting) == SharedReading && FromString<bool>(Value(setting));
             });
+            const auto enableWatermarksAdvanced = State_->EnableWatermarksAdvanced && !useSharedReading;
 
             const auto maybeWatermark = pqReadTopic.Watermark().Maybe<TCoLambda>();
 
             TMaybeNode<TCoAtom> watermarkSerialized;
-            if (maybeWatermark) {
+            if (maybeWatermark && !enableWatermarksAdvanced) {
                 const auto watermark = maybeWatermark.Cast();
 
                 TStringBuilder err;
@@ -231,15 +232,15 @@ public:
                     .Partitions<TCoVoid>().Build()
                     .OffsetPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .WriteTimePredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
-                    .WatermarkExpr(maybeWatermark)
-                    .WatermarkSerialized(watermarkSerialized)
+                    .WatermarkExpr(enableWatermarksAdvanced ? TMaybeNode<TCoLambda>() : maybeWatermark)
+                    .WatermarkSerialized(enableWatermarksAdvanced ? TMaybeNode<TCoAtom>() : watermarkSerialized)
                     .Build()
                 .RowType(expandedRowType)
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
                 .Settings(BuildDqSourceWrapSettings(pqReadTopic, pos, ctx))
                 .Done();
 
-            if (maybeWatermark && State_->EnableWatermarksAdvanced && !useSharedReading) {
+            if (maybeWatermark && enableWatermarksAdvanced) {
                 const auto watermark = maybeWatermark.Cast();
 
                 const auto eventTimeAndDelay = SplitWatermarkExpr(watermark, *State_, ctx);
@@ -623,7 +624,8 @@ public:
 
                 TString watermarkExprSql;
                 if (const auto maybeWatermarkSerialized = topicSource.WatermarkSerialized()) {
-                    const auto serializedWatermarkExpr = maybeWatermarkSerialized.Cast().Ref().Content();
+                    const auto watermarkSerialized = maybeWatermarkSerialized.Cast();
+                    const auto serializedWatermarkExpr = watermarkSerialized.Ref().Content();
                     if (!serializedWatermarkExpr.empty()) {
                         NYql::NConnector::NApi::TExpression watermarkExprProto;
                         YQL_ENSURE(watermarkExprProto.ParseFromString(serializedWatermarkExpr));

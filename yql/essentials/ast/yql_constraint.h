@@ -507,11 +507,12 @@ public:
     static const TEmptyConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
 };
 
-class TStreamingConstraintNode final: public TConstraintNode {
+class TStreamingConstraintNode final: public TConstraintWithFieldsT<TStreamingConstraintNode> {
     friend struct TExprContext;
 
 protected:
     explicit TStreamingConstraintNode(TExprContext& ctx);
+    TStreamingConstraintNode(TExprContext& ctx, TPartOfConstraintBase::TPathType eventTime);
     TStreamingConstraintNode(TExprContext& ctx, const NYT::TNode& serialized);
 
 public:
@@ -519,11 +520,35 @@ public:
         return "Streaming";
     }
 
+    [[nodiscard]] const TMaybe<TPartOfConstraintBase::TPathType>& GetEventTime() const {
+        return EventTime_;
+    }
+
+    TSetType GetFullSet() const;
+    void FilterUncompleteReferences(TSetType& references) const override;
     bool Equals(const TConstraintNode& node) const final;
+    bool Includes(const TConstraintNode& node) const final;
+    void Out(IOutputStream& out) const override;
     void ToJson(NJson::TJsonWriter& out) const final;
     NYT::TNode ToYson() const final;
     bool IsApplicableToType(const TTypeAnnotationNode& type) const final;
+    const TStreamingConstraintNode* MakeCommon(const TStreamingConstraintNode* other, TExprContext& ctx) const;
+
+private:
+    const TConstraintWithFieldsNode* DoFilterFields(TExprContext& ctx, const TPathFilter& predicate) const final;
+    const TConstraintWithFieldsNode* DoRenameFields(TExprContext& ctx, const TPathReduce& reduce) const final;
+    const TConstraintWithFieldsNode* DoGetComplicatedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const final;
+    const TConstraintWithFieldsNode* DoGetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const final;
+
+    TMaybe<TPartOfConstraintBase::TPathType> EventTime_;
 };
+
+using TPartOfStreamingConstraintNode = TPartOfConstraintNode<TStreamingConstraintNode>;
+
+template <>
+constexpr std::string_view TPartOfStreamingConstraintNode::Name() {
+    return "PartOfStreaming";
+}
 
 class TVarIndexConstraintNode final: public TConstraintNode {
 public:

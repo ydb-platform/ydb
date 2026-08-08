@@ -184,6 +184,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PredicatePushdown) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         constexpr bool logQueries = false;
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
@@ -338,6 +339,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PredicatePushdown_Datetime_QS) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -497,6 +499,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(SimpleLookupOlap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -523,6 +526,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(SimpleRangeOlap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -716,6 +720,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
         auto doTest = [](std::optional<bool> viaPragma, bool pushdownPresent) {
             NKikimrConfig::TAppConfig appConfig;
             appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+            appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
             auto settings = TKikimrSettings(appConfig)
                 .SetWithSampleTables(false);
 
@@ -785,6 +790,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(CheckEarlyFilterOnEmptySelect) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -1186,6 +1192,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PredicatePushdown_SimpleAsciiILike) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         // For insert.
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
 
@@ -1447,6 +1454,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PredicatePushdownWithParametersILike) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
 
         constexpr bool logQueries = true;
         auto settings = TKikimrSettings(appConfig)
@@ -1531,6 +1539,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PredicatePushdownWithParameters) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
 
         constexpr bool logQueries = true;
         auto settings = TKikimrSettings(appConfig)
@@ -1613,6 +1622,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PredicatePushdownParameterTypesValidation) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
 
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
@@ -1864,6 +1874,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         settings.AppConfig.MutableTableServiceConfig()->SetBlockChannelsMode(blockChannelsMode);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
         settings.AppConfig.MutableTableServiceConfig()->SetDefaultHashShuffleFuncType(NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
@@ -2086,6 +2097,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(SimpleCountNoFilter) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(false);
         auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);

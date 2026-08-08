@@ -11,6 +11,7 @@ namespace NDq {
 IGraphTransformer::TStatus ConstraintDqStage(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus ConstraintDqOutput(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus ConstraintDqConnection(const TExprNode::TPtr& input, TExprContext& ctx);
+IGraphTransformer::TStatus ConstraintDqCnUnionAll(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus ConstraintDqCnMerge(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus ConstraintDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus ConstraintDqJoin(const TExprNode::TPtr& input, TExprContext& ctx);

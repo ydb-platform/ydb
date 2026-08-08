@@ -12,52 +12,48 @@ namespace {
 using namespace NYql::NNodes;
 using TStatus = NYql::IGraphTransformer::TStatus;
 
-template <class... TOther>
-struct TCopyConstraint;
-
-template <>
-struct TCopyConstraint<> {
-    static void Do(const TExprNode& from, const TExprNode::TPtr& to) {
-        Y_UNUSED(from, to);
+struct TCopyConstraint {
+    template <class TConstraint>
+    static void Do(const TExprNode& from, TExprNode& to) {
+        if (const auto* constraint = from.GetConstraint<TConstraint>()) {
+            to.AddConstraint(constraint);
+        }
     }
 };
 
-template <class TConstraint, class... TOther>
-struct TCopyConstraint<TConstraint, TOther...> {
-    static void Do(const TExprNode& from, const TExprNode::TPtr& to) {
-        if (const auto* constraint = from.GetConstraint<TConstraint>()) {
-            to->AddConstraint(constraint);
-        }
-        TCopyConstraint<TOther...>::Do(from, to);
+struct TCopyConstraints {
+    template <class... TConstraint>
+    static void Do(const TExprNode& from, TExprNode& to) {
+        (TCopyConstraint::Do<TConstraint>(from, to), ...);
     }
 };
 
 TStatus ConstraintDqCnValue(const TExprNode::TPtr& input, TExprContext& ctx) {
-    const auto output = TDqConnection(input).Output();
-    if (output.Ref().GetConstraint<TStreamingConstraintNode>()) {
+    const TDqConnection connection(input);
+    if (connection.Output().Ref().GetConstraint<TStreamingConstraintNode>()) {
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Converting streaming input to value is not supported"));
         return TStatus::Error;
     }
 
-    TCopyConstraint<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>::Do(output.Ref(), input);
+    connection.MutableRef().CopyConstraints(connection.Output().Ref());
     return TStatus::Ok;
 }
 
 TStatus ConstraintDqCnMerge(const TExprNode::TPtr& input, TExprContext& ctx, bool disableCheck) {
-    const auto output = TDqConnection(input).Output();
-    if (output.Ref().GetConstraint<TStreamingConstraintNode>()) {
+    const TDqConnection connection(input);
+
+    if (connection.Output().Ref().GetConstraint<TStreamingConstraintNode>()) {
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Streaming input is not supported for merge connection"));
         return TStatus::Error;
     }
 
-    if (const auto outSorted = output.Ref().GetConstraint<TSortedConstraintNode>()) {
-        input->AddConstraint(outSorted);
-    } else if (!disableCheck) {
+    if (const auto outSorted = connection.Output().Ref().GetConstraint<TSortedConstraintNode>();
+        !outSorted && !disableCheck) {
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Expected sorted constraint on stage output."));
         return TStatus::Error;
     }
 
-    TCopyConstraint<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>::Do(output.Ref(), input);
+    TCopyConstraints::Do<TSortedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode>(connection.Output().Ref(), connection.MutableRef());
     return TStatus::Ok;
 }
 
@@ -108,13 +104,46 @@ TStatus ConstraintDqPhyHashCombine(const TExprNode::TPtr& input, TExprContext& c
 }
 
 TStatus ConstrainDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext& ctx) {
-    Y_UNUSED(ctx);
+    const auto* streaming = input->Head().GetConstraint<TStreamingConstraintNode>();
+    if (!streaming) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Watermark generator requires streaming input"));
+        return TStatus::Error;
+    }
+    if (streaming->GetEventTime().Defined()) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Event time is already assigned for streaming input"));
+        return TStatus::Error;
+    }
 
-    if (const auto status = UpdateAllChildLambdasConstraints(*input); status != TStatus::Ok) {
+    auto& extractor = input->ChildRef(TDqPhyWatermarkGenerator::idx_WatermarkExtractor);
+    TMaybe<TPartOfConstraintBase::TPathType> eventTime;
+    if (const auto status = TryExtractEventTime(
+            extractor,
+            *extractor->Child(TCoLambda::idx_Body),
+            ctx,
+            eventTime
+        );
+        status != TStatus::Ok
+    ) {
+        return status;
+    }
+    if (!eventTime) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Event time expression must be materialized into a Timestamp column before assigning a watermark"));
+        return TStatus::Error;
+    }
+
+    if (const auto status = UpdateLambdaConstraints(*input->Child(TDqPhyWatermarkGenerator::idx_PartitionKeyExtractor));
+        status != TStatus::Ok) {
         return status;
     }
 
-    TCopyConstraint<TStreamingConstraintNode>::Do(input->Head(), input);
+    if (const auto status = UpdateLambdaConstraints(*input->Child(TDqPhyWatermarkGenerator::idx_WriteTimeExtractor));
+        status != TStatus::Ok) {
+        return status;
+    }
+
+    input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>(std::move(*eventTime)));
+
+    TCopyConstraints::Do<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input->Head(), *input);
     return TStatus::Ok;
 }
 
@@ -132,10 +161,12 @@ public:
         AddHandler({
             TDqCnUnionAll::CallableName(),
             TDqCnParallelUnionAll::CallableName(),
+            TDqCnHashShuffle::CallableName(),
+        }, Hndl(&ConstraintDqCnUnionAll));
+        AddHandler({
             TDqCnBroadcast::CallableName(),
             TDqCnMap::CallableName(),
             TDqCnStreamLookup::CallableName(),
-            TDqCnHashShuffle::CallableName(),
             TDqCnResult::CallableName(),
         }, Hndl(&ConstraintDqConnection));
         AddHandler({TDqCnValue::CallableName()}, Hndl(&ConstraintDqCnValue));
@@ -174,39 +205,41 @@ private:
 TStatus ConstraintDqStage(const TExprNode::TPtr& input, TExprContext& ctx) {
     const TDqStageBase stage(input);
     const auto& inputs = stage.Inputs();
-    TSmallVec<TConstraintNode::TListType> argConstraints(inputs.Size());
+    TSmallVec<TConstraintNode::TListType> constraints(inputs.Size());
     for (size_t i = 0; i < inputs.Size(); ++i) {
-        argConstraints[i] = inputs.Item(i).Ref().GetAllConstraints();
+        constraints[i] = inputs.Item(i).Ref().GetAllConstraints();
     }
 
-    if (const auto status = UpdateLambdaConstraints(stage.Ptr()->ChildRef(TDqStageBase::idx_Program), ctx, argConstraints); status != TStatus::Ok) {
+    if (const auto status = UpdateLambdaConstraints(stage.Ptr()->ChildRef(TDqStageBase::idx_Program), ctx, constraints); status != TStatus::Ok) {
         return status;
     }
 
-    TCopyConstraint<TStreamingConstraintNode>::Do(stage.Program().Ref(), stage.Ptr());
+    stage.MutableRef().CopyConstraints(stage.Program().Ref());
     return TStatus::Ok;
 }
 
-TStatus ConstraintDqOutput(const TExprNode::TPtr& input, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-
+TStatus ConstraintDqOutput(const TExprNode::TPtr& input, TExprContext& /* ctx */) {
     const TDqOutput output(input);
-    const auto& programBody = output.Stage().Program().Body().Ref();
-    if (const auto* multi = programBody.GetConstraint<TMultiConstraintNode>()) {
+    if (const auto* multi = output.Stage().Ref().GetConstraint<TMultiConstraintNode>()) {
         if (const auto* constraints = multi->GetItem(FromString<ui32>(output.Index().Value()))) {
             input->SetConstraints(*constraints);
         }
-        TCopyConstraint<TStreamingConstraintNode>::Do(output.Stage().Ref(), input);
     } else {
-        input->CopyConstraints(programBody);
+        output.MutableRef().CopyConstraints(output.Stage().Ref());
     }
 
     return TStatus::Ok;
 }
 
-TStatus ConstraintDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-    TCopyConstraint<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode, TStreamingConstraintNode>::Do(TDqConnection(input).Output().Ref(), input);
+TStatus ConstraintDqConnection(const TExprNode::TPtr& input, TExprContext& /* ctx */) {
+    const TDqConnection connection(input);
+    connection.MutableRef().CopyConstraints(connection.Output().Ref());
+    return TStatus::Ok;
+}
+
+TStatus ConstraintDqCnUnionAll(const TExprNode::TPtr& input, TExprContext& /* ctx */) {
+    const TDqConnection connection(input);
+    TCopyConstraints::Do<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TStreamingConstraintNode>(connection.Output().Ref(), connection.MutableRef());
     return TStatus::Ok;
 }
 
@@ -216,10 +249,10 @@ TStatus ConstraintDqCnMerge(const TExprNode::TPtr& input, TExprContext& ctx) {
 
 TStatus ConstraintDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
     const TDqReplicate replicate(input);
-    TSmallVec<TConstraintNode::TListType> argConstraints(1, replicate.Input().Ref().GetAllConstraints());
+    TSmallVec<TConstraintNode::TListType> constraints(1, replicate.Input().Ref().GetAllConstraints());
     TStatus status = TStatus::Ok;
     for (size_t i = 1; i < replicate.Ref().ChildrenSize(); ++i) {
-        status = status.Combine(UpdateLambdaConstraints(replicate.Ptr()->ChildRef(i), ctx, argConstraints));
+        status = status.Combine(UpdateLambdaConstraints(replicate.Ptr()->ChildRef(i), ctx, constraints));
     }
 
     if (status != TStatus::Ok) {
@@ -271,6 +304,24 @@ TStatus ConstraintDqJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto lUnique = join.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>();
     const auto rUnique = join.RightInput().Ref().GetConstraint<TUniqueConstraintNode>();
 
+    const auto makeRename = [&ctx](const TExprBase& label) -> TPartOfConstraintBase::TPathReduce {
+        if (label.Ref().IsAtom()) {
+            const auto table = label.Cast<TCoAtom>().Value();
+            return [table, &ctx](const TPartOfConstraintBase::TPathType& path) -> std::vector<TPartOfConstraintBase::TPathType> {
+                if (path.empty()) {
+                    return {path};
+                }
+                auto out = path;
+                out.front() = ctx.AppendString(TStringBuilder() << table << '.' << out.front());
+                return {out};
+            };
+        }
+        return {};
+    };
+
+    const auto leftRename = makeRename(join.LeftLabel());
+    const auto rightRename = makeRename(join.RightLabel());
+
     if (lUnique || rUnique) {
         std::vector<std::string_view> leftJoinKeys, rightJoinKeys;
         const auto size = join.JoinKeys().Size();
@@ -303,24 +354,6 @@ TStatus ConstraintDqJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
 
         const bool lOneRow = leftAny || lUnique && lUnique->ContainsCompleteSet(leftJoinKeys);
         const bool rOneRow = rightAny || rUnique && rUnique->ContainsCompleteSet(rightJoinKeys);
-
-        const auto makeRename = [&ctx](const TExprBase& label) -> TPartOfConstraintBase::TPathReduce {
-            if (label.Ref().IsAtom()) {
-                const auto table = label.Cast<TCoAtom>().Value();
-                return [table, &ctx](const TPartOfConstraintBase::TPathType& path) -> std::vector<TPartOfConstraintBase::TPathType> {
-                    if (path.empty()) {
-                        return {path};
-                    }
-                    auto out = path;
-                    out.front() = ctx.AppendString(TStringBuilder() << table << '.' << out.front());
-                    return {out};
-                };
-            }
-            return {};
-        };
-
-        const auto leftRename = makeRename(join.LeftLabel());
-        const auto rightRename = makeRename(join.RightLabel());
 
         if (singleSide) {
             if (leftSide && lUnique) {
@@ -392,7 +425,18 @@ TStatus ConstraintDqJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+        if (lStreaming && rStreaming) {
+            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Stream X Stream Join is unsupported"));
+            return IGraphTransformer::TStatus::Error;
+        } else if (lStreaming) {
+            const auto* renamed = leftRename ? lStreaming->RenameFields(ctx, leftRename) : lStreaming;
+            input->AddConstraint(renamed->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
+        } else if (rStreaming) {
+            const auto* renamed = rightRename ? rStreaming->RenameFields(ctx, rightRename) : rStreaming;
+            input->AddConstraint(renamed->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
+        } else {
+            input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+        }
     }
 
     return TStatus::Ok;

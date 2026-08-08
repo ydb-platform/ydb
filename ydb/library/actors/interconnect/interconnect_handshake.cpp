@@ -372,6 +372,7 @@ namespace NActors {
         TActorId HandshakeBroker;
         std::optional<TBrokerLeaseHolder> BrokerLeaseHolder;
         std::optional<TString> HandshakeId; // for XDC
+        THolder<TEvReportConnection::THandle> PendingXdcConnection;
         bool SubscribedForConnection = false;
 
         struct {
@@ -492,7 +493,9 @@ namespace NActors {
                     if (Params.UseExternalDataChannel) {
                         if (incoming) {
                             Y_ABORT_UNLESS(SubscribedForConnection);
-                            auto ev = WaitForSpecificEvent<TEvReportConnection>("WaitInboundXdcStream");
+                            auto ev = PendingXdcConnection
+                                ? std::move(PendingXdcConnection)
+                                : WaitForSpecificEvent<TEvReportConnection>("WaitInboundXdcStream");
                             SubscribedForConnection = false;
                             if (ev->Get()->HandshakeId != *HandshakeId) {
                                 Y_DEBUG_ABORT_UNLESS(false);
@@ -614,6 +617,10 @@ namespace NActors {
 
                 case TEvPollerReady::EventType:
                    break;
+
+                case TEvReportConnection::EventType:
+                    PendingXdcConnection.Reset(static_cast<TEvReportConnection::THandle*>(ev.Release()));
+                    break;
 
                 case TEvents::TSystem::Poison:
                    throw TExPoison();

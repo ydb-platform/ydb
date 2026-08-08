@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 
 struct ibv_qp;
 struct ibv_cq;
@@ -27,6 +28,7 @@ namespace NMonitoring {
 
 class IOutputStream;
 class TRcBuf;
+class TContiguousSpan;
 
 namespace NInterconnect::NRdma {
 
@@ -34,10 +36,17 @@ class TRdmaCtx;
 class TCqCommon;
 class TCqActor;
 class IMemPool;
+class TMemRegion;
 struct TEvRdmaIoDone;
 
 class TQueuePair;
 class IIbVerbsBuilder;
+
+struct TSendSge {
+    const void* Data = nullptr;
+    size_t Size = 0;
+    const TMemRegion* MemRegion = nullptr;
+};
 
 struct TRdmaRuntimeParams {
     int MaxCqe;   // max capacity of single queue under CQ actor abstruction. -1 - use limit from rdma context
@@ -148,9 +157,15 @@ class IIbVerbsBuilder : public NNonCopyable::TNonCopyable {
     friend class TIbVerbsBuilderImpl;
 public:
     virtual ~IIbVerbsBuilder() = default;
+    // The builder never owns SEND buffers. The caller must keep every buffer alive
+    // until the matching completion callback is delivered.
     virtual void AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize,
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept = 0;
-    virtual void AddSendVerb(TRcBuf packet,
+    virtual void AddSendVerb(const TRcBuf& packet,
+        std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept = 0;
+    virtual void AddSendVerb(TContiguousSpan packet, const TMemRegion* memRegion,
+        std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept = 0;
+    virtual void AddSendVerb(std::span<const TSendSge> sgList,
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept = 0;
 private:
     IIbVerbsBuilder() noexcept = default;

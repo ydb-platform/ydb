@@ -24,7 +24,6 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::atomic<ui32> CriticalTotalRetriesCount = 20;
     std::atomic<ui32> ReaskShardRetriesCount = 5;
 
-    std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
     std::atomic<ui64> MinChannelBufferSize = 0;
     std::atomic<ui64> MinMemAllocSize = 1_MB;
     std::atomic<ui64> MinMemFreeSize = 32_MB;

@@ -6,6 +6,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/schemeshard/user_attributes.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
@@ -27,6 +28,7 @@ struct TReportedTableInfo {
     TString TablePath;
     ui64 SchemaVersion;
     ui32 MetricsLevel;
+    TString MonitoringProjectId;
 
     explicit TReportedTableInfo(const TEvTabletCounters::TEvTabletSetTableInfo &ev)
         : TabletID(ev.TabletID)
@@ -35,6 +37,7 @@ struct TReportedTableInfo {
         , TablePath(ev.TablePath)
         , SchemaVersion(ev.SchemaVersion)
         , MetricsLevel(ev.MetricsLevel)
+        , MonitoringProjectId(ev.MonitoringProjectId)
     {}
 };
 
@@ -396,6 +399,103 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         UNIT_ASSERT(!reported.empty());
         UNIT_ASSERT_VALUES_EQUAL(reported.back().MetricsLevel,
             ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+    }
+
+    // monitoring_project_id reaches DataShard as a well-known user attribute of
+    // the database path, carried by the same subdomain publish as the
+    // database-wide TABLES_METRICS_LEVEL default. No control-plane surface
+    // exists yet, so patch it onto the wire.
+    Y_UNIT_TEST(TestSetTableInfoUsesSubDomainMonitoringProjectId) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+
+        auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                auto *msg = ev->Get();
+                NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
+                auto *attr = record.MutablePathDescription()->AddUserAttributes();
+                attr->SetKey(TString(NSchemeShard::ATTR_MONITORING_PROJECT_ID));
+                attr->SetValue("proj1");
+                msg->Result = NSchemeCache::TDescribeResult::Create(record);
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().MonitoringProjectId, "proj1");
+    }
+
+    // The database attribute is persisted, so a restarted shard keeps
+    // reporting it instead of falling back to empty until the next subdomain
+    // publish arrives.
+    Y_UNIT_TEST(TestSubDomainMonitoringProjectIdSurvivesRestart) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+
+        auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                auto *msg = ev->Get();
+                NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
+                auto *attr = record.MutablePathDescription()->AddUserAttributes();
+                attr->SetKey(TString(NSchemeShard::ATTR_MONITORING_PROJECT_ID));
+                attr->SetValue("proj1");
+                msg->Result = NSchemeCache::TDescribeResult::Create(record);
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        auto shard = GetTableShards(server, sender, "/Root/table-1")[0];
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        SimulateSleep(server, TDuration::Seconds(6));
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().MonitoringProjectId, "proj1");
+
+        // Cut the subscription off entirely, so the restarted shard can only
+        // know the database attribute from its own local database.
+        patcher.Remove();
+        auto blocker = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                ev.Reset();
+            });
+
+        RebootTablet(runtime, shard, sender);
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(6));
+        UNIT_ASSERT(!reported.empty());
+        UNIT_ASSERT_VALUES_EQUAL(reported.back().MonitoringProjectId, "proj1");
     }
 }
 

@@ -2,10 +2,42 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <util/generic/algorithm.h>
+#include <util/string/builder.h>
+
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
+
+bool CheckMonitoringProjectIdPath(
+    const NKikimrSchemeOp::TAlterUserAttributes& patch,
+    const TPath& path,
+    TOperationContext& context,
+    TString& errStr)
+{
+    const bool touched = AnyOf(patch.GetUserAttributes(), [](const auto& item) {
+        return TUserAttributes::ParseName(item.GetKey()) == EAttribute::MONITORING_PROJECT_ID;
+    });
+
+    if (!touched) {
+        return true;
+    }
+
+    if (!path.Base()->IsDomainRoot()) {
+        errStr = TStringBuilder() << "UserAttributes: attribute '" << ATTR_MONITORING_PROJECT_ID
+            << "' can only be set on a database";
+        return false;
+    }
+
+    if (path.Base()->IsRoot() && context.SS->IsDomainSchemeShard) {
+        errStr = TStringBuilder() << "UserAttributes: attribute '" << ATTR_MONITORING_PROJECT_ID
+            << "' cannot be set on the root database";
+        return false;
+    }
+
+    return true;
+}
 
 class TAlterUserAttrs: public TSubOperationBase {
 public:
@@ -55,6 +87,17 @@ public:
         }
 
         TString errStr;
+
+        // __monitoring_project_id labels the detailed metrics a database emits,
+        // so it is only meaningful on a database path, and never on the root
+        // database, which has no SysView Processor and therefore cannot produce
+        // detailed metrics at all (TABLES_METRICS_LEVEL is rejected there for
+        // the same reason). The op-level part of this check lives in
+        // TUserAttributes::CheckAttribute; only the path shape is known here.
+        if (!CheckMonitoringProjectIdPath(userAttrsPatch, path, context, errStr)) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            return result;
+        }
 
         TUserAttributes::TPtr alterData = path.Base()->UserAttrs->CreateNextVersion();
         if (!alterData->ApplyPatch(EUserAttributesOp::AlterUserAttrs, userAttrsPatch, errStr) ||

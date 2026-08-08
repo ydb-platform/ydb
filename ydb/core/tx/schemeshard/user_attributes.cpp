@@ -2,6 +2,8 @@
 
 #include "schemeshard_user_attr_limits.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <library/cpp/json/json_reader.h>
 
 #include <util/string/cast.h>
@@ -60,6 +62,7 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
                 HANDLE_ATTR(ASYNC_REPLICATION);
                 HANDLE_ATTR(ASYNC_REPLICA);
                 HANDLE_ATTR(INCREMENTAL_BACKUP);
+                HANDLE_ATTR(MONITORING_PROJECT_ID);
 
             #undef HANDLE_ATTR
             return EAttribute::UNKNOWN;
@@ -154,6 +157,46 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
             case EAttribute::INCREMENTAL_BACKUP:
                 // TODO(enjection): check ops
                 return CheckValueJson(name, value, errStr);
+            case EAttribute::MONITORING_PROJECT_ID:
+                if (!CheckMonitoringProjectIdOp(op, name, errStr)) {
+                    return false;
+                }
+                if (op == EUserAttributesOp::InitRoot) {
+                    // Tenant SchemeShard bootstrap replays what the domain
+                    // SchemeShard has already accepted, it must never fail
+                    return true;
+                }
+                if (!AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                    errStr = Sprintf("UserAttributes: attribute '%s' cannot be set, detailed metrics are disabled",
+                        name.c_str());
+                    return false;
+                }
+                if (value.size() > TUserAttributesLimits::MaxMonitoringProjectIdLen) {
+                    errStr = Sprintf("UserAttributes: attribute '%s' value is longer than %" PRIu32 " bytes",
+                        name.c_str(), TUserAttributesLimits::MaxMonitoringProjectIdLen);
+                    return false;
+                }
+                // An empty value is accepted and means "no project": the same
+                // thing removing the attribute means
+                return CheckValueStringWeak(name, value, errStr);
+        }
+
+        Y_UNREACHABLE();
+    }
+
+    bool TUserAttributes::CheckMonitoringProjectIdOp(EUserAttributesOp op, const TString& name, TString& errStr) {
+        switch (op) {
+            case EUserAttributesOp::InitRoot:
+            case EUserAttributesOp::SyncUpdateTenants:
+            case EUserAttributesOp::AlterUserAttrs:
+            case EUserAttributesOp::CreateSubDomain:
+            case EUserAttributesOp::CreateExtSubDomain:
+                return true;
+            case EUserAttributesOp::MkDir:
+            case EUserAttributesOp::CreateTable:
+            case EUserAttributesOp::CreateChangefeed:
+                errStr = Sprintf("UserAttributes: attribute '%s' can only be set on a database", name.c_str());
+                return false;
         }
 
         Y_UNREACHABLE();
@@ -199,6 +242,10 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
             case EAttribute::INCREMENTAL_BACKUP:
                 // TODO(enjection): check ops
                 return true;
+            case EAttribute::MONITORING_PROJECT_ID:
+                // Removing is how the project is cleared, and it stays possible
+                // even after the feature flag is turned off again
+                return CheckMonitoringProjectIdOp(op, name, errStr);
         }
 
         Y_UNREACHABLE();

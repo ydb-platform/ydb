@@ -2810,7 +2810,6 @@ private:
     TMaybeAuditSettings AuditSettings;
 
     ETablesMetricsLevel TablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
-
     TVector<TTabletId> FilterPrivateTablets(TTabletTypes::EType type, const THashMap<TShardIdx, TShardInfo>& allShards) const {
         TVector<TTabletId> tablets;
         for (auto shardId: PrivateShards) {

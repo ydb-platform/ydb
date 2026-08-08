@@ -1,4 +1,6 @@
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h>
+#include <ydb/core/tx/schemeshard/user_attributes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 #include <ydb/library/testlib/helpers.h>
@@ -1002,8 +1004,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardDatabaseDetailedMetricsSettingsTest) {
             {NKikimrScheme::StatusInvalidParameter});
     }
 
-    // The root database has no SysView Processor, so detailed metrics can never be
-    // aggregated for it
+    // The root database has no SysView Processor, so it can never produce detailed
+    // metrics, and TTxInit does not restore the root domain from its SubDomains
+    // row. TABLES_METRICS_LEVEL is therefore rejected there for every value,
+    // including the ones that mean "off": there is nothing to turn off or clear.
     void VerifyAlterRootDatabaseTablesMetricsLevelRejected(
         NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level
     ) {
@@ -1067,5 +1071,347 @@ Y_UNIT_TEST_SUITE(TSchemeShardDatabaseDetailedMetricsSettingsTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(GetPublishedTablesMetricsLevel(runtime, "/MyRoot/USER_0"),
             ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+    }
+
+    // CREATE validates before it touches the database. Getting this wrong does
+    // not produce an error reply: the failed Propose trips the
+    // IsUndoChangesSafe() verify in IgniteOperation and aborts the Scheme Shard.
+    Y_UNIT_TEST(CreateDatabaseTablesMetricsLevelNotAllowedFeatureFlagDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(false);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot",
+            Sprintf("%sTablesMetricsLevel: %u", SubDomainSettings,
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable)),
+            {NKikimrScheme::StatusInvalidParameter});
+
+        // The Scheme Shard is still alive and the rejected database was not created
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {NLs::PathNotExist});
+
+        // A subsequent valid request on the same Scheme Shard still works
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot",
+            Sprintf("%sTablesMetricsLevel: %u", SubDomainSettings,
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable)));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedTablesMetricsLevel(runtime, "/MyRoot/USER_0"),
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+    }
+}
+
+/**
+ * Unit test for the well-known user attribute __monitoring_project_id, the
+ * database attribute that names the Monitoring project detailed metrics are
+ * shipped to. It is published with the database path, where DataShard picks it
+ * up off the subdomain watch.
+ */
+Y_UNIT_TEST_SUITE(TSchemeShardDatabaseMonitoringProjectIdTest) {
+    constexpr const char* SubDomainSettings =
+        "PlanResolution: 50 "
+        "Coordinators: 1 "
+        "Mediators: 1 "
+        "TimeCastBucketsPerMediator: 2 "
+        "Name: \"USER_0\" ";
+
+    const TString AttrName = TString(ATTR_MONITORING_PROJECT_ID);
+
+    // An absent attribute and an empty value both mean "no project", which is
+    // exactly how DataShard reads it
+    TString GetPublishedMonitoringProjectId(TTestBasicRuntime& runtime, const TString& path) {
+        const auto describeResult = DescribePath(runtime, path);
+        for (const auto& attr : describeResult.GetPathDescription().GetUserAttributes()) {
+            if (attr.GetKey() == AttrName) {
+                return attr.GetValue();
+            }
+        }
+        return "";
+    }
+
+    NKikimrSchemeOp::TAlterUserAttributes SetProjectId(const TString& projectId) {
+        return AlterUserAttrs({{AttrName, projectId}});
+    }
+
+    NKikimrSchemeOp::TAlterUserAttributes DropProjectId() {
+        return AlterUserAttrs({}, {AttrName});
+    }
+
+    Y_UNIT_TEST(AlterDatabaseMonitoringProjectId) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // No project id configured yet
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "");
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "USER_0", SetProjectId("proj1"));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "proj1");
+
+        // Persisted, so it survives a Scheme Shard restart
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "proj1");
+
+        // An alter that says nothing about the project id keeps the current one
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "USER_0", AlterUserAttrs({{"AttrA", "ValA"}}));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "proj1");
+
+        // Changing it to another value overwrites the current one
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "USER_0", SetProjectId("proj2"));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "proj2");
+    }
+
+    // Removing the attribute is how the project id is cleared
+    Y_UNIT_TEST(AlterDatabaseMonitoringProjectIdDropped) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings, SetProjectId("proj1"));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "proj1");
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "USER_0", DropProjectId());
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "");
+
+        // The clear is persisted, the old value does not come back on restart
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "");
+    }
+
+    // Dropping stays possible after the feature flag is turned off again, so a
+    // disabled flag cannot strand a project id on a database
+    Y_UNIT_TEST(AlterDatabaseMonitoringProjectIdDroppedFeatureFlagDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings, SetProjectId("proj1"));
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(false);
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "USER_0", DropProjectId());
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "");
+    }
+
+    // An explicit empty value is accepted and means the same as no attribute
+    Y_UNIT_TEST(AlterDatabaseMonitoringProjectIdEmpty) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings, SetProjectId("proj1"));
+        env.TestWaitNotification(runtime, txId);
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "USER_0", SetProjectId(""));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "");
+    }
+
+    Y_UNIT_TEST(AlterDatabaseMonitoringProjectIdMaxLength) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        const TString projectId(TUserAttributesLimits::MaxMonitoringProjectIdLen, 'p');
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "USER_0", SetProjectId(projectId));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), projectId);
+    }
+
+    Y_UNIT_TEST(AlterDatabaseMonitoringProjectIdTooLongRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        const TString projectId(TUserAttributesLimits::MaxMonitoringProjectIdLen + 1, 'p');
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "USER_0",
+            {NKikimrScheme::StatusInvalidParameter}, SetProjectId(projectId));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "");
+    }
+
+    // A value that would not survive being used as a metric label is rejected
+    Y_UNIT_TEST(AlterDatabaseMonitoringProjectIdInvalidValueRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "USER_0",
+            {NKikimrScheme::StatusInvalidParameter}, SetProjectId("proj 1"));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "");
+    }
+
+    Y_UNIT_TEST(AlterDatabaseMonitoringProjectIdNotAllowedFeatureFlagDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(false);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "USER_0",
+            {NKikimrScheme::StatusInvalidParameter}, SetProjectId("proj1"));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "");
+    }
+
+    // The root database has no SysView Processor, so it can never produce
+    // detailed metrics. The project id is rejected there for every value,
+    // including the empty one: there is nothing to label and nothing to clear.
+    void VerifyRootDatabaseMonitoringProjectIdRejected(const TString& projectId) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestUserAttrs(runtime, ++txId, "", "MyRoot",
+            {NKikimrScheme::StatusInvalidParameter}, SetProjectId(projectId));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot"), "");
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot"), "");
+    }
+
+    Y_UNIT_TEST(AlterRootDatabaseMonitoringProjectIdNotAllowed) {
+        VerifyRootDatabaseMonitoringProjectIdRejected("proj1");
+    }
+
+    Y_UNIT_TEST(AlterRootDatabaseMonitoringProjectIdEmptyNotAllowed) {
+        VerifyRootDatabaseMonitoringProjectIdRejected("");
+    }
+
+    // Only a database can ship detailed metrics, so the attribute is refused on
+    // any other kind of path rather than sitting there doing nothing
+    Y_UNIT_TEST(AlterDirMonitoringProjectIdNotAllowed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "DirA",
+            {NKikimrScheme::StatusInvalidParameter}, SetProjectId("proj1"));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/DirA"), "");
+    }
+
+    Y_UNIT_TEST(MkDirMonitoringProjectIdNotAllowed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirA",
+            {NKikimrScheme::StatusInvalidParameter}, SetProjectId("proj1"));
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(CreateDatabaseWithMonitoringProjectId) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings, SetProjectId("proj1"));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "proj1");
+    }
+
+    // CREATE validates before it touches the database. Getting this wrong does
+    // not produce an error reply: the failed Propose trips the
+    // IsUndoChangesSafe() verify in IgniteOperation and aborts the Scheme Shard.
+    void VerifyCreateDatabaseMonitoringProjectIdRejected(
+        bool detailedMetricsEnabled,
+        const TString& projectId
+    ) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(detailedMetricsEnabled);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings,
+            {NKikimrScheme::StatusInvalidParameter}, SetProjectId(projectId));
+
+        // The Scheme Shard is still alive and the rejected database was not created
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {NLs::PathNotExist});
+
+        // A subsequent valid request on the same Scheme Shard still works
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", SubDomainSettings, SetProjectId("proj1"));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetPublishedMonitoringProjectId(runtime, "/MyRoot/USER_0"), "proj1");
+    }
+
+    Y_UNIT_TEST(CreateDatabaseMonitoringProjectIdNotAllowedFeatureFlagDisabled) {
+        VerifyCreateDatabaseMonitoringProjectIdRejected(/* detailedMetricsEnabled */ false, "proj1");
+    }
+
+    Y_UNIT_TEST(CreateDatabaseMonitoringProjectIdTooLongRejected) {
+        VerifyCreateDatabaseMonitoringProjectIdRejected(/* detailedMetricsEnabled */ true,
+            TString(TUserAttributesLimits::MaxMonitoringProjectIdLen + 1, 'p'));
     }
 }

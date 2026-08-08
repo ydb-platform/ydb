@@ -582,6 +582,7 @@ public:
         if (accessServiceProto.GetEnable()) {
             NCloud::TAccessServiceSettings asSettings;
             asSettings.Endpoint = accessServiceProto.GetEndpoint();
+            asSettings.UserAgentHint = "fq_control_plane_proxy";
             if (accessServiceProto.GetPathToRootCA()) {
                 asSettings.CertificateRootCA = TUnbufferedFileInput(accessServiceProto.GetPathToRootCA()).ReadAll();
             }

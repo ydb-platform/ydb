@@ -11,15 +11,17 @@ struct TAccessServiceSettings : NGrpcActorClient::TGrpcClientSettings {};
 IActor* CreateAccessServiceV1(const TAccessServiceSettings& settings);
 IActor* CreateAccessServiceV2(const TAccessServiceSettings& settings);
 
-inline IActor* CreateAccessServiceV1(const TString& endpoint) {
+inline IActor* CreateAccessServiceV1(TString endpoint, TString userAgentHint) {
     TAccessServiceSettings settings;
-    settings.Endpoint = endpoint;
+    settings.Endpoint = std::move(endpoint);
+    settings.UserAgentHint = std::move(userAgentHint);
     return CreateAccessServiceV1(settings);
 }
 
-inline IActor* CreateAccessServiceV2(const TString& endpoint) {
+inline IActor* CreateAccessServiceV2(TString endpoint, TString userAgentHint) {
     TAccessServiceSettings settings;
-    settings.Endpoint = endpoint;
+    settings.Endpoint = std::move(endpoint);
+    settings.UserAgentHint = std::move(userAgentHint);
     return CreateAccessServiceV2(settings);
 }
 

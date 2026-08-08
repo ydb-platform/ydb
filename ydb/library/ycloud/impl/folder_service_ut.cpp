@@ -64,13 +64,13 @@ struct TFolderServiceTestSetup {
     }
 
     IActor* RegisterFolderTransitionalServiceActor(const ui16 port) {
-        IActor* folderServiceTransitional = NCloud::CreateFolderServiceTransitional("localhost:" + ToString(port));
+        IActor* folderServiceTransitional = NCloud::CreateFolderServiceTransitional("localhost:" + ToString(port), "folder_service_ut");
         GetRuntime()->Register(folderServiceTransitional);
         return folderServiceTransitional;
     }
 
     IActor* RegisterFolderServiceActor(const ui16 port) {
-        IActor* folderService = NCloud::CreateFolderService("localhost:" + ToString(port));
+        IActor* folderService = NCloud::CreateFolderService("localhost:" + ToString(port), "folder_service_ut");
         GetRuntime()->Register(folderService);
         return folderService;
     }
@@ -132,6 +132,9 @@ Y_UNIT_TEST_SUITE(FolderServiceTest) {
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_EQUAL(result->Response.result(0).cloud_id(), cloudId);
+        with_lock (folderServiceTransitionalMock.MetadataMutex) {
+            UNIT_ASSERT_STRING_CONTAINS(folderServiceTransitionalMock.CapturedUserAgent, "ydb-folder_service_ut/");
+        }
     }
 
     Y_UNIT_TEST(TFolderService) {
@@ -173,6 +176,9 @@ Y_UNIT_TEST_SUITE(FolderServiceTest) {
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_EQUAL(result->Response.resolved_folders(0).cloud_id(), cloudId);
+        with_lock (folderServiceMock.MetadataMutex) {
+            UNIT_ASSERT_STRING_CONTAINS(folderServiceMock.CapturedUserAgent, "ydb-folder_service_ut/");
+        }
 
         // check for empty answer
         setup.SendResolveFoldersRequest(folderService, emptyFolderId);

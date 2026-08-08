@@ -10,9 +10,10 @@ struct TUserAccountServiceSettings : NGrpcActorClient::TGrpcClientSettings {};
 
 IActor* CreateUserAccountService(const TUserAccountServiceSettings& settings);
 
-inline IActor* CreateUserAccountService(const TString& endpoint) {
+inline IActor* CreateUserAccountService(TString endpoint, TString userAgentHint) {
     TUserAccountServiceSettings settings;
-    settings.Endpoint = endpoint;
+    settings.Endpoint = std::move(endpoint);
+    settings.UserAgentHint = std::move(userAgentHint);
     return CreateUserAccountService(settings);
 }
 

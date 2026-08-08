@@ -21,8 +21,9 @@ public:
     THashMap<TString, TResponse<nebius::iam::v1::AuthenticateResponse>> AuthenticateData;
     THashMap<TString, TResponse<nebius::iam::v1::AuthorizeResponse>> AuthorizeData;
 
-    TMutex UserIPMutex;
+    TMutex MetadataMutex;
     TString CapturedXUserIP;
+    TString CapturedUserAgent;
 
     template <class TResonseProto>
     void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResonseProto>& resp, const TString& token) {
@@ -38,6 +39,10 @@ public:
             grpc::ServerContext* ctx,
             const nebius::iam::v1::AuthenticateRequest* request,
             nebius::iam::v1::AuthenticateResponse* response) override {
+        with_lock (MetadataMutex) {
+            CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
+        }
+
         TString key = request->iam_token();
 
         auto it = AuthenticateData.find(key);
@@ -55,9 +60,9 @@ public:
             const nebius::iam::v1::AuthorizeRequest* request,
             nebius::iam::v1::AuthorizeResponse* response) override {
 
-        {
-            std::lock_guard guard(UserIPMutex);
+        with_lock (MetadataMutex) {
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+            CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
         }
 
         UNIT_ASSERT_VALUES_EQUAL_C(request->checks_size(), 1, "Nebius access service mock does not support multiple checks yet");

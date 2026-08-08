@@ -10,9 +10,10 @@ struct TFolderServiceTransitionalSettings : NGrpcActorClient::TGrpcClientSetting
 
 IActor* CreateFolderServiceTransitional(const TFolderServiceTransitionalSettings& settings);
 
-inline IActor* CreateFolderServiceTransitional(const TString& endpoint) {
+inline IActor* CreateFolderServiceTransitional(TString endpoint, TString userAgentHint) {
     TFolderServiceTransitionalSettings settings;
-    settings.Endpoint = endpoint;
+    settings.Endpoint = std::move(endpoint);
+    settings.UserAgentHint = std::move(userAgentHint);
     return CreateFolderServiceTransitional(settings);
 }
 

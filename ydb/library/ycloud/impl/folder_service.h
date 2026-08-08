@@ -10,9 +10,10 @@ struct TFolderServiceSettings : NGrpcActorClient::TGrpcClientSettings {};
 
 IActor* CreateFolderService(const TFolderServiceSettings& settings);
 
-inline IActor* CreateFolderService(const TString& endpoint) {
+inline IActor* CreateFolderService(TString endpoint, TString userAgentHint) {
     TFolderServiceSettings settings;
-    settings.Endpoint = endpoint;
+    settings.Endpoint = std::move(endpoint);
+    settings.UserAgentHint = std::move(userAgentHint);
     return CreateFolderService(settings);
 }
 

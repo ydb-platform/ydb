@@ -10,9 +10,10 @@ struct TIamTokenServiceSettings : NGrpcActorClient::TGrpcClientSettings {};
 
 IActor* CreateIamTokenService(const TIamTokenServiceSettings& settings);
 
-inline IActor* CreateIamTokenService(const TString& endpoint) {
+inline IActor* CreateIamTokenService(TString endpoint, TString userAgentHint) {
     TIamTokenServiceSettings settings;
-    settings.Endpoint = endpoint;
+    settings.Endpoint = std::move(endpoint);
+    settings.UserAgentHint = std::move(userAgentHint);
     return CreateIamTokenService(settings);
 }
 

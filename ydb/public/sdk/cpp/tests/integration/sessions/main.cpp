@@ -199,7 +199,7 @@ TEST(YdbSdkSessions, TestActiveSessionCountAfterBadSession) {
 TEST(YdbSdkSessions, TestSdkFreeSessionAfterBadSessionQueryService) {
     GTEST_SKIP() << "Test is failing right now";
     std::string location = std::getenv("YDB_ENDPOINT");
-    auto clientConfig = NYdbGrpc::TGRpcClientConfig(location);
+    auto clientConfig = NYdbGrpc::TGRpcClientConfig(location, "sdk_sessions_ut");
 
     auto driver = NYdb::TDriver(
         TDriverConfig()
@@ -247,7 +247,7 @@ TEST(YdbSdkSessions, TestSdkFreeSessionAfterBadSessionQueryService) {
 TEST(YdbSdkSessions, TestSdkFreeSessionAfterBadSessionQueryServiceStreamCall) {
     GTEST_SKIP() << "Test is failing right now";
     std::string location = std::getenv("YDB_ENDPOINT");
-    auto clientConfig = NYdbGrpc::TGRpcClientConfig(location);
+    auto clientConfig = NYdbGrpc::TGRpcClientConfig(location, "sdk_sessions_ut");
 
     auto driver = NYdb::TDriver(
         TDriverConfig()

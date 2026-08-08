@@ -260,7 +260,7 @@ struct TYdbLocation {
             certificate = CaCertificate;
             ssl = true;
         }
-        NYdbGrpc::TGRpcClientConfig config(endpoint);
+        NYdbGrpc::TGRpcClientConfig config(endpoint, "mvp");
         if (!certificate.empty()) {
             config.SslCredentials.pem_root_certs = certificate;
         }

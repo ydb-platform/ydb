@@ -14,7 +14,7 @@ public:
 
 Y_UNIT_TEST_SUITE(ChannelPoolTests) {
     Y_UNIT_TEST(UnusedStubsHoldersDeletion) {
-        TGRpcClientConfig clientConfig("invalid_host:invalid_port");
+        TGRpcClientConfig clientConfig("invalid_host:invalid_port", "grpc_client_low_ut");
         TTcpKeepAliveSettings tcpKeepAliveSettings =
         {
             true,

@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(KqpQuerySession)
         auto host1 = endpoints.begin();
         auto host2 = ++endpoints.begin();
 
-        auto sessionId = CreateQuerySession(TGRpcClientConfig(CreateHostWithPort(host1->first)));
+        auto sessionId = CreateQuerySession(TGRpcClientConfig(CreateHostWithPort(host1->first), "kqp_query_session"));
 
         bool allDoneOk = true;
 
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(KqpQuerySession)
 
         auto readyToKill = NThreading::NewPromise<NYdbGrpc::IStreamRequestCtrl::TPtr>();
         auto doCheckAttach = [&] {
-            auto p = CheckAttach(clientLow, TGRpcClientConfig(CreateHostWithPort(host2->first)), sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+            auto p = CheckAttach(clientLow, TGRpcClientConfig(CreateHostWithPort(host2->first), "kqp_query_session"), sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
             readyToKill.SetValue(p);
         };
 
@@ -106,9 +106,9 @@ Y_UNIT_TEST_SUITE(KqpQuerySession)
         {
             // Try to attach to same session - extect session was destroyed
             // Using host where session actor worked
-            CheckAttach(TGRpcClientConfig(CreateHostWithPort(host1->first)), sessionId, Ydb::StatusIds::BAD_SESSION, allDoneOk);
+            CheckAttach(TGRpcClientConfig(CreateHostWithPort(host1->first), "kqp_query_session"), sessionId, Ydb::StatusIds::BAD_SESSION, allDoneOk);
             // Using kqp proxy
-            CheckAttach(TGRpcClientConfig(CreateHostWithPort(host2->first)), sessionId, Ydb::StatusIds::BAD_SESSION, allDoneOk);
+            CheckAttach(TGRpcClientConfig(CreateHostWithPort(host2->first), "kqp_query_session"), sessionId, Ydb::StatusIds::BAD_SESSION, allDoneOk);
         }
 
         // Right now we requered to cancel stream from client side

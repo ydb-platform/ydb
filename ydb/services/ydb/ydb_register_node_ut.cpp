@@ -1022,7 +1022,7 @@ Y_UNIT_TEST(ServerWithCertVerification_AuthNotRequired) {
 namespace {
 
 NClient::TKikimr GetKikimr(const TString& addr, const TCertAndKey& caCert, const TCertAndKey& clientServerCert) {
-    NYdbGrpc::TGRpcClientConfig grpcConfig(addr, TDuration::Seconds(15));
+    NYdbGrpc::TGRpcClientConfig grpcConfig(addr, "register_node_ut", TDuration::Seconds(15));
     grpcConfig.EnableSsl = true;
     grpcConfig.SslCredentials = {.pem_root_certs = caCert.Certificate.c_str(),
                                  .pem_private_key = clientServerCert.PrivateKey.c_str(),

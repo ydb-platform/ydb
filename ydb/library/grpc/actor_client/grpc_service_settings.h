@@ -1,6 +1,8 @@
 #pragma once
+
 #include <util/generic/string.h>
 #include <util/system/types.h>
+
 #include <unordered_map>
 
 namespace NGrpcActorClient {
@@ -15,6 +17,7 @@ struct TGrpcClientSettings {
     ui64 RequestTimeoutMs = 10000; // 10 seconds
     std::unordered_map<TString, TString> Headers;
     TString SslTargetNameOverride;
+    TString UserAgentHint;
 };
 
 } // namespace NGrpcActorClient

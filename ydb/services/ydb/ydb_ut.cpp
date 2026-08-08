@@ -136,12 +136,14 @@ struct TKikimrTestSettings {
     static constexpr bool PrecreatePools = true;
 };
 
+// TODO(vlad-serikov): Check user agent
+
 Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
     Y_UNIT_TEST(SimpleRequest) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_ut");
         bool allDoneOk = false;
 
         {
@@ -168,7 +170,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_ut");
         bool allDoneOk = false;
 
         {
@@ -231,7 +233,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
 
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_ut");
 
         UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/Root", "root@builtin"), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
         UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", "root@builtin"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
@@ -245,7 +247,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
 
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_ut");
 
         UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/Root", ""), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
         UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", ""), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
@@ -260,7 +262,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
 
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_ut");
 
         UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/Root", ""), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
         UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", ""), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
@@ -296,7 +298,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
 
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_ut");
         NYdbGrpc::TCallMeta meta;
         meta.Aux.push_back({YDB_DATABASE_HEADER, "/Root"});
         meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, "root@builtin"});
@@ -350,7 +352,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
 
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_ut");
         NYdbGrpc::TCallMeta meta;
         meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, "root@builtin"});
         {
@@ -392,7 +394,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_ut");
         TAtomic okResponseCounter = 0;
         const size_t numRequests = 1000;
 
@@ -421,7 +423,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location, "ydb_ut");
 
         {
             TClient client(*server.ServerSettings);

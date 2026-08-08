@@ -171,7 +171,7 @@ public:
         TDbDriverStatePtr dbState, const TEndpointKey& preferredEndpoint,
         TRpcRequestSettings::TEndpointPolicy endpointPolicy)
     {
-        auto clientConfig = NYdbGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
+        auto clientConfig = NYdbGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint, "cpp_sdk");
         const auto& sslCredentials = dbState->SslCredentials;
         clientConfig.SslCredentials = {.pem_root_certs = TStringType{sslCredentials.CaCert}, .pem_private_key = TStringType{sslCredentials.PrivateKey}, .pem_cert_chain = TStringType{sslCredentials.Cert}};
         clientConfig.EnableSsl = sslCredentials.IsEnabled;
@@ -275,7 +275,7 @@ public:
     class TRequestWrapper {
     public:
         // Implicit conversion from rvalue reference
-        TRequestWrapper(TRequest&& request) 
+        TRequestWrapper(TRequest&& request)
             : Storage_(std::move(request))
         {}
 
@@ -286,13 +286,13 @@ public:
 
         // Copy constructor
         TRequestWrapper(const TRequestWrapper& other) = default;
-        
+
         // Move constructor
         TRequestWrapper(TRequestWrapper&& other) = default;
-        
+
         // Copy assignment
         TRequestWrapper& operator=(const TRequestWrapper& other) = default;
-        
+
         // Move assignment
         TRequestWrapper& operator=(TRequestWrapper&& other) = default;
 
@@ -303,13 +303,13 @@ public:
             NYdbGrpc::TAdvancedResponseCallback<TResponse>&& responseCbLow,
             typename NYdbGrpc::TSimpleRequestProcessor<typename TService::Stub, TRequest, TResponse>::TAsyncRequest rpc,
             const TCallMeta& meta,
-            IQueueClientContext* context) 
+            IQueueClientContext* context)
         {
             if (auto ptr = std::get_if<TRequest*>(&Storage_)) {
-                serviceConnection->DoAdvancedRequest(**ptr, 
+                serviceConnection->DoAdvancedRequest(**ptr,
                     std::move(responseCbLow), rpc, meta, context);
             } else {
-                serviceConnection->DoAdvancedRequest(std::move(std::get<TRequest>(Storage_)), 
+                serviceConnection->DoAdvancedRequest(std::move(std::get<TRequest>(Storage_)),
                     std::move(responseCbLow), rpc, meta, context);
             }
         }
@@ -378,7 +378,7 @@ public:
         }
 
         WithServiceConnection<TService>(
-            [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb), rpc, 
+            [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb), rpc,
              requestSettings, context = std::move(context), dbState]
                 (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable -> void {
                     if (!status.Ok()) {

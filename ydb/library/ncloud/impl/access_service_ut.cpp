@@ -42,7 +42,7 @@ struct TTestSetup : public NUnitTest::TBaseFixture {
         Runtime.Initialize(MakeEgg());
         EdgeActor = Runtime.AllocateEdgeActor();
 
-        AccessServiceActor = NNebiusCloud::CreateAccessServiceV1(TStringBuilder() << "localhost:" << ServicePort);
+        AccessServiceActor = NNebiusCloud::CreateAccessServiceV1(TStringBuilder() << "localhost:" << ServicePort, "ncloud_access_service_ut");
         AccessServiceActorId = Runtime.Register(AccessServiceActor);
 
         StartAccessService();
@@ -91,6 +91,9 @@ Y_UNIT_TEST_SUITE_F(TNebiusAccessServiceTest, TTestSetup) {
             auto* result = Authenticate("good");
             UNIT_ASSERT(result->Status.Ok());
             UNIT_ASSERT_VALUES_EQUAL(result->Response.account().user_account().id(), "1234");
+            with_lock (AccessServiceMock.MetadataMutex) {
+                UNIT_ASSERT_STRING_CONTAINS(AccessServiceMock.CapturedUserAgent, "ydb-ncloud_access_service_ut/");
+            }
         }
     }
 
@@ -120,6 +123,9 @@ Y_UNIT_TEST_SUITE_F(TNebiusAccessServiceTest, TTestSetup) {
             UNIT_ASSERT(resultIt != result->Response.results().end());
             const auto& resultRec = resultIt->second;
             UNIT_ASSERT_VALUES_EQUAL(resultRec.account().user_account().id(), "user_id");
+            with_lock (AccessServiceMock.MetadataMutex) {
+                UNIT_ASSERT_STRING_CONTAINS(AccessServiceMock.CapturedUserAgent, "ydb-ncloud_access_service_ut/");
+            }
         }
 
         {

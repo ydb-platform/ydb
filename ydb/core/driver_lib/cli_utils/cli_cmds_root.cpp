@@ -198,7 +198,7 @@ public:
         ParseCaCerts(config);
         ParseClientCert(config);
 
-        CommandConfig.ClientConfig = NYdbGrpc::TGRpcClientConfig(endpoint.Address);
+        CommandConfig.ClientConfig = NYdbGrpc::TGRpcClientConfig(endpoint.Address, "cli");
         if (config.EnableSsl) {
             CommandConfig.ClientConfig.EnableSsl = config.EnableSsl;
             CommandConfig.ClientConfig.SslCredentials.pem_root_certs = config.CaCerts;

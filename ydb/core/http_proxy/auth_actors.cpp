@@ -19,10 +19,11 @@
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
 
 namespace NKikimr::NHttpProxy {
-    NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, bool enableV2Interface)
+    NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, const TString& userAgentHint, bool enableV2Interface)
     {
         NCloud::TAccessServiceSettings asSettings;
         asSettings.Endpoint = config.GetHttpConfig().GetAccessServiceEndpoint();
+        asSettings.UserAgentHint = userAgentHint;
 
         if (config.GetCaCert()) {
             TString certificate = TFileInput(config.GetCaCert()).ReadAll();
@@ -31,10 +32,11 @@ namespace NKikimr::NHttpProxy {
         return NCloud::CreateAccessServiceWithCache(asSettings, enableV2Interface);
     }
 
-    NActors::IActor* CreateIamTokenServiceActor(const NKikimrConfig::TServerlessProxyConfig& config)
+    NActors::IActor* CreateIamTokenServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, const TString& userAgentHint)
     {
         NCloud::TIamTokenServiceSettings tsSettings;
         tsSettings.Endpoint = config.GetHttpConfig().GetIamTokenServiceEndpoint();
+        tsSettings.UserAgentHint = userAgentHint;
         if (config.GetCaCert()) {
             TString certificate = TFileInput(config.GetCaCert()).ReadAll();
             tsSettings.CertificateRootCA = certificate;

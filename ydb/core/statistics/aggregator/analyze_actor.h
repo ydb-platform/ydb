@@ -106,6 +106,12 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
 
+    bool ResolvingDatabase = false;
+    THashMap<ui32, TSysTables::TTableColumnInfo> NavigateColumns;
+    TVector<NKikimrSchemeOp::TMultiColumnStatisticsDescription> NavigateMultiColumnStatistics;
+    void HandleNavigateResult();
+    void HandleResolveDatabase(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry);
+
     // StateLocateTablets
 
     // In this stage tablet -> node correspondence is resolved. Currently this is only needed

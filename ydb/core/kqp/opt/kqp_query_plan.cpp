@@ -2060,6 +2060,10 @@ private:
         }
     }
 
+    static bool IsIdentityLambda(const TCoLambda& lambda) {
+        return lambda.Args().Size() == 1 && lambda.Body().Raw() == lambda.Args().Arg(0).Raw();
+    }
+
     std::variant<ui32, TArgContext> Visit(const TCoFilterBase& filter, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Filter";
@@ -2140,8 +2144,13 @@ private:
         AddReadTableSettings(op, read, readInfo);
 
         if (auto maybeRead = read.Maybe<TKqpReadOlapTableRangesBase>()) {
+            const auto olapRead = maybeRead.Cast();
             op.Properties["SsaProgram"] = GetSsaProgramInJsonByTable(read.Table().Path().StringValue(), planNode.StageProto);
-            AddOptimizerEstimates(op, maybeRead.Cast().Process());
+            if (IsIdentityLambda(olapRead.Process())) {
+                AddOptimizerEstimates(op, olapRead);
+            } else {
+                AddOptimizerEstimates(op, olapRead.Process());
+            }
         } else {
             AddOptimizerEstimates(op, read);
         }

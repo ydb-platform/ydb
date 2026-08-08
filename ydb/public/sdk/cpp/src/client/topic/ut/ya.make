@@ -22,12 +22,7 @@ SRCS(
     basic_usage_ut.cpp
     describe_topic_ut.cpp
     local_partition_ut.cpp
-<<<<<<< HEAD
-=======
-    producer_deferred_publication_ut.cpp
     read_session_credentials_ut.cpp
-    topic_deferred_publish_ut.cpp
->>>>>>> 3311ddd5696 (always run callbacks on the completion queue to awoid re-entrant lock… (#49281))
     topic_to_table_ut.cpp
     topic_tx_skip_conflict_ut.cpp
 )

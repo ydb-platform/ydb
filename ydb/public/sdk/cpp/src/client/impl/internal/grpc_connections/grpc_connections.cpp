@@ -71,19 +71,8 @@ void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
     }
 
     auto scheduleContext = context;
-<<<<<<< HEAD
-    auto schedule = [this, scheduleContext](TDeadline deadline) {
-=======
-    auto scheduleCallback = [this, scheduleContext, stopState = StopState_]
+    auto scheduleCallback = [this, scheduleContext]
         (TDeadline deadline, std::function<void(bool)> callback) {
-        // Future continuations may outlive TGRpcConnectionsImpl. Acquire the guard before
-        // dereferencing this, so destruction either waits for scheduling or prevents it.
-        TSdkCallbackGuard guard(stopState);
-        if (!guard.IsEntered()) {
-            callback(false);
-            return;
-        }
->>>>>>> 3311ddd5696 (always run callbacks on the completion queue to awoid re-entrant lock… (#49281))
         const auto now = TDeadline::Clock::now();
         const auto timeout = deadline.GetTimePoint() <= now
             ? TDuration::Zero()

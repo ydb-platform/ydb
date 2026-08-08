@@ -1,0 +1,9 @@
+items:
+- name: Обзор
+  href: index.md
+- name: YDB CLI
+  href: ydb-cli.md
+- name: Spark
+  href: spark.md
+- name: Федеративные запросы (S3)
+  href: federated-queries-s3.md

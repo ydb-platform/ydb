@@ -47,6 +47,11 @@ items:
   include:
     mode: link
     path: transfer/toc_p.yaml
+- name: Импорт в {{ ydb-short-name }}
+  href: import/index.md
+  include:
+    mode: link
+    path: import/toc_p.yaml
 - name: Резервное копирование в NFS
   href: nfs-backup/nfs-backup.md
 - name: Импорт и экспорт данных в колоночные таблицы

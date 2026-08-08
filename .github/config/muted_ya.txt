@@ -86,6 +86,7 @@ ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.t
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_prestable-26-4_and_stable-26-3-1]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_stable-26-3-1]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_stable-26-3-1_and_stable-26-2-1]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_join[rolling_stable-26-3-1_to_prestable-26-4-True]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_multi_output[rolling_stable-26-2-1_to_stable-26-3-1-False]
 ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_batch_written_with_topic_protocol_is_fetched_after_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
 ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_plain_and_batched_messages_survive_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]

@@ -309,6 +309,14 @@ public:
             alter->SetAuditSettings(settings.GetAuditSettings());
         }
 
+        if (settings.HasTablesMetricsLevel()) {
+            if (!CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), /* isRootDomain */ false, errStr)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
+            }
+            alter->SetTablesMetricsLevel(settings.GetTablesMetricsLevel());
+        }
+
         Y_ABORT_UNLESS(!context.SS->SubDomains.contains(newNode->PathId));
         auto& subDomainInfo = context.SS->SubDomains[newNode->PathId];
         subDomainInfo = new TSubDomainInfo();

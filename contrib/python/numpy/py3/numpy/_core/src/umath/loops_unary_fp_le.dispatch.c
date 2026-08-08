@@ -3393,17 +3393,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_isnan)
     const npy_intp istep = steps[0];
     const npy_intp ostep = steps[1];
     npy_intp len = dimensions[0];
-    const int ilsize = sizeof(npyv_lanetype_f32);
-    const int olsize = sizeof(npy_bool);
-    const npy_intp istride = istep / ilsize;
-    const npy_intp ostride = ostep / olsize;
-    assert(len <= 1 || ostep % olsize == 0);
 
-    if ((istep % ilsize == 0) &&
-        !is_mem_overlap(ip, istep, op, ostep, len) &&
-        npyv_loadable_stride_f32(istride) &&
-        npyv_storable_stride_f32(ostride))
+    if (!is_mem_overlap(ip, istep, op, ostep, len) &&
+        npyv_loadable_stride_f32(istep) &&
+        npyv_storable_stride_f32(ostep))
     {
+        const npy_intp istride = istep / sizeof(npyv_lanetype_f32);
+        const npy_intp ostride = ostep / sizeof(npy_bool);
+
         if (istride == 1 && ostride == 1) {
             simd_unary_isnan_FLOAT_CONTIG_CONTIG(ip, 1, op, 1, len);
         }
@@ -3437,17 +3434,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_isinf)
     const npy_intp istep = steps[0];
     const npy_intp ostep = steps[1];
     npy_intp len = dimensions[0];
-    const int ilsize = sizeof(npyv_lanetype_f32);
-    const int olsize = sizeof(npy_bool);
-    const npy_intp istride = istep / ilsize;
-    const npy_intp ostride = ostep / olsize;
-    assert(len <= 1 || ostep % olsize == 0);
 
-    if ((istep % ilsize == 0) &&
-        !is_mem_overlap(ip, istep, op, ostep, len) &&
-        npyv_loadable_stride_f32(istride) &&
-        npyv_storable_stride_f32(ostride))
+    if (!is_mem_overlap(ip, istep, op, ostep, len) &&
+        npyv_loadable_stride_f32(istep) &&
+        npyv_storable_stride_f32(ostep))
     {
+        const npy_intp istride = istep / sizeof(npyv_lanetype_f32);
+        const npy_intp ostride = ostep / sizeof(npy_bool);
+
         if (istride == 1 && ostride == 1) {
             simd_unary_isinf_FLOAT_CONTIG_CONTIG(ip, 1, op, 1, len);
         }
@@ -3481,17 +3475,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_isfinite)
     const npy_intp istep = steps[0];
     const npy_intp ostep = steps[1];
     npy_intp len = dimensions[0];
-    const int ilsize = sizeof(npyv_lanetype_f32);
-    const int olsize = sizeof(npy_bool);
-    const npy_intp istride = istep / ilsize;
-    const npy_intp ostride = ostep / olsize;
-    assert(len <= 1 || ostep % olsize == 0);
 
-    if ((istep % ilsize == 0) &&
-        !is_mem_overlap(ip, istep, op, ostep, len) &&
-        npyv_loadable_stride_f32(istride) &&
-        npyv_storable_stride_f32(ostride))
+    if (!is_mem_overlap(ip, istep, op, ostep, len) &&
+        npyv_loadable_stride_f32(istep) &&
+        npyv_storable_stride_f32(ostep))
     {
+        const npy_intp istride = istep / sizeof(npyv_lanetype_f32);
+        const npy_intp ostride = ostep / sizeof(npy_bool);
+
         if (istride == 1 && ostride == 1) {
             simd_unary_isfinite_FLOAT_CONTIG_CONTIG(ip, 1, op, 1, len);
         }
@@ -3525,17 +3516,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_signbit)
     const npy_intp istep = steps[0];
     const npy_intp ostep = steps[1];
     npy_intp len = dimensions[0];
-    const int ilsize = sizeof(npyv_lanetype_f32);
-    const int olsize = sizeof(npy_bool);
-    const npy_intp istride = istep / ilsize;
-    const npy_intp ostride = ostep / olsize;
-    assert(len <= 1 || ostep % olsize == 0);
 
-    if ((istep % ilsize == 0) &&
-        !is_mem_overlap(ip, istep, op, ostep, len) &&
-        npyv_loadable_stride_f32(istride) &&
-        npyv_storable_stride_f32(ostride))
+    if (!is_mem_overlap(ip, istep, op, ostep, len) &&
+        npyv_loadable_stride_f32(istep) &&
+        npyv_storable_stride_f32(ostep))
     {
+        const npy_intp istride = istep / sizeof(npyv_lanetype_f32);
+        const npy_intp ostride = ostep / sizeof(npy_bool);
+
         if (istride == 1 && ostride == 1) {
             simd_unary_signbit_FLOAT_CONTIG_CONTIG(ip, 1, op, 1, len);
         }
@@ -3572,17 +3560,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_isnan)
     const npy_intp istep = steps[0];
     const npy_intp ostep = steps[1];
     npy_intp len = dimensions[0];
-    const int ilsize = sizeof(npyv_lanetype_f64);
-    const int olsize = sizeof(npy_bool);
-    const npy_intp istride = istep / ilsize;
-    const npy_intp ostride = ostep / olsize;
-    assert(len <= 1 || ostep % olsize == 0);
 
-    if ((istep % ilsize == 0) &&
-        !is_mem_overlap(ip, istep, op, ostep, len) &&
-        npyv_loadable_stride_f64(istride) &&
-        npyv_storable_stride_f64(ostride))
+    if (!is_mem_overlap(ip, istep, op, ostep, len) &&
+        npyv_loadable_stride_f64(istep) &&
+        npyv_storable_stride_f64(ostep))
     {
+        const npy_intp istride = istep / sizeof(npyv_lanetype_f64);
+        const npy_intp ostride = ostep / sizeof(npy_bool);
+
         if (istride == 1 && ostride == 1) {
             simd_unary_isnan_DOUBLE_CONTIG_CONTIG(ip, 1, op, 1, len);
         }
@@ -3616,17 +3601,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_isinf)
     const npy_intp istep = steps[0];
     const npy_intp ostep = steps[1];
     npy_intp len = dimensions[0];
-    const int ilsize = sizeof(npyv_lanetype_f64);
-    const int olsize = sizeof(npy_bool);
-    const npy_intp istride = istep / ilsize;
-    const npy_intp ostride = ostep / olsize;
-    assert(len <= 1 || ostep % olsize == 0);
 
-    if ((istep % ilsize == 0) &&
-        !is_mem_overlap(ip, istep, op, ostep, len) &&
-        npyv_loadable_stride_f64(istride) &&
-        npyv_storable_stride_f64(ostride))
+    if (!is_mem_overlap(ip, istep, op, ostep, len) &&
+        npyv_loadable_stride_f64(istep) &&
+        npyv_storable_stride_f64(ostep))
     {
+        const npy_intp istride = istep / sizeof(npyv_lanetype_f64);
+        const npy_intp ostride = ostep / sizeof(npy_bool);
+
         if (istride == 1 && ostride == 1) {
             simd_unary_isinf_DOUBLE_CONTIG_CONTIG(ip, 1, op, 1, len);
         }
@@ -3660,17 +3642,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_isfinite)
     const npy_intp istep = steps[0];
     const npy_intp ostep = steps[1];
     npy_intp len = dimensions[0];
-    const int ilsize = sizeof(npyv_lanetype_f64);
-    const int olsize = sizeof(npy_bool);
-    const npy_intp istride = istep / ilsize;
-    const npy_intp ostride = ostep / olsize;
-    assert(len <= 1 || ostep % olsize == 0);
 
-    if ((istep % ilsize == 0) &&
-        !is_mem_overlap(ip, istep, op, ostep, len) &&
-        npyv_loadable_stride_f64(istride) &&
-        npyv_storable_stride_f64(ostride))
+    if (!is_mem_overlap(ip, istep, op, ostep, len) &&
+        npyv_loadable_stride_f64(istep) &&
+        npyv_storable_stride_f64(ostep))
     {
+        const npy_intp istride = istep / sizeof(npyv_lanetype_f64);
+        const npy_intp ostride = ostep / sizeof(npy_bool);
+
         if (istride == 1 && ostride == 1) {
             simd_unary_isfinite_DOUBLE_CONTIG_CONTIG(ip, 1, op, 1, len);
         }
@@ -3704,17 +3683,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_signbit)
     const npy_intp istep = steps[0];
     const npy_intp ostep = steps[1];
     npy_intp len = dimensions[0];
-    const int ilsize = sizeof(npyv_lanetype_f64);
-    const int olsize = sizeof(npy_bool);
-    const npy_intp istride = istep / ilsize;
-    const npy_intp ostride = ostep / olsize;
-    assert(len <= 1 || ostep % olsize == 0);
 
-    if ((istep % ilsize == 0) &&
-        !is_mem_overlap(ip, istep, op, ostep, len) &&
-        npyv_loadable_stride_f64(istride) &&
-        npyv_storable_stride_f64(ostride))
+    if (!is_mem_overlap(ip, istep, op, ostep, len) &&
+        npyv_loadable_stride_f64(istep) &&
+        npyv_storable_stride_f64(ostep))
     {
+        const npy_intp istride = istep / sizeof(npyv_lanetype_f64);
+        const npy_intp ostride = ostep / sizeof(npy_bool);
+
         if (istride == 1 && ostride == 1) {
             simd_unary_signbit_DOUBLE_CONTIG_CONTIG(ip, 1, op, 1, len);
         }

@@ -31,6 +31,10 @@ inline constexpr size_t OperationCount =
 // Indexed by EOperation.
 using TInflightByOperation = std::array<size_t, OperationCount>;
 
+// True for operations with DDisk
+// (as opposed to the PBuffer operations).
+[[nodiscard]] bool IsDDiskOperation(EOperation operation);
+
 class THostStat
 {
 public:

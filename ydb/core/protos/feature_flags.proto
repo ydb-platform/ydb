@@ -360,5 +360,6 @@ message TFeatureFlags {
     optional bool EnableKafkaServerlessTransactions = 307 [default = false];
     optional bool EnableGeneratedStored = 308 [default = false];
     optional bool EnableGeneratedVirtual = 309 [default = false];
-    optional bool EnableCsFlowControl = 310 [default = false];
+    optional bool EnableTxIdInStats = 310 [default = false];
+    optional bool EnableCsFlowControl = 311 [default = false];
 }

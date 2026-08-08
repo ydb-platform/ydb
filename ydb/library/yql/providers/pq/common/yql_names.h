@@ -1,9 +1,11 @@
 #pragma once
 
 #include <util/generic/strbuf.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 
 namespace NYql {
 
+constexpr TStringBuf PqSource = NDq::PqSource;
 constexpr TStringBuf PartitionsCountProp = "PartitionsCount";
 constexpr TStringBuf FederatedClustersProp = "FederatedClusters";
 constexpr TStringBuf ConsumerSetting = "Consumer";

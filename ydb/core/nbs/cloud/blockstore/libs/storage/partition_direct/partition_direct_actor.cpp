@@ -117,6 +117,8 @@ void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
         "%s DetachEndpointAddDie",
         LogTitle.GetWithTime().c_str());
 
+    ctx.Send(LoadActorAdapter, new TEvents::TEvPoisonPill());
+
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
     if (FastPathService) {
@@ -412,7 +414,8 @@ void TPartitionActor::HandleFastPathServiceReady(
             .StripeSize = StorageConfig->GetStripeSize(),
             .BlocksCount = blockCount,
             .VChunkSize = StorageConfig->GetVChunkSize(),
-            .VhostQueuesCount = StorageConfig->GetVhostQueuesCount()};
+            .VhostQueuesCount = StorageConfig->GetVhostQueuesCount(),
+            .Generation = Executor()->Generation()};
         service->VhostServer->StartEndpoint(
             GetSocketPath(),
             FastPathService,
@@ -710,6 +713,8 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvPoison,
             HandlePoisonByBlockedGeneration);
+
+        HFunc(TEvService::TEvDeletePartitionRequest, HandleDeletePartition);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

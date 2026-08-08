@@ -1,4 +1,5 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
@@ -1052,5 +1053,143 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                 static_cast<int>(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP)
             );
         }
+    }
+
+    // Base-stat fields sent to the Statistics Aggregator (RowCount, RowUpdates,
+    // RowDeletes) are persisted in the schemeshard local DB and must survive a reboot.
+    Y_UNIT_TEST_WITH_REBOOTS(BaseStatsSurviveReboot) {
+        t.GetTestEnvOptions().EnablePersistentPartitionStats(true);
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            constexpr ui32 WrittenRows = 50;
+            constexpr ui32 DeletedRows = 10;
+
+            ui64 rowCountBefore = 0;
+            ui64 rowUpdatesBefore = 0;
+            ui64 rowDeletesBefore = 0;
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Simple"
+                    Columns { Name: "key"   Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                for (ui32 key = 0; key < WrittenRows; ++key) {
+                    WriteRow(runtime, ++t.TxId, "/MyRoot/Simple", 0, key, "value");
+                }
+                for (ui32 key = 0; key < DeletedRows; ++key) {
+                    DeleteRow(runtime, ++t.TxId, "/MyRoot/Simple", 0, key);
+                }
+
+                while (rowUpdatesBefore < WrittenRows || rowDeletesBefore < DeletedRows) {
+                    auto describe = DescribePrivatePath(runtime, "/MyRoot/Simple", true, true);
+                    const auto& stats = describe.GetPathDescription().GetTableStats();
+                    rowCountBefore = stats.GetRowCount();
+                    rowUpdatesBefore = stats.GetRowUpdates();
+                    rowDeletesBefore = stats.GetRowDeletes();
+                    t.TestEnv->SimulateSleep(runtime, TDuration::Seconds(1));
+                }
+            }
+
+            TActorId sender = runtime.AllocateEdgeActor();
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                auto describe = DescribePrivatePath(runtime, "/MyRoot/Simple", true, true);
+                const auto& stats = describe.GetPathDescription().GetTableStats();
+
+                // All three fields are persisted in the schemeshard local DB and
+                // must be restored to the same values after the reboot.
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetRowCount(), rowCountBefore);
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetRowUpdates(), rowUpdatesBefore);
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetRowDeletes(), rowDeletesBefore);
+            }
+        });
+    }
+
+    // Without EnablePersistentPartitionStats, schemeshard loses in-memory base stats on
+    // reboot. Datashards keep their counters and re-send them via PeriodicTableStats,
+    // so the table aggregate must recover after some time.
+    Y_UNIT_TEST_WITH_REBOOTS(BaseStatsRecoverAfterRebootWithoutPersistence) {
+        t.GetTestEnvOptions()
+            .EnablePersistentPartitionStats(false)
+            .DataShardStatsReportIntervalSeconds(1);
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            constexpr ui32 WrittenRows = 50;
+            constexpr ui32 DeletedRows = 10;
+
+            ui64 rowCountBefore = 0;
+            ui64 rowUpdatesBefore = 0;
+            ui64 rowDeletesBefore = 0;
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Simple"
+                    Columns { Name: "key"   Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                for (ui32 key = 0; key < WrittenRows; ++key) {
+                    WriteRow(runtime, ++t.TxId, "/MyRoot/Simple", 0, key, "value");
+                }
+                for (ui32 key = 0; key < DeletedRows; ++key) {
+                    DeleteRow(runtime, ++t.TxId, "/MyRoot/Simple", 0, key);
+                }
+
+                while (rowUpdatesBefore < WrittenRows || rowDeletesBefore < DeletedRows) {
+                    auto describe = DescribePrivatePath(runtime, "/MyRoot/Simple", true, true);
+                    const auto& stats = describe.GetPathDescription().GetTableStats();
+                    rowCountBefore = stats.GetRowCount();
+                    rowUpdatesBefore = stats.GetRowUpdates();
+                    rowDeletesBefore = stats.GetRowDeletes();
+                    t.TestEnv->SimulateSleep(runtime, TDuration::Seconds(1));
+                }
+
+                // Reboot only schemeshard; leave the datashard running so its in-memory
+                // RowUpdates/RowDeletes survive and can be re-reported.
+                TActorId sender = runtime.AllocateEdgeActor();
+                RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+                // Stats were not persisted, so they start empty after the reboot.
+                {
+                    auto describe = DescribePrivatePath(runtime, "/MyRoot/Simple", true, true);
+                    const auto& stats = describe.GetPathDescription().GetTableStats();
+                    UNIT_ASSERT_VALUES_EQUAL(stats.GetRowCount(), 0u);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.GetRowUpdates(), 0u);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.GetRowDeletes(), 0u);
+                }
+
+                ui64 rowCountAfter = 0;
+                ui64 rowUpdatesAfter = 0;
+                ui64 rowDeletesAfter = 0;
+                while (rowCountAfter < rowCountBefore
+                        || rowUpdatesAfter < rowUpdatesBefore
+                        || rowDeletesAfter < rowDeletesBefore)
+                {
+                    auto describe = DescribePrivatePath(runtime, "/MyRoot/Simple", true, true);
+                    const auto& stats = describe.GetPathDescription().GetTableStats();
+                    rowCountAfter = stats.GetRowCount();
+                    rowUpdatesAfter = stats.GetRowUpdates();
+                    rowDeletesAfter = stats.GetRowDeletes();
+                    t.TestEnv->SimulateSleep(runtime, TDuration::Seconds(1));
+                }
+
+                UNIT_ASSERT_VALUES_EQUAL(rowCountAfter, rowCountBefore);
+                UNIT_ASSERT_VALUES_EQUAL(rowUpdatesAfter, rowUpdatesBefore);
+                UNIT_ASSERT_VALUES_EQUAL(rowDeletesAfter, rowDeletesBefore);
+            }
+        });
     }
 }

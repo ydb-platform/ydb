@@ -2,8 +2,7 @@
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideMapTest) {
 Y_UNIT_TEST_LLVM(TestSimpleSwap) {
@@ -115,7 +114,7 @@ Y_UNIT_TEST_LLVM(TestPasstroughtFieldsAsIs) {
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
-                                                              [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), pb.Minus(items[1u]), items.back()}; }),
+                                                              [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), pb.Minus(items[1U]), items.back()}; }),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -203,5 +202,4 @@ Y_UNIT_TEST_LLVM(TestPasstroughtFieldSplitAndFirstUnused) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideMapTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

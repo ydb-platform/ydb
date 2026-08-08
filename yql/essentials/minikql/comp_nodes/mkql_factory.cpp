@@ -134,8 +134,7 @@
 #include <string_view>
 #include <unordered_map>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapArg(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected 0 args");
@@ -433,5 +432,4 @@ TComputationNodeFactory GetCompositeWithBuiltinFactory(TVector<TComputationNodeF
     };
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

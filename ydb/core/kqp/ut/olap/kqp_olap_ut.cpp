@@ -1602,6 +1602,111 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(PredicatePushdown_Regexp) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/foo` (
+                    id Int64 NOT NULL,
+                    str String,
+                    u_str Utf8,
+                    PRIMARY KEY(id)
+                )
+                WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT(res.IsSuccess());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        {
+            const auto res = session.ExecuteQuery(R"(
+                INSERT INTO `/Root/foo` (id, str, u_str) VALUES
+                    (1, "foobar", "foobar"),
+                    (2, "baz", "baz"),
+                    (3, "fooqux", "fooqux"),
+                    (4, NULL, NULL)
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+        }
+
+        std::vector<TString> predicates = {
+            "str REGEXP '.*foo.*'",
+            "str REGEXP 'foo.ar'",
+            "str REGEXP 'nomatch'",
+            "u_str REGEXP '.*foo.*'",
+            "u_str REGEXP 'foo.ar'",
+            "u_str REGEXP 'nomatch'",
+        };
+
+        std::vector<TString> expectedResults = {
+            "[[1];[3]]",
+            "[[1]]",
+            "[]",
+            "[[1];[3]]",
+            "[[1]]",
+            "[]",
+        };
+
+        UNIT_ASSERT_EQUAL(expectedResults.size(), predicates.size());
+
+        // Pragma ON: REGEXP must be pushed down (KqpOlapFilter present in AST) and produce correct results.
+        for (ui32 i = 0; i < predicates.size(); ++i) {
+            const auto& query = TString(R"(
+                PRAGMA kikimr.OptEnableOlapPushdownRegexp = "true";
+                SELECT id FROM `/Root/foo` WHERE
+                )") + predicates[i] + " ORDER BY id";
+            Cerr << "QUERY " << i << Endl << query << Endl;
+
+            const auto res = session
+                                 .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                     NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full))
+                                 .ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+
+            const auto ast = res.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast->find("KqpOlapFilter") != std::string::npos,
+                TStringBuilder() << "REGEXP not pushed down. Query: " << query);
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResults[i]);
+        }
+
+        // Pragma OFF (default): REGEXP must NOT be pushed down, but results must still be correct.
+        for (ui32 i = 0; i < predicates.size(); ++i) {
+            const auto& query = TString(R"(
+                SELECT id FROM `/Root/foo` WHERE
+                )") + predicates[i] + " ORDER BY id";
+
+            const auto res = session
+                                 .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                     NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full))
+                                 .ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+
+            const auto ast = res.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast->find("KqpOlapFilter") == std::string::npos,
+                TStringBuilder() << "REGEXP unexpectedly pushed down with pragma off. Query: " << query);
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResults[i]);
+        }
+
+        // Invalid regex must be ignored (no error), preserving current Re2 semantics, even when pushed down.
+        {
+            const auto query = R"(
+                PRAGMA kikimr.OptEnableOlapPushdownRegexp = "true";
+                SELECT id FROM `/Root/foo` WHERE str REGEXP '(' ORDER BY id;
+            )";
+            const auto res = session
+                                 .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx())
+                                 .ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[]");
+        }
+    }
+
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

@@ -2,37 +2,33 @@
 
 import math
 from collections.abc import Iterable, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, SupportsInt, Union
+from typing import Any, SupportsInt, Union
 
 from multidict import istr
 
 from ._quoters import QUERY_PART_QUOTER, QUERY_QUOTER
 
-SimpleQuery = Union[str, int, float]
+SimpleQuery = Union[str, SupportsInt, float]
 QueryVariable = Union[SimpleQuery, Sequence[SimpleQuery]]
 Query = Union[
     None, str, Mapping[str, QueryVariable], Sequence[tuple[str, QueryVariable]]
 ]
 
 
-def query_var(v: QueryVariable) -> str:
+def query_var(v: SimpleQuery) -> str:
     """Convert a query variable to a string."""
     cls = type(v)
     if cls is int:  # Fast path for non-subclassed int
         return str(v)
-    if issubclass(cls, str):
-        if TYPE_CHECKING:
-            assert isinstance(v, str)
+    if isinstance(v, str):
         return v
-    if cls is float or issubclass(cls, float):
-        if TYPE_CHECKING:
-            assert isinstance(v, float)
+    if isinstance(v, float):
         if math.isinf(v):
             raise ValueError("float('inf') is not supported")
         if math.isnan(v):
             raise ValueError("float('nan') is not supported")
         return str(float(v))
-    if cls is not bool and isinstance(cls, SupportsInt):
+    if cls is not bool and isinstance(v, SupportsInt):
         return str(int(v))
     raise TypeError(
         "Invalid variable type: value "
@@ -103,7 +99,7 @@ def get_str_query(*args: Any, **kwargs: Any) -> Union[str, None]:
         return QUERY_QUOTER(query)
     if isinstance(query, Mapping):
         return get_str_query_from_sequence_iterable(query.items())
-    if isinstance(query, (bytes, bytearray, memoryview)):
+    if isinstance(query, (bytes, bytearray, memoryview)):  # type: ignore[unreachable]
         msg = "Invalid query type: bytes, bytearray and memoryview are forbidden"
         raise TypeError(msg)
     if isinstance(query, Sequence):

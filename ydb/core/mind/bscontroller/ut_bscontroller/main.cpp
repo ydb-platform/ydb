@@ -1262,7 +1262,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
 
         UNIT_ASSERT(!group.Listable());
 
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters params;
+        NKikimrBlobStorage::TGroupMetrics::TGroupParameters params;
         UNIT_ASSERT(!group.FillInGroupParameters(&params, nullptr));
         UNIT_ASSERT_VALUES_EQUAL(params.GetGroupSizeInUnits(), 0);
     }

@@ -1,0 +1,36 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelineDirectory = "pipelines";
+pragma Ytflow.PipelineName = "test";
+
+$union = (
+    select key, ts, value
+    from InputA
+    union all
+    select key, ts, value
+    from InputB
+);
+
+$mapped = (
+    select key, ts, value + 1 as mapped_value
+    from $union
+);
+
+insert into Output
+select
+    HOP_START() as window_start,
+    HOP_END() as window_end,
+    key,
+    sum(mapped_value) as sum_values,
+    sum_if(mapped_value, mapped_value > 10) as sum_if_values,
+    count(*) as count_values,
+    count_if(mapped_value > 10) as count_if_values
+from $mapped
+group by
+    key,
+    HOP(Datetime::FromSeconds(Unwrap(ts)), "PT5S", "PT5S", "PT10S");

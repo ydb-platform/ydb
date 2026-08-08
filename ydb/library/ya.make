@@ -47,6 +47,7 @@ RECURSE(
     time_series_vec
     union_copy_set
     wilson_ids
+    wasm
     workload
     workload
     yaml_config

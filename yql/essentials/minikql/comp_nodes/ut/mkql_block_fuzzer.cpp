@@ -73,9 +73,9 @@ public:
     std::shared_ptr<arrow::ArrayData> FuzzArray(const arrow::ArrayData& array,
                                                 arrow::MemoryPool& memoryPool,
                                                 IRandomProvider& randomProvider) const {
-        ValidateDatum(arrow::Datum(array.Copy()), Nothing(), nullptr, ValidationMode_);
+        ValidateDatum(arrow::Datum(array.Copy()), Nothing(), /*type=*/nullptr, ValidationMode_);
         auto result = DoFuzzArray(array, memoryPool, randomProvider);
-        ValidateDatum(arrow::Datum(result), Nothing(), nullptr, ValidationMode_);
+        ValidateDatum(arrow::Datum(result), Nothing(), /*type=*/nullptr, ValidationMode_);
         return result;
     };
 
@@ -183,7 +183,7 @@ protected:
 class TExternalOptionalOffsetFuzzer: public TOffsetFuzzerBase {
 public:
     TExternalOptionalOffsetFuzzer(TOffsetFuzzerBase::TPtr base, const NYql::NUdf::TType* type, const TTypeEnvironment& env, NYql::EDatumValidationMode validationMode)
-        : TOffsetFuzzerBase(type, /*isOptional=*/true, env, validationMode)
+        : TOffsetFuzzerBase(type, /*isTypeOptional=*/true, env, validationMode)
         , Base_(std::move(base))
     {
     }
@@ -321,7 +321,7 @@ public:
     arrow::Datum Fuzz(const arrow::ArrayData& input,
                       arrow::MemoryPool& memoryPool,
                       IRandomProvider& randomProvider) const final {
-        ValidateDatum(input, Nothing(), nullptr, ValidationMode_);
+        ValidateDatum(input, Nothing(), /*type=*/nullptr, ValidationMode_);
         return DoFuzz(input, memoryPool, randomProvider);
     };
 

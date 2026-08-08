@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, cast
 from .api import PlatformDirsABC
 
 
-class Android(PlatformDirsABC):  # noqa: PLR0904
+class Android(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
     """Platform directories for Android.
 
     Follows the guidance `from here <https://android.stackexchange.com/a/216132>`_. Directories are typically located
@@ -68,7 +68,7 @@ class Android(PlatformDirsABC):  # noqa: PLR0904
         """Log directory tied to the user, same as `user_cache_dir` if not opinionated else ``log`` in it, e.g. ``/data/user/<userid>/<packagename>/cache/<AppName>/log``."""
         path = self.user_cache_dir
         if self.opinion:
-            path = os.path.join(path, "log")  # noqa: PTH118
+            path = os.path.join(path, "log")  # ruff:ignore[os-path-join]
             self._optionally_create_directory(path)
         return path
 
@@ -135,7 +135,7 @@ class Android(PlatformDirsABC):  # noqa: PLR0904
     @property
     def user_bin_dir(self) -> str:
         """Bin directory tied to the user, e.g. ``/data/user/<userid>/<packagename>/files/bin``."""
-        return os.path.join(cast("str", _android_folder()), "files", "bin")  # noqa: PTH118
+        return os.path.join(cast("str", _android_folder()), "files", "bin")  # ruff:ignore[os-path-join]
 
     @property
     def site_bin_dir(self) -> str:
@@ -157,7 +157,7 @@ class Android(PlatformDirsABC):  # noqa: PLR0904
         """Runtime directory tied to the user, same as `user_cache_dir` if not opinionated else ``tmp`` in it, e.g. ``/data/user/<userid>/<packagename>/cache/<AppName>/tmp``."""
         path = self.user_cache_dir
         if self.opinion:
-            path = os.path.join(path, "tmp")  # noqa: PTH118
+            path = os.path.join(path, "tmp")  # ruff:ignore[os-path-join]
             self._optionally_create_directory(path)
         return path
 
@@ -168,7 +168,7 @@ class Android(PlatformDirsABC):  # noqa: PLR0904
 
 
 @lru_cache(maxsize=1)
-def _android_folder() -> str | None:  # noqa: C901
+def _android_folder() -> str | None:  # ruff:ignore[complex-structure]
     """:returns: base folder for the Android OS or None if it cannot be found"""
     result: str | None = None
     # type checker isn't happy with our "import android", just don't do this when type checking see
@@ -176,21 +176,21 @@ def _android_folder() -> str | None:  # noqa: C901
     if not TYPE_CHECKING:
         try:
             # First try to get a path to android app using python4android (if available)...
-            from android import mActivity  # noqa: PLC0415
+            from android import mActivity  # ruff:ignore[import-outside-top-level]
 
-            context = cast("android.content.Context", mActivity.getApplicationContext())  # noqa: F821
+            context = cast("android.content.Context", mActivity.getApplicationContext())  # ruff:ignore[undefined-name]
             result = context.getFilesDir().getParentFile().getAbsolutePath()
-        except Exception:  # noqa: BLE001
+        except Exception:  # ruff:ignore[blind-except]
             result = None
     if result is None:
         try:
             # ...and fall back to using plain pyjnius, if python4android isn't available or doesn't deliver any useful
             # result...
-            from jnius import autoclass  # noqa: PLC0415  # ty: ignore[unresolved-import]
+            from jnius import autoclass  # ruff:ignore[import-outside-top-level]  # ty: ignore[unresolved-import]
 
             context = autoclass("android.content.Context")
             result = context.getFilesDir().getParentFile().getAbsolutePath()
-        except Exception:  # noqa: BLE001
+        except Exception:  # ruff:ignore[blind-except]
             result = None
     if result is None:
         # and if that fails, too, find an android folder looking at path on the sys.path
@@ -220,12 +220,12 @@ def _android_documents_folder() -> str:
     """:returns: documents folder for the Android OS"""
     # Get directories with pyjnius
     try:
-        from jnius import autoclass  # noqa: PLC0415  # ty: ignore[unresolved-import]
+        from jnius import autoclass  # ruff:ignore[import-outside-top-level]  # ty: ignore[unresolved-import]
 
         context = autoclass("android.content.Context")
         environment = autoclass("android.os.Environment")
         documents_dir: str = context.getExternalFilesDir(environment.DIRECTORY_DOCUMENTS).getAbsolutePath()
-    except Exception:  # noqa: BLE001
+    except Exception:  # ruff:ignore[blind-except]
         documents_dir = "/storage/emulated/0/Documents"
 
     return documents_dir
@@ -236,12 +236,12 @@ def _android_downloads_folder() -> str:
     """:returns: downloads folder for the Android OS"""
     # Get directories with pyjnius
     try:
-        from jnius import autoclass  # noqa: PLC0415  # ty: ignore[unresolved-import]
+        from jnius import autoclass  # ruff:ignore[import-outside-top-level]  # ty: ignore[unresolved-import]
 
         context = autoclass("android.content.Context")
         environment = autoclass("android.os.Environment")
         downloads_dir: str = context.getExternalFilesDir(environment.DIRECTORY_DOWNLOADS).getAbsolutePath()
-    except Exception:  # noqa: BLE001
+    except Exception:  # ruff:ignore[blind-except]
         downloads_dir = "/storage/emulated/0/Downloads"
 
     return downloads_dir
@@ -252,12 +252,12 @@ def _android_pictures_folder() -> str:
     """:returns: pictures folder for the Android OS"""
     # Get directories with pyjnius
     try:
-        from jnius import autoclass  # noqa: PLC0415  # ty: ignore[unresolved-import]
+        from jnius import autoclass  # ruff:ignore[import-outside-top-level]  # ty: ignore[unresolved-import]
 
         context = autoclass("android.content.Context")
         environment = autoclass("android.os.Environment")
         pictures_dir: str = context.getExternalFilesDir(environment.DIRECTORY_PICTURES).getAbsolutePath()
-    except Exception:  # noqa: BLE001
+    except Exception:  # ruff:ignore[blind-except]
         pictures_dir = "/storage/emulated/0/Pictures"
 
     return pictures_dir
@@ -268,12 +268,12 @@ def _android_videos_folder() -> str:
     """:returns: videos folder for the Android OS"""
     # Get directories with pyjnius
     try:
-        from jnius import autoclass  # noqa: PLC0415  # ty: ignore[unresolved-import]
+        from jnius import autoclass  # ruff:ignore[import-outside-top-level]  # ty: ignore[unresolved-import]
 
         context = autoclass("android.content.Context")
         environment = autoclass("android.os.Environment")
         videos_dir: str = context.getExternalFilesDir(environment.DIRECTORY_DCIM).getAbsolutePath()
-    except Exception:  # noqa: BLE001
+    except Exception:  # ruff:ignore[blind-except]
         videos_dir = "/storage/emulated/0/DCIM/Camera"
 
     return videos_dir
@@ -284,12 +284,12 @@ def _android_music_folder() -> str:
     """:returns: music folder for the Android OS"""
     # Get directories with pyjnius
     try:
-        from jnius import autoclass  # noqa: PLC0415  # ty: ignore[unresolved-import]
+        from jnius import autoclass  # ruff:ignore[import-outside-top-level]  # ty: ignore[unresolved-import]
 
         context = autoclass("android.content.Context")
         environment = autoclass("android.os.Environment")
         music_dir: str = context.getExternalFilesDir(environment.DIRECTORY_MUSIC).getAbsolutePath()
-    except Exception:  # noqa: BLE001
+    except Exception:  # ruff:ignore[blind-except]
         music_dir = "/storage/emulated/0/Music"
 
     return music_dir

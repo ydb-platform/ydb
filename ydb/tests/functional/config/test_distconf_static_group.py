@@ -6,6 +6,7 @@ import pytest
 import yaml
 from hamcrest import assert_that
 
+from ydb.core.protos import blobstorage_base3_pb2 as bsbase
 from ydb.core.protos import blobstorage_config_pb2 as bsconfig
 from ydb.public.api.grpc.draft import ydb_distributed_storage_v1_pb2_grpc as distributed_storage_grpc
 from ydb.public.api.protos.draft import ydb_distributed_storage_pb2 as distributed_storage
@@ -94,7 +95,7 @@ def pdisk_path(cluster, node_id, pdisk_id):
 def set_pdisk_faulty(cluster, node, path):
     for attempt in range(10):
         resp = cluster.client.update_drive_status(
-            node.host, node.ic_port, path, bsconfig.EDriveStatus.FAULTY
+            node.host, node.ic_port, path, bsbase.EDriveStatus.FAULTY
         ).BlobStorageConfigResponse
 
         if resp.Success:
@@ -186,7 +187,7 @@ def find_target_pdisk(cluster, vdisks):
         (pdisk.NodeId, pdisk.PDiskId)
         for pdisk in base_config.PDisk
         if (
-            pdisk.DriveStatus == bsconfig.EDriveStatus.ACTIVE
+            pdisk.DriveStatus == bsbase.EDriveStatus.ACTIVE
             and pdisk.NodeId not in occupied_nodes
         )
     ]

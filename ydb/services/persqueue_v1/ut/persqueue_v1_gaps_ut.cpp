@@ -469,6 +469,8 @@ Y_UNIT_TEST(StreamWriteRejectsEmptyAndMissingDatabase) {
     server.AnnoyingClient->GrantConnect("root@builtin");
     auto stub = MakeTopicStub(server);
 
+    Sleep(TDuration::Seconds(1));
+
     for (const auto& database : {TMaybe<TString>(TString()), TMaybe<TString>()}) {
         auto session = TStreamWriteSession::Open(*stub, database, /*withAuthTicket=*/true);
         auto resp = InitStreamWrite(*session->Stream, TString(DefaultTopicShortName), "producer-empty-db");

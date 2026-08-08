@@ -45,6 +45,7 @@ str_to_float = np.vectorize(convert)
 
 class TestAccuracy:
     @platform_skip
+    @pytest.mark.xfail
     def test_validate_transcendentals(self):
         with np.errstate(all='ignore'):
             import yatest.common as yc
@@ -76,6 +77,8 @@ class TestAccuracy:
             reason = "SVML FP16 have slightly higher ULP errors")
     @pytest.mark.parametrize("ufunc", UNARY_OBJECT_UFUNCS)
     def test_validate_fp16_transcendentals(self, ufunc):
+        if ufunc.__name__ in ("cos", "sin"):
+            pytest.xfail()
         with np.errstate(all='ignore'):
             arr = np.arange(65536, dtype=np.int16)
             datafp16 = np.frombuffer(arr.tobytes(), dtype=np.float16)

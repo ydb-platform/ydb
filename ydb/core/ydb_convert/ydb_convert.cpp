@@ -814,9 +814,12 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
     }
 }
 
-void ConvertAclToYdb(const TString& owner, const TString& acl, bool isContainer,
-    google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions>* permissions) {
-    const auto& securityObject = TSecurityObject(owner, acl, isContainer);
+namespace {
+
+void FillPermissionsFromSecurityObject(
+    const NACLib::TSecurityObject& securityObject,
+    google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions>* permissions
+) {
     for (const auto& ace : securityObject.GetACL().GetACE()) {
         auto entry = permissions->Add();
         entry->set_subject(ace.GetSID());
@@ -825,7 +828,15 @@ void ConvertAclToYdb(const TString& owner, const TString& acl, bool isContainer,
             entry->add_permission_names(n);
         }
     }
+}
 
+} // namespace
+
+void ConvertAclToYdb(
+    const TString& owner, const TString& acl, bool isContainer,
+    google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions>* permissions
+) {
+    FillPermissionsFromSecurityObject(TSecurityObject(owner, acl, isContainer), permissions);
 }
 
 using namespace NACLib;
@@ -1012,7 +1023,9 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
     if (processAcl) {
         const bool isDir = from.GetPathType() == NKikimrSchemeOp::EPathTypeDir;
         ConvertAclToYdb(from.GetOwner(), from.GetEffectiveACL(), isDir, to->mutable_effective_permissions());
-        ConvertAclToYdb(from.GetOwner(), from.GetACL(), isDir, to->mutable_permissions());
+        const TSecurityObject securityObject(from.GetOwner(), from.GetACL(), isDir);
+        FillPermissionsFromSecurityObject(securityObject, to->mutable_permissions());
+        to->set_interrupt_permissions_inheritance(securityObject.GetACL().GetInterruptInheritance());
     }
 }
 

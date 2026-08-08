@@ -356,10 +356,10 @@ void CreateStringInColumnTables(TKikimrRunner& kikimr) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-TKikimrRunner MakeTpcdsRunner() {
+TKikimrRunner MakeTpcdsRunner(bool enableNewRbo = true) {
     NKikimrConfig::TAppConfig appConfig;
     auto* service = appConfig.MutableTableServiceConfig();
-    service->SetEnableNewRBO(true);
+    service->SetEnableNewRBO(enableNewRbo);
     service->SetEnableFallbackToYqlOptimizer(false);
     service->SetAllowOlapDataQuery(true);
     service->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -500,6 +500,67 @@ TSnapshotPair VerifyRealHostSnapshotPair(
     UNIT_ASSERT_VALUES_EQUAL(pair.Verdict["row_bound"].GetIntegerSafe(), 2);
     UNIT_ASSERT_VALUES_EQUAL(pair.Verdict["task_bound"].GetIntegerSafe(), 2);
     return pair;
+}
+
+struct TRuntimeStringDemandObservation {
+    bool Success = false;
+    TString Issues;
+    TVector<TString> Rows;
+};
+
+TRuntimeStringDemandObservation ObserveRuntimeStringDemand(
+    const TString& query,
+    bool enableNewRbo)
+{
+    auto kikimr = MakeTpcdsRunner(enableNewRbo);
+    CreateRuntimeStringTable(kikimr);
+
+    NYdb::TValueBuilder rows;
+    rows.BeginList()
+        .AddListItem()
+            .BeginStruct()
+                .AddMember("Id").Int64(1)
+                .AddMember("S").OptionalString("present")
+            .EndStruct()
+        .AddListItem()
+            .BeginStruct()
+                .AddMember("Id").Int64(2)
+                .AddMember("S").OptionalString(std::nullopt)
+            .EndStruct()
+        .EndList();
+    const auto bulkResult = kikimr.GetTableClient()
+        .BulkUpsert("/Root/RboRuntimeString", rows.Build())
+        .GetValueSync();
+    UNIT_ASSERT_C(
+        bulkResult.IsSuccess(),
+        bulkResult.GetIssues().ToString());
+
+    auto session = kikimr.GetTableClient()
+        .CreateSession()
+        .GetValueSync()
+        .GetSession();
+    const auto prepared =
+        session.PrepareDataQuery(query).ExtractValueSync();
+    UNIT_ASSERT_C(
+        prepared.IsSuccess(),
+        prepared.GetIssues().ToString());
+    const auto result = prepared.GetQuery().Execute(
+        NYdb::NTable::TTxControl::BeginTx().CommitTx())
+        .ExtractValueSync();
+
+    TRuntimeStringDemandObservation observation{
+        .Success = result.IsSuccess(),
+        .Issues = result.GetIssues().ToString(),
+    };
+    if (result.IsSuccess()) {
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+        NYdb::TResultSetParser parser(result.GetResultSet(0));
+        while (parser.TryNextRow()) {
+            observation.Rows.emplace_back(
+                parser.ColumnParser("RequiredString").GetString());
+        }
+    }
+    return observation;
 }
 
 } // namespace
@@ -2092,6 +2153,27 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_STRING_CONTAINS(
             result.GetIssues().ToString(),
             "Failed to unwrap empty optional");
+    }
+
+    Y_UNIT_TEST(RealRuntimeStringUnwrapOrderLimitDemand) {
+        const TString query = R"(
+            SELECT UNWRAP(S) AS RequiredString
+            FROM `/Root/RboRuntimeString`
+            ORDER BY Id
+            LIMIT 1;
+        )";
+
+        const auto legacy = ObserveRuntimeStringDemand(query, false);
+        UNIT_ASSERT_C(legacy.Success, legacy.Issues);
+        UNIT_ASSERT_VALUES_EQUAL(
+            legacy.Rows,
+            TVector<TString>({"present"}));
+
+        const auto newRbo = ObserveRuntimeStringDemand(query, true);
+        UNIT_ASSERT_C(newRbo.Success, newRbo.Issues);
+        UNIT_ASSERT_VALUES_EQUAL(
+            newRbo.Rows,
+            TVector<TString>({"present"}));
     }
 
     Y_UNIT_TEST(RealHostVerifiesStaticSqlInWithNullableLookups) {

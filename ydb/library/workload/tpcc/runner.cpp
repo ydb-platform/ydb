@@ -186,6 +186,9 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             << ". It might affect benchmark results");
     }
 
+    // Persist resolved value (may differ from user-provided/auto default) for JSON/status output.
+    Config.ThreadCount = threadCount;
+
     // The number of terminals might be hundreds of thousands.
     // For now, we don't have more than 32 network threads (check TClientCommand::TConfig::GetNetworkThreadNum()),
     // so that maxTerminalThreads will be around more or less around 100.
@@ -362,7 +365,8 @@ void TPCCRunner::RunSync() {
             warmupSeconds = 5 * 60;
         } else if (Config.WarehouseCount <= 1000) {
             warmupSeconds = 10 * 60;
-        } else if (Config.WarehouseCount <= 1000) {
+        } else {
+            // Large scales need a long warmup so terminals finish ramping before measure.
             warmupSeconds = 30 * 60;
         }
         warmupSeconds = std::max(warmupSeconds, minWarmupSeconds);
@@ -374,6 +378,9 @@ void TPCCRunner::RunSync() {
             warmupSeconds = minWarmupSeconds;
         }
     }
+
+    // Persist resolved warmup for JSON/status output (includes auto/min-floor adjustments).
+    Config.WarmupDuration = TDuration::Seconds(warmupSeconds);
 
     WarmupStartTs = Clock::now();
     WarmupStopDeadline = WarmupStartTs + std::chrono::seconds(warmupSeconds);
@@ -806,6 +813,9 @@ void TPCCRunner::PrintFinalResultJson() {
     summary.InsertValue("new_orders", static_cast<long long>(newOrdersCount));
     summary.InsertValue("tpmc", DataToDisplay->StatusData.Tpmc);
     summary.InsertValue("efficiency", DataToDisplay->StatusData.Efficiency);
+    summary.InsertValue("max_sessions", static_cast<long long>(Config.MaxInflight));
+    summary.InsertValue("threads", static_cast<long long>(Config.ThreadCount));
+    summary.InsertValue("warmup_seconds", static_cast<long long>(Config.WarmupDuration.Seconds()));
 
     root.InsertValue("summary", std::move(summary));
 
@@ -813,6 +823,17 @@ void TPCCRunner::PrintFinalResultJson() {
 
     NJson::TJsonValue transactions;
     transactions.SetType(NJson::JSON_MAP);
+
+    auto fillPercentiles = [](const THistogram& histogram) {
+        NJson::TJsonValue percentiles;
+        percentiles.SetType(NJson::JSON_MAP);
+        percentiles.InsertValue("50", histogram.GetValueAtPercentile(50));
+        percentiles.InsertValue("90", histogram.GetValueAtPercentile(90));
+        percentiles.InsertValue("95", histogram.GetValueAtPercentile(95));
+        percentiles.InsertValue("99", histogram.GetValueAtPercentile(99));
+        percentiles.InsertValue("99.9", histogram.GetValueAtPercentile(99.9));
+        return percentiles;
+    };
 
     for (size_t i = 0; i < GetEnumItemsCount<ETransactionType>(); ++i) {
         auto type = static_cast<ETransactionType>(i);
@@ -826,15 +847,12 @@ void TPCCRunner::PrintFinalResultJson() {
         txData.InsertValue("ok_count", static_cast<long long>(ok));
         txData.InsertValue("failed_count", static_cast<long long>(failed));
 
-        NJson::TJsonValue percentiles;
-        percentiles.SetType(NJson::JSON_MAP);
-        percentiles.InsertValue("50", stats.LatencyHistogramFullMs.GetValueAtPercentile(50));
-        percentiles.InsertValue("90", stats.LatencyHistogramFullMs.GetValueAtPercentile(90));
-        percentiles.InsertValue("95", stats.LatencyHistogramFullMs.GetValueAtPercentile(95));
-        percentiles.InsertValue("99", stats.LatencyHistogramFullMs.GetValueAtPercentile(99));
-        percentiles.InsertValue("99.9", stats.LatencyHistogramFullMs.GetValueAtPercentile(99.9));
-
-        txData.InsertValue("percentiles", std::move(percentiles));
+        // percentiles: Full (= +inflight queue wait). Kept for backward compatibility.
+        // percentiles_ms: no queue wait (closer to BenchBase).
+        // percentiles_pure: in-transaction query time only.
+        txData.InsertValue("percentiles", fillPercentiles(stats.LatencyHistogramFullMs));
+        txData.InsertValue("percentiles_ms", fillPercentiles(stats.LatencyHistogramMs));
+        txData.InsertValue("percentiles_pure", fillPercentiles(stats.LatencyHistogramPure));
         transactions.InsertValue(typeStr, std::move(txData));
     }
 

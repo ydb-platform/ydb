@@ -56,6 +56,7 @@ namespace TEvPrivate {
         EvFullBackupItemDone,
         EvProgressForcedCompaction,
         EvMoveShardToStoragePool,
+        EvSolomonRollingUpdateDone,
         EvEnd
     };
 
@@ -80,6 +81,14 @@ namespace TEvPrivate {
         TEvOperationPlan(ui64 step, ui64 txId)
             : StepId(step)
             , TxId(txId)
+        {}
+    };
+
+    struct TEvSolomonRollingUpdateDone: public TEventLocal<TEvSolomonRollingUpdateDone, EvSolomonRollingUpdateDone> {
+        const TOperationId OperationId;
+
+        explicit TEvSolomonRollingUpdateDone(TOperationId operationId)
+            : OperationId(operationId)
         {}
     };
 

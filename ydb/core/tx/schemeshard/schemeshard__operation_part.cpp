@@ -36,6 +36,15 @@ struct TDebugEvent<TEvPrivate::TEvOperationPlan> {
 };
 
 template <>
+struct TDebugEvent<TEvPrivate::TEvSolomonRollingUpdateDone> {
+    static TString ToString(const TEvPrivate::TEvSolomonRollingUpdateDone::TPtr& ev) {
+        return TStringBuilder() << "TEvSolomonRollingUpdateDone {"
+                                << " OperationId: " << ev->Get()->OperationId
+                                << " }";
+    }
+};
+
+template <>
 struct TDebugEvent<TEvPrivate::TEvCompletePublication> {
     static TString ToString(const TEvPrivate::TEvCompletePublication::TPtr& ev) {
         return ev->Get()->ToString();

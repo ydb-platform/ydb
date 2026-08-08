@@ -22,11 +22,23 @@ enum Codec {
     CODEC_GZIP = 2;
     CODEC_LZOP = 3;
     CODEC_ZSTD = 4;
-    CODEC_KAFKA_BATCH = 5;
-    reserved 6 to 9999;
+    reserved 5 to 9999;
     // User-defined codecs from 10000 to 19999
     CODEC_CUSTOM = 10000;
     reserved 20000 to max;
+}
+
+enum MessageBatchCodec {
+    MESSAGE_BATCH_CODEC_UNSPECIFIED = 0;
+
+    MESSAGE_BATCH_CODEC_RAW = 1;              // Unused in protocol, needed to allow/disallow usual topic batch in settings.
+    MESSAGE_BATCH_CODEC_TOPIC_COMPRESSED = 2; // Codec value + compressed usual topic batch protobuf.
+    MESSAGE_BATCH_CODEC_KAFKA_BATCH = 3;      // Binary kafka message batch
+
+    reserved 5 to 9999;
+
+    // Custom codec may be added later, if need.
+    reserved 10000 to max;
 }
 
 // Description of supported codecs.
@@ -34,6 +46,12 @@ message SupportedCodecs {
     // List of supported codecs.
     // See enum Codec above for values.
     repeated int32 codecs = 1 [(Ydb.value) = "[1; 19999]", (Ydb.size).le = 100];
+}
+
+message SupportedMessageBatchCodecs {
+    // List of supported message batch codecs.
+    // See enum MessageBatchCodec above for values.
+    repeated int32 batch_codecs = 1 [(Ydb.value) = "[1; 19999]", (Ydb.size).le = 100];
 }
 
 // Represents range [start, end).
@@ -140,17 +158,27 @@ message StreamWriteMessage {
         // Otherwise session will be closed with BAD_REQUEST.
         SupportedCodecs supported_codecs = 4;
 
-        // Indicates that server supports batching.
-        bool is_batching_supported = 5;
+        // Client can only use batch codecs from this set to write messages to topic.
+        // Otherwise session will be closed with BAD_REQUEST.
+        SupportedMessageBatchCodecs supported_message_batch_codecs = 5;
     }
 
     // Represents portion of client messages.
     message WriteRequest {
         repeated MessageData messages = 1;
 
-        // Codec that is used for data compression.
-        // See enum Codec above for values.
-        int32 codec = 2;
+        EncodedBatch batch_data = 11;
+
+
+        oneof data_codec {
+           // Codec that is used for data compression.
+           // See enum Codec above for values.
+           int32 codec = 2;
+
+           // Batch codec that is used for encode full messages batch.
+           // See enum MessageBatchCodec above for values.
+           int32 batch_codec = 10;
+        }
 
         oneof write_context {
             TransactionIdentity tx = 3;
@@ -178,6 +206,13 @@ message StreamWriteMessage {
             }
             // Message metadata. Overall size is limited to 4096 symbols (all keys and values combined).
             repeated MetadataItem metadata_items = 7 [(Ydb.size).le = 1000];
+        }
+
+        message EncodedBatch {
+            int64 uncompressed_size = 1;
+            bytes data = 2;
+
+            // ... if need some meta
         }
     }
 
@@ -351,8 +386,8 @@ message StreamReadMessage {
             google.protobuf.Timestamp read_from = 4;
         }
 
-        // Indicates that client supports batching.
-        bool is_batching_supported = 7;
+        // Indicates batch encoding, supported by client.
+        SupportedMessageBatchCodecs supported_message_batch_codecs = 7;
     }
 
     // Handshake response.
@@ -407,19 +442,33 @@ message StreamReadMessage {
             repeated MetadataItem metadata_items = 8;
         }
 
+        message EncodedBatchData {
+            int32 uncompressed_size = 1;
+
+            // Encoded batch data.
+            bytes data = 2;
+        }
+
         // Representation of sequence of client messages from one write session.
         message Batch {
             // List of client messages.
             repeated MessageData message_data = 1;
+            repeated EncodedBatchData encoded_batches = 7; // may be message with metadata if need?
 
             // Producer identifier provided by client for this batch of client messages.
             string producer_id = 2 [(Ydb.length).le = 2048];
             // Client metadata attached to write session, the same for all messages in batch.
             map<string, string> write_session_meta = 3;
 
-            // Codec that is used for data compression.
-            // See enum Codec above for values.
-            int32 codec = 4;
+            oneof data_codec {
+                // Codec that is used for data compression.
+                // See enum Codec above for values.
+                int32 codec = 4;
+
+                // Codec that is used for encode full batch
+                // See enum MessageBatchCodec above for values.
+                int32 batch_codec = 6;
+            }
 
             // Persist timestamp on server for batch.
             google.protobuf.Timestamp written_at = 5;

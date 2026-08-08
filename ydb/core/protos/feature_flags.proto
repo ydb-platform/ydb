@@ -361,4 +361,5 @@ message TFeatureFlags {
     optional bool EnableGeneratedStored = 308 [default = false];
     optional bool EnableGeneratedVirtual = 309 [default = false];
     optional bool EnableTxIdInStats = 310 [default = false];
+    optional bool EnableDqSourceStreamLookupJoinLocalLookups = 311 [default = false];
 }

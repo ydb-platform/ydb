@@ -187,7 +187,7 @@ private:
     }
 
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status) {
-        Request->ReplyWithYdbStatus(status);
+        SendAttachResult(status);
         Request->FinishStream(status);
         this->PassAway();
     }
@@ -196,6 +196,15 @@ private:
     TString SessionId;
 };
 
+}
+
+template<>
+template<>
+IActor* TEvAttachSessionRequest::CreateRpcActor(IRequestNoOpCtx* msg, ui64 rpcBufferSize) {
+    Y_UNUSED(rpcBufferSize);
+    auto* req = dynamic_cast<TEvAttachSessionRequest*>(msg);
+    Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    return new TAttachSessionRPC(std::unique_ptr<IRequestNoOpCtx>(req));
 }
 
 namespace NQuery {

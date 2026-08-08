@@ -137,23 +137,51 @@ struct TDirectReadRestoreEnv {
         auto settings = TTopicSdkTestSetup::MakeServerSettings();
         settings.SetUseRealThreads(false);
         settings.SetNodeCount(1);
+        // Skip SysViews roster WaitFor in TServer::Initialize (~10s under UseRealThreads=false).
+        settings.FeatureFlags.SetEnableRealSystemViewPaths(false);
 
+        // Inline TTestServer::StartServer so AnnoyingClient (Sync discovery) can run
+        // under RunWithDispatch; shared StartServer constructs it without a pump.
         Server = std::make_unique<::NPersQueue::TTestServer>(settings, /*start=*/false);
-        Server->StartServer(/*doClientInit=*/false, TString("/Root"));
         Endpoint = Server->Endpoint;
+
+        Server->PrepareNetDataFile();
+        Server->CleverServer = MakeHolder<NKikimr::Tests::TServer>(Server->ServerSettings);
+        Server->CleverServer->EnableGRpc(Server->GrpcServerOptions);
+
+        Server->Log.SetFormatter([](ELogPriority priority, TStringBuf message) {
+            return TStringBuilder() << TInstant::Now() << " " << priority << ": " << message << Endl;
+        });
+        Server->Log << TLOG_INFO << "TTestServer started on Port " << Server->Port
+                    << " GrpcPort " << Server->GrpcPort;
 
         auto& runtime = Runtime();
         runtime.SetScheduledLimit(100'000);
-        runtime.UpdateCurrentTime(TInstant::Now());
+
+        // TFlatMsgBusPQClient builds NYdb::TDriver with default Sync discovery, which blocks
+        // on ListEndpoints (GET_ENDPOINTS_TIMEOUT=10s). With UseRealThreads=false the request
+        // is only served while we DispatchEvents — so construct it under RunWithDispatch.
+        RunWithDispatch(runtime, [&] {
+            Server->AnnoyingClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(
+                Server->ServerSettings, Server->GrpcPort, TString("/Root"));
+            return true;
+        });
+
         Server->AnnoyingClient->SetNoConfigMode();
 
-        runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_INFO);
+        // Configure service log levels here if needed, e.g.:
+        // runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_DEBUG);
 
         InstallHooks();
 
+        // No-config mode: FullInit() would still call InitSourceIds({}) with an empty
+        // path (CreateTable fails with "Path does not exist"). Only need Root + /PQ.
         RunWithDispatch(runtime, [&] {
-            Server->AnnoyingClient->FullInit();
+            Server->AnnoyingClient->InitRootScheme();
+            return true;
+        });
+        RunWithDispatch(runtime, [&] {
+            Server->AnnoyingClient->MkDir("/Root", "PQ");
             return true;
         });
 

@@ -1,9 +1,10 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/util/actorsys_test/testactorsys.h>
-#include <ydb/core/mind/bscontroller/self_heal.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/mind/bscontroller/impl.h>
 #include <ydb/core/mind/bscontroller/layout_helpers.h>
+#include <ydb/core/mind/bscontroller/self_heal.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 
 using namespace NActors;
 using namespace NKikimr;
@@ -47,13 +48,14 @@ void RegisterDiskResponders(TTestActorSystem& runtime, const TIntrusivePtr<TBlob
     }
 }
 
-TIntrusivePtr<TBlobStorageGroupInfo> CreateGroup() {
+TIntrusivePtr<TBlobStorageGroupInfo> CreateGroup(TGroupId groupId = TGroupId::FromValue(0x82000000)) {
     TVector<TActorId> actorIds;
     for (ui32 i = 0; i < 8; ++i) {
         actorIds.push_back(MakeBlobStorageVDiskID(1, 1000 + i, 1000));
     }
     return MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block, 1u, 0u, 1u, &actorIds,
-        TBlobStorageGroupInfo::EEM_NONE, TBlobStorageGroupInfo::ELCP_INITIAL, TCypherKey(), TGroupId::FromValue(0x82000000));
+                                                TBlobStorageGroupInfo::EEM_NONE, TBlobStorageGroupInfo::ELCP_INITIAL,
+                                                TCypherKey(), groupId);
 }
 
 TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
@@ -117,6 +119,34 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
             runtime.Schedule(TDuration::Minutes(30), new IEventHandle(TEvents::TSystem::Wakeup, 0, parentId, {}, nullptr, 0), nullptr, 1);
             auto res = runtime.WaitForEdgeActorEvent({parentId});
             UNIT_ASSERT_EQUAL(res->GetTypeRewrite(), TEvents::TSystem::Wakeup);
+        });
+    }
+
+    Y_UNIT_TEST(StaticGroupUsesPlacementPolicyFromPreviousSettingsUpdate) {
+        RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
+            runtime.RegisterService(MakeBlobStorageNodeWardenID(1), parentId);
+            auto info = CreateGroup(TGroupId::Zero());
+            RegisterDiskResponders(runtime, info);
+
+            auto settings = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+            settings->DonorMode = true;
+            settings->UseSelfHealLocalPolicy = true;
+            settings->TryToRelocateBrokenDisksLocallyFirst = true;
+            runtime.Send(new IEventHandle(selfHealId, parentId, settings.release()), 1);
+
+            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+            ev->GroupsToUpdate[info->GroupID] = Convert(info, {0}, {E::ERROR});
+            runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
+
+            auto res = runtime.WaitForEdgeActorEvent({parentId});
+            auto *msg = res->Get<NStorage::TEvNodeConfigInvokeOnRoot>();
+            UNIT_ASSERT(msg->Record.HasReassignGroupDisk());
+            const auto& command = msg->Record.GetReassignGroupDisk();
+            UNIT_ASSERT(command.GetFromSelfHeal());
+            UNIT_ASSERT(command.GetConvertToDonor());
+            UNIT_ASSERT(command.GetSettleOnlyOnOperationalDisks());
+            UNIT_ASSERT(command.GetUseSelfHealLocalPolicy());
+            UNIT_ASSERT(command.GetTryToRelocateBrokenDisksLocallyFirst());
         });
     }
 

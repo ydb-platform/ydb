@@ -15,7 +15,6 @@
 #include <util/string/cast.h>
 #include <util/string/split.h>
 
-
 namespace NKikimr {
 namespace NKqp {
 

@@ -5425,20 +5425,15 @@ using TDecimalAverageCarrierTypes = THashSet<TString>;
 constexpr TStringBuf IntegralAverageOrderingComparisonV1 =
     "integral_avg_rank_v1";
 
-// MiniKQL grows Concat's ui32 allocation capacity by 50 percent in
-// yql/essentials/minikql/mkql_string_util.cpp.  This is the largest result for
-// which `size + size / 2` cannot wrap that capacity.
-constexpr ui64 MaxConcatAllocationBytes =
-    2ULL * std::numeric_limits<ui32>::max() / 3;
-static_assert(
-    MaxConcatAllocationBytes + MaxConcatAllocationBytes / 2 <=
-    std::numeric_limits<ui32>::max());
-static_assert(
-    MaxConcatAllocationBytes + 1 + (MaxConcatAllocationBytes + 1) / 2 >
-    std::numeric_limits<ui32>::max());
-static_assert(MaxOlapStoredStringBytes < MaxConcatAllocationBytes);
-static_assert(2 * MaxOlapStoredStringBytes > MaxConcatAllocationBytes);
-static_assert(2 * MaxDatashardStoredStringBytes < MaxConcatAllocationBytes);
+// MiniKQL rejects a logical Concat result larger than ui32 and clamps its
+// spare allocation capacity without wrapping
+// (yql/essentials/minikql/mkql_string_util.cpp).
+constexpr ui64 MaxConcatResultBytes =
+    std::numeric_limits<ui32>::max();
+static_assert(MaxOlapStoredStringBytes < MaxConcatResultBytes);
+static_assert(2 * MaxOlapStoredStringBytes <= MaxConcatResultBytes);
+static_assert(2 * MaxOlapStoredStringBytes + 2 > MaxConcatResultBytes);
+static_assert(2 * MaxDatashardStoredStringBytes < MaxConcatResultBytes);
 
 class TLiteralStringConcatFolder {
 public:
@@ -5510,8 +5505,8 @@ private:
         }
         LiteralExpr(node);
         const TStringBuf bytes = node.Child(0)->Content();
-        if (bytes.size() > MaxConcatAllocationBytes - Value.size()) {
-            Fail("byte length exceeds the safe Concat allocation bound");
+        if (bytes.size() > MaxConcatResultBytes - Value.size()) {
+            Fail("byte length exceeds the Concat result bound");
         }
         Value.append(bytes.data(), bytes.size());
     }
@@ -5601,8 +5596,8 @@ private:
     }
 
     void AddMaximumBytes(ui64 bytes) {
-        if (bytes > MaxConcatAllocationBytes - MaximumBytes) {
-            Fail("maximum byte length exceeds the safe Concat allocation bound");
+        if (bytes > MaxConcatResultBytes - MaximumBytes) {
+            Fail("maximum byte length exceeds the Concat result bound");
         }
         MaximumBytes += bytes;
     }

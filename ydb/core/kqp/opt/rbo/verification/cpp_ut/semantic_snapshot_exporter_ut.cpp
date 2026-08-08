@@ -6046,8 +6046,65 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
-    Y_UNIT_TEST(RestrictedStoredStringConcatFailsClosed) {
+    Y_UNIT_TEST(RestrictedStoredStringConcatUsesUi32ResultBound) {
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/OlapTwoCells", {
+                {"text", "String", false},
+            });
+            table.Metadata->Kind = EKikimrTableKind::Olap;
+            auto read = MakeRead(ctx, table, "a", {"text"});
+            SetOutputType(ctx, *read, {
+                {"a.text", NUdf::EDataSlot::String, true},
+            });
+            auto map = MakeComputedMap(
+                ctx,
+                read,
+                "result",
+                StringConcat(
+                    ctx,
+                    CoalescedStoredString(ctx, "a.text"),
+                    CoalescedStoredString(ctx, "a.text")));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            UNIT_ASSERT_VALUES_EQUAL(
+                FindNode(snapshot, "project")["columns"].GetArraySafe().back()
+                    ["expression"]["kind"].GetStringSafe(),
+                "opaque");
+        }
 
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/OlapTwoCellsAndComma", {
+                {"text", "String", false},
+            });
+            table.Metadata->Kind = EKikimrTableKind::Olap;
+            auto read = MakeRead(ctx, table, "a", {"text"});
+            SetOutputType(ctx, *read, {
+                {"a.text", NUdf::EDataSlot::String, true},
+            });
+            auto map = MakeComputedMap(
+                ctx,
+                read,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringConcat(
+                        ctx,
+                        CoalescedStoredString(ctx, "a.text"),
+                        StringLiteral(ctx, ", ")),
+                    CoalescedStoredString(ctx, "a.text")));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Concat result bound");
+        }
+    }
+
+    Y_UNIT_TEST(RestrictedStoredStringConcatFailsClosed) {
         {
             TExportTestContext ctx;
             const auto& table = AddTable(ctx, "/Root/Utf8", {
@@ -6186,32 +6243,6 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "no storage-bounded");
-        }
-
-        {
-            TExportTestContext ctx;
-            const auto& table = AddTable(ctx, "/Root/OlapTwoCells", {
-                {"text", "String", false},
-            });
-            table.Metadata->Kind = EKikimrTableKind::Olap;
-            auto read = MakeRead(ctx, table, "a", {"text"});
-            SetOutputType(ctx, *read, {
-                {"a.text", NUdf::EDataSlot::String, true},
-            });
-            auto map = MakeComputedMap(
-                ctx,
-                read,
-                "result",
-                StringConcat(
-                    ctx,
-                    CoalescedStoredString(ctx, "a.text"),
-                    CoalescedStoredString(ctx, "a.text")));
-            TOpRoot root(map, TPositionHandle(), {"result"});
-            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
-            UNIT_ASSERT(!result.IsSupported());
-            UNIT_ASSERT_STRING_CONTAINS(
-                result.UnsupportedReason,
-                "safe Concat allocation bound");
         }
 
         {

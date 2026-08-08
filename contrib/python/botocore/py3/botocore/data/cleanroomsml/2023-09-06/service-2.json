@@ -369,7 +369,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about an audience generation job.</p>"
+      "documentation":"<p>Returns information about an audience generation job.</p>",
+      "readonly":true
     },
     "GetAudienceModel":{
       "name":"GetAudienceModel",
@@ -385,7 +386,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about an audience model</p>"
+      "documentation":"<p>Returns information about an audience model</p>",
+      "readonly":true
     },
     "GetCollaborationConfiguredModelAlgorithmAssociation":{
       "name":"GetCollaborationConfiguredModelAlgorithmAssociation",
@@ -402,7 +404,8 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns information about the configured model algorithm association in a collaboration.</p>"
+      "documentation":"<p>Returns information about the configured model algorithm association in a collaboration.</p>",
+      "readonly":true
     },
     "GetCollaborationMLInputChannel":{
       "name":"GetCollaborationMLInputChannel",
@@ -419,7 +422,8 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns information about a specific ML input channel in a collaboration.</p>"
+      "documentation":"<p>Returns information about a specific ML input channel in a collaboration.</p>",
+      "readonly":true
     },
     "GetCollaborationTrainedModel":{
       "name":"GetCollaborationTrainedModel",
@@ -436,7 +440,8 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns information about a trained model in a collaboration.</p>"
+      "documentation":"<p>Returns information about a trained model in a collaboration.</p>",
+      "readonly":true
     },
     "GetConfiguredAudienceModel":{
       "name":"GetConfiguredAudienceModel",
@@ -452,7 +457,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about a specified configured audience model.</p>"
+      "documentation":"<p>Returns information about a specified configured audience model.</p>",
+      "readonly":true
     },
     "GetConfiguredAudienceModelPolicy":{
       "name":"GetConfiguredAudienceModelPolicy",
@@ -468,7 +474,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about a configured audience model policy.</p>"
+      "documentation":"<p>Returns information about a configured audience model policy.</p>",
+      "readonly":true
     },
     "GetConfiguredModelAlgorithm":{
       "name":"GetConfiguredModelAlgorithm",
@@ -484,7 +491,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about a configured model algorithm.</p>"
+      "documentation":"<p>Returns information about a configured model algorithm.</p>",
+      "readonly":true
     },
     "GetConfiguredModelAlgorithmAssociation":{
       "name":"GetConfiguredModelAlgorithmAssociation",
@@ -501,7 +509,8 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns information about a configured model algorithm association.</p>"
+      "documentation":"<p>Returns information about a configured model algorithm association.</p>",
+      "readonly":true
     },
     "GetMLConfiguration":{
       "name":"GetMLConfiguration",
@@ -518,7 +527,8 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns information about a specific ML configuration.</p>"
+      "documentation":"<p>Returns information about a specific ML configuration.</p>",
+      "readonly":true
     },
     "GetMLInputChannel":{
       "name":"GetMLInputChannel",
@@ -535,7 +545,8 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns information about an ML input channel.</p>"
+      "documentation":"<p>Returns information about an ML input channel.</p>",
+      "readonly":true
     },
     "GetTrainedModel":{
       "name":"GetTrainedModel",
@@ -552,7 +563,8 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns information about a trained model.</p>"
+      "documentation":"<p>Returns information about a trained model.</p>",
+      "readonly":true
     },
     "GetTrainedModelInferenceJob":{
       "name":"GetTrainedModelInferenceJob",
@@ -569,7 +581,8 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns information about a trained model inference job.</p>"
+      "documentation":"<p>Returns information about a trained model inference job.</p>",
+      "readonly":true
     },
     "GetTrainingDataset":{
       "name":"GetTrainingDataset",
@@ -585,7 +598,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about a training dataset.</p>"
+      "documentation":"<p>Returns information about a training dataset.</p>",
+      "readonly":true
     },
     "ListAudienceExportJobs":{
       "name":"ListAudienceExportJobs",
@@ -600,7 +614,8 @@
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Returns a list of the audience export jobs.</p>"
+      "documentation":"<p>Returns a list of the audience export jobs.</p>",
+      "readonly":true
     },
     "ListAudienceGenerationJobs":{
       "name":"ListAudienceGenerationJobs",
@@ -615,7 +630,8 @@
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Returns a list of audience generation jobs.</p>"
+      "documentation":"<p>Returns a list of audience generation jobs.</p>",
+      "readonly":true
     },
     "ListAudienceModels":{
       "name":"ListAudienceModels",
@@ -630,7 +646,8 @@
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Returns a list of audience models.</p>"
+      "documentation":"<p>Returns a list of audience models.</p>",
+      "readonly":true
     },
     "ListCollaborationConfiguredModelAlgorithmAssociations":{
       "name":"ListCollaborationConfiguredModelAlgorithmAssociations",
@@ -646,7 +663,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns a list of the configured model algorithm associations in a collaboration.</p>"
+      "documentation":"<p>Returns a list of the configured model algorithm associations in a collaboration.</p>",
+      "readonly":true
     },
     "ListCollaborationMLInputChannels":{
       "name":"ListCollaborationMLInputChannels",
@@ -662,7 +680,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns a list of the ML input channels in a collaboration.</p>"
+      "documentation":"<p>Returns a list of the ML input channels in a collaboration.</p>",
+      "readonly":true
     },
     "ListCollaborationTrainedModelExportJobs":{
       "name":"ListCollaborationTrainedModelExportJobs",
@@ -678,7 +697,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns a list of the export jobs for a trained model in a collaboration.</p>"
+      "documentation":"<p>Returns a list of the export jobs for a trained model in a collaboration.</p>",
+      "readonly":true
     },
     "ListCollaborationTrainedModelInferenceJobs":{
       "name":"ListCollaborationTrainedModelInferenceJobs",
@@ -694,7 +714,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns a list of trained model inference jobs in a specified collaboration.</p>"
+      "documentation":"<p>Returns a list of trained model inference jobs in a specified collaboration.</p>",
+      "readonly":true
     },
     "ListCollaborationTrainedModels":{
       "name":"ListCollaborationTrainedModels",
@@ -710,7 +731,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns a list of the trained models in a collaboration.</p>"
+      "documentation":"<p>Returns a list of the trained models in a collaboration.</p>",
+      "readonly":true
     },
     "ListConfiguredAudienceModels":{
       "name":"ListConfiguredAudienceModels",
@@ -725,7 +747,8 @@
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Returns a list of the configured audience models.</p>"
+      "documentation":"<p>Returns a list of the configured audience models.</p>",
+      "readonly":true
     },
     "ListConfiguredModelAlgorithmAssociations":{
       "name":"ListConfiguredModelAlgorithmAssociations",
@@ -741,7 +764,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns a list of configured model algorithm associations.</p>"
+      "documentation":"<p>Returns a list of configured model algorithm associations.</p>",
+      "readonly":true
     },
     "ListConfiguredModelAlgorithms":{
       "name":"ListConfiguredModelAlgorithms",
@@ -756,7 +780,8 @@
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Returns a list of configured model algorithms.</p>"
+      "documentation":"<p>Returns a list of configured model algorithms.</p>",
+      "readonly":true
     },
     "ListMLInputChannels":{
       "name":"ListMLInputChannels",
@@ -772,7 +797,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns a list of ML input channels.</p>"
+      "documentation":"<p>Returns a list of ML input channels.</p>",
+      "readonly":true
     },
     "ListTagsForResource":{
       "name":"ListTagsForResource",
@@ -788,7 +814,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns a list of tags for a provided resource.</p>"
+      "documentation":"<p>Returns a list of tags for a provided resource.</p>",
+      "readonly":true
     },
     "ListTrainedModelInferenceJobs":{
       "name":"ListTrainedModelInferenceJobs",
@@ -804,7 +831,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns a list of trained model inference jobs that match the request parameters.</p>"
+      "documentation":"<p>Returns a list of trained model inference jobs that match the request parameters.</p>",
+      "readonly":true
     },
     "ListTrainedModelVersions":{
       "name":"ListTrainedModelVersions",
@@ -821,7 +849,8 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns a list of trained model versions for a specified trained model. This operation allows you to view all versions of a trained model, including information about their status and creation details. You can use this to track the evolution of your trained models and select specific versions for inference or further training.</p>"
+      "documentation":"<p>Returns a list of trained model versions for a specified trained model. This operation allows you to view all versions of a trained model, including information about their status and creation details. You can use this to track the evolution of your trained models and select specific versions for inference or further training.</p>",
+      "readonly":true
     },
     "ListTrainedModels":{
       "name":"ListTrainedModels",
@@ -837,7 +866,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Returns a list of trained models.</p>"
+      "documentation":"<p>Returns a list of trained models.</p>",
+      "readonly":true
     },
     "ListTrainingDatasets":{
       "name":"ListTrainingDatasets",
@@ -852,7 +882,8 @@
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Returns a list of training datasets.</p>"
+      "documentation":"<p>Returns a list of training datasets.</p>",
+      "readonly":true
     },
     "PutConfiguredAudienceModelPolicy":{
       "name":"PutConfiguredAudienceModelPolicy",
@@ -1016,6 +1047,86 @@
     }
   },
   "shapes":{
+    "AccessBudget":{
+      "type":"structure",
+      "required":[
+        "resourceArn",
+        "details",
+        "aggregateRemainingBudget"
+      ],
+      "members":{
+        "resourceArn":{
+          "shape":"BudgetedResourceArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the resource that this access budget applies to.</p>"
+        },
+        "details":{
+          "shape":"AccessBudgetDetailsList",
+          "documentation":"<p>A list of budget details for this resource. Contains active budget periods that apply to the resource.</p>"
+        },
+        "aggregateRemainingBudget":{
+          "shape":"Budget",
+          "documentation":"<p>The total remaining budget across all active budget periods for this resource.</p>"
+        }
+      },
+      "documentation":"<p>An access budget that defines consumption limits for a specific resource within defined time periods.</p>"
+    },
+    "AccessBudgetDetails":{
+      "type":"structure",
+      "required":[
+        "startTime",
+        "remainingBudget",
+        "budget",
+        "budgetType"
+      ],
+      "members":{
+        "startTime":{
+          "shape":"SyntheticTimestamp_date_time",
+          "documentation":"<p>The start time of this budget period.</p>"
+        },
+        "endTime":{
+          "shape":"SyntheticTimestamp_date_time",
+          "documentation":"<p>The end time of this budget period. If not specified, the budget period continues indefinitely.</p>"
+        },
+        "remainingBudget":{
+          "shape":"Budget",
+          "documentation":"<p>The amount of budget remaining in this period.</p>"
+        },
+        "budget":{
+          "shape":"Budget",
+          "documentation":"<p>The total budget amount allocated for this period.</p>"
+        },
+        "budgetType":{
+          "shape":"AccessBudgetType",
+          "documentation":"<p>The type of budget period. Calendar-based types reset automatically at regular intervals, while LIFETIME budgets never reset.</p>"
+        },
+        "autoRefresh":{
+          "shape":"AutoRefreshMode",
+          "documentation":"<p>Specifies whether this budget automatically refreshes when the current period ends.</p>"
+        }
+      },
+      "documentation":"<p>The detailed information for a specific budget period, including time boundaries and budget amounts.</p>"
+    },
+    "AccessBudgetDetailsList":{
+      "type":"list",
+      "member":{"shape":"AccessBudgetDetails"},
+      "max":2,
+      "min":1
+    },
+    "AccessBudgetType":{
+      "type":"string",
+      "enum":[
+        "CALENDAR_DAY",
+        "CALENDAR_MONTH",
+        "CALENDAR_WEEK",
+        "LIFETIME"
+      ]
+    },
+    "AccessBudgets":{
+      "type":"list",
+      "member":{"shape":"AccessBudget"},
+      "max":100,
+      "min":1
+    },
     "AccessDeniedException":{
       "type":"structure",
       "required":["message"],
@@ -1353,9 +1464,27 @@
       "max":20000000,
       "min":1
     },
+    "AutoRefreshMode":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
     "Boolean":{
       "type":"boolean",
       "box":true
+    },
+    "Budget":{
+      "type":"integer",
+      "box":true,
+      "min":0
+    },
+    "BudgetedResourceArn":{
+      "type":"string",
+      "max":200,
+      "min":0,
+      "pattern":"arn:aws:[\\w]+:[\\w]{2}-[\\w]{4,9}-[\\d]:[\\d]{12}:membership/[\\d\\w-]+/configuredtableassociation/[\\d\\w-]+"
     },
     "CancelTrainedModelInferenceJobRequest":{
       "type":"structure",
@@ -2427,6 +2556,29 @@
         }
       }
     },
+    "CustomDataIdentifier":{
+      "type":"string",
+      "max":200,
+      "min":1,
+      "pattern":"[a-zA-Z0-9\\_\\#\\=\\@/\\;\\,\\-\\ \\^\\$\\?\\[\\]\\{\\}\\|\\\\\\*\\+\\.\\(\\)]+"
+    },
+    "CustomDataIdentifierList":{
+      "type":"list",
+      "member":{"shape":"CustomDataIdentifier"},
+      "max":10,
+      "min":1
+    },
+    "CustomEntityConfig":{
+      "type":"structure",
+      "required":["customDataIdentifiers"],
+      "members":{
+        "customDataIdentifiers":{
+          "shape":"CustomDataIdentifierList",
+          "documentation":"<p>Defines data identifiers for the custom entity configuration. Provide this only if CUSTOM redaction is configured. </p>"
+        }
+      },
+      "documentation":"<p>The configuration for defining custom patterns to be redacted from logs and error messages. This is for the CUSTOM config under entitiesToRedact. Both CustomEntityConfig and entitiesToRedact need to be present or not present.</p>"
+    },
     "DataSource":{
       "type":"structure",
       "required":["glueDataSource"],
@@ -2648,6 +2800,19 @@
         "s3Destination":{"shape":"S3ConfigMap"}
       },
       "documentation":"<p>The Amazon S3 location where the exported model artifacts are stored.</p>"
+    },
+    "EntityType":{
+      "type":"string",
+      "enum":[
+        "ALL_PERSONALLY_IDENTIFIABLE_INFORMATION",
+        "NUMBERS",
+        "CUSTOM"
+      ]
+    },
+    "EntityTypeList":{
+      "type":"list",
+      "member":{"shape":"EntityType"},
+      "min":1
     },
     "Environment":{
       "type":"map",
@@ -2923,30 +3088,18 @@
     "GetCollaborationMLInputChannelResponse":{
       "type":"structure",
       "required":[
-        "createTime",
-        "updateTime",
-        "creatorAccountId",
         "membershipIdentifier",
         "collaborationIdentifier",
         "mlInputChannelArn",
         "name",
         "configuredModelAlgorithmAssociations",
         "status",
-        "retentionInDays"
+        "retentionInDays",
+        "createTime",
+        "updateTime",
+        "creatorAccountId"
       ],
       "members":{
-        "createTime":{
-          "shape":"SyntheticTimestamp_date_time",
-          "documentation":"<p>The time at which the ML input channel was created.</p>"
-        },
-        "updateTime":{
-          "shape":"SyntheticTimestamp_date_time",
-          "documentation":"<p>The most recent time at which the ML input channel was updated.</p>"
-        },
-        "creatorAccountId":{
-          "shape":"AccountId",
-          "documentation":"<p>The account ID of the member who created the ML input channel.</p>"
-        },
         "membershipIdentifier":{
           "shape":"UUID",
           "documentation":"<p>The membership ID of the membership that contains the ML input channel.</p>"
@@ -2980,9 +3133,25 @@
           "shape":"GetCollaborationMLInputChannelResponseNumberOfRecordsLong",
           "documentation":"<p>The number of records in the ML input channel.</p>"
         },
+        "privacyBudgets":{
+          "shape":"PrivacyBudgets",
+          "documentation":"<p>Returns the privacy budgets that control access to this Clean Rooms ML input channel. Use these budgets to monitor and limit resource consumption over specified time periods.</p>"
+        },
         "description":{
           "shape":"ResourceDescription",
           "documentation":"<p>The description of the ML input channel.</p>"
+        },
+        "createTime":{
+          "shape":"SyntheticTimestamp_date_time",
+          "documentation":"<p>The time at which the ML input channel was created.</p>"
+        },
+        "updateTime":{
+          "shape":"SyntheticTimestamp_date_time",
+          "documentation":"<p>The most recent time at which the ML input channel was updated.</p>"
+        },
+        "creatorAccountId":{
+          "shape":"AccountId",
+          "documentation":"<p>The account ID of the member who created the ML input channel.</p>"
         }
       }
     },
@@ -3443,26 +3612,18 @@
     "GetMLInputChannelResponse":{
       "type":"structure",
       "required":[
-        "createTime",
-        "updateTime",
         "membershipIdentifier",
         "collaborationIdentifier",
-        "inputChannel",
         "mlInputChannelArn",
         "name",
         "configuredModelAlgorithmAssociations",
         "status",
-        "retentionInDays"
+        "retentionInDays",
+        "createTime",
+        "updateTime",
+        "inputChannel"
       ],
       "members":{
-        "createTime":{
-          "shape":"SyntheticTimestamp_date_time",
-          "documentation":"<p>The time at which the ML input channel was created.</p>"
-        },
-        "updateTime":{
-          "shape":"SyntheticTimestamp_date_time",
-          "documentation":"<p>The most recent time at which the ML input channel was updated.</p>"
-        },
         "membershipIdentifier":{
           "shape":"UUID",
           "documentation":"<p>The membership ID of the membership that contains the ML input channel.</p>"
@@ -3470,14 +3631,6 @@
         "collaborationIdentifier":{
           "shape":"UUID",
           "documentation":"<p>The collaboration ID of the collaboration that contains the ML input channel.</p>"
-        },
-        "inputChannel":{
-          "shape":"InputChannel",
-          "documentation":"<p>The input channel that was used to create the ML input channel.</p>"
-        },
-        "protectedQueryIdentifier":{
-          "shape":"UUID",
-          "documentation":"<p>The ID of the protected query that was used to create the ML input channel.</p>"
         },
         "mlInputChannelArn":{
           "shape":"MLInputChannelArn",
@@ -3504,6 +3657,30 @@
           "shape":"GetMLInputChannelResponseNumberOfRecordsLong",
           "documentation":"<p>The number of records in the ML input channel.</p>"
         },
+        "privacyBudgets":{
+          "shape":"PrivacyBudgets",
+          "documentation":"<p>Returns the privacy budgets that control access to this Clean Rooms ML input channel. Use these budgets to monitor and limit resource consumption over specified time periods.</p>"
+        },
+        "description":{
+          "shape":"ResourceDescription",
+          "documentation":"<p>The description of the ML input channel.</p>"
+        },
+        "createTime":{
+          "shape":"SyntheticTimestamp_date_time",
+          "documentation":"<p>The time at which the ML input channel was created.</p>"
+        },
+        "updateTime":{
+          "shape":"SyntheticTimestamp_date_time",
+          "documentation":"<p>The most recent time at which the ML input channel was updated.</p>"
+        },
+        "inputChannel":{
+          "shape":"InputChannel",
+          "documentation":"<p>The input channel that was used to create the ML input channel.</p>"
+        },
+        "protectedQueryIdentifier":{
+          "shape":"UUID",
+          "documentation":"<p>The ID of the protected query that was used to create the ML input channel.</p>"
+        },
         "numberOfFiles":{
           "shape":"GetMLInputChannelResponseNumberOfFilesDouble",
           "documentation":"<p>The number of files in the ML input channel.</p>"
@@ -3511,10 +3688,6 @@
         "sizeInGb":{
           "shape":"GetMLInputChannelResponseSizeInGbDouble",
           "documentation":"<p>The size, in GB, of the ML input channel.</p>"
-        },
-        "description":{
-          "shape":"ResourceDescription",
-          "documentation":"<p>The description of the ML input channel.</p>"
         },
         "kmsKeyArn":{
           "shape":"KmsKeyArn",
@@ -4073,7 +4246,6 @@
         "ml.r6i.large",
         "ml.g5.2xlarge",
         "ml.m5.large",
-        "ml.p3.16xlarge",
         "ml.m7i.48xlarge",
         "ml.m6i.16xlarge",
         "ml.p2.16xlarge",
@@ -4121,7 +4293,6 @@
         "ml.m6i.2xlarge",
         "ml.g5.16xlarge",
         "ml.m7i.4xlarge",
-        "ml.p3.2xlarge",
         "ml.r6i.32xlarge",
         "ml.m6i.4xlarge",
         "ml.m5.xlarge",
@@ -4147,8 +4318,10 @@
         "ml.p2.8xlarge",
         "ml.r6i.4xlarge",
         "ml.m6i.32xlarge",
-        "ml.p3.8xlarge",
-        "ml.m4.4xlarge"
+        "ml.m4.4xlarge",
+        "ml.p3.16xlarge",
+        "ml.p3.2xlarge",
+        "ml.p3.8xlarge"
       ]
     },
     "InferenceOutputConfiguration":{
@@ -4263,10 +4436,6 @@
         "ml.p2.xlarge",
         "ml.p2.8xlarge",
         "ml.p2.16xlarge",
-        "ml.p3.2xlarge",
-        "ml.p3.8xlarge",
-        "ml.p3.16xlarge",
-        "ml.p3dn.24xlarge",
         "ml.p4d.24xlarge",
         "ml.p4de.24xlarge",
         "ml.p5.48xlarge",
@@ -4327,7 +4496,55 @@
         "ml.r5.8xlarge",
         "ml.r5.12xlarge",
         "ml.r5.16xlarge",
-        "ml.r5.24xlarge"
+        "ml.r5.24xlarge",
+        "ml.c7i.large",
+        "ml.c7i.xlarge",
+        "ml.c7i.2xlarge",
+        "ml.c7i.4xlarge",
+        "ml.c7i.8xlarge",
+        "ml.c7i.12xlarge",
+        "ml.c7i.16xlarge",
+        "ml.c7i.24xlarge",
+        "ml.c7i.48xlarge",
+        "ml.m7i.large",
+        "ml.m7i.xlarge",
+        "ml.m7i.2xlarge",
+        "ml.m7i.4xlarge",
+        "ml.m7i.8xlarge",
+        "ml.m7i.12xlarge",
+        "ml.m7i.16xlarge",
+        "ml.m7i.24xlarge",
+        "ml.m7i.48xlarge",
+        "ml.r7i.large",
+        "ml.r7i.xlarge",
+        "ml.r7i.2xlarge",
+        "ml.r7i.4xlarge",
+        "ml.r7i.8xlarge",
+        "ml.r7i.12xlarge",
+        "ml.r7i.16xlarge",
+        "ml.r7i.24xlarge",
+        "ml.r7i.48xlarge",
+        "ml.g6.xlarge",
+        "ml.g6.2xlarge",
+        "ml.g6.4xlarge",
+        "ml.g6.8xlarge",
+        "ml.g6.12xlarge",
+        "ml.g6.16xlarge",
+        "ml.g6.24xlarge",
+        "ml.g6.48xlarge",
+        "ml.g6e.xlarge",
+        "ml.g6e.2xlarge",
+        "ml.g6e.4xlarge",
+        "ml.g6e.8xlarge",
+        "ml.g6e.12xlarge",
+        "ml.g6e.16xlarge",
+        "ml.g6e.24xlarge",
+        "ml.g6e.48xlarge",
+        "ml.p5en.48xlarge",
+        "ml.p3.2xlarge",
+        "ml.p3.8xlarge",
+        "ml.p3.16xlarge",
+        "ml.p3dn.24xlarge"
       ]
     },
     "InternalServiceException":{
@@ -5007,6 +5224,28 @@
         }
       }
     },
+    "LogRedactionConfiguration":{
+      "type":"structure",
+      "required":["entitiesToRedact"],
+      "members":{
+        "entitiesToRedact":{
+          "shape":"EntityTypeList",
+          "documentation":"<p>Specifies the entities to be redacted from logs. Entities to redact are \"ALL_PERSONALLY_IDENTIFIABLE_INFORMATION\", \"NUMBERS\",\"CUSTOM\". If CUSTOM is supplied or configured, custom patterns (customDataIdentifiers) should be provided, and the patterns will be redacted in logs or error messages.</p>"
+        },
+        "customEntityConfig":{
+          "shape":"CustomEntityConfig",
+          "documentation":"<p>Specifies the configuration for custom entities in the context of log redaction.</p>"
+        }
+      },
+      "documentation":"<p>The configuration for log redaction.</p>"
+    },
+    "LogType":{
+      "type":"string",
+      "enum":[
+        "ALL",
+        "ERROR_SUMMARY"
+      ]
+    },
     "LogsConfigurationPolicy":{
       "type":"structure",
       "required":["allowedAccountIds"],
@@ -5018,6 +5257,14 @@
         "filterPattern":{
           "shape":"LogsConfigurationPolicyFilterPatternString",
           "documentation":"<p>A regular expression pattern that is used to parse the logs and return information that matches the pattern.</p>"
+        },
+        "logType":{
+          "shape":"LogType",
+          "documentation":"<p>Specifies the type of log this policy applies to. The currently supported policies are ALL or ERROR_SUMMARY.</p>"
+        },
+        "logRedactionConfiguration":{
+          "shape":"LogRedactionConfiguration",
+          "documentation":"<p>Specifies the log redaction configuration for this policy.</p>"
         }
       },
       "documentation":"<p>Provides the information necessary for a user to access the logs.</p>"
@@ -5299,6 +5546,17 @@
         "POLICY_MUST_EXIST",
         "POLICY_MUST_NOT_EXIST"
       ]
+    },
+    "PrivacyBudgets":{
+      "type":"structure",
+      "members":{
+        "accessBudgets":{
+          "shape":"AccessBudgets",
+          "documentation":"<p>A list of access budgets that apply to resources associated with this Clean Rooms ML input channel.</p>"
+        }
+      },
+      "documentation":"<p>The privacy budget information that controls access to Clean Rooms ML input channels.</p>",
+      "union":true
     },
     "PrivacyConfiguration":{
       "type":"structure",
@@ -5846,8 +6104,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -6335,8 +6592,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateConfiguredAudienceModelRequest":{
       "type":"structure",
@@ -6425,5 +6681,5 @@
       ]
     }
   },
-  "documentation":"<p>Welcome to the <i>Amazon Web Services Clean Rooms ML API Reference</i>.</p> <p>Amazon Web Services Clean Rooms ML provides a privacy-enhancing method for two parties to identify similar users in their data without the need to share their data with each other. The first party brings the training data to Clean Rooms so that they can create and configure an audience model (lookalike model) and associate it with a collaboration. The second party then brings their seed data to Clean Rooms and generates an audience (lookalike segment) that resembles the training data.</p> <p>To learn more about Amazon Web Services Clean Rooms ML concepts, procedures, and best practices, see the <a href=\"https://docs.aws.amazon.com/clean-rooms/latest/userguide/machine-learning.html\">Clean Rooms User Guide</a>.</p> <p>To learn more about SQL commands, functions, and conditions supported in Clean Rooms, see the <a href=\"https://docs.aws.amazon.com/clean-rooms/latest/sql-reference/sql-reference.html\">Clean Rooms SQL Reference</a>.</p>"
+  "documentation":"<p>Welcome to the <i>Amazon Web Services Clean Rooms ML API Reference</i>.</p> <p>Amazon Web Services Clean Rooms ML provides a privacy-enhancing method for two parties to identify similar users in their data without the need to share their data with each other. The first party brings the training data to Clean Rooms so that they can create and configure an audience model (lookalike model) and associate it with a collaboration. The second party then brings their seed data to Clean Rooms and generates an audience (lookalike segment) that resembles the training data.</p> <p>To learn more about Amazon Web Services Clean Rooms ML concepts, procedures, and best practices, see the <a href=\"https://docs.aws.amazon.com/clean-rooms/latest/userguide/machine-learning.html\">Clean Rooms User Guide</a>.</p> <p>To learn more about SQL commands, functions, and conditions supported in Clean Rooms, see the <a href=\"https://docs.aws.amazon.com/clean-rooms/latest/sql-reference/sql-reference.html\">Clean Rooms SQL Reference</a>.</p> <p/>"
 }

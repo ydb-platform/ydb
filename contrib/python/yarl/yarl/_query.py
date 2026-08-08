@@ -58,7 +58,7 @@ def get_str_query_from_sequence_iterable(
 
 
 def get_str_query_from_iterable(
-    items: Iterable[tuple[Union[str, istr], SimpleQuery]]
+    items: Iterable[tuple[Union[str, istr], SimpleQuery]],
 ) -> str:
     """Return a query string from an iterable.
 

@@ -172,6 +172,7 @@ class Stubber:
         self.client = client
         self._event_id = 'boto_stubber'
         self._expected_params_event_id = 'boto_stubber_expected_params'
+        self._stub_account_id_event_id = 'boto_stubber_stub_account_id'
         self._queue = deque()
 
     def __enter__(self):
@@ -195,6 +196,11 @@ class Stubber:
             self._get_response_handler,
             unique_id=self._event_id,
         )
+        self.client.meta.events.register(
+            'before-endpoint-resolution.*',
+            self._set_account_id_for_endpoint_resolution,
+            unique_id=self._stub_account_id_event_id,
+        )
 
     def deactivate(self):
         """
@@ -209,6 +215,11 @@ class Stubber:
             'before-call.*.*',
             self._get_response_handler,
             unique_id=self._event_id,
+        )
+        self.client.meta.events.unregister(
+            'before-endpoint-resolution.*',
+            self._stub_account_id_event_id,
+            unique_id=self._stub_account_id_event_id,
         )
 
     def add_response(self, method, service_response, expected_params=None):
@@ -364,6 +375,14 @@ class Stubber:
                 operation_name=model.name,
                 reason=f'Operation mismatch: found response for {name}.',
             )
+
+    def _set_account_id_for_endpoint_resolution(self, builtins, **kwargs):
+        # Account ID comes from credentials and will try to resolve on endpoint resolution
+        # when it's a builtin.  This breaks any stubber in environments where credentials
+        # are not available.  We mock it to be a None value so that we don't attempt to
+        # resolve credentials.
+        if 'AWS::Auth::AccountId' in builtins:
+            builtins['AWS::Auth::AccountId'] = None
 
     def _get_response_handler(self, model, params, context, **kwargs):
         self._assert_expected_call_order(model, params)

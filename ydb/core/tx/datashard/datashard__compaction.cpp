@@ -1,5 +1,7 @@
 #include "datashard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -19,11 +21,11 @@ public:
         auto& record = Ev->Get()->Record;
 
         if (!Self->IsStateActive()) {
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Compaction tx at non-ready tablet " << Self->TabletID()
-                << " with cookie " << Ev->Cookie
-                << ", state " << Self->State
-                << ", requested from " << Ev->Sender);
+            YDB_LOG_WARN_CTX(ctx, "Compaction tx at non-ready tablet with cookie state requested",
+                {"tabletId", Self->TabletID()},
+                {"cookie", Ev->Cookie},
+                {"state", Self->State},
+                {"sender", Ev->Sender});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 record.GetPathId().GetOwnerId(),
@@ -36,11 +38,11 @@ public:
         const auto pathId = TPathId::FromProto(record.GetPathId());
 
         if (Self->GetPathOwnerId() != pathId.OwnerId) {
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Compaction " << Self->TabletID()
-                << " with cookie " << Ev->Cookie
-                << " of not owned " << pathId
-                << ", self path owner id# " << Self->GetPathOwnerId());
+            YDB_LOG_WARN_CTX(ctx, "Compaction with cookie of not owned self path owner",
+                {"tabletId", Self->TabletID()},
+                {"cookie", Ev->Cookie},
+                {"pathId", pathId},
+                {"id", Self->GetPathOwnerId()});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
@@ -52,11 +54,11 @@ public:
         const auto& tableId = pathId.LocalPathId;
         auto it = Self->TableInfos.find(tableId);
         if (it == Self->TableInfos.end()) {
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Compaction " << Self->TabletID()
-                << " with cookie " << Ev->Cookie
-                << " of unknown " << pathId
-                << ", requested from " << Ev->Sender);
+            YDB_LOG_WARN_CTX(ctx, "Compaction with cookie of unknown requested",
+                {"tabletId", Self->TabletID()},
+                {"cookie", Ev->Cookie},
+                {"pathId", pathId},
+                {"sender", Ev->Sender});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
@@ -73,12 +75,11 @@ public:
         if (hasBorrowed && !record.GetCompactBorrowed()) {
             // normally we should not receive requests to compact in this case
             // but in some rare cases like schemeshard restart we can
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Compaction of tablet# " << Self->TabletID()
-                << " with cookie " << Ev->Cookie
-                << " of path# " << pathId
-                << ", requested from# " << Ev->Sender
-                << " contains borrowed parts, failed");
+            YDB_LOG_DEBUG_CTX(ctx, "Compaction of with cookie of requested contains borrowed parts, failed",
+                {"tablet", Self->TabletID()},
+                {"cookie", Ev->Cookie},
+                {"path", pathId},
+                {"from", Ev->Sender});
 
             Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_BORROWED);
 
@@ -93,12 +94,11 @@ public:
         if (Self->Executor()->HasLoanedParts()) {
             // normally we should not receive requests to compact in this case
             // but in some rare cases like schemeshard restart we can
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Compaction of tablet# " << Self->TabletID()
-                << " with cookie " << Ev->Cookie
-                << " of path# " << pathId
-                << ", requested from# " << Ev->Sender
-                << " contains loaned parts, failed");
+            YDB_LOG_DEBUG_CTX(ctx, "Compaction of with cookie of requested contains loaned parts, failed",
+                {"tablet", Self->TabletID()},
+                {"cookie", Ev->Cookie},
+                {"path", pathId},
+                {"from", Ev->Sender});
 
             Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_LOANED);
 
@@ -116,12 +116,11 @@ public:
         bool hasSchemaChanges = Self->Executor()->HasSchemaChanges(tableInfo.LocalTid);
         if (isEmpty || isSingleParted && !hasBorrowed && !hasSchemaChanges && !record.GetCompactSinglePartedShards()) {
             // nothing to compact
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Compaction of tablet# " << Self->TabletID()
-                << " with cookie " << Ev->Cookie
-                << " of path# " << pathId
-                << ", requested from# " << Ev->Sender
-                << " is not needed");
+            YDB_LOG_DEBUG_CTX(ctx, "Compaction of with cookie of requested is not needed",
+                {"tablet", Self->TabletID()},
+                {"cookie", Ev->Cookie},
+                {"path", pathId},
+                {"from", Ev->Sender});
 
             Self->IncCounter(COUNTER_TX_COMPACTION_NOT_NEEDED);
 
@@ -135,17 +134,17 @@ public:
 
         auto compactionId = Self->Executor()->CompactTable(tableInfo.LocalTid);
         if (compactionId) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Started compaction# " << compactionId
-                << " with cookie " << Ev->Cookie
-                << " of " << Self->TabletID()
-                << " tableId# " << tableId
-                << " localTid# " << localTid
-                << ", requested from " << Ev->Sender
-                << ", partsCount# " << stats.PartCount
-                << ", memtableSize# " << stats.MemDataSize
-                << ", memtableWaste# " << stats.MemDataWaste
-                << ", memtableRows# " << stats.MemRowCount);
+            YDB_LOG_INFO_CTX(ctx, "Started with cookie of requested",
+                {"compaction", compactionId},
+                {"cookie", Ev->Cookie},
+                {"tabletId", Self->TabletID()},
+                {"tableId", tableId},
+                {"localTid", localTid},
+                {"sender", Ev->Sender},
+                {"partsCount", stats.PartCount},
+                {"memtableSize", stats.MemDataSize},
+                {"memtableWaste", stats.MemDataWaste},
+                {"memtableRows", stats.MemRowCount});
 
             Self->IncCounter(COUNTER_TX_COMPACTION);
             Self->CompactionWaiters[tableInfo.LocalTid].emplace_back(compactionId, Ev->Sender, Ev->Cookie);
@@ -190,10 +189,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Updated last full compaction of tablet# "<< Self->TabletID()
-            << ", tableId# " << TableId
-            << ", last full compaction# " << Ts);
+        YDB_LOG_DEBUG_CTX(ctx, "Updated last full compaction of last full",
+            {"tablet", Self->TabletID()},
+            {"tableId", TableId},
+            {"compaction", Ts});
     }
 };
 
@@ -204,10 +203,11 @@ void TDataShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorCon
 void TDataShard::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
     auto finishedInfo = Executor()->GetFinishedCompactionInfo(tableId);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-        "CompactionComplete of tablet# "<< TabletID() << ", table# " << tableId
-        << ", finished edge# " << finishedInfo.Edge
-        << ", ts " << finishedInfo.FullCompactionTs);
+    YDB_LOG_DEBUG_CTX(ctx, "CompactionComplete of finished ts",
+        {"tablet", TabletID()},
+        {"table", tableId},
+        {"edge", finishedInfo.Edge},
+        {"fullCompactionTs", finishedInfo.FullCompactionTs});
 
     TLocalPathId localPathId = InvalidLocalPathId;
     if (tableId >= Schema::MinLocalTid) {
@@ -241,10 +241,11 @@ void TDataShard::ReplyCompactionWaiters(
     const NTabletFlatExecutor::TFinishedCompactionInfo& compactionInfo,
     const TActorContext &ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-        "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
-        << ", finished edge# " << compactionInfo.Edge
-        << ", front# " << (CompactionWaiters[tableId].empty() ? 0UL : CompactionWaiters[tableId].front().CompactionId));
+    YDB_LOG_DEBUG_CTX(ctx, "ReplyCompactionWaiters of finished",
+        {"tablet", TabletID()},
+        {"table", tableId},
+        {"edge", compactionInfo.Edge},
+        {"front", (CompactionWaiters[tableId].empty() ? 0UL : CompactionWaiters[tableId].front().CompactionId)});
 
     auto fullCompactionQueue = CompactionWaiters.FindPtr(tableId);
     while (fullCompactionQueue && !fullCompactionQueue->empty()) {
@@ -260,10 +261,11 @@ void TDataShard::ReplyCompactionWaiters(
             NKikimrTxDataShard::TEvCompactTableResult::OK);
         ctx.Send(waiter.ActorId, std::move(response), 0, waiter.Cookie);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
-            << " sending TEvCompactTableResult to# " << waiter.ActorId
-            << ", pathId# " << TPathId(GetPathOwnerId(), localPathId));
+        YDB_LOG_DEBUG_CTX(ctx, "ReplyCompactionWaiters of sending TEvCompactTableResult",
+            {"tablet", TabletID()},
+            {"table", tableId},
+            {"to", waiter.ActorId},
+            {"pathId", TPathId(GetPathOwnerId(), localPathId)});
 
         fullCompactionQueue->pop_front();
     }
@@ -283,10 +285,11 @@ void TDataShard::ReplyCompactionWaiters(
                         waiter->RequestedTable);
                     ctx.Send(waiter->ActorId, std::move(response));
 
-                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
-                        << " sending TEvCompactBorrowedResult to# " << waiter->ActorId
-                        << ", pathId# " << TPathId(GetPathOwnerId(), waiter->RequestedTable));
+                    YDB_LOG_DEBUG_CTX(ctx, "ReplyCompactionWaiters of sending TEvCompactBorrowedResult",
+                        {"tablet", TabletID()},
+                        {"table", tableId},
+                        {"to", waiter->ActorId},
+                        {"pathId", TPathId(GetPathOwnerId(), waiter->RequestedTable)});
                 }
 
                 compactBorrowedQueue->pop_front();

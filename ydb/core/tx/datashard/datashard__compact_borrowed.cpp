@@ -1,5 +1,7 @@
 #include "datashard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -16,10 +18,10 @@ public:
         const auto& record = Ev->Get()->Record;
 
         const auto pathId = TPathId::FromProto(record.GetPathId());
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-            "TEvCompactBorrowed request from " << Ev->Sender
-            << " for table " << pathId
-            << " at tablet " << Self->TabletID());
+        YDB_LOG_INFO_CTX(ctx, "TEvCompactBorrowed request from for table at tablet",
+            {"sender", Ev->Sender},
+            {"pathId", pathId},
+            {"tabletId", Self->TabletID()});
 
         auto nothingToCompactResult = MakeHolder<TEvDataShard::TEvCompactBorrowedResult>(Self->TabletID(), pathId);
 
@@ -33,7 +35,7 @@ public:
             return true;
         }
         const TUserTable& tableInfo = *it->second;
-     
+
         THashSet<ui32> tablesToCompact;
         if (txc.DB.HasBorrowed(tableInfo.LocalTid, Self->TabletID())) {
             tablesToCompact.insert(tableInfo.LocalTid);
@@ -45,11 +47,11 @@ public:
         auto waiter = MakeIntrusive<TCompactBorrowedWaiter>(Ev->Sender, pathId.LocalPathId);
 
         for (auto tableToCompact : tablesToCompact) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TEvCompactBorrowed request from " << Ev->Sender
-                << " for table " << pathId
-                << " starting compaction for local table " << tableToCompact
-                << " at tablet " << Self->TabletID());
+            YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request from for table starting compaction for local table at tablet",
+                {"sender", Ev->Sender},
+                {"pathId", pathId},
+                {"tableToCompact", tableToCompact},
+                {"tabletId", Self->TabletID()});
 
             if (Self->Executor()->CompactBorrowed(tableToCompact)) {
                 Self->IncCounter(COUNTER_TX_COMPACT_BORROWED);
@@ -58,20 +60,18 @@ public:
                 waiter->CompactingTables.insert(tableToCompact);
                 Self->CompactBorrowedWaiters[tableToCompact].push_back(waiter);
             } else {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "TEvCompactBorrowed request from " << Ev->Sender
-                    << " for table " << pathId
-                    << " can not be compacted"
-                    << " at tablet " << Self->TabletID());
+                YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request from for table can not be compacted at tablet",
+                    {"sender", Ev->Sender},
+                    {"pathId", pathId},
+                    {"tabletId", Self->TabletID()});
             }
         }
 
         if (waiter->CompactingTables.empty()) { // none has been triggered
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TEvCompactBorrowed request from " << Ev->Sender
-                << " for table " << pathId
-                << " has no parts for borrowed compaction"
-                << " at tablet " << Self->TabletID());
+            YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request from for table has no parts for borrowed compaction at tablet",
+                {"sender", Ev->Sender},
+                {"pathId", pathId},
+                {"tabletId", Self->TabletID()});
             ctx.Send(Ev->Sender, std::move(nothingToCompactResult));
         }
 

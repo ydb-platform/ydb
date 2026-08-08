@@ -17,6 +17,8 @@
 
 #include <util/generic/cast.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::MINIKQL_ENGINE
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -524,18 +526,22 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
     auto txId = stepTxId.TxId;
     const TActorSystem* actorSystem = ctx.ActorSystem();
     EngineSettings->LogErrorWriter = [actorSystem, tabletId, txId](const TString& message) {
-        LOG_ERROR_S(*actorSystem, NKikimrServices::MINIKQL_ENGINE,
-            "Shard %" << tabletId << ", txid %" <<txId << ", engine error: " << message);
+        YDB_LOG_ERROR_CTX(*actorSystem, "Shard % txid % engine",
+            {"tabletId", tabletId},
+            {"txId", txId},
+            {"error", message});
     };
 
     if (ctx.LoggerSettings()->Satisfies(NLog::PRI_DEBUG, NKikimrServices::MINIKQL_ENGINE, txId)) {
         EngineSettings->BacktraceWriter =
             [actorSystem, tabletId, txId](const char * operation, ui32 line, const TBackTrace* backtrace)
             {
-                LOG_DEBUG(*actorSystem, NKikimrServices::MINIKQL_ENGINE,
-                    "Shard %" PRIu64 ", txid %, %s (%" PRIu32 ")\n%s",
-                    tabletId, txId, operation, line,
-                    backtrace ? backtrace->PrintToString().data() : "");
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Shard txid %, )\n",
+                    {"tabletId", tabletId},
+                    {"txId", txId},
+                    {"operation", operation},
+                    {"line", line},
+                    {"backtrace", backtrace ? backtrace->PrintToString().data() : ""});
             };
     }
 }

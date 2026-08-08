@@ -20,7 +20,6 @@ SRCS(
     upload_rows_counters.cpp
     upload_rows_common_impl.cpp
     upload_rows.cpp
-    global.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(read_table_impl.h)

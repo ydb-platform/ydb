@@ -2883,6 +2883,26 @@ message TColumnShardConfig {
     optional TReadRetryPolicy ReadRetryPolicy = 70;
     optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
     optional bool EnableBulkUpsertValidation = 72 [default = true];
+
+    message TFlowControlConfig {
+        optional uint64 MaxWaitQueueSize = 1 [default = 500];
+        optional uint64 MaxDelayedRejectQueueSize = 2 [default = 5000];
+        optional uint32 WaitTimeoutPercent = 3 [default = 50];
+        optional uint32 DelayedRejectTimeoutPercent = 4 [default = 20];
+        optional uint32 DrainJitterMinMs = 5 [default = 50];
+        optional uint32 DrainJitterMaxMs = 6 [default = 250];
+        optional double DrainAimdBeta = 7 [default = 0.8];
+        optional double DrainCubicRecoveryTargetSec = 8 [default = 10];
+        optional double DrainCubicProbePercent = 9 [default = 8];
+        optional double DrainRateMin = 10 [default = 5];
+        optional double DrainRateMax = 11 [default = 0];
+        optional double DrainRateStart = 12 [default = 50];
+        optional double DrainRateMinBytes = 13 [default = 50000000];
+        optional double DrainRateMaxBytes = 14 [default = 0];
+        optional double DrainRateStartBytes = 15 [default = 10000000];
+    }
+
+    optional TFlowControlConfig FlowControl = 73;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

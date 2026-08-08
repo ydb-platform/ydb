@@ -1,5 +1,6 @@
 #include "overload_manager_service.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_actor.h>
@@ -12,11 +13,25 @@ namespace {
 std::atomic_uint64_t DEFAULT_WRITES_IN_FLY_LIMIT{ 0 };
 std::atomic_uint64_t DEFAULT_WRITES_SIZE_IN_FLY_LIMIT{ 0 };
 
+bool IsCsFlowControlEnabled() {
+    return HasAppData() && AppData()->FeatureFlags.GetEnableCsFlowControl();
+}
+
+void SendToOverloadManager(NActors::IEventBase* event) {
+    auto* actorSystem = NActors::TActivationContext::ActorSystem();
+    if (!actorSystem) {
+        delete event;
+        return;
+    }
+    actorSystem->Send(new NActors::IEventHandle(TOverloadManagerServiceOperator::MakeServiceId(), NActors::TActorId(), event));
+}
+
 }   // namespace
 
 TPositiveControlInteger TOverloadManagerServiceOperator::WritesInFlight;
 TPositiveControlInteger TOverloadManagerServiceOperator::WritesSizeInFlight;
 std::atomic<EResourcesStatus> TOverloadManagerServiceOperator::ResourcesStatus{ EResourcesStatus::Ok };
+std::atomic<bool> TOverloadManagerServiceOperator::CompactionOverloaded{ false };
 
 ui64 TOverloadManagerServiceOperator::GetShardWritesInFlyLimit() {
     if (DEFAULT_WRITES_IN_FLY_LIMIT.load() == 0) {
@@ -40,6 +55,11 @@ ui64 TOverloadManagerServiceOperator::GetShardWritesSizeInFlyLimit() {
                : DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load();
 }
 
+bool TOverloadManagerServiceOperator::AreWriteResourcesBelowSoftLimit() {
+    return WritesInFlight.Val() <= GetShardWritesInFlyLimit() * WritesInFlightSoftLimitCoefficient &&
+           WritesSizeInFlight.Val() <= GetShardWritesSizeInFlyLimit() * WritesInFlightSizeSoftLimitCoefficient;
+}
+
 NActors::TActorId TOverloadManagerServiceOperator::MakeServiceId() {
     return NActors::TActorId(0, "OverloadMng");
 }
@@ -48,13 +68,25 @@ std::unique_ptr<NActors::IActor> TOverloadManagerServiceOperator::CreateService(
     return std::make_unique<TOverloadManager>(countersGroup);
 }
 
+void TOverloadManagerServiceOperator::SetCompactionOverloaded(bool overloaded) {
+    CompactionOverloaded.store(overloaded);
+}
+
+void TOverloadManagerServiceOperator::SyncNodeOverloadPublication() {
+    if (!IsCsFlowControlEnabled()) {
+        return;
+    }
+    SendToOverloadManager(new TEvSyncNodeOverloadPublication());
+}
+
 void TOverloadManagerServiceOperator::NotifyIfResourcesAvailable(bool force) {
-    if ((force || ResourcesStatus.load() != EResourcesStatus::Ok) &&
-        WritesInFlight.Val() <= GetShardWritesInFlyLimit() * WritesInFlightSoftLimitCoefficient &&
-        WritesSizeInFlight.Val() <= GetShardWritesSizeInFlyLimit() * WritesInFlightSizeSoftLimitCoefficient) {
+    const auto previousStatus = ResourcesStatus.load();
+    if ((force || previousStatus != EResourcesStatus::Ok) && AreWriteResourcesBelowSoftLimit()) {
         ResourcesStatus = EResourcesStatus::Ok;
-        auto& context = NActors::TActorContext::AsActorContext();
-        context.Send(MakeServiceId(), new NOverload::TEvOverloadResourcesReleased());
+        SendToOverloadManager(new NOverload::TEvOverloadResourcesReleased());
+        if (previousStatus != EResourcesStatus::Ok) {
+            SyncNodeOverloadPublication();
+        }
     }
 }
 
@@ -67,8 +99,10 @@ EResourcesStatus TOverloadManagerServiceOperator::RequestResources(ui64 writesCo
     auto resWriteSizeInFlight = WritesSizeInFlight.Add(writesSize);
     if (resWritesInFlight >= GetShardWritesInFlyLimit()) {
         ResourcesStatus = EResourcesStatus::WritesInFlyLimitReached;
+        SyncNodeOverloadPublication();
     } else if (resWriteSizeInFlight >= GetShardWritesSizeInFlyLimit()) {
         ResourcesStatus = EResourcesStatus::WritesSizeInFlyLimitReached;
+        SyncNodeOverloadPublication();
     }
 
     return EResourcesStatus::Ok;
@@ -79,6 +113,13 @@ void TOverloadManagerServiceOperator::ReleaseResources(ui64 writesCount, ui64 wr
     WritesSizeInFlight.Sub(writesSize);
 
     NotifyIfResourcesAvailable(false);
+}
+
+void TOverloadManagerServiceOperator::ReportCompactionOverload(ui64 tabletId, bool overloaded) {
+    if (!IsCsFlowControlEnabled()) {
+        return;
+    }
+    SendToOverloadManager(new TEvCompactionOverloadState(tabletId, overloaded));
 }
 
 }   // namespace NKikimr::NColumnShard::NOverload

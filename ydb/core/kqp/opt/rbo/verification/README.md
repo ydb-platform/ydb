@@ -741,9 +741,16 @@ separate two-row real-YDB probe then confirmed the tenth production optimizer
 defect: pre-fix new RBO evaluated `UNWRAP(NULL)` on a row discarded by
 `ORDER BY Id LIMIT 1`, while legacy returned the selected non-NULL row. Commit
 `c2c66fb1d7b` delays an eligible pure output Map until after TopSort and retains
-the regression. q84's Concat Map has already moved into a join input before
-that rule, so the query still has no formula or bounded proof. No complete
-corpus rerun has been made; the post-M74 counts above remain authoritative.
+the regression. A follow-up trace and independent-key runtime probe found a
+second demand defect: map normalization pushed computed expressions below
+row-discarding Filter and Join boundaries even with expression pushdown
+disabled. Commit `564010e2e4e` restricts that rule to direct column accesses
+and semantic renames. q84 now retains its Concat after row selection, but still
+stops at the exact checked result-bound gate. Its regenerated final topology is
+`Map[Concat] -> Limit[100, Final] -> Map -> TopSort[100, Intermediate] ->`
+joins, so Concat runs in the final consumer stage on at most 100 rows. It still
+has no formula or bounded proof. No complete corpus rerun has been made; the
+post-M74 counts above remain authoritative.
 
 The preceding q66 complete TPCH dashboard spent 2,927/30,624 ms in
 preparation/verifier work and produced report SHA-256
@@ -2372,7 +2379,7 @@ raise it to 13 TPCH plus 17 TPC-DS obligations. TPC-DS q8 raises that
 floor to 13 TPCH plus 18 TPC-DS obligations; q28 now raises the current floor
 to 13 TPCH plus 19 TPC-DS obligations, 32 total.
 
-The audit has found ten production optimizer defects. A stale negation flag
+The audit has found eleven production optimizer defects. A stale negation flag
 could turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression
 and fix are committed in `95a2afad1d3`. The missing scalar-cardinality enforcement made
 a two-row scalar subquery select its first row instead of raising
@@ -2482,8 +2489,26 @@ free of Result, position-aware, side-effecting, CSE-unsafe, and subplan nodes.
 Computed sort keys and shared or unsafe Maps fail closed. The focused rule
 suite passes 8/8, the complete verifier C++ target 274/274, the real-host
 regression 1/1 under both optimizers, and the broader TopSort-stage test 1/1.
-This does not yet cover q84 because earlier Map normalization pushes its
-Concat into a join input.
+At that checkpoint the isolated fix did not cover q84 because earlier Map
+normalization pushed its Concat into a join input.
+
+The eleventh defect was that earlier map normalization itself. Although
+`TPushMapElementsThroughInputRule` was registered with expression pushdown
+disabled, it moved computed fields below Filter unconditionally and into
+selected Join children. A two-row Olap self-join made this observable: legacy
+returned the matching row's `UNWRAP("present")`, while pre-fix new RBO
+materialized `UNWRAP(NULL)` for an unmatched left row and failed.
+
+Commit `564010e2e4e` removes computed-expression movement from this rule; only
+direct column accesses and semantic renames may cross Filter, Limit, Sort, or
+Join. Mixed-map tests retain alias movement while keeping computed fields and
+their dependent renames above row-discarding operators. The 18 map-element
+tests, 10 append-push tests, three real-runtime String tests, and all 274
+verifier C++ tests pass. Focused no-solver q84 preparation also succeeds, with
+both snapshots still rejected only by the exact checked-Concat result bound;
+formula and proof coverage are unchanged at this checkpoint. The regenerated
+final trace places Concat in stage 11 after the final Limit and the stage-10
+TopSort, on at most 100 selected rows.
 
 An additional legacy probe placed
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer; it

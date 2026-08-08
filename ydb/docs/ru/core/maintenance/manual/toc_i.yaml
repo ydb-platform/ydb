@@ -19,3 +19,7 @@ items:
   href: balancing_load.md
 - name: Освобождение места на физических устройствах
   href: disk_end_space.md
+- name: Блобовница
+  href: blobdepot.md
+- name: Декомиссия групп
+  href: blobdepot_decommit.md

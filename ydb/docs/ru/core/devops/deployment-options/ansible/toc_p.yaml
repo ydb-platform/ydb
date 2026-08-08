@@ -13,6 +13,7 @@ items:
 - name: Обновление исполняемого файла
   href: update-executable.md
 - name: Наблюдаемость
+  href: observability/index.md
   include:
     mode: link
     path: observability/toc_p.yaml

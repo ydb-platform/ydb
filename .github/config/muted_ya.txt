@@ -101,7 +101,6 @@ ydb/tests/functional/config test_distconf_static_group.py.TestStaticGroupSelfHea
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test_batched_source
-ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[light-column]
 ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test
 ydb/tools/mnc/viewer/ut py3test.sole chunk

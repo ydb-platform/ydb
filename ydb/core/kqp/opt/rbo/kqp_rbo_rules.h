@@ -295,7 +295,11 @@ class TFuseFiltersRule : public ISimplifiedRule {
  */
 class TPushLimitIntoSortRule : public ISimplifiedRule {
   public:
-    TPushLimitIntoSortRule() : ISimplifiedRule("Push limit into sort operator", ERuleProperties::RequireParents) {}
+    TPushLimitIntoSortRule()
+        : ISimplifiedRule(
+            "Push limit into sort operator",
+            ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs)
+    {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;

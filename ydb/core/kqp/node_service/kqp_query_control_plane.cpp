@@ -130,7 +130,7 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
 
     void FreeQuota(ui64 memorySize) override {
         auto prevQuota = AllocatedQuota.fetch_sub(memorySize);
-        Y_DEBUG_ABORT_UNLESS(prevQuota >= memorySize);
+        Y_DEBUG_ABORT_UNLESS(prevQuota >= memorySize, "Free %" PRIu64 " of %" PRIu64, memorySize, prevQuota);
         i64 quota = AvailableQuota.fetch_add(memorySize);
         if (quota > static_cast<i64>(AllocationStep * 10 + DataMemoryLimit)) {
             AvailableQuota.fetch_sub(AllocationStep);

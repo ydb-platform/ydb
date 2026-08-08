@@ -276,6 +276,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx);
@@ -451,6 +453,8 @@ protected:
             HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvColumnShard::TEvInternalScan, Handle);
+            HFunc(TEvDataShard::TEvRead, Handle);
+            HFunc(TEvDataShard::TEvReadCancel, Handle);
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
             HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
             HFunc(TEvPrivate::TEvStartCompaction, Handle);

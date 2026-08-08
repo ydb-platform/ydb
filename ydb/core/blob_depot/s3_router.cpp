@@ -82,7 +82,6 @@ namespace NKikimr::NBlobDepot {
         TActorId InnerWrapperId;
         TActorId HttpProxyId;
         bool RefreshInFlight = false;
-        bool RefreshScheduled = false;
 
         ui32 RefreshSecMin() const {
             return Settings.HasBalancerRefreshSecMin() ? Settings.GetBalancerRefreshSecMin() : 10;
@@ -156,24 +155,17 @@ namespace NKikimr::NBlobDepot {
         }
 
         void ScheduleNextRefresh() {
-            if (!RefreshScheduled && BalancerEnabled()) {
-                TActivationContext::Schedule(NextRefreshDelay(),
-                    new IEventHandle(TEvPrivate::EvBalancerTick, 0, SelfId(), SelfId(), nullptr, 0));
-                RefreshScheduled = true;
-            }
+            TActivationContext::Schedule(NextRefreshDelay(),
+                new IEventHandle(TEvPrivate::EvBalancerTick, 0, SelfId(), SelfId(), nullptr, 0));
         }
 
         void HandleBalancerTick() {
-            RefreshScheduled = false;
-            RefreshInFlight = false;
             IssueBalancerRequest();
             ScheduleNextRefresh();
         }
 
         void HandleRefreshNow() {
-            if (!RefreshInFlight) {
-                IssueBalancerRequest();
-            }
+            IssueBalancerRequest();
         }
 
         void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev) {
@@ -201,7 +193,9 @@ namespace NKikimr::NBlobDepot {
             if (!InnerWrapperId) {
                 return;
             }
+
             TActivationContext::Send(ev->Forward(InnerWrapperId));
+            IssueBalancerRequest();
         }
 
     public:
@@ -214,13 +208,14 @@ namespace NKikimr::NBlobDepot {
         {}
 
         void Bootstrap() {
-            const TString& endpoint = Settings.GetSettings().GetEndpoint();
-            OriginalEndpoint = endpoint;
-            BuildInnerWrapper(endpoint);
+            OriginalEndpoint = Settings.GetSettings().GetEndpoint();
             if (BalancerEnabled()) {
                 IssueBalancerRequest();
                 ScheduleNextRefresh();
+            } else {
+                BuildInnerWrapper(OriginalEndpoint);
             }
+
             Become(&TThis::StateWork);
         }
 

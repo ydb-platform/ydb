@@ -2132,6 +2132,13 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
         EscapeString(options.GetScanReaderPolicyName(), paramsStr);
         del = ", ";
     }
+    if (options.HasDeduplicationEnabled()) {
+        paramsStr << del;
+        EscapeName("DEDUPLICATION_ENABLED", paramsStr);
+        paramsStr << "=";
+        EscapeValue(options.GetDeduplicationEnabled(), paramsStr);
+        del = ", ";
+    }
     if (options.HasCompactionPlannerConstructor()) {
         const auto& compactionPlannerConstructor = options.GetCompactionPlannerConstructor();
         if (compactionPlannerConstructor.HasClassName() && !compactionPlannerConstructor.GetClassName().empty()) {

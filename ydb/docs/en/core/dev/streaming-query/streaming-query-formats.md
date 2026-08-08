@@ -4,9 +4,15 @@ This section describes data formats for [streaming queries](../../concepts/gloss
 
 ## Supported formats {#formats}
 
+<<<<<<< HEAD
 {{ ydb-short-name }} supports built-in formats (predefined defaults) and custom formats that you configure for specific tasks.
 
 Built-in formats:
+=======
+{{ ydb-short-name }} supports built-in data formats (predefined by default) and custom formats (configured by the user for specific tasks).
+
+Below is the list of data formats built into {{ ydb-short-name }}:
+>>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 
 - [`csv_with_names`](#csv_with_names)
 - [`tsv_with_names`](#tsv_with_names)
@@ -71,7 +77,13 @@ See also: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](
 
 ## Read formats {#read_formats}
 
+<<<<<<< HEAD
 ### `csv_with_names` {#csv_with_names}
+=======
+If a single streaming query writes to multiple topics, all output topics must be different.
+
+## Formats for reading data {#read_formats}
+>>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 
 Based on [CSV](https://en.wikipedia.org/wiki/Comma-separated_values). Values are comma-separated; the first line contains column names.
 
@@ -145,7 +157,15 @@ END DO
 
 ### `json_list` {#json_list}
 
+<<<<<<< HEAD
 Based on [JSON](https://en.wikipedia.org/wiki/JSON). Each message must be a JSON **array** of objects.
+=======
+### json_list format {#json_list}
+
+This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. In this format, each message must be a JSON array of objects.
+
+Example of valid data (as a list of JSON objects):
+>>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 
 Valid example:
 
@@ -156,7 +176,13 @@ Valid example:
 ]
 ```
 
+<<<<<<< HEAD
 Invalid example (separate objects per line, not wrapped in an array):
+=======
+
+Example of invalid data (each message contains a separate JSON object, but these objects are not combined into a list):
+
+>>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
@@ -191,7 +217,14 @@ END DO
 
 Based on [JSON](https://en.wikipedia.org/wiki/JSON). Each message must be a single JSON **object**. Common for systems like Apache Kafka or [{{ ydb-full-name }} topics](../../concepts/datamodel/topic.md).
 
+<<<<<<< HEAD
 Multiple separate JSON objects in one message are not supported; a JSON array is also not supported.
+=======
+This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. In this format, each message must be a JSON object. This format is used when transferring data through streaming systems, such as Apache Kafka or [{{ydb-full-name}} Topics](../../concepts/datamodel/topic.md).
+Multiple separate JSONs in a single message are not supported; a JSON list is also not supported.
+
+Example of valid data (in a single message):
+>>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 
 Valid example (one message):
 
@@ -199,7 +232,13 @@ Valid example (one message):
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 ```
 
+<<<<<<< HEAD
 Invalid example (two objects in one message):
+=======
+
+Example of invalid data:
+
+>>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
@@ -239,7 +278,16 @@ Each message may contain:
 - One JSON object per line in valid JSON representation;
 - Or objects combined into a list.
 
+<<<<<<< HEAD
 `json_as_string` does not split the JSON document into fields; each message is one JSON object (or one line). Useful when the set of fields varies between rows.
+=======
+- An object in valid JSON representation on each separate line of the file.
+- Objects in valid JSON representation combined into a list.
+
+The `json_as_string` format does not split the input JSON document into fields, but represents each message as a single JSON object (or a single line). This format is convenient when the list of fields is not the same across all rows and can vary.
+
+Example of valid data:
+>>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 
 Valid examples:
 
@@ -417,7 +465,12 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 See also:
+=======
+
+For more information about functions:
+>>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 
 - [Yson::ConvertTo](../../yql/reference/udf/list/yson#ysonconvertto)
 - [FLATTEN COLUMNS](../../yql/reference/syntax/select/flatten.md#flatten-columns).
@@ -456,7 +509,12 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 See also:
+=======
+
+For more information about functions:
+>>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 
 - [String::SplitToList](../../yql/reference/udf/list/string.md#splittolist)
 - [DictLookup](../../yql/reference/builtins/dict.md#dictlookup)

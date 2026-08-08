@@ -3021,7 +3021,7 @@ namespace NKikimr {
             }
             if (LastEventsQueueSize == 0) {
                 auto events = TlsActivationContext->Mailbox.CountMailboxEvents(SelfId().LocalId(), 128);
-                ActorQueueLight.Set(events.first >= 64, ++ActorQueueSeqNo);
+                ActorQueueLight.Set(events.first >= 64);
                 LastEventsQueueSize = events.first;
             }
         }
@@ -3472,7 +3472,6 @@ namespace NKikimr {
         ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonBusyTimeUs;
         size_t LastEventsQueueSize = 0;
         TLight ActorQueueLight;
-        ui16 ActorQueueSeqNo = 0;
 
         TEvBlobStorage::TEvLocalRecoveryDone::TPtr LocalRecoveryDoneEvent;
 

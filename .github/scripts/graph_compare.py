@@ -36,6 +36,11 @@ def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: 
 
     log('Checkout head commit...')
     exec(f'git checkout {head_commit}')
+    # Base configure fills ~/.ya/build; reuse on head can hide configure errors.
+    ya_build_cache = os.path.expanduser('~/.ya/build')
+    if os.path.exists(ya_build_cache):
+        log(f'Clear {ya_build_cache} before head configure...')
+        exec(f'rm -rf {ya_build_cache}')
     log('Build graph for head commit...')
     exec(f'{ya_make_command} ydb --cache-tests --save-graph-to {workdir}/graph_head.json --save-context-to {workdir}/context_head.json')
 

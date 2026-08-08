@@ -208,6 +208,9 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before(';'), ' ') == "application/x-www-form-urlencoded") {
         BuildParamsFromFormData(Event->Get()->Request.GetPostContent());
     }
+    if (!Event->Get()->Database.empty()) {
+        Database = Event->Get()->Database;
+    }
     InitConfig(Params);
     SetupTracing(handlerName);
 }
@@ -223,6 +226,9 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHt
     }
     if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/x-www-form-urlencoded") {
         BuildParamsFromFormData(HttpEvent->Get()->Request->Body);
+    }
+    if (!HttpEvent->Get()->Database.empty()) {
+        Database = HttpEvent->Get()->Database;
     }
     InitConfig(Params);
     SetupTracing(handlerName);
@@ -1021,9 +1027,11 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     Metrics = FromStringWithDefault(params.Get("metrics"), Metrics);
     WithRetry = FromStringWithDefault(params.Get("with_retry"), WithRetry);
     MaxRequestsInFlight = FromStringWithDefault(params.Get("max_requests_in_flight"), MaxRequestsInFlight);
-    Database = params.Get("database");
     if (!Database) {
-        Database = params.Get("tenant");
+        Database = params.Get("database");
+        if (!Database) {
+            Database = params.Get("tenant");
+        }
     }
     Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);

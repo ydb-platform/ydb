@@ -736,9 +736,34 @@ class TRcBuf {
             return VisitRaw(value, [](EType type, auto& value) { return Construct(type, value); });
         }
 
+        // Runs the destructor of the alternative T over the (already untagged) holder storage.
+        template<typename T, typename TOwner>
+        static void CallDtorAs(TOwner& value) {
+            if constexpr (sizeof(T) <= sizeof(TBackendHolder)) {
+                CallDtor(reinterpret_cast<T&>(value));
+            } else {
+                CallDtor(reinterpret_cast<TObjectHolder<T>&>(value));
+            }
+        }
+
+        // Deliberately not expressed via VisitRaw: every caller (~TBackend and both
+        // assignment operators) either ends the holder's lifetime or overwrites Owner
+        // right away, so the tag-stripped copy VisitRaw makes and writes back is pure
+        // overhead here -- it forced a stack spill/reload of the holder around each
+        // destructor call plus a 16-byte store of a now-dangling value. Untagging in
+        // place and leaving the stale bytes behind is what the callers already expect.
         template<typename TOwner>
         static void Destroy(TOwner& value) {
-            VisitRaw(value, [](EType, auto& value) { CallDtor(value); });
+            Y_DEBUG_ABORT_UNLESS(value);
+            const EType type = static_cast<EType>(value.Data[0] & TypeMask);
+            value.Data[0] = value.Data[0] & ValueMask;
+            switch (type) {
+                case EType::STRING:             return CallDtorAs<TString>(value);
+                case EType::SHARED_DATA:        return CallDtorAs<NActors::TSharedData>(value);
+                case EType::INTERNAL_BACKEND:   return CallDtorAs<TInternalBackend>(value);
+                case EType::EXTERNAL_BACKEND:   return CallDtorAs<IContiguousChunk::TPtr>(value);
+            }
+            Y_ABORT("Unexpected type# %" PRIu64, static_cast<ui64>(type));
         }
 
         template<typename T>

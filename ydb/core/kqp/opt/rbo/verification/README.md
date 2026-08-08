@@ -734,6 +734,17 @@ and Read range/ordering semantics for q51. The focused run spent 3,186/0 ms in
 preparation/verifier work and produced report SHA-256
 `37b983f3247c653f5bf4a52c79375cdbc7df588ac79bd893d3a5a89ae25e16e0`.
 
+The fresh q84 audit repaired MiniKQL String-capacity overflow in
+`82cfcd837f4` and synchronized the exporter's exact `UINT32_MAX` result bound
+in `daab603c2f1`. q84 remains one byte beyond that widened totality gate. A
+separate two-row real-YDB probe then confirmed the tenth production optimizer
+defect: pre-fix new RBO evaluated `UNWRAP(NULL)` on a row discarded by
+`ORDER BY Id LIMIT 1`, while legacy returned the selected non-NULL row. Commit
+`c2c66fb1d7b` delays an eligible pure output Map until after TopSort and retains
+the regression. q84's Concat Map has already moved into a join input before
+that rule, so the query still has no formula or bounded proof. No complete
+corpus rerun has been made; the post-M74 counts above remain authoritative.
+
 The preceding q66 complete TPCH dashboard spent 2,927/30,624 ms in
 preparation/verifier work and produced report SHA-256
 `97c0048b4bc31c8c02785bc3dea18c676b9ba6e2452411912c8984f06b376205`.
@@ -946,8 +957,9 @@ raising the starting point to 92 formulas. Nine exact captured pairs remain
 outside formula construction, led by window semantics, q49's Decimal
 scale-changing cast/window combination, and q84's allocation-bounded
 `Concat`; the remaining twenty workload entries need frontend or optimizer
-progress before verifier feature work can reach them. A fresh blocker audit
-selects M75 rather than treating any family as a promised next slice. These
+progress before verifier feature work can reach them. The fresh blocker audit
+selected q84's partial-`Concat` and checked-projection demand boundary for M75.
+That milestone is in progress and carries no formula or proof claim yet. These
 planning estimates are not coverage promises and assume deliberately
 workload-targeted gates.
 
@@ -1760,10 +1772,13 @@ by assuming Concat cannot fail. Datashard caps a stored value at 16 MiB through
 MiniKQL as Arrow `BinaryType`; its validated signed 32-bit offsets bound one
 logical cell by `INT32_MAX` bytes independently of compression. The auditor
 charges the bound carried by each stored occurrence plus exact literal bytes.
-It also requires the complete result to stay below the largest `ui32` size for
-which MiniKQL's `newSize + newSize / 2` allocation capacity cannot wrap. Thus
-one Olap occurrence plus the audited literals is safe, while two generic Olap
-occurrences fail closed. The authoritative implementations are
+It also requires the complete result to fit in `UINT32_MAX`. Commit
+`82cfcd837f4` clamps MiniKQL's half-spare capacity calculation instead of
+allowing `newSize + newSize / 2` to wrap, and `daab603c2f1` aligns the exporter
+with that repaired runtime bound. Thus one Olap occurrence plus audited
+literals is safe, and two maximum Olap cells without literals also fit; q84's
+same two cells plus `", "` total `UINT32_MAX + 1` and fail closed. The
+authoritative implementations are
 `ydb/core/tx/datashard/const.h`,
 `ydb/core/tx/datashard/datashard_write_operation.cpp`,
 `ydb/core/tx/datashard/datashard_common_upload.cpp`,
@@ -1775,7 +1790,8 @@ occurrences fail closed. The authoritative implementations are
 
 This gate moves TPC-DS q5 and q80 past snapshot export to the deeper Decimal-SUM
 headroom and 82,944-pair grouped-aggregate construction checks. q84 has two
-Olap String occurrences, so it fails the allocation-totality gate. The formula
+Olap String occurrences plus a two-byte literal, so it fails the
+allocation-totality gate by one byte. The formula
 slice at that milestone remained 23/121 (19.0%) and the proof floor remained
 ten.
 
@@ -2356,9 +2372,9 @@ raise it to 13 TPCH plus 17 TPC-DS obligations. TPC-DS q8 raises that
 floor to 13 TPCH plus 18 TPC-DS obligations; q28 now raises the current floor
 to 13 TPCH plus 19 TPC-DS obligations, 32 total.
 
-The audit has found nine production optimizer defects. A stale negation flag could
-turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix
-are committed in `95a2afad1d3`. The missing scalar-cardinality enforcement made
+The audit has found ten production optimizer defects. A stale negation flag
+could turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression
+and fix are committed in `95a2afad1d3`. The missing scalar-cardinality enforcement made
 a two-row scalar subquery select its first row instead of raising
 `PRECONDITION_FAILED`; the enforcement fix and real-YDB regressions are
 committed in `e1e3419012c`. While enabling direct scalar projection, the audit
@@ -2449,6 +2465,25 @@ Neither query entered the proof floor at that source checkpoint. Formula
 coverage there remained
 53/121 overall, 53/93 among optimizer-successful queries, and 53/59 among
 verifier entrants, with 20/121 bounded proofs.
+
+The tenth defect is an eager projection below distributed TopSort. For a
+two-row Olap table containing `(Id=1, S="present")` and `(Id=2, S=NULL)`,
+legacy execution of `SELECT UNWRAP(S) ... ORDER BY Id LIMIT 1` returns
+`"present"`; pre-fix new RBO fails with `Failed to unwrap empty optional`.
+Limit-to-TopSort fusion left the computed Map below the sort, and stage
+splitting serialized that Map before each partition's intermediate TopSort and
+the global final Limit.
+
+Commit `c2c66fb1d7b` rewrites only eligible
+`Limit(Sort(Map(input)))` shapes to `Map(TopSort(input))`. Sort and Map must be
+single-consumer; sort keys must be pass-through or direct column accesses; all
+dependencies must remain available; and the complete expression DAG must be
+free of Result, position-aware, side-effecting, CSE-unsafe, and subplan nodes.
+Computed sort keys and shared or unsafe Maps fail closed. The focused rule
+suite passes 8/8, the complete verifier C++ target 274/274, the real-host
+regression 1/1 under both optimizers, and the broader TopSort-stage test 1/1.
+This does not yet cover q84 because earlier Map normalization pushes its
+Concat into a join input.
 
 An additional legacy probe placed
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer; it

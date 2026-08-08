@@ -467,8 +467,8 @@ public:
         if (Suspended_.load(std::memory_order::relaxed)) {
             if (backlogEvents < lowBacklogWatermark) {
                 Suspended_.store(false, std::memory_order::relaxed);
-                YT_LOG_INFO("Backlog size has dropped below low watermark, logging resumed (LowBacklogWatermark: %v)",
-                    lowBacklogWatermark);
+                YT_TLOG_INFO("Backlog size has dropped below low watermark, logging resumed")
+                    .With("LowBacklogWatermark", lowBacklogWatermark);
             }
         } else {
             if (backlogEvents >= lowBacklogWatermark && !ScheduledOutOfBand_.exchange(true)) {
@@ -477,8 +477,8 @@ public:
 
             if (backlogEvents >= highBacklogWatermark) {
                 Suspended_.store(true, std::memory_order::relaxed);
-                YT_LOG_WARNING("Backlog size has exceeded high watermark, logging suspended (HighBacklogWatermark: %v)",
-                    highBacklogWatermark);
+                YT_TLOG_WARNING("Backlog size has exceeded high watermark, logging suspended")
+                    .With("HighBacklogWatermark", highBacklogWatermark);
             }
         }
 
@@ -626,7 +626,8 @@ private:
             try {
                 NotificationHandle_ = std::make_unique<TInotifyHandle>();
             } catch (const std::exception& ex) {
-                YT_LOG_ERROR(ex, "Error creating inotify handle, watching disabled");
+                YT_TLOG_ERROR("Error creating inotify handle, watching disabled")
+                    .With(TError(ex));
                 NotificationHandleCreationFailed_ = true;
             }
         }
@@ -652,8 +653,9 @@ private:
             } catch (const std::exception& ex) {
                 // Watch can fail to initialize if the writer is disabled
                 // e.g. due to the lack of space.
-                YT_LOG_ERROR(ex, "Error creating inotify watch (Path: %v)",
-                    writer->GetFileName());
+                YT_TLOG_ERROR("Error creating inotify watch")
+                    .With("Path", writer->GetFileName())
+                    .With(TError(ex));
                 return nullptr;
             }
         }
@@ -981,7 +983,8 @@ private:
                 MinLogStorageFreeSpace_.Update(minLogStorageFreeSpace);
             }
         } catch (const std::exception& ex) {
-            YT_LOG_WARNING(ex, "Failed to get log storage disk statistics");
+            YT_TLOG_WARNING("Failed to get log storage disk statistics")
+                .With(TError(ex));
         }
     }
 

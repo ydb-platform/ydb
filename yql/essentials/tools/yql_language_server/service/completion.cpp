@@ -31,7 +31,7 @@ TCompletionService::TCompletionService(NSQLComplete::ISqlCompletionEngine::TPtr 
 {
 }
 
-TCompletionList TCompletionService::Completion(TStringBuf text, const TCompletionParams& params) {
+TCompletionList TCompletionService::Completion(TStringBuf text, const TCompletionParams& params) const {
     size_t position = ToBytes(params.Position, text);
 
     const NSQLComplete::TCompletionInput input = {
@@ -39,7 +39,6 @@ TCompletionList TCompletionService::Completion(TStringBuf text, const TCompletio
         .CursorPosition = position,
     };
 
-    std::lock_guard _(Mutex_);
     auto completion = Engine_->CompleteAsync(input).ExtractValueSync();
     return ToMessage(completion.Candidates);
 }

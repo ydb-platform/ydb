@@ -8,8 +8,8 @@
 
 #include <yt/yt/client/chunk_client/read_limit.h>
 
-#include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/column_rename_descriptor.h>
+#include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/versioned_io_options.h>
 
@@ -193,7 +193,7 @@ TConstrainedRichYPath<TValidator...> TConstrainedRichYPath<TValidator...>::Norma
         attributes = NYTree::CreateEphemeralAttributes();
     }
     attributes->MergeFrom(Attributes());
-    return TConstrainedRichYPath<TValidator...>(std::move(path), *attributes);;
+    return TConstrainedRichYPath<TValidator...>(std::move(path), *attributes);
 }
 
 template <class... TValidator>

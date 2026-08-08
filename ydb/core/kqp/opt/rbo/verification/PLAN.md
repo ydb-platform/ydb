@@ -883,8 +883,9 @@ Implementation sequence:
 74. M4: exact nullable Decimal count-distinct with raw aggregate-code equality
     plus the independently certified staged Decimal AVG carrier, moving TPC-DS
     q28 through both exporters, formula construction, and bounded proof.
-    M4 remains current; Milestone 75 is deliberately unselected until a fresh
-    blocker audit.
+    M4 remains current. A fresh blocker audit selected Milestone 75 as the
+    demand-aware, partial stored-String `Concat` slice led by TPC-DS q84; it is
+    in progress and carries no formula or proof claim yet.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -1600,15 +1601,20 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   carried catalog nullability. The auditor carries Datashard's enforced 16 MiB
   value cap or the `INT32_MAX` logical-cell bound imposed by Olap's validated
   Arrow `BinaryType` representation, charges it per occurrence plus exact
-  literal bytes, and proves that MiniKQL's `ui32` allocation-growth calculation
-  cannot wrap. One generic Olap occurrence can pass when its exact literals fit
-  the remaining allocation headroom; any two generic Olap occurrences fail
-  closed. Only then does it encode the whole syntax tree as one opaque function
+  literal bytes, and proves that the complete result fits in `UINT32_MAX`.
+  Commit `82cfcd837f4` clamps MiniKQL's half-spare capacity calculation instead
+  of allowing `newSize + newSize / 2` to wrap; commit `daab603c2f1` aligns the
+  verifier gate with that repaired runtime bound. One generic Olap occurrence
+  can pass when its exact literals fit, and two maximum Olap cells without a
+  literal also fit. q84's two maximum cells plus its two-byte `", "` literal
+  total `UINT32_MAX + 1` and still fail closed. Only then does the exporter
+  encode the whole syntax tree as one opaque function
   whose fingerprint retains structure, literal bytes, order, and repetition.
   Focused tests cover the
   grammar, provenance failures, and all ten join kinds; a real-host
   initial/final one-Olap-occurrence obligation is `VERIFIED_BOUNDED`, and a
-  two-Olap-occurrence case fails closed. At that milestone TPC-DS q5 reached
+  two-maximum-cell case is admitted while adding `", "` fails closed. At that
+  milestone TPC-DS q5 reached
   the Decimal-SUM headroom gate and q80 reached the 82,944-pair
   grouped-aggregate construction cap. q84 had two Olap String occurrences and
   stopped at the allocation-totality gate. The formula slice remained 23/121
@@ -2711,6 +2717,18 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   It spent 3,186/0 ms and produced report SHA-256
   `37b983f3247c653f5bf4a52c79375cdbc7df588ac79bd893d3a5a89ae25e16e0`.
 
+  The fresh q84 blocker audit repaired MiniKQL String-capacity overflow in
+  `82cfcd837f4` and synchronized the exporter's exact `UINT32_MAX` result bound
+  in `daab603c2f1`. The widened totality gate admits two maximum Olap cells
+  alone, but q84 remains one byte beyond it because of its exact `", "`
+  literal. A separate two-row real-YDB demand probe then confirmed production
+  optimizer defect ten: legacy returned the selected non-NULL `UNWRAP(S)` row
+  for `ORDER BY Id LIMIT 1`, while new RBO evaluated a discarded NULL row and
+  failed. Commit `c2c66fb1d7b` fixes that immediate TopSort shape and retains
+  the regression. It does not move q84's Concat Map, which normalization has
+  already pushed through Filter and join inputs, so q84 still has no formula
+  or proof and the post-M74 numerical coverage remains the current baseline.
+
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
   q35. Narrowly tagged derived-`Double` ordering now removes q22/q85 from the
@@ -2731,9 +2749,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   semantics for the failed-preparation pairs,
   the full captured-pair gap is roughly 6--8 feature families or 8--16
   milestones. Those workload-targeted estimates now start from 92 formulas and
-  can change as later blockers become visible. A fresh boundary/blocker audit,
-  rather than a preselected feature, will choose Milestone 75. M4 remains
-  current. The 20 no-pair entries require frontend/optimizer progress; the
+  can change as later blockers become visible. The fresh audit selected q84's
+  partial-`Concat` and checked-projection demand boundary for Milestone 75.
+  M4 remains current. The 20 no-pair entries require frontend/optimizer
+  progress; the
   present captured-pair ceiling is 101/121, and formula construction is not
   solver proof.
 
@@ -3473,7 +3492,7 @@ twenty-nine and thirty. The checked nullable-String `Unwrap` slice adds q8 as
 obligation thirty-one, and the exact Decimal count-distinct/staged-AVG slice
 adds q28 as obligation thirty-two.
 
-The audit and solver/real-YDB confirmation workflow have found nine production
+The audit and solver/real-YDB confirmation workflow have found ten production
 optimizer defects.
 First, an unrelated earlier `NOT` left stale state while the simple-subplan rule
 searched later conjuncts, so a positive `EXISTS` could be lowered as
@@ -3571,6 +3590,26 @@ return `WITNESS_NOT_REPRODUCED`, while focused q56 and q60 solver runs return
 `UNKNOWN` at 60 seconds; their SHA-bound timings and report digest are recorded
 above. At that repaired String checkpoint, formula coverage was 53/121, 53/93,
 and 53/59 under the three documented denominators; the proof floor was 20/121.
+
+Tenth, the q84 allocation/demand audit exposed an independent eager-projection
+defect in distributed TopSort. For a two-row Olap table with `(Id=1,
+S="present")` and `(Id=2, S=NULL)`, legacy execution of
+`SELECT UNWRAP(S) ... ORDER BY Id LIMIT 1` returned `"present"`; pre-fix new
+RBO failed with `Failed to unwrap empty optional`. `TPushLimitIntoSortRule`
+formed `TopSort(Map(Unwrap, Read))`; physical stage splitting then serialized
+that Map below each partition's intermediate TopSort, forcing a row that the
+global final Limit discarded.
+
+Commit `c2c66fb1d7b` delays the whole Map until after TopSort only when the Map
+and Sort are single-consumer, every sort key is pass-through or a direct
+column access, every expression dependency remains available, and a complete
+expression-DAG scan finds no Result, position-aware, side-effecting, or
+CSE-unsafe node or subplan dependency. Computed keys and shared or unsafe Maps
+retain the old topology. The direct rule suite passes 8/8, the complete
+verifier C++ target passes 274/274, the real-host regression passes 1/1 under
+both optimizer modes, and the broader TopSort stage test passes 1/1. This fix
+does not by itself cover q84 because its computed Map has already moved into a
+join input before Limit-to-TopSort fusion.
 
 An additional legacy probe with an intrinsic
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer raises

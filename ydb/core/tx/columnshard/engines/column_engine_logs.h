@@ -231,6 +231,10 @@ public:
         return GranulesStorage->GetTables();
     }
 
+    const std::shared_ptr<NStorageOptimizer::TOptimizerRuntimeSettings>& GetOptimizerRuntimeSettings() const {
+        return GranulesStorage->GetOptimizerRuntimeSettings();
+    }
+
     ui64 GetTabletId() const {
         return TabletId;
     }

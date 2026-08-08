@@ -735,15 +735,10 @@ private:
 
         PeerDiscoveryError_ = {};
 
-        std::vector<std::string> newAddresses;
         for (const auto& address : addresses) {
             if (!BannedAddresses_.contains(address) && !ActiveAddresses_.contains(address)) {
-                newAddresses.push_back(address);
+                AddPeer(address);
             }
-        }
-
-        for (const auto& address : newAddresses) {
-            AddPeer(address);
         }
     }
 

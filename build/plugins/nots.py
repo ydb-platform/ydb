@@ -1153,9 +1153,16 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
 
         ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed)
 
-        if not _use_hermetic_node_modules(unit):
-            from lib.nots.package_manager.utils import s_rooted
+        from lib.nots.package_manager import constants
+        from lib.nots.package_manager.utils import s_rooted
 
+        source_manifests = {
+            s_rooted(os.path.join(pm.module_path, constants.PACKAGE_JSON_FILENAME)),
+            s_rooted(os.path.join(pm.module_path, constants.PNPM_LOCKFILE_FILENAME)),
+        }
+        ins = [path for path in ins if path not in source_manifests]
+
+        if not _use_hermetic_node_modules(unit):
             # Legacy builders materialize node_modules in the build action and
             # copy pnpm patches from the source tree there. Declare those files
             # explicitly so they are available in a distbuild sandbox.

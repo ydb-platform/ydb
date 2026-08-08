@@ -129,6 +129,7 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
+        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType());
         QueryClassifier = RequestEv->GetWmQueryClassifier();
 
         if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {

@@ -5681,44 +5681,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 2);
     }
 
-    Y_UNIT_TEST(PushMapElementsPushesRenameShadowingMovedExpressionOutput) {
-        TMapRuleTestContext testContext;
-        TPlanProps expressionProps;
-        const auto pos = NYql::TPositionHandle();
-
-        auto read = MakeTestRead({TInfoUnit("a")}, pos);
-        auto sort = MakeIntrusive<TOpSort>(
-            read,
-            pos,
-            TVector<TSortElement>{TSortElement(TInfoUnit("a"), true, true)},
-            std::nullopt
-        );
-        auto map = MakeIntrusive<TOpMap>(sort, pos, TVector<TMapElement>{
-            MakeTestConstantAppend("a", pos, testContext.ExprCtx),
-            TMapElement(TInfoUnit("x"), TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps, true),
-        });
-        TOpRoot root(map, pos, {"a", "x"});
-
-        TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>(/*pushExpressions*/ true));
-        TRuleBasedStage pushMapElements("Focused push map elements through unary", std::move(rules));
-        ComputeLogicalTestProps(root);
-        pushMapElements.RunStage(root, testContext.RboCtx);
-
-        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Sort, root.PlanToString(testContext.ExprCtx));
-        auto rewrittenSort = CastOperator<TOpSort>(root.GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(rewrittenSort->SortElements.size(), 1);
-        UNIT_ASSERT(rewrittenSort->SortElements[0].SortColumn == TInfoUnit("x"));
-        UNIT_ASSERT_C(rewrittenSort->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
-
-        auto pushedMap = CastOperator<TOpMap>(rewrittenSort->GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 2);
-        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("a"));
-        UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
-        UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("x"));
-        UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("a"));
-    }
-
     Y_UNIT_TEST(PushRenamePushesSemanticRenameThroughJoin) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;
@@ -6720,7 +6682,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(std::find(joinOutput.begin(), joinOutput.end(), TInfoUnit("l_a")) != joinOutput.end());
     }
 
-    Y_UNIT_TEST(PushAppendExpressionCrossesFilter) {
+    Y_UNIT_TEST(PushAppendKeepsComputedExpressionAboveFilter) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;
         const auto pos = NYql::TPositionHandle();
@@ -6732,26 +6694,34 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
         );
         auto appendMap = MakeIntrusive<TOpMap>(filter, pos, TVector<TMapElement>{
+            MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
             MakeTestConstantAppend("one", pos, testContext.ExprCtx),
         });
-        TOpRoot root(appendMap, pos, {"a", "one"});
+        TOpRoot root(appendMap, pos, {"a", "l_a", "one"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>(/*pushExpressions*/ true));
-        TRuleBasedStage pushAppend("Focused push append expressions", std::move(rules));
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
+        TRuleBasedStage pushAppend("Focused push append", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
-        auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto residualMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(residualMap->MapElements.size(), 1);
+        UNIT_ASSERT(residualMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+        UNIT_ASSERT_C(residualMap->GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
+
+        auto rewrittenFilter = CastOperator<TOpFilter>(residualMap->GetInput());
         UNIT_ASSERT_C(rewrittenFilter->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto pushedMap = CastOperator<TOpMap>(rewrittenFilter->GetInput());
         UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
-        UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+        UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("l_a"));
+        UNIT_ASSERT(pushedMap->MapElements.front().IsColumnAccess());
     }
 
-    Y_UNIT_TEST(PushAppendExpressionConstantChoosesPreservedJoinSide) {
+    Y_UNIT_TEST(PushAppendKeepsComputedExpressionAboveJoin) {
         TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
         const auto pos = NYql::TPositionHandle();
 
         auto leftRead = MakeTestRead({TInfoUnit("a")}, pos);
@@ -6764,27 +6734,34 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         auto appendMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
+            MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
             MakeTestConstantAppend("one", pos, testContext.ExprCtx),
         });
-        TOpRoot root(appendMap, pos, {"a", "b", "one"});
+        TOpRoot root(appendMap, pos, {"a", "b", "l_a", "one"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>(/*pushExpressions*/ true));
-        TRuleBasedStage pushAppend("Focused push append expressions", std::move(rules));
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
+        TRuleBasedStage pushAppend("Focused push append", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
-        auto rewrittenJoin = CastOperator<TOpJoin>(root.GetInput());
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto residualMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(residualMap->MapElements.size(), 1);
+        UNIT_ASSERT(residualMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+        UNIT_ASSERT_C(residualMap->GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
+
+        auto rewrittenJoin = CastOperator<TOpJoin>(residualMap->GetInput());
         UNIT_ASSERT_C(rewrittenJoin->GetLeftInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         UNIT_ASSERT_C(rewrittenJoin->GetRightInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
 
         auto leftMap = CastOperator<TOpMap>(rewrittenJoin->GetLeftInput());
         UNIT_ASSERT_VALUES_EQUAL(leftMap->MapElements.size(), 1);
-        UNIT_ASSERT(leftMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+        UNIT_ASSERT(leftMap->MapElements.front().GetElementName() == TInfoUnit("l_a"));
+        UNIT_ASSERT(leftMap->MapElements.front().IsColumnAccess());
     }
 
-    Y_UNIT_TEST(PushMapElementsPushesRenameShadowingMovedJoinExpressionOutput) {
+    Y_UNIT_TEST(PushMapElementsKeepsRenameWithComputedProducerAboveJoin) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;
         const auto pos = NYql::TPositionHandle();
@@ -6810,20 +6787,18 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         pushMapElements.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
-        auto rewrittenJoin = CastOperator<TOpJoin>(root.GetInput());
-        UNIT_ASSERT_C(rewrittenJoin->GetLeftInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT_C(rewrittenJoin->GetRightInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto residualMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(residualMap->MapElements.size(), 2);
+        UNIT_ASSERT(residualMap->MapElements[0].GetElementName() == TInfoUnit("a"));
+        UNIT_ASSERT(residualMap->MapElements[1].IsRename());
+        UNIT_ASSERT(residualMap->MapElements[1].GetElementName() == TInfoUnit("x"));
+        UNIT_ASSERT(residualMap->MapElements[1].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT_C(residualMap->GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
 
-        auto leftMap = CastOperator<TOpMap>(rewrittenJoin->GetLeftInput());
-        UNIT_ASSERT_VALUES_EQUAL(leftMap->MapElements.size(), 2);
-        UNIT_ASSERT(leftMap->MapElements[0].GetElementName() == TInfoUnit("a"));
-        UNIT_ASSERT(leftMap->MapElements[1].IsRename());
-        UNIT_ASSERT(leftMap->MapElements[1].GetElementName() == TInfoUnit("x"));
-        UNIT_ASSERT(leftMap->MapElements[1].GetRename() == TInfoUnit("a"));
-
+        auto rewrittenJoin = CastOperator<TOpJoin>(residualMap->GetInput());
         UNIT_ASSERT_VALUES_EQUAL(rewrittenJoin->JoinKeys.size(), 1);
-        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().first == TInfoUnit("x"));
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().first == TInfoUnit("a"));
         UNIT_ASSERT(rewrittenJoin->JoinKeys.front().second == TInfoUnit("b"));
     }
 
@@ -6846,7 +6821,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(appendMap, pos, {"a", "b", "one"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>(/*pushExpressions*/ true));
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
         TRuleBasedStage pushAppend("Focused push append expressions", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);

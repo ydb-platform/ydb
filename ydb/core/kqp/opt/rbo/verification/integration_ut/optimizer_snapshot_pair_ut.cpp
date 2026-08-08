@@ -285,6 +285,7 @@ void CreateRuntimeStringTable(TKikimrRunner& kikimr) {
     const auto result = session.ExecuteSchemeQuery(R"(
         CREATE TABLE `/Root/RboRuntimeString` (
             Id Int64 NOT NULL,
+            MatchKey Int64 NOT NULL,
             S String,
             PRIMARY KEY (Id)
         ) WITH (STORE = COLUMN);
@@ -520,11 +521,13 @@ TRuntimeStringDemandObservation ObserveRuntimeStringDemand(
         .AddListItem()
             .BeginStruct()
                 .AddMember("Id").Int64(1)
+                .AddMember("MatchKey").Int64(1)
                 .AddMember("S").OptionalString("present")
             .EndStruct()
         .AddListItem()
             .BeginStruct()
                 .AddMember("Id").Int64(2)
+                .AddMember("MatchKey").Int64(999)
                 .AddMember("S").OptionalString(std::nullopt)
             .EndStruct()
         .EndList();
@@ -2000,11 +2003,13 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             .AddListItem()
                     .BeginStruct()
                     .AddMember("Id").Int64(1)
+                    .AddMember("MatchKey").Int64(1)
                     .AddMember("S").OptionalString("present")
                 .EndStruct()
             .AddListItem()
                     .BeginStruct()
                     .AddMember("Id").Int64(2)
+                    .AddMember("MatchKey").Int64(999)
                     .AddMember("S").OptionalString(std::nullopt)
                 .EndStruct()
             .EndList();
@@ -2161,6 +2166,30 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             FROM `/Root/RboRuntimeString`
             ORDER BY Id
             LIMIT 1;
+        )";
+
+        const auto legacy = ObserveRuntimeStringDemand(query, false);
+        UNIT_ASSERT_C(legacy.Success, legacy.Issues);
+        UNIT_ASSERT_VALUES_EQUAL(
+            legacy.Rows,
+            TVector<TString>({"present"}));
+
+        const auto newRbo = ObserveRuntimeStringDemand(query, true);
+        UNIT_ASSERT_C(newRbo.Success, newRbo.Issues);
+        UNIT_ASSERT_VALUES_EQUAL(
+            newRbo.Rows,
+            TVector<TString>({"present"}));
+    }
+
+    Y_UNIT_TEST(RealRuntimeStringUnwrapJoinDemand) {
+        // The NULL row has no matching right key, so its output projection is
+        // outside the query's evaluation demand.
+        const TString query = R"(
+            SELECT UNWRAP(lhs.S) AS RequiredString
+            FROM `/Root/RboRuntimeString` AS lhs
+            INNER JOIN `/Root/RboRuntimeString` AS rhs
+                ON lhs.MatchKey = rhs.Id
+            WHERE rhs.S = "present";
         )";
 
         const auto legacy = ObserveRuntimeStringDemand(query, false);

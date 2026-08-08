@@ -149,15 +149,14 @@ class TPushMapElementsIntoMapRule : public ISimplifiedRule {
 
 class TPushMapElementsThroughInputRule : public ISimplifiedRule {
   public:
-    explicit TPushMapElementsThroughInputRule(bool pushExpressions = false)
-        : ISimplifiedRule("Push map elements through input operator", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs)
-        , PushExpressions(pushExpressions) {}
+    TPushMapElementsThroughInputRule()
+        : ISimplifiedRule(
+            "Push map elements through input operator",
+            ERuleProperties::RequireParents |
+                ERuleProperties::RequireOutputIUs) {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
-
-  private:
-    bool PushExpressions;
 };
 
 class TPushMapElementsThroughAggregateRule : public ISimplifiedRule {

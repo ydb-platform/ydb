@@ -19,10 +19,12 @@ namespace NKqp {
 //
 // Caveats:
 // 1.
-// A: Map [ a := f(b) ]      -- expression appends move through Filter, move
-// B: `- Sort                   through Limit/Sort only when this rule is
-// C:    `- input               configured to push expressions, and move below
-//                              joins only to a side whose rows are preserved.
+// A: Map [ a := f(b) ]      -- computed expressions stay above every input
+// B: `- Operator B             boundary. Filter, Limit, TopSort, and Join can
+// C:    `- input               all discard rows, so moving a partial expression
+//                              below them can make an otherwise lazy error
+//                              observable. This rule only moves direct column
+//                              accesses and semantic renames.
 //
 // 2.
 // A: Map [ a := b ]         -- move prevented if operator B has multiple
@@ -52,50 +54,13 @@ bool CanPushThroughInputOperator(const IOperator& op) {
     }
 }
 
-bool IsLeftPreserved(const TString& joinKind) {
-    return joinKind == "Inner" || joinKind == "Cross" || joinKind == "Left" || joinKind == "LeftOnly" || joinKind == "LeftSemi";
-}
-
-bool IsRightPreserved(const TString& joinKind) {
-    return joinKind == "Inner" || joinKind == "Cross";
-}
-
-bool IsJoinChildPreserved(const TOpJoin& join, ui32 childIdx) {
-    Y_ENSURE(childIdx < join.Children.size());
-    return childIdx == 0
-        ? IsLeftPreserved(join.JoinKind)
-        : IsRightPreserved(join.JoinKind);
-}
-
 bool CanPushAppendToChild(
     const IOperator& op,
     ui32 childIdx,
-    const TMapElement& mapElement,
-    bool pushExpressions)
+    const TMapElement& mapElement)
 {
-    const bool dependsOnlyOnChild = mapElement.DependsOnlyOn(op.Children[childIdx]->GetOutputIUs());
-
-    if (mapElement.IsColumnAccess()) {
-        return dependsOnlyOnChild;
-    }
-
-    if (op.Kind != EOperator::Join) {
-        if (op.Kind != EOperator::Filter && !pushExpressions) {
-            return false;
-        }
-        return dependsOnlyOnChild;
-    }
-
-    const auto& join = static_cast<const TOpJoin&>(op);
-    if (!IsJoinChildPreserved(join, childIdx)) {
-        return false;
-    }
-
-    if (dependsOnlyOnChild) {
-        return true;
-    }
-
-    return mapElement.GetExpression().GetInputIUs(false, true).empty();
+    return mapElement.IsColumnAccess() &&
+        mapElement.DependsOnlyOn(op.Children[childIdx]->GetOutputIUs());
 }
 
 } // anonymous namespace
@@ -131,7 +96,7 @@ TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOpera
 
         bool canPush = false;
         for (ui32 childIdx = 0; childIdx < op->Children.size(); ++childIdx) {
-            if (CanPushAppendToChild(*op, childIdx, mapElement, PushExpressions)) {
+            if (CanPushAppendToChild(*op, childIdx, mapElement)) {
                 pushedOutputs[childIdx].insert(mapElement.GetElementName());
                 canPush = true;
             }

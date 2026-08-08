@@ -1,7 +1,7 @@
 #include "dq_state_load_plan.h"
 
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 #include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
@@ -9,8 +9,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NFq {
-
-using namespace NYql;
 
 namespace {
 
@@ -92,7 +90,7 @@ struct TGraphBuilder {
 
 TTaskInputBuilder& TTaskInputBuilder::TopicSource(const TString& topic, ui64 partitionsCount, ui64 dqPartitionsCount, ui64 eachPartition) {
     auto* src = In->MutableSource();
-    src->SetType(TString(NYql::NDq::PqSource));
+    src->SetType(TString(NYql::PqSource));
 
     NYql::NPq::NProto::TDqPqTopicSource topicSrcSettings;
     topicSrcSettings.SetDatabase("DB");
@@ -136,8 +134,8 @@ ui64 SinksCount(const NYql::NDqProto::TDqTask& task) {
 struct TTestCase : public NUnitTest::TBaseTestCase {
     TGraphBuilder SrcGraph;
     TGraphBuilder DstGraph;
-    THashMap<ui64, NDqProto::NDqStateLoadPlan::TTaskPlan> Plan;
-    TIssues Issues;
+    THashMap<ui64, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan> Plan;
+    NYql::TIssues Issues;
 
     bool MakePlan(bool force) {
         Plan.clear();
@@ -172,43 +170,43 @@ struct TTestCase : public NUnitTest::TBaseTestCase {
             const auto taskPlanIt = Plan.find(task.GetId());
             UNIT_ASSERT_C(taskPlanIt != Plan.end(), "Task " << task.GetId() << " was not found in plan");
             const auto& taskPlan = taskPlanIt->second;
-            UNIT_ASSERT_C(taskPlan.GetStateType() != NDqProto::NDqStateLoadPlan::STATE_TYPE_UNSPECIFIED, "Task " << task.GetId() << " plan: " << taskPlan);
-            if (taskPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY) {
+            UNIT_ASSERT_C(taskPlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_UNSPECIFIED, "Task " << task.GetId() << " plan: " << taskPlan);
+            if (taskPlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY) {
                 UNIT_ASSERT_C(!taskPlan.HasProgram(), "Task " << task.GetId() << " plan: " << taskPlan);
                 UNIT_ASSERT_VALUES_EQUAL_C(taskPlan.SourcesSize(), 0, "Task " << task.GetId() << " plan: " << taskPlan);
                 UNIT_ASSERT_VALUES_EQUAL_C(taskPlan.SinksSize(), 0, "Task " << task.GetId() << " plan: " << taskPlan);
             } else {
-                UNIT_ASSERT_C(taskPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN, "Task " << task.GetId() << " plan: " << taskPlan);
+                UNIT_ASSERT_C(taskPlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN, "Task " << task.GetId() << " plan: " << taskPlan);
                 UNIT_ASSERT_C(taskPlan.HasProgram(), "Task " << task.GetId() << " plan: " << taskPlan);
-                UNIT_ASSERT_C(taskPlan.GetProgram().GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Task " << task.GetId() << " plan: " << taskPlan);
+                UNIT_ASSERT_C(taskPlan.GetProgram().GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Task " << task.GetId() << " plan: " << taskPlan);
                 UNIT_ASSERT_VALUES_EQUAL_C(taskPlan.SourcesSize(), SourcesCount(task), "Task " << task.GetId() << " plan: " << taskPlan);
                 UNIT_ASSERT_VALUES_EQUAL_C(taskPlan.SinksSize(), SinksCount(task), "Task " << task.GetId() << " plan: " << taskPlan);
                 for (const auto& sourcePlan : taskPlan.GetSources()) {
-                    UNIT_ASSERT_C(sourcePlan.GetStateType() != NDqProto::NDqStateLoadPlan::STATE_TYPE_UNSPECIFIED, "Task " << task.GetId() << " plan: " << taskPlan);
-                    UNIT_ASSERT_C(sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY || sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN, "Task " << task.GetId() << " plan: " << taskPlan);
+                    UNIT_ASSERT_C(sourcePlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_UNSPECIFIED, "Task " << task.GetId() << " plan: " << taskPlan);
+                    UNIT_ASSERT_C(sourcePlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY || sourcePlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN, "Task " << task.GetId() << " plan: " << taskPlan);
                     UNIT_ASSERT_C(sourcePlan.GetInputIndex() < task.InputsSize(), "Task " << task.GetId() << " plan: " << taskPlan);
                     const auto& taskInput = task.GetInputs(sourcePlan.GetInputIndex());
                     UNIT_ASSERT_C(taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource, "Task " << task.GetId() << " plan: " << taskPlan);
                     // State type is foreign => source type is pq
-                    UNIT_ASSERT_C(sourcePlan.GetStateType() != NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN || taskInput.GetSource().GetType() == NYql::NDq::PqSource, "Task " << task.GetId() << " plan: " << taskPlan << ". Task input: " << taskInput);
-                    if (sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
+                    UNIT_ASSERT_C(sourcePlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN || taskInput.GetSource().GetType() == NYql::PqSource, "Task " << task.GetId() << " plan: " << taskPlan << ". Task input: " << taskInput);
+                    if (sourcePlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
                         UNIT_ASSERT_C(sourcePlan.ForeignTasksSourcesSize() > 0, "Task " << task.GetId() << " plan: " << taskPlan);
-                        const TMaybe<NPq::TTopicPartitionsSet> partitionsSet = NPq::GetTopicPartitionsSet(task.GetMeta());
+                        const TMaybe<NYql::NPq::TTopicPartitionsSet> partitionsSet = NYql::NPq::GetTopicPartitionsSet(task.GetMeta());
                         UNIT_ASSERT_C(partitionsSet, "Task " << task.GetId() << " plan: " << taskPlan);
                         for (const auto& taskSource : sourcePlan.GetForeignTasksSources()) {
                             const auto& srcTask = FindSrcTask(taskSource.GetTaskId()); // with assertion
                             UNIT_ASSERT_C(taskSource.GetInputIndex() < srcTask.InputsSize(), "Task " << srcTask.GetId() << " plan: " << taskPlan);
                             const auto& srcTaskInput = srcTask.GetInputs(taskSource.GetInputIndex());
                             UNIT_ASSERT_C(srcTaskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource, "Task " << srcTask.GetId() << " plan: " << taskPlan);
-                            UNIT_ASSERT_C(srcTaskInput.GetSource().GetType() == NYql::NDq::PqSource, "Task " << srcTask.GetId() << " plan: " << taskPlan);
-                            const TMaybe<NPq::TTopicPartitionsSet> srcTaskPartitionsSet = NPq::GetTopicPartitionsSet(task.GetMeta());
+                            UNIT_ASSERT_C(srcTaskInput.GetSource().GetType() == NYql::PqSource, "Task " << srcTask.GetId() << " plan: " << taskPlan);
+                            const TMaybe<NYql::NPq::TTopicPartitionsSet> srcTaskPartitionsSet = NYql::NPq::GetTopicPartitionsSet(task.GetMeta());
                             UNIT_ASSERT_C(srcTaskPartitionsSet, "Task " << srcTask.GetId() << " plan: " << taskPlan);
                             UNIT_ASSERT_C(partitionsSet->Intersects(*srcTaskPartitionsSet), "Task " << srcTask.GetId() << " plan: " << taskPlan);
                         }
                     }
                 }
                 for (const auto& sinkPlan : taskPlan.GetSinks()) {
-                    UNIT_ASSERT_C(sinkPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Task " << task.GetId() << " plan: " << taskPlan);
+                    UNIT_ASSERT_C(sinkPlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Task " << task.GetId() << " plan: " << taskPlan);
                     UNIT_ASSERT_C(sinkPlan.GetOutputIndex() < task.OutputsSize(), "Task " << task.GetId() << " plan: " << taskPlan);
                     const auto& taskOutput = task.GetOutputs(sinkPlan.GetOutputIndex());
                     UNIT_ASSERT_C(taskOutput.GetTypeCase() == NYql::NDqProto::TTaskOutput::kSink, "Task " << task.GetId() << " plan: " << taskPlan);
@@ -220,14 +218,14 @@ struct TTestCase : public NUnitTest::TBaseTestCase {
     void AssertTaskPlanIsEmpty(ui64 taskId) const {
         const auto taskPlanIt = Plan.find(taskId);
         UNIT_ASSERT_C(taskPlanIt != Plan.end(), "Task " << taskId << " was not found in plan");
-        UNIT_ASSERT_C(taskPlanIt->second.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, taskPlanIt->second);
+        UNIT_ASSERT_C(taskPlanIt->second.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, taskPlanIt->second);
     }
 
     void AssertTaskPlanSourceHasSourceTask(ui64 taskId, ui64 sourceIndex, ui64 srcTaskId, ui64 srcInputIndex) const {
         const auto taskPlanIt = Plan.find(taskId);
         UNIT_ASSERT_C(taskPlanIt != Plan.end(), "Task " << taskId << " was not found in plan");
         const auto& taskPlan = taskPlanIt->second;
-        UNIT_ASSERT_C(taskPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN, taskPlanIt->second);
+        UNIT_ASSERT_C(taskPlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN, taskPlanIt->second);
         for (const auto& sourcePlan : taskPlan.GetSources()) {
             if (sourcePlan.GetInputIndex() == sourceIndex) {
                 for (const auto& foreignTaskSource : sourcePlan.GetForeignTasksSources()) {

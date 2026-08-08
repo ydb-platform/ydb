@@ -11,7 +11,9 @@
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 
-namespace NYql::NDq {
+namespace NFq {
+
+using namespace NYql;
 namespace {
 // Pq specific
 // TODO: rewrite this code to not depend on concrete providers (now it is only pq)
@@ -72,7 +74,7 @@ void AddForceWarningOrError(const TString& message, TIssues& issues, bool force)
 }
 
 bool IsTopicInput(const NYql::NDqProto::TTaskInput& taskInput) {
-    return taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == PqSource;
+    return taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == NYql::NDq::PqSource;
 }
 
 bool ParseTopicInput(
@@ -259,4 +261,4 @@ bool MakeContinueFromStreamingOffsetsPlan(
 #undef FORCE_MSG
 }
 
-} // namespace NYql::NDq
+} // namespace NFq

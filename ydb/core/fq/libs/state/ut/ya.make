@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/dq/state)
+UNITTEST_FOR(ydb/core/fq/libs/state)
 
 SRCS(
     dq_state_load_plan_ut.cpp

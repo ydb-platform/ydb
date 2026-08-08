@@ -178,12 +178,13 @@ class TKqpQueryManager : public NActors::TActor<TKqpQueryManager> {
 public:
     TKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,
         std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
-        bool enableChannelMemoryTracking)
+        bool enableSmallComputeMemoryAllocations, bool enableChannelMemoryTracking)
         : TActor(&TThis::StateFunc)
         , Counters_(counters)
         , State_(state)
         , ResourceManager_(resourceManager)
         , CaFactory_(caFactory)
+        , EnableSmallComputeMemoryAllocations(enableSmallComputeMemoryAllocations)
         , EnableChannelMemoryTracking(enableChannelMemoryTracking)
     {
     }
@@ -312,9 +313,18 @@ public:
             rlPath.ConstructInPlace(runtimeSettings.GetRlPath());
         }
 
-        auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
+        auto lightLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
+        auto heavyLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
         const ui32 tasksCount = msg.GetTasks().size();
-        auto externalMemory = initialMemoryLimit * tasksCount;
+        ui64 externalMemory = 0;
+        if (EnableSmallComputeMemoryAllocations) {
+            externalMemory = tasksCount * lightLimit;
+        } else {
+            for (const auto& dqTask: msg.GetTasks()) {
+                auto& taskOpts = dqTask.GetProgram().GetSettings();
+                externalMemory += taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation() ? heavyLimit : lightLimit;
+            }
+        }
         auto channelMemory = 0;
 
         if (!TxInfo) {
@@ -360,6 +370,9 @@ public:
         for (auto& dqTask: *msg.MutableTasks()) {
 
             const auto taskId = dqTask.GetId();
+
+            auto& taskOpts = dqTask.GetProgram().GetSettings();
+            auto initialMemoryLimit = !EnableSmallComputeMemoryAllocations && (taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation()) ? heavyLimit : lightLimit;
 
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
                 .ExecuterId = executerId,
@@ -509,13 +522,14 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferInflightBytes;
     NYql::NDq::IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    const bool EnableSmallComputeMemoryAllocations;
     const bool EnableChannelMemoryTracking;
 };
 
 NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,
     std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
-    bool enableChannelMemoryTracking) {
-    return new TKqpQueryManager(counters, state, resourceManager, caFactory, enableChannelMemoryTracking);
+    bool enableSmallComputeMemoryAllocations, bool enableChannelMemoryTracking) {
+    return new TKqpQueryManager(counters, state, resourceManager, caFactory, enableSmallComputeMemoryAllocations, enableChannelMemoryTracking);
 }
 
 } // namespace NKikimr::NKqp

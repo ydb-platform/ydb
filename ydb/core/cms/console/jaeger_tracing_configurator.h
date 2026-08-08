@@ -8,6 +8,8 @@
 namespace NKikimr::NConsole {
 
 IActor* CreateJaegerTracingConfigurator(TIntrusivePtr<NJaegerTracing::TSamplingThrottlingConfigurator> tracingConfigurator,
-                                                NKikimrConfig::TTracingConfig cfg);
+                                                NKikimrConfig::TTracingConfig cfg,
+                                                ui32 configItemKind,
+                                                bool userFacing);
 
 } // namespace NKikimr::NConsole

@@ -1,6 +1,7 @@
 #include "ut_helpers.h"
 #include "jaeger_tracing_configurator.h"
 
+#include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 
 #include <util/generic/ptr.h>
@@ -53,9 +54,12 @@ TTenantTestConfig DefaultConsoleTestConfig() {
 void InitJaegerTracingConfigurator(
     TTenantTestRuntime& runtime,
     TIntrusivePtr<TSamplingThrottlingConfigurator> configurator,
-    const NKikimrConfig::TTracingConfig& initCfg
+    const NKikimrConfig::TTracingConfig& initCfg,
+    ui32 configItemKind = static_cast<ui32>(NKikimrConsole::TConfigItem::TracingConfigItem),
+    bool userFacing = false
 ) {
-    runtime.Register(CreateJaegerTracingConfigurator(std::move(configurator), initCfg));
+    runtime.Register(CreateJaegerTracingConfigurator(
+        std::move(configurator), initCfg, configItemKind, userFacing));
 
     TDispatchOptions options;
     options.FinalEvents.emplace_back(TEvConfigsDispatcher::EvSetConfigSubscriptionResponse, 1);
@@ -87,11 +91,19 @@ private:
     size_t Count = 0;
 };
 
-void Configure(TTenantTestRuntime& runtime, const NKikimrConfig::TTracingConfig& cfg, ui32 order) {
-    auto configItem = MakeConfigItem(NKikimrConsole::TConfigItem::TracingConfigItem,
+void Configure(TTenantTestRuntime& runtime, const NKikimrConfig::TTracingConfig& cfg, ui32 order,
+        bool userFacing = false) {
+    const auto configItemKind = userFacing
+        ? NKikimrConsole::TConfigItem::UserFacingTracingConfigItem
+        : NKikimrConsole::TConfigItem::TracingConfigItem;
+    auto configItem = MakeConfigItem(configItemKind,
                                      NKikimrConfig::TAppConfig(), {}, {}, "", "", order,
                                      NKikimrConsole::TConfigItem::OVERWRITE, "");
-    configItem.MutableConfig()->MutableTracingConfig()->CopyFrom(cfg);
+    if (userFacing) {
+        configItem.MutableConfig()->MutableUserFacingTracingConfig()->CopyFrom(cfg);
+    } else {
+        configItem.MutableConfig()->MutableTracingConfig()->CopyFrom(cfg);
+    }
 
     auto* event = new TEvConsole::TEvConfigureRequest;
     event->Record.AddActions()->CopyFrom(MakeAddAction(configItem));
@@ -102,9 +114,10 @@ void Configure(TTenantTestRuntime& runtime, const NKikimrConfig::TTracingConfig&
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
 }
 
-void ConfigureAndWaitUpdate(TTenantTestRuntime& runtime, TConfigUpdatesObserver& updates, const NKikimrConfig::TTracingConfig& cfg, ui32 order) {
+void ConfigureAndWaitUpdate(TTenantTestRuntime& runtime, TConfigUpdatesObserver& updates,
+        const NKikimrConfig::TTracingConfig& cfg, ui32 order, bool userFacing = false) {
     updates.Clear();
-    Configure(runtime, cfg, order);
+    Configure(runtime, cfg, order, userFacing);
     updates.Wait();
 }
 
@@ -205,9 +218,68 @@ struct TTimeProviderMock : public ITimeProvider {
     TInstant Now_;
 };
 
+class THandleTracingActor : public TActorBootstrapped<THandleTracingActor> {
+public:
+    explicit THandleTracingActor(TActorId replyTo)
+        : ReplyTo(replyTo)
+    {}
+
+    void Bootstrap() {
+        const bool dev = static_cast<bool>(HandleTracing({}, {}));
+        const NWilson::TTraceId user = HandleUserFacingTracing({}, {});
+        const ui64 result = static_cast<ui64>(dev)
+            | (static_cast<ui64>(static_cast<bool>(user)) << 1)
+            | (static_cast<ui64>(user.GetVerbosity()) << 8);
+        Send(ReplyTo, new TEvents::TEvWakeup(result));
+        PassAway();
+    }
+
+private:
+    const TActorId ReplyTo;
+};
+
+ui64 HandleTracingOnActorThread(TTenantTestRuntime& runtime) {
+    runtime.Register(new THandleTracingActor(runtime.Sender));
+    return runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(runtime.Sender)->Get()->Tag;
+}
+
 } // namespace anonymous
 
 Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
+    Y_UNIT_TEST(UserFacingConfig) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        TConfigUpdatesObserver updates(runtime);
+        NKikimrConfig::TTracingConfig cfg;
+        auto* rule = cfg.AddSampling();
+        rule->SetFraction(1.0);
+        rule->SetLevel(7);
+        rule->SetMaxTracesBurst(100);
+        rule->SetMaxTracesPerMinute(1'000);
+
+        Configure(runtime, cfg, 1, true);
+        InitJaegerTracingConfigurator(
+            runtime,
+            runtime.GetAppData().UserFacingTracingConfigurator,
+            cfg,
+            static_cast<ui32>(NKikimrConsole::TConfigItem::UserFacingTracingConfigItem),
+            true);
+        updates.Wait();
+
+        ui64 result = HandleTracingOnActorThread(runtime);
+        UNIT_ASSERT(!(result & 1));
+        UNIT_ASSERT(result & 2);
+        UNIT_ASSERT_VALUES_EQUAL(result >> 8, 7);
+
+        cfg.MutableSampling(0)->SetLevel(9);
+        ConfigureAndWaitUpdate(runtime, updates, cfg, 2, true);
+        result = HandleTracingOnActorThread(runtime);
+        UNIT_ASSERT(!(result & 1));
+        UNIT_ASSERT(result & 2);
+        UNIT_ASSERT_VALUES_EQUAL(result >> 8, 9);
+    }
+
     Y_UNIT_TEST(DefaultConfig) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         runtime.SimulateSleep(TDuration::MilliSeconds(100)); // settle down

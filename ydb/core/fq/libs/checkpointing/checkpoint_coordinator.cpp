@@ -260,7 +260,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
 
     NYql::TIssues issues;
     THashMap<ui64, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan> plan;
-    const bool result = NFq::MakeContinueFromStreamingOffsetsPlan(
+    const bool result = MakeContinueFromStreamingOffsetsPlan(
         checkpoint.Graph->GetTasks(),
         GraphParams.GetTasks(),
         StreamingDisposition.from_last_checkpoint().force(),

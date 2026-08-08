@@ -16611,6 +16611,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockWay"] = &BlockWayWrapper;
         Functions["BlockVariant"] = &BlockVariantWrapper;
         Functions["BlockVariantItem"] = &BlockVariantItemWrapper;
+        Functions["BlockDynamicVariant"] = &BlockDynamicVariantWrapper;
         Functions["BlockIf"] = &BlockIfWrapper;
         Functions["BlockJust"] = &BlockJustWrapper;
         Functions["BlockAsStruct"] = &BlockAsStructWrapper;

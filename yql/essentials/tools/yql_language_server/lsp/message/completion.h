@@ -2,7 +2,9 @@
 
 #include "text_document.h"
 
+#include <yql/essentials/utils/json/from.h>
 #include <yql/essentials/utils/json/to.h>
+#include <yql/essentials/utils/meta/reflection.h>
 
 #include <util/generic/string.h>
 #include <util/generic/maybe.h>
@@ -71,6 +73,14 @@ struct TCompletionList {
 };
 
 } // namespace NLsp
+
+namespace NYql::NReflection {
+
+YQL_DEFINE_REFLECTING(NLsp::TMarkupContent, (Kind)(Value));
+YQL_DEFINE_REFLECTING(NLsp::TCompletionItem, (Label)(Kind)(Detail)(Documentation)(FilterText)(InsertText)(InsertTextFormat));
+YQL_DEFINE_REFLECTING(NLsp::TCompletionList, (IsIncomplete)(Items));
+
+} // namespace NYql::NReflection
 
 namespace NYql::NJson {
 

@@ -895,10 +895,6 @@ def _TS_PROTO_CONFIGURE(unit: ymake.Unit) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _TS_PROTO_AUTO_CONFIGURE(unit: ymake.Unit) -> None:
-    in_package_json = _build_directives(["hide", "input"], ["package.json"])
-    out_lockfile = _build_directives(["hide", "output"], ["pnpm-lock.yaml"])
-    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_package_json, out_lockfile])
-
     deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
     unit.onpeerdir([deps_path])
 
@@ -939,6 +935,7 @@ def _PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps, local_cli)
+    outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
     if use_hermetic_node_modules:
         from lib.nots.package_manager import constants
         from lib.nots.package_manager.utils import b_rooted, s_rooted
@@ -978,6 +975,7 @@ def _TS_PROTO_AUTO_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
     pm = _create_pm(unit)
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     _, outs, _ = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
+    outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
     __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
     package_name = unit.get("_TS_PROTO_AUTO_PACKAGE_NAME")
     unit.set(
@@ -1155,9 +1153,16 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
 
         ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed)
 
-        if not _use_hermetic_node_modules(unit):
-            from lib.nots.package_manager.utils import s_rooted
+        from lib.nots.package_manager import constants
+        from lib.nots.package_manager.utils import s_rooted
 
+        source_manifests = {
+            s_rooted(os.path.join(pm.module_path, constants.PACKAGE_JSON_FILENAME)),
+            s_rooted(os.path.join(pm.module_path, constants.PNPM_LOCKFILE_FILENAME)),
+        }
+        ins = [path for path in ins if path not in source_manifests]
+
+        if not _use_hermetic_node_modules(unit):
             # Legacy builders materialize node_modules in the build action and
             # copy pnpm patches from the source tree there. Declare those files
             # explicitly so they are available in a distbuild sandbox.

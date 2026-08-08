@@ -33,6 +33,7 @@ Scramp supports the following mechanisms:
 * [OpenSSF Scorecard](#openssf-scorecard)
 * [Doing A Release Of Scramp](#doing-a-release-of-scramp)
 * [Release Notes](#release-notes)
+  * [Version 1.4.13, 2026-07-23](#version-1413-2026-07-23)
   * [Version 1.4.12, 2026-07-05](#version-1412-2026-07-05)
   * [Version 1.4.11, 2026-07-04](#version-1411-2026-07-04)
   * [Version 1.4.10, 2026-06-27](#version-1410-2026-06-27)
@@ -365,6 +366,15 @@ Run `tox` to make sure all tests pass, then update the release notes, then do:
 
 
 ## Release Notes
+
+### Version 1.4.13, 2026-07-23
+
+- Have a Nonce class for validation.
+- Have a Salt class for validation.
+- Handle exceptions from the auth function.
+- Optional extensions should be ignored.
+- Check for invalid GS2 header.
+
 
 ### Version 1.4.12, 2026-07-05
 

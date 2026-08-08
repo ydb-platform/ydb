@@ -1,26 +1,26 @@
 #include "key_helpers.h"
 
-#include <yt/yt/core/test_framework/framework.h>
-
-#include <yt/yt/client/ypath/rich.h>
-#include <yt/yt/client/ypath/rich_constrained.h>
-
 #include <yt/yt/client/chunk_client/helpers.h>
 
 #include <yt/yt/client/table_client/comparator.h>
 #include <yt/yt/client/table_client/key_bound.h>
+
+#include <yt/yt/client/ypath/rich.h>
+#include <yt/yt/client/ypath/rich_constrained.h>
+
+#include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/yson/parser.h>
 #include <yt/yt/core/yson/writer.h>
 
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/ephemeral_node_factory.h>
+#include <yt/yt/core/ytree/helpers.h>
 #include <yt/yt/core/ytree/node.h>
 #include <yt/yt/core/ytree/tree_builder.h>
 #include <yt/yt/core/ytree/tree_visitor.h>
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/ypath_service.h>
-#include <yt/yt/core/ytree/helpers.h>
 
 #include <util/string/vector.h>
 
@@ -1081,7 +1081,8 @@ TEST(TConstraintRichYPathTest, Context)
     EXPECT_EQ(otherPath, path);
 }
 
-void AssignPathModifyAttributes(auto left, auto right) {
+void AssignPathModifyAttributes(auto left, auto right)
+{
     EXPECT_EQ(right.GetCluster(), std::nullopt);
     left = right;
     right.SetCluster("primary");

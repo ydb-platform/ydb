@@ -65,7 +65,7 @@ public:
     {
     }
 
-    TLocalSyntaxContext Analyze(TCompletionInput input) override {
+    TLocalSyntaxContext Analyze(TCompletionInput input) const override {
         TMaterializedInput materialized = {
             .Text = TString(input.Text),
             .CursorPosition = input.CursorPosition,
@@ -177,7 +177,7 @@ private:
         return resolved;
     }
 
-    TC3Candidates C3Complete(TCompletionInput statement, const TCursorTokenContext& context) {
+    TC3Candidates C3Complete(TCompletionInput statement, const TCursorTokenContext& context) const {
         auto enclosing = context.Enclosing();
 
         size_t caretTokenIndex = context.Cursor.NextTokenIndex;
@@ -408,7 +408,7 @@ private:
     }
 
     NSQLTranslation::ILexer::TPtr Lexer_;
-    TC3Engine<G> C3_;
+    const TC3Engine<G> C3_;
 };
 
 class TLocalSyntaxAnalysis: public ILocalSyntaxAnalysis {
@@ -423,14 +423,14 @@ public:
     {
     }
 
-    TLocalSyntaxContext Analyze(TCompletionInput input) override {
+    TLocalSyntaxContext Analyze(TCompletionInput input) const override {
         auto isAnsiLexer = IsAnsiQuery(TString(input.Text));
         auto& engine = GetSpecializedEngine(isAnsiLexer);
         return engine.Analyze(input);
     }
 
 private:
-    ILocalSyntaxAnalysis& GetSpecializedEngine(bool isAnsiLexer) {
+    const ILocalSyntaxAnalysis& GetSpecializedEngine(bool isAnsiLexer) const {
         if (isAnsiLexer) {
             return AnsiEngine_;
         }

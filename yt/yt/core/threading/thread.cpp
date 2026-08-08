@@ -283,11 +283,10 @@ YT_PREVENT_TLS_CACHING void TThread::ThreadMainTrampoline()
 
     StartedEvent_.NotifyAll();
 
-    YT_LOG_DEBUG(
-        "Initializing thread (ThreadName: %v, ThreadId: %v, FSBase: %v)",
-        ThreadName_,
-        GetSystemThreadId(),
-        FSBase_);
+    YT_TLOG_DEBUG("Initializing thread")
+        .With("ThreadName", ThreadName_)
+        .With("ThreadId", GetSystemThreadId())
+        .With("FSBase", FSBase_);
 
     class TExitInterceptor
     {
@@ -349,11 +348,12 @@ void TThread::SetThreadPriority()
         };
         int result = sched_setscheduler(ThreadId_, SCHED_FIFO, &param);
         if (result == 0) {
-            YT_LOG_DEBUG("Thread real-time priority enabled (ThreadName: %v)",
-                ThreadName_);
+            YT_TLOG_DEBUG("Thread real-time priority enabled")
+                .With("ThreadName", ThreadName_);
         } else {
-            YT_LOG_DEBUG(TError::FromSystem(), "Cannot enable thread real-time priority: sched_setscheduler failed (ThreadName: %v)",
-                ThreadName_);
+            YT_TLOG_DEBUG("Cannot enable thread real-time priority: sched_setscheduler failed")
+                .With("ThreadName", ThreadName_)
+                .With(TError::FromSystem());
         }
     }
 #else

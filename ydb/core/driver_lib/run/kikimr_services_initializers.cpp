@@ -3431,7 +3431,7 @@ void TNbsServiceInitializer::InitializeServices(NActors::TActorSystemSetup *setu
 
 TUdfStoreInitializer::TUdfStoreInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry)
     : IKikimrServicesInitializer(runConfig)
-    , FunctionRegistry(functionRegistry) {
+    , FunctionRegistry(std::move(functionRegistry)) {
 }
 
 void TUdfStoreInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {

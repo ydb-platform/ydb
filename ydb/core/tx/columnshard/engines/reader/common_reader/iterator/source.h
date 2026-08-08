@@ -28,6 +28,8 @@ class IDataReader;
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+using TPKSortPermutation = std::vector<ui64>;
+
 class TFetchingScriptCursor;
 
 class TExecutionContext {

@@ -1,5 +1,7 @@
 #include "source.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
@@ -68,6 +70,33 @@ bool TSourceData::DoStartFetchingAccessor(
     request->RegisterSubscriber(std::make_shared<NCommon::TPortionAccessorFetchingSubscriber>(step, sourcePtr));
     GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
     return true;
+}
+
+NCommon::TPKSortPermutation TSourceData::DoBuildPKSortPermutation() const {
+    // column records are emitted before index records while their entity ids interleave
+    if (!HasAppData() || !AppDataVerified().ColumnShardConfig.GetEnableSysViewOrderByLimitPushdown()) {
+        return {};
+    }
+    const auto& records = GetPortionAccessor().GetRecordsVerified();
+    const auto& indexes = GetPortionAccessor().GetIndexesVerified();
+    std::vector<std::pair<TChunkAddress, ui64>> positions;
+    positions.reserve(records.size() + indexes.size());
+    for (auto&& record : records) {
+        positions.emplace_back(record.GetAddress(), positions.size());
+    }
+    for (auto&& index : indexes) {
+        positions.emplace_back(index.GetAddress(), positions.size());
+    }
+    if (std::is_sorted(positions.begin(), positions.end())) {
+        return {};
+    }
+    std::sort(positions.begin(), positions.end());
+    NCommon::TPKSortPermutation result;
+    result.reserve(positions.size());
+    for (auto&& position : positions) {
+        result.emplace_back(position.second);
+    }
+    return result;
 }
 
 std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {

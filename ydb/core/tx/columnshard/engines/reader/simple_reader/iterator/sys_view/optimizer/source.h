@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract/source.h>
@@ -30,6 +32,10 @@ public:
         , OptimizerTasks(std::move(tasks))
         , ExternalPathId(externalPathId)
     {
+        // task order is planner-specific while the sys view PK requires TaskId ascending
+        if (HasAppData() && AppDataVerified().ColumnShardConfig.GetEnableSysViewOrderByLimitPushdown()) {
+            std::sort(OptimizerTasks.begin(), OptimizerTasks.end());
+        }
     }
 };
 

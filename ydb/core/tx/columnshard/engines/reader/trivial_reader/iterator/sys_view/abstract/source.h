@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/source.h>
 
+#include <ydb/library/formats/arrow/permutations.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NAbstract {
@@ -13,6 +14,7 @@ private:
     YDB_READONLY(ui64, TabletId, 0);
     const NCommon::TReplaceKeyAdapter Start;
     const NCommon::TReplaceKeyAdapter Finish;
+    mutable std::optional<NCommon::TPKSortPermutation> PKSortPermutation;
 
     virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NReader::NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
@@ -30,6 +32,24 @@ private:
 
     virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const = 0;
 
+    // sorted scans require source batches ordered by the sys view PK; a non-empty permutation
+    // reorders every assembled column consistently
+    virtual NCommon::TPKSortPermutation DoBuildPKSortPermutation() const {
+        return {};
+    }
+
+    std::shared_ptr<arrow::Array> BuildOrderedArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {
+        auto array = BuildArrayAccessor(columnId, recordsCount);
+        if (!PKSortPermutation) {
+            PKSortPermutation = DoBuildPKSortPermutation();
+        }
+        if (PKSortPermutation->size()) {
+            AFL_VERIFY(PKSortPermutation->size() == recordsCount)("permutation", PKSortPermutation->size())("records", recordsCount);
+            array = NArrow::CopyRecords(array, *PKSortPermutation);
+        }
+        return array;
+    }
+
     virtual void DoAssembleColumns(const std::shared_ptr<NReader::NCommon::TColumnsSet>& columns, const bool /*sequential*/) override {
         const ui32 recordsCount = GetRecordsCount();
         for (auto&& i : columns->GetColumnIds()) {
@@ -40,7 +60,7 @@ private:
                            std::make_shared<arrow::UInt64Scalar>(0), recordsCount)), true);
             } else {
                 MutableStageData().MutableTable().AddVerified(
-                    i, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildArrayAccessor(i, recordsCount)), true);
+                    i, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildOrderedArrayAccessor(i, recordsCount)), true);
             }
         }
     }
@@ -151,7 +171,7 @@ protected:
                     NArrow::TThreadSimpleArraysCache::GetConst(arrow::uint64(), std::make_shared<arrow::UInt64Scalar>(0), recordsCount)), true);
         } else {
             context.MutableResources().AddVerified(
-                columnId, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildArrayAccessor(columnId, recordsCount)), true);
+                columnId, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildOrderedArrayAccessor(columnId, recordsCount)), true);
         }
     }
 

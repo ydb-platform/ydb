@@ -34,14 +34,6 @@ TCredentialsWaitResult ReadyResult(const NThreading::TFuture<void>& future) {
     }
 }
 
-bool ScheduledSuccessfully(const NThreading::TFuture<bool>& future) {
-    try {
-        return future.GetValue();
-    } catch (...) {
-        return false;
-    }
-}
-
 } // anonymous namespace
 
 NThreading::TFuture<void> TGRpcConnectionsImpl::CredentialsReadyToWaitFor(
@@ -64,28 +56,42 @@ void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
     NThreading::TFuture<void> credentialsReady,
     TCredentialsCallback callback)
 {
+    if (!TryCreateContext(context)) {
+        callback(InitCancelledStatus());
+        return;
+    }
+
     auto cancelled = NThreading::NewPromise<void>();
     if (!credentialsReady.IsReady()) {
-        TryCreateContext(context);
-        if (context) {
-            context->SubscribeCancel([cancelled]() mutable {
-                cancelled.TrySetValue();
-            });
-        } else {
-            cancelled.SetValue();
-        }
-    } else if (context && context->IsCancelled()) {
+        context->SubscribeCancel([cancelled]() mutable {
+            cancelled.TrySetValue();
+        });
+    } else if (context->IsCancelled()) {
         cancelled.SetValue();
     }
 
     auto scheduleContext = context;
+<<<<<<< HEAD
     auto schedule = [this, scheduleContext](TDeadline deadline) {
+=======
+    auto scheduleCallback = [this, scheduleContext, stopState = StopState_]
+        (TDeadline deadline, std::function<void(bool)> callback) {
+        // Future continuations may outlive TGRpcConnectionsImpl. Acquire the guard before
+        // dereferencing this, so destruction either waits for scheduling or prevents it.
+        TSdkCallbackGuard guard(stopState);
+        if (!guard.IsEntered()) {
+            callback(false);
+            return;
+        }
+>>>>>>> 3311ddd5696 (always run callbacks on the completion queue to awoid re-entrant lock… (#49281))
         const auto now = TDeadline::Clock::now();
         const auto timeout = deadline.GetTimePoint() <= now
             ? TDuration::Zero()
             : TDuration::MicroSeconds(std::chrono::duration_cast<std::chrono::microseconds>(
                 deadline.GetTimePoint() - now).count());
-        return ScheduleFuture(timeout, scheduleContext);
+        // Register the callback directly on the alarm. ScheduleFuture(timeout).Subscribe(...)
+        // may run the callback inline when the future becomes ready before Subscribe().
+        ScheduleCallback(timeout, std::move(callback), scheduleContext);
     };
 
     NThreading::TFuture<TCredentialsWaitResult> wait;
@@ -104,35 +110,25 @@ void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
             result.TrySetValue(InitCancelledStatus());
         });
         if (requestSettings.Deadline != TDeadline::Max()) {
-            try {
-                schedule(requestSettings.Deadline).Subscribe(
-                    [result](const NThreading::TFuture<bool>& future) mutable {
-                        result.TrySetValue(ScheduledSuccessfully(future)
-                            ? TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED,
-                                "Request deadline exceeded while waiting for credentials")
-                            : InitCancelledStatus());
-                    });
-            } catch (...) {
-                result.TrySetValue(InitCancelledStatus());
-            }
+            scheduleCallback(requestSettings.Deadline,
+                [result](bool scheduledSuccessfully) mutable {
+                    result.TrySetValue(scheduledSuccessfully
+                        ? TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED,
+                            "Request deadline exceeded while waiting for credentials")
+                        : InitCancelledStatus());
+                });
         }
     }
 
-    wait.Subscribe([callback = std::move(callback), schedule = std::move(schedule)]
+    wait.Subscribe([callback = std::move(callback), scheduleCallback = std::move(scheduleCallback)]
         (const NThreading::TFuture<TCredentialsWaitResult>& future) mutable {
-        NThreading::TFuture<bool> scheduled;
-        try {
-            scheduled = schedule(TDeadline::Now());
-        } catch (...) {
-            callback(InitCancelledStatus());
-            return;
-        }
-        scheduled.Subscribe([callback = std::move(callback), status = future.GetValue()]
-            (const NThreading::TFuture<bool>& future) mutable {
-            callback(ScheduledSuccessfully(future)
-                ? std::move(status)
-                : TCredentialsWaitResult(InitCancelledStatus()));
-        });
+        scheduleCallback(TDeadline::Now(),
+            [callback = std::move(callback), status = future.GetValue()]
+            (bool scheduledSuccessfully) mutable {
+                callback(scheduledSuccessfully
+                    ? std::move(status)
+                    : TCredentialsWaitResult(InitCancelledStatus()));
+            });
     });
 }
 

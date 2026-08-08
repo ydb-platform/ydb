@@ -1,6 +1,6 @@
 # Backup and restore via NFS
 
-This recipe describes preparing NFS for the server commands **`export nfs`** and **`import nfs`**: cluster requirements, access rights, step-by-step configuration of the NFS server and clients, feature flags, performance, and diagnostics. See the reference for command syntax: [export to NFS](../../reference/ydb-cli/export-import/export-nfs.md), [import from NFS](../../reference/ydb-cli/export-import/import-nfs.md).
+This recipe describes preparing NFS for the server commands **`export nfs`** and **`import nfs`**: cluster requirements, access rights, step-by-step configuration of the NFS server and clients, feature flags, performance, and diagnostics. See the reference for command syntax: [export to NFS](../../../reference/ydb-cli/export-import/export-nfs.md), [import from NFS](../../../reference/ydb-cli/export-import/import-nfs.md).
 
 ## Prerequisites {#nfs-prerequisites}
 
@@ -340,7 +340,7 @@ sudo -u ydb rm /mnt/ydb-backup/test-file
 
 ## Feature flags {#nfs-feature-flags}
 
-To use export and import via NFS, you need to enable the `enable_fs_backups` feature flag in the cluster [configuration](../../reference/configuration/feature_flags.md). By default, this flag is **disabled**.
+To use export and import via NFS, you need to enable the `enable_fs_backups` feature flag in the cluster [configuration](../../../reference/configuration/feature_flags.md). By default, this flag is **disabled**.
 
 ## Performance configuration {#nfs-performance}
 
@@ -348,13 +348,13 @@ Two mechanisms affect the performance of export and import operations via NFS: t
 
 ### Resource broker
 
-Export and import via NFS use the same [resource broker](../../reference/configuration/resource_broker_config.md) queues as S3: `queue_backup` for export and `queue_restore` for import. Increasing the limits speeds up operations but increases CPU load. Default values and configuration method are described in the [{#T}](../../reference/configuration/resource_broker_config.md) section.
+Export and import via NFS use the same [resource broker](../../../reference/configuration/resource_broker_config.md) queues as S3: `queue_backup` for export and `queue_restore` for import. Increasing the limits speeds up operations but increases CPU load. Default values and configuration method are described in the [{#T}](../../../reference/configuration/resource_broker_config.md) section.
 
 ### Actor system IO pool
 
-File operations (write during export, read during import) are performed by actors in the pool of the [actor system](../../reference/configuration/actor_system_config.md#tuneconfig). By default, this pool contains `1` thread. Since file system operations are blocking, the `IO` pool can become a bottleneck during intensive export or import.
+File operations (write during export, read during import) are performed by actors in the pool of the [actor system](../../../reference/configuration/actor_system_config.md#tuneconfig). By default, this pool contains `1` thread. Since file system operations are blocking, the `IO` pool can become a bottleneck during intensive export or import.
 
-To increase the number of `threads` in the IO pool, change the parameter in the [actor system configuration](../../reference/configuration/actor_system_config.md#tuneconfig):
+To increase the number of `threads` in the IO pool, change the parameter in the [actor system configuration](../../../reference/configuration/actor_system_config.md#tuneconfig):
 
 
 ```yaml
@@ -373,7 +373,7 @@ Recommendations for choosing the number of IO pool threads when using NFS export
 
 - Start with `2` threads and monitor the load.
 - Keep in mind that the IO pool handles not only NFS operations but also other blocking tasks (e.g., writing logs).
-- Monitor the pool load via the [Embedded UI](../../reference/embedded-ui/ydb-monitoring.md#node_list_page).
+- Monitor the pool load via the [Embedded UI](../../../reference/embedded-ui/ydb-monitoring.md#node_list_page).
 
 {% endnote %}
 
@@ -394,7 +394,7 @@ When diagnosing issues, it is recommended to:
 
 ## Limitations {#nfs-limitations}
 
-- Export and import via NFS support the same object types as export to S3. A detailed list of supported objects is provided in the [export command](../../reference/ydb-cli/export-import/export-nfs.md) documentation.
+- Export and import via NFS support the same object types as export to S3. A detailed list of supported objects is provided in the [export command](../../../reference/ydb-cli/export-import/export-nfs.md) documentation.
 - Import always creates objects from scratch — you cannot import into existing tables.
 - The `--list` parameter for listing export objects is available only for import from S3 in the current version.
 - The operation is not supported on the Windows platform.

@@ -14,17 +14,17 @@ Two main approaches are available:
 
 ## Export and import via federated queries to {{ objstorage-name }} {#objstorage}
 
-[Federated queries](../concepts/query_execution/federated_query/index.md) let {{ ydb-short-name }} read and write data directly in Parquet or CSV files. This method is convenient for running export and import operations using SQL only, without external tools.
+[Federated queries](../../../concepts/query_execution/federated_query/index.md) let {{ ydb-short-name }} read and write data directly in Parquet or CSV files. This method is convenient for running export and import operations using SQL only, without external tools.
 
 ### Prerequisites
 
 - Object storage ({{ objstorage-name }}) and a static access key, for example [{{ objstorage-full-name }}](https://yandex.cloud/en/docs/storage/) with a pre-created bucket (for example, `your-bucket`).
 - Network access from {{ ydb-short-name }} cluster nodes to the object storage. The example uses endpoint `storage.yandexcloud.net` — ensure access to it on port 443.
-- The examples use TPC-H benchmark data. Instructions for loading test data are in the corresponding [section](../reference/ydb-cli/workload-tpch.md) of the guide.
+- The examples use TPC-H benchmark data. Instructions for loading test data are in the corresponding [section](../../../reference/ydb-cli/workload-tpch.md) of the guide.
 
 ### Create a secret for access to {{ objstorage-name }}
 
-To connect to a private bucket, use authentication with static access keys. In {{ ydb-short-name }}, these keys are stored as [secrets](../concepts/datamodel/secrets.md).
+To connect to a private bucket, use authentication with static access keys. In {{ ydb-short-name }}, these keys are stored as [secrets](../../../concepts/datamodel/secrets.md).
 
 ```sql
 CREATE SECRET aws_access_id WITH (value='<access_key_id>');
@@ -123,15 +123,15 @@ Here `tpch/s10/lineitem` is the name of the target table in {{ ydb-short-name }}
 
 ## Export and import with Apache Spark™ {#spark}
 
-Using the [connector](../integrations/query-engines/spark.md) for {{ ydb-short-name }} and Apache Spark™ is a flexible and scalable way to export and import large volumes of data.
+Using the [connector](../../../integrations/query-engines/spark.md) for {{ ydb-short-name }} and Apache Spark™ is a flexible and scalable way to export and import large volumes of data.
 
 ### Prerequisites
 
 - PySpark version 4.0.1 installed; see the [installation guide](https://spark.apache.org/docs/latest/api/python/getting_started/install.html).
-- A [gRPC endpoint](../concepts/connect.md#endpoint) for connecting to the {{ ydb-short-name }} database.
-- [Access credentials](../reference/ydb-cli/connect.md#command-line-pars) for {{ ydb-short-name }} with read/write permissions.
+- A [gRPC endpoint](../../../concepts/connect.md#endpoint) for connecting to the {{ ydb-short-name }} database.
+- [Access credentials](../../../reference/ydb-cli/connect.md#command-line-pars) for {{ ydb-short-name }} with read/write permissions.
 - Network access from {{ ydb-short-name }} cluster nodes to the object storage. The example uses endpoint `storage.yandexcloud.net` — ensure access to it on port 443.
-- The examples use TPC-H benchmark data. Instructions for loading test data are in the corresponding [section](../reference/ydb-cli/workload-tpch.md) of the guide.
+- The examples use TPC-H benchmark data. Instructions for loading test data are in the corresponding [section](../../../reference/ydb-cli/workload-tpch.md) of the guide.
 
 ### Exporting data from {{ ydb-short-name }} to Parquet
 

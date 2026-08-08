@@ -9,6 +9,6 @@
 
 ## См. также
 
-- [Резервное копирование системных таблеток](../../concepts/backup.md#system-tablet-backup) — концепции и принцип работы
-- [Резервное копирование и восстановление](../../devops/backup-and-recovery/index.md#system-tablet-backup) — обзор способов резервного копирования
-- [system_tablet_backup_config](../../reference/configuration/system_tablet_backup_config.md) — параметры конфигурации
+- [Резервное копирование системных таблеток](../../../concepts/backup.md#system-tablet-backup) — концепции и принцип работы
+- [Резервное копирование и восстановление](../../../devops/backup-and-recovery/index.md#system-tablet-backup) — обзор способов резервного копирования
+- [system_tablet_backup_config](../../../reference/configuration/system_tablet_backup_config.md) — параметры конфигурации

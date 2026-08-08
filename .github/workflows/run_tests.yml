@@ -89,8 +89,8 @@ on:
         default: relwithdebinfo
       collect_coredumps:
         type: boolean
-        default: false
-        description: "Collect coredumps via ulimit -c unlimited"
+        default: true
+        description: "Collect coredumps (ulimit -c unlimited); keep only the first 10 dumps"
       test_threads:
         description: 'Test threads count (default: 52; build presets use a fraction of this value)'
         required: false

@@ -61,8 +61,8 @@ inputs:
     description: "add ya make vars with git info"
   collect_coredumps:
     type: boolean
-    default: false
-    description: "Collect coredumps via enabling ulimit -c unlimited"
+    default: true
+    description: "Collect coredumps (ulimit -c unlimited); keep only the first 10 dumps"
   pull_number:
     type: string
     required: false

@@ -73,8 +73,8 @@ inputs:
     description: "Telegram alert chat"
   collect_coredumps:
     type: boolean
-    default: false
-    description: "Collect coredumps via enabling ulimit -c unlimited"
+    default: true
+    description: "Collect coredumps (ulimit -c unlimited); keep only the first 10 dumps"
   pull_number:
     type: string
     required: false
@@ -176,9 +176,17 @@ runs:
         set -ex
         
         if [ "$COLLECT_COREDUMPS" = "true" ]; then
+          COREDUMP_GUARD=/usr/local/sbin/coredump-guard.sh
+          COREDUMP_MAX=10
           sudo mkdir -p /coredumps
+          # Drop leftovers from previous jobs on the same runner.
+          sudo find /coredumps -mindepth 1 -delete
           sudo chmod 1777 /coredumps
-          echo "/coredumps/%p.%s" | sudo tee /proc/sys/kernel/core_pattern
+          echo "$COREDUMP_MAX" | sudo tee /coredumps/.max >/dev/null
+          echo 0 | sudo tee /coredumps/.count >/dev/null
+          sudo install -m 0755 "$(pwd)/.github/scripts/coredump-guard.sh" "$COREDUMP_GUARD"
+          # Pipe pattern: ya recovers via hardcoded /coredumps/%e.%p.%s when pattern starts with '|'.
+          echo "|${COREDUMP_GUARD} %p %s %e" | sudo tee /proc/sys/kernel/core_pattern
           ulimit -c unlimited
         else
           ulimit -c 0

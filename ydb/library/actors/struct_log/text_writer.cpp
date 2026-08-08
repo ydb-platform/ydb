@@ -38,8 +38,19 @@ void TTextWriter::TValueWriter::operator()(const TString& value) const {
     }
     outputText << "=";
     auto str = TTypesMapping::ToString(value);
-    SubstGlobal(str, "\n", " ");
-    outputText << str;
+    if (str.find_first_of(" ='\"\\\n")!=std::string::npos)
+    {
+        outputText << "\"";
+        for(std::string::size_type pos = 0;pos < str.size();pos++) {
+            if (str[pos]=='"') outputText << "\\\"";
+            else if (str[pos]=='\\') outputText << "\\\\";
+            else if (str[pos]=='\n') outputText << "\\n";
+            else outputText << str[pos];
+        }
+        outputText << "\"";
+    } else {
+        outputText << str;
+    }
 }
 
 }  // namespace NActors::NStructuredLog

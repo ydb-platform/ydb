@@ -714,6 +714,13 @@ void TReshardTableCommand::Register(TRegistrar registrar)
         })
         .Default();
 
+    registrar.ParameterWithUniversalAccessor<std::vector<i64>>(
+        "cumulative_data_weights",
+        [] (TThis* command) -> auto& {
+            return command->Options.CumulativeDataWeights;
+        })
+        .Default();
+
     registrar.Postprocessor([] (TThis* command) {
         if (command->PivotKeys && command->TabletCount) {
             THROW_ERROR_EXCEPTION("Cannot specify both \"pivot_keys\" and \"tablet_count\"");

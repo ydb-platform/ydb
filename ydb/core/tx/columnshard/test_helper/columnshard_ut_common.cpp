@@ -648,7 +648,7 @@ NTxUT::TPlanStep SetupSchema(
 }
 
 NTxUT::TPlanStep PrepareTablet(
-    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
+    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize, bool standalone) {
     using namespace NTxUT;
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
@@ -658,6 +658,7 @@ NTxUT::TPlanStep PrepareTablet(
 
     TestTableDescription tableDescription;
     tableDescription.Schema = schema;
+    tableDescription.InStore = !standalone;
     tableDescription.Pk = {};
     for (ui64 i = 0; i < keySize; ++i) {
         Y_ABORT_UNLESS(i < schema.size());

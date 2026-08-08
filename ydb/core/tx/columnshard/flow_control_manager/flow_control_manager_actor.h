@@ -81,13 +81,14 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     //    let growth fire at the shard fan-out rate;
     //  * ceiling: AnchorFactor × the throughput FCM actually admits — the rate can never
     //    run far above reality (no absolute config nail; the anchor is measured).
+    // Seeded from TFlowControlConfig in the constructor (and refreshed by SyncDrainBounds).
     double Tokens = 0.0;
-    double RefillRateR = 10.0;
-    double RMin = 0.0;   // 0 => unset => EffectiveRMin() clamps to a tiny floor (no config nail)
-    double RMax = 0.0;   // 0 => unset => EffectiveRMax() is +inf
-    double AimdBeta = 0.5;
-    double CubicRecoveryTargetSec = 10.0;
-    double CubicProbePercent = 5.0;
+    double RefillRateR = 0.0;
+    double RMin = 0.0;
+    double RMax = 0.0;   // 0 => no limit => EffectiveRMax() is +inf
+    double AimdBeta = 0.0;
+    double CubicRecoveryTargetSec = 0.0;
+    double CubicProbePercent = 0.0;
     TInstant LastRefillAt;
     bool DrainWakeupScheduled = false;
 
@@ -95,10 +96,10 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     // wait queue. A waiter is released only when BOTH buckets have enough tokens, so small
     // batches are gated by the count bucket and large batches by the bytes bucket.
     double TokensBytes = 0.0;
-    double RefillRateBytesR = 10'000'000.0;   // bytes/sec
-    double RMinBytes = 0.0;   // 0 => unset
-    double RMaxBytes = 0.0;   // 0 => unset
-    double AimdBetaBytes = 0.5;
+    double RefillRateBytesR = 0.0;   // bytes/sec
+    double RMinBytes = 0.0;
+    double RMaxBytes = 0.0;   // 0 => no limit
+    double AimdBetaBytes = 0.0;
     TInstant LastRefillBytesAt;
 
     // CUBIC epoch (shared wall-clock origin for both buckets after a meaningful cut).
@@ -216,8 +217,8 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     // wait-queue knobs are already read live.
     void SyncDrainBounds();
 
-    // Unset (0) bounds mean "no limit": a usable floor so cuts cannot freeze the wait queue
-    // (0.001 req/s or 1 B/s needs minutes-to-days to release one batch), +inf ceiling.
+    // RMin* of 0 (UT-only) keeps a tiny floor so cuts cannot freeze the wait queue.
+    // RMax* of 0 means no limit (+inf), matching DrainRateMax / DrainRateMaxBytes in config.
     double EffectiveRMin() const {
         return RMin > 0.0 ? RMin : 1.0;
     }

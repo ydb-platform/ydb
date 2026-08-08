@@ -2846,7 +2846,7 @@ message TColumnShardConfig {
         optional uint32 DrainJitterMaxMs = 6 [default = 250];
         optional double DrainAimdBeta = 7 [default = 0.8];
         optional double DrainCubicRecoveryTargetSec = 8 [default = 10];
-        optional double DrainCubicProbePercent = 9 [default = 5];
+        optional double DrainCubicProbePercent = 9 [default = 8];
         optional double DrainRateMin = 10 [default = 5];
         optional double DrainRateMax = 11 [default = 0];
         optional double DrainRateStart = 12 [default = 50];

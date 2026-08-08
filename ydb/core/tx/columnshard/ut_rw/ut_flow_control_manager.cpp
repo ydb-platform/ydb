@@ -1,6 +1,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_events.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
@@ -33,6 +34,21 @@ using namespace NColumnShard;
 using namespace NColumnShard::NFlowControl;
 using namespace NLongTxService;
 using namespace NTxUT;
+
+// FlowControl Get* applies proto defaults for every unset field, so tests that flip one
+// knob via MutableFlowControl must also nail the drain params they care about.
+void ApplyDrainParamsToFlowControl(
+    NKikimrConfig::TColumnShardConfig::TFlowControlConfig* fc, const TFlowControlManagerServiceOperator::TDrainRateParams& p) {
+    fc->SetDrainRateMin(p.RMin);
+    fc->SetDrainRateMax(p.RMax);
+    fc->SetDrainRateStart(p.RStart);
+    fc->SetDrainAimdBeta(p.AimdBeta);
+    fc->SetDrainCubicRecoveryTargetSec(p.CubicRecoveryTargetSec);
+    fc->SetDrainCubicProbePercent(p.CubicProbePercent);
+    fc->SetDrainRateMinBytes(p.RMinBytes);
+    fc->SetDrainRateMaxBytes(p.RMaxBytes);
+    fc->SetDrainRateStartBytes(p.RStartBytes);
+}
 
 class TStartLongTxWriteActor: public TActorBootstrapped<TStartLongTxWriteActor> {
 public:
@@ -132,8 +148,8 @@ public:
         // Drain rate params: leave process defaults (or whatever the test set before construction);
         // FCM copies them at RegisterServices time.
         TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), 1024);
-        // Pin the wait-timeout percent to the historical UT default (50%) so tests are deterministic
-        // regardless of the process-wide default (which now matches production tuning at 10%).
+        // Pin wait/delayed-reject percents so tests stay deterministic even if process-wide
+        // defaults change; production defaults are WaitTimeoutPercent=50 / DelayedReject=20.
         TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(50);
         // Delayed-reject percent controls the delay before OVERLOADED is sent from the delayed-reject
         // queue; pin it to 10% so delayed-reject tests are deterministic.
@@ -1168,12 +1184,12 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmValue("FlowControl/Drain/RefillRate"), 100);
     }
 
-    // A partial FlowControl YAML (queue sizes only) must NOT apply protobuf DrainRateMax
-    // defaults as a silent nail: unset HasDrainRateMax ⇒ RMax stays 0 (no ceiling).
+    // Proto DrainRateMax / DrainRateMaxBytes default to 0 = no limit. A partial FlowControl
+    // YAML (queue knobs only) must keep that no-limit semantics (not invent a rate ceiling).
     Y_UNIT_TEST(UnsetDrainRateMaxDoesNotCapFromProtoDefault) {
         TFlowControlManagerServiceOperator::TDrainRateParams drain;
         drain.RMin = 0.0;
-        drain.RMax = 0.0;   // unset
+        drain.RMax = 0.0;   // no limit
         drain.RStart = 200.0;
         drain.CubicProbePercent = 0.0;
         TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
@@ -1189,9 +1205,9 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         fc->SetMaxDelayedRejectQueueSize(5000);
         fc->SetDelayedRejectTimeoutPercent(10);
         UNIT_ASSERT(!fc->HasDrainRateMax());
-        UNIT_ASSERT(!fc->HasDrainRateMin());
         UNIT_ASSERT(!fc->HasDrainRateMaxBytes());
-        UNIT_ASSERT(!fc->HasDrainRateMinBytes());
+        UNIT_ASSERT_VALUES_EQUAL(fc->GetDrainRateMax(), 0.0);
+        UNIT_ASSERT_VALUES_EQUAL(fc->GetDrainRateMaxBytes(), 0.0);
 
         const ui64 tabletA = TTestTxConfig::TxTablet0;
         const ui32 nodeA = 42;
@@ -1201,17 +1217,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         runtime.AdvanceCurrentTime(TDuration::MilliSeconds(50));
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
 
-        // Seeded 200 must remain; old bug clamped to proto default 500's absence as 500,
-        // or would have left rate alone — assert we did NOT invent a 500 cap by reading
-        // GetDrainRateMax() without Has*. Rate stays at construction seed 200.
+        // Live rate seeded at 200 stays: proto RMax default 0 means no ceiling.
         UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmValue("FlowControl/Drain/RefillRate"), 200);
-
-        // And GetDrainRateParams reports unset max for both buckets.
-        const auto params = TFlowControlManagerServiceOperator::GetDrainRateParams();
-        UNIT_ASSERT_VALUES_EQUAL(params.RMax, 0.0);
-        UNIT_ASSERT_VALUES_EQUAL(params.RMin, 0.0);
-        UNIT_ASSERT_VALUES_EQUAL(params.RMaxBytes, 0.0);
-        UNIT_ASSERT_VALUES_EQUAL(params.RMinBytes, 0.0);
     }
 
     // Shared CUBIC probe / beta from FlowControl apply to BOTH count and bytes buckets.
@@ -1231,9 +1238,10 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         env.EnableSchedulesForAllActors();
         TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), 1024);
 
-        auto* fc = runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl();
-        fc->SetDrainCubicProbePercent(10.0);   // +10% of Wmax both buckets
-        fc->SetDrainAimdBeta(0.5);
+        // Config must carry the full drain knobs: Get* fills unset fields from proto defaults.
+        drain.CubicProbePercent = 10.0;   // +10% of Wmax both buckets
+        drain.AimdBeta = 0.5;
+        ApplyDrainParamsToFlowControl(runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl(), drain);
 
         const ui64 tabletA = TTestTxConfig::TxTablet0;
         const ui32 nodeA = 42;
@@ -1272,8 +1280,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         TFlowControlManagerTestEnv env(runtime);
         env.EnableSchedulesForAllActors();
 
-        auto* fc = runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl();
-        fc->SetDrainRateMaxBytes(100'000'000.0);
+        drain.RMaxBytes = 100'000'000.0;
+        ApplyDrainParamsToFlowControl(runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl(), drain);
 
         const ui32 nodeA = 42;
         env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
@@ -1396,7 +1404,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmValue("FlowControl/Drain/RefillRate"), 1000);
 
         // RMin was holding the anchor floor at the start rate; let it act.
-        runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl()->SetDrainRateMin(1.0);
+        drain.RMin = 1.0;
+        ApplyDrainParamsToFlowControl(runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl(), drain);
         for (int i = 0; i < 100; ++i) {
             runtime.AdvanceCurrentTime(TDuration::MilliSeconds(100));
             runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
@@ -1540,8 +1549,10 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             }
 
             // Drop RMin so the dirty-cohort cut can land; hot edge was clamped away above.
-            runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl()->SetDrainRateMin(0.1);
-            runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl()->SetDrainRateMinBytes(1.0);
+            // Nail the full drain knobs — Get* would otherwise fill unset fields from proto defaults.
+            drain.RMin = 0.1;
+            drain.RMinBytes = 1.0;
+            ApplyDrainParamsToFlowControl(runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl(), drain);
             const ui64 cutTarget = Max<ui64>(1, static_cast<ui64>(std::ceil(wmax)));
             for (ui64 i = 0; i < cutTarget; ++i) {
                 env.SendWriteOutcome(tabletA, nodeA, /*overloaded=*/true);
@@ -1556,9 +1567,9 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmValue("FlowControl/Drain/RefillRate"), afterCut);
 
             // Re-open a cohort without lowering rate: RMin = afterCut clamps the hot cut.
-            runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl()->SetDrainRateMin(static_cast<double>(afterCut));
-            runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl()->SetDrainRateMinBytes(
-                static_cast<double>(env.ReadFcmValue("FlowControl/Drain/RefillRateBytes")));
+            drain.RMin = static_cast<double>(afterCut);
+            drain.RMinBytes = static_cast<double>(env.ReadFcmValue("FlowControl/Drain/RefillRateBytes"));
+            ApplyDrainParamsToFlowControl(runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl(), drain);
             env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED, /*generation=*/2);
             runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
             UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmValue("FlowControl/Drain/RefillRate"), afterCut);
@@ -1625,7 +1636,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             UNIT_ASSERT_VALUES_EQUAL((int)drained->Get()->GetDecision(), (int)EAdmitDecision::Allow);
         }
         // Drop RMin so the in-cohort cut can land below start (config picked up on outcome Sync).
-        runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl()->SetDrainRateMin(1.0);
+        drain.RMin = 1.0;
+        ApplyDrainParamsToFlowControl(runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl(), drain);
         for (int i = 0; i < 100; ++i) {
             env.SendWriteOutcome(tabletA, nodeA, /*overloaded=*/true);
         }
@@ -1642,7 +1654,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         runtime.AdvanceCurrentTime(TDuration::MilliSeconds(static_cast<ui64>(kTarget * 1000) + 100));
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
         // Raise RMin so the empty→hot AimdBeta cut clamps to RStart instead of cutting further.
-        runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl()->SetDrainRateMin(100.0);
+        drain.RMin = 100.0;
+        ApplyDrainParamsToFlowControl(runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl(), drain);
         env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED, /*generation=*/2);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
         UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);

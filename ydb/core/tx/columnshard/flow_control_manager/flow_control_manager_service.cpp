@@ -14,28 +14,38 @@ namespace NKikimr::NColumnShard::NFlowControl {
 
 namespace {
 
-// Process-wide defaults / UT overrides (used when ColumnShardConfig.FlowControl is unset).
-std::atomic<ui64> DrainJitterMinMs{ 50 };
-std::atomic<ui64> DrainJitterMaxMs{ 250 };
-std::atomic<ui64> MaxWaitQueueSize{ 500 };
-std::atomic<ui64> MaxDelayedRejectQueueSize{ 5000 };
-std::atomic<ui32> WaitTimeoutPercent{ 10 };
-std::atomic<ui32> DelayedRejectTimeoutPercent{ 10 };
+using TFlowControlConfig = NKikimrConfig::TColumnShardConfig::TFlowControlConfig;
 
-// Count bucket. RMin/RMax default to 0 = unset (no floor / no ceiling); the actor's
-// EffectiveRMin()/EffectiveRMax() supply a 1 req/s floor and +inf ceiling in that case.
+// Single source of truth for production defaults: protobuf field defaults on TFlowControlConfig.
+const TFlowControlConfig& DefaultFlowControlConfig() {
+    static const TFlowControlConfig defaults;
+    return defaults;
+}
+
+// UT-only overrides when ColumnShardConfig.FlowControl is absent. Production never sets these;
+// Reset clears the flags and Get* falls back to DefaultFlowControlConfig().
+std::atomic<bool> UtWaitQueueOverrides{ false };
+std::atomic<bool> UtWaitTimeoutOverrides{ false };
+std::atomic<bool> UtDelayedRejectTimeoutOverrides{ false };
+std::atomic<bool> UtDrainOverrides{ false };
+
+std::atomic<ui64> DrainJitterMinMs{ 0 };
+std::atomic<ui64> DrainJitterMaxMs{ 0 };
+std::atomic<ui64> MaxWaitQueueSize{ 0 };
+std::atomic<ui64> MaxDelayedRejectQueueSize{ 0 };
+std::atomic<ui32> WaitTimeoutPercent{ 0 };
+std::atomic<ui32> DelayedRejectTimeoutPercent{ 0 };
+
 std::atomic<ui64> DrainRMinMilli{ 0 };
 std::atomic<ui64> DrainRMaxMilli{ 0 };
-std::atomic<ui64> DrainRStartMilli{ 50'000 };
-std::atomic<ui64> DrainAimdBetaMilli{ 500 };
-std::atomic<ui64> DrainCubicRecoveryTargetSecMilli{ 10'000 };   // 10.0 s
-std::atomic<ui64> DrainCubicProbePercentMilli{ 5'000 };   // 5.0 %
+std::atomic<ui64> DrainRStartMilli{ 0 };
+std::atomic<ui64> DrainAimdBetaMilli{ 0 };
+std::atomic<ui64> DrainCubicRecoveryTargetSecMilli{ 0 };
+std::atomic<ui64> DrainCubicProbePercentMilli{ 0 };
 
-// Bytes bucket. Same unset-bound semantics. Encoded in the same milli-rate units.
 std::atomic<ui64> DrainRMinBytesMilli{ 0 };
 std::atomic<ui64> DrainRMaxBytesMilli{ 0 };
-std::atomic<ui64> DrainRStartBytesMilli{ 10'000'000'000 };   // 10 MB/sec
-std::atomic<ui64> DrainAimdBetaBytesMilli{ 500 };   // 0.5 (mirrors count)
+std::atomic<ui64> DrainRStartBytesMilli{ 0 };
 
 double MilliToRate(ui64 milli) {
     return static_cast<double>(milli) / 1000.0;
@@ -52,14 +62,63 @@ ui32 ClampPercent(ui32 percent) {
     return Max<ui32>(1, Min<ui32>(100, percent));
 }
 
-const NKikimrConfig::TColumnShardConfig::TFlowControlConfig* FlowControlConfigOrNull() {
+const TFlowControlConfig* FlowControlConfigOrNull() {
     if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasFlowControl()) {
         return nullptr;
     }
     return &AppDataVerified().ColumnShardConfig.GetFlowControl();
 }
 
+// Start <= 0 in config means "use proto default" (configs often nail 0 for unset).
+double PositiveOrDefaultStart(double configured, double protoDefault) {
+    return configured > 0.0 ? configured : protoDefault;
+}
+
+void FillFromConfig(TFlowControlManagerServiceOperator::TDrainRateParams& params, const TFlowControlConfig& cfg) {
+    const auto& defaults = DefaultFlowControlConfig();
+    params.RMin = cfg.GetDrainRateMin();
+    // 0 = no limit (EffectiveRMax → +inf).
+    params.RMax = cfg.GetDrainRateMax();
+    params.RStart = PositiveOrDefaultStart(cfg.GetDrainRateStart(), defaults.GetDrainRateStart());
+    params.AimdBeta = cfg.GetDrainAimdBeta();
+    params.CubicRecoveryTargetSec = cfg.GetDrainCubicRecoveryTargetSec();
+    params.CubicProbePercent = cfg.GetDrainCubicProbePercent();
+    params.RMinBytes = cfg.GetDrainRateMinBytes();
+    // 0 = no limit (EffectiveRMaxBytes → +inf).
+    params.RMaxBytes = cfg.GetDrainRateMaxBytes();
+    params.RStartBytes = PositiveOrDefaultStart(cfg.GetDrainRateStartBytes(), defaults.GetDrainRateStartBytes());
+    params.AimdBetaBytes = params.AimdBeta;
+}
+
+TFlowControlManagerServiceOperator::TDrainRateParams ParamsFromConfig(const TFlowControlConfig& cfg) {
+    TFlowControlManagerServiceOperator::TDrainRateParams params;
+    FillFromConfig(params, cfg);
+    return params;
+}
+
+void FillFromUtAtomics(TFlowControlManagerServiceOperator::TDrainRateParams& params) {
+    params.RMin = MilliToRate(DrainRMinMilli.load());
+    params.RMax = MilliToRate(DrainRMaxMilli.load());
+    params.RStart = MilliToRate(DrainRStartMilli.load());
+    params.AimdBeta = MilliToRate(DrainAimdBetaMilli.load());
+    params.CubicRecoveryTargetSec = MilliToRate(DrainCubicRecoveryTargetSecMilli.load());
+    params.CubicProbePercent = MilliToRate(DrainCubicProbePercentMilli.load());
+    params.RMinBytes = MilliToRate(DrainRMinBytesMilli.load());
+    params.RMaxBytes = MilliToRate(DrainRMaxBytesMilli.load());
+    params.RStartBytes = MilliToRate(DrainRStartBytesMilli.load());
+    params.AimdBetaBytes = params.AimdBeta;
+}
+
 }   // namespace
+
+TFlowControlManagerServiceOperator::TDrainRateParams::TDrainRateParams() {
+    // Avoid calling Defaults()/ParamsFromConfig here — those construct TDrainRateParams.
+    FillFromConfig(*this, DefaultFlowControlConfig());
+}
+
+TFlowControlManagerServiceOperator::TDrainRateParams TFlowControlManagerServiceOperator::TDrainRateParams::Defaults() {
+    return ParamsFromConfig(DefaultFlowControlConfig());
+}
 
 NActors::TActorId TFlowControlManagerServiceOperator::MakeServiceId(ui32 nodeId) {
     return NActors::TActorId(nodeId, "FlowCtrlMng");
@@ -74,44 +133,60 @@ ui64 TFlowControlManagerServiceOperator::GetMaxWaitQueueSize() {
     if (const auto* cfg = FlowControlConfigOrNull()) {
         return cfg->GetMaxWaitQueueSize();
     }
-    return MaxWaitQueueSize.load();
+    if (UtWaitQueueOverrides.load()) {
+        return MaxWaitQueueSize.load();
+    }
+    return DefaultFlowControlConfig().GetMaxWaitQueueSize();
 }
 
 ui64 TFlowControlManagerServiceOperator::GetMaxDelayedRejectQueueSize() {
     if (const auto* cfg = FlowControlConfigOrNull()) {
-        if (cfg->HasMaxDelayedRejectQueueSize()) {
-            return cfg->GetMaxDelayedRejectQueueSize();
-        }
+        return cfg->GetMaxDelayedRejectQueueSize();
     }
-    return MaxDelayedRejectQueueSize.load();
+    if (UtWaitQueueOverrides.load()) {
+        return MaxDelayedRejectQueueSize.load();
+    }
+    return DefaultFlowControlConfig().GetMaxDelayedRejectQueueSize();
 }
 
 TDuration TFlowControlManagerServiceOperator::GetDrainJitterMin() {
     if (const auto* cfg = FlowControlConfigOrNull()) {
         return TDuration::MilliSeconds(cfg->GetDrainJitterMinMs());
     }
-    return TDuration::MilliSeconds(DrainJitterMinMs.load());
+    if (UtWaitQueueOverrides.load()) {
+        return TDuration::MilliSeconds(DrainJitterMinMs.load());
+    }
+    return TDuration::MilliSeconds(DefaultFlowControlConfig().GetDrainJitterMinMs());
 }
 
 TDuration TFlowControlManagerServiceOperator::GetDrainJitterMax() {
     if (const auto* cfg = FlowControlConfigOrNull()) {
         return TDuration::MilliSeconds(cfg->GetDrainJitterMaxMs());
     }
-    return TDuration::MilliSeconds(DrainJitterMaxMs.load());
+    if (UtWaitQueueOverrides.load()) {
+        return TDuration::MilliSeconds(DrainJitterMaxMs.load());
+    }
+    return TDuration::MilliSeconds(DefaultFlowControlConfig().GetDrainJitterMaxMs());
 }
 
 ui32 TFlowControlManagerServiceOperator::GetWaitTimeoutPercent() {
     if (const auto* cfg = FlowControlConfigOrNull()) {
         return ClampPercent(cfg->GetWaitTimeoutPercent());
     }
-    return ClampPercent(WaitTimeoutPercent.load());
+    if (UtWaitTimeoutOverrides.load()) {
+        return ClampPercent(WaitTimeoutPercent.load());
+    }
+    return ClampPercent(DefaultFlowControlConfig().GetWaitTimeoutPercent());
 }
 
 ui32 TFlowControlManagerServiceOperator::GetDelayedRejectTimeoutPercent() {
     if (const auto* cfg = FlowControlConfigOrNull()) {
         return ClampPercent(cfg->GetDelayedRejectTimeoutPercent());
     }
-    return ClampPercent(DelayedRejectTimeoutPercent.load());
+    if (UtDelayedRejectTimeoutOverrides.load()) {
+        return ClampPercent(DelayedRejectTimeoutPercent.load());
+    }
+    return ClampPercent(DefaultFlowControlConfig().GetDelayedRejectTimeoutPercent());
 }
 
 TDuration TFlowControlManagerServiceOperator::GetMaxWaitDuration(TDuration operationTimeout) {
@@ -126,55 +201,18 @@ TInstant TFlowControlManagerServiceOperator::ComputeWaitDeadline(TInstant deadli
 }
 
 TFlowControlManagerServiceOperator::TDrainRateParams TFlowControlManagerServiceOperator::GetDrainRateParams() {
-    // Start from process-wide atomics (0 RMin/RMax = unset). Overlay only fields explicitly
-    // set on ColumnShardConfig.FlowControl (Has*). DrainAimdBeta / CUBIC knobs are shared
-    // across count and bytes — no separate bytes AIMD/CUBIC config.
-    TDrainRateParams params;
-    params.RMin = MilliToRate(DrainRMinMilli.load());
-    params.RMax = MilliToRate(DrainRMaxMilli.load());
-    params.RStart = MilliToRate(DrainRStartMilli.load());
-    params.AimdBeta = MilliToRate(DrainAimdBetaMilli.load());
-    params.CubicRecoveryTargetSec = MilliToRate(DrainCubicRecoveryTargetSecMilli.load());
-    params.CubicProbePercent = MilliToRate(DrainCubicProbePercentMilli.load());
-    params.RMinBytes = MilliToRate(DrainRMinBytesMilli.load());
-    params.RMaxBytes = MilliToRate(DrainRMaxBytesMilli.load());
-    params.RStartBytes = MilliToRate(DrainRStartBytesMilli.load());
-
+    // Prefer live ColumnShardConfig.FlowControl (Get* ⇒ proto defaults for unset fields).
+    // Else UT drain overrides, else default-constructed TFlowControlConfig.
+    // DrainRateMax / DrainRateMaxBytes of 0 mean no limit.
     if (const auto* cfg = FlowControlConfigOrNull()) {
-        if (cfg->HasDrainRateMin()) {
-            params.RMin = cfg->GetDrainRateMin();
-        }
-        if (cfg->HasDrainRateMax()) {
-            params.RMax = cfg->GetDrainRateMax();
-        }
-        // Start <= 0 means unset (proto default for StartBytes is 0; configs often nail 0
-        // meaning "default"). Applying 0 cold-starts the actor at EffectiveRMin* and stalls
-        // the wait queue after a process restart.
-        if (cfg->HasDrainRateStart() && cfg->GetDrainRateStart() > 0.0) {
-            params.RStart = cfg->GetDrainRateStart();
-        }
-        if (cfg->HasDrainAimdBeta()) {
-            params.AimdBeta = cfg->GetDrainAimdBeta();
-        }
-        if (cfg->HasDrainCubicRecoveryTargetSec()) {
-            params.CubicRecoveryTargetSec = cfg->GetDrainCubicRecoveryTargetSec();
-        }
-        if (cfg->HasDrainCubicProbePercent()) {
-            params.CubicProbePercent = cfg->GetDrainCubicProbePercent();
-        }
-        if (cfg->HasDrainRateMinBytes()) {
-            params.RMinBytes = cfg->GetDrainRateMinBytes();
-        }
-        if (cfg->HasDrainRateMaxBytes()) {
-            params.RMaxBytes = cfg->GetDrainRateMaxBytes();
-        }
-        if (cfg->HasDrainRateStartBytes() && cfg->GetDrainRateStartBytes() > 0.0) {
-            params.RStartBytes = cfg->GetDrainRateStartBytes();
-        }
+        return ParamsFromConfig(*cfg);
     }
-
-    params.AimdBetaBytes = params.AimdBeta;
-    return params;
+    if (UtDrainOverrides.load()) {
+        TDrainRateParams params;
+        FillFromUtAtomics(params);
+        return params;
+    }
+    return ParamsFromConfig(DefaultFlowControlConfig());
 }
 
 void TFlowControlManagerServiceOperator::SetWaitQueueParams(
@@ -186,19 +224,21 @@ void TFlowControlManagerServiceOperator::SetWaitQueueParams(
     DrainJitterMaxMs.store(drainJitterMax.MilliSeconds());
     MaxWaitQueueSize.store(maxWaitQueueSize);
     MaxDelayedRejectQueueSize.store(maxDelayedRejectQueueSize);
+    UtWaitQueueOverrides.store(true);
 }
 
 void TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(ui32 percent) {
     WaitTimeoutPercent.store(ClampPercent(percent));
+    UtWaitTimeoutOverrides.store(true);
 }
 
 void TFlowControlManagerServiceOperator::SetDelayedRejectTimeoutPercent(ui32 percent) {
     DelayedRejectTimeoutPercent.store(ClampPercent(percent));
+    UtDelayedRejectTimeoutOverrides.store(true);
 }
 
 void TFlowControlManagerServiceOperator::SetDrainRateParams(const TDrainRateParams& params) {
-    // Count bucket. RMin/RMax of 0 mean "unset" and are stored verbatim (RateToMilli(0)==0);
-    // only clamp/order them when a caller actually set positive bounds.
+    // Count bucket. RMax of 0 means no limit and is stored verbatim.
     const double rMin = Max(0.0, params.RMin);
     const double rMax = params.RMax > 0.0 ? Max(rMin, params.RMax) : 0.0;
     const double rStartLo = rMin > 0.0 ? rMin : 1.0;
@@ -216,7 +256,6 @@ void TFlowControlManagerServiceOperator::SetDrainRateParams(const TDrainRatePara
     DrainCubicRecoveryTargetSecMilli.store(RateToMilli(kTarget));
     DrainCubicProbePercentMilli.store(RateToMilli(probePct));
 
-    // Bytes bucket bounds/start. Beta is shared with the count bucket.
     const double rMinB = Max(0.0, params.RMinBytes);
     const double rMaxB = params.RMaxBytes > 0.0 ? Max(rMinB, params.RMaxBytes) : 0.0;
     const double rStartBLo = rMinB > 0.0 ? rMinB : 1'000'000.0;
@@ -227,13 +266,14 @@ void TFlowControlManagerServiceOperator::SetDrainRateParams(const TDrainRatePara
     DrainRMinBytesMilli.store(RateToMilli(rMinB));
     DrainRMaxBytesMilli.store(RateToMilli(rMaxB));
     DrainRStartBytesMilli.store(RateToMilli(rStartB));
-    DrainAimdBetaBytesMilli.store(RateToMilli(beta));
+    UtDrainOverrides.store(true);
 }
 
 void TFlowControlManagerServiceOperator::ResetDrainRateParamsToDefaults() {
-    SetDrainRateParams(TDrainRateParams{});
-    WaitTimeoutPercent.store(50);
-    DelayedRejectTimeoutPercent.store(10);
+    UtDrainOverrides.store(false);
+    UtWaitQueueOverrides.store(false);
+    UtWaitTimeoutOverrides.store(false);
+    UtDelayedRejectTimeoutOverrides.store(false);
 }
 
 TDuration TFlowControlManagerServiceOperator::PickDrainJitter() {

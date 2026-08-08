@@ -294,8 +294,8 @@ void TFlowControlManager::SyncDrainBounds() {
     AimdBeta = params.AimdBeta;
     CubicRecoveryTargetSec = params.CubicRecoveryTargetSec;
     CubicProbePercent = params.CubicProbePercent;
-    // Keep the live rate inside the (possibly updated) bounds. Unset bounds (0) become a
-    // tiny floor / +inf ceiling via EffectiveR*, so an unset config never pins the rate.
+    // Keep the live rate inside the (possibly updated) bounds. RMax* of 0 means no limit
+    // (+inf via EffectiveRMax*); RMin* of 0 keeps a tiny UT floor via EffectiveRMin*.
     RefillRateR = Min(EffectiveRMax(), Max(EffectiveRMin(), RefillRateR));
 
     RMinBytes = params.RMinBytes;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/events.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
@@ -28,10 +29,41 @@ struct TEvIncrementalRestoreScan {
     struct TEvNoMoreData: public TEventLocal<TEvNoMoreData, EvNoMoreData> {};
     struct TEvFinished: public TEventLocal<TEvFinished, EvFinished> {
         TEvFinished() = default;
-        TEvFinished(ui64 txId) : TxId(txId) {}
-        ui64 TxId;
+        TEvFinished(ui64 txId, bool success = true, const TString& error = "",
+                    NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::EEndStatus endStatus =
+                        NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_UNSPECIFIED)
+            : TxId(txId)
+            , Success(success)
+            , Error(error)
+            , EndStatus(endStatus)
+        {}
+        ui64 TxId = 0;
+        bool Success = true;
+        TString Error;
+        NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::EEndStatus EndStatus =
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_UNSPECIFIED;
     };
 };
+
+inline bool IsScanSuccess(NTable::EStatus status) {
+    return status == NTable::EStatus::Done;
+}
+
+// Maps a scan termination cause to the wire-level enum.
+inline NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::EEndStatus MapScanStatus(NTable::EStatus s) {
+    switch (s) {
+        case NTable::EStatus::Done:
+            return NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_SUCCESS;
+        case NTable::EStatus::Term:
+            return NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_TRANSIENT_FAILURE;
+        case NTable::EStatus::Lost:
+        case NTable::EStatus::StorageError:
+        case NTable::EStatus::Exception:
+            return NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE;
+        default:
+            return NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_UNSPECIFIED;
+    }
+}
 
 THolder<NTable::IScan> CreateIncrementalRestoreScan(
         NActors::TActorId parent,

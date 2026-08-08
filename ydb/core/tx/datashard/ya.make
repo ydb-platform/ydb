@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/library/nmslib/include
+)
+
 SRCS(
     alter_cdc_stream_unit.cpp
     alter_table_unit.cpp
@@ -156,6 +160,10 @@ SRCS(
     finish_propose_unit.cpp
     finish_propose_write_unit.cpp
     follower_edge.cpp
+    hnsw_index.cpp
+    hnsw_index.h
+    hnsw_index_build_actor.cpp
+    hnsw_index_build_actor.h
     incr_restore_helpers.cpp
     incr_restore_scan.cpp
     incremental_restore_src_actor.cpp
@@ -281,6 +289,7 @@ PEERDIR(
     ydb/core/wrappers
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/nmslib
     ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/actors/http
@@ -329,6 +338,7 @@ RECURSE_FOR_TESTS(
     ut_export
     ut_external_blobs
     ut_followers
+    ut_hnsw_index
     ut_incremental_backup
     ut_incremental_restore_scan
     ut_init

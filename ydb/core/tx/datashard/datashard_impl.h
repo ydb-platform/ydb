@@ -21,6 +21,7 @@
 #include "datashard_trans_queue.h"
 #include "datashard_user_table.h"
 #include "datashard_write.h"
+#include "hnsw_index.h"
 #include "incr_restore_scan.h"
 #include "datashard_tli.h"
 #include "multi_txids.h"
@@ -307,6 +308,7 @@ class TDataShard
     friend class TMultiTxIdManager;
 
     friend class TTableStatsCoroBuilder;
+    friend class THnswIndexBuildActor;
     friend class TReadTableScan;
     friend class TWaitForStreamClearanceUnit;
     friend class TBuildIndexScan;
@@ -381,6 +383,7 @@ class TDataShard
             EvTableStatsError,
             EvRemoveSchemaSnapshots,
             EvBlockFailPointUnblock,
+            EvHnswIndexBuildResult,
             EvEnd
         };
 
@@ -415,6 +418,15 @@ class TDataShard
             ui64 MemDataSize = 0;
             ui64 SearchHeight = 0;
             bool HasSchemaChanges = false;
+        };
+
+        // Result of an off-thread THnswIndex build (see hnsw_index_build_actor.h).
+        // Index is nullptr on failure; Error explains why.
+        struct TEvHnswIndexBuildResult : public TEventLocal<TEvHnswIndexBuildResult, EvHnswIndexBuildResult> {
+            ui32 LocalTid = 0;
+            ui64 RowCountAtBuild = 0;
+            std::shared_ptr<NDataShard::THnswIndex> Index;
+            TString Error;
         };
 
         struct TEvBuildTableStatsError : public TEventLocal<TEvBuildTableStatsError, EvTableStatsError> {
@@ -1358,6 +1370,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvBuildTableStatsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvBuildTableStatsError::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
@@ -1769,6 +1782,9 @@ public:
 
         SysLocks.RemoveSchema(tableId, locksDb);
         Pipeline.GetDepTracker().RemoveSchema(tableId);
+        if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end()) {
+            HnswIndexCache.erase(it->second->LocalTid);
+        }
         TableInfos.erase(tableId.LocalPathId);
     }
 
@@ -1776,9 +1792,71 @@ public:
         if (locksDb) {
             SysLocks.RemoveSchema(tableId, locksDb);
         }
+        if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end() && it->second->LocalTid != tableInfo->LocalTid) {
+            HnswIndexCache.erase(it->second->LocalTid);
+        }
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
+    }
+
+    // Returns a ready cached HNSW index for the given local table id, or
+    // nullptr if none exists yet (never triggers a build).
+    std::shared_ptr<NDataShard::THnswIndex> GetHnswIndex(ui32 localTid) const {
+        auto it = HnswIndexCache.find(localTid);
+        if (it != HnswIndexCache.end() && it->second.Index) {
+            return it->second.Index;
+        }
+        return nullptr;
+    }
+
+    // Returns true if a build for this local table id is already running
+    // (in the same read transaction that started it) or is on cooldown after
+    // a scan page fault, and should not be (re-)started yet.
+    bool IsHnswIndexBuilding(ui32 localTid) const {
+        auto it = HnswIndexCache.find(localTid);
+        if (it == HnswIndexCache.end()) {
+            return false;
+        }
+        return it->second.Building || TInstant::Now() < it->second.NextScanAttemptAt;
+    }
+
+    void SetHnswIndexBuilding(ui32 localTid, bool building) {
+        HnswIndexCache[localTid].Building = building;
+    }
+
+    // Called after a scan page fault: clears the "actively building" flag
+    // (this attempt is abandoned) but keeps retries throttled for a short
+    // cooldown, so every subsequent read on the shard doesn't immediately
+    // retry the scan (Precharge's page fetch takes some time to land).
+    void RegisterHnswScanPageFault(ui32 localTid) {
+        auto& entry = HnswIndexCache[localTid];
+        entry.Building = false;
+        entry.NextScanAttemptAt = TInstant::Now() + TDuration::MilliSeconds(500);
+    }
+
+    void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index, ui64 rowCountAtBuild) {
+        auto& entry = HnswIndexCache[localTid];
+        entry.Index = std::move(index);
+        entry.RowCountAtBuild = rowCountAtBuild;
+        entry.Building = false;
+        entry.NextScanAttemptAt = TInstant::Zero();
+    }
+
+    // Invalidates a cached HNSW index if the current row count has drifted
+    // too far from what it was built with (heuristic staleness check).
+    void InvalidateHnswIndexIfStale(ui32 localTid, ui64 currentRowCount) {
+        auto it = HnswIndexCache.find(localTid);
+        if (it == HnswIndexCache.end() || !it->second.Index) {
+            return;
+        }
+        const ui64 builtRows = it->second.RowCountAtBuild;
+        const ui64 diff = builtRows > currentRowCount ? builtRows - currentRowCount : currentRowCount - builtRows;
+        // More than ~20% drift since build time: treat as stale and drop it,
+        // a later request will trigger a fresh build.
+        if (builtRows == 0 || diff * 5 > builtRows) {
+            HnswIndexCache.erase(it);
+        }
     }
 
     bool IsUserTable(const TTableId& tableId) const {
@@ -2900,6 +2978,20 @@ private:
     TInstant StopKeyAccessSamplingAt;
 
     TUserTable::TTableInfos TableInfos;  // tableId -> local table info
+
+    // In-memory HNSW index cache for accelerated vector top-K search, keyed by
+    // local table id (i.e. one entry per posting table hosted by this tablet).
+    struct THnswIndexCacheEntry {
+        std::shared_ptr<NDataShard::THnswIndex> Index;
+        ui64 RowCountAtBuild = 0;
+        bool Building = false;
+        // Earliest time a new scan/build attempt may be started after a scan
+        // page fault, to avoid a tight retry loop (Precharge's async page
+        // fetch takes some time; every incoming read would otherwise retry
+        // the scan immediately and burn CPU competing with query serving).
+        TInstant NextScanAttemptAt;
+    };
+    THashMap<ui32, THnswIndexCacheEntry> HnswIndexCache;  // LocalTid -> cache entry
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;
@@ -3364,6 +3456,7 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
+            HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
             HFunc(TEvLongTxService::TEvLockStatus, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3434,6 +3527,7 @@ protected:
             HFunc(TEvDataShard::TEvGetTableStats, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
+            HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvDataShard::TEvUploadRowsRequest, Handle);
             HFunc(TEvDataShard::TEvEraseRowsRequest, Handle);
@@ -3545,6 +3639,7 @@ protected:
             HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
+            HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()

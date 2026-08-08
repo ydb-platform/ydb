@@ -2725,9 +2725,17 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   optimizer defect ten: legacy returned the selected non-NULL `UNWRAP(S)` row
   for `ORDER BY Id LIMIT 1`, while new RBO evaluated a discarded NULL row and
   failed. Commit `c2c66fb1d7b` fixes that immediate TopSort shape and retains
-  the regression. It does not move q84's Concat Map, which normalization has
-  already pushed through Filter and join inputs, so q84 still has no formula
-  or proof and the post-M74 numerical coverage remains the current baseline.
+  the regression. The follow-up trace and independent-key runtime probe found
+  optimizer defect eleven: map normalization pushed q84's computed Concat,
+  and a checked `UNWRAP`, below row-discarding Filter and Join boundaries even
+  though expression pushdown was disabled. Commit `564010e2e4e` removes that
+  unsafe mode and moves only direct column accesses and semantic renames.
+  q84 now retains its computed projection after row selection, but still stops
+  at the exact checked-Concat result-bound gate. The regenerated final trace is
+  `Map[Concat] -> Limit[100, Final] -> Map -> TopSort[100, Intermediate] ->`
+  joins: Concat is on the stage-11 consumer side and runs on at most 100 rows.
+  q84 therefore still has no formula or proof and the post-M74 numerical
+  coverage remains the current baseline.
 
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
@@ -3492,7 +3500,7 @@ twenty-nine and thirty. The checked nullable-String `Unwrap` slice adds q8 as
 obligation thirty-one, and the exact Decimal count-distinct/staged-AVG slice
 adds q28 as obligation thirty-two.
 
-The audit and solver/real-YDB confirmation workflow have found ten production
+The audit and solver/real-YDB confirmation workflow have found eleven production
 optimizer defects.
 First, an unrelated earlier `NOT` left stale state while the simple-subplan rule
 searched later conjuncts, so a positive `EXISTS` could be lowered as
@@ -3607,9 +3615,31 @@ expression-DAG scan finds no Result, position-aware, side-effecting, or
 CSE-unsafe node or subplan dependency. Computed keys and shared or unsafe Maps
 retain the old topology. The direct rule suite passes 8/8, the complete
 verifier C++ target passes 274/274, the real-host regression passes 1/1 under
-both optimizer modes, and the broader TopSort stage test passes 1/1. This fix
-does not by itself cover q84 because its computed Map has already moved into a
-join input before Limit-to-TopSort fusion.
+both optimizer modes, and the broader TopSort stage test passes 1/1. At that
+checkpoint the isolated fix did not cover q84 because its computed Map had
+already moved into a join input before Limit-to-TopSort fusion.
+
+Eleventh, the follow-up q84 trace identified the earlier movement as a separate
+map-normalization defect. `TPushMapElementsThroughInputRule` was registered
+with expression pushdown disabled, but computed expressions still crossed
+Filter unconditionally and crossed selected Join inputs. A two-row Olap probe
+joined `(Id=1, MatchKey=1, S="present")` and `(Id=2, MatchKey=999, S=NULL)`
+against the same table while filtering the right side to `S="present"`.
+Legacy returned the one matching non-NULL projection; pre-fix new RBO
+materialized `UNWRAP(NULL)` for the unmatched left row and failed.
+
+Commit `564010e2e4e` removes the expression-push option from that rule and
+permits only direct column accesses and semantic renames to cross Filter,
+Limit, Sort, or Join. Mixed-map tests prove that aliases still move while
+computed fields remain above Filter and Join; producer-dependent renames stay
+with their computed producer. All 18 focused map-element tests and all 10
+append-push tests pass, the three real-runtime String demand/error tests pass,
+and the complete verifier C++ target remains 274/274. A focused no-solver q84
+dashboard still prepares successfully and reports the same exact
+checked-Concat result-bound rejection at both snapshots; formula and proof
+coverage therefore remain unchanged at this checkpoint. The regenerated final
+trace confirms `Map[Concat] -> Limit[100, Final] -> Map -> TopSort[100,
+Intermediate] -> joins`, with Concat in stage 11 after the row-selection work.
 
 An additional legacy probe with an intrinsic
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer raises

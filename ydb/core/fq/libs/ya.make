@@ -31,6 +31,7 @@ RECURSE(
     result_formatter
     row_dispatcher
     shared_resources
+    state
     signer
     tasks_packer
     test_connection

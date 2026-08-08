@@ -1,7 +1,7 @@
 #include "dq_state_load_plan.h"
 
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
 
@@ -11,7 +11,8 @@
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 
-namespace NYql::NDq {
+namespace NFq {
+
 namespace {
 // Pq specific
 // TODO: rewrite this code to not depend on concrete providers (now it is only pq)
@@ -63,16 +64,16 @@ using TTopicsMapping = THashMap<TTopic, TTopicMappingInfo, TTopicHash>;
     }                                                                   \
     /**/
 
-void AddForceWarningOrError(const TString& message, TIssues& issues, bool force) {
-    TIssue issue(message);
+void AddForceWarningOrError(const TString& message, NYql::TIssues& issues, bool force) {
+    NYql::TIssue issue(message);
     if (force) {
-        issue.SetCode(TIssuesIds::WARNING, TSeverityIds::S_WARNING);
+        issue.SetCode(NYql::TIssuesIds::WARNING, NYql::TSeverityIds::S_WARNING);
     }
     issues.AddIssue(std::move(issue));
 }
 
 bool IsTopicInput(const NYql::NDqProto::TTaskInput& taskInput) {
-    return taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == PqSource;
+    return taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == NYql::PqSource;
 }
 
 bool ParseTopicInput(
@@ -82,8 +83,8 @@ bool ParseTopicInput(
     bool force,
     bool isSourceGraph,
     NYql::NPq::NProto::TDqPqTopicSource& srcDesc,
-    std::vector<NPq::TTopicPartitionsSet>& partitionsSets,
-    TIssues& issues)
+    std::vector<NYql::NPq::TTopicPartitionsSet>& partitionsSets,
+    NYql::TIssues& issues)
 {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-but-set-variable"
@@ -100,7 +101,7 @@ bool ParseTopicInput(
         return false;
     }
 
-    partitionsSets = NPq::GetTopicPartitionsSets(task);
+    partitionsSets = NYql::NPq::GetTopicPartitionsSets(task);
     if (partitionsSets.empty()) {
         ISSUE("Can't read " << queryKindStr << " query params: failed to load partitions of topic `" << srcDesc.GetTopicPath() << "` from input " << inputIndex << " of task " << task.GetId());
         return false;
@@ -111,7 +112,7 @@ bool ParseTopicInput(
 
 void AddToMapping(
     const NYql::NPq::NProto::TDqPqTopicSource& srcDesc,
-    const std::vector<NPq::TTopicPartitionsSet>& partitionsSets,
+    const std::vector<NYql::NPq::TTopicPartitionsSet>& partitionsSets,
     ui64 taskId,
     ui64 inputIndex,
     TTopicsMapping& mapping)
@@ -126,29 +127,29 @@ void AddToMapping(
     }
 }
 
-void InitForeignPlan(const NYql::NDqProto::TDqTask& task, NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan) {
-    taskPlan.SetStateType(NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN);
-    taskPlan.MutableProgram()->SetStateType(NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);
+void InitForeignPlan(const NYql::NDqProto::TDqTask& task, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan) {
+    taskPlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN);
+    taskPlan.MutableProgram()->SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);
     for (ui64 inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {
         const NYql::NDqProto::TTaskInput& taskInput = task.GetInputs(inputIndex);
         if (taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource) {
-            NDqProto::NDqStateLoadPlan::TSourcePlan& sourcePlan = *taskPlan.AddSources();
-            sourcePlan.SetStateType(NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);
+            NYql::NDqProto::NDqStateLoadPlan::TSourcePlan& sourcePlan = *taskPlan.AddSources();
+            sourcePlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);
             sourcePlan.SetInputIndex(inputIndex);
         }
     }
     for (ui64 outputIndex = 0; outputIndex < task.OutputsSize(); ++outputIndex) {
         const NYql::NDqProto::TTaskOutput& taskOutput = task.GetOutputs(outputIndex);
         if (taskOutput.GetTypeCase() == NYql::NDqProto::TTaskOutput::kSink) {
-            NDqProto::NDqStateLoadPlan::TSinkPlan& sinkPlan = *taskPlan.AddSinks();
-            sinkPlan.SetStateType(NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);
+            NYql::NDqProto::NDqStateLoadPlan::TSinkPlan& sinkPlan = *taskPlan.AddSinks();
+            sinkPlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);
             sinkPlan.SetOutputIndex(outputIndex);
         }
     }
 }
 
-NDqProto::NDqStateLoadPlan::TSourcePlan& FindSourcePlan(NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan, ui64 inputIndex) {
-    for (NDqProto::NDqStateLoadPlan::TSourcePlan& plan : *taskPlan.MutableSources()) {
+NYql::NDqProto::NDqStateLoadPlan::TSourcePlan& FindSourcePlan(NYql::NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan, ui64 inputIndex) {
+    for (NYql::NDqProto::NDqStateLoadPlan::TSourcePlan& plan : *taskPlan.MutableSources()) {
         if (plan.GetInputIndex() == inputIndex) {
             return plan;
         }
@@ -162,8 +163,8 @@ bool MakeContinueFromStreamingOffsetsPlan(
     const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& src,
     const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& dst,
     const bool force,
-    THashMap<ui64, NDqProto::NDqStateLoadPlan::TTaskPlan>& plan,
-    TIssues& issues)
+    THashMap<ui64, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan>& plan,
+    NYql::TIssues& issues)
 {
 #define FORCE_MSG(msg) (force ? ". " msg : ". Use force mode to ignore this issue")
 
@@ -175,7 +176,7 @@ bool MakeContinueFromStreamingOffsetsPlan(
             const NYql::NDqProto::TTaskInput& taskInput = task.GetInputs(inputIndex);
             if (IsTopicInput(taskInput)) {
                 NYql::NPq::NProto::TDqPqTopicSource srcDesc;
-                std::vector<NPq::TTopicPartitionsSet> partitionsSets;
+                std::vector<NYql::NPq::TTopicPartitionsSet> partitionsSets;
                 if (!ParseTopicInput(task, taskInput, inputIndex, force, true, srcDesc, partitionsSets, issues)) {
                     if (!force) {
                         result = false;
@@ -190,14 +191,14 @@ bool MakeContinueFromStreamingOffsetsPlan(
 
     // Watch dst query and build plan
     for (const NYql::NDqProto::TDqTask& task : dst) {
-        NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan = plan[task.GetId()];
-        taskPlan.SetStateType(NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY); // default if no topic sources
+        NYql::NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan = plan[task.GetId()];
+        taskPlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY); // default if no topic sources
         bool foreignStatePlanInited = false;
         for (ui64 inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {
             const NYql::NDqProto::TTaskInput& taskInput = task.GetInputs(inputIndex);
             if (IsTopicInput(taskInput)) {
                 NYql::NPq::NProto::TDqPqTopicSource srcDesc;
-                std::vector<NPq::TTopicPartitionsSet> partitionsSets;
+                std::vector<NYql::NPq::TTopicPartitionsSet> partitionsSets;
                 if (!ParseTopicInput(task, taskInput, inputIndex, force, false, srcDesc, partitionsSets, issues)) {
                     if (!force) {
                         result = false;
@@ -238,10 +239,10 @@ bool MakeContinueFromStreamingOffsetsPlan(
                         foreignStatePlanInited = true;
                         InitForeignPlan(task, taskPlan);
                     }
-                    NDqProto::NDqStateLoadPlan::TSourcePlan& sourcePlan = FindSourcePlan(taskPlan, inputIndex);
-                    sourcePlan.SetStateType(NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN);
+                    NYql::NDqProto::NDqStateLoadPlan::TSourcePlan& sourcePlan = FindSourcePlan(taskPlan, inputIndex);
+                    sourcePlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN);
                     for (const TTaskSource& taskSource : tasksSet) {
-                        NDqProto::NDqStateLoadPlan::TSourcePlan::TForeignTaskSource& taskSourceProto = *sourcePlan.AddForeignTasksSources();
+                        NYql::NDqProto::NDqStateLoadPlan::TSourcePlan::TForeignTaskSource& taskSourceProto = *sourcePlan.AddForeignTasksSources();
                         taskSourceProto.SetTaskId(taskSource.TaskId);
                         taskSourceProto.SetInputIndex(taskSource.InputIndex);
                     }
@@ -259,4 +260,4 @@ bool MakeContinueFromStreamingOffsetsPlan(
 #undef FORCE_MSG
 }
 
-} // namespace NYql::NDq
+} // namespace NFq

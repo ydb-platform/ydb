@@ -7,7 +7,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/dq/actors/dq.h>
-#include <ydb/library/yql/dq/state/dq_state_load_plan.h>
+#include <ydb/core/fq/libs/state/dq_state_load_plan.h>
 
 #include <util/string/builder.h>
 #include <util/system/env.h>
@@ -260,7 +260,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
 
     NYql::TIssues issues;
     THashMap<ui64, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan> plan;
-    const bool result = NYql::NDq::MakeContinueFromStreamingOffsetsPlan(
+    const bool result = MakeContinueFromStreamingOffsetsPlan(
         checkpoint.Graph->GetTasks(),
         GraphParams.GetTasks(),
         StreamingDisposition.from_last_checkpoint().force(),

@@ -45,7 +45,7 @@ def _explain_missing_subpackage(sub: str, exc: ModuleNotFoundError) -> None:
 SUBCOMMANDS = (
     "compdb", "analyze", "aggregate", "report", "all",
     "pilot", "doctor", "selfcheck", "selfcontain",
-    "timetrace", "timing", "worklist", "bench",
+    "timetrace", "timing", "worklist", "bench", "buildbench",
 )
 
 
@@ -67,6 +67,9 @@ def _help() -> str:
         "                header-optimization worklist (which headers to fix, why, how)\n"
         "  bench       - measure per-file compile time (clang -ftime-trace, min of N)\n"
         "                for real .cpp TUs; save a baseline and diff after edits\n"
+        "  buildbench  - measure whole-build cost reproducibly: instructions retired\n"
+        "                (load-independent) plus CPU time per TU; sweep parallelism\n"
+        "                and diff two saved runs with noise-aware verdicts\n"
         "  all         - run analyze -> aggregate -> report in order\n"
         "  pilot       - exercise the pipeline WITHOUT clang-include-cleaner using\n"
         "                synthesized verdicts; for tool development and CI smoke tests\n"
@@ -104,6 +107,8 @@ def run_selfcheck(rest: Sequence[str]) -> int:
         "timing.collect",
         "timing.run",
         "bench.run",
+        "buildbench.parse",
+        "buildbench.run",
         "pilot",
         "doctor",
     )
@@ -199,8 +204,9 @@ def _run_shim(rest: List[str]) -> int:
 
     Lets the bundled binary act as the compile recorder, so a source-tree
     Python copy of the package is not required during ``compdb`` /
-    ``timetrace`` collection. Records/augments the compile command, then
-    execs the real compiler (replacing this process).
+    ``timetrace`` / ``buildbench`` collection. Records the compile command
+    and adds whichever measurement flags are enabled, then execs the
+    result — the compiler itself, or ``perf stat`` wrapping it.
     """
     import os as _os
     from .compdb.record_cc import shim_handle
@@ -208,8 +214,11 @@ def _run_shim(rest: List[str]) -> int:
     if not cmd:
         return 2
     try:
-        cmd = shim_handle(cmd, _os.environ.get("YDB_COMPDB_DIR"),
-                          _os.environ.get("YDB_TIMETRACE_DIR"))
+        cmd = shim_handle(cmd,
+                          _os.environ.get("YDB_COMPDB_DIR"),
+                          _os.environ.get("YDB_TIMETRACE_DIR"),
+                          _os.environ.get("YDB_PSTAT_DIR"),
+                          _os.environ.get("YDB_PERF_DIR"))
     except Exception as exc:  # never break the build
         print(f"ydb-include-sanitizer __shim failure: {exc}", file=sys.stderr)
         sys.stderr.flush()
@@ -244,6 +253,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "timing": "timing.run",
         "worklist": "report.worklist",
         "bench": "bench.run",
+        "buildbench": "buildbench.run",
         "pilot": "pilot",
         "doctor": "doctor",
     }

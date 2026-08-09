@@ -385,12 +385,11 @@ class ResponseParser:
                 for member in shape.members
             ]
             if tag not in serialized_member_names:
-                msg = (
-                    "Received a tagged union response with member "
-                    "unknown to client: %s. Please upgrade SDK for full "
-                    "response support."
+                LOG.info(
+                    "Received a tagged union response with member unknown to client: %s. "
+                    "Please upgrade SDK for full response support.",
+                    tag,
                 )
-                LOG.info(msg % tag)
                 return True
         return False
 

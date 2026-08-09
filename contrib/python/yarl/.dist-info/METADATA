@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: yarl
-Version: 1.19.0
+Version: 1.20.1
 Summary: Yet another URL library
 Home-page: https://github.com/aio-libs/yarl
 Author: Andrew Svetlov
@@ -266,6 +266,77 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+1.20.1
+======
+
+*(2025-06-09)*
+
+
+Bug fixes
+---------
+
+- Started raising a ``ValueError`` exception raised for corrupted
+  IPv6 URL values.
+
+  These fixes the issue where exception ``IndexError`` was
+  leaking from the internal code because of not being handled and
+  transformed into a user-facing error. The problem was happening
+  under the following conditions: empty IPv6 URL, brackets in
+  reverse order.
+
+  -- by `@MaelPic <https://github.com/sponsors/MaelPic>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1512 <https://github.com/aio-libs/yarl/issues/1512>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Updated to use Cython 3.1 universally across the build path -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1514 <https://github.com/aio-libs/yarl/issues/1514>`__.
+
+- Made Cython line tracing opt-in via the ``with-cython-tracing`` build config setting -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  Previously, line tracing was enabled by default in ``pyproject.toml``, which caused build issues for some users and made wheels nearly twice as slow.
+  Now line tracing is only enabled when explicitly requested via ``pip install . --config-setting=with-cython-tracing=true`` or by setting the ``YARL_CYTHON_TRACING`` environment variable.
+
+  *Related issues and pull requests on GitHub:*
+  `#1521 <https://github.com/aio-libs/yarl/issues/1521>`__.
+
+
+----
+
+
+1.20.0
+======
+
+*(2025-04-16)*
+
+
+Features
+--------
+
+- Implemented support for the free-threaded build of CPython 3.13 -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1456 <https://github.com/aio-libs/yarl/issues/1456>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Started building wheels for the free-threaded build of CPython 3.13 -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1456 <https://github.com/aio-libs/yarl/issues/1456>`__.
+
+
+----
+
 
 1.19.0
 ======

@@ -583,6 +583,15 @@ def _filter_inputs_by_rules_from_tsconfig(unit: ymake.Unit, tsconfig: 'TsConfig'
         __set_append(unit, to_var, [_wrap_file_path(f) for f in filtered_files])
 
 
+@ymake.macro
+@_with_report_configure_error
+def _TS_LEGACY_CHECKS_CONFIGURE(unit: ymake.Unit) -> None:
+    _setup_eslint(unit)
+    _setup_tsc_typecheck(unit)
+    _setup_stylelint(unit)
+    _setup_biome(unit)
+
+
 def _is_tests_enabled(unit: ymake.Unit) -> bool:
     return unit.get("CPP_ANALYSIS_MODE") != "yes"
 
@@ -1061,6 +1070,12 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
             f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"
             f"Following directories are missing in {COLORS.cyan}package.json#files{COLORS.reset}: {COLORS.red}{', '.join(missing_outputs)}{COLORS.reset}"
         )
+
+    after_build_command = unit.get("_TS_AFTER_BUILD_COMMAND")
+    if after_build_command:
+        build_command = "{} && {}".format(unit.get("_TS_BUILD_COMMAND"), after_build_command)
+        unit.set(["_TS_BUILD_COMMAND", build_command])
+        unit.set(["_TS_BUILD_COMMAND_ARG", '--build-command "{}"'.format(build_command.replace('"', '\\"'))])
 
     # Code navigation
     if unit.get("TS_YNDEXING") == "yes":

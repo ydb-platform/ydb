@@ -70,7 +70,7 @@ from botocore.model import ServiceModel
 from botocore.parsers import ResponseParserFactory
 from botocore.plugin import get_botocore_plugins, load_client_plugins
 from botocore.regions import EndpointResolver
-from botocore.useragent import UserAgentString
+from botocore.useragent import UserAgentString, register_feature_id
 from botocore.utils import (
     EVENT_ALIASES,
     IMDSRegionProvider,
@@ -979,10 +979,13 @@ class Session:
                 aws_session_token, aws_account_id
             ):
                 logger.debug(
-                    f"Ignoring the following credential-related values which were set without "
-                    f"an access key id and secret key on the session or client: {ignored_credentials}"
+                    "Ignoring the following credential-related values which were set without "
+                    "an access key id and secret key on the session or client: %s",
+                    ignored_credentials,
                 )
             credentials = self.get_credentials()
+        if getattr(credentials, 'method', None) == 'explicit':
+            register_feature_id('CREDENTIALS_CODE')
         auth_token = self.get_auth_token()
         endpoint_resolver = self._get_internal_component('endpoint_resolver')
         exceptions_factory = self._get_internal_component('exceptions_factory')
@@ -1178,7 +1181,7 @@ class Session:
                 client_plugins[name] = module
             except ValueError:
                 logger.warning(
-                    f"Invalid plugin format: {plugin}. Expected 'name=module'"
+                    "Invalid plugin format: %s. Expected 'name=module'", plugin
                 )
 
         if client_plugins:

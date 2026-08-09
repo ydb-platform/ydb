@@ -67,7 +67,8 @@ TError TCheckPermissionResult::ToError(
                 "Unexpected security action %Qlv in permission check result for user %Qv",
                 Action,
                 user);
-            YT_LOG_ALERT(error);
+            YT_TLOG_ALERT("Unexpected security action in permission check result")
+                .With(error);
             return error;
         }
     }

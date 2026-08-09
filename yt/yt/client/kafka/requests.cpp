@@ -168,7 +168,8 @@ void TRecord::Deserialize(IKafkaProtocolReader* reader, int version)
         READ_KAFKA_FIELD(OffsetDelta, ReadVarInt)
 
         auto keySize = reader->ReadVarInt();
-        YT_LOG_TRACE("Parsing Record (KeySize: %v)", keySize);
+        YT_TLOG_TRACE("Parsing Record")
+            .With("KeySize", keySize);
         if (keySize > 0) {
             Key = std::string{};
             reader->ReadString(&(*Key), keySize);
@@ -178,7 +179,8 @@ void TRecord::Deserialize(IKafkaProtocolReader* reader, int version)
         READ_KAFKA_FIELD(valueSize, ReadVarInt);
 
         if (valueSize > 0) {
-            YT_LOG_TRACE("Parsing Record (ValueSize: %v)", valueSize);
+            YT_TLOG_TRACE("Parsing Record")
+                .With("ValueSize", valueSize);
             Value = std::string{};
             reader->ReadString(&(*Value), valueSize);
         }
@@ -193,7 +195,9 @@ void TRecord::Deserialize(IKafkaProtocolReader* reader, int version)
         }
 
         if (length && reader->GetReadBytesCount() != length) {
-            YT_LOG_ERROR("Not all record bytes were read (Expected: %v, Actual: %v)", *length, reader->GetReadBytesCount());
+            YT_TLOG_ERROR("Not all record bytes were read")
+                .With("Expected", *length)
+                .With("Actual", reader->GetReadBytesCount());
         }
 
         reader->FinishReadBytes();
@@ -261,7 +265,7 @@ void TRecordBatch::Deserialize(IKafkaProtocolReader* reader)
 
         // It's a message in v0/v1.
         auto& record = Records.emplace_back();
-        YT_LOG_TRACE("Parsing RecordBatch, reading Record");
+        YT_TLOG_TRACE("Parsing RecordBatch, reading Record");
         record.Deserialize(reader, MagicByte);
     } else if (MagicByte == 2) {
         READ_KAFKA_FIELD(Crc, ReadUint32)

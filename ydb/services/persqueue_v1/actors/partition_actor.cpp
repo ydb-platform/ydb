@@ -796,8 +796,24 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
             // Late/duplicate Prepare (or other non-Publish) is possible after nested pipe restart:
             // restore may re-send Prepare for the same id while a previous Prepare is still delivered
             // after we have already moved to Publish. Soft-ignore like Prepare stage.
-            if (!result.HasCmdPublishReadResult() || DirectReadsToPublish.empty()
-                    || *DirectReadsToPublish.begin() != result.GetCmdPublishReadResult().GetDirectReadId()) {
+            if (!result.HasCmdPublishReadResult()) {
+                YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect PublishReadResult, got",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()});
+                return;
+            }
+            // Empty queue while expecting Publish is a bookkeeping anomaly (not a stale reply).
+            // Soft-ignore would hang restore forever; close the session so the client recovers.
+            if (DirectReadsToPublish.empty()) {
+                ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+                    TStringBuilder() << "direct read restore Publish with empty DirectReadsToPublish"
+                        << ", cookie=" << result.GetCookie()
+                        << ", result=" << result.ShortDebugString(),
+                    PersQueue::ErrorCode::ERROR));
+                return;
+            }
+            if (*DirectReadsToPublish.begin() != result.GetCmdPublishReadResult().GetDirectReadId()) {
                 YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect PublishReadResult, got",
                     {"PQLOGPREFIX", PQ_LOG_PREFIX},
                     {"partition", Partition},
@@ -814,8 +830,24 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
             // assign it (see SendNextRestorePrepareOrForget), while DirectReadsToForget is kept.
             // Late Prepare/Publish (or other non-Forget / wrong id) is possible after nested pipe
             // restart — soft-ignore like Prepare/Publish stages.
-            if (!result.HasCmdForgetReadResult() || DirectReadsToForget.empty()
-                    || *DirectReadsToForget.begin() != result.GetCmdForgetReadResult().GetDirectReadId()) {
+            if (!result.HasCmdForgetReadResult()) {
+                YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect ForgetReadResult, got",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()});
+                return;
+            }
+            // Empty queue while expecting Forget is a bookkeeping anomaly (not a stale reply).
+            // Soft-ignore would hang restore forever; close the session so the client recovers.
+            if (DirectReadsToForget.empty()) {
+                ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+                    TStringBuilder() << "direct read restore Forget with empty DirectReadsToForget"
+                        << ", cookie=" << result.GetCookie()
+                        << ", result=" << result.ShortDebugString(),
+                    PersQueue::ErrorCode::ERROR));
+                return;
+            }
+            if (*DirectReadsToForget.begin() != result.GetCmdForgetReadResult().GetDirectReadId()) {
                 YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect ForgetReadResult, got",
                     {"PQLOGPREFIX", PQ_LOG_PREFIX},
                     {"partition", Partition},

@@ -514,7 +514,7 @@ void TClientRequest::PrepareHeader()
         ToProto(Header_.mutable_response_attachments_dpt_parameters(), ResponseAttachmentsDptParameters_);
     }
 
-    if (!User_.empty() && User_ != RootUserName) {
+    if (User_ != RootUserName) {
         Header_.set_user(User_);
     }
 

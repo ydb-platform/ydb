@@ -314,7 +314,9 @@ private:
                 NYT::Ref(Tracer_.Get());
             }
             InitialMetadataBuilder_.Add(RequestIdMetadataKey, ToString(Request_->GetRequestId()));
-            InitialMetadataBuilder_.Add(UserMetadataKey, Request_->GetUser());
+            if (Request_->GetUser() != RootUserName) {
+                InitialMetadataBuilder_.Add(UserMetadataKey, Request_->GetUser());
+            }
             if (!Request_->GetUserTag().empty()) {
                 InitialMetadataBuilder_.Add(UserTagMetadataKey, Request_->GetUserTag());
             }
@@ -623,7 +625,7 @@ private:
                 TError error;
                 auto serializedError = ResponseFinalMetadata_.Find(ErrorMetadataKey);
                 if (serializedError) {
-                    error = DeserializeError(serializedError);
+                    error = DeserializeError(*serializedError);
                 } else {
                     error = TError(StatusCodeToErrorCode(ResponseStatusCode_), ResponseStatusDetails_.AsString(), TError::DisableFormat)
                         << TErrorAttribute("status_code", ResponseStatusCode_);
@@ -643,7 +645,7 @@ private:
             auto messageBodySizeString = ResponseFinalMetadata_.Find(MessageBodySizeMetadataKey);
             if (messageBodySizeString) {
                 try {
-                    messageBodySize = FromString<ui32>(messageBodySizeString);
+                    messageBodySize = FromString<ui32>(*messageBodySizeString);
                 } catch (const std::exception& ex) {
                     auto error = TError(NRpc::EErrorCode::TransportError, "Failed to parse response message body size")
                         << ex;

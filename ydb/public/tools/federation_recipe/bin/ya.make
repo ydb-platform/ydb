@@ -1,0 +1,5 @@
+PACKAGE()
+
+FROM_SANDBOX(FILE 1234567890 OUT cm-binary-test)
+
+END()

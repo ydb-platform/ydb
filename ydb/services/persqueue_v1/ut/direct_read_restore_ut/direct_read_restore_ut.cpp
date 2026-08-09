@@ -656,13 +656,30 @@ Y_UNIT_TEST(HasCmdPublishReadResultOnPrepareDuringPublishRestore) {
             << "; held=" << env.HeldPrepareResponses.load());
 
     env.ReleaseHeldPrepares();
-    runtime.SimulateSleep(TDuration::Seconds(1));
-
+    // First Prepare advances restore to Publish; second is soft-ignored on Publish stage.
+    WaitUntil(runtime, [&] {
+        return env.HeldPublishResponses.load() >= 1
+            || env.UnexpectedErrorCloseSession.load() > 0;
+    });
     UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
         "late Prepare during Publish restore must not kill partition actor via unhandled exception"
             << "; heldPrepare=" << env.HeldPrepareResponses.load()
             << "; heldPublish=" << env.HeldPublishResponses.load()
             << "; reason=" << env.UnexpectedErrorCloseReason);
+    UNIT_ASSERT_C(env.HeldPublishResponses.load() >= 1,
+        "expected Publish stage after releasing held Prepares");
+
+    const ui64 updateSessionsBefore = env.UpdateSessionCount.load();
+    env.ReleaseHeldPublishes();
+    WaitUntil(runtime, [&] {
+        return env.UpdateSessionCount.load() > updateSessionsBefore
+            || env.UnexpectedErrorCloseSession.load() > 0;
+    });
+    UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
+        "releasing Publish after late Prepare must not kill partition actor"
+            << "; reason=" << env.UnexpectedErrorCloseReason);
+    UNIT_ASSERT_C(env.UpdateSessionCount.load() > updateSessionsBefore,
+        "Publish restore must complete with TEvUpdateSession after late Prepare soft-ignore");
 
     TearDownGrpcAndServer(env, client);
 }

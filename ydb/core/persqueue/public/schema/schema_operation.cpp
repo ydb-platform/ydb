@@ -95,7 +95,7 @@ private:
         switch (status) {
             case NTxProxy::TResultStatus::ExecComplete:
                 if (ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
-                    return ReplyError(Ydb::StatusIds::ALREADY_EXISTS, ssStatus);
+                    return ReplyError(Ydb::StatusIds::ALREADY_EXISTS, ssStatus, record.GetSchemeShardReason());
                 } else {
                     return ReplyOkAndDie();
                 }
@@ -105,12 +105,12 @@ private:
                 return RetryPropose();
             case NTxProxy::TResultStatus::ExecAlready:
                 if (ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
-                    return ReplyError(Ydb::StatusIds::ALREADY_EXISTS, ssStatus);
+                    return ReplyError(Ydb::StatusIds::ALREADY_EXISTS, ssStatus, record.GetSchemeShardReason());
                 } else {
-                    return ReplyError(ydbStatus, ssStatus);
+                    return ReplyError(ydbStatus, ssStatus, record.GetSchemeShardReason());
                 }
             default:
-                return ReplyError(ydbStatus, ssStatus);
+                return ReplyError(ydbStatus, ssStatus, record.GetSchemeShardReason());
         }
     }
 
@@ -171,9 +171,13 @@ private:
     }
 
 private:
-    void ReplyError(Ydb::StatusIds::StatusCode errorCode, NKikimrScheme::EStatus ssStatus) {
-        ReplyErrorAndDie(errorCode,
-            TStringBuilder() << "Failed to execute operation: " << NKikimrScheme::EStatus_Name(ssStatus));
+    void ReplyError(Ydb::StatusIds::StatusCode errorCode, NKikimrScheme::EStatus ssStatus, const TString& reason) {
+        TStringBuilder message;
+        message << "Failed to execute operation: " << NKikimrScheme::EStatus_Name(ssStatus);
+        if (reason) {
+            message << ", reason: " << reason;
+        }
+        ReplyErrorAndDie(errorCode, std::move(message));
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {

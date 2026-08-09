@@ -190,6 +190,12 @@ class DynamicConfigGenerator(object):
             if drive.expected_slot_count is not None:
                 pc = pdisk_config.TPDiskConfig(ExpectedSlotCount=drive.expected_slot_count)
                 kwargs.update(PDiskConfig=pc)
+            elif drive.expected_slot_size:  # zero means 'not set', as on the C++ side
+                pc = pdisk_config.TPDiskConfig(
+                    ExpectedSlotSize=drive.expected_slot_size,
+                    MaxSlots=drive.max_slots,
+                )
+                kwargs.update(PDiskConfig=pc)
             array.add(**kwargs)
 
         for host_config in self._cluster_details.host_configs:

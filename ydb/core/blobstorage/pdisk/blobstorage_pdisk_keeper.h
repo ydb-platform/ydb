@@ -174,6 +174,22 @@ public:
     }
 
     //
+    // Runtime (re)configuration
+    //
+
+    void SetExpectedOwnerCount(size_t newOwnerCount) {
+        ChunkTracker.SetExpectedOwnerCount(newOwnerCount);
+    }
+
+    void SetExpectedOwnerSize(i64 newOwnerSize) {
+        ChunkTracker.SetExpectedOwnerSize(newOwnerSize);
+    }
+
+    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize) {
+        ChunkTracker.SetExpectedOwnerSettings(newOwnerCount, newOwnerSize);
+    }
+
+    //
     // GUI
     //
     void PrintHTML(IOutputStream &str) {

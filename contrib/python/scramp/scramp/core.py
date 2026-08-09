@@ -21,11 +21,28 @@ from stringprep import (
     in_table_d2,
 )
 
-from asn1crypto.core import binascii
 from asn1crypto.x509 import Certificate
 
-from scramp.exceptions import ScramException
-from scramp.utils import IterationCount, b64dec, b64enc, h, hmac, uenc, xor
+from scramp.utils import (
+    ScramException,
+    SERVER_ERROR_CHANNEL_BINDING_NOT_SUPPORTED,
+    SERVER_ERROR_CHANNEL_BINDINGS_DONT_MATCH,
+    SERVER_ERROR_SERVER_DOES_SUPPORT_CHANNEL_BINDING,
+    SERVER_ERROR_INVALID_ENCODING,
+    SERVER_ERROR_INVALID_PROOF,
+    SERVER_ERROR_INVALID_USERNAME_ENCODING,
+    SERVER_ERROR_OTHER_ERROR,
+    SERVER_ERROR_EXTENSIONS_NOT_SUPPORTED,
+    SERVER_ERROR_UNKNOWN_USER,
+    SERVER_ERROR_UNSUPPORTED_CHANNEL_BINDING_TYPE,
+    IterationCount,
+    b64dec,
+    b64enc,
+    h,
+    hmac,
+    uenc,
+    xor,
+)
 
 
 # https://tools.ietf.org/html/rfc5802
@@ -36,7 +53,8 @@ class Salt:
     def __init__(self, salt):
         if not isinstance(salt, bytes):
             raise ScramException(
-                f"The 'salt' must be of type bytes, but found type {type(salt)}"
+                f"The 'salt' must be of type bytes, but found type {type(salt)}",
+                SERVER_ERROR_OTHER_ERROR,
             )
         self.salt = salt
 
@@ -51,7 +69,12 @@ class Salt:
 
     @classmethod
     def from_str(cls, s):
-        return cls(b64dec(s))
+        try:
+            return cls(b64dec(s))
+        except ScramException as e:
+            raise ScramException(
+                f"Invalid salt encoding: {e}", SERVER_ERROR_INVALID_ENCODING
+            ) from e
 
     @classmethod
     def create(cls):
@@ -62,18 +85,18 @@ class Nonce:
     def __init__(self, nonce):
         if not isinstance(nonce, str):
             raise ScramException(
-                f"The 'nonce' must be of type str, but found type {type(nonce)}"
+                f"The 'nonce' must be of type str, but found type {type(nonce)}",
+                SERVER_ERROR_OTHER_ERROR,
             )
         if not all(0x21 <= ord(c) <= 0x7E and c != "," for c in nonce):
-            raise ScramException("Nonce contains invalid characters.")
+            raise ScramException(
+                "Nonce contains invalid characters.", SERVER_ERROR_OTHER_ERROR
+            )
 
         self.nonce = nonce
 
     def __str__(self):
         return self.nonce
-
-    def __bytes__(self):
-        return b64enc(self.nonce)
 
     def __eq__(self, other):
         return isinstance(other, Nonce) and self.nonce == other.nonce
@@ -762,19 +785,6 @@ def _get_client_final(
     return b64enc(server_signature), client_final
 
 
-SERVER_ERROR_INVALID_ENCODING = "invalid-encoding"
-SERVER_ERROR_EXTENSIONS_NOT_SUPPORTED = "extensions-not-supported"
-SERVER_ERROR_INVALID_PROOF = "invalid-proof"
-SERVER_ERROR_CHANNEL_BINDINGS_DONT_MATCH = "channel-bindings-dont-match"
-SERVER_ERROR_SERVER_DOES_SUPPORT_CHANNEL_BINDING = "server-does-support-channel-binding"
-SERVER_ERROR_CHANNEL_BINDING_NOT_SUPPORTED = "channel-binding-not-supported"
-SERVER_ERROR_UNSUPPORTED_CHANNEL_BINDING_TYPE = "unsupported-channel-binding-type"
-SERVER_ERROR_UNKNOWN_USER = "unknown-user"
-SERVER_ERROR_INVALID_USERNAME_ENCODING = "invalid-username-encoding"
-SERVER_ERROR_NO_RESOURCES = "no-resources"
-SERVER_ERROR_OTHER_ERROR = "other-error"
-
-
 def _set_client_final(
     hf,
     client_final,
@@ -790,15 +800,16 @@ def _set_client_final(
     chan_binding = msg["c"]
     try:
         chan_binding_bin = b64dec(chan_binding)
-    except binascii.Error as e:
+    except ScramException as e:
         raise ScramException(
-            "The channel binding isn't correctly b64 encoded",
+            f"The channel binding isn't correctly encoded: {e}",
             SERVER_ERROR_INVALID_ENCODING,
         ) from e
     msg_nonce = Nonce(msg["r"])
     proof = msg["p"]
     if not compare_digest(
-        chan_binding_bin, _make_cbind_input(channel_binding, gs2_header)
+        chan_binding_bin,
+        _make_cbind_input(channel_binding, gs2_header),  # type: ignore[arg-type]
     ):
         raise ScramException(
             "The channel bindings don't match.",

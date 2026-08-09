@@ -568,7 +568,8 @@ TWellKnownTaggedLoggingGuard TTaggedLoggingGuard::With(const TValue& value) &
 
 //! Terminal guard for the fluent |YT_TLOG_FATAL| macros. Builds the message
 //! unconditionally and, once the |.With| chain completes, emits the event at |Fatal|
-//! level -- which aborts the process. The enclosing |for| invokes #Commit in its step.
+//! level -- which aborts the process. The enclosing |for| invokes #Commit in its step;
+//! since #Commit is |[[noreturn]]|, the body runs a single time.
 class TTaggedFatalLoggingGuard
     : public TTaggedLoggingGuard
 {
@@ -581,15 +582,6 @@ public:
         : TTaggedLoggingGuard(logger, ELogLevel::Fatal, sourceLocation, anchorRef, message, /*alwaysBuildMessage*/ true)
     { }
 
-    //! Returns true exactly once, so the enclosing |for| runs the |.With| chain a single
-    //! time before its step expression commits the event.
-    bool TryEnter()
-    {
-        bool pending = Pending_;
-        Pending_ = false;
-        return pending;
-    }
-
     //! Emits the event at |Fatal| level; the log manager aborts the process.
     [[noreturn]] void Commit() &
     {
@@ -597,9 +589,6 @@ public:
         LogEventImpl(LoggingContext_, Logger_, ELogLevel::Fatal, SourceLocation_, Anchor_, Writer_.Finish());
         Y_UNREACHABLE();
     }
-
-private:
-    bool Pending_ = true;
 };
 
 //! Terminal guard for the fluent |YT_TLOG_ALERT_AND_THROW| macros. Builds the message

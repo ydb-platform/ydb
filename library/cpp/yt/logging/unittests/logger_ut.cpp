@@ -458,13 +458,19 @@ TEST(TTaggedApiTest, AlertAndThrowDisabledStillThrows)
     EXPECT_TRUE(manager.GetEvents().empty());
 }
 
+//! Compiles only if |YT_TLOG_FATAL| is noreturn: no |return| follows it.
+int LogFatal(const TLogger& Logger)
+{
+    YT_TLOG_FATAL("Fatal message")
+        .With("Arg1", 1);
+}
+
 TEST(TTaggedApiDeathTest, Fatal)
 {
     EXPECT_DEATH({
         TMockLogManager manager;
         TLogger Logger(&manager, "Test");
-        YT_TLOG_FATAL("Fatal message")
-            .With("Arg1", 1);
+        LogFatal(Logger);
     }, "Fatal message \\(Arg1: 1\\)");
 }
 

@@ -126,13 +126,19 @@ struct TDirectReadRestoreEnv {
     std::atomic<ui64> HeldPublishResponses{0};
     TVector<THolder<IEventHandle>> HeldPublishEvents;
 
-    // Drop CmdForgetReadResult to keep restore stuck in Forget stage.
+    // Hold CmdForgetReadResult (re-inject later) to keep restore stuck in Forget stage.
     std::atomic<ui64> HoldForgetResponses{0};
     std::atomic<ui64> HeldForgetResponses{0};
+    TVector<THolder<IEventHandle>> HeldForgetEvents;
 
     // PARTITION_ENSURE → OnUnhandledException → CloseSession("unexpected error: ...").
     std::atomic<ui64> UnexpectedErrorCloseSession{0};
     TString UnexpectedErrorCloseReason;
+
+    // OnDirectReadsRestored → TEvUpdateSession; proves restore finished (not silent-hang).
+    std::atomic<ui64> UpdateSessionCount{0};
+    // Normal-path Publish completed → TEvDirectReadResponse to read session.
+    std::atomic<ui64> DirectReadResponseCount{0};
 
     NActors::TTestActorRuntime& Runtime() {
         return *Server->CleverServer->GetRuntime();
@@ -239,7 +245,8 @@ struct TDirectReadRestoreEnv {
 
             if (HoldForgetResponses.load() && part.HasCmdForgetReadResult()) {
                 ++HeldForgetResponses;
-                return true; // drop — keep restore stuck in Forget
+                HeldForgetEvents.emplace_back(ev.Release());
+                return true;
             }
 
             if (!HoldRestorePreparePublish.load()) {
@@ -259,6 +266,12 @@ struct TDirectReadRestoreEnv {
                     UnexpectedErrorCloseReason = msg->Reason;
                     ++UnexpectedErrorCloseSession;
                 }
+            }
+            if (ev->CastAsLocal<NGRpcProxy::V1::TEvPQProxy::TEvUpdateSession>()) {
+                ++UpdateSessionCount;
+            }
+            if (ev->CastAsLocal<NGRpcProxy::V1::TEvPQProxy::TEvDirectReadResponse>()) {
+                ++DirectReadResponseCount;
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -282,12 +295,22 @@ struct TDirectReadRestoreEnv {
         HeldPublishEvents.clear();
     }
 
+    void ReleaseHeldForgets() {
+        HoldForgetResponses.store(0);
+        auto& runtime = Runtime();
+        for (auto& ev : HeldForgetEvents) {
+            runtime.Send(ev.Release(), /*senderNodeIndex=*/0, /*viaActorSystem=*/true);
+        }
+        HeldForgetEvents.clear();
+    }
+
     void DropHooks() {
         auto& runtime = Runtime();
         runtime.SetEventFilter(&TTestActorRuntimeBase::DefaultFilterFunc);
         runtime.SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
         HeldPrepareEvents.clear();
         HeldPublishEvents.clear();
+        HeldForgetEvents.clear();
     }
 
     void RebootPqTablet() {
@@ -429,6 +452,7 @@ struct TGrpcDirectReadClient {
             return true;
         });
     }
+
 };
 
 void TearDownGrpcAndServer(TDirectReadRestoreEnv& env, TGrpcDirectReadClient& client) {
@@ -500,15 +524,22 @@ Y_UNIT_TEST(RestoredDirectReadIdZeroOnForgetAfterDoubleRestart) {
     client.SendDirectReadAckNoWait(runtime, 1);
     runtime.SimulateSleep(TDuration::MilliSeconds(50));
 
+    const ui64 updateSessionsBefore = env.UpdateSessionCount.load();
     env.RebootPqTablet();
     // Allow Session→Forget path to run; do not hold Forget responses.
     env.HoldRestorePreparePublish.store(0);
-    runtime.SimulateSleep(TDuration::Seconds(1));
+
+    WaitUntil(runtime, [&] {
+        return env.UpdateSessionCount.load() > updateSessionsBefore
+            || env.UnexpectedErrorCloseSession.load() > 0;
+    });
 
     UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
         "Forget after nested restart must not kill partition actor via unhandled exception"
             << "; held=" << env.HeldPrepareOrPublish.load()
             << "; reason=" << env.UnexpectedErrorCloseReason);
+    UNIT_ASSERT_C(env.UpdateSessionCount.load() > updateSessionsBefore,
+        "restore must complete with TEvUpdateSession (not silent-hang in Forget)");
 
     TearDownGrpcAndServer(env, client);
 }
@@ -558,13 +589,20 @@ Y_UNIT_TEST(RequestInflyOnDuplicatePrepareAfterPipeRestart) {
         "expected held Prepare from original read and from ResendRecentRequests after restore"
             << "; held=" << env.HeldPrepareResponses.load());
 
+    const ui64 directReadsBefore = env.DirectReadResponseCount.load();
     env.ReleaseHeldPrepares();
-    runtime.SimulateSleep(TDuration::Seconds(1));
+
+    WaitUntil(runtime, [&] {
+        return env.DirectReadResponseCount.load() > directReadsBefore
+            || env.UnexpectedErrorCloseSession.load() > 0;
+    });
 
     UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
         "duplicate Prepare after pipe restart must not kill partition actor via unhandled exception"
             << "; held=" << env.HeldPrepareResponses.load()
             << "; reason=" << env.UnexpectedErrorCloseReason);
+    UNIT_ASSERT_C(env.DirectReadResponseCount.load() > directReadsBefore,
+        "Prepare/Publish must complete after releasing held Prepares (not silent-hang)");
 
     TearDownGrpcAndServer(env, client);
 }
@@ -681,13 +719,25 @@ Y_UNIT_TEST(HasCmdForgetReadResultOnPrepareDuringForgetRestore) {
         "expected Forget after nested restart (forget-first, RestoredDirectReadId==0)");
 
     env.ReleaseHeldPrepares();
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    runtime.SimulateSleep(TDuration::MilliSeconds(200));
 
     UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
         "late Prepare during Forget restore must not kill partition actor via unhandled exception"
             << "; heldPrepare=" << env.HeldPrepareResponses.load()
             << "; heldForget=" << env.HeldForgetResponses.load()
             << "; reason=" << env.UnexpectedErrorCloseReason);
+
+    const ui64 updateSessionsBefore = env.UpdateSessionCount.load();
+    env.ReleaseHeldForgets();
+    WaitUntil(runtime, [&] {
+        return env.UpdateSessionCount.load() > updateSessionsBefore
+            || env.UnexpectedErrorCloseSession.load() > 0;
+    });
+    UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
+        "releasing Forget after late Prepare must not kill partition actor"
+            << "; reason=" << env.UnexpectedErrorCloseReason);
+    UNIT_ASSERT_C(env.UpdateSessionCount.load() > updateSessionsBefore,
+        "Forget restore must complete with TEvUpdateSession after late Prepare soft-ignore");
 
     TearDownGrpcAndServer(env, client);
 }
@@ -742,13 +792,25 @@ Y_UNIT_TEST(HasCmdForgetReadResultOnPublishDuringForgetRestore) {
         "expected Forget after nested restart (forget-first, RestoredDirectReadId==0)");
 
     env.ReleaseHeldPublishes();
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    runtime.SimulateSleep(TDuration::MilliSeconds(200));
 
     UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
         "late Publish during Forget restore must not kill partition actor via unhandled exception"
             << "; heldPublish=" << env.HeldPublishResponses.load()
             << "; heldForget=" << env.HeldForgetResponses.load()
             << "; reason=" << env.UnexpectedErrorCloseReason);
+
+    const ui64 updateSessionsBefore = env.UpdateSessionCount.load();
+    env.ReleaseHeldForgets();
+    WaitUntil(runtime, [&] {
+        return env.UpdateSessionCount.load() > updateSessionsBefore
+            || env.UnexpectedErrorCloseSession.load() > 0;
+    });
+    UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
+        "releasing Forget after late Publish must not kill partition actor"
+            << "; reason=" << env.UnexpectedErrorCloseReason);
+    UNIT_ASSERT_C(env.UpdateSessionCount.load() > updateSessionsBefore,
+        "Forget restore must complete with TEvUpdateSession after late Publish soft-ignore");
 
     TearDownGrpcAndServer(env, client);
 }

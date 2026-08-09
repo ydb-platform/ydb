@@ -186,15 +186,23 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
 #endif
 
     Y_UNIT_TEST(CouldUseTablePerTable) {
+        // New-scan window: drop is still above minNew → protect.
         UNIT_ASSERT(TSnapshotHoldersPerTable(Step(8), {}).CouldUseTable(Step(10)));
         UNIT_ASSERT(TSnapshotHoldersPerTable(Step(8), {}).CouldUseTable(Step(9)));
 
+        // drop == minNew: new scans at minNew already see the table as dropped → safe.
         UNIT_ASSERT(!TSnapshotHoldersPerTable(Step(8), {}).CouldUseTable(Step(8)));
 
+        // New-scan window closed and no in-flight txs → safe.
         UNIT_ASSERT(!TSnapshotHoldersPerTable(Step(20), {}).CouldUseTable(Step(5)));
         UNIT_ASSERT(!TSnapshotHoldersPerTable(Step(20), {}).CouldUseTable(Step(19)));
 
-        UNIT_ASSERT(!TSnapshotHoldersPerTable(Step(20), { Step(5) }).CouldUseTable(Step(8)));
+        // Long-lived scan at Step(5) < drop=Step(8) <= minNew=Step(20) → must protect.
+        UNIT_ASSERT(TSnapshotHoldersPerTable(Step(20), { Step(5) }).CouldUseTable(Step(8)));
+
+        // In-flight scan at/after drop sees the table as dropped → safe.
+        UNIT_ASSERT(!TSnapshotHoldersPerTable(Step(20), { Step(8) }).CouldUseTable(Step(8)));
+        UNIT_ASSERT(!TSnapshotHoldersPerTable(Step(20), { Step(10) }).CouldUseTable(Step(8)));
     }
 
     Y_UNIT_TEST(CouldUseTableRegistry) {
@@ -205,12 +213,14 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         NTest::TTestPathIdTranslator translator;
         translator.Add(internalPathId, { ssPathId });
 
+        // New-scan window: drop > minNew, even with empty registry → must protect.
         {
             auto registry = CreateSnapshotRegistry();
             const TRegistrySnapshotHolders holders(Step(8), registry, schemeShardId, translator);
-            UNIT_ASSERT(!holders.CouldUseTable(internalPathId, Step(10)));
+            UNIT_ASSERT(holders.CouldUseTable(internalPathId, Step(10)));
         }
 
+        // New-scan window closed and no registered scans → safe.
         {
             auto registry = CreateSnapshotRegistry();
             const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator);

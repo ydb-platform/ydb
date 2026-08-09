@@ -1,6 +1,7 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
@@ -10,6 +11,7 @@
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 #include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
@@ -956,9 +958,17 @@ void TestDropWriteRace() {
     PlanCommit(runtime, sender, planStep + 1, commitTxId);
 }
 
-void TestDropMvccAndCleanupWithActiveScan() {
+void TestDropMvccAndCleanupWithActiveScan(const bool enableSnapshotsLocking) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(enableSnapshotsLocking);
+    if (enableSnapshotsLocking) {
+        auto& longTx = runtime.GetAppData(0).LongTxServiceConfig;
+        longTx.SetLocalSnapshotPromotionTimeSeconds(1);
+        longTx.SetMaxClockSkewMs(1000);
+        longTx.SetSnapshotsExchangeIntervalSeconds(1);
+        longTx.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+    }
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csDefaultControllerGuard->SetOverrideMaxReadStaleness(TDuration::Seconds(5));
 
@@ -1028,19 +1038,29 @@ void TestDropMvccAndCleanupWithActiveScan() {
         UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), PORTION_ROWS);
     }
 
-    // Start an active scan at writeSnapshot (BEFORE the drop) and hold it open.
-    // Wait for data become stale
-    // Check that the scan sees its data.
+    // Start an active scan at writeSnapshot (BEFORE the drop) and hold it open while
+    // minSnapshotForNewReads advances past dropSnapshot. Cleanup must defer dropping
+    // portions because of the in-flight pre-drop snapshot (local tracker or registry).
     {
         TShardReader activeScan(runtime, TTestTxConfig::TxTablet0, tableId, writeSnapshot);
         activeScan.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
         UNIT_ASSERT_C(activeScan.InitializeScanner(), "active pre-drop scan must start");
 
-        // Advance minSnapshotForNewReads past dropSnapshot (sleep > MaxReadStaleness = 5s).
+        // Advance minSnapshotForNewReads past dropSnapshot (sleep > MaxReadStaleness = 5s,
+        // and past registry freshness margin when locking is enabled).
         runtime.SimulateSleep(TDuration::Seconds(6));
         for (ui32 i = 0; i < 10; ++i) {
             PlanCommit(runtime, sender, TPlanStep{ dropPlanStep + i + 1 }, TSet<ui64>{});
             runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+
+        if (enableSnapshotsLocking) {
+            // Local TShardReader does not publish into SnapshotRegistry; pin writeSnapshot
+            // explicitly so TRegistrySnapshotHolders::CouldUseTable sees the active scan.
+            auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
+            registryBuilder->AddSnapshot({}, TRowVersion(writeSnapshot.GetPlanStep(), writeSnapshot.GetTxId()));
+            registryBuilder->SetOldestCollectionTime(runtime.GetCurrentTime());
+            runtime.GetAppData(0).SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());
         }
 
         // Trigger cleanup while the scan is in flight.
@@ -1383,8 +1403,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST(DropWriteRace) {
         TestDropWriteRace();
     }
-    Y_UNIT_TEST(DropMvccAndCleanupWithActiveScan) {
-        TestDropMvccAndCleanupWithActiveScan();
+    Y_UNIT_TEST_DUO(DropMvccAndCleanupWithActiveScan, EnableSnapshotsLocking) {
+        TestDropMvccAndCleanupWithActiveScan(EnableSnapshotsLocking);
     }
 }
 

@@ -55,13 +55,7 @@ bool TRegistrySnapshotHolders::CouldUseTable(const TInternalPathId& pathId, cons
         // Table no longer resolvable — no scan can reach it, cleanup is safe.
         return false;
     }
-    const auto holders = BuildHoldersForTable(*schemeShardLocalPathIds);
-    for (const auto& txSnapshot : holders.GetTxInFlight()) {
-        if (txSnapshot < dropSnapshot) {
-            return true;
-        }
-    }
-    return false;
+    return BuildHoldersForTable(*schemeShardLocalPathIds).CouldUseTable(dropSnapshot);
 }
 
 }   // namespace NKikimr::NOlap

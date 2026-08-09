@@ -70,7 +70,15 @@ public:
     }
 
     bool CouldUseTable(const TSnapshot& dropSnapshot) const {
-        return dropSnapshot > MinSnapshotForNewReads;
+        if (dropSnapshot > MinSnapshotForNewReads) {
+            return true;
+        }
+        for (const auto& txSnapshot : TxInFlight) {
+            if (txSnapshot < dropSnapshot) {
+                return true;
+            }
+        }
+        return false;
     }
 };
 

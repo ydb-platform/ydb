@@ -565,8 +565,8 @@ void LogStructuredEvent(
 
 // See #YT_LOG_ALERT_AND_THROW for the rationale. The throw lives here -- not in the guard
 // -- because the logging library must not depend on the error library. The guard's
-// |Commit| logs the alert (when enabled) and returns the message for the |"message"|
-// attribute.
+// |Commit| logs the alert (when enabled) and returns the rendered event -- tags included,
+// so they survive in the |"message"| attribute.
 #define YT_TLOG_ALERT_AND_THROW(message)                                       \
     for (::NYT::NLogging::NDetail::TTaggedThrowingLoggingGuard loggingGuard__( \
             Logger(),                                                          \

@@ -593,9 +593,9 @@ public:
 
 //! Terminal guard for the fluent |YT_TLOG_ALERT_AND_THROW| macros. Builds the message
 //! unconditionally; once the |.With| chain completes, #Commit emits the event at |Alert|
-//! level (when enabled) and returns the message so the macro can attach it to the thrown
-//! error. The throw lives in the macro -- the logging library must not depend on the
-//! error library, and a destructor must not throw.
+//! level (when enabled) and returns it rendered -- tags included -- for the macro to
+//! attach to the thrown error. The throw lives in the macro -- the logging library must
+//! not depend on the error library, and a destructor must not throw.
 class TTaggedThrowingLoggingGuard
     : public TTaggedLoggingGuard
 {
@@ -617,11 +617,11 @@ public:
         return pending;
     }
 
-    //! Emits the alert event (when enabled) and returns its message for the error payload.
+    //! Emits the alert event (when enabled) and returns it rendered, tags included.
     std::string Commit() &
     {
         auto payload = Writer_.Finish();
-        std::string message(GetMessageFromTaggedPayload(payload));
+        auto message = FormatTaggedPayload(payload);
         if (Enabled_) {
             Enabled_ = false; // The event is emitted here, not from the base destructor.
             LogEventImpl(LoggingContext_, Logger_, EffectiveLevel_, SourceLocation_, Anchor_, std::move(payload));

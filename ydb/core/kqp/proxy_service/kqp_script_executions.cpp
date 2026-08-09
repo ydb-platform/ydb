@@ -1357,7 +1357,9 @@ private:
             }
         }
 
-        Response->OperationIssues = ParseScriptExecutionIssues(executionsResult);
+        if (const auto& issuesSerialized = executionsResult.ColumnParser("issues").GetOptionalJsonDocument()) {
+            Response->OperationIssues = DeserializeIssues(*issuesSerialized);
+        }
 
         if (const auto& retryState = ParseRetryState(executionsResult)) {
             Response->HasRetryPolicy = retryState->RetryPolicyMappingSize() > 0;
@@ -1574,7 +1576,7 @@ private:
 
         auto issues = event.OperationIssues;
         if (!issues) {
-            issues.AddIssue(event.FinalizationStatus ? "Finalization is not complete" : "Lease expired");
+            issues.AddIssue(event.FinalizationStatus ? "Finalization is not complete" : "Lease expired for current query execution runner. Execution runner node was lost.");
         }
 
         // Script execution lease is expired but TRunScriptActor may be still running, so we should check it availability first

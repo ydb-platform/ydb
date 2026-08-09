@@ -20,6 +20,22 @@ from ydb.tests.library.common.types import Erasure
 logger = logging.getLogger(__name__)
 
 
+def max_json_depth(value):
+    if isinstance(value, dict):
+        return 1 + max(
+            (max_json_depth(v) for v in value.values()),
+            default=0
+        )
+
+    if isinstance(value, list):
+        return 1 + max(
+            (max_json_depth(item) for item in value),
+            default=0
+        )
+
+    return 0
+
+
 def set_test_env(request):
     param = getattr(request, "param", {})
     checkpointing_period_ms = param.get("checkpointing_period_ms", "200")

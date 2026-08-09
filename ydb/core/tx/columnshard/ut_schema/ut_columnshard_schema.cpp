@@ -2,6 +2,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
+#include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -955,10 +956,11 @@ void TestDropWriteRace() {
     PlanCommit(runtime, sender, planStep + 1, commitTxId);
 }
 
-void TestIsDroppedAtExactDropSnapshot() {
+void TestDropMvccAndCleanupWithActiveScan() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csDefaultControllerGuard->SetOverrideMaxReadStaleness(TDuration::Seconds(5));
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -991,7 +993,7 @@ void TestIsDroppedAtExactDropSnapshot() {
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        UNIT_ASSERT(rb && rb->num_rows() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), PORTION_ROWS);
     }
 
     // Drop table
@@ -999,31 +1001,63 @@ void TestIsDroppedAtExactDropSnapshot() {
     const auto dropPlanStep = SetupSchema(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), dropTxId);
     const auto dropSnapshot = NOlap::TSnapshot(dropPlanStep, dropTxId);
 
-    // data still readable at commit snapshot
+    // MVCC: after drop the data must still be readable at writeSnapshot (pre-drop).
     {
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, writeSnapshot);
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        UNIT_ASSERT(rb && rb->num_rows() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), PORTION_ROWS);
     }
 
-    // Read EXACTLY AT drop snapshot -- table MUST be considered dropped (no data).
+    // Read EXACTLY AT drop snapshot -- table MUST be considered dropped (0 rows).
     {
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, dropSnapshot);
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        UNIT_ASSERT(!rb || !rb->num_rows());
+        UNIT_ASSERT_VALUES_EQUAL(rb ? rb->num_rows() : 0, 0);
     }
 
-    // Read Right before drop snapshot -- data must be readable
+    // Read right before drop snapshot -- full data must be readable.
     {
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, dropSnapshot.GetPreviousSnapshot());
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        UNIT_ASSERT(rb && rb->num_rows() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), PORTION_ROWS);
+    }
+
+    // Start an active scan at writeSnapshot (BEFORE the drop) and hold it open.
+    // Wait for data become stale
+    // Check that the scan sees its data.
+    {
+        TShardReader activeScan(runtime, TTestTxConfig::TxTablet0, tableId, writeSnapshot);
+        activeScan.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
+        UNIT_ASSERT_C(activeScan.InitializeScanner(), "active pre-drop scan must start");
+
+        // Advance minSnapshotForNewReads past dropSnapshot (sleep > MaxReadStaleness = 5s).
+        runtime.SimulateSleep(TDuration::Seconds(6));
+        for (ui32 i = 0; i < 10; ++i) {
+            PlanCommit(runtime, sender, TPlanStep{ dropPlanStep + i + 1 }, TSet<ui64>{});
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+
+        // Trigger cleanup while the scan is in flight.
+        for (ui32 i = 0; i < 5; ++i) {
+            Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            csDefaultControllerGuard->WaitCleaning(TDuration::Seconds(1), &runtime);
+        }
+
+        // Drain the scan — it must return the pre-drop data.
+        // CouldUseTable must have blocked cleanup of the dropped table's portions.
+        activeScan.Ack();
+        auto rb = activeScan.ContinueReadAll();
+        UNIT_ASSERT_C(activeScan.IsCorrectlyFinished(), "pre-drop active scan must finish without error after cleanup cycles");
+        UNIT_ASSERT_C(rb, "pre-drop active scan must return a batch");
+        UNIT_ASSERT_VALUES_EQUAL_C(rb->num_rows(), PORTION_ROWS,
+            "pre-drop active scan must return all written rows — CouldUseTable must have protected portions while scan was in flight");
     }
 }
 
@@ -1349,8 +1383,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST(DropWriteRace) {
         TestDropWriteRace();
     }
-    Y_UNIT_TEST(IsDroppedAtExactDropSnapshot) {
-        TestIsDroppedAtExactDropSnapshot();
+    Y_UNIT_TEST(DropMvccAndCleanupWithActiveScan) {
+        TestDropMvccAndCleanupWithActiveScan();
     }
 }
 

@@ -43,6 +43,10 @@ public:
         return MinSnapshotForNewReads;
     }
 
+    const std::vector<TSnapshot>& GetTxInFlight() const {
+        return TxInFlight;
+    }
+
     bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const {
         // The object can be used by new scans.
         if (!portion->IsRemovedFor(MinSnapshotForNewReads)) {
@@ -64,6 +68,10 @@ public:
         // We have not found txs that could use it.
         return false;
     }
+
+    bool CouldUseTable(const TSnapshot& dropSnapshot) const {
+        return dropSnapshot > MinSnapshotForNewReads;
+    }
 };
 
 class ISnapshotHolders {
@@ -71,6 +79,7 @@ public:
     virtual ~ISnapshotHolders() = default;
     virtual TSnapshot GetMinSnapshotForNewReads() const = 0;
     virtual bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const = 0;
+    virtual bool CouldUseTable(const TInternalPathId& pathId, const TSnapshot& dropSnapshot) const = 0;
 };
 
 class TLegacySnapshotHolders: public ISnapshotHolders {
@@ -88,6 +97,10 @@ public:
 
     bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const override {
         return impl.CouldUsePortion(portion);
+    }
+
+    bool CouldUseTable(const TInternalPathId& /*pathId*/, const TSnapshot& dropSnapshot) const override {
+        return impl.CouldUseTable(dropSnapshot);
     }
 };
 
@@ -112,6 +125,7 @@ public:
     }
 
     bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const override;
+    bool CouldUseTable(const TInternalPathId& pathId, const TSnapshot& dropSnapshot) const override;
 };
 
 }   // namespace NKikimr::NOlap

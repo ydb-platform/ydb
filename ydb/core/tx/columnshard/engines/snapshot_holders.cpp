@@ -49,4 +49,19 @@ bool TRegistrySnapshotHolders::CouldUsePortion(const TPortionInfo::TConstPtr& po
     return GetHoldersByPathId(portion->GetPathId()).CouldUsePortion(portion);
 }
 
+bool TRegistrySnapshotHolders::CouldUseTable(const TInternalPathId& pathId, const TSnapshot& dropSnapshot) const {
+    auto schemeShardLocalPathIds = PathIdTranslator.ResolveSchemeShardLocalPathIdsOptional(pathId);
+    if (!schemeShardLocalPathIds) {
+        // Table no longer resolvable — no scan can reach it, cleanup is safe.
+        return false;
+    }
+    const auto holders = BuildHoldersForTable(*schemeShardLocalPathIds);
+    for (const auto& txSnapshot : holders.GetTxInFlight()) {
+        if (txSnapshot < dropSnapshot) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }   // namespace NKikimr::NOlap

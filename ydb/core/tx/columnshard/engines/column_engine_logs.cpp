@@ -588,8 +588,15 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
         }
     }
 
-    for (auto& [_, pathIds] : pathsToDrop) {
+    for (auto& [dropSnapshot, pathIds] : pathsToDrop) {
         for (TInternalPathId pathId : pathIds) {
+            if (snapshotHolders.CouldUseTable(pathId, dropSnapshot)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+                    ("event", "CleanupTablesDeferredByActiveScan")
+                    ("path_id", pathId)
+                    ("drop_snapshot", dropSnapshot.DebugString());
+                continue;
+            }
             auto g = GranulesStorage->GetGranuleOptional(pathId);
             if (!g) {
                 continue;

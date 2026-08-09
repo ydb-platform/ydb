@@ -121,9 +121,14 @@ struct TDirectReadRestoreEnv {
     std::atomic<ui64> HeldPrepareResponses{0};
     TVector<THolder<IEventHandle>> HeldPrepareEvents;
 
-    // Hold CmdPublishReadResult to keep restore stuck in Publish stage.
+    // Hold CmdPublishReadResult (re-inject later) / keep restore stuck in Publish.
     std::atomic<ui64> HoldPublishResponses{0};
     std::atomic<ui64> HeldPublishResponses{0};
+    TVector<THolder<IEventHandle>> HeldPublishEvents;
+
+    // Drop CmdForgetReadResult to keep restore stuck in Forget stage.
+    std::atomic<ui64> HoldForgetResponses{0};
+    std::atomic<ui64> HeldForgetResponses{0};
 
     // PARTITION_ENSURE → OnUnhandledException → CloseSession("unexpected error: ...").
     std::atomic<ui64> UnexpectedErrorCloseSession{0};
@@ -228,7 +233,13 @@ struct TDirectReadRestoreEnv {
 
             if (HoldPublishResponses.load() && part.HasCmdPublishReadResult()) {
                 ++HeldPublishResponses;
-                return true; // drop — keep restore stuck in Publish
+                HeldPublishEvents.emplace_back(ev.Release());
+                return true;
+            }
+
+            if (HoldForgetResponses.load() && part.HasCmdForgetReadResult()) {
+                ++HeldForgetResponses;
+                return true; // drop — keep restore stuck in Forget
             }
 
             if (!HoldRestorePreparePublish.load()) {
@@ -262,11 +273,21 @@ struct TDirectReadRestoreEnv {
         HeldPrepareEvents.clear();
     }
 
+    void ReleaseHeldPublishes() {
+        HoldPublishResponses.store(0);
+        auto& runtime = Runtime();
+        for (auto& ev : HeldPublishEvents) {
+            runtime.Send(ev.Release(), /*senderNodeIndex=*/0, /*viaActorSystem=*/true);
+        }
+        HeldPublishEvents.clear();
+    }
+
     void DropHooks() {
         auto& runtime = Runtime();
         runtime.SetEventFilter(&TTestActorRuntimeBase::DefaultFilterFunc);
         runtime.SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
         HeldPrepareEvents.clear();
+        HeldPublishEvents.clear();
     }
 
     void RebootPqTablet() {
@@ -603,6 +624,136 @@ Y_UNIT_TEST(HasCmdPublishReadResultOnPrepareDuringPublishRestore) {
         "late Prepare during Publish restore must not kill partition actor via unhandled exception"
             << "; heldPrepare=" << env.HeldPrepareResponses.load()
             << "; heldPublish=" << env.HeldPublishResponses.load()
+            << "; reason=" << env.UnexpectedErrorCloseReason);
+
+    TearDownGrpcAndServer(env, client);
+}
+
+// LOGBROKER-10590: after ack during Prepare-restore + nested pipe restart, forget-first runs with
+// RestoredDirectReadId==0; a late Prepare from the previous restore attempt must be ignored.
+Y_UNIT_TEST(HasCmdForgetReadResultOnPrepareDuringForgetRestore) {
+    TDirectReadRestoreEnv env;
+    env.Start();
+    auto& runtime = env.Runtime();
+
+    RunWithDispatch(runtime, [&] {
+        TDriver driver(MakeAsyncDriverConfig(env.Endpoint));
+        auto writer = CreateSimpleWriter(driver, kTopicPath, "src", /*partitionGroup=*/{}, TString("raw"));
+        if (!writer->Write(TString(1_MB, 'x'))) {
+            ythrow yexception() << "write failed";
+        }
+        writer->Close();
+        driver.Stop(true);
+        return true;
+    });
+
+    TGrpcDirectReadClient client;
+    client.Connect(env.Endpoint);
+    client.InitControlSession(runtime);
+    client.AcceptAssign(runtime);
+    client.InitDirectSession(runtime);
+    client.StartDirectReadPartition(runtime);
+    client.ReadDataNoAck(runtime, /*expectedDirectReadId=*/1);
+
+    // Hold Prepare from the first restore so it can be re-injected later (late delivery).
+    env.HoldPrepareResponses.store(1);
+    env.RebootPqTablet();
+
+    WaitUntil(runtime, [&] {
+        return env.HeldPrepareResponses.load() >= 1;
+    });
+    UNIT_ASSERT_C(env.HeldPrepareResponses.load() >= 1,
+        "expected held Prepare from first restore attempt");
+
+    // Ack while RestoredDirectReadId==id → DirectReadsToForget; DirectReadResults cleared.
+    client.SendDirectReadAckNoWait(runtime, 1);
+    runtime.SimulateSleep(TDuration::MilliSeconds(50));
+
+    // Keep Forget stuck so released Prepare arrives on Forget stage (prod: Prepare in flight /
+    // mailbox vs new Forget after nested disconnect).
+    env.HoldForgetResponses.store(1);
+    env.RebootPqTablet();
+
+    WaitUntil(runtime, [&] {
+        return env.HeldForgetResponses.load() >= 1;
+    });
+    UNIT_ASSERT_C(env.HeldForgetResponses.load() >= 1,
+        "expected Forget after nested restart (forget-first, RestoredDirectReadId==0)");
+
+    env.ReleaseHeldPrepares();
+    WaitUntil(runtime, [&] {
+        return env.UnexpectedErrorCloseSession.load() > 0;
+    });
+
+    // Repro: PARTITION_ENSURE(HasCmdForgetReadResult) on late Prepare during Forget.
+    UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() > 0,
+        "expected PARTITION_ENSURE(HasCmdForgetReadResult) on late Prepare during Forget restore"
+            << "; heldPrepare=" << env.HeldPrepareResponses.load()
+            << "; heldForget=" << env.HeldForgetResponses.load()
+            << "; reason=" << env.UnexpectedErrorCloseReason);
+
+    TearDownGrpcAndServer(env, client);
+}
+
+// LOGBROKER-10590: Prepare+Publish restore in flight, client acks, nested pipe restart → forget-first;
+// late Publish from the previous restore attempt must be ignored (not ENSURE on Forget).
+Y_UNIT_TEST(HasCmdForgetReadResultOnPublishDuringForgetRestore) {
+    TDirectReadRestoreEnv env;
+    env.Start();
+    auto& runtime = env.Runtime();
+
+    RunWithDispatch(runtime, [&] {
+        TDriver driver(MakeAsyncDriverConfig(env.Endpoint));
+        auto writer = CreateSimpleWriter(driver, kTopicPath, "src", /*partitionGroup=*/{}, TString("raw"));
+        if (!writer->Write(TString(1_MB, 'x'))) {
+            ythrow yexception() << "write failed";
+        }
+        writer->Close();
+        driver.Stop(true);
+        return true;
+    });
+
+    TGrpcDirectReadClient client;
+    client.Connect(env.Endpoint);
+    client.InitControlSession(runtime);
+    client.AcceptAssign(runtime);
+    client.InitDirectSession(runtime);
+    client.StartDirectReadPartition(runtime);
+    client.ReadDataNoAck(runtime, /*expectedDirectReadId=*/1);
+
+    // Let Prepare complete; hold Publish (prod: Publish reply still on the wire / in mailbox).
+    env.HoldPublishResponses.store(1);
+    env.RebootPqTablet();
+
+    WaitUntil(runtime, [&] {
+        return env.HeldPublishResponses.load() >= 1;
+    });
+    UNIT_ASSERT_C(env.HeldPublishResponses.load() >= 1,
+        "expected held Publish from first restore attempt (stage=Publish, RestoredDirectReadId set)");
+
+    // Ack while RestoredDirectReadId==id → DirectReadsToForget; DirectReadResults cleared.
+    client.SendDirectReadAckNoWait(runtime, 1);
+    runtime.SimulateSleep(TDuration::MilliSeconds(50));
+
+    env.HoldForgetResponses.store(1);
+    env.RebootPqTablet();
+
+    WaitUntil(runtime, [&] {
+        return env.HeldForgetResponses.load() >= 1;
+    });
+    UNIT_ASSERT_C(env.HeldForgetResponses.load() >= 1,
+        "expected Forget after nested restart (forget-first, RestoredDirectReadId==0)");
+
+    env.ReleaseHeldPublishes();
+    WaitUntil(runtime, [&] {
+        return env.UnexpectedErrorCloseSession.load() > 0;
+    });
+
+    // Repro: PARTITION_ENSURE(HasCmdForgetReadResult) on late Publish during Forget.
+    UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() > 0,
+        "expected PARTITION_ENSURE(HasCmdForgetReadResult) on late Publish during Forget restore"
+            << "; heldPublish=" << env.HeldPublishResponses.load()
+            << "; heldForget=" << env.HeldForgetResponses.load()
             << "; reason=" << env.UnexpectedErrorCloseReason);
 
     TearDownGrpcAndServer(env, client);

@@ -1,4 +1,7 @@
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
+ydb/tests/stress/kafka/tests py3test.sole chunk
+ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test_batched_source
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/simple_queue/tests py3test.sole chunk
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1

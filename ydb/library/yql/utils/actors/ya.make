@@ -7,9 +7,8 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
-    yql/essentials/public/types
-    yql/essentials/public/udf
-    ydb/library/yql/providers/solomon/proto
+    ydb/library/actors/http
+    library/cpp/retry
 )
 
 END()

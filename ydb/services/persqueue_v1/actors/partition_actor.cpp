@@ -812,11 +812,16 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
         case EDirectReadRestoreStage::Forget:
             // RestoredDirectReadId may be 0: forget-first after nested pipe restart does not
             // assign it (see SendNextRestorePrepareOrForget), while DirectReadsToForget is kept.
-            PARTITION_ENSURE(result.HasCmdForgetReadResult())
-                ("result", result.ShortDebugString());
-            PARTITION_ENSURE(*DirectReadsToForget.begin() == result.GetCmdForgetReadResult().GetDirectReadId())
-                ("expected_direct_read_id", *DirectReadsToForget.begin())
-                ("got_direct_read_id", result.GetCmdForgetReadResult().GetDirectReadId());
+            // Late Prepare/Publish (or other non-Forget / wrong id) is possible after nested pipe
+            // restart — soft-ignore like Prepare/Publish stages.
+            if (!result.HasCmdForgetReadResult() || DirectReadsToForget.empty()
+                    || *DirectReadsToForget.begin() != result.GetCmdForgetReadResult().GetDirectReadId()) {
+                YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect ForgetReadResult, got",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()});
+                return;
+            }
             DirectReadsToForget.erase(DirectReadsToForget.begin());
             if (!SendNextRestorePrepareOrForget()) {
                 OnDirectReadsRestored();

@@ -681,13 +681,10 @@ Y_UNIT_TEST(HasCmdForgetReadResultOnPrepareDuringForgetRestore) {
         "expected Forget after nested restart (forget-first, RestoredDirectReadId==0)");
 
     env.ReleaseHeldPrepares();
-    WaitUntil(runtime, [&] {
-        return env.UnexpectedErrorCloseSession.load() > 0;
-    });
+    runtime.SimulateSleep(TDuration::Seconds(1));
 
-    // Repro: PARTITION_ENSURE(HasCmdForgetReadResult) on late Prepare during Forget.
-    UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() > 0,
-        "expected PARTITION_ENSURE(HasCmdForgetReadResult) on late Prepare during Forget restore"
+    UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
+        "late Prepare during Forget restore must not kill partition actor via unhandled exception"
             << "; heldPrepare=" << env.HeldPrepareResponses.load()
             << "; heldForget=" << env.HeldForgetResponses.load()
             << "; reason=" << env.UnexpectedErrorCloseReason);
@@ -745,13 +742,10 @@ Y_UNIT_TEST(HasCmdForgetReadResultOnPublishDuringForgetRestore) {
         "expected Forget after nested restart (forget-first, RestoredDirectReadId==0)");
 
     env.ReleaseHeldPublishes();
-    WaitUntil(runtime, [&] {
-        return env.UnexpectedErrorCloseSession.load() > 0;
-    });
+    runtime.SimulateSleep(TDuration::Seconds(1));
 
-    // Repro: PARTITION_ENSURE(HasCmdForgetReadResult) on late Publish during Forget.
-    UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() > 0,
-        "expected PARTITION_ENSURE(HasCmdForgetReadResult) on late Publish during Forget restore"
+    UNIT_ASSERT_C(env.UnexpectedErrorCloseSession.load() == 0,
+        "late Publish during Forget restore must not kill partition actor via unhandled exception"
             << "; heldPublish=" << env.HeldPublishResponses.load()
             << "; heldForget=" << env.HeldForgetResponses.load()
             << "; reason=" << env.UnexpectedErrorCloseReason);

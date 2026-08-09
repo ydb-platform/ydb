@@ -524,10 +524,11 @@ Y_UNIT_TEST(RestoredDirectReadIdZeroOnForgetAfterDoubleRestart) {
     client.SendDirectReadAckNoWait(runtime, 1);
     runtime.SimulateSleep(TDuration::MilliSeconds(50));
 
+    // HoldRestorePreparePublish filters only Prepare/Publish, not Forget. Clear it before the
+    // nested reboot so Session→Forget is not mixed with the first-attempt prepare hold.
+    env.HoldRestorePreparePublish.store(0);
     const ui64 updateSessionsBefore = env.UpdateSessionCount.load();
     env.RebootPqTablet();
-    // Allow Session→Forget path to run; do not hold Forget responses.
-    env.HoldRestorePreparePublish.store(0);
 
     WaitUntil(runtime, [&] {
         return env.UpdateSessionCount.load() > updateSessionsBefore

@@ -45,7 +45,7 @@ When reading with a [special kind of filter](#min-max-index-predicates) on a col
 
 Example:
 
-In storage, for the [`events` table](../../yql/reference/syntax/create_table/secondary_index.md#example), one of the fragments of column `level` of type `Int32` contains values `[5, 5, 9, 5, 9, 13]`. Then the minimum value is 5, the maximum is 13. For query `SELECT * FROM events WHERE level = 15`, the filter interval is `[15, 15]`. It does not intersect with interval `[5, 13]`, so such a fragment does not need to be read from storage.
+In storage, for the [`events` table](../../yql/reference/syntax/create_table/min_max_index.md#example), one of the fragments of column `level` of type `Int32` contains values `[5, 5, 9, 5, 9, 13]`. Then the minimum value is 5, the maximum is 13. For query `SELECT * FROM events WHERE level = 15`, the filter interval is `[15, 15]`. It does not intersect with interval `[5, 13]`, so such a fragment does not need to be read from storage.
 
 ### Min-max index predicates {#min-max-index-predicates}
 

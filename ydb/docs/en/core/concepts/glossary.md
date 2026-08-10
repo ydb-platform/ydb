@@ -750,19 +750,19 @@ The information in the state storage is volatile. Thus, it is lost on power fail
 
 Due to its nature, the state storage service operates on a best-effort basis. For example, the absence of multiple tablet leaders is guaranteed through the leader election protocol on [distributed storage](#distributed-storage), not on state storage.
 
-For more details on the structure of StateStorage and related subsystems, see the section Metadata distribution services.
+For more details on the structure of StateStorage and related subsystems, see the section [Metadata distribution services](architecture/metadata-services.md).
 
 ### Board {#board}
 
 **Board** is a distributed service designed to store metadata as key-value pairs. It is used, among other things, to store information about [endpoints](../concepts/connect.md#endpoint).
 
-For more details on the structure of Board and related subsystems, see the section Metadata distribution services.
+For more details on the structure of Board and related subsystems, see the section [Metadata distribution services](architecture/metadata-services.md).
 
 ### SchemeBoard {#scheme-board}
 
 **SchemeBoard** is a distributed service designed to store metadata as key-value pairs. It is used, among other things, to store information about [schemas](#global-schema).
 
-For more details on the structure of SchemeBoard and related subsystems, see the section Metadata distribution services.
+For more details on the structure of SchemeBoard and related subsystems, see the section [Metadata distribution services](architecture/metadata-services.md).
 
 #### Compaction {#compaction}
 
@@ -867,7 +867,7 @@ Below are explained terms related to the implementation of [distributed transact
 
 #### Deterministic transactions {#deterministic-transactions}
 
-Distributed transactions in {{ ydb-short-name }} are inspired by the research paper [Building Deterministic Transaction Processing Systems without Deterministic Thread Scheduling](http://cs-www.cs.yale.edu/homes/dna/papers/transactions-wodet11.pdf) by Alexander Thomson and Daniel J. Abadi from Yale University. The paper introduced the concept of **deterministic transaction processing**, which allows efficient processing of distributed transactions. The original paper imposed restrictions on the types of operations that could be performed in this way. Since these restrictions hindered real user scenarios, {{ ydb-short-name }} evolved its algorithms to handle these restrictions, using deterministic transactions as stages of user transaction execution with additional orchestration and locking.
+Distributed transactions in {{ ydb-short-name }} are inspired by the research paper [Building Deterministic Transaction Processing Systems without Deterministic Thread Scheduling](http://cs-www.cs.yale.edu/homes/dna/papers/transactions-wodet11.pdf) by Alexander Thomson and Daniel J. Abadi from Yale University. The paper introduced the concept of **deterministic transaction processing**, which allows efficient processing of distributed transactions. The original paper imposed restrictions on the types of operations that could be performed in this way. Since these restrictions hindered real user scenarios, {{ ydb-short-name }} developed algorithms to overcome these restrictions, using deterministic transactions as stages of user transaction execution with additional orchestration and locking.
 
 #### Optimistic locking {#optimistic-locking}
 

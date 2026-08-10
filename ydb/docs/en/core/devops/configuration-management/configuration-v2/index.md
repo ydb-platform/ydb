@@ -12,6 +12,7 @@ Main materials:
 - [Configuration parameters](config-settings.md)
 - [{#T}](cluster-expansion.md)
 - [{#T}](state-storage-reconfiguration.md)
+- state-storage-reconfiguration
 - [{#T}](state-storage-move.md)
 - [{#T}](static-group-move.md)
 - [Replacing node FQDN](replacing-nodes.md)

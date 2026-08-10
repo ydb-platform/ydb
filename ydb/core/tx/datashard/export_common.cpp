@@ -123,7 +123,7 @@ TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(const NKikimrSch
     permissions.mutable_actions()->Add()->set_change_owner(selfDesc.GetOwner());
 
     NProtoBuf::RepeatedPtrField<Ydb::Scheme::Permissions> toGrant;
-    ConvertAclToYdb(selfDesc.GetOwner(), selfDesc.GetACL(), false, &toGrant);
+    FillPermissionsFromAcl(NACLib::TACL(selfDesc.GetACL()), &toGrant);
     for (const auto& permission : toGrant) {
         *permissions.mutable_actions()->Add()->mutable_grant() = permission;
     }

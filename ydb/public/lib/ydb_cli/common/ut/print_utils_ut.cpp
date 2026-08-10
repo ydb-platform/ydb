@@ -300,7 +300,7 @@ Y_UNIT_TEST_SUITE(PrintAllPermissionsTests) {
             "Permissions: \n"
             "database:ydb.generic.full\n"
             "\n"
-            "Interrupt permissions inheritance: true\n"
+            "Is permissions inheritance interrupted: true\n"
             "\n"
             "Effective permissions: \n"
             "USERS:ydb.database.connect\n"

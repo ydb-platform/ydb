@@ -58,6 +58,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.PutRecordsWithLongExpl
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestConsumersEmptyNames
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestCounters
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestEmptyHttpBody
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestListStreamConsumers
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestListStreamConsumersWithMaxResults
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestListStreamConsumersWithToken
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestPing
@@ -443,6 +444,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQuer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithLocalYdbJoin
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithMultipleWrites
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithPrecompute
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithTwoGroupByHopsOnSameKey
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.WritingInLocalYdbTablesWithCheckpoints
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure
 ydb/core/kqp/ut/indexes/prefixed_vector KqpPrefixedVectorIndexes.PrefixedVectorIndexInsertNewPrefix-Nullable+Covered

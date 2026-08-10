@@ -49,11 +49,15 @@ ui64 IOptimizerPlanner::GetNodePortionsCountLimit() const {
 }
 
 void TOptimizerRuntimeSettings::RefreshNodePortionsCountLimitCounter() const {
-    TGlobalCounters::GetNodePortionsCountLimit()->Set(NodePortionsCountLimit.value_or(IOptimizerPlanner::GetDefaultNodePortionsCountLimit()));
+    const ui64 nodePortionsCountLimit = NodePortionsCountLimit.value_or(IOptimizerPlanner::GetDefaultNodePortionsCountLimit());
+    TGlobalCounters::GetNodePortionsCountLimit()->Set(nodePortionsCountLimit);
+    const ui64 configuredBadPortionsLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetBadPortionsLimit() : 0;
+    TGlobalCounters::GetNodeBadPortionsCountLimit()->Set(configuredBadPortionsLimit ? configuredBadPortionsLimit : 2 * nodePortionsCountLimit);
 }
 
 void TOptimizerRuntimeSettings::LoadFromAppData() {
-    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasNodePortionsCountLimit()) {
+    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasNodePortionsCountLimit() &&
+        AppDataVerified().ColumnShardConfig.GetNodePortionsCountLimit() > 0) {
         SetNodePortionsCountLimit(AppDataVerified().ColumnShardConfig.GetNodePortionsCountLimit());
     } else {
         SetNodePortionsCountLimit(std::nullopt);
@@ -62,7 +66,7 @@ void TOptimizerRuntimeSettings::LoadFromAppData() {
 }
 
 void TOptimizerRuntimeSettings::ApplyFromConfig(const NKikimrConfig::TColumnShardConfig& config) {
-    if (config.HasNodePortionsCountLimit()) {
+    if (config.HasNodePortionsCountLimit() && config.GetNodePortionsCountLimit() > 0) {
         SetNodePortionsCountLimit(config.GetNodePortionsCountLimit());
     } else {
         SetNodePortionsCountLimit(std::nullopt);

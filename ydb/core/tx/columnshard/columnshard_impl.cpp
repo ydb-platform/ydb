@@ -1272,7 +1272,7 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
     ui32 eventType = ev->Get()->SourceType;
     switch (eventType) {
         case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-            YDB_LOG_CRIT("",
+            YDB_LOG_WARN("",
                 {"event", "failed_to_deliver_config_subscription_request"});
             ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRetryConfigSubscription());
             break;

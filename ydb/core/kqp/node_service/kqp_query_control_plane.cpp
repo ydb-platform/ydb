@@ -314,7 +314,7 @@ public:
         }
 
         auto lightLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
-        auto heavyLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
+        auto heavyLimit = CaFactory_->MkqlHeavyProgramMemoryLimit.load();
         const ui32 tasksCount = msg.GetTasks().size();
         ui64 externalMemory = 0;
         if (EnableSmallComputeMemoryAllocations) {
@@ -329,9 +329,11 @@ public:
 
         if (!TxInfo) {
             // - for the very 1st start request we reserve the same amount of memory for channels as well
-            // - for following start requests (unlikely) we allocate no extra mempry for channels
-            channelMemory = externalMemory;
-            externalMemory += channelMemory;
+            // - for following start requests (unlikely) we allocate no extra memory for channels
+            if (EnableChannelMemoryTracking) {
+                channelMemory = tasksCount * lightLimit;
+                externalMemory += channelMemory;
+            }
             TxInfo = MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
                 poolId, msg.GetMemoryPoolPercent(),
                 msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());

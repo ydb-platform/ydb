@@ -101,6 +101,7 @@ struct IKqpNodeComputeActorFactory {
 
     std::atomic<bool> AccountDefaultPoolInScheduler = false;
     std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
+    std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
 
 public:
     struct TCreateArgs {

@@ -285,7 +285,7 @@ void PrintAllPermissions(
     out << "Owner: " << owner << Endl << Endl << "Permissions: " << Endl;
     PrintPermissions(permissions, out);
     if (interruptInheritance) {
-        out << Endl << "Interrupt permissions inheritance: true" << Endl;
+        out << Endl << "Is permissions inheritance interrupted: true" << Endl;
     }
     out << Endl << "Effective permissions: " << Endl;
     PrintPermissions(effectivePermissions, out);

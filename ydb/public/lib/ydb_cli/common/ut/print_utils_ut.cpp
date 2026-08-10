@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(PrintAllPermissionsTests) {
             "Permissions: \n"
             "none\n"
             "\n"
-            "Interrupt permissions inheritance: true\n"
+            "Is permissions inheritance interrupted: true\n"
             "\n"
             "Effective permissions: \n"
             "none\n"

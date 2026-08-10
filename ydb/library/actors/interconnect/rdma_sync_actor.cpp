@@ -919,7 +919,10 @@ namespace {
             };
 
             auto builder = CreateIbVerbsBuilder(1);
-            builder->AddSendVerb(*sendBuf, std::move(cb));
+            if (!builder->AddSendVerb(*sendBuf, std::move(cb))) {
+                error = TString("unable to build send WR");
+                return ReportRdmaSendError(error);
+            }
 
             if (Cq->DoWrBatchAsync(Qp, std::move(builder))) {
                 error = Sprintf("unable to post RDMA %s SEND work request", what);

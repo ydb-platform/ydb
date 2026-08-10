@@ -185,6 +185,10 @@ protected:
         return defaultValue;
     }
 
+    virtual bool DoGetEnableIndexBlobSplit(const bool defaultValue) const {
+        return defaultValue;
+    }
+
 private:
     inline static const NKikimrConfig::TColumnShardConfig DefaultConfig = {};
 
@@ -202,6 +206,10 @@ public:
     const NOlap::NSplitter::TSplitSettings& GetBlobSplitSettings(
         const NOlap::NSplitter::TSplitSettings& defaultValue = Default<NOlap::NSplitter::TSplitSettings>()) {
         return DoGetBlobSplitSettings(defaultValue);
+    }
+
+    bool GetEnableIndexBlobSplit() {
+        return DoGetEnableIndexBlobSplit(GetConfig().GetEnableIndexBlobSplit());
     }
 
     virtual bool CheckPortionsToMergeOnCompaction(const ui64 memoryAfterAdd, const ui32 currentSubsetsCount);

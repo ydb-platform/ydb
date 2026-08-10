@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
@@ -497,7 +498,7 @@ NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_
     AFL_VERIFY(checkRecordsCount == recordsCount)("index_id", indexId)("sum", checkRecordsCount)("portion", recordsCount);
     const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
     auto opStorage = operators->GetOperatorVerified(indexStorageId);
-    const bool splitEnabled = AppDataVerified().ColumnShardConfig.GetEnableIndexBlobSplit();
+    const bool splitEnabled = NYDBTest::TControllers::GetColumnShardController()->GetEnableIndexBlobSplit();
     for (auto&& chunk : chunks) {
         if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
             // The index does not fit the target storage: an inplace (_LOCAL) index cannot be split at all, and
@@ -538,7 +539,8 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     // oversize index is dropped by ReuseIndexChunks (the same behaviour as before the split was introduced).
     std::optional<ui64> chunkSizeLimit;
     const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
-    if (indexStorageId != IStoragesManager::LocalMetadataStorageId && AppDataVerified().ColumnShardConfig.GetEnableIndexBlobSplit()) {
+    if (indexStorageId != IStoragesManager::LocalMetadataStorageId &&
+        NYDBTest::TControllers::GetColumnShardController()->GetEnableIndexBlobSplit()) {
         chunkSizeLimit = operators->GetOperatorVerified(indexStorageId)->GetBlobSplitSettings().GetMaxBlobSize();
     }
     TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> indexChunkConclusion =

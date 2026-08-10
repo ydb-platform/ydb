@@ -21,7 +21,7 @@ PEERDIR(
 )
 
 DEPENDS(
-      ydb/public/tools/federation_recipe/bin
+    ydb/public/tools/federation_recipe/bin
 )
 
 END()

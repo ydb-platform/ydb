@@ -1,5 +1,6 @@
 DEPENDS(
     ydb/public/tools/federation_recipe
+    ydb/public/tools/federation_recipe/bin
     ydb/apps/ydbd
 )
 

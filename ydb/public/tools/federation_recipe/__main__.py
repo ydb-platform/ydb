@@ -185,7 +185,7 @@ class FederationRecipe(object):
 
         cm_binary = os.environ.get(
             'FEDERATION_CM_BINARY',
-            yatest.common.binary_path('ydb/public/tools/federation_recipe/bin/config-manager'),
+             yatest.common.build_path('ydb/public/tools/federation_recipe/bin/cm-binary-test'),
         )
 
         command = [

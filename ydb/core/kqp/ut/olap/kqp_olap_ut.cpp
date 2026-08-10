@@ -5100,10 +5100,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         settings.FeatureFlags.SetEnableSnapshotsLocking(EnableSnapshotsLocking);
         TKikimrRunner kikimr(settings);
         if (EnableSnapshotsLocking) {
-            // AppConfig.LongTxServiceConfig is not propagated through the test server setup path;
-            // ColumnShard/LongTx read AppData dynamically. Shorten the freshness margin so
-            // MinSnapshotForNewReads can advance past the drop snapshot within the wait window
-            // (otherwise CouldUseTable keeps deferring dropped-table cleanup forever).
             auto& longTx = kikimr.GetTestServer().GetRuntime()->GetAppData().LongTxServiceConfig;
             longTx.SetSnapshotsExchangeIntervalSeconds(1);
             longTx.SetSnapshotsRegistryUpdateIntervalSeconds(1);

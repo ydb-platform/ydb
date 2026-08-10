@@ -150,25 +150,6 @@ TString ToString(const TLogTitle::TInterconnectTransport& data)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLogTag::TLogTag(TStringBuf key, TStringBuf value)
-    : Key(key)
-    , Printer(+[](IOutputStream& out, const void* storage)
-              { out << *static_cast<const TStringBuf*>(storage); })
-{
-    static_assert(sizeof(TStringBuf) <= MaxValueSize);
-    static_assert(alignof(TStringBuf) <= 8);
-    std::memcpy(Storage, &value, sizeof(TStringBuf));
-}
-
-void TLogTag::Out(IOutputStream& out) const
-{
-    Y_ABORT_UNLESS(Printer);
-    out << Key << ":";
-    Printer(out, Storage);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 // static
 TString TLogTitle::GetPartitionPrefix(
     ui64 tabletId,
@@ -184,12 +165,12 @@ TString TLogTitle::GetPartitionPrefix(
 
 TChildLogTitle TLogTitle::GetChild(const ui64 startTime) const
 {
-    return MakeChild(startTime, std::span<const TLogTag>{});
+    return MakeChild(startTime, std::span<const TLogParam>{});
 }
 
 TChildLogTitle TLogTitle::MakeChild(
     const ui64 startTime,
-    std::span<const TLogTag> tags) const
+    std::span<const TLogParam> tags) const
 {
     return {CachedPrefix, StartTime, startTime, tags};
 }
@@ -275,7 +256,7 @@ TChildLogTitle::TChildLogTitle(
     TString parentPrefix,
     ui64 parentStartTime,
     ui64 startTime,
-    std::span<const TLogTag> tags)
+    std::span<const TLogParam> tags)
     : ParentPrefix(std::move(parentPrefix))
     , ParentStartTime(parentStartTime)
     , StartTime(startTime)
@@ -292,9 +273,9 @@ TString TChildLogTitle::GetWithTime() const
     TStringBuilder builder;
     builder << ParentPrefix;
 
-    for (size_t i = 0; i < TagCount; ++i) {
+    if (TagCount) {
         builder << " ";
-        Tags[i].Out(builder.Out);
+        NBlockStore::PrintParams(builder.Out, {Tags.data(), TagCount});
     }
 
     const auto sinceParent = CyclesToDurationSafe(StartTime - ParentStartTime);

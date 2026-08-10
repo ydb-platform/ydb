@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(TLogTitleTest)
             TLogTitle::TVolume{.DiskId = "disk1", .TabletId = 12345});
         logTitle1.SetGeneration(5);
 
-        TLogTag tags[] = {{"cp", "123"}};
+        TLogParam tags[] = {{"cp", "123"}};
 
         auto childLogTitle = logTitle1.GetChildWithTags(
             startTime + GetCyclesPerMillisecond() * 1001,

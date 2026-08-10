@@ -106,9 +106,14 @@ int main(int argc, const char* argv[]) {
         };
 
         auto drainBlocks = [&]() {
-            while (TMaybe<TBuffer> block = deserializer->GetNextBlock()) {
-                const ui64 blockStart = progress.ProcessedBytes;
+            for (;;) {
+                const ui64 blockStart = deserializer->GetProcessedInputBytes();
+                TMaybe<TBuffer> block = deserializer->GetNextBlock();
                 progress.ProcessedBytes = deserializer->GetProcessedInputBytes();
+                if (!block) {
+                    break;
+                }
+
                 ++progress.BlocksRead;
                 progress.DecryptedBytes += block->Size();
 

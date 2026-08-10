@@ -337,6 +337,7 @@ kubectl cp auth_token <storage-name>-0:/tmp/auth_token -c ydb-storage
 - Без TLS и аутентификации
 
   Выполните команду:
+
   ```bash
   kubectl exec <storage-name>-0 -c ydb-storage -- \
     /opt/ydb/bin/ydbd \
@@ -347,6 +348,7 @@ kubectl cp auth_token <storage-name>-0:/tmp/auth_token -c ydb-storage
 - С аутентификацией
 
   Выполните команду:
+
   ```bash
   kubectl exec <storage-name>-0 -c ydb-storage -- \
     /opt/ydb/bin/ydbd \
@@ -358,6 +360,7 @@ kubectl cp auth_token <storage-name>-0:/tmp/auth_token -c ydb-storage
 - С аутентификацией и TLS
 
   Выполните команду:
+
   ```bash
   kubectl exec <storage-name>-0 -c ydb-storage -- \
     /opt/ydb/bin/ydbd \

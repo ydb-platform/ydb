@@ -283,8 +283,8 @@ Y_UNIT_TEST(DescribePartitionFailsAfterStatsRetriesExhausted) {
     auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
         runtime, request, CreateDescribePartitionActor, path);
 
-    // Initial attempt + StatsMaxRetries backoff retries, then fail on the next DeliveryProblem.
-    UNIT_ASSERT_VALUES_EQUAL(broken, 6u);
+    // Initial attempt + StatsMaxRetries(15) backoff retries, then fail on the next DeliveryProblem.
+    UNIT_ASSERT_VALUES_EQUAL(broken, 16u);
     AssertStatus(result, Ydb::StatusIds::UNAVAILABLE, "unresponsive");
 }
 

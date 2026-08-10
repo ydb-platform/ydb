@@ -156,6 +156,7 @@ public:
     std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
+    TString QueryTextForLogging;
     TKqpCompileResult::TConstPtr CompileResult;
     TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;

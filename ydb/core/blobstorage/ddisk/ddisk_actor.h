@@ -261,8 +261,8 @@ namespace NKikimr::NDDisk {
 
         // Flat cost-estimation constants derived once from PDiskParams (seek
         // time, read/write speed) in InitUring(). Deliberately reuses PDisk's
-        // measured constants for the first iteration (see plan doc); IO_URING
-        // may warrant its own calibrated constants later.
+        // measured constants for the first iteration; IO_URING may warrant
+        // its own calibrated constants later.
         ui64 DeviceOverestimationReadSpeedBps = 0;
         ui64 DeviceOverestimationWriteSpeedBps = 0;
 

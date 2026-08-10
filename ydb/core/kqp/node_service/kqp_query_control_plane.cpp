@@ -325,7 +325,7 @@ public:
                 externalMemory += taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation() ? heavyLimit : lightLimit;
             }
         }
-        auto channelMemory = 0;
+        ui64 channelMemory = 0;
 
         if (!TxInfo) {
             // - for the very 1st start request we reserve the same amount of memory for channels as well

@@ -2,21 +2,17 @@ import json
 import pytest
 import logging
 import time
-import datetime
 from typing import Callable
 
 from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 import ydb.issues
 import os
-import sys
 from collections import Counter
 from itertools import chain, islice
 
-import conftest
 import random
 
-# The token that the IAM emulator returns by default.
 USER_TOKEN = "root@builtin"
 
 MAX_WRITE_STREAM_SIZE = 500
@@ -1214,9 +1210,9 @@ class TestJoinYdbStreaming(StreamingTestBase):
         local: bool,
         column_tables: bool,
     ):
-        if not (DEBUG or steamlookup):
+        if not (DEBUG or streamlookup):
             pytest.skip("map join verified only in DEBUG test")
-        if local and steamlookup:
+        if local and streamlookup:
             pytest.skip("YQ-5431")
         title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}"
         query_name = f"q_{title}"
@@ -1312,7 +1308,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
         local: bool,
         column_tables: bool,
     ):
-        if local and steamlookup:
+        if local and streamlookup:
             pytest.skip("YQ-5431")
         title = f"slj_wm_{partitions_count}{streamlookup!s:.1}{tasks}{local!s:.1}"
         query_name = f"q_{title}"
@@ -1328,7 +1324,6 @@ class TestJoinYdbStreaming(StreamingTestBase):
         create_table(kikimr, column_tables)
 
         table_name = 'join_table'
-        ydb_conn_name = f'ydb_conn_{table_name}'
 
         # 3. Create TOKEN-auth external data source.
         # (shared_reading with local topics is not implemented, hence use eds)
@@ -1337,8 +1332,8 @@ class TestJoinYdbStreaming(StreamingTestBase):
         options = ()
         streamlookup_hint = Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else ''
         idle_clause = R", WATERMARK_IDLE_TIMEOUT = 'PT5S'" if tasks > 1 or partitions_count > 1 else ""
-        table_source='' if local else f"`{source_name}`."
-        topic_source=f'`{source_name}`.'
+        table_source = '' if local else f"`{source_name}`."
+        topic_source = f'`{source_name}`.'
         sql = Rf'''
             PRAGMA ydb.MaxTasksPerStage = "{tasks}";
 
@@ -1412,11 +1407,11 @@ class TestJoinYdbStreaming(StreamingTestBase):
 
         for pair in messages:
             self.write_stream(
-                [ pair[0] ],
+                [pair[0]],
                 partition_key=b'1',
                 endpoint=endpoint,
             )
-            expected=pair[1:]
+            expected = pair[1:]
             read_data = self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint, timeout=None if len(expected) > 0 else 10)
             read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))
             messages_ctr = Counter(map(freeze, map(json.loads, expected)))

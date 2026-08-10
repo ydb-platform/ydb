@@ -44,7 +44,7 @@ public:
 
         Y_ENSURE(tableInfo);
         TDataShardLocksDb locksDb(DataShard, txc);
-        DataShard.AddUserTable(pathId, tableInfo, &locksDb);
+        DataShard.ReplaceUserTable(pathId, tableInfo, locksDb);
 
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);

@@ -754,6 +754,7 @@ message TColumnTableSchemeOptions {
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
+    optional bool DeduplicationEnabled = 7;
 }
 
 message TColumnTableSchema {
@@ -800,6 +801,7 @@ message TColumnTableRequestedOptions {
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
+    optional bool DeduplicationEnabled = 7;
 }
 
 message TAlterColumnTableSchema {

@@ -11,6 +11,8 @@ items:
   href: cluster-expansion.md
 - name: State Storage move
   href: state-storage-move.md
+- name: Static group SelfHeal
+  href: static-group-self-heal.md
 - name: Static group move
   href: static-group-move.md
 - name: Replacing node FQDN

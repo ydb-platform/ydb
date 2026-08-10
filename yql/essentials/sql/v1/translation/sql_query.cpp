@@ -4324,6 +4324,11 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
 
     // bool fields.
     TABLE_ELEM(
+        "EvaluateExprCache",
+        EvaluateExprCache,
+        /*value=*/true,
+        /*isYqlSelectCompatible=*/true),
+    TABLE_ELEM(
         "RefSelect",
         PragmaRefSelect,
         /*value=*/true,

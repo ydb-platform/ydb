@@ -3691,6 +3691,11 @@ public:
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, BuildQuotedAtom(Pos_, pragmaName))));
                 }
 
+                if (ctx.EvaluateExprCache) {
+                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                                                           BuildQuotedAtom(Pos_, "EnableEvaluateExprCache"))));
+                }
+
                 if (ctx.OrderedColumns) {
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                                                            BuildQuotedAtom(Pos_, "OrderedColumns"))));

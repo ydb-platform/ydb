@@ -6,6 +6,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
 #include <util/generic/utility.h>
+#include <util/string/cast.h>
 #include <util/system/types.h>
 
 #include <array>
@@ -15,6 +16,8 @@
 namespace NKikimr::NKqp {
 
 // Data recorded by the executer and rendered by the session after query completion.
+
+constexpr size_t MaxUserFacingShardReadsPerTask = 64;
 
 // Avoid retaining the full compute actor stats proto for every sampled task.
 struct TUserFacingTaskSnapshot {
@@ -61,6 +64,24 @@ inline TUserFacingTaskSnapshot MakeUserFacingTaskSnapshot(const NYql::NDqProto::
             s.ShardReadsTruncated = extra.GetShardReadsTruncated();
         }
     }
+    for (const auto& source : task.GetSources()) {
+        for (const auto& partition : source.GetExternalPartitions()) {
+            ui64 shardId = 0;
+            if (!TryFromString(partition.GetPartitionId(), shardId)) {
+                continue;
+            }
+            if (s.ShardReads.size() >= MaxUserFacingShardReadsPerTask) {
+                ++s.ShardReadsTruncated;
+                continue;
+            }
+            auto& shard = s.ShardReads.emplace_back();
+            shard.SetShardId(shardId);
+            shard.SetStartTimeMs(partition.GetFirstMessageMs());
+            shard.SetFinishTimeMs(partition.GetLastMessageMs());
+            shard.SetRows(partition.GetExternalRows());
+            shard.SetTiming(NKqpProto::TKqpShardReadStats::FIRST_TO_LAST_MESSAGE);
+        }
+    }
     return s;
 }
 
@@ -68,8 +89,6 @@ inline TUserFacingTaskSnapshot MakeUserFacingTaskSnapshot(const NYql::NDqProto::
 using TUserFacingTraceTaskStats = std::unordered_map<ui32, std::unordered_map<ui64, TUserFacingTaskSnapshot>>;
 
 constexpr size_t MaxUserFacingTraceTasksPerStage = 128;
-
-constexpr size_t MaxUserFacingShardReadsPerTask = 64;
 
 class TUserFacingShardReadCollector {
 public:
@@ -171,6 +190,11 @@ struct TUserFacingStageAgg {
     ui32 MaxDurationNode = 0;
 };
 
+struct TUserFacingBufferLookupStats {
+    std::vector<NKqpProto::TKqpShardReadStats> ShardReads;
+    ui32 ShardReadsTruncated = 0;
+};
+
 // Sink-write stage stats do not contain a table path, so the executer captures it separately.
 struct TUserFacingStageHint {
     TString TablePath;
@@ -182,6 +206,7 @@ struct TUserFacingTraceExecutionData {
     TUserFacingTraceTaskStats TaskStats;
     std::unordered_map<ui32, TUserFacingStageHint> StageHints;
     std::unordered_map<ui32, TUserFacingStageAgg> StageAggs;
+    TUserFacingBufferLookupStats BufferLookup;
     std::vector<TUserFacingShardCommitAck> ShardCommitAcks;
     // Unlike response stats, this snapshot is exported at the tracing collection depth.
     NYql::NDqProto::TDqExecutionStats ExecStats;

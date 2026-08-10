@@ -100,10 +100,22 @@ ui64 GetExpectedVersion(const TString&) {
 
 template<typename TRequest, typename TResponse, typename TResult>
 TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& actorId, TRequest* request,
-    typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback)
+    typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback,
+    std::shared_ptr<TUserFacingCompileDependencyCollector> collector = {},
+    EUserFacingCompileDependency dependency = EUserFacingCompileDependency::SchemeCache,
+    TString target = {})
 {
     auto promise = NewPromise<TResult>();
-    IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TResult>(actorId, request, promise, callback);
+    const TInstant start = TInstant::Now();
+    auto tracedCallback = [callback = std::move(callback), collector = std::move(collector), dependency,
+            target = std::move(target), start](TPromise<TResult> promise, TResponse&& response) mutable {
+        if (collector) {
+            collector->Record(dependency, std::move(target), start, TInstant::Now());
+        }
+        callback(std::move(promise), std::move(response));
+    };
+    IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TResult>(
+        actorId, request, promise, std::move(tracedCallback));
     actorSystem->Register(requestHandler, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
     return promise.GetFuture();
 }
@@ -1436,7 +1448,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
             } catch (const yexception& e) {
                 promise.SetValue(ResultFromException<TResult>(e));
             }
-        }
+        },
+        UserFacingCompileCollector, EUserFacingCompileDependency::SchemeCache, table
     );
 
     // Create an apply for the future that will fetch table statistics and save it in the metadata
@@ -1448,7 +1461,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     TActorSystem* actorSystem = ActorSystem;
 
-    return future.Apply([actorSystem, database](const TFuture<TTableMetadataResult>& f) {
+    return future.Apply([actorSystem, database, table, collector = UserFacingCompileCollector](const TFuture<TTableMetadataResult>& f) {
         auto result = f.GetValue();
         if (!result.Success()) {
             return MakeFuture(result);
@@ -1487,7 +1500,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 result.Metadata->DataSize = s.BytesSize;
                 result.Metadata->StatsLoaded = response.Success;
                 promise.SetValue(result);
-        });
+        }, collector, EUserFacingCompileDependency::StatisticsService, table);
     });
 }
 

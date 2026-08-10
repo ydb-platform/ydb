@@ -657,7 +657,9 @@ private:
             .Counters = RequestCounters->Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
             .Alloc = std::move(alloc),
-            .UserCtx = UserCtx
+            .UserCtx = UserCtx,
+            .CollectUserFacingShards = Request.UserFacingTraceCollectionMode
+                >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL,
         };
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));

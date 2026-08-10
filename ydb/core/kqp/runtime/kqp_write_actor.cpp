@@ -3333,6 +3333,7 @@ public:
         : SessionActorId(settings.SessionActorId)
         , MessageSettings(GetWriteActorSettings())
         , TxManager(settings.TxManager)
+        , CollectUserFacingShards(settings.CollectUserFacingShards)
         , Alloc(settings.Alloc)
         , TypeEnv(std::make_shared<NKikimr::NMiniKQL::TTypeEnvironment>(*Alloc))
         , MemInfo("TKqpBufferWriteActor")
@@ -3635,6 +3636,7 @@ public:
             .Counters = Counters,
 
             .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
+            .CollectUserFacingShards = CollectUserFacingShards,
         });
 
         TActorId id = RegisterWithSameMailbox(actor);

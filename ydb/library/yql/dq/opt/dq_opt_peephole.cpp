@@ -18,9 +18,9 @@ using namespace NYql::NNodes;
 
 namespace {
 
-// Resolves a join key to a wide-flow column index. Like New RBO's PrepareJoinKeys,
-// a physical column used more than once as a join key (or needing a dry-type cast)
-// is expanded into an extra StrictCast column via convertedItems.
+// Resolves a BlockHashJoin key to a wide-flow column index. Like New RBO's
+// PrepareJoinKeys, a physical column used more than once as a join key
+// (or needing a dry-type cast) is expanded into an extra StrictCast column.
 void AssignJoinKeyColumn(
     TExprNode::TPtr& keyAtom,
     TStringBuf keyName,
@@ -258,8 +258,6 @@ TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const TExprBase& node, TExprCont
 
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
-    THashSet<ui32> seenLeftKeyIndexes;
-    THashSet<ui32> seenRightKeyIndexes;
 
     YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
     for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
@@ -277,10 +275,18 @@ TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const TExprBase& node, TExprCont
         bool hasOptional = false;
         auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
 
-        AssignJoinKeyColumn(leftKeyColumnNodes[i], leftName, *leftIndex, keyTypeLeft, dryType,
-                            itemTypeLeft->GetSize(), seenLeftKeyIndexes, leftConvertedItems, ctx);
-        AssignJoinKeyColumn(rightKeyColumnNodes[i], rightName, *rightIndex, keyTypeRight, dryType,
-                            itemTypeRight->GetSize(), seenRightKeyIndexes, rightConvertedItems, ctx);
+        if (keyTypeLeft->Equals(*dryType)) {
+            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
+        } else {
+            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size()));
+            leftConvertedItems.emplace_back(leftName, dryType);
+        }
+        if (keyTypeRight->Equals(*dryType)) {
+            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
+        } else {
+            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
+            rightConvertedItems.emplace_back(rightName, dryType);
+        }
     }
 
     auto leftInput = ExpandJoinInput(*itemTypeLeft, ctx.NewCallable(graceJoin.LeftInput().Pos(), "ToFlow", {graceJoin.LeftInput().Ptr()}), ctx, leftConvertedItems, pos);

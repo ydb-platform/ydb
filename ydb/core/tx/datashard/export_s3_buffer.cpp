@@ -317,7 +317,7 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
         try {
             TBuffer encryptedBlock = Encryption->AddBlock(TStringBuf(Buffer.Data(), Buffer.Size()), last);
             Buffer = std::move(encryptedBlock);
-        } catch (const std::exception& ex) {
+        } catch (const yexception& ex) {
             ErrorString = ex.what();
             return Nothing();
         }

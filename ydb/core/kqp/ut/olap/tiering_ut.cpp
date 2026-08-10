@@ -633,6 +633,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
+        // Enable index blob split so the oversized ngramm filter is split across chunks instead of dropped.
+        testHelper.GetRuntime().GetAppData().ColumnShardConfig.SetEnableIndexBlobSplit(true);
         olapHelper.CreateTestOlapTable();
         testHelper.CreateTier(DEFAULT_TIER_NAME);
 

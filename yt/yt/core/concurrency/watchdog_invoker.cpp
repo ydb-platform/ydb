@@ -46,9 +46,9 @@ private:
     {
         TCurrentInvokerGuard currentInvokerGuard(this);
         TFiberSliceTimer fiberSliceTimer(Threshold_, [&, this] (TCpuDuration execution) {
-            YT_LOG_WARNING("Callback executed for too long without interruptions (Callback: %v, Execution: %v)",
-                callback.GetHandle(),
-                CpuDurationToDuration(execution));
+            YT_TLOG_WARNING("Callback executed for too long without interruptions")
+                .With("Callback", callback.GetHandle())
+                .With("Execution", CpuDurationToDuration(execution));
         });
         callback();
     }

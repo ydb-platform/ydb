@@ -160,6 +160,18 @@ class TestSnapshot:
             {"h1": _error_entry()}, now=10.0, last_update=10.0, max_age_sec=180.0
         ).fresh
 
+        # HOST kind is shared; only TimeSkew waits on clock_skew.
+        host = ChaosTarget.for_host("h1")
+        skew_bad = build_snapshot(
+            {"h1": _hc("h1", skew="ORANGE")}, now=10.0, last_update=10.0, max_age_sec=180.0
+        )
+        assert not hc_predicate_for(
+            host, kind=TargetKind.HOST, scope=ImpactScope.NODE, nemesis_type="TimeSkewNemesis"
+        )(skew_bad)
+        assert hc_predicate_for(
+            host, kind=TargetKind.HOST, scope=ImpactScope.NODE, nemesis_type="NetworkNemesis"
+        )(skew_bad)
+
 
 class TestNodeAndSlotRecovery:
     def test_node_prefault_blue_stuck_then_green(self):

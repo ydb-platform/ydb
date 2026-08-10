@@ -5,11 +5,20 @@ from collections.abc import Mapping, Sequence
 from enum import Enum
 from functools import _CacheInfo, lru_cache
 from ipaddress import ip_address
-from typing import TYPE_CHECKING, Any, NoReturn, TypedDict, TypeVar, Union, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    NoReturn,
+    TypedDict,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
 from urllib.parse import SplitResult, uses_relative
 
 import idna
-from multidict import MultiDict, MultiDictProxy
+from multidict import MultiDict, MultiDictProxy, istr
 from propcache.api import under_cached_property as cached_property
 
 from ._parse import (
@@ -1231,7 +1240,12 @@ class URL:
         >>> url.update_query(a=3, c=4)
         URL('http://example.com/?a=3&b=2&c=4')
         """
-        in_query: Union[str, Mapping[str, QueryVariable], None]
+        in_query: Union[
+            str,
+            Mapping[str, QueryVariable],
+            Sequence[tuple[Union[str, istr], SimpleQuery]],
+            None,
+        ]
         if kwargs:
             if args:
                 msg = "Either kwargs or single query parameter must be present"
@@ -1254,7 +1268,7 @@ class URL:
             qstr: MultiDict[str] = MultiDict(self._parsed_query)
             qstr.update(query_to_pairs(in_query))
             query = get_str_query_from_iterable(qstr.items())
-        elif isinstance(in_query, (bytes, bytearray, memoryview)):  # type: ignore[unreachable]
+        elif isinstance(in_query, (bytes, bytearray, memoryview)):
             msg = "Invalid query type: bytes, bytearray and memoryview are forbidden"
             raise TypeError(msg)
         elif isinstance(in_query, Sequence):
@@ -1262,6 +1276,10 @@ class URL:
             # already; only mappings like builtin `dict` which can't have the
             # same key pointing to multiple values are allowed to use
             # `_query_seq_pairs`.
+            if TYPE_CHECKING:
+                in_query = cast(
+                    Sequence[tuple[Union[str, istr], SimpleQuery]], in_query
+                )
             qs: MultiDict[SimpleQuery] = MultiDict(self._parsed_query)
             qs.update(in_query)
             query = get_str_query_from_iterable(qs.items())

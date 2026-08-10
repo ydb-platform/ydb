@@ -16,6 +16,13 @@ void TestBlockGuess(const TVector<TInputData>& data, const TVector<TExpectedData
     });
 }
 
+template <typename TInputData, typename TExpectedData>
+void TestBlockGuess(const TVector<TInputData>& data, const TVector<TExpectedData>& expected, const std::string_view& memberName) {
+    TBlockHelper().TestKernelFuzzied(data, expected, [memberName](TSetup<false>& setup, TRuntimeNode variantValue) {
+        return setup.PgmBuilder->BlockGuess(variantValue, memberName);
+    });
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlockGuessTest) {
@@ -219,6 +226,20 @@ Y_UNIT_TEST(TupleVariant_OptionalString_AllStringsOmitted) {
         TMaybe<TMaybe<TString>>{TMaybe<TString>{}},
     };
     TestBlockGuess(data, expected, 0U);
+}
+
+Y_UNIT_TEST(OptionalStructVariant_NoNull) {
+    using TFirstMember = NTest::TStructMember<"x", ui32>;
+    using TSecondMember = NTest::TStructMember<"y", ui64>;
+    using TVariant = NTest::TStructVariant<TFirstMember, TSecondMember>;
+
+    TVector<TMaybe<TVariant>> data = {
+        TMaybe<TVariant>{TVariant{TFirstMember{1}}},
+        TMaybe<TVariant>{TVariant{TSecondMember{2}}},
+        TMaybe<TVariant>{TVariant{TFirstMember{3}}},
+    };
+    TVector<TMaybe<ui32>> expected = {ui32{1}, Nothing(), ui32{3}};
+    TestBlockGuess(data, expected, "x");
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockGuessTest)

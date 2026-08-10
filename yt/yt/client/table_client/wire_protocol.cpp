@@ -774,8 +774,8 @@ public:
                 };
             }
             default:
-                YT_LOG_FATAL("Unknown write command (Command: %v)",
-                    command);
+                YT_TLOG_FATAL("Unknown write command")
+                    .With("Command", command);
         }
     }
 
@@ -1093,9 +1093,9 @@ public:
         , Options_(std::move(options))
         , CompressedBlocks_(std::move(compressedBlocks))
     {
-        YT_LOG_DEBUG("Wire protocol rowset reader created (BlockCount: %v, TotalCompressedSize: %v)",
-            CompressedBlocks_.size(),
-            GetByteSize(CompressedBlocks_));
+        YT_TLOG_DEBUG("Wire protocol rowset reader created")
+            .With("BlockCount", CompressedBlocks_.size())
+            .With("TotalCompressedSize", GetByteSize(CompressedBlocks_));
     }
 
     IUnversionedRowBatchPtr Read(const TRowBatchReadOptions& /*options*/) override
@@ -1106,20 +1106,20 @@ public:
 
         if (BlockIndex_ >= std::ssize(CompressedBlocks_)) {
             Finished_ = true;
-            YT_LOG_DEBUG("Wire protocol rowset reader finished");
+            YT_TLOG_DEBUG("Wire protocol rowset reader finished");
             return nullptr;
         }
 
-        YT_LOG_DEBUG("Started decompressing rowset reader block (BlockIndex: %v, CompressedSize: %v)",
-            BlockIndex_,
-            CompressedBlocks_[BlockIndex_].Size());
+        YT_TLOG_DEBUG("Started decompressing rowset reader block")
+            .With("BlockIndex", BlockIndex_)
+            .With("CompressedSize", CompressedBlocks_[BlockIndex_].Size());
 
         auto uncompressedBlock = Codec_->Decompress(CompressedBlocks_[BlockIndex_]);
         CompressedBlocks_[BlockIndex_].Reset();
 
-        YT_LOG_DEBUG("Finished decompressing rowset reader block (BlockIndex: %v, UncompressedSize: %v)",
-            BlockIndex_,
-            uncompressedBlock.Size());
+        YT_TLOG_DEBUG("Finished decompressing rowset reader block")
+            .With("BlockIndex", BlockIndex_)
+            .With("UncompressedSize", uncompressedBlock.Size());
 
         auto rowBuffer = New<TRowBuffer>(
             GetRefCountedTypeCookie<TWireProtocolReaderTag>(),
@@ -1233,15 +1233,15 @@ public:
         , Schemaful_(schemaful)
         , Logger(logger.WithTag("WriterId", TGuid::Create()))
     {
-        YT_LOG_DEBUG("Wire protocol rowset writer created (Codec: %v, DesiredUncompressedBlockSize: %v)",
-            codecId,
-            DesiredUncompressedBlockSize_);
+        YT_TLOG_DEBUG("Wire protocol rowset writer created")
+            .With("Codec", codecId)
+            .With("DesiredUncompressedBlockSize", DesiredUncompressedBlockSize_);
     }
 
     TFuture<void> Close() override
     {
         if (!Closed_) {
-            YT_LOG_DEBUG("Wire protocol rowset writer closed");
+            YT_TLOG_DEBUG("Wire protocol rowset writer closed");
             FlushBlock();
             Closed_ = true;
         }
@@ -1307,13 +1307,13 @@ private:
 
         auto uncompressedBlocks = WireWriter_->Finish();
 
-        YT_LOG_DEBUG("Started compressing rowset writer block (BlockIndex: %v, UncompressedSize: %v)",
-            CompressedBlocks_.size(),
-            GetByteSize(uncompressedBlocks));
+        YT_TLOG_DEBUG("Started compressing rowset writer block")
+            .With("BlockIndex", CompressedBlocks_.size())
+            .With("UncompressedSize", GetByteSize(uncompressedBlocks));
         auto compressedBlock = Codec_->Compress(uncompressedBlocks);
-        YT_LOG_DEBUG("Finished compressing rowset writer block (BlockIndex: %v, CompressedSize: %v)",
-            CompressedBlocks_.size(),
-            compressedBlock.Size());
+        YT_TLOG_DEBUG("Finished compressing rowset writer block")
+            .With("BlockIndex", CompressedBlocks_.size())
+            .With("CompressedSize", compressedBlock.Size());
 
         CompressedBlocks_.push_back(compressedBlock);
         WireWriter_.reset();

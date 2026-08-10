@@ -14,11 +14,11 @@ if not NO_EXTENSIONS:
     from yarl._quoting_c import _Unquoter as _CUnquoter
 
     @pytest.fixture(params=[_PyQuoter, _CQuoter], ids=["py_quoter", "c_quoter"])
-    def quoter(request: pytest.FixtureRequest) -> Union[_PyQuoter, _CQuoter]:  # type: ignore[misc,no-any-unimported]
+    def quoter(request: pytest.FixtureRequest) -> Union[_PyQuoter, _CQuoter]:  # type: ignore[no-any-unimported,misc,unused-ignore]
         return request.param
 
     @pytest.fixture(params=[_PyUnquoter, _CUnquoter], ids=["py_unquoter", "c_unquoter"])
-    def unquoter(request: pytest.FixtureRequest) -> Union[_PyUnquoter, _CUnquoter]:  # type: ignore[misc,no-any-unimported]
+    def unquoter(request: pytest.FixtureRequest) -> Union[_PyUnquoter, _CUnquoter]:  # type: ignore[no-any-unimported,misc,unused-ignore]
         return request.param
 
     quoters = [_PyQuoter, _CQuoter]

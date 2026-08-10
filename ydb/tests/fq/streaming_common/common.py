@@ -26,7 +26,6 @@ def set_test_env(request):
     os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = checkpointing_period_ms
     os.environ["YDB_TEST_LEASE_DURATION_SEC"] = param.get("lease_duration_sec", "5")
     rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
-    print(f"rebalancing_timeout_ms {rebalancing_timeout_ms}")
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
 
 
@@ -40,6 +39,13 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
     enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
+    enable_dq_source_stream_lookup_join_local_lookups = param.get(
+        "enable_dq_source_stream_lookup_join_local_lookups", False
+    )  # TODO YQ-5431
+    enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
+    enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
+        "enable_dq_source_stream_lookup_join_shuffle_mode", False
+    )  # TODO YQ-5453
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -52,6 +58,12 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
+    if enable_dq_source_stream_lookup_join_local_lookups:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_local_lookups")
+    if enable_dq_source_stream_lookup_join_fullscan:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_fullscan")
+    if enable_dq_source_stream_lookup_join_shuffle_mode:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_shuffle_mode")
 
     disabled_feature_flags = []
     if enable_user_attributes_in_topic_query:
@@ -111,6 +123,61 @@ def get_ydb_config(request, enable_fq_connector=None):
         "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
     }
     return config
+
+
+def monitoring_endpoint(cluster: KiKiMR, node_id: int) -> str:
+    node = cluster.nodes[node_id]
+    return f"http://localhost:{node.mon_port}"
+
+
+def get_sensors(cluster: KiKiMR, node_id: int, counters: str) -> Sensors:
+    url = monitoring_endpoint(cluster, node_id) + "/counters/counters={}/json".format(counters)
+    return load_metrics(url)
+
+
+def get_checkpoint_coordinator_metric(
+    cluster: KiKiMR, path: str, metric_name: str, expect_counters_exist: bool = False
+) -> int:
+    sensor_sum = 0
+    found = False
+    for node_id in cluster.nodes:
+        sensor = get_sensors(cluster, node_id, "kqp").find_sensor(
+            {"path": path, "subsystem": "checkpoint_coordinator", "sensor": metric_name}
+        )
+        if sensor is not None:
+            found = True
+            sensor_sum += sensor
+    assert found or not expect_counters_exist, f"Metric '{metric_name}' not found on path '{path}'"
+    return sensor_sum
+
+
+def get_completed_checkpoints(cluster: KiKiMR, path: str, expect_counters_exist: bool = False) -> int:
+    return get_checkpoint_coordinator_metric(
+        cluster, path, "CompletedCheckpoints", expect_counters_exist=expect_counters_exist
+    )
+
+
+def wait_completed_checkpoints(
+    cluster: KiKiMR,
+    path: str,
+    timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
+    checkpoints_count=2,
+    wait_delta: bool = True,
+    expect_counters_exist: bool = False,
+) -> None:
+    if wait_delta:
+        current = get_completed_checkpoints(cluster, path, expect_counters_exist=expect_counters_exist)
+        checkpoints_count = current + checkpoints_count
+
+    deadline = time.time() + timeout
+    while True:
+        completed = get_completed_checkpoints(cluster, path, expect_counters_exist=expect_counters_exist)
+        if completed >= checkpoints_count:
+            break
+        assert (
+            time.time() < deadline
+        ), f"Wait checkpoint failed, actual completed: {completed}, expected {checkpoints_count}"
+        time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
 
 class YdbClient:
@@ -285,49 +352,15 @@ class StreamingTestBase(TestYdsBase):
             endpoint = self.get_endpoint(kikimr, local_topics=False)
         kikimr.ydb_client.create_external_data_source(source_name, endpoint.endpoint, endpoint.database, shared)
 
-    def monitoring_endpoint(self, kikimr: Kikimr, node_id: int) -> str:
-        node = kikimr.cluster.nodes[node_id]
-        return f"http://localhost:{node.mon_port}"
-
-    def get_sensors(self, kikimr: Kikimr, node_id: int, counters: str) -> Sensors:
-        url = self.monitoring_endpoint(kikimr, node_id) + "/counters/counters={}/json".format(counters)
-        return load_metrics(url)
-
-    def get_checkpoint_coordinator_metric(
-        self, kikimr: Kikimr, path: str, metric_name: str, expect_counters_exist: bool = False
-    ) -> int:
-        sum = 0
-        found = False
-        for node_id in kikimr.cluster.nodes:
-            sensor = self.get_sensors(kikimr, node_id, "kqp").find_sensor(
-                {"path": path, "subsystem": "checkpoint_coordinator", "sensor": metric_name}
-            )
-            if sensor is not None:
-                found = True
-                sum += sensor
-        assert found or not expect_counters_exist
-        return sum
-
-    def get_completed_checkpoints(self, kikimr: Kikimr, path: str) -> int:
-        return self.get_checkpoint_coordinator_metric(kikimr, path, "CompletedCheckpoints")
-
     def wait_completed_checkpoints(
         self, kikimr: Kikimr, path: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), checkpoints_count=2
     ) -> None:
-        current = self.get_completed_checkpoints(kikimr, path)
-        checkpoints_count = current + checkpoints_count
-        deadline = time.time() + timeout
-        while True:
-            completed = self.get_completed_checkpoints(kikimr, path)
-            if completed >= checkpoints_count:
-                break
-            assert (
-                time.time() < deadline
-            ), f"Wait checkpoint failed, actual completed: {completed}, expected {checkpoints_count}"
-            time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
+        wait_completed_checkpoints(
+            kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
+        )
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
-        result = self.get_sensors(kikimr, node_id, "utils").find_sensor(
+        result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(
             {"activity": activity, "sensor": "ActorsAliveByActivity", "execpool": "User"}
         )
         return result if result is not None else 0
@@ -338,7 +371,7 @@ class StreamingTestBase(TestYdsBase):
         sum = 0
         found = False
         for node_id in kikimr.cluster.nodes:
-            sensor = self.get_sensors(kikimr, node_id, "kqp").find_sensor(
+            sensor = get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
                 {"path": path, "subsystem": "streaming_queries", "sensor": metric_name}
             )
             if sensor is not None:

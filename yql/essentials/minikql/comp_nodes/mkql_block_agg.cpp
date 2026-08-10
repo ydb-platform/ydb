@@ -749,7 +749,6 @@ public:
 
     ui64 BatchNum = 0;
     TUnboxedValueVector InputValues;
-    TBlockState InputState;
     std::vector<std::unique_ptr<TAggregator>> Aggs;
     std::vector<ui32> AggStateOffsets;
     TUnboxedValueVector UnwrappedValues;
@@ -780,7 +779,6 @@ public:
         , Width(width)
         , OutputWidth(outputWidth)
         , InputValues(width)
-        , InputState(memInfo, width)
         , UnwrappedValues(width)
         , Readers(keys.size())
         , Builders(keys.size())
@@ -818,22 +816,7 @@ public:
         }
     }
 
-    NUdf::TUnboxedValue* GetInputBuffer() {
-        return InputState.Values.data();
-    }
-
     void ProcessInput(const THolderFactory& holderFactory) {
-        InputState.FillArrays();
-        while (InputState.Count) {
-            const auto sliceSize = InputState.Slice();
-            for (size_t i = 0; i < Width; ++i) {
-                InputValues[i] = InputState.Get(sliceSize, holderFactory, i);
-            }
-            ProcessInputImpl(holderFactory);
-        }
-    }
-
-    void ProcessInputImpl(const THolderFactory& holderFactory) {
         ++BatchNum;
         const auto batchLength = TArrowBlock::From(InputValues.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
         if (!batchLength) {
@@ -1286,18 +1269,18 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(KeyLength_, StreamIndex_, Width_, OutputWidth_, FilterColumn_, AggsParams_, Streams_, Keys_, MaxBlockLen_, ctx);
-        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory, std::move(state), std::move(Stream_->GetValue(ctx)), ctx.RuntimeSettings.DatumValidation.Get());
+        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory, OutputWidth_, std::move(state), std::move(Stream_->GetValue(ctx)), ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
-    class TStreamValue: public TComputationValue<TStreamValue> {
-        using TBase = TComputationValue<TStreamValue>;
+    class TStreamValue: public TBlockStreamValue<TStreamValue> {
+        using TBase = TBlockStreamValue<TStreamValue>;
 
     public:
-        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
+        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, size_t outputWidth,
                      NUdf::TUnboxedValue&& state, NUdf::TUnboxedValue&& stream,
                      NYql::EDatumValidationMode validationMode)
-            : TBase(memInfo)
+            : TBase(memInfo, holderFactory, outputWidth)
             , State_(state)
             , Stream_(stream)
             , HolderFactory_(holderFactory)
@@ -1305,9 +1288,9 @@ private:
         {
         }
 
-    private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus DoWideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             TState& state = *static_cast<TState*>(State_.AsBoxed().Get());
+            auto* inputFields = state.InputValues.data();
             const size_t inputWidth = state.Width;
             const size_t outputWidth = state.OutputWidth;
             MKQL_ENSURE(outputWidth == width, "The given width doesn't equal to the result type size");
@@ -1318,7 +1301,7 @@ private:
                 }
 
                 while (!state.WritingOutput) {
-                    switch (Stream_.WideFetch(state.GetInputBuffer(), inputWidth)) {
+                    switch (Stream_.WideFetch(inputFields, inputWidth)) {
                         case NUdf::EFetchStatus::Yield:
                             return NUdf::EFetchStatus::Yield;
                         case NUdf::EFetchStatus::Ok:

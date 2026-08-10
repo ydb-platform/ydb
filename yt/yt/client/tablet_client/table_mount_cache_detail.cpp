@@ -148,8 +148,8 @@ void TTabletInfoOwnerCache::SweepExpiredEntries()
     }
 
     if (!expiredTabletIds.empty()) {
-        YT_LOG_DEBUG("Start sweeping expired tablet info (ExpiredTabletCount: %v)",
-            expiredTabletIds.size());
+        YT_TLOG_DEBUG("Start sweeping expired tablet info")
+            .With("ExpiredTabletCount", expiredTabletIds.size());
 
         for (auto id : expiredTabletIds) {
             auto guard = WriterGuard(MapLock_);
@@ -167,7 +167,7 @@ void TTabletInfoOwnerCache::SweepExpiredEntries()
             }
         }
 
-        YT_LOG_DEBUG("Finish sweeping expired tablet info");
+        YT_TLOG_DEBUG("Finish sweeping expired tablet info");
     }
 }
 
@@ -334,14 +334,13 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
     onError(error, onError);
 
     if (retryInplace) {
-        YT_LOG_ALERT_UNLESS(
+        YT_TLOG_ALERT_UNLESS(
             smoothMovementRedirectionHints.empty() && !reshardRedirectionHint,
-            error,
-            "In-place retry is combined with tablet redirection hints "
-            "within a single request; redirection hints are ignored in favor of in-place retry "
-            "(HasSmoothMovementRedirectionHints: %v, HasReshardRedirectionHint: %v)",
-            !smoothMovementRedirectionHints.empty(),
-            static_cast<bool>(reshardRedirectionHint));
+            "In-place retry is combined with tablet redirection hints within a single request; "
+            "redirection hints are ignored in favor of in-place retry")
+            .With("HasSmoothMovementRedirectionHints", !smoothMovementRedirectionHints.empty())
+            .With("HasReshardRedirectionHint", static_cast<bool>(reshardRedirectionHint))
+            .With(error);
 
         return {{
             .Retryable = true,
@@ -419,17 +418,14 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(
 
         auto owners = TabletInfoOwnerCache_.GetOwners(tabletInfo->TabletId);
 
-        YT_LOG_DEBUG("Switching tablet servant in table mount cache "
-            "(TabletId: %v, PreviousCellId: %v, PreviousMountRevision: %x, "
-            "LogicalMountRevision: %x, NewCellId: %v, NewMountRevision: %x, "
-            "Owners: %v)",
-            tabletInfo->TabletId,
-            tabletInfo->CellId,
-            tabletInfo->MountRevision,
-            tabletInfo->LogicalMountRevision,
-            smoothMovementHint.CellId,
-            smoothMovementHint.NewMountRevision,
-            MakeFormattableView(owners, [] (auto* builder, const auto& weakOwner) {
+        YT_TLOG_DEBUG("Switching tablet servant in table mount cache")
+            .With("TabletId", tabletInfo->TabletId)
+            .With("PreviousCellId", tabletInfo->CellId)
+            .WithFormat("PreviousMountRevision", "%x", tabletInfo->MountRevision)
+            .WithFormat("LogicalMountRevision", "%x", tabletInfo->LogicalMountRevision)
+            .With("NewCellId", smoothMovementHint.CellId)
+            .WithFormat("NewMountRevision", "%x", smoothMovementHint.NewMountRevision)
+            .With("Owners", MakeFormattableView(owners, [] (auto* builder, const auto& weakOwner) {
                 if (auto owner = weakOwner.Lock()) {
                     builder->AppendString(owner->Path);
                 } else {
@@ -454,12 +450,11 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(
         }
     }
 
-    YT_LOG_DEBUG("Switching tablet servants in table mount cache "
-        "(TabletIds: %v, Owners: %v)",
-        MakeFormattableView(replacements, [] (auto* builder, const auto& pair) {
+    YT_TLOG_DEBUG("Switching tablet servants in table mount cache")
+        .With("TabletIds", MakeFormattableView(replacements, [] (auto* builder, const auto& pair) {
             builder->AppendFormat("%v", pair.first);
-        }),
-        ownerPaths);
+        }))
+        .With("Owners", ownerPaths);
 
     std::vector<TTableMountInfoPtr> clonedTableInfos;
 
@@ -529,16 +524,13 @@ auto TTableMountCacheBase::TryHandleTabletReshardedError(
         return {};
     }
 
-    YT_LOG_DEBUG("Updating info of tablets in table mount cache after reshard "
-        "(OldTabletIds: %v, OldTabletMountRevisions: %llx, "
-        "CellId: %v, NewTabletIds: %v, NewTabletsMountRevision: %llx, "
-        "Owners: %v)",
-        oldTabletIds,
-        oldTabletMountRevisions,
-        tabletInfo->CellId,
-        newTabletIds,
-        newTabletsMountRevision,
-        ownerPaths);
+    YT_TLOG_DEBUG("Updating info of tablets in table mount cache after reshard")
+        .With("OldTabletIds", oldTabletIds)
+        .WithFormat("OldTabletMountRevisions", "%llx", oldTabletMountRevisions)
+        .With("CellId", tabletInfo->CellId)
+        .With("NewTabletIds", newTabletIds)
+        .WithFormat("NewTabletsMountRevision", "%llx", newTabletsMountRevision)
+        .With("Owners", ownerPaths);
 
     THashSet<TTabletId> reshardedTabletIds(oldTabletIds.begin(), oldTabletIds.end());
 
@@ -677,21 +669,20 @@ auto TTableMountCacheBase::InvalidateOnError(const TError& error, bool forceRetr
         auto isTabletUnmounted = retryableError->Attributes().Get<bool>("is_tablet_unmounted", false);
         auto tabletInfo = FindTabletInfo(*tabletId);
         if (tabletInfo) {
-            YT_LOG_DEBUG(error,
-                "Invalidating tablet in table mount cache "
-                "(TabletId: %v, CellId: %v, MountRevision: %x, LogicalMountRevision: %x, IsTabletUnmounted: %v, Owners: %v)",
-                tabletInfo->TabletId,
-                tabletInfo->CellId,
-                tabletInfo->MountRevision,
-                tabletInfo->LogicalMountRevision,
-                isTabletUnmounted,
-                MakeFormattableView(TabletInfoOwnerCache_.GetOwners(*tabletId), [] (auto* builder, const auto& weakOwner) {
+            YT_TLOG_DEBUG("Invalidating tablet in table mount cache")
+                .With("TabletId", tabletInfo->TabletId)
+                .With("CellId", tabletInfo->CellId)
+                .WithFormat("MountRevision", "%x", tabletInfo->MountRevision)
+                .WithFormat("LogicalMountRevision", "%x", tabletInfo->LogicalMountRevision)
+                .With("IsTabletUnmounted", isTabletUnmounted)
+                .With("Owners", MakeFormattableView(TabletInfoOwnerCache_.GetOwners(*tabletId), [] (auto* builder, const auto& weakOwner) {
                     if (auto owner = weakOwner.Lock()) {
                         FormatValue(builder, owner->Path, TStringBuf());
                     } else {
                         builder->AppendString(TStringBuf("<expired>"));
                     }
-                }));
+                }))
+                .With(error);
 
             InvalidateTablet(*tabletId);
         }
@@ -721,7 +712,7 @@ void TTableMountCacheBase::Clear()
 {
     TAsyncExpiringCache::Clear();
     TabletInfoOwnerCache_.Clear();
-    YT_LOG_DEBUG("Table mount info cache cleared");
+    YT_TLOG_DEBUG("Table mount info cache cleared");
 }
 
 void TTableMountCacheBase::Reconfigure(TTableMountCacheConfigPtr config)
@@ -731,8 +722,8 @@ void TTableMountCacheBase::Reconfigure(TTableMountCacheConfigPtr config)
         auto guard = WriterGuard(SpinLock_);
         Config_ = config;
     }
-    YT_LOG_DEBUG("Table mount info cache reconfigured (NewConfig: %v)",
-        NYson::ConvertToYsonString(config, NYson::EYsonFormat::Text).AsStringBuf());
+    YT_TLOG_DEBUG("Table mount info cache reconfigured")
+        .With("NewConfig", NYson::ConvertToYsonString(config, NYson::EYsonFormat::Text).AsStringBuf());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

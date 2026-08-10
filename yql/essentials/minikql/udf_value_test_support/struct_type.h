@@ -2,6 +2,7 @@
 
 #include <util/generic/fwd.h>
 #include <util/generic/strbuf.h>
+#include <util/generic/yexception.h>
 
 #include <utility>
 #include <algorithm>
@@ -46,6 +47,15 @@ struct TStructMember {
 template <typename... TMembers>
 struct TStructType {
 private:
+    static consteval bool HasUniqueNames() {
+        std::array<TStringBuf, sizeof...(TMembers)> names = {
+            TMembers::MemberName()...};
+        std::ranges::sort(names);
+        return std::ranges::unique(names).empty();
+    }
+
+    static_assert(HasUniqueNames(), "TStructType members must have unique names");
+
     static consteval std::array<size_t, sizeof...(TMembers)> GetSortedIndexMapping() {
         constexpr std::array<TStringBuf, sizeof...(TMembers)> names = {
             TMembers::MemberName()...};
@@ -72,6 +82,17 @@ private:
     }
 
 public:
+    static constexpr size_t FindMemberIndexByName(TStringBuf name) {
+        constexpr std::array<TStringBuf, sizeof...(TMembers)> names = {
+            TMembers::MemberName()...};
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (names[i] == name) {
+                return i;
+            }
+        }
+        throw yexception() << "struct member not found in other struct type: " << name;
+    }
+
     static constexpr auto SortedIndexMapping = GetSortedIndexMapping();
     static constexpr auto OriginalIndexMapping = GetOriginalIndexMapping();
 

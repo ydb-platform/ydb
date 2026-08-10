@@ -71,6 +71,7 @@ BELONGS opentelemetry/proto/collector/trace/v1/ya.make ya.make
         opentelemetry/proto/common/v1/common.proto [3:13]
         opentelemetry/proto/logs/v1/logs.proto [3:13]
         opentelemetry/proto/metrics/v1/metrics.proto [3:13]
+        opentelemetry/proto/processcontext/v1development/process_context.proto [3:13]
         opentelemetry/proto/profiles/v1development/profiles.proto [3:13]
         opentelemetry/proto/resource/v1/resource.proto [3:13]
         opentelemetry/proto/trace/v1/trace.proto [3:13]

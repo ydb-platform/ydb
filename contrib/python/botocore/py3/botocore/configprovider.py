@@ -147,7 +147,7 @@ BOTOCORE_DEFAUT_SESSION_VARIABLES = {
     'sts_regional_endpoints': (
         'sts_regional_endpoints',
         'AWS_STS_REGIONAL_ENDPOINTS',
-        'legacy',
+        'regional',
         None,
     ),
     'retry_mode': ('retry_mode', 'AWS_RETRY_MODE', 'legacy', None),

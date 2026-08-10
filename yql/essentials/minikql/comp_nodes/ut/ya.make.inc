@@ -31,7 +31,6 @@ SET(ORIG_SOURCES
     mkql_block_exists_ut.cpp
     mkql_block_logical_ut.cpp
     mkql_block_skiptake_ut.cpp
-    mkql_block_map_join_ut_utils.cpp
     mkql_block_map_join_ut.cpp
     mkql_block_test_helper.cpp
     mkql_block_serializer_test_utils.cpp
@@ -46,6 +45,7 @@ SET(ORIG_SOURCES
     mkql_block_dynumber_ut.cpp
     mkql_block_variant_item_ut.cpp
     mkql_block_variant_node_ut.cpp
+    mkql_block_dynamic_variant_ut.cpp
     mkql_blocks_ut.cpp
     mkql_callable_ut.cpp
     mkql_combine_ut.cpp

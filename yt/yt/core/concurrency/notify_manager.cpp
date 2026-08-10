@@ -68,11 +68,11 @@ void TNotifyManager::NotifyFromInvoke(TCpuInstant cpuInstant, bool force)
     auto waitTime = CpuDurationToDuration(cpuInstant - minEnqueuedAt);
     bool needNotify = force || waitTime > WaitLimit;
 
-    YT_LOG_TRACE("Notify from invoke (Force: %v, Decision: %v, WaitTime: %v, MinEnqueuedAt: %v)",
-        force,
-        needNotify,
-        waitTime,
-        CpuInstantToInstant(minEnqueuedAt));
+    YT_TLOG_TRACE("Notify from invoke")
+        .With("Force", force)
+        .With("Decision", needNotify)
+        .With("WaitTime", waitTime)
+        .With("MinEnqueuedAt", CpuInstantToInstant(minEnqueuedAt));
 
     if (needNotify) {
         NotifyOne(cpuInstant);
@@ -87,9 +87,9 @@ void TNotifyManager::NotifyAfterFetch(TCpuInstant cpuInstant, TCpuInstant newMin
     auto waitTime = CpuDurationToDuration(cpuInstant - minEnqueuedAt);
 
     if (waitTime > WaitLimit) {
-        YT_LOG_TRACE("Notify after fetch (WaitTime: %v, MinEnqueuedAt: %v)",
-            waitTime,
-            CpuInstantToInstant(minEnqueuedAt));
+        YT_TLOG_TRACE("Notify after fetch")
+            .With("WaitTime", waitTime)
+            .With("MinEnqueuedAt", CpuInstantToInstant(minEnqueuedAt));
 
         NotifyOne(cpuInstant);
     }
@@ -144,9 +144,9 @@ void TNotifyManager::Wait(NThreading::TEventCount::TCookie cookie, std::function
             auto waitTime = CpuDurationToDuration(cpuInstant - minEnqueuedAt);
 
             if (waitTime > WaitLimit) {
-                YT_LOG_DEBUG("Wake up by timeout (WaitTime: %v, MinEnqueuedAt: %v)",
-                    waitTime,
-                    CpuInstantToInstant(minEnqueuedAt));
+                YT_TLOG_DEBUG("Wake up by timeout")
+                    .With("WaitTime", waitTime)
+                    .With("MinEnqueuedAt", CpuInstantToInstant(minEnqueuedAt));
 
                 WakeupByTimeoutCounter_.Increment();
 
@@ -220,17 +220,17 @@ void TNotifyManager::NotifyOne(TCpuInstant cpuInstant)
 {
     auto notifyInstant = UnlockedNotifyInstant;
     if (NotifyInstant_.compare_exchange_strong(notifyInstant, cpuInstant)) {
-        YT_LOG_TRACE("Notify futex (MinEnqueuedAt: %v)",
-            CpuInstantToInstant(GetMinEnqueuedAt()));
+        YT_TLOG_TRACE("Notify futex")
+            .With("MinEnqueuedAt", CpuInstantToInstant(GetMinEnqueuedAt()));
         EventCount_->NotifyOne();
     } else {
         auto waitTime = CpuDurationToDuration(cpuInstant - notifyInstant);
         if (waitTime > WaitTimeWarningThreshold) {
             // Notifications are locked during more than 30 seconds.
-            YT_LOG_WARNING("Action is probably stuck (MinEnqueuedAt: %v, NotifyInstant: %v, WaitTime: %v)",
-                CpuInstantToInstant(GetMinEnqueuedAt()),
-                notifyInstant,
-                waitTime);
+            YT_TLOG_WARNING("Action is probably stuck")
+                .With("MinEnqueuedAt", CpuInstantToInstant(GetMinEnqueuedAt()))
+                .With("NotifyInstant", notifyInstant)
+                .With("WaitTime", waitTime);
         }
     }
 }

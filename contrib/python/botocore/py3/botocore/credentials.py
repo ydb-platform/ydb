@@ -44,6 +44,7 @@ from botocore.exceptions import (
     UnknownCredentialError,
 )
 from botocore.tokens import SSOTokenProvider
+from botocore.useragent import register_feature_id, register_feature_ids
 from botocore.utils import (
     ArnParser,
     ContainerMetadataFetcher,
@@ -704,6 +705,7 @@ class CachedCredentialFetcher:
         if expiry_window_seconds is None:
             expiry_window_seconds = self.DEFAULT_EXPIRY_WINDOW_SECONDS
         self._expiry_window_seconds = expiry_window_seconds
+        self.feature_ids = set()
 
     def _create_cache_key(self):
         raise NotImplementedError('_create_cache_key()')
@@ -824,7 +826,7 @@ class BaseAssumeRoleCredentialFetcher(CachedCredentialFetcher):
             account_id = arn_parser.parse_arn(role_arn)['account']
             response['Credentials']['AccountId'] = account_id
         else:
-            logger.debug(f"Unable to extract account ID from Arn: {role_arn}")
+            logger.debug("Unable to extract account ID from Arn: %s", role_arn)
 
 
 class AssumeRoleCredentialFetcher(BaseAssumeRoleCredentialFetcher):
@@ -884,6 +886,7 @@ class AssumeRoleCredentialFetcher(BaseAssumeRoleCredentialFetcher):
 
     def _get_credentials(self):
         """Get credentials by calling assume role."""
+        register_feature_ids(self.feature_ids)
         kwargs = self._assume_role_kwargs()
         client = self._create_client()
         response = client.assume_role(**kwargs)
@@ -970,6 +973,7 @@ class AssumeRoleWithWebIdentityCredentialFetcher(
 
     def _get_credentials(self):
         """Get credentials by calling assume role."""
+        register_feature_ids(self.feature_ids)
         kwargs = self._assume_role_kwargs()
         # Assume role with web identity does not require credentials other than
         # the token, explicitly configure the client to not sign requests.
@@ -1048,7 +1052,9 @@ class ProcessProvider(CredentialProvider):
         if credential_process is None:
             return
 
+        register_feature_id('CREDENTIALS_PROFILE_PROCESS')
         creds_dict = self._retrieve_credentials_using(credential_process)
+        register_feature_id('CREDENTIALS_PROCESS')
         if creds_dict.get('expiry_time') is not None:
             return RefreshableCredentials.create_from_metadata(
                 creds_dict,
@@ -1133,6 +1139,7 @@ class InstanceMetadataProvider(CredentialProvider):
         metadata = fetcher.retrieve_iam_role_credentials()
         if not metadata:
             return None
+        register_feature_id('CREDENTIALS_IMDS')
         logger.info(
             'Found credentials from IAM Role: %s', metadata['role_name']
         )
@@ -1217,6 +1224,7 @@ class EnvProvider(CredentialProvider):
             logger.info('Found credentials in environment variables.')
             fetcher = self._create_credentials_fetcher()
             credentials = fetcher(require_expiry=False)
+            register_feature_id('CREDENTIALS_ENV_VARS')
 
             expiry_time = credentials['expiry_time']
             if expiry_time is not None:
@@ -1362,6 +1370,7 @@ class SharedCredentialProvider(CredentialProvider):
                 )
                 token = self._get_session_token(config)
                 account_id = self._get_account_id(config)
+                register_feature_id('CREDENTIALS_PROFILE')
                 return Credentials(
                     access_key,
                     secret_key,
@@ -1429,6 +1438,7 @@ class ConfigProvider(CredentialProvider):
                 )
                 token = self._get_session_token(profile_config)
                 account_id = self._get_account_id(profile_config)
+                register_feature_id('CREDENTIALS_PROFILE')
                 return Credentials(
                     access_key,
                     secret_key,
@@ -1488,6 +1498,7 @@ class BotoProvider(CredentialProvider):
                     access_key, secret_key = self._extract_creds_from_mapping(
                         credentials, self.ACCESS_KEY, self.SECRET_KEY
                     )
+                    register_feature_id('CREDENTIALS_BOTO2_CONFIG_FILE')
                     return Credentials(
                         access_key, secret_key, method=self.METHOD
                     )
@@ -1507,6 +1518,11 @@ class AssumeRoleProvider(CredentialProvider):
     # remaining time left until the credentials expires is less than the
     # EXPIRY_WINDOW.
     EXPIRY_WINDOW_SECONDS = 60 * 15
+    NAMED_PROVIDER_FEATURE_MAP = {
+        'Ec2InstanceMetadata': 'CREDENTIALS_IMDS',
+        'Environment': 'CREDENTIALS_ENV_VARS',
+        'EcsContainer': 'CREDENTIALS_HTTP',
+    }
 
     def __init__(
         self,
@@ -1569,6 +1585,7 @@ class AssumeRoleProvider(CredentialProvider):
         self._credential_sourcer = credential_sourcer
         self._profile_provider_builder = profile_provider_builder
         self._visited_profiles = [self._profile_name]
+        self._feature_ids = set()
 
     def load(self):
         self._loaded_config = self._load_config()
@@ -1619,10 +1636,13 @@ class AssumeRoleProvider(CredentialProvider):
             mfa_prompter=self._prompter,
             cache=self.cache,
         )
+        fetcher.feature_ids = self._feature_ids.copy()
         refresher = fetcher.fetch_credentials
         if mfa_serial is not None:
             refresher = create_mfa_serial_refresher(refresher)
 
+        self._feature_ids.add('CREDENTIALS_STS_ASSUME_ROLE')
+        register_feature_ids(self._feature_ids)
         # The initial credentials are empty and the expiration time is set
         # to now so that we can delay the call to assume role until it is
         # strictly needed.
@@ -1751,18 +1771,20 @@ class AssumeRoleProvider(CredentialProvider):
     def _resolve_source_credentials(self, role_config, profile_name):
         credential_source = role_config.get('credential_source')
         if credential_source is not None:
+            self._feature_ids.add('CREDENTIALS_PROFILE_NAMED_PROVIDER')
             return self._resolve_credentials_from_source(
                 credential_source, profile_name
             )
 
         source_profile = role_config['source_profile']
         self._visited_profiles.append(source_profile)
+        self._feature_ids.add('CREDENTIALS_PROFILE_SOURCE_PROFILE')
         return self._resolve_credentials_from_profile(source_profile)
 
     def _resolve_credentials_from_profile(self, profile_name):
         profiles = self._loaded_config.get('profiles', {})
         profile = profiles[profile_name]
-
+        self._feature_ids.add('CREDENTIALS_PROFILE')
         if (
             self._has_static_credentials(profile)
             and not self._profile_provider_builder
@@ -1818,6 +1840,11 @@ class AssumeRoleProvider(CredentialProvider):
                     f'in profile {profile_name}'
                 ),
             )
+        named_provider_feature_id = self.NAMED_PROVIDER_FEATURE_MAP.get(
+            credential_source
+        )
+        if named_provider_feature_id:
+            self._feature_ids.add(named_provider_feature_id)
         return credentials
 
 
@@ -1848,6 +1875,7 @@ class AssumeRoleWithWebIdentityProvider(CredentialProvider):
         if token_loader_cls is None:
             token_loader_cls = FileWebIdentityTokenLoader
         self._token_loader_cls = token_loader_cls
+        self._feature_ids = set()
 
     def load(self):
         return self._assume_role_with_web_identity()
@@ -1870,8 +1898,15 @@ class AssumeRoleWithWebIdentityProvider(CredentialProvider):
     def _get_config(self, key):
         env_value = self._get_env_config(key)
         if env_value is not None:
+            self._feature_ids.add('CREDENTIALS_ENV_VARS_STS_WEB_ID_TOKEN')
             return env_value
-        return self._get_profile_config(key)
+
+        config_value = self._get_profile_config(key)
+        if config_value is not None:
+            self._feature_ids.add('CREDENTIALS_PROFILE_STS_WEB_ID_TOKEN')
+            return config_value
+
+        return None
 
     def _assume_role_with_web_identity(self):
         token_path = self._get_config('web_identity_token_file')
@@ -1901,6 +1936,10 @@ class AssumeRoleWithWebIdentityProvider(CredentialProvider):
             extra_args=extra_args,
             cache=self.cache,
         )
+        fetcher.feature_ids = self._feature_ids.copy()
+
+        self._feature_ids.add('CREDENTIALS_STS_ASSUME_ROLE_WEB_ID')
+        register_feature_ids(self._feature_ids)
         # The initial credentials are empty and the expiration time is set
         # to now so that we can delay the call to assume role until it is
         # strictly needed.
@@ -2060,6 +2099,7 @@ class ContainerProvider(CredentialProvider):
                 response = self._fetcher.retrieve_full_uri(
                     full_uri, headers=headers
                 )
+                register_feature_id('CREDENTIALS_HTTP')
             except MetadataRetrievalError as e:
                 logger.debug(
                     "Error retrieving container metadata: %s", e, exc_info=True
@@ -2265,6 +2305,7 @@ class SSOCredentialFetcher(CachedCredentialFetcher):
             'accessToken': token,
         }
         try:
+            register_feature_ids(self.feature_ids)
             response = client.get_role_credentials(**kwargs)
         except client.exceptions.UnauthorizedException:
             raise UnauthorizedSSOTokenError()
@@ -2320,6 +2361,7 @@ class SSOProvider(CredentialProvider):
         self._load_config = load_config
         self._client_creator = client_creator
         self._profile_name = profile_name
+        self._feature_ids = set()
 
     def _load_sso_config(self):
         loaded_config = self._load_config()
@@ -2394,12 +2436,23 @@ class SSOProvider(CredentialProvider):
             'token_loader': SSOTokenLoader(cache=self._token_cache),
             'cache': self.cache,
         }
-        if 'sso_session' in sso_config:
+        sso_session_in_config = 'sso_session' in sso_config
+        if sso_session_in_config:
             fetcher_kwargs['sso_session_name'] = sso_config['sso_session']
             fetcher_kwargs['token_provider'] = self._token_provider
+            self._feature_ids.add('CREDENTIALS_PROFILE_SSO')
+        else:
+            self._feature_ids.add('CREDENTIALS_PROFILE_SSO_LEGACY')
 
         sso_fetcher = SSOCredentialFetcher(**fetcher_kwargs)
+        sso_fetcher.feature_ids = self._feature_ids.copy()
 
+        if sso_session_in_config:
+            self._feature_ids.add('CREDENTIALS_SSO')
+        else:
+            self._feature_ids.add('CREDENTIALS_SSO_LEGACY')
+
+        register_feature_ids(self._feature_ids)
         return DeferredRefreshableCredentials(
             method=self.METHOD,
             refresh_using=sso_fetcher.fetch_credentials,

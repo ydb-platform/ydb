@@ -338,9 +338,26 @@ def test_ipv6_missing_right_bracket() -> None:
         URL("http://[1dec:0:0:0::1/")
 
 
-def test_ipv4_brackets_not_allowed() -> None:
-    with pytest.raises(ValueError, match="An IPv4 address cannot be in brackets"):
-        URL("http://[127.0.0.1]/")
+@pytest.mark.parametrize(
+    "url",
+    (
+        "http://[]/",
+        "http://[1]/",
+        "http://[127.0.0.1]/",
+        "http://]1dec:0:0:0::1[/",
+    ),
+    ids=(
+        "empty-IPv6-like-URL",
+        "no-colons-in-IPv6",
+        "IPv4-inside-brackets",
+        "brackets-in-reversed-order",
+    ),
+)
+def test_ipv6_invalid_url(url: str) -> None:
+    with pytest.raises(
+        ValueError, match="The IPv6 content between brackets is not valid"
+    ):
+        URL(url)
 
 
 def test_ipfuture_brackets_not_allowed() -> None:

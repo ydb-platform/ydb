@@ -43,11 +43,13 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners import (
     ClusterSuspendNodeNemesis,
     # ClusterHardRebootHostNemesis,
     KillNodeNemesis,
-    # NetworkNemesis,
+    NetworkNemesis,
+    DnsNemesis,
     TimeSkewNemesis,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.network_planner import (
-    # NetworkNemesisPlanner,
+    DnsNemesisPlanner,
+    NetworkNemesisPlanner,
     TimeSkewNemesisPlanner,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.pinned_first_host_planner import (
@@ -137,16 +139,19 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
 
     # --- core nemesis (network / node / time skew) --------------------------
-    # out["NetworkNemesis"] = {
-    #     "runner": NetworkNemesis(),
-    #     "schedule": 200,
-    #     "ui_group": "NetworkNemesis",
-    #     "planner_cls": NetworkNemesisPlanner,
-    #     "target_kind": TargetKind.HOST,
-    #     "impact_scope": ImpactScope.NODE,
-    #     "guard_mode": GuardMode.FULL,
-    #     "supports_manual": False,
-    # }
+    out["NetworkNemesis"] = {
+        "runner": NetworkNemesis(),
+        "schedule": 200,
+        "ui_group": "NetworkNemesis",
+        "planner_cls": NetworkNemesisPlanner,
+        "target_kind": TargetKind.HOST,
+        "impact_scope": ImpactScope.NODE,
+        "guard_mode": GuardMode.FULL,
+        "supports_manual": False,
+        # Toggle: probe extracts after auto_recovery_sec (clear iptables drops).
+        "recovery": "extract",
+        "auto_recovery_sec": 120,
+    }
     out["KillNodeNemesis"] = {
         "runner": KillNodeNemesis(),
         "schedule": 200,
@@ -156,12 +161,19 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "guard_mode": GuardMode.FULL,
         # Self-healing (SIGKILL + systemd); probe releases on endpoint + storage GREEN.
     }
-    # out["DnsNemesis"] = {
-    #     "runner": DnsNemesis(),
-    #     "schedule": 120,
-    #     "ui_group": "NetworkNemesis",
-    #     "planner_cls": DnsNemesisPlanner,
-    # },
+    out["DnsNemesis"] = {
+        "runner": DnsNemesis(),
+        "schedule": 120,
+        "ui_group": "NetworkNemesis",
+        "planner_cls": DnsNemesisPlanner,
+        "target_kind": TargetKind.HOST,
+        "impact_scope": ImpactScope.NODE,
+        "guard_mode": GuardMode.FULL,
+        "supports_manual": False,
+        # Toggle: probe extracts after auto_recovery_sec (clear iptables DNS drops).
+        "recovery": "extract",
+        "auto_recovery_sec": 120,
+    }
 
     out["ClusterRollingRestartNemesis"] = {
         "runner": ClusterRollingRestartNemesis(),

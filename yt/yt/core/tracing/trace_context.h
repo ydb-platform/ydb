@@ -44,6 +44,9 @@ struct TSpanContext
 
 void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStringBuf spec);
 
+//! Parses a W3C traceparent value into a span context.
+bool TryParseTraceParent(TStringBuf traceParent, TSpanContext& spanContext);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void SetGlobalTracer(const ITracerPtr& tracer);

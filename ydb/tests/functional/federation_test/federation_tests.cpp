@@ -46,7 +46,7 @@ void WriteMessages(const std::string& endpoint, const std::string& database,
     driver.Stop(true);
 }
 
-std::vector<std::string> DrainMessages(std::shared_ptr<IReadSession> session, size_t wantCount,
+std::vector<std::string> ReadMessages(std::shared_ptr<IReadSession> session, size_t wantCount,
                                           TDuration timeout = TDuration::Seconds(30))
   {
       std::vector<std::string> result;
@@ -114,73 +114,12 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
                     .ConsumerName(consumerName)
                     .AppendTopics(TTopicReadSettings(prodTopicPath))
             );
-            messages = DrainMessages(session, 1);
+            messages = ReadMessages(session, 1);
             session->Close(TDuration::Seconds(5));
         }
         Cerr << TInstant::Now() << " Session closed" << Endl;
         driver.Stop(true);
         Cerr << TInstant::Now() << " Driver stopped" << Endl;
-
     }
-
-    // Y_UNIT_TEST(WriteAndReadOnClusterB) {
-    //     TClusterEndpoints env;
-    //     WriteMessages(env.ClusterB, prodDatabasePath, prodTopicPath,
-    //                   "ut-producer-b", {"hello from cluster_b"});
-
-    //     TDriver driver = MakeDriver(env.ClusterB, prodDatabasePath);
-    //     TTopicClient client(driver);
-
-    //     auto session = client.CreateReadSession(
-    //         TReadSessionSettings()
-    //             .ConsumerName(consumerName)
-    //             .AppendTopics(prodTopicPath)
-    //     );
-    //     auto messages = DrainMessages(session, 1);
-    //     UNIT_ASSERT_C(!messages.empty(), "No messages received from cluster_b prod topic");
-    //     session->Close();
-    //     driver.Stop(true);
-    // }
-
-    // Y_UNIT_TEST(WriteAndReadMultipleMessages) {
-    //     TClusterEndpoints env;
-    //     const std::vector<std::string> written = {"msg-0", "msg-1", "msg-2"};
-    //     WriteMessages(env.ClusterA, prodDatabasePath, prodTopicPath,
-    //                   "ut-producer-multi", written);
-
-    //     TDriver driver = MakeDriver(env.ClusterA, prodDatabasePath);
-    //     TTopicClient client(driver);
-
-    //     auto session = client.CreateReadSession(
-    //         TReadSessionSettings()
-    //             .ConsumerName(consumerName)
-    //             .AppendTopics(prodTopicPath)
-    //     );
-    //     auto messages = DrainMessages(session, written.size());
-    //     UNIT_ASSERT_C(messages.size() >= written.size(),
-    //                   "Expected at least " + std::to_string(written.size()) +
-    //                   " messages, got " + std::to_string(messages.size()));
-    //     session->Close();
-    //     driver.Stop(true);
-    // }
-
-    // Y_UNIT_TEST(WriteAndReadTestAccountTopic) {
-    //     TClusterEndpoints env;
-    //     WriteMessages(env.ClusterA, testDatabasePath, testTopicPath,
-    //                   "ut-producer-test-account", {"hello test account"});
-
-    //     TDriver driver = MakeDriver(env.ClusterA, testDatabasePath);
-    //     TTopicClient client(driver);
-
-    //     auto session = client.CreateReadSession(
-    //         TReadSessionSettings()
-    //             .ConsumerName(consumerName)
-    //             .AppendTopics(testTopicPath)
-    //     );
-    //     auto messages = DrainMessages(session, 1);
-    //     UNIT_ASSERT_C(!messages.empty(), "No messages received from test account topic");
-    //     session->Close();
-    //     driver.Stop(true);
-    // }
 
 }

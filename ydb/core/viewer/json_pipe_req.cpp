@@ -1,5 +1,6 @@
 #include "json_pipe_req.h"
 #include "log.h"
+#include <ydb/core/base/wilson_tracing_control.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
@@ -168,15 +169,13 @@ void TViewerPipeClient::BuildParamsFromFormData(TStringBuf data) {
 
 void TViewerPipeClient::SetupTracing(const TString& handlerName) {
     auto request = GetRequest();
-    NWilson::TTraceId traceId;
     TString traceparent = request.GetHeader("traceparent");
-    if (traceparent) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
-    }
     TString wantTrace = request.GetHeader("X-Want-Trace");
     TString traceVerbosity = request.GetHeader("X-Trace-Verbosity");
     TString traceTTL = request.GetHeader("X-Trace-TTL");
-    if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
+
+    NWilson::TTraceId traceId;
+    if (traceparent || FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty()) {
         ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
         if (traceVerbosity) {
             verbosity = FromStringWithDefault<ui8>(traceVerbosity, verbosity);
@@ -187,7 +186,16 @@ void TViewerPipeClient::SetupTracing(const TString& handlerName) {
             ttl = FromStringWithDefault<ui32>(traceTTL, ttl);
             ttl = std::min(ttl, NWilson::TTraceId::MAX_TIME_TO_LIVE);
         }
-        traceId = NWilson::TTraceId::NewTraceId(verbosity, ttl);
+
+        NJaegerTracing::TRequestDiscriminator discriminator;
+        if (Database) {
+            discriminator.Database = Database;
+        }
+        traceId = NJaegerTracing::HandleExternalTracing(
+            discriminator,
+            traceparent ? TMaybe<TString>(traceparent) : Nothing(),
+            verbosity,
+            ttl);
     }
     if (traceId) {
         Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), handlerName ? "http " + handlerName : "http viewer", NWilson::EFlags::AUTO_END};

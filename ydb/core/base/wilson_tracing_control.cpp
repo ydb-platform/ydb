@@ -63,6 +63,15 @@ NWilson::TTraceId HandleTracing(const TRequestDiscriminator& discriminator, cons
     return NWilson::TTraceId{};
 }
 
+NWilson::TTraceId HandleExternalTracing(const TRequestDiscriminator& discriminator,
+        const TMaybe<TString>& traceparent, ui8 maxVerbosity, ui32 timeToLive) {
+    TSamplingThrottlingControl* control = GetTracingControlTls();
+    if (Y_LIKELY(control)) {
+        return control->HandleExternalTracing(discriminator, traceparent, maxVerbosity, timeToLive);
+    }
+    return NWilson::TTraceId{};
+}
+
 void ClearTracingControl() {
     if (TracingControlRawPtr) {
         TracingControlRawPtr = nullptr;

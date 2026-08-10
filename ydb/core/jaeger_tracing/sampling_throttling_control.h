@@ -13,6 +13,9 @@ public:
     NWilson::TTraceId HandleTracing(const TRequestDiscriminator& discriminator,
             const TMaybe<TString>& traceparent);
 
+    NWilson::TTraceId HandleExternalTracing(const TRequestDiscriminator& discriminator,
+            const TMaybe<TString>& traceparent, ui8 maxVerbosity, ui32 timeToLive);
+
     ~TSamplingThrottlingControl();
     
 private:

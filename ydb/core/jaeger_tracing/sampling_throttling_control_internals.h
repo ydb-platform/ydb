@@ -19,6 +19,8 @@ struct TSamplingThrottlingControl::TSamplingThrottlingImpl {
 
     TSettings<TSampler, TIntrusivePtr<TThrottler>> Setup;
 
+    std::optional<ui8> HandleExternalThrottling(const TRequestDiscriminator& discriminator);
+
     NWilson::TTraceId HandleTracing(TRequestDiscriminator discriminator,
             const TMaybe<TString>& traceparent);
 };

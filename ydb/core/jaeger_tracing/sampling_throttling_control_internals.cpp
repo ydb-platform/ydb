@@ -21,26 +21,38 @@ void ForEachMatchingRule(TRequestTypeRules<T>& rules, const TMaybe<TString>& dat
 
 } // namespace anonymous
 
+std::optional<ui8> TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleExternalThrottling(
+        const TRequestDiscriminator& discriminator) {
+    auto requestType = static_cast<size_t>(discriminator.RequestType);
+    const auto& database = discriminator.Database;
+    std::optional<ui8> level;
+
+    ForEachMatchingRule(
+        Setup.ExternalThrottlingRules[requestType], database,
+        [&level](auto& throttlingRule) {
+            if (throttlingRule.Throttler->Throttle()) {
+                return;
+            }
+            if (!level || throttlingRule.Level > *level) {
+                level = throttlingRule.Level;
+            }
+        }
+    );
+
+    return level;
+}
+
 NWilson::TTraceId TSamplingThrottlingControl::TSamplingThrottlingImpl::HandleTracing(
         TRequestDiscriminator discriminator, const TMaybe<TString>& traceparent) {
     auto requestType = static_cast<size_t>(discriminator.RequestType);
-    auto database = std::move(discriminator.Database);
     std::optional<ui8> level;
     NWilson::TTraceId traceId;
 
     if (traceparent) {
-        ForEachMatchingRule(
-            Setup.ExternalThrottlingRules[requestType], database,
-            [&level](auto& throttlingRule) {
-                if (throttlingRule.Throttler->Throttle()) {
-                    return;
-                }
-                if (!level || throttlingRule.Level > *level) {
-                    level = throttlingRule.Level;
-                }
-            }
-        );
+        level = HandleExternalThrottling(discriminator);
     }
+
+    auto database = std::move(discriminator.Database);
 
     if (!level) {
         ForEachMatchingRule(

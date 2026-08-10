@@ -58,7 +58,7 @@ How to view current metric values in the [built-in web interface](../../../devop
 | `api.http.data_streams.response.bytes`<br/>`RATE`, bytes | Total size of responses over HTTP.<br/>Labels:<br/>- _method_ – HTTP API service method name, in this case only `GetRecords`.<br/>- _topic_ – topic name. |
 | `api.http.data_streams.response.duration_milliseconds`<br/>`HIST_RATE`, count | Histogram counter. Intervals are set in milliseconds. Shows the number of responses whose execution time falls within a certain interval.<br/>Labels:<br/>- _method_ – HTTP API service method name.<br/>- _topic_ – topic name. |
 | `api.http.data_streams.get_records.messages`<br/>`RATE`, count | Number of messages read by the `GetRecords` method.<br/>Labels:<br/>- _topic_ – topic name. |
-| `api.http.data_streams.put_record.messages`<br/>`RATE`, count | Number of messages written by the `PutRecord` method (always =1).<br/>Labels:<br/>- _topic_ – topic name. |
+| `api.http.data_streams.put_record.messages`<br/>`RATE`, count | Number of messages sent by the `PutRecord` method.<br/>Labels:<br/>- _topic_ – topic name. |
 | `api.http.data_streams.put_records.failed_messages`<br/>`RATE`, count | Number of messages sent by the `PutRecords` method that were not written.<br/>Labels:<br/>- _topic_ – topic name. |
 | `api.http.data_streams.put_records.successful_messages`<br/>`RATE`, count | Number of messages sent by the `PutRecords` method that were successfully written.<br/>Labels:<br/>- _topic_ – topic name. |
 | `api.http.data_streams.put_records.total_messages`<br/>`RATE`, count | Number of messages sent by the `PutRecords` method.<br/>Labels:<br/>- _topic_ – topic name. |

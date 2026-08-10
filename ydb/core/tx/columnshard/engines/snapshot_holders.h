@@ -43,10 +43,6 @@ public:
         return MinSnapshotForNewReads;
     }
 
-    const std::vector<TSnapshot>& GetTxInFlight() const {
-        return TxInFlight;
-    }
-
     bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const {
         // The object can be used by new scans.
         if (!portion->IsRemovedFor(MinSnapshotForNewReads)) {

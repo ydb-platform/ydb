@@ -769,7 +769,30 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
         case EDirectReadRestoreStage::Prepare:
             PARTITION_ENSURE(RestoredDirectReadId != 0)
                 ("restored_direct_read_id", RestoredDirectReadId);
-            if (!result.HasCmdPrepareReadResult() || DirectReadsToRestore.empty() || DirectReadsToRestore.begin()->first != result.GetCmdPrepareReadResult().GetDirectReadId()) {
+            // Late/duplicate non-Prepare is possible after nested pipe restart — soft-ignore.
+            if (!result.HasCmdPrepareReadResult()) {
+                YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect PrepareReadResult, got",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()});
+                return;
+            }
+            // Empty queue while expecting Prepare is a bookkeeping anomaly (not a stale reply).
+            // Soft-ignore would hang restore forever; close the session so the client recovers.
+            if (DirectReadsToRestore.empty()) {
+                YDB_LOG_WARN_CTX(ctx, "Direct read restore Prepare with empty DirectReadsToRestore",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()},
+                    {"result", result.ShortDebugString()});
+                ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+                    TStringBuilder() << "direct read restore Prepare with empty DirectReadsToRestore"
+                        << ", session=" << Session
+                        << ", cookie=" << Cookie,
+                    PersQueue::ErrorCode::ERROR));
+                return;
+            }
+            if (DirectReadsToRestore.begin()->first != result.GetCmdPrepareReadResult().GetDirectReadId()) {
                 YDB_LOG_DEBUG_CTX(ctx, "Invalid response on direct read restore for expect PrepareReadResult, got",
                     {"PQLOGPREFIX", PQ_LOG_PREFIX},
                     {"partition", Partition},

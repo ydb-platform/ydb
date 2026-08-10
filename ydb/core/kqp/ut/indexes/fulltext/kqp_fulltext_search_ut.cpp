@@ -894,8 +894,8 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextRelevance, UTF8, EnableIndexStreamWrite) {
     }
 }
 
-Y_UNIT_TEST(LuceneRelevanceComparison) {
-    auto kikimr = Kikimr();
+Y_UNIT_TEST_QUAD(LuceneRelevanceComparison, Compact, AfterBuild) {
+    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
     auto db = kikimr.GetQueryClient();
 
     // Create table with fulltext index using relevance layout
@@ -909,27 +909,39 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
     auto result = db.ExecuteQuery(createQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-    // Insert exact documents from Lucene test
-    TString insertQuery = R"sql(
-        UPSERT INTO `/Root/Texts` (Key, Text) VALUES
-            (0, "the quick brown fox jumps over the lazy dog"),
-            (1, "quick quick fox"),
-            (2, "lazy dog sleeps"),
-            (3, "brown bear eats honey"),
-            (4, "xylophone music is rare")
-    )sql";
-    result = db.ExecuteQuery(insertQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    auto ins = [&]() {
+        // Insert exact documents from Lucene test
+        TString insertQuery = R"sql(
+            UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+                (0, "the quick brown fox jumps over the lazy dog"),
+                (1, "quick quick fox"),
+                (2, "lazy dog sleeps"),
+                (3, "brown bear eats honey"),
+                (4, "xylophone music is rare")
+        )sql";
+        result = db.ExecuteQuery(insertQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    };
 
-    // Add fulltext index with relevance
-    TString indexQuery = R"sql(
-        ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-            GLOBAL USING fulltext_relevance
-            ON (Text)
-            WITH (tokenizer=standard, use_filter_lowercase=true)
-    )sql";
-    result = db.ExecuteQuery(indexQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    auto createIdx = [&]() {
+        // Add fulltext index with relevance
+        TString indexQuery = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_relevance
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        result = db.ExecuteQuery(indexQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    };
+
+    if (AfterBuild) {
+        createIdx();
+        ins();
+    } else {
+        ins();
+        createIdx();
+    }
 
     // Test queries with exact relevance scores from Lucene BM25
     std::vector<std::pair<std::string, std::vector<std::pair<ui64, double>>>> testCases = {

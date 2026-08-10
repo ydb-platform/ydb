@@ -139,6 +139,8 @@ struct TDirectReadRestoreEnv {
     std::atomic<ui64> UpdateSessionCount{0};
     // Normal-path Publish completed → TEvDirectReadResponse to read session.
     std::atomic<ui64> DirectReadResponseCount{0};
+    // Control-path DirectReadAck delivered to partition actor.
+    std::atomic<ui64> DirectReadAckCount{0};
 
     // Prepare/Publish delivered while Forget responses are held (late reply onto Forget stage).
     std::atomic<ui64> LateNonForgetReplyDuringForget{0};
@@ -280,6 +282,9 @@ struct TDirectReadRestoreEnv {
             if (ev->CastAsLocal<NGRpcProxy::V1::TEvPQProxy::TEvDirectReadResponse>()) {
                 ++DirectReadResponseCount;
             }
+            if (ev->CastAsLocal<NGRpcProxy::V1::TEvPQProxy::TEvDirectReadAck>()) {
+                ++DirectReadAckCount;
+            }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
     }
@@ -324,8 +329,7 @@ struct TDirectReadRestoreEnv {
         auto& runtime = Runtime();
         const auto edge = runtime.AllocateEdgeActor();
         RebootTablet(runtime, PqTabletId, edge);
-        // Partition actor schedules pipe restart with RESTART_PIPE_DELAY_MS=100.
-        runtime.SimulateSleep(TDuration::MilliSeconds(250));
+        // Callers WaitUntil for restore progress; DispatchEvents advances RESTART_PIPE_DELAY_MS.
     }
 };
 
@@ -600,10 +604,15 @@ protected:
             "expected dropped CmdPrepareReadResult/CmdPublishReadResult during restore");
     }
 
-    // 4. Ack DirectRead and give the actor a short slice to process it.
+    // 4. Ack DirectRead and wait until the ack reaches the partition actor.
     void AckDirectRead(ui64 directReadId = 1) {
+        const ui64 before = Env.DirectReadAckCount.load();
         Client.SendDirectReadAckNoWait(Runtime(), directReadId);
-        Runtime().SimulateSleep(TDuration::MilliSeconds(50));
+        WaitUntil(Runtime(), [&] {
+            return Env.DirectReadAckCount.load() > before
+                || Env.UnexpectedErrorCloseSession.load() > 0;
+        });
+        AssertNoUnexpectedClose("DirectReadAck must not kill partition actor");
     }
 
     // 9–10. Shared asserts.

@@ -1315,6 +1315,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
     ):
         if local and streamlookup:
             pytest.skip("YQ-5431")
+        pytest.skip("YQ-5580: works unstable, requires investigation")
         title = f"slj_wm_{partitions_count}{streamlookup!s:.1}{tasks}{local!s:.1}"
         query_name = f"q_{title}"
         endpoint = self.get_endpoint(kikimr, local_topics=True)

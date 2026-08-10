@@ -5,7 +5,6 @@ ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
 ydb/core/mind/hive/ut THiveTest.TestResetServerlessComputeResourcesMode
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCountersWithKeepMessageOrder
 ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
-ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
 ydb/library/actors/interconnect/ut InterconnectDirectSession.UnregisterRestoresActorSystemDelivery
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemTeardownIdleSessions
@@ -80,6 +79,7 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-1-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-2-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-2-2048-ROW]
+ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_stable-26-3-1_and_stable-26-2-1]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_prestable-26-4]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_prestable-26-4_and_stable-26-3-1]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_stable-26-3-1]

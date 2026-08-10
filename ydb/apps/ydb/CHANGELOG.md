@@ -1,3 +1,4 @@
+* Exposed the `ydb workload testshard` command for creating and managing TestShard tablets for storage load testing.
 
 * Added support for `--format svg` plan format to `ydb sql` command when used with `--explain` or `--explain-analyze` options
 * Added `--content-based-deduplication` option to `ydb topic create` and `ydb topic alter` commands.

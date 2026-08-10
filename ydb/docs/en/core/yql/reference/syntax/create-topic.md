@@ -36,7 +36,7 @@ parameters not explicitly specified are also set to defaults (for both the topic
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs` — a list of [codecs](../../../../concepts/datamodel/topic#message-codec) supported by the topic. The value type is `String`.
+* `supported_codecs` — a list of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the topic. The value type is `String`.
 
 {% endif %}
 

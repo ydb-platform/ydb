@@ -65,15 +65,7 @@ runs:
         python3 .github/scripts/tests/codecov_suites.py json-suite "${SUITE}" > "$CFG_FILE"
         EXCL=$(python3 .github/scripts/tests/codecov_suites.py exclude-regexp)
         echo "exclude_regexp=${EXCL}" >> "$GITHUB_OUTPUT"
-        python3 -c '
-import json, os, sys
-cfg = json.load(open(sys.argv[1], encoding="utf-8"))
-out = os.environ["GITHUB_OUTPUT"]
-with open(out, "a", encoding="utf-8") as fh:
-    fh.write("regexp=" + cfg["regexp"] + "\n")
-    fh.write("flag=" + cfg["flag"] + "\n")
-    fh.write("targets_json=" + json.dumps(cfg["targets"]) + "\n")
-' "$CFG_FILE"
+        python3 -c 'import json,os,sys; cfg=json.load(open(sys.argv[1],encoding="utf-8")); out=os.environ["GITHUB_OUTPUT"]; open(out,"a",encoding="utf-8").write("regexp="+cfg["regexp"]+"\nflag="+cfg["flag"]+"\ntargets_json="+json.dumps(cfg["targets"])+"\n")' "$CFG_FILE"
 
     - name: Ya make with clang coverage
       id: ya

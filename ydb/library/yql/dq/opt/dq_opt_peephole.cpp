@@ -18,9 +18,6 @@ using namespace NYql::NNodes;
 
 namespace {
 
-// Resolves a BlockHashJoin key to a wide-flow column index. Like New RBO's
-// PrepareJoinKeys, a physical column used more than once as a join key
-// (or needing a dry-type cast) is expanded into an extra StrictCast column.
 void AssignJoinKeyColumn(
     TExprNode::TPtr& keyAtom,
     TStringBuf keyName,
@@ -966,8 +963,6 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     THashSet<ui32> seenRightKeyIndexes;
 
     // Process key types and conversions (similar to GraceJoin / New RBO logic).
-    // Duplicate key indexes are expanded into extra columns so BlockHashJoinCore
-    // never sees the same physical column twice in KeyColumns.
     YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
     for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
 
@@ -984,7 +979,6 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         bool hasOptional = false;
         auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
 
-        // Member() in ExpandJoinInput needs the real struct field name.
         const TString leftMemberName(itemTypeLeft->GetItems()[*leftIndex]->GetName());
         const TString rightMemberName(itemTypeRight->GetItems()[*rightIndex]->GetName());
         AssignJoinKeyColumn(leftKeyColumnNodes[i], leftMemberName, *leftIndex, keyTypeLeft, dryType,

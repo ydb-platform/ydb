@@ -1,5 +1,3 @@
-# cython: language_level=3, freethreading_compatible=True
-
 from cpython.exc cimport PyErr_NoMemory
 from cpython.mem cimport PyMem_Free, PyMem_Malloc, PyMem_Realloc
 from cpython.unicode cimport (

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: yarl
-Version: 1.20.1
+Version: 1.21.0
 Summary: Yet another URL library
 Home-page: https://github.com/aio-libs/yarl
 Author: Andrew Svetlov
@@ -29,6 +29,7 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Topic :: Internet :: WWW/HTTP
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Requires-Python: >=3.9
@@ -266,6 +267,37 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+1.21.0
+======
+
+*(2025-10-05)*
+
+
+Contributor-facing changes
+--------------------------
+
+- The ``reusable-cibuildwheel.yml`` workflow has been refactored to
+  be more generic and ``ci-cd.yml`` now holds all the configuration
+  toggles -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1535 <https://github.com/aio-libs/yarl/issues/1535>`__.
+
+- When building wheels, the source distribution is now passed directly
+  to the ``cibuildwheel`` invocation -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1536 <https://github.com/aio-libs/yarl/issues/1536>`__.
+
+- Added CI for Python 3.14 -- by `@kumaraditya303 <https://github.com/sponsors/kumaraditya303>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1560 <https://github.com/aio-libs/yarl/issues/1560>`__.
+
+
+----
+
 
 1.20.1
 ======

@@ -276,10 +276,8 @@ inline bool IsJournalChunkTypeImpl(NObjectClient::EObjectType type)
 inline bool IsJournalChunkType(NObjectClient::EObjectType type)
 {
     constexpr auto& Logger = ChunkClientLogger;
-    YT_LOG_ALERT_IF(
-        IsErasureChunkPartType(type),
-        "Erasure chunk part type passed to IsJournalChunkType (Type: %v)",
-        type);
+    YT_TLOG_ALERT_IF(IsErasureChunkPartType(type), "Erasure chunk part type passed to IsJournalChunkType")
+        .With("Type", type);
     return IsJournalChunkTypeImpl(type);
 }
 
@@ -287,10 +285,8 @@ inline bool IsJournalChunkId(TChunkId id)
 {
     auto type = NObjectClient::TypeFromId(id);
     constexpr auto& Logger = ChunkClientLogger;
-    YT_LOG_ALERT_IF(
-        IsErasureChunkPartType(type),
-        "Erasure chunk part type passed to IsJournalChunkId (ChunkId: %v)",
-        id);
+    YT_TLOG_ALERT_IF(IsErasureChunkPartType(type), "Erasure chunk part type passed to IsJournalChunkId")
+        .With("ChunkId", id);
     return IsJournalChunkTypeImpl(type);
 }
 
@@ -304,10 +300,8 @@ inline bool IsBlobChunkTypeImpl(NObjectClient::EObjectType type)
 inline bool IsBlobChunkType(NObjectClient::EObjectType type)
 {
     constexpr auto& Logger = ChunkClientLogger;
-    YT_LOG_ALERT_IF(
-        IsErasureChunkPartType(type),
-        "Erasure chunk part type passed to IsBlobChunkType (Type: %v)",
-        type);
+    YT_TLOG_ALERT_IF(IsErasureChunkPartType(type), "Erasure chunk part type passed to IsBlobChunkType")
+        .With("Type", type);
     return IsBlobChunkTypeImpl(type);
 }
 
@@ -315,10 +309,8 @@ inline bool IsBlobChunkId(TChunkId id)
 {
     auto type = NObjectClient::TypeFromId(id);
     constexpr auto& Logger = ChunkClientLogger;
-    YT_LOG_ALERT_IF(
-        IsErasureChunkPartType(type),
-        "Erasure chunk part type passed to IsBlobChunkId (ChunkId: %v)",
-        id);
+    YT_TLOG_ALERT_IF(IsErasureChunkPartType(type), "Erasure chunk part type passed to IsBlobChunkId")
+        .With("ChunkId", id);
     return IsBlobChunkTypeImpl(type);
 }
 
@@ -332,10 +324,8 @@ inline bool IsErasureChunkTypeImpl(NObjectClient::EObjectType type)
 inline bool IsErasureChunkType(NObjectClient::EObjectType type)
 {
     constexpr auto& Logger = ChunkClientLogger;
-    YT_LOG_ALERT_IF(
-        IsErasureChunkPartType(type),
-        "Erasure chunk part type passed to IsErasureChunkType (Type: %v)",
-        type);
+    YT_TLOG_ALERT_IF(IsErasureChunkPartType(type), "Erasure chunk part type passed to IsErasureChunkType")
+        .With("Type", type);
     return IsErasureChunkTypeImpl(type);
 }
 
@@ -343,10 +333,8 @@ inline bool IsErasureChunkId(TChunkId id)
 {
     auto type = NObjectClient::TypeFromId(id);
     constexpr auto& Logger = ChunkClientLogger;
-    YT_LOG_ALERT_IF(
-        IsErasureChunkPartType(type),
-        "Erasure chunk part type passed to IsErasureChunkId (ChunkId: %v)",
-        id);
+    YT_TLOG_ALERT_IF(IsErasureChunkPartType(type), "Erasure chunk part type passed to IsErasureChunkId")
+        .With("ChunkId", id);
     return IsErasureChunkTypeImpl(type);
 }
 
@@ -372,10 +360,8 @@ inline bool IsRegularChunkTypeImpl(NObjectClient::EObjectType type)
 inline bool IsRegularChunkType(NObjectClient::EObjectType type)
 {
     constexpr auto& Logger = ChunkClientLogger;
-    YT_LOG_ALERT_IF(
-        IsErasureChunkPartType(type),
-        "Erasure chunk part type passed to IsRegularChunkType (Type: %v)",
-        type);
+    YT_TLOG_ALERT_IF(IsErasureChunkPartType(type), "Erasure chunk part type passed to IsRegularChunkType")
+        .With("Type", type);
     return IsRegularChunkTypeImpl(type);
 }
 
@@ -383,10 +369,8 @@ inline bool IsRegularChunkId(TChunkId id)
 {
     auto type = NObjectClient::TypeFromId(id);
     constexpr auto& Logger = ChunkClientLogger;
-    YT_LOG_ALERT_IF(
-        IsErasureChunkPartType(type),
-        "Erasure chunk part type passed to IsRegularChunkId (ChunkId: %v)",
-        id);
+    YT_TLOG_ALERT_IF(IsErasureChunkPartType(type), "Erasure chunk part type passed to IsRegularChunkId")
+        .With("ChunkId", id);
     return IsRegularChunkTypeImpl(type);
 }
 

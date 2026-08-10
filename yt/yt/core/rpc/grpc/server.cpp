@@ -418,7 +418,7 @@ private:
         TNetworkAddress PeerAddress_;
 
         TRequestId RequestId_;
-        std::optional<std::string> User_;
+        std::string User_ = RootUserName;
         std::optional<std::string> UserTag_;
         std::optional<std::string> UserAgent_;
         std::optional<NGrpc::NProto::TSslCredentialsExt> SslCredentialsExt_;
@@ -527,8 +527,8 @@ private:
                 .With("RequestId", RequestId_)
                 .With("Host", ToStringBuf(CallDetails_->host))
                 .WithFormat("Method", "%v.%v", ServiceName_, MethodName_)
-                .WithIf(User_.has_value(), "User", User_)
-                .WithIf(User_ && UserTag_ && *UserTag_ != *User_, "UserTag", UserTag_)
+                .With("User", User_)
+                .WithIf(UserTag_ && *UserTag_ != User_, "UserTag", UserTag_)
                 .With("PeerAddress", PeerAddressString_)
                 .With("Timeout", Timeout_)
                 .With("ProtocolVersion", ProtocolVersion_);
@@ -592,7 +592,7 @@ private:
             {
                 auto traceParentString = CallMetadata_.Find(TracingTraceParentMetadataKey);
                 NTracing::TSpanContext spanContext;
-                if (!traceParentString || !NTracing::TryParseTraceParent(traceParentString, spanContext)) {
+                if (!traceParentString || !NTracing::TryParseTraceParent(*traceParentString, spanContext)) {
                     return;
                 }
 
@@ -606,28 +606,28 @@ private:
 
             if (traceIdString) {
                 TGuid traceId;
-                if (!TGuid::FromString(traceIdString, &traceId)) {
+                if (!TGuid::FromString(*traceIdString, &traceId)) {
                     return;
                 }
                 ToProto(traceContext.mutable_trace_id(), traceId);
             }
             if (spanIdString) {
                 NTracing::TSpanId spanId;
-                if (!TryFromString(spanIdString, spanId)) {
+                if (!TryFromString(*spanIdString, spanId)) {
                     return;
                 }
                 traceContext.set_span_id(spanId);
             }
             if (sampledString) {
                 bool sampled;
-                if (!TryFromString(sampledString, sampled)) {
+                if (!TryFromString(*sampledString, sampled)) {
                     return;
                 }
                 traceContext.set_sampled(sampled);
             }
             if (debugString) {
                 bool debug;
-                if (!TryFromString(debugString, debug)) {
+                if (!TryFromString(*debugString, debug)) {
                     return;
                 }
                 traceContext.set_debug(debug);
@@ -643,10 +643,10 @@ private:
                 return;
             }
 
-            if (!TRequestId::FromString(idString, &RequestId_)) {
+            if (!TRequestId::FromString(*idString, &RequestId_)) {
                 RequestId_ = TRequestId::Create();
                 YT_TLOG_WARNING("Malformed request id, using a random one")
-                    .With("MalformedRequestId", idString)
+                    .With("MalformedRequestId", *idString)
                     .With("RequestId", RequestId_);
             }
         }
@@ -658,7 +658,7 @@ private:
                 return;
             }
 
-            User_ = std::string(userString);
+            User_ = std::string(*userString);
         }
 
         void ParseUserTag()
@@ -668,7 +668,7 @@ private:
                 return;
             }
 
-            UserTag_ = std::string(userTagString);
+            UserTag_ = std::string(*userTagString);
         }
 
         void ParseUserAgent()
@@ -678,7 +678,7 @@ private:
                 return;
             }
 
-            UserAgent_ = std::string(userAgentString);
+            UserAgent_ = std::string(*userAgentString);
         }
 
         void ParseRequestCodec()
@@ -689,7 +689,7 @@ private:
             }
 
             int intCodecId;
-            if (!TryFromString(requestCodecString, intCodecId)) {
+            if (!TryFromString(*requestCodecString, intCodecId)) {
                 YT_TLOG_WARNING("Failed to parse request codec from request metadata")
                     .With("RequestId", RequestId_);
                 return;
@@ -713,7 +713,7 @@ private:
             }
 
             int intCodecId;
-            if (!TryFromString(responseCodecString, intCodecId)) {
+            if (!TryFromString(*responseCodecString, intCodecId)) {
                 YT_TLOG_WARNING("Failed to parse response codec from request metadata")
                     .With("RequestId", RequestId_);
                 return;
@@ -749,19 +749,19 @@ private:
             RpcCredentialsExt_.emplace();
 
             if (tokenString) {
-                RpcCredentialsExt_->set_token(std::string(tokenString));
+                RpcCredentialsExt_->set_token(std::string(*tokenString));
             }
             if (sessionIdString) {
-                RpcCredentialsExt_->set_session_id(std::string(sessionIdString));
+                RpcCredentialsExt_->set_session_id(std::string(*sessionIdString));
             }
             if (sslSessionIdString) {
-                RpcCredentialsExt_->set_ssl_session_id(std::string(sslSessionIdString));
+                RpcCredentialsExt_->set_ssl_session_id(std::string(*sslSessionIdString));
             }
             if (userTicketString) {
-                RpcCredentialsExt_->set_user_ticket(std::string(userTicketString));
+                RpcCredentialsExt_->set_user_ticket(std::string(*userTicketString));
             }
             if (serviceTicketString) {
-                RpcCredentialsExt_->set_service_ticket(std::string(serviceTicketString));
+                RpcCredentialsExt_->set_service_ticket(std::string(*serviceTicketString));
             }
         }
 
@@ -899,7 +899,7 @@ private:
             }
 
             try {
-                RequestMessageBodySize_ = FromString<ui32>(messageBodySizeString);
+                RequestMessageBodySize_ = FromString<ui32>(*messageBodySizeString);
             } catch (const std::exception& ex) {
                 YT_TLOG_WARNING("Failed to parse message body size from request metadata")
                     .With("RequestId", RequestId_)
@@ -918,7 +918,7 @@ private:
             }
 
             try {
-                ProtocolVersion_ = TProtocolVersion::FromString(protocolVersionString);
+                ProtocolVersion_ = TProtocolVersion::FromString(*protocolVersionString);
             } catch (const std::exception& ex) {
                 YT_TLOG_WARNING("Failed to parse protocol version from string")
                     .With("RequestId", RequestId_)
@@ -947,8 +947,8 @@ private:
 
             auto header = std::make_unique<NRpc::NProto::TRequestHeader>();
             ToProto(header->mutable_request_id(), RequestId_);
-            if (User_) {
-                header->set_user(*User_);
+            if (User_ != RootUserName) {
+                header->set_user(User_);
             }
             if (UserTag_) {
                 header->set_user_tag(*UserTag_);

@@ -5,7 +5,7 @@ from scramp.core import (
     ScramMechanism,
     make_channel_binding,
 )
-from scramp.exceptions import ScramException
+from scramp.utils import ScramException
 
 __all__ = ["ScramClient", "ScramException", "ScramMechanism", "make_channel_binding"]
 

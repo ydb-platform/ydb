@@ -266,6 +266,8 @@ namespace NKikimr::NDDisk {
         ui64 DeviceOverestimationReadSpeedBps = 0;
         ui64 DeviceOverestimationWriteSpeedBps = 0;
 
+        static constexpr ui64 NanosecondsPerSecond = 1'000'000'000ull;
+
         // Estimates the cost of an operation excluding any seek cost (the
         // owning PDisk actor's aggregator applies seek cost itself based on
         // the merged, cross-source stream).
@@ -274,7 +276,7 @@ namespace NKikimr::NDDisk {
             if (speedBps == 0) {
                 return 0;
             }
-            return size * 1000000000ull / speedBps;
+            return size * NanosecondsPerSecond / speedBps;
         }
 
         void OnDeviceIoSample(const NPDisk::TDeviceIoSample& sample);

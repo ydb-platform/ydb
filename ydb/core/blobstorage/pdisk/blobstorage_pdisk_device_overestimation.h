@@ -9,6 +9,77 @@
 
 namespace NKikimr::NPDisk {
 
+////////////////////////////////////////////////////////////////////////////
+// Shared constants for the "device overestimation" statistic. Used both by
+// TDeviceOverestimationAggregator (below, for the merged/cross-source stream)
+// and by TRealBlockDevice::TSharedCallback::Exec in
+// blobstorage_pdisk_blockdevice_async.cpp (for the legacy PDisk-only stream),
+// so that the two computations -- which mirror each other -- stay in sync
+// and the magic numbers aren't duplicated between the two call sites.
+////////////////////////////////////////////////////////////////////////////
+
+// Length of the periodic window over which the overestimation ratio and
+// nonperformance counters are (re)computed.
+constexpr ui64 OverestimationWindowMs = 15000;
+constexpr ui64 OverestimationWindowNs = OverestimationWindowMs * 1'000'000ull;
+
+// Fixed-point scale for the overestimation ratio counters (e.g. a value of
+// 1000 in the counter means a ratio of 1.0).
+constexpr ui64 OverestimationRatioScale = 1000ull;
+
+// Small constant bias added to the actual-cost accumulator (and to the
+// estimated-cost denominator) before computing the ratio, to avoid a
+// near-zero denominator producing a wildly noisy ratio on lightly loaded
+// devices.
+constexpr ui64 OverestimationActualCostBiasNs = 30'000'000ull; // 30ms
+
+// Upper bound for the "nonperformance" counter (expressed on the same
+// OverestimationRatioScale-like scale, capped at one full window).
+constexpr ui64 NonperformanceCapMs = 1000ull;
+
+// Nanoseconds-per-unit divisor used to convert an (actual - estimated) delta
+// into the "nonperformance" counter's scale: the whole window (in ns) maps to
+// NonperformanceCapMs units.
+constexpr ui64 NonperformanceNsPerUnit = OverestimationWindowNs / NonperformanceCapMs;
+
+// Approximate divisor used to convert a nanosecond seek-cost estimate into
+// the NHPTimer cycle domain when comparing against cycle-based timestamps.
+// This mirrors the legacy (pre-existing) PDisk-only computation's constant
+// exactly, kept as-is for consistency rather than replaced with a proper
+// NHPTimer::GetClockRate()-based conversion.
+constexpr ui64 SeekCostNsToCyclesApproxDivisor = 25;
+
+// Result of deriving the overestimation ratio and nonperformance counters
+// for a single window, given that window's summed estimated/actual costs.
+struct TOverestimationRatioResult {
+    ui64 OverestimationRatio = OverestimationRatioScale;
+    ui64 NonperformanceMs = 0;
+};
+
+// Shared computation used both for the legacy PDisk-only stream and for the
+// merged (cross-source) stream: derives the overestimation ratio (on
+// OverestimationRatioScale) and the capped nonperformance counter from a
+// window's summed estimated/actual-with-bias costs. Kept in one place so the
+// two call sites (TSharedCallback::Exec's PDisk-only and merged branches)
+// cannot drift apart.
+inline TOverestimationRatioResult ComputeOverestimationRatio(ui64 estimatedNs, ui64 actualWithBiasNs) {
+    TOverestimationRatioResult result;
+    if (estimatedNs == 0) {
+        return result;
+    }
+
+    result.OverestimationRatio = OverestimationRatioScale * actualWithBiasNs / (estimatedNs + OverestimationActualCostBiasNs);
+
+    if (actualWithBiasNs > estimatedNs) {
+        const ui64 deltaNs = actualWithBiasNs - estimatedNs;
+        result.NonperformanceMs = (deltaNs < OverestimationWindowNs)
+            ? deltaNs / NonperformanceNsPerUnit
+            : NonperformanceCapMs;
+    }
+
+    return result;
+}
+
 // Aggregates raw TDeviceIoSample-s produced by multiple sources that all issue
 // I/O to the same physical device (PDisk's own block device thread, DDisk's
 // io_uring completion poller, PersistentBuffer's io_uring completion poller),
@@ -87,7 +158,8 @@ public:
             // Mirrors TSharedCallback::Exec's isSeekExpected heuristic exactly,
             // including its mixing of cycle and nanosecond units -- kept as-is
             // for consistency with the legacy PDisk-only computation.
-            bool isSeekExpected = (i64)(sample.SubmitCycles + seekCostNs / 25ull) >= (i64)PrevCompleteCycles;
+            bool isSeekExpected =
+                (i64)(sample.SubmitCycles + seekCostNs / SeekCostNsToCyclesApproxDivisor) >= (i64)PrevCompleteCycles;
             if (sample.Offset != EndOffset) {
                 isSeekExpected = true;
             }

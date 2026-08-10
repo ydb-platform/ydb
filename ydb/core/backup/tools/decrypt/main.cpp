@@ -47,7 +47,7 @@ private:
             .NoArgument()
             .SetFlag(&NoOutput);
 
-        opts.AddLongOption('v', "verbose", "Print offset and size of every block")
+        opts.AddLongOption('v', "verbose", "Print offset and size of every decrypted chunk")
             .NoArgument()
             .SetFlag(&Verbose);
 
@@ -65,13 +65,16 @@ private:
 };
 
 struct TProgress {
-    ui64 BlocksRead = 0;
-    ui64 ProcessedBytes = 0; // encrypted bytes consumed, i.e. offset of the next block
+    // A chunk is one successful GetNextBlock() result. The deserializer may
+    // concatenate several encrypted file blocks into a single chunk when
+    // enough input is buffered, so chunk count/size is not 1:1 with file blocks.
+    ui64 ChunksRead = 0;
+    ui64 ProcessedBytes = 0; // encrypted bytes consumed, i.e. offset of the next chunk
     ui64 InputBytes = 0;     // encrypted bytes read from the input
     ui64 DecryptedBytes = 0;
 
     void Print(IOutputStream& out) const {
-        out << "Blocks read: " << BlocksRead << Endl;
+        out << "Chunks read: " << ChunksRead << Endl;
         out << "Decrypted bytes: " << DecryptedBytes << Endl;
         out << "Encrypted bytes processed: " << ProcessedBytes << Endl;
         out << "Encrypted bytes read from input: " << InputBytes << Endl;
@@ -105,27 +108,27 @@ int main(int argc, const char* argv[]) {
             }
         };
 
-        auto drainBlocks = [&]() {
+        auto drainChunks = [&]() {
             for (;;) {
-                const ui64 blockStart = deserializer->GetProcessedInputBytes();
-                TMaybe<TBuffer> block = deserializer->GetNextBlock();
+                const ui64 chunkStart = deserializer->GetProcessedInputBytes();
+                TMaybe<TBuffer> chunk = deserializer->GetNextBlock();
                 progress.ProcessedBytes = deserializer->GetProcessedInputBytes();
-                if (!block) {
+                if (!chunk) {
                     break;
                 }
 
-                ++progress.BlocksRead;
-                progress.DecryptedBytes += block->Size();
+                ++progress.ChunksRead;
+                progress.DecryptedBytes += chunk->Size();
 
                 if (options.Verbose) {
-                    Cerr << "Block " << progress.BlocksRead
-                        << ": offset " << blockStart
-                        << ", encrypted size " << (progress.ProcessedBytes - blockStart)
-                        << ", decrypted size " << block->Size() << Endl;
+                    Cerr << "Chunk " << progress.ChunksRead
+                        << ": offset " << chunkStart
+                        << ", encrypted size " << (progress.ProcessedBytes - chunkStart)
+                        << ", decrypted size " << chunk->Size() << Endl;
                 }
 
                 if (!options.NoOutput) {
-                    out->Write(block->Data(), block->Size());
+                    out->Write(chunk->Data(), chunk->Size());
                 }
             }
         };
@@ -141,10 +144,10 @@ int main(int argc, const char* argv[]) {
         while (size_t bytes = in->Read(buffer, sizeof(buffer))) {
             progress.InputBytes += bytes;
             deserializer->AddData(TBuffer(buffer, bytes), false);
-            drainBlocks();
+            drainChunks();
         }
         deserializer->AddData(TBuffer(), true);
-        drainBlocks();
+        drainChunks();
 
         if (!options.NoOutput) {
             out->Finish();

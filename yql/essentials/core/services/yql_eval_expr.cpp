@@ -57,6 +57,10 @@ bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const T
         underTypeOf = true;
     }
 
+    if (root.IsCallable({"YqlColumnRef", "PgColumnRef"})) {
+        hasUnresolvedTypes = true;
+    }
+
     if (root.Type() == TExprNode::Argument) {
         if (activeArgs.find(&root) == activeArgs.cend()) {
             if (underTypeOf) {

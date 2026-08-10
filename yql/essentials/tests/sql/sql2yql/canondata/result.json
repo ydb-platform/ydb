@@ -9617,6 +9617,13 @@
             "uri": "https://{canondata_backend}/1597364/fdeffca975c2d2d1bc708528a504feb47b36c5c9/resource.tar.gz#test_sql2yql.test_select_yql-correlated_where_unique_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-evaluate_expr_column_type]": [
+        {
+            "checksum": "d317995f92c2f55a9a973042b8cacac3",
+            "size": 945,
+            "uri": "https://{canondata_backend}/1925821/1b321407489aa873fad6c878f2acc68e5eb2f5bc/resource.tar.gz#test_sql2yql.test_select_yql-evaluate_expr_column_type_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-expr]": [
         {
             "checksum": "72e956eeefc8a32be9c7755741305d94",
@@ -18229,6 +18236,11 @@
     "test_sql_format.test[select_yql-correlated_where_unique]": [
         {
             "uri": "file://test_sql_format.test_select_yql-correlated_where_unique_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-evaluate_expr_column_type]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-evaluate_expr_column_type_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-expr]": [

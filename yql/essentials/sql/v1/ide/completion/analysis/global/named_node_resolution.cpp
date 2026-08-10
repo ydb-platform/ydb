@@ -218,7 +218,7 @@ TMaybe<TNamedNodeRef> GetNamedNodeRef(SQLv1::Bind_parameterContext* ctx) {
 
 TNamedNodes::TPtr ResolveNamedNodes(TParsedInput input, const TEnvironment& env) {
     TNamedNodes* names = new TNamedNodes();
-    TVisitor(names, &env).visit(input.SqlQuery);
+    TVisitor(names, &env).visit(input.ParseTree->Root());
     return THolder(names);
 }
 

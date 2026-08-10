@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/minikql/udf_value_test_support/dynumber.h>
+#include <yql/essentials/minikql/udf_value_test_support/singular_void.h>
 #include <yql/essentials/minikql/udf_value_test_support/stream_view.h>
 #include <yql/essentials/minikql/udf_value_test_support/struct_type.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
@@ -91,20 +92,24 @@ struct TTestTypeHash<std::variant<Ts...>> {
 
 template <typename... TMembers>
 struct TTestTypeHash<NTest::TStructType<TMembers...>> {
-    template <typename TOther>
-    size_t operator()(const TOther& value) const {
-        static_assert(std::tuple_size_v<std::remove_cvref_t<decltype(value.Members)>> == sizeof...(TMembers),
-                      "Struct member count mismatch: members of the probe beyond the expected count "
-                      "would be silently left out of the hash.");
-        return [&]<size_t... Is>(std::index_sequence<Is...>) {
+    template <typename... TOtherMembers>
+    size_t operator()(const NTest::TStructType<TOtherMembers...>& value) const {
+        static_assert(sizeof...(TMembers) == sizeof...(TOtherMembers), "Hashing structs with a different number of members");
+        return [&]<size_t... SortedPos>(std::index_sequence<SortedPos...>) {
             size_t result = 0;
-            ((result = CombineHashes(result, TTestTypeHash<typename std::tuple_element_t<Is, std::tuple<TMembers...>>::TValueType>{}(
-                                                 std::get<Is>(value.Members).Value))),
+            ((result = CombineHashes(result, HashMemberAt<NTest::TStructType<TMembers...>::SortedIndexMapping[SortedPos], TOtherMembers...>(value))),
              ...);
             return result;
         }(std::index_sequence_for<TMembers...>{});
     }
-    using is_transparent = void;
+
+private:
+    template <size_t Is, typename... TOtherMembers>
+    static size_t HashMemberAt(const NTest::TStructType<TOtherMembers...>& value) {
+        using TMember = std::tuple_element_t<Is, std::tuple<TMembers...>>;
+        constexpr size_t OtherIdx = NTest::TStructType<TOtherMembers...>::FindMemberIndexByName(TMember::MemberName());
+        return TTestTypeHash<typename TMember::TValueType>{}(std::get<OtherIdx>(value.Members).Value);
+    }
 };
 
 template <>
@@ -123,6 +128,13 @@ struct TTestTypeHash<NTest::TTestDyNumber> {
         const auto bytes = NKikimr::NDyNumber::ParseDyNumberString(value.Value);
         Y_ENSURE(bytes, "Invalid DyNumber string: " << value.Value);
         return TTestTypeHash<TString>{}(*bytes);
+    }
+};
+
+template <>
+struct TTestTypeHash<NTest::TSingularVoid> {
+    size_t operator()(const NYql::NUdf::NTest::TSingularVoid&) const {
+        return 0;
     }
 };
 

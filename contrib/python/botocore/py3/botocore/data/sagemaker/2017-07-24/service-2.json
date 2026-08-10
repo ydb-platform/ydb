@@ -54,6 +54,33 @@
       ],
       "documentation":"<p>Associates a trial component with a trial. A trial component can be associated with multiple trials. To disassociate a trial component from a trial, call the <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DisassociateTrialComponent.html\">DisassociateTrialComponent</a> API.</p>"
     },
+    "AttachClusterNodeVolume":{
+      "name":"AttachClusterNodeVolume",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"AttachClusterNodeVolumeRequest"},
+      "output":{"shape":"AttachClusterNodeVolumeResponse"},
+      "errors":[
+        {"shape":"ResourceNotFound"}
+      ],
+      "documentation":"<p> Attaches your Amazon Elastic Block Store (Amazon EBS) volume to a node in your EKS orchestrated HyperPod cluster. </p> <p> This API works with the Amazon Elastic Block Store (Amazon EBS) Container Storage Interface (CSI) driver to manage the lifecycle of persistent storage in your HyperPod EKS clusters. </p>"
+    },
+    "BatchAddClusterNodes":{
+      "name":"BatchAddClusterNodes",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"BatchAddClusterNodesRequest"},
+      "output":{"shape":"BatchAddClusterNodesResponse"},
+      "errors":[
+        {"shape":"ResourceNotFound"},
+        {"shape":"ResourceLimitExceeded"}
+      ],
+      "documentation":"<p>Adds nodes to a HyperPod cluster by incrementing the target count for one or more instance groups. This operation returns a unique <code>NodeLogicalId</code> for each node being added, which can be used to track the provisioning status of the node. This API provides a safer alternative to <code>UpdateCluster</code> for scaling operations by avoiding unintended configuration changes.</p> <note> <p>This API is only supported for clusters using <code>Continuous</code> as the <code>NodeProvisioningMode</code>.</p> </note>"
+    },
     "BatchDeleteClusterNodes":{
       "name":"BatchDeleteClusterNodes",
       "http":{
@@ -1515,6 +1542,19 @@
       ],
       "documentation":"<p>Deletes a pipeline if there are no running instances of the pipeline. To delete a pipeline, you must stop all running instances of the pipeline using the <code>StopPipelineExecution</code> API. When you delete a pipeline, all instances of the pipeline are deleted.</p>"
     },
+    "DeleteProcessingJob":{
+      "name":"DeleteProcessingJob",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DeleteProcessingJobRequest"},
+      "errors":[
+        {"shape":"ResourceNotFound"},
+        {"shape":"ResourceInUse"}
+      ],
+      "documentation":"<p>Deletes a processing job. After Amazon SageMaker deletes a processing job, all of the metadata for the processing job is lost. You can delete only processing jobs that are in a terminal state (<code>Stopped</code>, <code>Failed</code>, or <code>Completed</code>). You cannot delete a job that is in the <code>InProgress</code> or <code>Stopping</code> state. After deleting the job, you can reuse its name to create another processing job.</p>"
+    },
     "DeleteProject":{
       "name":"DeleteProject",
       "http":{
@@ -1562,6 +1602,19 @@
       "input":{"shape":"DeleteTagsInput"},
       "output":{"shape":"DeleteTagsOutput"},
       "documentation":"<p>Deletes the specified tags from an SageMaker resource.</p> <p>To list a resource's tags, use the <code>ListTags</code> API. </p> <note> <p>When you call this API to delete tags from a hyperparameter tuning job, the deleted tags are not removed from training jobs that the hyperparameter tuning job launched before you called this API.</p> </note> <note> <p>When you call this API to delete tags from a SageMaker Domain or User Profile, the deleted tags are not removed from Apps that the SageMaker Domain or User Profile launched before you called this API.</p> </note>"
+    },
+    "DeleteTrainingJob":{
+      "name":"DeleteTrainingJob",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DeleteTrainingJobRequest"},
+      "errors":[
+        {"shape":"ResourceNotFound"},
+        {"shape":"ResourceInUse"}
+      ],
+      "documentation":"<p>Deletes a training job. After SageMaker deletes a training job, all of the metadata for the training job is lost. You can delete only training jobs that are in a terminal state (<code>Stopped</code>, <code>Failed</code>, or <code>Completed</code>) and don't retain an <code>Available</code> <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/train-warm-pools.html\">managed warm pool</a>. You cannot delete a job that is in the <code>InProgress</code> or <code>Stopping</code> state. After deleting the job, you can reuse its name to create another training job.</p>"
     },
     "DeleteTrial":{
       "name":"DeleteTrial",
@@ -1734,6 +1787,19 @@
         {"shape":"ResourceNotFound"}
       ],
       "documentation":"<p>Retrieves information of a SageMaker HyperPod cluster.</p>"
+    },
+    "DescribeClusterEvent":{
+      "name":"DescribeClusterEvent",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DescribeClusterEventRequest"},
+      "output":{"shape":"DescribeClusterEventResponse"},
+      "errors":[
+        {"shape":"ResourceNotFound"}
+      ],
+      "documentation":"<p>Retrieves detailed information about a specific event for a given HyperPod cluster. This functionality is only supported when the <code>NodeProvisioningMode</code> is set to <code>Continuous</code>.</p>"
     },
     "DescribeClusterNode":{
       "name":"DescribeClusterNode",
@@ -2329,6 +2395,19 @@
       "output":{"shape":"DescribeProjectOutput"},
       "documentation":"<p>Describes the details of a project.</p>"
     },
+    "DescribeReservedCapacity":{
+      "name":"DescribeReservedCapacity",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DescribeReservedCapacityRequest"},
+      "output":{"shape":"DescribeReservedCapacityResponse"},
+      "errors":[
+        {"shape":"ResourceNotFound"}
+      ],
+      "documentation":"<p>Retrieves details about a reserved capacity.</p>"
+    },
     "DescribeSpace":{
       "name":"DescribeSpace",
       "http":{
@@ -2463,6 +2542,19 @@
       "input":{"shape":"DescribeWorkteamRequest"},
       "output":{"shape":"DescribeWorkteamResponse"},
       "documentation":"<p>Gets information about a specific work team. You can see information such as the creation date, the last updated date, membership information, and the work team's Amazon Resource Name (ARN).</p>"
+    },
+    "DetachClusterNodeVolume":{
+      "name":"DetachClusterNodeVolume",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DetachClusterNodeVolumeRequest"},
+      "output":{"shape":"DetachClusterNodeVolumeResponse"},
+      "errors":[
+        {"shape":"ResourceNotFound"}
+      ],
+      "documentation":"<p> Detaches your Amazon Elastic Block Store (Amazon EBS) volume from a node in your EKS orchestrated SageMaker HyperPod cluster.</p> <p> This API works with the Amazon Elastic Block Store (Amazon EBS) Container Storage Interface (CSI) driver to manage the lifecycle of persistent storage in your HyperPod EKS clusters. </p>"
     },
     "DisableSagemakerServicecatalogPortfolio":{
       "name":"DisableSagemakerServicecatalogPortfolio",
@@ -2682,6 +2774,19 @@
         {"shape":"ResourceNotFound"}
       ],
       "documentation":"<p>List the candidates created for the job.</p>"
+    },
+    "ListClusterEvents":{
+      "name":"ListClusterEvents",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListClusterEventsRequest"},
+      "output":{"shape":"ListClusterEventsResponse"},
+      "errors":[
+        {"shape":"ResourceNotFound"}
+      ],
+      "documentation":"<p>Retrieves a list of event summaries for a specified HyperPod cluster. The operation supports filtering, sorting, and pagination of results. This functionality is only supported when the <code>NodeProvisioningMode</code> is set to <code>Continuous</code>.</p>"
     },
     "ListClusterNodes":{
       "name":"ListClusterNodes",
@@ -3436,6 +3541,19 @@
         {"shape":"ResourceNotFound"}
       ],
       "documentation":"<p>Lists the trials in your account. Specify an experiment name to limit the list to the trials that are part of that experiment. Specify a trial component name to limit the list to the trials that associated with that trial component. The list can be filtered to show only trials that were created in a specific time range. The list can be sorted by trial name or creation time.</p>"
+    },
+    "ListUltraServersByReservedCapacity":{
+      "name":"ListUltraServersByReservedCapacity",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListUltraServersByReservedCapacityRequest"},
+      "output":{"shape":"ListUltraServersByReservedCapacityResponse"},
+      "errors":[
+        {"shape":"ResourceNotFound"}
+      ],
+      "documentation":"<p>Lists all UltraServers that are part of a specified reserved capacity.</p>"
     },
     "ListUserProfiles":{
       "name":"ListUserProfiles",
@@ -4452,7 +4570,7 @@
       "errors":[
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Use this operation to update your workforce. You can use this operation to require that workers use specific IP addresses to work on tasks and to update your OpenID Connect (OIDC) Identity Provider (IdP) workforce configuration.</p> <p>The worker portal is now supported in VPC and public internet.</p> <p> Use <code>SourceIpConfig</code> to restrict worker access to tasks to a specific range of IP addresses. You specify allowed IP addresses by creating a list of up to ten <a href=\"https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Subnets.html\">CIDRs</a>. By default, a workforce isn't restricted to specific IP addresses. If you specify a range of IP addresses, workers who attempt to access tasks using any IP address outside the specified range are denied and get a <code>Not Found</code> error message on the worker portal.</p> <p>To restrict access to all the workers in public internet, add the <code>SourceIpConfig</code> CIDR value as \"10.0.0.0/16\".</p> <important> <p>Amazon SageMaker does not support Source Ip restriction for worker portals in VPC.</p> </important> <p>Use <code>OidcConfig</code> to update the configuration of a workforce created using your own OIDC IdP. </p> <important> <p>You can only update your OIDC IdP configuration when there are no work teams associated with your workforce. You can delete work teams using the <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DeleteWorkteam.html\">DeleteWorkteam</a> operation.</p> </important> <p>After restricting access to a range of IP addresses or updating your OIDC IdP configuration with this operation, you can view details about your update workforce using the <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeWorkforce.html\">DescribeWorkforce</a> operation.</p> <important> <p>This operation only applies to private workforces.</p> </important>"
+      "documentation":"<p>Use this operation to update your workforce. You can use this operation to require that workers use specific IP addresses to work on tasks and to update your OpenID Connect (OIDC) Identity Provider (IdP) workforce configuration.</p> <p>The worker portal is now supported in VPC and public internet.</p> <p> Use <code>SourceIpConfig</code> to restrict worker access to tasks to a specific range of IP addresses. You specify allowed IP addresses by creating a list of up to ten <a href=\"https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Subnets.html\">CIDRs</a>. By default, a workforce isn't restricted to specific IP addresses. If you specify a range of IP addresses, workers who attempt to access tasks using any IP address outside the specified range are denied and get a <code>Not Found</code> error message on the worker portal.</p> <p>To restrict public internet access for all workers, configure the <code>SourceIpConfig</code> CIDR value. For example, when using <code>SourceIpConfig</code> with an <code>IpAddressType</code> of <code>IPv4</code>, you can restrict access to the IPv4 CIDR block \"10.0.0.0/16\". When using an <code>IpAddressType</code> of <code>dualstack</code>, you can specify both the IPv4 and IPv6 CIDR blocks, such as \"10.0.0.0/16\" for IPv4 only, \"2001:db8:1234:1a00::/56\" for IPv6 only, or \"10.0.0.0/16\" and \"2001:db8:1234:1a00::/56\" for dual stack.</p> <important> <p>Amazon SageMaker does not support Source Ip restriction for worker portals in VPC.</p> </important> <p>Use <code>OidcConfig</code> to update the configuration of a workforce created using your own OIDC IdP. </p> <important> <p>You can only update your OIDC IdP configuration when there are no work teams associated with your workforce. You can delete work teams using the <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DeleteWorkteam.html\">DeleteWorkteam</a> operation.</p> </important> <p>After restricting access to a range of IP addresses or updating your OIDC IdP configuration with this operation, you can view details about your update workforce using the <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeWorkforce.html\">DescribeWorkforce</a> operation.</p> <important> <p>This operation only applies to private workforces.</p> </important>"
     },
     "UpdateWorkteam":{
       "name":"UpdateWorkteam",
@@ -4469,6 +4587,12 @@
     }
   },
   "shapes":{
+    "AcceleratorsAmount":{
+      "type":"integer",
+      "box":true,
+      "max":10000000,
+      "min":0
+    },
     "Accept":{
       "type":"string",
       "max":256,
@@ -4597,6 +4721,36 @@
         }
       }
     },
+    "AddClusterNodeSpecification":{
+      "type":"structure",
+      "required":[
+        "InstanceGroupName",
+        "IncrementTargetCountBy"
+      ],
+      "members":{
+        "InstanceGroupName":{
+          "shape":"ClusterInstanceGroupName",
+          "documentation":"<p>The name of the instance group to which you want to add nodes.</p>"
+        },
+        "IncrementTargetCountBy":{
+          "shape":"AddClusterNodeSpecificationIncrementTargetCountByInteger",
+          "documentation":"<p>The number of nodes to add to the specified instance group. The total number of nodes across all instance groups in a single request cannot exceed 50.</p>"
+        }
+      },
+      "documentation":"<p>Specifies an instance group and the number of nodes to add to it.</p>"
+    },
+    "AddClusterNodeSpecificationIncrementTargetCountByInteger":{
+      "type":"integer",
+      "box":true,
+      "max":50,
+      "min":1
+    },
+    "AddClusterNodeSpecificationList":{
+      "type":"list",
+      "member":{"shape":"AddClusterNodeSpecification"},
+      "max":5,
+      "min":1
+    },
     "AddTagsInput":{
       "type":"structure",
       "required":[
@@ -4628,6 +4782,16 @@
       "member":{"shape":"CodeRepositoryNameOrUrl"},
       "max":3,
       "min":0
+    },
+    "AdditionalEnis":{
+      "type":"structure",
+      "members":{
+        "EfaEnis":{
+          "shape":"EfaEnis",
+          "documentation":"<p>A list of Elastic Fabric Adapter (EFA) ENIs associated with the instance.</p>"
+        }
+      },
+      "documentation":"<p>Information about additional Elastic Network Interfaces (ENIs) associated with an instance.</p>"
     },
     "AdditionalInferenceSpecificationDefinition":{
       "type":"structure",
@@ -4810,7 +4974,7 @@
       "type":"string",
       "max":2048,
       "min":1,
-      "pattern":"arn:aws(-cn|-us-gov|-iso-f)?:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:algorithm/[\\S]{1,2048}"
+      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:algorithm/[\\S]{1,2048}"
     },
     "AlgorithmImage":{
       "type":"string",
@@ -5202,6 +5366,7 @@
         "ml.trn1n.32xlarge",
         "ml.p5.48xlarge",
         "ml.p5en.48xlarge",
+        "ml.p6-b200.48xlarge",
         "ml.m6i.large",
         "ml.m6i.xlarge",
         "ml.m6i.2xlarge",
@@ -5489,6 +5654,12 @@
         "Line"
       ]
     },
+    "AssignedGroupPatternsList":{
+      "type":"list",
+      "member":{"shape":"GroupNamePattern"},
+      "max":10,
+      "min":0
+    },
     "AssociateTrialComponentRequest":{
       "type":"structure",
       "required":[
@@ -5736,6 +5907,65 @@
       "max":128,
       "min":1,
       "pattern":"[a-zA-Z0-9._-]+"
+    },
+    "AttachClusterNodeVolumeRequest":{
+      "type":"structure",
+      "required":[
+        "ClusterArn",
+        "NodeId",
+        "VolumeId"
+      ],
+      "members":{
+        "ClusterArn":{
+          "shape":"ClusterArn",
+          "documentation":"<p> The Amazon Resource Name (ARN) of your SageMaker HyperPod cluster containing the target node. Your cluster must use EKS as the orchestration and be in the <code>InService</code> state. </p>"
+        },
+        "NodeId":{
+          "shape":"ClusterNodeId",
+          "documentation":"<p> The unique identifier of the cluster node to which you want to attach the volume. The node must belong to your specified HyperPod cluster and cannot be part of a Restricted Instance Group (RIG). </p>"
+        },
+        "VolumeId":{
+          "shape":"VolumeId",
+          "documentation":"<p> The unique identifier of your EBS volume to attach. The volume must be in the <code>available</code> state. </p>"
+        }
+      }
+    },
+    "AttachClusterNodeVolumeResponse":{
+      "type":"structure",
+      "required":[
+        "ClusterArn",
+        "NodeId",
+        "VolumeId",
+        "AttachTime",
+        "Status",
+        "DeviceName"
+      ],
+      "members":{
+        "ClusterArn":{
+          "shape":"ClusterArn",
+          "documentation":"<p> The Amazon Resource Name (ARN) of your SageMaker HyperPod cluster where the volume attachment operation was performed. </p>"
+        },
+        "NodeId":{
+          "shape":"ClusterNodeId",
+          "documentation":"<p> The unique identifier of the cluster node where your volume was attached. </p>"
+        },
+        "VolumeId":{
+          "shape":"VolumeId",
+          "documentation":"<p> The unique identifier of your EBS volume that was attached. </p>"
+        },
+        "AttachTime":{
+          "shape":"Timestamp",
+          "documentation":"<p> The timestamp when the volume attachment operation was initiated by the SageMaker HyperPod service. </p>"
+        },
+        "Status":{
+          "shape":"VolumeAttachmentStatus",
+          "documentation":"<p> The current status of your volume attachment operation. </p>"
+        },
+        "DeviceName":{
+          "shape":"VolumeDeviceName",
+          "documentation":"<p> The device name assigned to your attached volume on the target instance. </p>"
+        }
+      }
     },
     "AttributeName":{
       "type":"string",
@@ -6586,6 +6816,25 @@
       "box":true,
       "min":0
     },
+    "AvailableSpareInstanceCount":{
+      "type":"integer",
+      "box":true,
+      "min":0
+    },
+    "AvailableUpgrade":{
+      "type":"structure",
+      "members":{
+        "Version":{
+          "shape":"MajorMinorVersion",
+          "documentation":"<p>The semantic version number of the available upgrade for the SageMaker Partner AI App.</p>"
+        },
+        "ReleaseNotes":{
+          "shape":"ReleaseNotesList",
+          "documentation":"<p>A list of release notes describing the changes and improvements included in the available upgrade version.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about an available upgrade for a SageMaker Partner AI App, including the version number and release notes.</p>"
+    },
     "AwsManagedHumanLoopRequestSource":{
       "type":"string",
       "enum":[
@@ -6602,6 +6851,94 @@
       "max":256,
       "min":1,
       "pattern":"[a-zA-Z0-9](-*[a-zA-Z0-9])*"
+    },
+    "BatchAddClusterNodesError":{
+      "type":"structure",
+      "required":[
+        "InstanceGroupName",
+        "ErrorCode",
+        "FailedCount"
+      ],
+      "members":{
+        "InstanceGroupName":{
+          "shape":"InstanceGroupName",
+          "documentation":"<p>The name of the instance group for which the error occurred.</p>"
+        },
+        "ErrorCode":{
+          "shape":"BatchAddClusterNodesErrorCode",
+          "documentation":"<p>The error code associated with the failure. Possible values include <code>InstanceGroupNotFound</code> and <code>InvalidInstanceGroupState</code>.</p>"
+        },
+        "FailedCount":{
+          "shape":"BatchAddFailureCount",
+          "documentation":"<p>The number of nodes that failed to be added to the specified instance group.</p>"
+        },
+        "Message":{
+          "shape":"String",
+          "documentation":"<p>A descriptive message providing additional details about the error.</p>"
+        }
+      },
+      "documentation":"<p>Information about an error that occurred during the node addition operation.</p>"
+    },
+    "BatchAddClusterNodesErrorCode":{
+      "type":"string",
+      "enum":[
+        "InstanceGroupNotFound",
+        "InvalidInstanceGroupStatus"
+      ]
+    },
+    "BatchAddClusterNodesErrorList":{
+      "type":"list",
+      "member":{"shape":"BatchAddClusterNodesError"}
+    },
+    "BatchAddClusterNodesRequest":{
+      "type":"structure",
+      "required":[
+        "ClusterName",
+        "NodesToAdd"
+      ],
+      "members":{
+        "ClusterName":{
+          "shape":"ClusterNameOrArn",
+          "documentation":"<p>The name of the HyperPod cluster to which you want to add nodes.</p>"
+        },
+        "ClientToken":{
+          "shape":"BatchAddClusterNodesRequestClientTokenString",
+          "documentation":"<p>A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This token is valid for 8 hours. If you retry the request with the same client token within this timeframe and the same parameters, the API returns the same set of <code>NodeLogicalIds</code> with their latest status.</p>",
+          "idempotencyToken":true
+        },
+        "NodesToAdd":{
+          "shape":"AddClusterNodeSpecificationList",
+          "documentation":"<p>A list of instance groups and the number of nodes to add to each. You can specify up to 5 instance groups in a single request, with a maximum of 50 nodes total across all instance groups.</p>"
+        }
+      }
+    },
+    "BatchAddClusterNodesRequestClientTokenString":{
+      "type":"string",
+      "max":64,
+      "min":0,
+      "pattern":"[\\x21-\\x7E]+"
+    },
+    "BatchAddClusterNodesResponse":{
+      "type":"structure",
+      "required":[
+        "Successful",
+        "Failed"
+      ],
+      "members":{
+        "Successful":{
+          "shape":"NodeAdditionResultList",
+          "documentation":"<p>A list of <code>NodeLogicalIDs</code> that were successfully added to the cluster. The <code>NodeLogicalID</code> is unique per cluster and does not change between instance replacements. Each entry includes a <code>NodeLogicalId</code> that can be used to track the node's provisioning status (with <code>DescribeClusterNode</code>), the instance group name, and the current status of the node.</p>"
+        },
+        "Failed":{
+          "shape":"BatchAddClusterNodesErrorList",
+          "documentation":"<p>A list of errors that occurred during the node addition operation. Each entry includes the instance group name, error code, number of failed additions, and an error message.</p>"
+        }
+      }
+    },
+    "BatchAddFailureCount":{
+      "type":"integer",
+      "box":true,
+      "min":1
     },
     "BatchDataCaptureConfig":{
       "type":"structure",
@@ -6622,6 +6959,35 @@
         }
       },
       "documentation":"<p>Configuration to control how SageMaker captures inference data for batch transform jobs.</p>"
+    },
+    "BatchDeleteClusterNodeLogicalIdsError":{
+      "type":"structure",
+      "required":[
+        "Code",
+        "Message",
+        "NodeLogicalId"
+      ],
+      "members":{
+        "Code":{
+          "shape":"BatchDeleteClusterNodesErrorCode",
+          "documentation":"<p>The error code associated with the failure. Possible values include <code>NodeLogicalIdNotFound</code>, <code>InvalidNodeStatus</code>, and <code>InternalError</code>.</p>"
+        },
+        "Message":{
+          "shape":"String",
+          "documentation":"<p>A descriptive message providing additional details about the error.</p>"
+        },
+        "NodeLogicalId":{
+          "shape":"ClusterNodeLogicalId",
+          "documentation":"<p>The <code>NodeLogicalId</code> of the node that could not be deleted.</p>"
+        }
+      },
+      "documentation":"<p>Information about an error that occurred when attempting to delete a node identified by its <code>NodeLogicalId</code>.</p>"
+    },
+    "BatchDeleteClusterNodeLogicalIdsErrorList":{
+      "type":"list",
+      "member":{"shape":"BatchDeleteClusterNodeLogicalIdsError"},
+      "max":99,
+      "min":1
     },
     "BatchDeleteClusterNodesError":{
       "type":"structure",
@@ -6671,6 +7037,10 @@
         "NodeIds":{
           "shape":"ClusterNodeIds",
           "documentation":"<p>A list of node IDs to be deleted from the specified cluster.</p> <note> <ul> <li> <p>For SageMaker HyperPod clusters using the Slurm workload manager, you cannot remove instances that are configured as Slurm controller nodes.</p> </li> <li> <p>If you need to delete more than 99 instances, contact <a href=\"http://aws.amazon.com/contact-us/\">Support</a> for assistance.</p> </li> </ul> </note>"
+        },
+        "NodeLogicalIds":{
+          "shape":"ClusterNodeLogicalIdList",
+          "documentation":"<p>A list of <code>NodeLogicalIds</code> identifying the nodes to be deleted. You can specify up to 50 <code>NodeLogicalIds</code>. You must specify either <code>NodeLogicalIds</code>, <code>InstanceIds</code>, or both, with a combined maximum of 50 identifiers.</p>"
         }
       }
     },
@@ -6684,6 +7054,14 @@
         "Successful":{
           "shape":"ClusterNodeIds",
           "documentation":"<p>A list of node IDs that were successfully deleted from the specified cluster.</p>"
+        },
+        "FailedNodeLogicalIds":{
+          "shape":"BatchDeleteClusterNodeLogicalIdsErrorList",
+          "documentation":"<p>A list of <code>NodeLogicalIds</code> that could not be deleted, along with error information explaining why the deletion failed.</p>"
+        },
+        "SuccessfulNodeLogicalIds":{
+          "shape":"ClusterNodeLogicalIdList",
+          "documentation":"<p>A list of <code>NodeLogicalIds</code> that were successfully deleted from the cluster.</p>"
         }
       }
     },
@@ -7089,9 +7467,30 @@
       },
       "documentation":"<p>The SageMaker Canvas application settings.</p>"
     },
+    "CapacityReservation":{
+      "type":"structure",
+      "members":{
+        "Arn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Capacity Reservation.</p>"
+        },
+        "Type":{
+          "shape":"CapacityReservationType",
+          "documentation":"<p>The type of Capacity Reservation. Valid values are <code>ODCR</code> (On-Demand Capacity Reservation) or <code>CRG</code> (Capacity Reservation Group).</p>"
+        }
+      },
+      "documentation":"<p>Information about the Capacity Reservation used by an instance or instance group.</p>"
+    },
     "CapacityReservationPreference":{
       "type":"string",
       "enum":["capacity-reservations-only"]
+    },
+    "CapacityReservationType":{
+      "type":"string",
+      "enum":[
+        "ODCR",
+        "CRG"
+      ]
     },
     "CapacitySize":{
       "type":"structure",
@@ -7961,6 +8360,67 @@
       "min":0,
       "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]*:[0-9]{12}:cluster/[a-z0-9]{12}"
     },
+    "ClusterAutoScalerType":{
+      "type":"string",
+      "enum":["Karpenter"]
+    },
+    "ClusterAutoScalingConfig":{
+      "type":"structure",
+      "required":["Mode"],
+      "members":{
+        "Mode":{
+          "shape":"ClusterAutoScalingMode",
+          "documentation":"<p>Describes whether autoscaling is enabled or disabled for the cluster. Valid values are <code>Enable</code> and <code>Disable</code>.</p>"
+        },
+        "AutoScalerType":{
+          "shape":"ClusterAutoScalerType",
+          "documentation":"<p>The type of autoscaler to use. Currently supported value is <code>Karpenter</code>.</p>"
+        }
+      },
+      "documentation":"<p>Specifies the autoscaling configuration for a HyperPod cluster.</p>"
+    },
+    "ClusterAutoScalingConfigOutput":{
+      "type":"structure",
+      "required":[
+        "Mode",
+        "Status"
+      ],
+      "members":{
+        "Mode":{
+          "shape":"ClusterAutoScalingMode",
+          "documentation":"<p>Describes whether autoscaling is enabled or disabled for the cluster.</p>"
+        },
+        "AutoScalerType":{
+          "shape":"ClusterAutoScalerType",
+          "documentation":"<p>The type of autoscaler configured for the cluster.</p>"
+        },
+        "Status":{
+          "shape":"ClusterAutoScalingStatus",
+          "documentation":"<p>The current status of the autoscaling configuration. Valid values are <code>InService</code>, <code>Failed</code>, <code>Creating</code>, and <code>Deleting</code>.</p>"
+        },
+        "FailureMessage":{
+          "shape":"String",
+          "documentation":"<p>If the autoscaling status is <code>Failed</code>, this field contains a message describing the failure.</p>"
+        }
+      },
+      "documentation":"<p>The autoscaling configuration and status information for a HyperPod cluster.</p>"
+    },
+    "ClusterAutoScalingMode":{
+      "type":"string",
+      "enum":[
+        "Enable",
+        "Disable"
+      ]
+    },
+    "ClusterAutoScalingStatus":{
+      "type":"string",
+      "enum":[
+        "InService",
+        "Failed",
+        "Creating",
+        "Deleting"
+      ]
+    },
     "ClusterAvailabilityZone":{
       "type":"string",
       "pattern":"[a-z]{2}-[a-z]+-\\d[a-z]"
@@ -7969,12 +8429,28 @@
       "type":"string",
       "pattern":"[a-z]{3}\\d-az\\d"
     },
+    "ClusterConfigMode":{
+      "type":"string",
+      "enum":[
+        "Enable",
+        "Disable"
+      ]
+    },
     "ClusterEbsVolumeConfig":{
       "type":"structure",
       "members":{
         "VolumeSizeInGB":{
           "shape":"ClusterEbsVolumeSizeInGB",
           "documentation":"<p>The size in gigabytes (GB) of the additional EBS volume to be attached to the instances in the SageMaker HyperPod cluster instance group. The additional EBS volume is attached to each instance within the SageMaker HyperPod cluster instance group and mounted to <code>/opt/sagemaker</code>.</p>"
+        },
+        "VolumeKmsKeyId":{
+          "shape":"KmsKeyId",
+          "documentation":"<p>The ID of a KMS key to encrypt the Amazon EBS volume.</p>"
+        },
+        "RootVolume":{
+          "shape":"Boolean",
+          "documentation":"<p>Specifies whether the configuration is for the cluster's root or secondary Amazon EBS volume. You can specify two <code>ClusterEbsVolumeConfig</code> fields to configure both the root and secondary volumes. Set the value to <code>True</code> if you'd like to provide your own customer managed Amazon Web Services KMS key to encrypt the root volume. When <code>True</code>:</p> <ul> <li> <p>The configuration is applied to the root volume.</p> </li> <li> <p>You can't specify the <code>VolumeSizeInGB</code> field. The size of the root volume is determined for you.</p> </li> <li> <p>You must specify a KMS key ID for <code>VolumeKmsKeyId</code> to encrypt the root volume with your own KMS key instead of an Amazon Web Services owned KMS key.</p> </li> </ul> <p>Otherwise, by default, the value is <code>False</code>, and the following applies:</p> <ul> <li> <p>The configuration is applied to the secondary volume, while the root volume is encrypted with an Amazon Web Services owned key.</p> </li> <li> <p>You must specify the <code>VolumeSizeInGB</code> field.</p> </li> <li> <p>You can optionally specify the <code>VolumeKmsKeyId</code> to encrypt the secondary volume with your own KMS key instead of an Amazon Web Services owned KMS key.</p> </li> </ul>",
+          "box":true
         }
       },
       "documentation":"<p>Defines the configuration for attaching an additional Amazon Elastic Block Store (EBS) volume to each instance of the SageMaker HyperPod cluster instance group. To learn more, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-release-notes.html#sagemaker-hyperpod-release-notes-20240620\">SageMaker HyperPod release notes: June 20, 2024</a>.</p>"
@@ -7984,6 +8460,120 @@
       "box":true,
       "max":16384,
       "min":1
+    },
+    "ClusterEventDetail":{
+      "type":"structure",
+      "required":[
+        "EventId",
+        "ClusterArn",
+        "ClusterName",
+        "ResourceType",
+        "EventTime"
+      ],
+      "members":{
+        "EventId":{
+          "shape":"EventId",
+          "documentation":"<p>The unique identifier (UUID) of the event.</p>"
+        },
+        "ClusterArn":{
+          "shape":"ClusterArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the HyperPod cluster associated with the event.</p>"
+        },
+        "ClusterName":{
+          "shape":"ClusterName",
+          "documentation":"<p>The name of the HyperPod cluster associated with the event.</p>"
+        },
+        "InstanceGroupName":{
+          "shape":"ClusterInstanceGroupName",
+          "documentation":"<p>The name of the instance group associated with the event, if applicable.</p>"
+        },
+        "InstanceId":{
+          "shape":"String",
+          "documentation":"<p>The EC2 instance ID associated with the event, if applicable.</p>"
+        },
+        "ResourceType":{
+          "shape":"ClusterEventResourceType",
+          "documentation":"<p>The type of resource associated with the event. Valid values are <code>Cluster</code>, <code>InstanceGroup</code>, or <code>Instance</code>.</p>"
+        },
+        "EventTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp when the event occurred.</p>"
+        },
+        "EventDetails":{
+          "shape":"EventDetails",
+          "documentation":"<p>Additional details about the event, including event-specific metadata.</p>"
+        },
+        "Description":{
+          "shape":"String",
+          "documentation":"<p>A human-readable description of the event.</p>"
+        }
+      },
+      "documentation":"<p>Detailed information about a specific event in a HyperPod cluster.</p>"
+    },
+    "ClusterEventMaxResults":{
+      "type":"integer",
+      "box":true,
+      "max":100,
+      "min":1
+    },
+    "ClusterEventResourceType":{
+      "type":"string",
+      "enum":[
+        "Cluster",
+        "InstanceGroup",
+        "Instance"
+      ]
+    },
+    "ClusterEventSummaries":{
+      "type":"list",
+      "member":{"shape":"ClusterEventSummary"},
+      "max":100,
+      "min":0
+    },
+    "ClusterEventSummary":{
+      "type":"structure",
+      "required":[
+        "EventId",
+        "ClusterArn",
+        "ClusterName",
+        "ResourceType",
+        "EventTime"
+      ],
+      "members":{
+        "EventId":{
+          "shape":"EventId",
+          "documentation":"<p>The unique identifier (UUID) of the event.</p>"
+        },
+        "ClusterArn":{
+          "shape":"ClusterArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the HyperPod cluster associated with the event.</p>"
+        },
+        "ClusterName":{
+          "shape":"ClusterName",
+          "documentation":"<p>The name of the HyperPod cluster associated with the event.</p>"
+        },
+        "InstanceGroupName":{
+          "shape":"ClusterInstanceGroupName",
+          "documentation":"<p>The name of the instance group associated with the event, if applicable.</p>"
+        },
+        "InstanceId":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Elastic Compute Cloud (EC2) instance ID associated with the event, if applicable.</p>"
+        },
+        "ResourceType":{
+          "shape":"ClusterEventResourceType",
+          "documentation":"<p>The type of resource associated with the event. Valid values are <code>Cluster</code>, <code>InstanceGroup</code>, or <code>Instance</code>.</p>"
+        },
+        "EventTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp when the event occurred.</p>"
+        },
+        "Description":{
+          "shape":"String",
+          "documentation":"<p>A brief, human-readable description of the event.</p>"
+        }
+      },
+      "documentation":"<p>A summary of an event in a HyperPod cluster.</p>"
     },
     "ClusterInstanceCount":{
       "type":"integer",
@@ -8049,7 +8639,24 @@
         "ScheduledUpdateConfig":{
           "shape":"ScheduledUpdateConfig",
           "documentation":"<p>The configuration object of the schedule that SageMaker follows when updating the AMI.</p>"
-        }
+        },
+        "CurrentImageId":{
+          "shape":"ImageId",
+          "documentation":"<p>The ID of the Amazon Machine Image (AMI) currently in use by the instance group.</p>"
+        },
+        "DesiredImageId":{
+          "shape":"ImageId",
+          "documentation":"<p>The ID of the Amazon Machine Image (AMI) desired for the instance group.</p>"
+        },
+        "TargetStateCount":{
+          "shape":"ClusterInstanceCount",
+          "documentation":"<p>The number of nodes running a specific image ID since the last software update request.</p>"
+        },
+        "SoftwareUpdateStatus":{
+          "shape":"SoftwareUpdateStatus",
+          "documentation":"<p>Status of the last software udpate request.</p>"
+        },
+        "ActiveSoftwareUpdateConfig":{"shape":"DeploymentConfiguration"}
       },
       "documentation":"<p>Details of an instance group in a SageMaker HyperPod cluster.</p>"
     },
@@ -8116,6 +8723,10 @@
         "ScheduledUpdateConfig":{
           "shape":"ScheduledUpdateConfig",
           "documentation":"<p>The configuration object of the schedule that SageMaker uses to update the AMI.</p>"
+        },
+        "ImageId":{
+          "shape":"ImageId",
+          "documentation":"<p>When configuring your HyperPod cluster, you can specify an image ID using one of the following options:</p> <ul> <li> <p> <code>HyperPodPublicAmiId</code>: Use a HyperPod public AMI</p> </li> <li> <p> <code>CustomAmiId</code>: Use your custom AMI</p> </li> <li> <p> <code>default</code>: Use the default latest system image</p> </li> </ul> <p>If you choose to use a custom AMI (<code>CustomAmiId</code>), ensure it meets the following requirements:</p> <ul> <li> <p>Encryption: The custom AMI must be unencrypted.</p> </li> <li> <p>Ownership: The custom AMI must be owned by the same Amazon Web Services account that is creating the HyperPod cluster.</p> </li> <li> <p>Volume support: Only the primary AMI snapshot volume is supported; additional AMI volumes are not supported.</p> </li> </ul> <p>When updating the instance group's AMI through the <code>UpdateClusterSoftware</code> operation, if an instance group uses a custom AMI, you must provide an <code>ImageId</code> or use the default as input. Note that if you don't specify an instance group in your <code>UpdateClusterSoftware</code> request, then all of the instance groups are patched with the specified image.</p>"
         }
       },
       "documentation":"<p>The specifications of an instance group that you need to define.</p>"
@@ -8129,6 +8740,12 @@
     "ClusterInstanceGroupsToDelete":{
       "type":"list",
       "member":{"shape":"ClusterInstanceGroupName"},
+      "max":100,
+      "min":0
+    },
+    "ClusterInstanceMemoryAllocationPercentage":{
+      "type":"integer",
+      "box":true,
       "max":100,
       "min":0
     },
@@ -8154,7 +8771,8 @@
         "Pending",
         "ShuttingDown",
         "SystemUpdating",
-        "DeepHealthCheckInProgress"
+        "DeepHealthCheckInProgress",
+        "NotFound"
       ]
     },
     "ClusterInstanceStatusDetails":{
@@ -8195,6 +8813,7 @@
         "ml.p4d.24xlarge",
         "ml.p4de.24xlarge",
         "ml.p5.48xlarge",
+        "ml.p6e-gb200.36xlarge",
         "ml.trn1.32xlarge",
         "ml.trn1n.32xlarge",
         "ml.g5.xlarge",
@@ -8251,6 +8870,7 @@
         "ml.p5e.48xlarge",
         "ml.p5en.48xlarge",
         "ml.p6-b200.48xlarge",
+        "ml.trn2.3xlarge",
         "ml.trn2.48xlarge",
         "ml.c6i.large",
         "ml.c6i.xlarge",
@@ -8330,6 +8950,24 @@
       "min":1,
       "pattern":"[\\S\\s]+"
     },
+    "ClusterMetadata":{
+      "type":"structure",
+      "members":{
+        "FailureMessage":{
+          "shape":"String",
+          "documentation":"<p>An error message describing why the cluster level operation (such as creating, updating, or deleting) failed.</p>"
+        },
+        "EksRoleAccessEntries":{
+          "shape":"EksRoleAccessEntries",
+          "documentation":"<p>A list of Amazon EKS IAM role ARNs associated with the cluster. This is created by HyperPod on your behalf and only applies for EKS orchestrated clusters.</p>"
+        },
+        "SlrAccessEntry":{
+          "shape":"String",
+          "documentation":"<p>The Service-Linked Role (SLR) associated with the cluster. This is created by HyperPod on your behalf and only applies for EKS orchestrated clusters.</p>"
+        }
+      },
+      "documentation":"<p>Metadata information about a HyperPod cluster showing information about the cluster level operations, such as creating, updating, and deleting.</p>"
+    },
     "ClusterName":{
       "type":"string",
       "max":63,
@@ -8352,6 +8990,10 @@
         "InstanceId":{
           "shape":"String",
           "documentation":"<p>The ID of the instance.</p>"
+        },
+        "NodeLogicalId":{
+          "shape":"ClusterNodeLogicalId",
+          "documentation":"<p>A unique identifier for the node that persists throughout its lifecycle, from provisioning request to termination. This identifier can be used to track the node even before it has an assigned <code>InstanceId</code>.</p>"
         },
         "InstanceStatus":{
           "shape":"ClusterInstanceStatusDetails",
@@ -8400,6 +9042,18 @@
         "Placement":{
           "shape":"ClusterInstancePlacement",
           "documentation":"<p>The placement details of the SageMaker HyperPod cluster node.</p>"
+        },
+        "CurrentImageId":{
+          "shape":"ImageId",
+          "documentation":"<p>The ID of the Amazon Machine Image (AMI) currently in use by the node.</p>"
+        },
+        "DesiredImageId":{
+          "shape":"ImageId",
+          "documentation":"<p>The ID of the Amazon Machine Image (AMI) desired for the node.</p>"
+        },
+        "UltraServerInfo":{
+          "shape":"UltraServerInfo",
+          "documentation":"<p>Contains information about the UltraServer.</p>"
         }
       },
       "documentation":"<p>Details of an instance (also called a <i>node</i> interchangeably) in a SageMaker HyperPod cluster.</p>"
@@ -8415,6 +9069,22 @@
       "member":{"shape":"ClusterNodeId"},
       "max":3000,
       "min":1
+    },
+    "ClusterNodeLogicalId":{
+      "type":"string",
+      "max":128,
+      "min":1,
+      "pattern":"[a-zA-Z0-9][a-zA-Z0-9\\-]*[a-zA-Z0-9]"
+    },
+    "ClusterNodeLogicalIdList":{
+      "type":"list",
+      "member":{"shape":"ClusterNodeLogicalId"},
+      "max":99,
+      "min":1
+    },
+    "ClusterNodeProvisioningMode":{
+      "type":"string",
+      "enum":["Continuous"]
     },
     "ClusterNodeRecovery":{
       "type":"string",
@@ -8445,6 +9115,10 @@
           "shape":"String",
           "documentation":"<p>The ID of the instance.</p>"
         },
+        "NodeLogicalId":{
+          "shape":"String",
+          "documentation":"<p>A unique identifier for the node that persists throughout its lifecycle, from provisioning request to termination. This identifier can be used to track the node even before it has an assigned <code>InstanceId</code>. This field is only included when <code>IncludeNodeLogicalIds</code> is set to <code>True</code> in the <code>ListClusterNodes</code> request.</p>"
+        },
         "InstanceType":{
           "shape":"ClusterInstanceType",
           "documentation":"<p>The type of the instance.</p>"
@@ -8460,6 +9134,10 @@
         "InstanceStatus":{
           "shape":"ClusterInstanceStatusDetails",
           "documentation":"<p>The status of the instance.</p>"
+        },
+        "UltraServerInfo":{
+          "shape":"UltraServerInfo",
+          "documentation":"<p>Contains information about the UltraServer.</p>"
         }
       },
       "documentation":"<p>Lists a summary of the properties of an instance (also called a <i>node</i> interchangeably) of a SageMaker HyperPod cluster.</p>"
@@ -8746,6 +9424,21 @@
       "max":2,
       "min":1
     },
+    "ClusterTieredStorageConfig":{
+      "type":"structure",
+      "required":["Mode"],
+      "members":{
+        "Mode":{
+          "shape":"ClusterConfigMode",
+          "documentation":"<p>Specifies whether managed tier checkpointing is enabled or disabled for the HyperPod cluster. When set to <code>Enable</code>, the system installs a memory management daemon that provides disaggregated memory as a service for checkpoint storage. When set to <code>Disable</code>, the feature is turned off and the memory management daemon is removed from the cluster.</p>"
+        },
+        "InstanceMemoryAllocationPercentage":{
+          "shape":"ClusterInstanceMemoryAllocationPercentage",
+          "documentation":"<p>The percentage (int) of cluster memory to allocate for checkpointing.</p>"
+        }
+      },
+      "documentation":"<p>Defines the configuration for managed tier checkpointing in a HyperPod cluster. Managed tier checkpointing uses multiple storage tiers, including cluster CPU memory, to provide faster checkpoint operations and improved fault tolerance for large-scale model training. The system automatically saves checkpoints at high frequency to memory and periodically persists them to durable storage, like Amazon S3.</p>"
+    },
     "CodeEditorAppImageConfig":{
       "type":"structure",
       "members":{
@@ -8798,7 +9491,7 @@
       "type":"string",
       "max":2048,
       "min":1,
-      "pattern":"arn:aws(-cn|-us-gov|-iso-f)?:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:code-repository/[\\S]{1,2048}"
+      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:code-repository/[\\S]{1,2048}"
     },
     "CodeRepositoryContains":{
       "type":"string",
@@ -9114,6 +9807,18 @@
         "Count":{
           "shape":"InstanceCount",
           "documentation":"<p>The number of instances to add to the instance group of a SageMaker HyperPod cluster.</p>"
+        },
+        "Accelerators":{
+          "shape":"AcceleratorsAmount",
+          "documentation":"<p>The number of accelerators to allocate. If you don't specify a value for vCPU and MemoryInGiB, SageMaker AI automatically allocates ratio-based values for those parameters based on the number of accelerators you provide. For example, if you allocate 16 out of 32 total accelerators, SageMaker AI uses the ratio of 0.5 and allocates values to vCPU and MemoryInGiB.</p>"
+        },
+        "VCpu":{
+          "shape":"VCpuAmount",
+          "documentation":"<p>The number of vCPU to allocate. If you specify a value only for vCPU, SageMaker AI automatically allocates ratio-based values for MemoryInGiB based on this vCPU parameter. For example, if you allocate 20 out of 40 total vCPU, SageMaker AI uses the ratio of 0.5 and allocates values to MemoryInGiB. Accelerators are set to 0.</p>"
+        },
+        "MemoryInGiB":{
+          "shape":"MemoryInGiBAmount",
+          "documentation":"<p>The amount of memory in GiB to allocate. If you specify a value only for this parameter, SageMaker AI automatically allocates a ratio-based value for vCPU based on this memory that you provide. For example, if you allocate 200 out of 400 total memory in GiB, SageMaker AI uses the ratio of 0.5 and allocates values to vCPU. Accelerators are set to 0.</p>"
         }
       },
       "documentation":"<p>Configuration of the resources used for the compute allocation definition.</p>"
@@ -9236,6 +9941,11 @@
       "max":256,
       "min":0,
       "pattern":".*"
+    },
+    "ConfiguredSpareInstanceCount":{
+      "type":"integer",
+      "box":true,
+      "min":0
     },
     "ConflictException":{
       "type":"structure",
@@ -9910,11 +10620,27 @@
         },
         "Orchestrator":{
           "shape":"ClusterOrchestrator",
-          "documentation":"<p>The type of orchestrator to use for the SageMaker HyperPod cluster. Currently, the only supported value is <code>\"eks\"</code>, which is to use an Amazon Elastic Kubernetes Service (EKS) cluster as the orchestrator.</p>"
+          "documentation":"<p>The type of orchestrator to use for the SageMaker HyperPod cluster. Currently, the only supported value is <code>\"eks\"</code>, which is to use an Amazon Elastic Kubernetes Service cluster as the orchestrator.</p>"
         },
         "NodeRecovery":{
           "shape":"ClusterNodeRecovery",
           "documentation":"<p>The node recovery mode for the SageMaker HyperPod cluster. When set to <code>Automatic</code>, SageMaker HyperPod will automatically reboot or replace faulty nodes when issues are detected. When set to <code>None</code>, cluster administrators will need to manually manage any faulty cluster instances.</p>"
+        },
+        "TieredStorageConfig":{
+          "shape":"ClusterTieredStorageConfig",
+          "documentation":"<p>The configuration for managed tier checkpointing on the HyperPod cluster. When enabled, this feature uses a multi-tier storage approach for storing model checkpoints, providing faster checkpoint operations and improved fault tolerance across cluster nodes.</p>"
+        },
+        "NodeProvisioningMode":{
+          "shape":"ClusterNodeProvisioningMode",
+          "documentation":"<p>The mode for provisioning nodes in the cluster. You can specify the following modes:</p> <ul> <li> <p> <b>Continuous</b>: Scaling behavior that enables 1) concurrent operation execution within instance groups, 2) continuous retry mechanisms for failed operations, 3) enhanced customer visibility into cluster events through detailed event streams, 4) partial provisioning capabilities. Your clusters and instance groups remain <code>InService</code> while scaling. This mode is only supported for EKS orchestrated clusters.</p> </li> </ul>"
+        },
+        "ClusterRole":{
+          "shape":"RoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role that HyperPod assumes to perform cluster autoscaling operations. This role must have permissions for <code>sagemaker:BatchAddClusterNodes</code> and <code>sagemaker:BatchDeleteClusterNodes</code>. This is only required when autoscaling is enabled and when HyperPod is performing autoscaling operations.</p>"
+        },
+        "AutoScaling":{
+          "shape":"ClusterAutoScalingConfig",
+          "documentation":"<p>The autoscaling configuration for the cluster. Enables automatic scaling of cluster nodes based on workload demand using a Karpenter-based system.</p>"
         }
       }
     },
@@ -11155,7 +11881,7 @@
         },
         "LabelAttributeName":{
           "shape":"LabelAttributeName",
-          "documentation":"<p>The attribute name to use for the label in the output manifest file. This is the key for the key/value pair formed with the label that a worker assigns to the object. The <code>LabelAttributeName</code> must meet the following requirements.</p> <ul> <li> <p>The name can't end with \"-metadata\". </p> </li> <li> <p>If you are using one of the following <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/sms-task-types.html\">built-in task types</a>, the attribute name <i>must</i> end with \"-ref\". If the task type you are using is not listed below, the attribute name <i>must not</i> end with \"-ref\".</p> <ul> <li> <p>Image semantic segmentation (<code>SemanticSegmentation)</code>, and adjustment (<code>AdjustmentSemanticSegmentation</code>) and verification (<code>VerificationSemanticSegmentation</code>) labeling jobs for this task type.</p> </li> <li> <p>Video frame object detection (<code>VideoObjectDetection</code>), and adjustment and verification (<code>AdjustmentVideoObjectDetection</code>) labeling jobs for this task type.</p> </li> <li> <p>Video frame object tracking (<code>VideoObjectTracking</code>), and adjustment and verification (<code>AdjustmentVideoObjectTracking</code>) labeling jobs for this task type.</p> </li> <li> <p>3D point cloud semantic segmentation (<code>3DPointCloudSemanticSegmentation</code>), and adjustment and verification (<code>Adjustment3DPointCloudSemanticSegmentation</code>) labeling jobs for this task type. </p> </li> <li> <p>3D point cloud object tracking (<code>3DPointCloudObjectTracking</code>), and adjustment and verification (<code>Adjustment3DPointCloudObjectTracking</code>) labeling jobs for this task type. </p> </li> </ul> </li> </ul> <p/> <important> <p>If you are creating an adjustment or verification labeling job, you must use a <i>different</i> <code>LabelAttributeName</code> than the one used in the original labeling job. The original labeling job is the Ground Truth labeling job that produced the labels that you want verified or adjusted. To learn more about adjustment and verification labeling jobs, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/sms-verification-data.html\">Verify and Adjust Labels</a>.</p> </important>"
+          "documentation":"<p>The attribute name to use for the label in the output manifest file. This is the key for the key/value pair formed with the label that a worker assigns to the object. The <code>LabelAttributeName</code> must meet the following requirements.</p> <ul> <li> <p>The name can't end with \"-metadata\". </p> </li> <li> <p>If you are using one of the <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/sms-task-types.html\">built-in task types</a> or one of the following, the attribute name <i>must</i> end with \"-ref\".</p> <ul> <li> <p>Image semantic segmentation (<code>SemanticSegmentation)</code> and adjustment (<code>AdjustmentSemanticSegmentation</code>) labeling jobs for this task type. One exception is that verification (<code>VerificationSemanticSegmentation</code>) <i>must not</i> end with -\"ref\".</p> </li> <li> <p>Video frame object detection (<code>VideoObjectDetection</code>), and adjustment and verification (<code>AdjustmentVideoObjectDetection</code>) labeling jobs for this task type.</p> </li> <li> <p>Video frame object tracking (<code>VideoObjectTracking</code>), and adjustment and verification (<code>AdjustmentVideoObjectTracking</code>) labeling jobs for this task type.</p> </li> <li> <p>3D point cloud semantic segmentation (<code>3DPointCloudSemanticSegmentation</code>), and adjustment and verification (<code>Adjustment3DPointCloudSemanticSegmentation</code>) labeling jobs for this task type. </p> </li> <li> <p>3D point cloud object tracking (<code>3DPointCloudObjectTracking</code>), and adjustment and verification (<code>Adjustment3DPointCloudObjectTracking</code>) labeling jobs for this task type. </p> </li> </ul> </li> </ul> <p/> <important> <p>If you are creating an adjustment or verification labeling job, you must use a <i>different</i> <code>LabelAttributeName</code> than the one used in the original labeling job. The original labeling job is the Ground Truth labeling job that produced the labels that you want verified or adjusted. To learn more about adjustment and verification labeling jobs, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/sms-verification-data.html\">Verify and Adjust Labels</a>.</p> </important>"
         },
         "InputConfig":{
           "shape":"LabelingJobInputConfig",
@@ -11730,6 +12456,10 @@
           "shape":"SecurityGroupIds",
           "documentation":"<p>The VPC security group IDs, in the form sg-xxxxxxxx. The security groups must be for the same VPC as specified in the subnet. </p>"
         },
+        "IpAddressType":{
+          "shape":"IPAddressType",
+          "documentation":"<p>The IP address type for the notebook instance. Specify <code>ipv4</code> for IPv4-only connectivity or <code>dualstack</code> for both IPv4 and IPv6 connectivity. When you specify <code>dualstack</code>, the subnet must support IPv6 CIDR blocks. If not specified, defaults to <code>ipv4</code>.</p>"
+        },
         "RoleArn":{
           "shape":"RoleArn",
           "documentation":"<p> When you send any requests to Amazon Web Services resources from the notebook instance, SageMaker AI assumes this role to perform tasks on your behalf. You must grant this role necessary permissions so SageMaker AI can perform these tasks. The policy must allow the SageMaker AI service principal (sagemaker.amazonaws.com) permissions to assume this role. For more information, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-roles.html\">SageMaker AI Roles</a>. </p> <note> <p>To be able to pass this role to SageMaker AI, the caller of this API must have the <code>iam:PassRole</code> permission.</p> </note>"
@@ -11772,7 +12502,7 @@
         },
         "PlatformIdentifier":{
           "shape":"PlatformIdentifier",
-          "documentation":"<p>The platform identifier of the notebook instance runtime environment.</p>"
+          "documentation":"<p>The platform identifier of the notebook instance runtime environment. The default value is <code>notebook-al2-v2</code>.</p>"
         },
         "InstanceMetadataServiceConfiguration":{
           "shape":"InstanceMetadataServiceConfiguration",
@@ -11953,6 +12683,11 @@
         "EnableIamSessionBasedIdentity":{
           "shape":"Boolean",
           "documentation":"<p>When set to <code>TRUE</code>, the SageMaker Partner AI App sets the Amazon Web Services IAM session name or the authenticated IAM user as the identity of the SageMaker Partner AI App user.</p>",
+          "box":true
+        },
+        "EnableAutoMinorVersionUpgrade":{
+          "shape":"Boolean",
+          "documentation":"<p>When set to <code>TRUE</code>, the SageMaker Partner AI App is automatically upgraded to the latest minor version during the next scheduled maintenance window, if one is available. Default is <code>FALSE</code>.</p>",
           "box":true
         },
         "ClientToken":{
@@ -12329,11 +13064,8 @@
       "type":"structure",
       "required":[
         "TrainingJobName",
-        "AlgorithmSpecification",
         "RoleArn",
-        "OutputDataConfig",
-        "ResourceConfig",
-        "StoppingCondition"
+        "OutputDataConfig"
       ],
       "members":{
         "TrainingJobName":{
@@ -12453,6 +13185,10 @@
         "TrainingPlanOfferingId":{
           "shape":"TrainingPlanOfferingId",
           "documentation":"<p>The unique identifier of the training plan offering to use for creating this plan.</p>"
+        },
+        "SpareInstanceCountPerUltraServer":{
+          "shape":"SpareInstanceCountPerUltraServer",
+          "documentation":"<p>Number of spare instances to reserve per UltraServer for enhanced resiliency. Default is 1.</p>"
         },
         "Tags":{
           "shape":"TagList",
@@ -14004,6 +14740,16 @@
         }
       }
     },
+    "DeleteProcessingJobRequest":{
+      "type":"structure",
+      "required":["ProcessingJobName"],
+      "members":{
+        "ProcessingJobName":{
+          "shape":"ProcessingJobName",
+          "documentation":"<p>The name of the processing job to delete.</p>"
+        }
+      }
+    },
     "DeleteProjectInput":{
       "type":"structure",
       "required":["ProjectName"],
@@ -14061,6 +14807,16 @@
     "DeleteTagsOutput":{
       "type":"structure",
       "members":{}
+    },
+    "DeleteTrainingJobRequest":{
+      "type":"structure",
+      "required":["TrainingJobName"],
+      "members":{
+        "TrainingJobName":{
+          "shape":"TrainingJobName",
+          "documentation":"<p>The name of the training job to delete.</p>"
+        }
+      }
     },
     "DeleteTrialComponentRequest":{
       "type":"structure",
@@ -14556,6 +15312,10 @@
           "shape":"AppStatus",
           "documentation":"<p>The status.</p>"
         },
+        "EffectiveTrustedIdentityPropagationStatus":{
+          "shape":"FeatureStatus",
+          "documentation":"<p>The effective status of Trusted Identity Propagation (TIP) for this application. When enabled, user identities from IAM Identity Center are being propagated through the application to TIP enabled Amazon Web Services services. When disabled, standard IAM role-based access is used. </p>"
+        },
         "RecoveryMode":{
           "shape":"Boolean",
           "documentation":"<p> Indicates whether the application is launched in recovery mode. </p>",
@@ -14863,6 +15623,32 @@
         }
       }
     },
+    "DescribeClusterEventRequest":{
+      "type":"structure",
+      "required":[
+        "EventId",
+        "ClusterName"
+      ],
+      "members":{
+        "EventId":{
+          "shape":"EventId",
+          "documentation":"<p>The unique identifier (UUID) of the event to describe. This ID can be obtained from the <code>ListClusterEvents</code> operation.</p>"
+        },
+        "ClusterName":{
+          "shape":"ClusterNameOrArn",
+          "documentation":"<p>The name or Amazon Resource Name (ARN) of the HyperPod cluster associated with the event.</p>"
+        }
+      }
+    },
+    "DescribeClusterEventResponse":{
+      "type":"structure",
+      "members":{
+        "EventDetails":{
+          "shape":"ClusterEventDetail",
+          "documentation":"<p>Detailed information about the requested cluster event, including event metadata for various resource types such as <code>Cluster</code>, <code>InstanceGroup</code>, <code>Instance</code>, and their associated attributes.</p>"
+        }
+      }
+    },
     "DescribeClusterNodeRequest":{
       "type":"structure",
       "required":["ClusterName"],
@@ -14874,6 +15660,10 @@
         "NodeId":{
           "shape":"ClusterNodeId",
           "documentation":"<p>The ID of the SageMaker HyperPod cluster node.</p>"
+        },
+        "NodeLogicalId":{
+          "shape":"ClusterNodeLogicalId",
+          "documentation":"<p>The logical identifier of the node to describe. You can specify either <code>NodeLogicalId</code> or <code>InstanceId</code>, but not both. <code>NodeLogicalId</code> can be used to describe nodes that are still being provisioned and don't yet have an <code>InstanceId</code> assigned.</p>"
         }
       }
     },
@@ -14938,9 +15728,25 @@
           "shape":"ClusterOrchestrator",
           "documentation":"<p>The type of orchestrator used for the SageMaker HyperPod cluster. </p>"
         },
+        "TieredStorageConfig":{
+          "shape":"ClusterTieredStorageConfig",
+          "documentation":"<p>The current configuration for managed tier checkpointing on the HyperPod cluster. For example, this shows whether the feature is enabled and the percentage of cluster memory allocated for checkpoint storage.</p>"
+        },
         "NodeRecovery":{
           "shape":"ClusterNodeRecovery",
           "documentation":"<p>The node recovery mode configured for the SageMaker HyperPod cluster.</p>"
+        },
+        "NodeProvisioningMode":{
+          "shape":"ClusterNodeProvisioningMode",
+          "documentation":"<p>The mode used for provisioning nodes in the cluster.</p>"
+        },
+        "ClusterRole":{
+          "shape":"RoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role that HyperPod uses for cluster autoscaling operations.</p>"
+        },
+        "AutoScaling":{
+          "shape":"ClusterAutoScalingConfigOutput",
+          "documentation":"<p>The current autoscaling configuration and status for the autoscaler.</p>"
         }
       }
     },
@@ -17766,6 +18572,10 @@
           "shape":"InstanceType",
           "documentation":"<p>The type of ML compute instance running on the notebook instance.</p>"
         },
+        "IpAddressType":{
+          "shape":"IPAddressType",
+          "documentation":"<p>The IP address type configured for the notebook instance. Returns <code>ipv4</code> for IPv4-only connectivity or <code>dualstack</code> for both IPv4 and IPv6 connectivity.</p>"
+        },
         "SubnetId":{
           "shape":"SubnetId",
           "documentation":"<p>The ID of the VPC subnet.</p>"
@@ -17932,6 +18742,11 @@
         "Arn":{
           "shape":"PartnerAppArn",
           "documentation":"<p>The ARN of the SageMaker Partner AI App to describe.</p>"
+        },
+        "IncludeAvailableUpgrade":{
+          "shape":"Boolean",
+          "documentation":"<p>When set to <code>TRUE</code>, the response includes available upgrade information for the SageMaker Partner AI App. Default is <code>FALSE</code>.</p>",
+          "box":true
         }
       }
     },
@@ -17952,7 +18767,7 @@
         },
         "Status":{
           "shape":"PartnerAppStatus",
-          "documentation":"<p>The status of the SageMaker Partner AI App.</p>"
+          "documentation":"<p>The status of the SageMaker Partner AI App.</p> <ul> <li> <p>Creating: SageMaker AI is creating the partner AI app. The partner AI app is not available during creation.</p> </li> <li> <p>Updating: SageMaker AI is updating the partner AI app. The partner AI app is not available when updating.</p> </li> <li> <p>Deleting: SageMaker AI is deleting the partner AI app. The partner AI app is not available during deletion.</p> </li> <li> <p>Available: The partner AI app is provisioned and accessible.</p> </li> <li> <p>Failed: The partner AI app is in a failed state and isn't available. SageMaker AI is investigating the issue. For further guidance, contact Amazon Web Services Support.</p> </li> <li> <p>UpdateFailed: The partner AI app couldn't be updated but is available.</p> </li> <li> <p>Deleted: The partner AI app is permanently deleted and not available.</p> </li> </ul>"
         },
         "CreationTime":{
           "shape":"Timestamp",
@@ -18002,6 +18817,19 @@
         "Error":{
           "shape":"ErrorInfo",
           "documentation":"<p>This is an error field object that contains the error code and the reason for an operation failure.</p>"
+        },
+        "EnableAutoMinorVersionUpgrade":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the SageMaker Partner AI App is configured for automatic minor version upgrades during scheduled maintenance windows.</p>",
+          "box":true
+        },
+        "CurrentVersionEolDate":{
+          "shape":"Timestamp",
+          "documentation":"<p>The end-of-life date for the current version of the SageMaker Partner AI App.</p>"
+        },
+        "AvailableUpgrade":{
+          "shape":"AvailableUpgrade",
+          "documentation":"<p>A map of available minor version upgrades for the SageMaker Partner AI App. The key is the semantic version number, and the value is a list of release notes for that version. A null value indicates no upgrades are available.</p>"
         }
       }
     },
@@ -18334,6 +19162,78 @@
         "LastModifiedBy":{"shape":"UserContext"}
       }
     },
+    "DescribeReservedCapacityRequest":{
+      "type":"structure",
+      "required":["ReservedCapacityArn"],
+      "members":{
+        "ReservedCapacityArn":{
+          "shape":"ReservedCapacityArn",
+          "documentation":"<p>ARN of the reserved capacity to describe.</p>"
+        }
+      }
+    },
+    "DescribeReservedCapacityResponse":{
+      "type":"structure",
+      "required":[
+        "ReservedCapacityArn",
+        "InstanceType",
+        "TotalInstanceCount"
+      ],
+      "members":{
+        "ReservedCapacityArn":{
+          "shape":"ReservedCapacityArn",
+          "documentation":"<p>ARN of the reserved capacity.</p>"
+        },
+        "ReservedCapacityType":{
+          "shape":"ReservedCapacityType",
+          "documentation":"<p>The type of reserved capacity.</p>"
+        },
+        "Status":{
+          "shape":"ReservedCapacityStatus",
+          "documentation":"<p>The current status of the reserved capacity.</p>"
+        },
+        "AvailabilityZone":{
+          "shape":"AvailabilityZone",
+          "documentation":"<p>The Availability Zone where the reserved capacity is provisioned.</p>"
+        },
+        "DurationHours":{
+          "shape":"ReservedCapacityDurationHours",
+          "documentation":"<p>The total duration of the reserved capacity in hours.</p>"
+        },
+        "DurationMinutes":{
+          "shape":"ReservedCapacityDurationMinutes",
+          "documentation":"<p>The number of minutes for the duration of the reserved capacity. For example, if a reserved capacity starts at 08:55 and ends at 11:30, the minutes field would be 35.</p>"
+        },
+        "StartTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp when the reserved capacity becomes active.</p>"
+        },
+        "EndTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp when the reserved capacity expires.</p>"
+        },
+        "InstanceType":{
+          "shape":"ReservedCapacityInstanceType",
+          "documentation":"<p>The Amazon EC2 instance type used in the reserved capacity.</p>"
+        },
+        "TotalInstanceCount":{
+          "shape":"TotalInstanceCount",
+          "documentation":"<p>The total number of instances allocated to this reserved capacity.</p>"
+        },
+        "AvailableInstanceCount":{
+          "shape":"AvailableInstanceCount",
+          "documentation":"<p>The number of instances currently available for use in this reserved capacity.</p>"
+        },
+        "InUseInstanceCount":{
+          "shape":"InUseInstanceCount",
+          "documentation":"<p>The number of instances currently in use from this reserved capacity.</p>"
+        },
+        "UltraServerSummary":{
+          "shape":"UltraServerSummary",
+          "documentation":"<p>A summary of the UltraServer associated with this reserved capacity.</p>"
+        }
+      }
+    },
     "DescribeSpaceRequest":{
       "type":"structure",
       "required":[
@@ -18485,8 +19385,6 @@
         "ModelArtifacts",
         "TrainingJobStatus",
         "SecondaryStatus",
-        "AlgorithmSpecification",
-        "ResourceConfig",
         "StoppingCondition",
         "CreationTime"
       ],
@@ -18722,6 +19620,18 @@
         "InUseInstanceCount":{
           "shape":"InUseInstanceCount",
           "documentation":"<p>The number of instances currently in use from this training plan.</p>"
+        },
+        "UnhealthyInstanceCount":{
+          "shape":"UnhealthyInstanceCount",
+          "documentation":"<p>The number of instances in the training plan that are currently in an unhealthy state.</p>"
+        },
+        "AvailableSpareInstanceCount":{
+          "shape":"AvailableSpareInstanceCount",
+          "documentation":"<p>The number of available spare instances in the training plan.</p>"
+        },
+        "TotalUltraServerCount":{
+          "shape":"UltraServerCount",
+          "documentation":"<p>The total number of UltraServers reserved to this training plan.</p>"
         },
         "TargetResources":{
           "shape":"SageMakerResourceNames",
@@ -19116,6 +20026,65 @@
       "min":0,
       "pattern":"(https|s3)://([^/])/?(.*)"
     },
+    "DetachClusterNodeVolumeRequest":{
+      "type":"structure",
+      "required":[
+        "ClusterArn",
+        "NodeId",
+        "VolumeId"
+      ],
+      "members":{
+        "ClusterArn":{
+          "shape":"ClusterArn",
+          "documentation":"<p> The Amazon Resource Name (ARN) of your SageMaker HyperPod cluster containing the target node. Your cluster must use EKS as the orchestration and be in the <code>InService</code> state. </p>"
+        },
+        "NodeId":{
+          "shape":"ClusterNodeId",
+          "documentation":"<p> The unique identifier of the cluster node from which you want to detach the volume. </p>"
+        },
+        "VolumeId":{
+          "shape":"VolumeId",
+          "documentation":"<p> The unique identifier of your EBS volume that you want to detach. Your volume must be currently attached to the specified node. </p>"
+        }
+      }
+    },
+    "DetachClusterNodeVolumeResponse":{
+      "type":"structure",
+      "required":[
+        "ClusterArn",
+        "NodeId",
+        "VolumeId",
+        "AttachTime",
+        "Status",
+        "DeviceName"
+      ],
+      "members":{
+        "ClusterArn":{
+          "shape":"ClusterArn",
+          "documentation":"<p> The Amazon Resource Name (ARN) of your SageMaker HyperPod cluster where the volume detachment operation was performed. </p>"
+        },
+        "NodeId":{
+          "shape":"ClusterNodeId",
+          "documentation":"<p> The unique identifier of the cluster node from which your volume was detached. </p>"
+        },
+        "VolumeId":{
+          "shape":"VolumeId",
+          "documentation":"<p> The unique identifier of your EBS volume that was detached. </p>"
+        },
+        "AttachTime":{
+          "shape":"Timestamp",
+          "documentation":"<p> The original timestamp when your volume was initially attached to the node. </p>"
+        },
+        "Status":{
+          "shape":"VolumeAttachmentStatus",
+          "documentation":"<p> The current status of your volume detachment operation. </p>"
+        },
+        "DeviceName":{
+          "shape":"VolumeDeviceName",
+          "documentation":"<p> The device name assigned to your attached volume on the target instance. </p>"
+        }
+      }
+    },
     "DetailedAlgorithmStatus":{
       "type":"string",
       "enum":[
@@ -19483,6 +20452,10 @@
         "VpcOnlyTrustedAccounts":{
           "shape":"VpcOnlyTrustedAccounts",
           "documentation":"<p>The list of Amazon Web Services accounts that are trusted when the domain is created in VPC-only mode.</p>"
+        },
+        "RootlessDocker":{
+          "shape":"FeatureStatus",
+          "documentation":"<p>Indicates whether to use rootless Docker.</p>"
         }
       },
       "documentation":"<p>A collection of settings that configure the domain's Docker interaction.</p>"
@@ -19575,6 +20548,10 @@
           "shape":"ExecutionRoleIdentityConfig",
           "documentation":"<p>The configuration for attaching a SageMaker AI user profile name to the execution role as a <a href=\"https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_control-access_monitor.html\">sts:SourceIdentity key</a>.</p>"
         },
+        "TrustedIdentityPropagationSettings":{
+          "shape":"TrustedIdentityPropagationSettings",
+          "documentation":"<p>The Trusted Identity Propagation (TIP) settings for the SageMaker domain. These settings determine how user identities from IAM Identity Center are propagated through the domain to TIP enabled Amazon Web Services services.</p>"
+        },
         "DockerSettings":{
           "shape":"DockerSettings",
           "documentation":"<p>A collection of settings that configure the domain's Docker interaction.</p>"
@@ -19586,6 +20563,10 @@
         "UnifiedStudioSettings":{
           "shape":"UnifiedStudioSettings",
           "documentation":"<p>The settings that apply to an SageMaker AI domain when you use it in Amazon SageMaker Unified Studio.</p>"
+        },
+        "IpAddressType":{
+          "shape":"IPAddressType",
+          "documentation":"<p>The IP address type for the domain. Specify <code>ipv4</code> for IPv4-only connectivity or <code>dualstack</code> for both IPv4 and IPv6 connectivity. When you specify <code>dualstack</code>, the subnet must support IPv6 CIDR blocks. If not specified, defaults to <code>ipv4</code>.</p>"
         }
       },
       "documentation":"<p>A collection of settings that apply to the <code>SageMaker Domain</code>. These settings are specified through the <code>CreateDomain</code> API call.</p>"
@@ -19605,6 +20586,10 @@
           "shape":"DomainSecurityGroupIds",
           "documentation":"<p>The security groups for the Amazon Virtual Private Cloud that the <code>Domain</code> uses for communication between Domain-level apps and user apps.</p>"
         },
+        "TrustedIdentityPropagationSettings":{
+          "shape":"TrustedIdentityPropagationSettings",
+          "documentation":"<p>The Trusted Identity Propagation (TIP) settings for the SageMaker domain. These settings determine how user identities from IAM Identity Center are propagated through the domain to TIP enabled Amazon Web Services services.</p>"
+        },
         "DockerSettings":{
           "shape":"DockerSettings",
           "documentation":"<p>A collection of settings that configure the domain's Docker interaction.</p>"
@@ -19616,6 +20601,10 @@
         "UnifiedStudioSettings":{
           "shape":"UnifiedStudioSettings",
           "documentation":"<p>The settings that apply to an SageMaker AI domain when you use it in Amazon SageMaker Unified Studio.</p>"
+        },
+        "IpAddressType":{
+          "shape":"IPAddressType",
+          "documentation":"<p>The IP address type for the domain. Specify <code>ipv4</code> for IPv4-only connectivity or <code>dualstack</code> for both IPv4 and IPv6 connectivity. When you specify <code>dualstack</code>, the subnet must support IPv6 CIDR blocks.</p>"
         }
       },
       "documentation":"<p>A collection of <code>Domain</code> configuration settings to update.</p>"
@@ -20218,6 +21207,10 @@
       "type":"list",
       "member":{"shape":"Edge"}
     },
+    "EfaEnis":{
+      "type":"list",
+      "member":{"shape":"String"}
+    },
     "EfsUid":{
       "type":"string",
       "max":10,
@@ -20229,6 +21222,10 @@
       "max":2048,
       "min":20,
       "pattern":"arn:aws[a-z\\-]*:eks:[a-z0-9\\-]*:[0-9]{12}:cluster\\/[0-9A-Za-z][A-Za-z0-9\\-_]{0,99}"
+    },
+    "EksRoleAccessEntries":{
+      "type":"list",
+      "member":{"shape":"String"}
     },
     "EmrServerlessComputeConfig":{
       "type":"structure",
@@ -20269,6 +21266,7 @@
       },
       "documentation":"<p>The configuration parameters that specify the IAM roles assumed by the execution role of SageMaker (assumable roles) and the cluster instances or job execution environments (execution roles or runtime roles) to manage and access resources required for running Amazon EMR clusters or Amazon EMR Serverless applications.</p>"
     },
+    "EnableCaching":{"type":"boolean"},
     "EnableCapture":{"type":"boolean"},
     "EnableInfraCheck":{
       "type":"boolean",
@@ -20782,6 +21780,47 @@
         }
       },
       "documentation":"<p>This is an error field object that contains the error code and the reason for an operation failure.</p>"
+    },
+    "EventDetails":{
+      "type":"structure",
+      "members":{
+        "EventMetadata":{
+          "shape":"EventMetadata",
+          "documentation":"<p>Metadata specific to the event, which may include information about the cluster, instance group, or instance involved.</p>"
+        }
+      },
+      "documentation":"<p>Detailed information about a specific event, including event metadata.</p>"
+    },
+    "EventId":{
+      "type":"string",
+      "pattern":"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
+    },
+    "EventMetadata":{
+      "type":"structure",
+      "members":{
+        "Cluster":{
+          "shape":"ClusterMetadata",
+          "documentation":"<p>Metadata specific to cluster-level events.</p>"
+        },
+        "InstanceGroup":{
+          "shape":"InstanceGroupMetadata",
+          "documentation":"<p>Metadata specific to instance group-level events.</p>"
+        },
+        "InstanceGroupScaling":{
+          "shape":"InstanceGroupScalingMetadata",
+          "documentation":"<p>Metadata related to instance group scaling events.</p>"
+        },
+        "Instance":{
+          "shape":"InstanceMetadata",
+          "documentation":"<p>Metadata specific to instance-level events.</p>"
+        }
+      },
+      "documentation":"<p>Metadata associated with a cluster event, which may include details about various resource types.</p>",
+      "union":true
+    },
+    "EventSortBy":{
+      "type":"string",
+      "enum":["EventTime"]
     },
     "ExcludeFeaturesAttribute":{
       "type":"string",
@@ -21998,6 +23037,18 @@
       "max":63,
       "min":1,
       "pattern":"[\\p{L}\\p{M}\\p{S}\\p{N}\\p{P}]+"
+    },
+    "GroupNamePattern":{
+      "type":"string",
+      "max":128,
+      "min":1,
+      "pattern":"[\\w+=,.@*-]+"
+    },
+    "GroupPatternsList":{
+      "type":"list",
+      "member":{"shape":"GroupNamePattern"},
+      "max":10,
+      "min":1
     },
     "GroupingAttributeName":{
       "type":"string",
@@ -23223,6 +24274,13 @@
       "box":true,
       "min":1
     },
+    "IPAddressType":{
+      "type":"string",
+      "enum":[
+        "ipv4",
+        "dualstack"
+      ]
+    },
     "IamIdentity":{
       "type":"structure",
       "members":{
@@ -23428,6 +24486,12 @@
       "max":128,
       "min":1,
       "pattern":"\\S(.*\\S)?"
+    },
+    "ImageId":{
+      "type":"string",
+      "max":21,
+      "min":7,
+      "pattern":"ami-[0-9a-fA-F]{8,17}|default"
     },
     "ImageName":{
       "type":"string",
@@ -23654,6 +24718,10 @@
       "box":true,
       "min":0
     },
+    "IncludeNodeLogicalIdsBoolean":{
+      "type":"boolean",
+      "box":true
+    },
     "InferenceComponentArn":{
       "type":"string",
       "max":2048,
@@ -23744,6 +24812,30 @@
       "type":"integer",
       "box":true,
       "min":0
+    },
+    "InferenceComponentDataCacheConfig":{
+      "type":"structure",
+      "required":["EnableCaching"],
+      "members":{
+        "EnableCaching":{
+          "shape":"EnableCaching",
+          "documentation":"<p>Sets whether the endpoint that hosts the inference component caches the model artifacts and container image.</p> <p>With caching enabled, the endpoint caches this data in each instance that it provisions for the inference component. That way, the inference component deploys faster during the auto scaling process. If caching isn't enabled, the inference component takes longer to deploy because of the time it spends downloading the data.</p>",
+          "box":true
+        }
+      },
+      "documentation":"<p>Settings that affect how the inference component caches data.</p>"
+    },
+    "InferenceComponentDataCacheConfigSummary":{
+      "type":"structure",
+      "required":["EnableCaching"],
+      "members":{
+        "EnableCaching":{
+          "shape":"EnableCaching",
+          "documentation":"<p>Indicates whether the inference component caches model artifacts as part of the auto scaling process.</p>",
+          "box":true
+        }
+      },
+      "documentation":"<p>Settings that affect how the inference component caches data.</p>"
     },
     "InferenceComponentDeploymentConfig":{
       "type":"structure",
@@ -23850,6 +24942,10 @@
         "BaseInferenceComponentName":{
           "shape":"InferenceComponentName",
           "documentation":"<p>The name of an existing inference component that is to contain the inference component that you're creating with your request.</p> <p>Specify this parameter only if your request is meant to create an adapter inference component. An adapter inference component contains the path to an adapter model. The purpose of the adapter model is to tailor the inference output of a base foundation model, which is hosted by the base inference component. The adapter inference component uses the compute resources that you assigned to the base inference component.</p> <p>When you create an adapter inference component, use the <code>Container</code> parameter to specify the location of the adapter artifacts. In the parameter value, use the <code>ArtifactUrl</code> parameter of the <code>InferenceComponentContainerSpecification</code> data type.</p> <p>Before you can create an adapter inference component, you must have an existing inference component that contains the foundation model that you want to adapt.</p>"
+        },
+        "DataCacheConfig":{
+          "shape":"InferenceComponentDataCacheConfig",
+          "documentation":"<p>Settings that affect how the inference component caches data.</p>"
         }
       },
       "documentation":"<p>Details about the resources to deploy with this inference component, including the model, container, and compute resources.</p>"
@@ -23876,6 +24972,10 @@
         "BaseInferenceComponentName":{
           "shape":"InferenceComponentName",
           "documentation":"<p>The name of the base inference component that contains this inference component.</p>"
+        },
+        "DataCacheConfig":{
+          "shape":"InferenceComponentDataCacheConfigSummary",
+          "documentation":"<p>Settings that affect how the inference component caches data.</p>"
         }
       },
       "documentation":"<p>Details about the resources that are deployed with this inference component.</p>"
@@ -24419,6 +25519,36 @@
       },
       "documentation":"<p>Defines an instance group for heterogeneous cluster training. When requesting a training job using the <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateTrainingJob.html\">CreateTrainingJob</a> API, you can configure multiple instance groups .</p>"
     },
+    "InstanceGroupMetadata":{
+      "type":"structure",
+      "members":{
+        "FailureMessage":{
+          "shape":"String",
+          "documentation":"<p>An error message describing why the instance group level operation (such as creating, scaling, or deleting) failed.</p>"
+        },
+        "AvailabilityZoneId":{
+          "shape":"String",
+          "documentation":"<p>The ID of the Availability Zone where the instance group is located.</p>"
+        },
+        "CapacityReservation":{
+          "shape":"CapacityReservation",
+          "documentation":"<p>Information about the Capacity Reservation used by the instance group.</p>"
+        },
+        "SubnetId":{
+          "shape":"String",
+          "documentation":"<p>The ID of the subnet where the instance group is located.</p>"
+        },
+        "SecurityGroupIds":{
+          "shape":"SecurityGroupIds",
+          "documentation":"<p>A list of security group IDs associated with the instance group.</p>"
+        },
+        "AmiOverride":{
+          "shape":"String",
+          "documentation":"<p>If you use a custom Amazon Machine Image (AMI) for the instance group, this field shows the ID of the custom AMI.</p>"
+        }
+      },
+      "documentation":"<p>Metadata information about an instance group in a HyperPod cluster.</p>"
+    },
     "InstanceGroupName":{
       "type":"string",
       "max":64,
@@ -24430,6 +25560,24 @@
       "member":{"shape":"InstanceGroupName"},
       "max":5,
       "min":0
+    },
+    "InstanceGroupScalingMetadata":{
+      "type":"structure",
+      "members":{
+        "InstanceCount":{
+          "shape":"InstanceCount",
+          "documentation":"<p>The current number of instances in the group.</p>"
+        },
+        "TargetCount":{
+          "shape":"TargetCount",
+          "documentation":"<p>The desired number of instances for the group after scaling.</p>"
+        },
+        "FailureMessage":{
+          "shape":"String",
+          "documentation":"<p>An error message describing why the scaling operation failed, if applicable.</p>"
+        }
+      },
+      "documentation":"<p>Metadata information about scaling operations for an instance group.</p>"
     },
     "InstanceGroupStatus":{
       "type":"string",
@@ -24454,6 +25602,36 @@
       "max":5,
       "min":0
     },
+    "InstanceMetadata":{
+      "type":"structure",
+      "members":{
+        "CustomerEni":{
+          "shape":"String",
+          "documentation":"<p>The ID of the customer-managed Elastic Network Interface (ENI) associated with the instance.</p>"
+        },
+        "AdditionalEnis":{
+          "shape":"AdditionalEnis",
+          "documentation":"<p>Information about additional Elastic Network Interfaces (ENIs) associated with the instance.</p>"
+        },
+        "CapacityReservation":{
+          "shape":"CapacityReservation",
+          "documentation":"<p>Information about the Capacity Reservation used by the instance.</p>"
+        },
+        "FailureMessage":{
+          "shape":"String",
+          "documentation":"<p>An error message describing why the instance creation or update failed, if applicable.</p>"
+        },
+        "LcsExecutionState":{
+          "shape":"String",
+          "documentation":"<p>The execution state of the Lifecycle Script (LCS) for the instance.</p>"
+        },
+        "NodeLogicalId":{
+          "shape":"ClusterNodeLogicalId",
+          "documentation":"<p>The unique logical identifier of the node within the cluster. The ID used here is the same object as in the <code>BatchAddClusterNodes</code> API.</p>"
+        }
+      },
+      "documentation":"<p>Metadata information about an instance in a HyperPod cluster.</p>"
+    },
     "InstanceMetadataServiceConfiguration":{
       "type":"structure",
       "required":["MinimumInstanceMetadataServiceVersion"],
@@ -24464,6 +25642,21 @@
         }
       },
       "documentation":"<p>Information on the IMDS configuration of the notebook instance</p>"
+    },
+    "InstancePlacementConfig":{
+      "type":"structure",
+      "members":{
+        "EnableMultipleJobs":{
+          "shape":"Boolean",
+          "documentation":"<p>If set to true, allows multiple jobs to share the same UltraServer instances. If set to false, ensures this job's instances are placed on an UltraServer exclusively, with no other jobs sharing the same UltraServer. Default is false.</p>",
+          "box":true
+        },
+        "PlacementSpecifications":{
+          "shape":"PlacementSpecifications",
+          "documentation":"<p>A list of specifications for how instances should be placed on specific UltraServers. Maximum of 10 items is supported.</p>"
+        }
+      },
+      "documentation":"<p>Configuration for how instances are placed and allocated within UltraServers. This is only applicable for UltraServer capacity.</p>"
     },
     "InstanceType":{
       "type":"string",
@@ -24551,6 +25744,7 @@
         "ml.p4d.24xlarge",
         "ml.p4de.24xlarge",
         "ml.p5.48xlarge",
+        "ml.p6-b200.48xlarge",
         "ml.m6i.large",
         "ml.m6i.xlarge",
         "ml.m6i.2xlarge",
@@ -25833,6 +27027,65 @@
         }
       }
     },
+    "ListClusterEventsRequest":{
+      "type":"structure",
+      "required":["ClusterName"],
+      "members":{
+        "ClusterName":{
+          "shape":"ClusterNameOrArn",
+          "documentation":"<p>The name or Amazon Resource Name (ARN) of the HyperPod cluster for which to list events.</p>"
+        },
+        "InstanceGroupName":{
+          "shape":"ClusterInstanceGroupName",
+          "documentation":"<p>The name of the instance group to filter events. If specified, only events related to this instance group are returned.</p>"
+        },
+        "NodeId":{
+          "shape":"ClusterNodeId",
+          "documentation":"<p>The EC2 instance ID to filter events. If specified, only events related to this instance are returned.</p>"
+        },
+        "EventTimeAfter":{
+          "shape":"Timestamp",
+          "documentation":"<p>The start of the time range for filtering events. Only events that occurred after this time are included in the results.</p>"
+        },
+        "EventTimeBefore":{
+          "shape":"Timestamp",
+          "documentation":"<p>The end of the time range for filtering events. Only events that occurred before this time are included in the results.</p>"
+        },
+        "SortBy":{
+          "shape":"EventSortBy",
+          "documentation":"<p>The field to use for sorting the event list. Currently, the only supported value is <code>EventTime</code>.</p>"
+        },
+        "SortOrder":{
+          "shape":"SortOrder",
+          "documentation":"<p>The order in which to sort the results. Valid values are <code>Ascending</code> or <code>Descending</code> (the default is <code>Descending</code>).</p>"
+        },
+        "ResourceType":{
+          "shape":"ClusterEventResourceType",
+          "documentation":"<p>The type of resource for which to filter events. Valid values are <code>Cluster</code>, <code>InstanceGroup</code>, or <code>Instance</code>.</p>"
+        },
+        "MaxResults":{
+          "shape":"ClusterEventMaxResults",
+          "documentation":"<p>The maximum number of events to return in the response. Valid range is 1 to 100.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>A token to retrieve the next set of results. This token is obtained from the output of a previous <code>ListClusterEvents</code> call.</p>"
+        }
+      }
+    },
+    "ListClusterEventsResponse":{
+      "type":"structure",
+      "members":{
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>A token to retrieve the next set of results. Include this token in subsequent <code>ListClusterEvents</code> calls to fetch more events.</p>"
+        },
+        "Events":{
+          "shape":"ClusterEventSummaries",
+          "documentation":"<p>A list of event summaries matching the specified criteria.</p>"
+        }
+      }
+    },
     "ListClusterNodesRequest":{
       "type":"structure",
       "required":["ClusterName"],
@@ -25868,6 +27121,10 @@
         "SortOrder":{
           "shape":"SortOrder",
           "documentation":"<p>The sort order for results. The default value is <code>Ascending</code>.</p>"
+        },
+        "IncludeNodeLogicalIds":{
+          "shape":"IncludeNodeLogicalIdsBoolean",
+          "documentation":"<p>Specifies whether to include nodes that are still being provisioned in the response. When set to true, the response includes all nodes regardless of their provisioning status. When set to <code>False</code> (default), only nodes with assigned <code>InstanceIds</code> are returned.</p>"
         }
       }
     },
@@ -29483,6 +30740,38 @@
         }
       }
     },
+    "ListUltraServersByReservedCapacityRequest":{
+      "type":"structure",
+      "required":["ReservedCapacityArn"],
+      "members":{
+        "ReservedCapacityArn":{
+          "shape":"ReservedCapacityArn",
+          "documentation":"<p>The ARN of the reserved capacity to list UltraServers for.</p>"
+        },
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of UltraServers to return in the response. The default value is 10.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>If the previous response was truncated, you receive this token. Use it in your next request to receive the next set of results.</p>"
+        }
+      }
+    },
+    "ListUltraServersByReservedCapacityResponse":{
+      "type":"structure",
+      "required":["UltraServers"],
+      "members":{
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>If the response is truncated, SageMaker returns this token. Use it in the next request to retrieve the next set of UltraServers.</p>"
+        },
+        "UltraServers":{
+          "shape":"UltraServers",
+          "documentation":"<p>A list of UltraServers that are part of the specified reserved capacity.</p>"
+        }
+      }
+    },
     "ListUserProfilesRequest":{
       "type":"structure",
       "members":{
@@ -29636,6 +30925,12 @@
       "min":1,
       "pattern":"[a-zA-Z]+ ?\\d+\\.\\d+(\\.\\d+)?"
     },
+    "MajorMinorVersion":{
+      "type":"string",
+      "max":64,
+      "min":0,
+      "pattern":"\\d+\\.\\d+"
+    },
     "ManagedInstanceScalingMaxInstanceCount":{
       "type":"integer",
       "box":true,
@@ -29788,6 +31083,12 @@
       "member":{"shape":"MemberDefinition"},
       "max":10,
       "min":1
+    },
+    "MemoryInGiBAmount":{
+      "type":"float",
+      "box":true,
+      "max":10000000,
+      "min":0
     },
     "MemoryInMb":{
       "type":"integer",
@@ -29962,7 +31263,7 @@
       "type":"string",
       "max":258,
       "min":20,
-      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]*:[0-9]{12}:ml-reservation/.*"
+      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]*:[0-9]{12}:[a-z0-9\\-]{1,14}/.*"
     },
     "MlTools":{
       "type":"string",
@@ -31080,7 +32381,7 @@
       "type":"string",
       "max":2048,
       "min":1,
-      "pattern":"arn:aws(-cn|-us-gov|-iso-f)?:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:model-package/[\\S]{1,2048}"
+      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:model-package/[\\S]{1,2048}"
     },
     "ModelPackageArnList":{
       "type":"list",
@@ -31090,7 +32391,6 @@
     },
     "ModelPackageContainerDefinition":{
       "type":"structure",
-      "required":["Image"],
       "members":{
         "ContainerHostname":{
           "shape":"ContainerHostname",
@@ -31194,7 +32494,7 @@
       "type":"string",
       "max":2048,
       "min":1,
-      "pattern":"arn:aws(-cn|-us-gov|-iso-f)?:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:model-package-group/[\\S]{1,2048}"
+      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:model-package-group/[\\S]{1,2048}"
     },
     "ModelPackageGroupSortBy":{
       "type":"string",
@@ -32553,6 +33853,33 @@
       "min":0,
       "pattern":".*"
     },
+    "NodeAdditionResult":{
+      "type":"structure",
+      "required":[
+        "NodeLogicalId",
+        "InstanceGroupName",
+        "Status"
+      ],
+      "members":{
+        "NodeLogicalId":{
+          "shape":"ClusterNodeLogicalId",
+          "documentation":"<p>A unique identifier assigned to the node that can be used to track its provisioning status through the <code>DescribeClusterNode</code> operation.</p>"
+        },
+        "InstanceGroupName":{
+          "shape":"ClusterInstanceGroupName",
+          "documentation":"<p>The name of the instance group to which the node was added.</p>"
+        },
+        "Status":{
+          "shape":"ClusterInstanceStatus",
+          "documentation":"<p>The current status of the node. Possible values include <code>Pending</code>, <code>Running</code>, <code>Failed</code>, <code>ShuttingDown</code>, <code>SystemUpdating</code>, <code>DeepHealthCheckInProgress</code>, and <code>NotFound</code>.</p>"
+        }
+      },
+      "documentation":"<p>Information about a node that was successfully added to the cluster.</p>"
+    },
+    "NodeAdditionResultList":{
+      "type":"list",
+      "member":{"shape":"NodeAdditionResult"}
+    },
     "NodeUnavailabilityType":{
       "type":"string",
       "enum":[
@@ -33641,6 +34968,14 @@
         "Arguments":{
           "shape":"PartnerAppArguments",
           "documentation":"<p>This is a map of required inputs for a SageMaker Partner AI App. Based on the application type, the map is populated with a key and value pair that is specific to the user and application.</p>"
+        },
+        "AssignedGroupPatterns":{
+          "shape":"AssignedGroupPatternsList",
+          "documentation":"<p>A list of Amazon Web Services IAM Identity Center group patterns that can access the SageMaker Partner AI App. Group names support wildcard matching using <code>*</code>. An empty list indicates the app will not use Identity Center group features. All groups specified in <code>RoleGroupAssignments</code> must match patterns in this list.</p>"
+        },
+        "RoleGroupAssignments":{
+          "shape":"RoleGroupAssignmentsList",
+          "documentation":"<p>A map of in-app roles to Amazon Web Services IAM Identity Center group patterns. Groups assigned to specific roles receive those permissions, while groups in <code>AssignedGroupPatterns</code> but not in this map receive default in-app role depending on app type. Group patterns support wildcard matching using <code>*</code>. Currently supported by Fiddler version 1.3 and later with roles: <code>ORG_MEMBER</code> (default) and <code>ORG_ADMIN</code>.</p>"
         }
       },
       "documentation":"<p>Configuration settings for the SageMaker Partner AI App.</p>"
@@ -34356,11 +35691,33 @@
       "max":100,
       "min":0
     },
+    "PlacementSpecification":{
+      "type":"structure",
+      "required":["InstanceCount"],
+      "members":{
+        "UltraServerId":{
+          "shape":"String256",
+          "documentation":"<p>The unique identifier of the UltraServer where instances should be placed.</p>"
+        },
+        "InstanceCount":{
+          "shape":"TrainingInstanceCount",
+          "documentation":"<p>The number of ML compute instances required to be placed together on the same UltraServer. Minimum value of 1.</p>",
+          "box":true
+        }
+      },
+      "documentation":"<p>Specifies how instances should be placed on a specific UltraServer.</p>"
+    },
+    "PlacementSpecifications":{
+      "type":"list",
+      "member":{"shape":"PlacementSpecification"},
+      "max":10,
+      "min":0
+    },
     "PlatformIdentifier":{
       "type":"string",
-      "max":15,
+      "max":20,
       "min":0,
-      "pattern":"(notebook-al1-v1|notebook-al2-v1|notebook-al2-v2|notebook-al2-v3)"
+      "pattern":"(notebook-al1-v1|notebook-al2-v1|notebook-al2-v2|notebook-al2-v3|notebook-al2023-v1)"
     },
     "PolicyString":{
       "type":"string",
@@ -34658,7 +36015,8 @@
         "ml.r7i.12xlarge",
         "ml.r7i.16xlarge",
         "ml.r7i.24xlarge",
-        "ml.r7i.48xlarge"
+        "ml.r7i.48xlarge",
+        "ml.p5.4xlarge"
       ]
     },
     "ProcessingJob":{
@@ -34741,7 +36099,7 @@
       "type":"string",
       "max":256,
       "min":0,
-      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]*:[0-9]{12}:processing-job/.*"
+      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]*:[0-9]{12}:processing-job/[a-zA-Z0-9](-*[a-zA-Z0-9]){0,62}"
     },
     "ProcessingJobName":{
       "type":"string",
@@ -34930,7 +36288,7 @@
         },
         "S3DataDistributionType":{
           "shape":"ProcessingS3DataDistributionType",
-          "documentation":"<p>Whether to distribute the data from Amazon S3 to all processing instances with <code>FullyReplicated</code>, or whether the data from Amazon S3 is shared by Amazon S3 key, downloading one shard of data to each processing instance.</p>"
+          "documentation":"<p>Whether to distribute the data from Amazon S3 to all processing instances with <code>FullyReplicated</code>, or whether the data from Amazon S3 is sharded by Amazon S3 key, downloading one shard of data to each processing instance.</p>"
         },
         "S3CompressionType":{
           "shape":"ProcessingS3CompressionType",
@@ -35431,7 +36789,8 @@
         "ml.c6in.24xlarge",
         "ml.c6in.32xlarge",
         "ml.p6-b200.48xlarge",
-        "ml.p6e-gb200.36xlarge"
+        "ml.p6e-gb200.36xlarge",
+        "ml.p5.4xlarge"
       ]
     },
     "ProductionVariantList":{
@@ -35806,7 +37165,7 @@
       "type":"string",
       "max":2048,
       "min":1,
-      "pattern":"arn:aws(-cn|-us-gov|-iso-f)?:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:project/[\\S]{1,2048}"
+      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:project/[\\S]{1,2048}"
     },
     "ProjectEntityName":{
       "type":"string",
@@ -36806,6 +38165,12 @@
       "min":1,
       "pattern":".*"
     },
+    "ReleaseNotesList":{
+      "type":"list",
+      "member":{"shape":"String1024"},
+      "max":10,
+      "min":0
+    },
     "RemoteDebugConfig":{
       "type":"structure",
       "members":{
@@ -36964,7 +38329,9 @@
         "ml.trn1.32xlarge",
         "ml.trn2.48xlarge",
         "ml.p6-b200.48xlarge",
-        "ml.p4de.24xlarge"
+        "ml.p4de.24xlarge",
+        "ml.p6e-gb200.36xlarge",
+        "ml.p5.4xlarge"
       ]
     },
     "ReservedCapacityOffering":{
@@ -36974,6 +38341,18 @@
         "InstanceCount"
       ],
       "members":{
+        "ReservedCapacityType":{
+          "shape":"ReservedCapacityType",
+          "documentation":"<p>The type of reserved capacity offering.</p>"
+        },
+        "UltraServerType":{
+          "shape":"UltraServerType",
+          "documentation":"<p>The type of UltraServer included in this reserved capacity offering, such as ml.u-p6e-gb200x72.</p>"
+        },
+        "UltraServerCount":{
+          "shape":"UltraServerCount",
+          "documentation":"<p>The number of UltraServers included in this reserved capacity offering.</p>"
+        },
         "InstanceType":{
           "shape":"ReservedCapacityInstanceType",
           "documentation":"<p>The instance type for the reserved capacity offering.</p>"
@@ -37041,6 +38420,18 @@
           "shape":"ReservedCapacityArn",
           "documentation":"<p>The Amazon Resource Name (ARN); of the reserved capacity.</p>"
         },
+        "ReservedCapacityType":{
+          "shape":"ReservedCapacityType",
+          "documentation":"<p>The type of reserved capacity.</p>"
+        },
+        "UltraServerType":{
+          "shape":"UltraServerType",
+          "documentation":"<p>The type of UltraServer included in this reserved capacity, such as ml.u-p6e-gb200x72.</p>"
+        },
+        "UltraServerCount":{
+          "shape":"UltraServerCount",
+          "documentation":"<p>The number of UltraServers included in this reserved capacity.</p>"
+        },
         "InstanceType":{
           "shape":"ReservedCapacityInstanceType",
           "documentation":"<p>The instance type for the reserved capacity.</p>"
@@ -37075,6 +38466,13 @@
         }
       },
       "documentation":"<p>Details of a reserved capacity for the training plan.</p> <p>For more information about how to reserve GPU capacity for your SageMaker HyperPod clusters using Amazon SageMaker Training Plan, see <code> <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateTrainingPlan.html\">CreateTrainingPlan</a> </code>.</p>"
+    },
+    "ReservedCapacityType":{
+      "type":"string",
+      "enum":[
+        "UltraServer",
+        "Instance"
+      ]
     },
     "ResolvedAttributes":{
       "type":"structure",
@@ -37186,6 +38584,10 @@
         "TrainingPlanArn":{
           "shape":"TrainingPlanArn",
           "documentation":"<p>The Amazon Resource Name (ARN); of the training plan to use for this resource configuration.</p>"
+        },
+        "InstancePlacementConfig":{
+          "shape":"InstancePlacementConfig",
+          "documentation":"<p>Configuration for how training job instances are placed and allocated within UltraServers. Only applicable for UltraServer capacity.</p>"
         }
       },
       "documentation":"<p>Describes the resources, including machine learning (ML) compute instances and ML storage volumes, to use for model training. </p>"
@@ -37422,6 +38824,30 @@
       "min":20,
       "pattern":"arn:aws[a-z\\-]*:iam::\\d{12}:role/?[a-zA-Z_0-9+=,.@\\-_/]+"
     },
+    "RoleGroupAssignment":{
+      "type":"structure",
+      "required":[
+        "RoleName",
+        "GroupPatterns"
+      ],
+      "members":{
+        "RoleName":{
+          "shape":"NonEmptyString256",
+          "documentation":"<p>The name of the in-app role within the SageMaker Partner AI App. The specific roles available depend on the app type and version.</p>"
+        },
+        "GroupPatterns":{
+          "shape":"GroupPatternsList",
+          "documentation":"<p>A list of AWS IAM Identity Center group patterns that should be assigned to the specified role. Group patterns support wildcard matching using <code>*</code>.</p>"
+        }
+      },
+      "documentation":"<p>Defines the mapping between an in-app role and the AWS IAM Identity Center group patterns that should be assigned to that role within the SageMaker Partner AI App.</p>"
+    },
+    "RoleGroupAssignmentsList":{
+      "type":"list",
+      "member":{"shape":"RoleGroupAssignment"},
+      "max":10,
+      "min":0
+    },
     "RollingDeploymentPolicy":{
       "type":"structure",
       "required":["MaximumBatchSize"],
@@ -37554,6 +38980,7 @@
     },
     "S3FileSystem":{
       "type":"structure",
+      "required":["S3Uri"],
       "members":{
         "S3Uri":{
           "shape":"S3SchemaUri",
@@ -37564,6 +38991,7 @@
     },
     "S3FileSystemConfig":{
       "type":"structure",
+      "required":["S3Uri"],
       "members":{
         "MountPath":{
           "shape":"String1024",
@@ -38021,6 +39449,14 @@
           "documentation":"<p>The number of instances you want to reserve in the training plan offerings. This allows you to specify the quantity of compute resources needed for your SageMaker training jobs or SageMaker HyperPod clusters, helping you find reserved capacity offerings that match your requirements.</p>",
           "box":true
         },
+        "UltraServerType":{
+          "shape":"UltraServerType",
+          "documentation":"<p>The type of UltraServer to search for, such as ml.u-p6e-gb200x72.</p>"
+        },
+        "UltraServerCount":{
+          "shape":"UltraServerCount",
+          "documentation":"<p>The number of UltraServers to search for.</p>"
+        },
         "StartTimeAfter":{
           "shape":"Timestamp",
           "documentation":"<p>A filter to search for training plan offerings with a start time after a specified date.</p>"
@@ -38415,6 +39851,17 @@
       "min":0,
       "pattern":"arn:aws[a-z\\-]*:sns:[a-z0-9\\-]*:[0-9]{12}:[a-zA-Z0-9_.-]+"
     },
+    "SoftwareUpdateStatus":{
+      "type":"string",
+      "enum":[
+        "Pending",
+        "InProgress",
+        "Succeeded",
+        "Failed",
+        "RollbackInProgress",
+        "RollbackComplete"
+      ]
+    },
     "SortActionsBy":{
       "type":"string",
       "enum":[
@@ -38808,6 +40255,11 @@
         }
       },
       "documentation":"<p>The storage settings for a space.</p>"
+    },
+    "SpareInstanceCountPerUltraServer":{
+      "type":"integer",
+      "box":true,
+      "min":0
     },
     "SpawnRate":{
       "type":"integer",
@@ -39623,6 +41075,11 @@
     "TargetAttributeName":{
       "type":"string",
       "min":1
+    },
+    "TargetCount":{
+      "type":"integer",
+      "box":true,
+      "min":0
     },
     "TargetDevice":{
       "type":"string",
@@ -40485,7 +41942,9 @@
         "ml.r7i.12xlarge",
         "ml.r7i.16xlarge",
         "ml.r7i.24xlarge",
-        "ml.r7i.48xlarge"
+        "ml.r7i.48xlarge",
+        "ml.p6e-gb200.36xlarge",
+        "ml.p5.4xlarge"
       ]
     },
     "TrainingInstanceTypes":{
@@ -40642,7 +42101,7 @@
       "type":"string",
       "max":256,
       "min":0,
-      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]*:[0-9]{12}:training-job/.*"
+      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]*:[0-9]{12}:training-job/[a-zA-Z0-9](-*[a-zA-Z0-9]){0,62}"
     },
     "TrainingJobDefinition":{
       "type":"structure",
@@ -40707,7 +42166,8 @@
         "Completed",
         "Failed",
         "Stopping",
-        "Stopped"
+        "Stopped",
+        "Deleting"
       ]
     },
     "TrainingJobStatusCounter":{
@@ -41020,6 +42480,10 @@
           "shape":"InUseInstanceCount",
           "documentation":"<p>The number of instances currently in use from this training plan.</p>"
         },
+        "TotalUltraServerCount":{
+          "shape":"UltraServerCount",
+          "documentation":"<p>The total number of UltraServers allocated to this training plan.</p>"
+        },
         "TargetResources":{
           "shape":"SageMakerResourceNames",
           "documentation":"<p>The target resources (e.g., training jobs, HyperPod clusters) that can use this training plan.</p> <p>Training plans are specific to their target resource.</p> <ul> <li> <p>A training plan designed for SageMaker training jobs can only be used to schedule and run training jobs.</p> </li> <li> <p>A training plan for HyperPod clusters can be used exclusively to provide compute resources to a cluster's instance group.</p> </li> </ul>"
@@ -41274,7 +42738,15 @@
         "ml.inf2.xlarge",
         "ml.inf2.8xlarge",
         "ml.inf2.24xlarge",
-        "ml.inf2.48xlarge"
+        "ml.inf2.48xlarge",
+        "ml.g6.xlarge",
+        "ml.g6.2xlarge",
+        "ml.g6.4xlarge",
+        "ml.g6.8xlarge",
+        "ml.g6.12xlarge",
+        "ml.g6.16xlarge",
+        "ml.g6.24xlarge",
+        "ml.g6.48xlarge"
       ]
     },
     "TransformInstanceTypes":{
@@ -41997,6 +43469,17 @@
       },
       "documentation":"<p>A summary of the properties of a trial. To get the complete set of properties, call the <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeTrial.html\">DescribeTrial</a> API and provide the <code>TrialName</code>.</p>"
     },
+    "TrustedIdentityPropagationSettings":{
+      "type":"structure",
+      "required":["Status"],
+      "members":{
+        "Status":{
+          "shape":"FeatureStatus",
+          "documentation":"<p>The status of Trusted Identity Propagation (TIP) at the SageMaker domain level. </p> <p>When disabled, standard IAM role-based access is used. </p> <p>When enabled:</p> <ul> <li> <p>User identities from IAM Identity Center are propagated through the application to TIP enabled Amazon Web Services services.</p> </li> <li> <p>New applications or existing applications that are automatically patched, will use the domain level configuration.</p> </li> </ul>"
+        }
+      },
+      "documentation":"<p>The Trusted Identity Propagation (TIP) settings for the SageMaker domain. These settings determine how user identities from IAM Identity Center are propagated through the domain to TIP enabled Amazon Web Services services.</p>"
+    },
     "TtlDuration":{
       "type":"structure",
       "members":{
@@ -42120,6 +43603,133 @@
       "max":4000000,
       "min":10000
     },
+    "UltraServer":{
+      "type":"structure",
+      "required":[
+        "UltraServerId",
+        "UltraServerType",
+        "AvailabilityZone",
+        "InstanceType",
+        "TotalInstanceCount"
+      ],
+      "members":{
+        "UltraServerId":{
+          "shape":"NonEmptyString256",
+          "documentation":"<p>The unique identifier for the UltraServer.</p>"
+        },
+        "UltraServerType":{
+          "shape":"UltraServerType",
+          "documentation":"<p>The type of UltraServer, such as ml.u-p6e-gb200x72.</p>"
+        },
+        "AvailabilityZone":{
+          "shape":"AvailabilityZone",
+          "documentation":"<p>The name of the Availability Zone where the UltraServer is provisioned.</p>"
+        },
+        "InstanceType":{
+          "shape":"ReservedCapacityInstanceType",
+          "documentation":"<p>The Amazon EC2 instance type used in the UltraServer.</p>"
+        },
+        "TotalInstanceCount":{
+          "shape":"TotalInstanceCount",
+          "documentation":"<p>The total number of instances in this UltraServer.</p>"
+        },
+        "ConfiguredSpareInstanceCount":{
+          "shape":"ConfiguredSpareInstanceCount",
+          "documentation":"<p>The number of spare instances configured for this UltraServer to provide enhanced resiliency.</p>"
+        },
+        "AvailableInstanceCount":{
+          "shape":"AvailableInstanceCount",
+          "documentation":"<p>The number of instances currently available for use in this UltraServer.</p>"
+        },
+        "InUseInstanceCount":{
+          "shape":"InUseInstanceCount",
+          "documentation":"<p>The number of instances currently in use in this UltraServer.</p>"
+        },
+        "AvailableSpareInstanceCount":{
+          "shape":"AvailableSpareInstanceCount",
+          "documentation":"<p>The number of available spare instances in the UltraServer.</p>"
+        },
+        "UnhealthyInstanceCount":{
+          "shape":"UnhealthyInstanceCount",
+          "documentation":"<p>The number of instances in this UltraServer that are currently in an unhealthy state.</p>"
+        },
+        "HealthStatus":{
+          "shape":"UltraServerHealthStatus",
+          "documentation":"<p>The overall health status of the UltraServer.</p>"
+        }
+      },
+      "documentation":"<p>Represents a high-performance compute server used for distributed training in SageMaker AI. An UltraServer consists of multiple instances within a shared NVLink interconnect domain.</p>"
+    },
+    "UltraServerCount":{
+      "type":"integer",
+      "box":true,
+      "min":1
+    },
+    "UltraServerHealthStatus":{
+      "type":"string",
+      "enum":[
+        "OK",
+        "Impaired",
+        "Insufficient-Data"
+      ]
+    },
+    "UltraServerInfo":{
+      "type":"structure",
+      "members":{
+        "Id":{
+          "shape":"String",
+          "documentation":"<p>The unique identifier of the UltraServer.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about the UltraServer object.</p>"
+    },
+    "UltraServerSummary":{
+      "type":"structure",
+      "required":[
+        "UltraServerType",
+        "InstanceType"
+      ],
+      "members":{
+        "UltraServerType":{
+          "shape":"UltraServerType",
+          "documentation":"<p>The type of UltraServer, such as ml.u-p6e-gb200x72.</p>"
+        },
+        "InstanceType":{
+          "shape":"ReservedCapacityInstanceType",
+          "documentation":"<p>The Amazon EC2 instance type used in the UltraServer.</p>"
+        },
+        "UltraServerCount":{
+          "shape":"UltraServerCount",
+          "documentation":"<p>The number of UltraServers of this type.</p>"
+        },
+        "AvailableSpareInstanceCount":{
+          "shape":"AvailableSpareInstanceCount",
+          "documentation":"<p>The number of available spare instances in the UltraServers.</p>"
+        },
+        "UnhealthyInstanceCount":{
+          "shape":"UnhealthyInstanceCount",
+          "documentation":"<p>The total number of instances across all UltraServers of this type that are currently in an unhealthy state.</p>"
+        }
+      },
+      "documentation":"<p>A summary of UltraServer resources and their current status.</p>"
+    },
+    "UltraServerType":{
+      "type":"string",
+      "max":64,
+      "min":1,
+      "pattern":"ml.[a-z0-9\\-.]+"
+    },
+    "UltraServers":{
+      "type":"list",
+      "member":{"shape":"UltraServer"},
+      "max":100,
+      "min":0
+    },
+    "UnhealthyInstanceCount":{
+      "type":"integer",
+      "box":true,
+      "min":0
+    },
     "UnifiedStudioDomainId":{
       "type":"string",
       "pattern":"dzd[-_][a-zA-Z0-9_-]{1,36}"
@@ -42165,7 +43775,7 @@
         },
         "SingleSignOnApplicationArn":{
           "shape":"SingleSignOnApplicationArn",
-          "documentation":"<p>The ARN of the application managed by SageMaker AI and SageMaker Unified Studio in the Amazon Web Services IAM Identity Center.</p>"
+          "documentation":"<p>The ARN of the Amazon DataZone application managed by Amazon SageMaker Unified Studio in the Amazon Web Services IAM Identity Center.</p>"
         }
       },
       "documentation":"<p>The settings that apply to an Amazon SageMaker AI domain when you use it in Amazon SageMaker Unified Studio.</p>"
@@ -42283,6 +43893,10 @@
           "shape":"ClusterRestrictedInstanceGroupSpecifications",
           "documentation":"<p>The specialized instance groups for training models like Amazon Nova to be created in the SageMaker HyperPod cluster.</p>"
         },
+        "TieredStorageConfig":{
+          "shape":"ClusterTieredStorageConfig",
+          "documentation":"<p>Updates the configuration for managed tier checkpointing on the HyperPod cluster. For example, you can enable or disable the feature and modify the percentage of cluster memory allocated for checkpoint storage.</p>"
+        },
         "NodeRecovery":{
           "shape":"ClusterNodeRecovery",
           "documentation":"<p>The node recovery mode to be applied to the SageMaker HyperPod cluster.</p>"
@@ -42290,6 +43904,18 @@
         "InstanceGroupsToDelete":{
           "shape":"ClusterInstanceGroupsToDelete",
           "documentation":"<p>Specify the names of the instance groups to delete. Use a single <code>,</code> as the separator between multiple names.</p>"
+        },
+        "NodeProvisioningMode":{
+          "shape":"ClusterNodeProvisioningMode",
+          "documentation":"<p>Determines how instance provisioning is handled during cluster operations. In <code>Continuous</code> mode, the cluster provisions available instances incrementally and retries until the target count is reached. The cluster becomes operational once cluster-level resources are ready. Use <code>CurrentCount</code> and <code>TargetCount</code> in <code>DescribeCluster</code> to track provisioning progress.</p>"
+        },
+        "ClusterRole":{
+          "shape":"RoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role that HyperPod assumes for cluster autoscaling operations. Cannot be updated while autoscaling is enabled.</p>"
+        },
+        "AutoScaling":{
+          "shape":"ClusterAutoScalingConfig",
+          "documentation":"<p>Updates the autoscaling configuration for the cluster. Use to enable or disable automatic node scaling.</p>"
         }
       }
     },
@@ -42379,6 +44005,10 @@
         "DeploymentConfig":{
           "shape":"DeploymentConfiguration",
           "documentation":"<p>The configuration to use when updating the AMI versions.</p>"
+        },
+        "ImageId":{
+          "shape":"ImageId",
+          "documentation":"<p>When configuring your HyperPod cluster, you can specify an image ID using one of the following options:</p> <ul> <li> <p> <code>HyperPodPublicAmiId</code>: Use a HyperPod public AMI</p> </li> <li> <p> <code>CustomAmiId</code>: Use your custom AMI</p> </li> <li> <p> <code>default</code>: Use the default latest system image</p> </li> </ul> <p>If you choose to use a custom AMI (<code>CustomAmiId</code>), ensure it meets the following requirements:</p> <ul> <li> <p>Encryption: The custom AMI must be unencrypted.</p> </li> <li> <p>Ownership: The custom AMI must be owned by the same Amazon Web Services account that is creating the HyperPod cluster.</p> </li> <li> <p>Volume support: Only the primary AMI snapshot volume is supported; additional AMI volumes are not supported.</p> </li> </ul> <p>When updating the instance group's AMI through the <code>UpdateClusterSoftware</code> operation, if an instance group uses a custom AMI, you must provide an <code>ImageId</code> or use the default as input. Note that if you don't specify an instance group in your <code>UpdateClusterSoftware</code> request, then all of the instance groups are patched with the specified image.</p>"
         }
       }
     },
@@ -42580,6 +44210,10 @@
         "TagPropagation":{
           "shape":"TagPropagation",
           "documentation":"<p>Indicates whether custom tag propagation is supported for the domain. Defaults to <code>DISABLED</code>.</p>"
+        },
+        "VpcId":{
+          "shape":"VpcId",
+          "documentation":"<p>The identifier for the VPC used by the domain for network communication. Use this field only when adding VPC configuration to a SageMaker AI domain used in Amazon SageMaker Unified Studio that was created without VPC settings. SageMaker AI doesn't automatically apply VPC updates to existing applications. Stop and restart your applications to apply the changes.</p>"
         }
       }
     },
@@ -43290,6 +44924,14 @@
           "shape":"InstanceType",
           "documentation":"<p>The Amazon ML compute instance type.</p>"
         },
+        "IpAddressType":{
+          "shape":"IPAddressType",
+          "documentation":"<p>The IP address type for the notebook instance. Specify <code>ipv4</code> for IPv4-only connectivity or <code>dualstack</code> for both IPv4 and IPv6 connectivity. The notebook instance must be stopped before updating this setting. When you specify <code>dualstack</code>, the subnet must support IPv6 addressing.</p>"
+        },
+        "PlatformIdentifier":{
+          "shape":"PlatformIdentifier",
+          "documentation":"<p>The platform identifier of the notebook instance runtime environment.</p>"
+        },
         "RoleArn":{
           "shape":"RoleArn",
           "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role that SageMaker AI can assume to access the notebook instance. For more information, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-roles.html\">SageMaker AI Roles</a>. </p> <note> <p>To be able to pass this role to SageMaker AI, the caller of this API must have the <code>iam:PassRole</code> permission.</p> </note>"
@@ -43394,6 +45036,15 @@
           "shape":"Boolean",
           "documentation":"<p>When set to <code>TRUE</code>, the SageMaker Partner AI App sets the Amazon Web Services IAM session name or the authenticated IAM user as the identity of the SageMaker Partner AI App user.</p>",
           "box":true
+        },
+        "EnableAutoMinorVersionUpgrade":{
+          "shape":"Boolean",
+          "documentation":"<p>When set to <code>TRUE</code>, the SageMaker Partner AI App is automatically upgraded to the latest minor version during the next scheduled maintenance window, if one is available.</p>",
+          "box":true
+        },
+        "AppVersion":{
+          "shape":"MajorMinorVersion",
+          "documentation":"<p>The semantic version to upgrade the SageMaker Partner AI App to. Must be the same semantic version returned in the <code>AvailableUpgrade</code> field from <code>DescribePartnerApp</code>. Version skipping and downgrades are not supported.</p>"
         },
         "ClientToken":{
           "shape":"ClientToken",
@@ -44021,6 +45672,12 @@
       "max":100,
       "min":1
     },
+    "VCpuAmount":{
+      "type":"float",
+      "box":true,
+      "max":10000000,
+      "min":0
+    },
     "ValidationFraction":{
       "type":"float",
       "box":true,
@@ -44169,6 +45826,28 @@
       "max":256,
       "min":0,
       "pattern":"([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)"
+    },
+    "VolumeAttachmentStatus":{
+      "type":"string",
+      "enum":[
+        "attaching",
+        "attached",
+        "detaching",
+        "detached",
+        "busy"
+      ]
+    },
+    "VolumeDeviceName":{
+      "type":"string",
+      "max":32,
+      "min":1,
+      "pattern":"/dev/(xvd[a-z]|sd[b-z]|sd[f-p][1-6])"
+    },
+    "VolumeId":{
+      "type":"string",
+      "max":256,
+      "min":1,
+      "pattern":"vol-[a-f0-9]{8}(?:[a-f0-9]{9})?"
     },
     "VolumeSizeInGB":{
       "type":"integer",

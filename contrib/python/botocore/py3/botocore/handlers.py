@@ -60,6 +60,7 @@ from botocore.exceptions import (
     UnsupportedTLSVersionWarning,
 )
 from botocore.regions import EndpointResolverBuiltins
+from botocore.serialize import TIMESTAMP_PRECISION_MILLISECOND
 from botocore.signers import (
     add_dsql_generate_db_auth_token_methods,
     add_generate_db_auth_token,
@@ -284,7 +285,9 @@ def generate_idempotent_uuid(params, model, **kwargs):
         if name not in params:
             params[name] = str(uuid.uuid4())
             logger.debug(
-                f"injecting idempotency token ({params[name]}) into param '{name}'."
+                "injecting idempotency token (%s) into param '%s'.",
+                params[name],
+                name,
             )
 
 
@@ -1089,6 +1092,11 @@ def remove_bedrock_runtime_invoke_model_with_bidirectional_stream(
         del class_attributes['invoke_model_with_bidirectional_stream']
 
 
+def enable_millisecond_timestamp_precision(serializer_kwargs, **kwargs):
+    """Event handler to enable millisecond precision"""
+    serializer_kwargs['timestamp_precision'] = TIMESTAMP_PRECISION_MILLISECOND
+
+
 def add_retry_headers(request, **kwargs):
     retries_context = request.context.get('retries')
     if not retries_context:
@@ -1237,8 +1245,9 @@ def handle_expires_header(
                 utils.parse_timestamp(expires_value)
             except (ValueError, RuntimeError):
                 logger.warning(
-                    f'Failed to parse the "Expires" member as a timestamp: {expires_value}. '
-                    f'The unparsed value is available in the response under "ExpiresString".'
+                    'Failed to parse the "Expires" member as a timestamp: %s. '
+                    'The unparsed value is available in the response under "ExpiresString".',
+                    expires_value,
                 )
                 del response_dict['headers']['Expires']
 
@@ -1302,7 +1311,8 @@ def _handle_200_error(operation_model, response_dict, **kwargs):
     ):
         response_dict['status_code'] = 500
         logger.debug(
-            f"Error found for response with 200 status code: {response_dict['body']}."
+            "Error found for response with 200 status code: %s.",
+            response_dict['body'],
         )
 
 
@@ -1493,6 +1503,10 @@ BUILTIN_HANDLERS = [
     (
         'creating-client-class.bedrock-runtime',
         remove_bedrock_runtime_invoke_model_with_bidirectional_stream,
+    ),
+    (
+        'creating-serializer.bedrock-agentcore',
+        enable_millisecond_timestamp_precision,
     ),
     ('after-call.iam', json_decode_policies),
     ('after-call.ec2.GetConsoleOutput', decode_console_output),

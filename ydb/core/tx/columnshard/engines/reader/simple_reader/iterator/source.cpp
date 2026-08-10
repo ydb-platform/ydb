@@ -17,7 +17,6 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
-#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
@@ -506,11 +505,8 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
     const ui64 sizeToReserve = policy->GetReserveMemorySize(
         result.GetBlobsSize(), result.GetRawSize(), GetContext()->GetReadMetadata()->GetLimitRobustOptional(), GetRecordsCount());
 
-    auto allocation = std::make_shared<NCommon::TAllocateMemoryStep::TFetchingStepAllocation>(
-        source, sizeToReserve, GetExecutionContext().GetCursorStep(), policy->GetStage(), false);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("mr"));
-    GetContext()->SendToGroupedMemoryAllocation(GetMemoryGroupId(), { allocation }, (ui32)policy->GetStage());
-    return true;
+    return NCommon::StartProgramStepReserveMemory(source, sizeToReserve, policy->GetStage());
 }
 
 bool TPortionDataSource::DoAddTxConflict() {

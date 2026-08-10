@@ -1,13 +1,15 @@
 #pragma once
 
 #include "expected.h"
-#include "meta.h"
+
+#include <yql/essentials/utils/meta/maybe.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
+#include <util/string/builder.h>
 
 #include <expected>
 
@@ -75,7 +77,7 @@ struct TFromJson<TVector<T>> {
 
 template <typename T>
 TExpected<T> MoveFrom(TJsonValue& json, TStringBuf key) {
-    constexpr bool IsMaybe = NDetail::IsMaybeV<T>;
+    constexpr bool IsMaybe = IsMaybeV<T>;
 
     using V = typename decltype([] {
         if constexpr (IsMaybe) {
@@ -85,14 +87,25 @@ TExpected<T> MoveFrom(TJsonValue& json, TStringBuf key) {
         }
     }())::type;
 
-    static_assert(!NDetail::IsMaybeV<V>, "TMaybe<TMaybe<T>> is not supported");
+    static_assert(!IsMaybeV<V>, "TMaybe<TMaybe<T>> is not supported");
     static_assert(CFromJson<V>);
+
+    if (!json.IsMap()) {
+        return Unexpected(
+            TStringBuilder()
+            << "expected an object "
+            << "with key " << '"' << key << '"' << ", "
+            << "but got " << json.GetType());
+    }
 
     NJson::TJsonValue* value = nullptr;
     const bool ok = json.GetValuePointer(key, &value);
 
     if constexpr (IsMaybe) {
         if (!ok) {
+            return T();
+        }
+        if (value->IsNull()) {
             return T();
         }
     } else {

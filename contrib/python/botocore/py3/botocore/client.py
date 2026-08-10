@@ -220,10 +220,11 @@ class ClientCreator:
                 else:
                     client_config = config_use_fips_endpoint
                 logger.warning(
-                    f'transforming region from {region_name} to '
-                    f'{normalized_region_name} and setting '
+                    'transforming region from %s to %s and setting '
                     'use_fips_endpoint to true. client should not '
-                    'be configured with a fips psuedo region.'
+                    'be configured with a fips psuedo region.',
+                    region_name,
+                    normalized_region_name,
                 )
                 region_name = normalized_region_name
         return region_name, client_config
@@ -786,7 +787,10 @@ class ClientEndpointBridge:
                 hostname, is_secure, ['http', 'https']
             )
         logger.debug(
-            f'Assuming an endpoint for {service_name}, {region_name}: {endpoint_url}'
+            'Assuming an endpoint for %s, %s: %s',
+            service_name,
+            region_name,
+            endpoint_url,
         )
         # We still want to allow the user to provide an explicit version.
         signature_version = self._resolve_signature_version(

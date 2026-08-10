@@ -272,8 +272,6 @@ void TestChunked(bool withBlockExpand) {
     });
     node = pb.WideToBlocks(pb.FromFlow(node));
     if (withBlockExpand) {
-        node = pb.BlockExpandChunked(node);
-        // WideTakeBlocks won't work on chunked blocks
         node = pb.WideTakeBlocks(node, NTest::ConvertValueToLiteralNode(pb, ui64(19)));
         node = pb.ToFlow(pb.WideFromBlocks(node), {});
     } else {

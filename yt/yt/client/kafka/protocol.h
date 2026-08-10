@@ -11,12 +11,17 @@ namespace NYT::NKafka {
 ////////////////////////////////////////////////////////////////////////////////
 
 #define READ_KAFKA_FIELD(field, method)                                                    \
-    YT_LOG_TRACE("Parsing kafka data (Field: %v)", #field);                                \
+    YT_TLOG_TRACE("Parsing kafka data")                                                    \
+        .With("Field", #field);                                                            \
     field = reader->method();                                                              \
-    YT_LOG_TRACE("Parsing kafka data, value read (Field: %v, Value: %v)", #field, field);
+    YT_TLOG_TRACE("Parsing kafka data, value read")                                        \
+        .With("Field", #field)                                                             \
+        .With("Value", field);
 
-#define WRITE_KAFKA_FIELD(kafkaWriter, method, field)                                             \
-    YT_LOG_TRACE("Writing kafka data (Field: %v, Value: %v)", #field, field);                     \
+#define WRITE_KAFKA_FIELD(kafkaWriter, method, field)                                      \
+    YT_TLOG_TRACE("Writing kafka data")                                                    \
+        .With("Field", #field)                                                             \
+        .With("Value", field);                                                             \
     kafkaWriter->method(field);
 
 ////////////////////////////////////////////////////////////////////////////////

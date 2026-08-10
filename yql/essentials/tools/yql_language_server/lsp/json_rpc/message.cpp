@@ -1,5 +1,7 @@
 #include "message.h"
 
+#include <yql/essentials/utils/json/reflection.h>
+
 namespace NYql::NJson {
 
 using namespace NLsp::NJsonRpc;
@@ -51,13 +53,7 @@ JSON_DEFINE_FROM(TJsonRpcRequest, json) {
     return x;
 }
 
-JSON_DEFINE_TO(TJsonRpcError, value) {
-    TJsonValue json(JSON_MAP);
-    SaveTo(json, "code", value.Code);
-    SaveTo(json, "message", std::move(value.Message));
-    SaveTo(json, "data", std::move(value.Data));
-    return json;
-}
+YQL_DERIVE_JSON_TO(TJsonRpcError);
 
 JSON_DEFINE_TO(TJsonRpcResponse, value) {
     TJsonValue json(JSON_MAP);

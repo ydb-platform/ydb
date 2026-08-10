@@ -1,7 +1,7 @@
 import codecs
 import re
 from string import ascii_letters, ascii_lowercase, digits
-from typing import Union, cast, overload
+from typing import Union, overload
 
 BASCII_LOWERCASE = ascii_lowercase.encode("ascii")
 BPCT_ALLOWED = {f"%{i:02X}".encode("ascii") for i in range(256)}
@@ -145,7 +145,7 @@ class _Unquoter:
             raise TypeError("Argument should be str")
         if not val:
             return ""
-        decoder = cast(codecs.BufferedIncrementalDecoder, utf8_decoder())
+        decoder = utf8_decoder()
         ret = []
         idx = 0
         while idx < len(val):

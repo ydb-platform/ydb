@@ -1,0 +1,73 @@
+$erasedType = TypeOf(AsErased(null));
+$nodeType = Struct<value:String,left:Optional<$erasedType>,right:Optional<$erasedType>>;
+
+$makeNode = ($value,$left,$right)->{
+   return cast(<|
+      value:$value,
+      left:if($left is not null, AsErased($left)),
+      right:if($right is not null, AsErased($right))|> as $nodeType);
+};
+
+$leftLink = ($node)->{
+   return Unwrap(PeekErased(Unwrap($node.left), $nodeType));
+};
+
+$rightLink = ($node)->{
+   return Unwrap(PeekErased(Unwrap($node.right), $nodeType));
+};
+
+$node1 = $makeNode("A",null,null);
+$node2 = $makeNode("B",$node1,null);
+$node3 = $makeNode("C",null,null);
+$node4 = $makeNode("D",$node2,$node3);
+
+$thunkType = Callable<()->$erasedType>;
+$contType = Callable<($erasedType)->$erasedType>;
+$trampolineCallableType = Callable<($erasedType,$contType,$nodeType)->$erasedType>;
+
+$printImplTrampoline=($impl_erased,$cont,$node)->{
+   $impl=Unwrap(PeekErased($impl_erased, $trampolineCallableType));
+   $str = "{" || $node.value;
+   return if($node.left is null and $node.right is null,
+      $cont(AsErased($str || "}")),
+      AsErased(Callable($thunkType, ()->{
+         $leftCont = ($leftValue)->{
+            $rightCont = ($rightValue)->{
+               $leftStr = Unwrap(PeekErased($leftValue, String));
+               $rightStr = Unwrap(PeekErased($rightValue, String));
+               $leftStr = if(len($leftStr) > 0, ",left:" || $leftStr, "");
+               $rightStr = if(len($rightStr) > 0, ",right:" || $rightStr, "");
+               return $cont(AsErased($str|| $leftStr || $rightStr || "}") );
+            };
+
+            return if($node.right is not null, 
+               $impl($impl_erased, Callable($contType, $rightCont), $rightLink($node)), 
+               $rightCont(AsErased("")));
+         };
+
+         return if($node.left is not null, 
+            $impl($impl_erased, Callable($contType, $leftCont), $leftLink($node)), 
+            $leftCont(AsErased("")));
+      })));
+};
+
+$printTrampoline = ($node)->{
+   $impl_erased = AsErased(Callable($trampolineCallableType, $printImplTrampoline));
+   return $printImplTrampoline($impl_erased, Callable($contType, ($x)->($x)), $node);
+};
+
+$runTrampoline = ($res, $limit, $type)->{
+   $values = ListFoldMap(ListFromRange(0, $limit), $res, ($_, $res)->{
+      $thunk = PeekErased($res, $thunkType);
+      $ret = if($thunk is not null,
+         ((true, $res), Unwrap($thunk)()),
+         ((false, $res), $res));
+      return ($ret.0, $ret.1);
+   });
+   $ret = ListHead(ListSkipWhile($values, ($x)->($x.0))).1;
+   return if($ret is not null, PeekErased(Unwrap($ret), $type));
+};
+
+select
+   $runTrampoline($printTrampoline($node4),10,String),
+   $runTrampoline($printTrampoline($node4),2,String); -- null, not enough iterations

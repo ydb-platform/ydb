@@ -1,5 +1,7 @@
 #pragma once
 
+#include <util/str_stl.h>
+
 namespace NYql::NUdf::NTest {
 
 class TSingularVoid {

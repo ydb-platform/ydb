@@ -55,8 +55,8 @@ void SerializeProtoToRef(
 {
 #ifdef YT_VALIDATE_REQUIRED_PROTO_FIELDS
     if (!partial && !message.IsInitialized()) {
-        YT_LOG_FATAL("Missing required protobuf fields (Error: %v)",
-            message.InitializationErrorString());
+        YT_TLOG_FATAL("Missing required protobuf fields")
+            .With("Error", message.InitializationErrorString());
     }
 #endif
     auto* begin = reinterpret_cast<google::protobuf::uint8*>(ref.begin());

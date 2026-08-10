@@ -277,7 +277,8 @@ void PipeReaderToWriterByBatches(
         WaitFor(writer->Close())
             .ThrowOnError();
     } catch (const std::exception& ex) {
-        YT_LOG_ERROR(ex, "Failed to transfer batches from reader to writer");
+        YT_TLOG_ERROR("Failed to transfer batches from reader to writer")
+            .With(ex);
 
         throw;
     }

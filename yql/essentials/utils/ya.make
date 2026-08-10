@@ -75,6 +75,7 @@ IF (OPENSOURCE_PROJECT != "yt")
         json
         log
         memory_profiling
+        meta
         network
         oom_helper
         signals

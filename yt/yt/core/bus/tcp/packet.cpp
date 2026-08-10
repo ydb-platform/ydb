@@ -268,17 +268,17 @@ private:
     bool EndFixedHeaderPhase()
     {
         if (FixedHeader_.Signature != PacketSignature) {
-            YT_LOG_ERROR("Packet header signature mismatch (PacketId: %v, ExpectedSignature: %X, ActualSignature: %X)",
-                FixedHeader_.PacketId,
-                PacketSignature,
-                FixedHeader_.Signature);
+            YT_TLOG_ERROR("Packet header signature mismatch")
+                .With("PacketId", FixedHeader_.PacketId)
+                .WithFormat("ExpectedSignature", "%X", PacketSignature)
+                .WithFormat("ActualSignature", "%X", FixedHeader_.Signature);
             return false;
         }
 
         if (FixedHeader_.PartCount > MaxMessagePartCount) {
-            YT_LOG_ERROR("Invalid packet part count (PacketId: %v, PartCount: %v)",
-                FixedHeader_.PacketId,
-                FixedHeader_.PartCount);
+            YT_TLOG_ERROR("Invalid packet part count")
+                .With("PacketId", FixedHeader_.PacketId)
+                .With("PartCount", FixedHeader_.PartCount);
             return false;
         }
 
@@ -287,8 +287,8 @@ private:
             if (expectedChecksum != NullChecksum) {
                 auto actualChecksum = GetFixedChecksum();
                 if (expectedChecksum != actualChecksum) {
-                    YT_LOG_ERROR("Fixed packet header checksum mismatch (PacketId: %v)",
-                        FixedHeader_.PacketId);
+                    YT_TLOG_ERROR("Fixed packet header checksum mismatch")
+                        .With("PacketId", FixedHeader_.PacketId);
                     return false;
                 }
             }
@@ -311,8 +311,8 @@ private:
             if (expectedChecksum != NullChecksum) {
                 auto actualChecksum = GetVariableChecksum();
                 if (expectedChecksum != actualChecksum) {
-                    YT_LOG_ERROR("Variable packet header checksum mismatch (PacketId: %v)",
-                        FixedHeader_.PacketId);
+                    YT_TLOG_ERROR("Variable packet header checksum mismatch")
+                        .With("PacketId", FixedHeader_.PacketId);
                     return false;
                 }
             }
@@ -321,10 +321,10 @@ private:
         for (int index = 0; index < static_cast<int>(FixedHeader_.PartCount); ++index) {
             ui32 partSize = GetPartSize(index);
             if (partSize != NullPacketPartSize && partSize > MaxMessagePartSize) {
-                YT_LOG_ERROR("Invalid packet part size (PacketId: %v, PartIndex: %v, PartSize: %v)",
-                    FixedHeader_.PacketId,
-                    index,
-                    partSize);
+                YT_TLOG_ERROR("Invalid packet part size")
+                    .With("PacketId", FixedHeader_.PacketId)
+                    .With("PartIndex", index)
+                    .With("PartSize", partSize);
                 return false;
             }
         }
@@ -340,8 +340,8 @@ private:
             if (expectedChecksum != NullChecksum) {
                 auto actualChecksum = GetChecksum(Parts_[PartIndex_]);
                 if (expectedChecksum != actualChecksum) {
-                    YT_LOG_ERROR("Packet part checksum mismatch (PacketId: %v)",
-                        FixedHeader_.PacketId);
+                    YT_TLOG_ERROR("Packet part checksum mismatch")
+                        .With("PacketId", FixedHeader_.PacketId);
                     return false;
                 }
             }

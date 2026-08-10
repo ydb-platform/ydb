@@ -1,1 +1,43 @@
-{% include [replacing-nodes](../_includes/replacing-nodes.md) %}
+# Замена FQDN статического узла
+
+{% include [_](../_includes/experimental_v2.md) %}
+
+Полное доменное имя (Fully Qualified Domain Name, FQDN) [статического узла](../../../concepts/glossary.md#static-node) задаётся параметром `host` в секции [`hosts`](../../../reference/configuration/hosts.md). Чтобы изменить FQDN без замены сервера и дисков, выполните следующие действия.
+
+Создайте DNS-запись для нового FQDN, указывающую на тот же сервер. Новый FQDN должен разрешаться со всех статических узлов кластера. Не удаляйте старую DNS-запись до окончания процедуры. Если кластер использует TLS, подготовьте [сертификат узла](../../deployment-options/manual/initial-deployment/deployment-preparation.md#tls-certificates), содержащий новый FQDN.
+
+1. Получите текущую конфигурацию кластера с помощью команды [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
+
+    ```bash
+    ydb [global options...] admin cluster config fetch > config.yaml
+    ```
+
+1. В файле `config.yaml` измените значение `host` у нужного узла, не меняя порядок элементов в списке `hosts`.
+
+    Например, для узла с идентификатором `1` замените `node-1.example.com` на `node-1-new.example.com`:
+
+    ```yaml
+    config:
+      hosts:
+      - host: node-1-new.example.com
+        node_id: 1
+    ```
+
+1. Примените новую конфигурацию с помощью команды [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
+
+    ```bash
+    ydb [global options...] admin cluster config replace -f config.yaml
+    ```
+
+1. Дождитесь, пока в локальной копии файла `config.yaml` на заменяемом узле появится новый FQDN.
+
+1. Убедитесь, что процесс можно [безопасно остановить](../../../maintenance/manual/node_restarting.md#restart_process). Если кластер использует TLS, установите подготовленный сертификат. Затем измените имя хоста в операционной системе сервера и перезапустите процесс статического узла. Например, при использовании `systemd`:
+
+    ```bash
+    sudo hostnamectl set-hostname node-1-new.example.com
+    sudo systemctl restart ydbd-storage
+    ```
+
+    Если узел запускается с параметром `--node static`, имя хоста в операционной системе должно совпадать с новым значением `host`. Имя сервиса может отличаться в зависимости от способа развёртывания.
+
+1. На вкладке **Nodes** [страницы мониторинга кластера](../../../reference/embedded-ui/ydb-monitoring.md#node_list_page) убедитесь, что узел подключился с прежним идентификатором и новым FQDN. После этого можно удалить старую DNS-запись.

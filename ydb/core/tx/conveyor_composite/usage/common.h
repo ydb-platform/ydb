@@ -31,6 +31,8 @@ public:
     explicit TProcessGuard(const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId,
         const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId);
 
+    bool SendTaskToExecute(const std::shared_ptr<ITask>& task) const;
+
     void Finish();
 
     TProcessGuard(TProcessGuard&& other)

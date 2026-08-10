@@ -110,7 +110,7 @@ public:
         , ExecutionId(std::move(settings.ExecutionId))
         , LeaseGeneration(settings.LeaseGeneration.value_or(0))
     {
-        SetOperationInfo(operationName, CreateTraceId(settings));
+        SetOperationInfo(operationName, CreateTraceId(settings.SessionId));
     }
 
 private:
@@ -144,23 +144,23 @@ private:
     }
 
 protected:
-    static TString CreateTraceId(const TSettings& settings) {
+    TString CreateTraceId(const TString& sessionId = "") const {
         TStringBuilder result;
 
-        if (settings.ExecutionId) {
-            result << "ExecutionId: " << settings.ExecutionId;
+        if (ExecutionId) {
+            result << "ExecutionId: " << ExecutionId;
         }
 
-        if (settings.Database) {
-            result << ", RequestDatabase: " << settings.Database;
+        if (Database) {
+            result << ", RequestDatabase: " << Database;
         }
 
-        if (settings.SessionId) {
-            result << ", RequestSessionId: " << settings.SessionId;
+        if (sessionId) {
+            result << ", RequestSessionId: " << sessionId;
         }
 
-        if (settings.LeaseGeneration) {
-            result << ", LeaseGeneration: " << *settings.LeaseGeneration;
+        if (LeaseGeneration) {
+            result << ", LeaseGeneration: " << LeaseGeneration;
         }
 
         return result;
@@ -2213,7 +2213,7 @@ private:
 
         ExecutionId = std::move(*executionId);
         Metadata.set_execution_id(ExecutionId);
-        SetOperationInfo(OperationName, CreateTraceId({.Database = Database, .ExecutionId = ExecutionId}));
+        SetOperationInfo(OperationName, CreateTraceId());
 
         constexpr char sql[] = R"(
             -- TGetScriptExecutionOperationQueryActor::OnRunQuery

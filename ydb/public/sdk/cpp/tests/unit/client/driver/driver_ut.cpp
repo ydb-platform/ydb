@@ -18,6 +18,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include <google/protobuf/text_format.h>
 
@@ -204,6 +205,7 @@ Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
         UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
         UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStatus(), EStatus::CLIENT_CANCELLED);
     }
+
 }
 
 Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {

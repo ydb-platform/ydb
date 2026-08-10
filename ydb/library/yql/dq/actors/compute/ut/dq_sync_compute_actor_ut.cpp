@@ -488,14 +488,12 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         return CreateDqInputChannel(settings, TypeEnv);
     }
 
-    auto CreateTestSyncComputeActor(NDqProto::TDqTask& task, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
+    auto CreateTaskRunnerActorFactory() {
         TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
             NYql::GetCommonDqFactory(),
             NKikimr::NMiniKQL::GetYqlFactory()
         };
-
         NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(std::move(compNodeFactories));
-
         NYql::TTaskTransformFactory dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({
                 NYql::CreateCommonDqTaskTransformFactory()
                 });
@@ -505,34 +503,38 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 dqCompFactory,
                 dqTaskTransformFactory,
                 patternCache, false);
-        auto taskRunnerActorFactory =
-            [factory=factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
-                {
-                    return factory->Get(alloc, task, statsMode);
-                };
+        return [factory=factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc&) {
+            return factory->Get(alloc, task, statsMode);
+        };
+    }
+
+    auto CreateTestSyncComputeActor(NDqProto::TDqTask& task, TComputeMemoryLimits memoryLimits, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
+        TComputeRuntimeSettings runtimeSettings;
+        runtimeSettings.StatsMode = statsMode;
+        runtimeSettings.ReportStatsSettings = TReportStatsSettings{TDuration::Seconds(1), TDuration::Seconds(1)};
+        auto actor = CreateDqComputeActor(
+                EdgeActor,
+                LogPrefix,
+                &task,
+                CreateAsyncIoFactory(),
+                FunctionRegistry.Get(),
+                runtimeSettings,
+                memoryLimits,
+                CreateTaskRunnerActorFactory(),
+                {}
+                );
+        UNIT_ASSERT(actor);
+        return ActorSystem.Register(actor);
+    }
+
+    auto CreateTestSyncComputeActor(NDqProto::TDqTask& task, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 1_MB;
         memoryLimits.MkqlLightProgramMemoryLimit = 40_MB;
         memoryLimits.MkqlHeavyProgramMemoryLimit = 60_MB;
         memoryLimits.MkqlProgramHardMemoryLimit = 80_MB;
         memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(64_MB, 40_MB);
-        TComputeRuntimeSettings runtimeSettings;
-        runtimeSettings.StatsMode = statsMode;
-        runtimeSettings.ReportStatsSettings = TReportStatsSettings{TDuration::Seconds(1), TDuration::Seconds(1)};
-    
-        auto actor = CreateDqComputeActor(
-                EdgeActor, // executerId,
-                LogPrefix,
-                &task, // NYql::NDqProto::TDqTask* task,
-                CreateAsyncIoFactory(),
-                FunctionRegistry.Get(),
-                runtimeSettings,
-                memoryLimits,
-                taskRunnerActorFactory,
-                {} // ::NMonitoring::TDynamicCounterPtr taskCounters,
-                );
-        UNIT_ASSERT(actor);
-        return ActorSystem.Register(actor);
+        return CreateTestSyncComputeActor(task, memoryLimits, statsMode);
     }
 
     TUnboxedValueBatch CreateRow(ui32 value, ui64 ts) {
@@ -1121,6 +1123,37 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
         auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor, TDuration::Seconds(5));
         UNIT_ASSERT(ev);
         UNIT_ASSERT(ev->Get()->Record.HasStats());
+    }
+
+    // Reproduces crash: kqp_query_control_plane.cpp always creates TMemoryQuotaManager with
+    // MkqlLightProgramMemoryLimit, but map-join tasks request MkqlHeavyProgramMemoryLimit
+    // in CalcMkqlMemoryLimit(). When the RM is under pressure and AllocateExtraQuota returns
+    // false, TDqMemoryQuota constructor hits Y_ABORT_UNLESS -> process crash.
+    //
+    // Before the fix: this test aborts the process.
+    // After the fix: the actor is created successfully and sends TEvState.
+    Y_UNIT_TEST_F(MapJoinTaskWithExhaustedQuotaManager, TSyncComputeActorTestFixture) {
+        NDqProto::TDqTask task;
+        GenerateSquareProgram(task, [](TExprContext& ctx) {
+            return ctx.MakeType<TDataExprType>(EDataSlot::Int32);
+        });
+        // HasMapJoin=true makes CalcMkqlMemoryLimit() return MkqlHeavyProgramMemoryLimit
+        task.MutableProgram()->MutableSettings()->SetHasMapJoin(true);
+        AddDummyInputChannels(task, InputChannelId, 1);
+        AddDummyOutputChannel(task, OutputChannelId, RowType);
+
+        TComputeMemoryLimits memoryLimits;
+        memoryLimits.ChannelBufferSize = 1_MB;
+        memoryLimits.MkqlLightProgramMemoryLimit = 40_MB;
+        memoryLimits.MkqlHeavyProgramMemoryLimit = 60_MB;
+        memoryLimits.MkqlProgramHardMemoryLimit = 80_MB;
+        // Quota manager funded with lightLimit only — simulates kqp_query_control_plane.cpp:315.
+        // AllocateExtraQuota(heavyLimit - lightLimit) returns false -> Y_ABORT_UNLESS fires.
+        memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(40_MB, 40_MB);
+
+        auto syncCA = CreateTestSyncComputeActor(task, memoryLimits);
+        ActorSystem.EnableScheduleForActor(syncCA, true);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
     }
 }
 

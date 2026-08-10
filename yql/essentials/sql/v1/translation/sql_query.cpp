@@ -2765,6 +2765,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
             if (!AlterTableDropStatistics(dropStatistics, params)) {
                 return false;
             }
+
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction26: {
+            // REBUILD INDEX
+            const auto& rebuildRule = node.GetAlt_alter_table_action26().GetRule_alter_table_rebuild_index1();
+
+            if (!AlterTableRebuildIndex(rebuildRule, params)) {
+                return false;
+            }
             break;
         }
         case TRule_alter_table_action::ALT_NOT_SET:
@@ -3191,6 +3201,21 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
         }
         case TRule_alter_table_alter_index_action::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
+    }
+
+    return true;
+}
+
+bool TSqlQuery::AlterTableRebuildIndex(const TRule_alter_table_rebuild_index& node, TAlterTableParameters& params) {
+    const auto indexName = IdEx(node.GetRule_an_id3(), *this);
+    params.RebuildIndexes.emplace_back(indexName, TIndexDescription::EType::GlobalVectorKmeansTree);
+    auto& index = params.RebuildIndexes.back();
+
+    // Parse optional WITH (settings) clause
+    if (node.HasBlock4()) {
+        if (!FillIndexSettings(node.GetBlock4().GetRule_with_index_settings1(), index.IndexSettings)) {
+            return false;
+        }
     }
 
     return true;

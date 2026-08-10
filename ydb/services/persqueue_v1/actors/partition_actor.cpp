@@ -806,10 +806,15 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
             // Empty queue while expecting Publish is a bookkeeping anomaly (not a stale reply).
             // Soft-ignore would hang restore forever; close the session so the client recovers.
             if (DirectReadsToPublish.empty()) {
+                YDB_LOG_WARN_CTX(ctx, "Direct read restore Publish with empty DirectReadsToPublish",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()},
+                    {"result", result.ShortDebugString()});
                 ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
                     TStringBuilder() << "direct read restore Publish with empty DirectReadsToPublish"
-                        << ", cookie=" << result.GetCookie()
-                        << ", result=" << result.ShortDebugString(),
+                        << ", session=" << Session
+                        << ", cookie=" << Cookie,
                     PersQueue::ErrorCode::ERROR));
                 return;
             }
@@ -840,10 +845,15 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
             // Empty queue while expecting Forget is a bookkeeping anomaly (not a stale reply).
             // Soft-ignore would hang restore forever; close the session so the client recovers.
             if (DirectReadsToForget.empty()) {
+                YDB_LOG_WARN_CTX(ctx, "Direct read restore Forget with empty DirectReadsToForget",
+                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {"partition", Partition},
+                    {"cookie", result.GetCookie()},
+                    {"result", result.ShortDebugString()});
                 ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
                     TStringBuilder() << "direct read restore Forget with empty DirectReadsToForget"
-                        << ", cookie=" << result.GetCookie()
-                        << ", result=" << result.ShortDebugString(),
+                        << ", session=" << Session
+                        << ", cookie=" << Cookie,
                     PersQueue::ErrorCode::ERROR));
                 return;
             }

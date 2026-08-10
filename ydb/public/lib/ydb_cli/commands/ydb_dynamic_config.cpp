@@ -50,7 +50,7 @@ TCommandConfig::TCommandConfig(
 {
     AddCommand(std::make_unique<TCommandConfigFetch>(useLegacyApi, allowEmptyDatabase));
     if (allowEmptyDatabase) {
-        AddCommand(std::make_unique<TCommandConfigMigration>());
+        AddHiddenCommand(std::make_unique<TCommandConfigMigration>());
     }
     AddCommand(std::make_unique<TCommandConfigReplace>(useLegacyApi, allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());

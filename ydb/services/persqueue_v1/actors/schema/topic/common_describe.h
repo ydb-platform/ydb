@@ -341,6 +341,11 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             if (LocationsReceived && ReadSessionsReceived) {
                 return;
             }
+            const auto remaining = RemainingRequestTimeout();
+            if (!remaining) {
+                HandleRequestTimeout();
+                return;
+            }
             if (!LocationsReceived) {
                 TVector<ui64> partitionIds;
                 for (const auto& partition : TopicInfo.Info->Description.GetPartitions()) {
@@ -351,7 +356,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                 LOG_D("PartitionsLocation " << ReadBalancerTabletId << " partitions " << JoinSeq(", ", partitionIds));
                 SendToTablet(
                     ReadBalancerTabletId,
-                    new TEvPersQueue::TEvGetPartitionsLocation(partitionIds, RemainingRequestTimeout()));
+                    new TEvPersQueue::TEvGetPartitionsLocation(partitionIds, remaining));
             }
             if (!ReadSessionsReceived && this->GetProtoRequest()->include_stats()) {
                 auto ev = CreateReadSessionsInfoRequest();
@@ -373,6 +378,10 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         }
 
         void ScheduleStatsRetry(ui64 tabletId) {
+            if (!RemainingRequestTimeout()) {
+                HandleRequestTimeout();
+                return;
+            }
             auto [it, _] = StatsBackoff.try_emplace(
                 tabletId, StatsMaxRetries, StatsRetryInitialDelay, StatsRetryMaxDelay);
             if (!it->second.HasMore()) {
@@ -400,6 +409,10 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             if (!TabletsInflight.contains(tabletId)) {
                 return true;
             }
+            if (!RemainingRequestTimeout()) {
+                HandleRequestTimeout();
+                return true;
+            }
             RequestStats(tabletId);
             return true;
         }
@@ -413,6 +426,10 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         }
 
         void ScheduleLocationsRetry() {
+            if (!RemainingRequestTimeout()) {
+                HandleRequestTimeout();
+                return;
+            }
             if (!LocationsBackoff.HasMore()) {
                 LOG_W("PartitionsLocation retries exceeded");
                 FailLocationsUnavailable();

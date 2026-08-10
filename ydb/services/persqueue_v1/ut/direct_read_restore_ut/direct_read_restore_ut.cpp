@@ -474,7 +474,11 @@ void TearDownGrpcAndServer(TDirectReadRestoreEnv& env, TGrpcDirectReadClient& cl
         env.Server->ShutdownGRpc();
         return true;
     }, DispatchPool());
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
     while (!shutdown.HasValue() && !shutdown.HasException()) {
+        if (TInstant::Now() >= deadline) {
+            UNIT_FAIL("ShutdownGRpc did not complete within 5 seconds");
+        }
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
     }
     shutdown.GetValueSync();

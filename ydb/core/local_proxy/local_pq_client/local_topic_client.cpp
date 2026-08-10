@@ -21,21 +21,6 @@ class TLocalTopicClient final : public TLocalTopicClientBase, public NYql::ITopi
 public:
     using TBase::TBase;
 
-    TAsyncStatus CreateTopic(const TString& path, const TCreateTopicSettings& settings) final {
-        Y_UNUSED(path, settings);
-        Y_VALIDATE(false, __func__ << " is not implemented");
-    }
-
-    TAsyncStatus AlterTopic(const TString& path, const TAlterTopicSettings& settings) final {
-        Y_UNUSED(path, settings);
-        Y_VALIDATE(false, __func__ << " is not implemented");
-    }
-
-    TAsyncStatus DropTopic(const TString& path, const TDropTopicSettings& settings) final {
-        Y_UNUSED(path, settings);
-        Y_VALIDATE(false, __func__ << " is not implemented");
-    }
-
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) final {
         using TDescribeTopicRequest = TGrpcRequestOperationCall<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>;
 

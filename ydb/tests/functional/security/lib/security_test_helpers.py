@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
+import logging
 from contextlib import contextmanager
 
 import requests
+
+from ydb.tests.library.common.wait_for import wait_for
+
+logger = logging.getLogger(__name__)
 
 DATABASE = '/Root'
 
@@ -82,6 +87,53 @@ def _test_endpoints_via_node_proxy(node, path_suffix, expected_statuses_by_token
 def mon_base_url(cluster, node_index=1):
     node = cluster.nodes[node_index]
     return f'https://{node.host}:{node.mon_port}'
+
+
+def wait_for_viewer_ready(
+    base_url,
+    database=DATABASE,
+    token='root@builtin',
+    timeout_seconds=30,
+    verify=False,
+):
+    """Wait until viewer HTTP handlers are registered and responding."""
+
+    last_failure = {"status": None, "exc": None}
+
+    def ready():
+        try:
+            headers = {}
+            if token is not None:
+                headers["Authorization"] = token
+            response = requests.post(
+                base_url + '/viewer/query',
+                headers=headers,
+                params={'database': database, 'query': 'SELECT 1;', 'schema': 'multi'},
+                verify=verify,
+                timeout=5,
+            )
+            if response.status_code == 200:
+                return True
+            last_failure["status"] = response.status_code
+            last_failure["exc"] = None
+            logger.info(
+                'Viewer not ready yet at %s: /viewer/query returned %s %s',
+                base_url,
+                response.status_code,
+                response.text,
+            )
+            return False
+        except requests.RequestException as exc:
+            last_failure["status"] = None
+            last_failure["exc"] = str(exc)
+            logger.info('Viewer not ready yet at %s: %s', base_url, exc)
+            return False
+
+    if not wait_for(ready, timeout_seconds=timeout_seconds, step_seconds=1):
+        raise AssertionError(
+            f'Viewer at {base_url} is not ready after {timeout_seconds}s; '
+            f'last_status={last_failure["status"]}; last_error={last_failure["exc"]}'
+        )
 
 
 def run_viewer_query(base_url, query, database=DATABASE, token='root@builtin', timeout=5):

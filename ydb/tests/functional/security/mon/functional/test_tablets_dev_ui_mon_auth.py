@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import hashlib
+import re
 import time
 
 import pytest
@@ -10,7 +12,11 @@ from ydb.tests.functional.security.lib.security_test_helpers import (
     tablet_devui_new_action_paths,
     tablet_devui_sid_matrix,
 )
+from ydb.tests.library.clients.kikimr_http_client import DEFAULT_HIVE_ID
 from ydb.tests.oss.ydb_sdk_import import ydb
+
+# MakeBSControllerID(): (1 << 56) | 0x1001
+BSC_TABLET_ID = 72057594037932033
 
 
 def _is_valid_tablet_id(tablet_id):
@@ -121,8 +127,7 @@ def ydb_cluster_with_enforce_user_token_secure_devui_flag_and_datashard_tablet(
     yield cluster
 
 
-def _prepare_datashard_tablet(cluster):
-    database = '/Root/ds_mon_security'
+def _prepare_datashard_tablet(cluster, database='/Root/ds_mon_security'):
     cluster.create_database(
         database,
         storage_pool_units_count={'hdd': 1},
@@ -214,6 +219,268 @@ def test_datashard_tablet_devui_mon_paths_with_enforce_user_token_and_secure_pat
         ydb_cluster_with_enforce_user_token_secure_devui_flag_and_datashard_tablet,
         _data_shard_devui_mon_paths_with_enforce(tid, secure_path_mode=True),
     )
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_enforce_user_token_and_hive_tablet(ydb_cluster_with_enforce_user_token):
+    cluster = ydb_cluster_with_enforce_user_token
+    cluster.hive_tablet_id = DEFAULT_HIVE_ID
+    yield cluster
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+    cluster.hive_tablet_id = DEFAULT_HIVE_ID
+    yield cluster
+
+
+def _hive_endpoint_cases(endpoint_paths, token_statuses):
+    return [
+        (endpoint_path, token, expected_status)
+        for endpoint_path in endpoint_paths
+        for token, expected_status in token_statuses.items()
+    ]
+
+
+def _hive_token_desc(token):
+    return token if token is not None else 'null'
+
+
+def _hive_mon_base_url(cluster):
+    node = cluster.nodes[1]
+    return f'https://{node.host}:{node.mon_port}'
+
+
+def _hive_get_status(cluster, endpoint_path, token=None):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+    response = requests.get(
+        f'{_hive_mon_base_url(cluster)}{endpoint_path}',
+        headers=headers,
+        verify=False,
+    )
+    return response.status_code
+
+
+def _hive_post(cluster, endpoint_path, token=None):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+    return requests.post(
+        f'{_hive_mon_base_url(cluster)}{endpoint_path}',
+        headers=headers,
+        verify=False,
+    )
+
+
+def _hive_post_status(cluster, endpoint_path, token=None):
+    return _hive_post(cluster, endpoint_path, token).status_code
+
+
+def _hive_app_path(secure_path_mode):
+    return '/tablets/app/secure' if secure_path_mode else '/tablets/app'
+
+
+def _hive_request(cluster, secure_path_mode, query, method='GET'):
+    url = f'{_hive_mon_base_url(cluster)}{_hive_app_path(secure_path_mode)}?TabletID={cluster.hive_tablet_id}&{query}'
+    response = requests.request(method, url, headers={'Authorization': 'root@builtin'}, verify=False)
+    response.raise_for_status()
+    return response
+
+
+def _hive_alive_node_id(cluster, secure_path_mode):
+    nodes = _hive_request(cluster, secure_path_mode, 'page=MemStateNodes&format=json').json()['Nodes']
+    alive = [node['Id'] for node in nodes if node.get('Alive')]
+    assert alive, f'Hive reports no alive nodes: {nodes}'
+    return alive[0]
+
+
+def _hive_ensure_tenant(cluster):
+    if getattr(cluster, 'hive_tenant_ready', False):
+        return
+    cluster.create_database(
+        '/Root/hive_mon_security',
+        storage_pool_units_count={'hdd': 1},
+        token='root@builtin',
+    )
+    cluster.register_and_start_slots('/Root/hive_mon_security', count=1)
+    cluster.wait_tenant_up('/Root/hive_mon_security', token='root@builtin')
+    cluster.hive_tenant_ready = True
+
+
+def _hive_managed_tablet_ids(cluster, secure_path_mode):
+    _hive_ensure_tenant(cluster)
+    # A tenant DataShard is owned by the tenant Hive, so the tablets are taken from this Hive.
+    page = _hive_request(cluster, secure_path_mode, 'page=MemStateTablets&max=100').text
+    return [int(tablet_id) for tablet_id in re.findall(r'tablets\?TabletID=(\d+)', page)]
+
+
+def _hive_managed_tablet_id(cluster, secure_path_mode):
+    tablet_ids = _hive_managed_tablet_ids(cluster, secure_path_mode)
+    assert tablet_ids, 'Hive manages no tablets'
+    return tablet_ids[0]
+
+
+def _hive_destroy_key(tablet_id):
+    # IsSafeOperation() hashes the concatenation of the tablet, owner and owner_idx cgi values.
+    return hashlib.md5(str(tablet_id).encode()).hexdigest()
+
+
+def _hive_pages(node_id, tablet_id, domain_ss, domain_path):
+    return (
+        ('', 200),
+        ('page=LandingData', 200),
+        ('page=MemStateNodes', 200),
+        ('page=MemStateTablets', 200),
+        ('page=MemStateDomains', 200),
+        ('page=DbState', 200),
+        ('page=Resources', 200),
+        ('page=Groups', 200),
+        ('page=Storage', 200),
+        ('page=Settings', 200),
+        ('page=Subactors', 200),
+        ('page=OperationsLog&max=10', 200),
+        ('page=ManualOperations', 200),
+        ('page=ObjectStats', 200),
+        ('page=QueryMigration', 200),
+        (f'page=TabletInfo&tablet={tablet_id}', 200),
+        (f'page=SetDown&node={node_id}&down=0', 200),
+        (f'page=SetFreeze&node={node_id}&freeze=0', 200),
+        (f'page=KickNode&node={node_id}', 200),
+        (f'page=DrainNode&node={node_id}&wait=0', 200),
+        (f'page=TabletAvailability&node={node_id}&resettype=Dummy', 200),
+        ('page=Rebalance', 200),
+        ('page=RebalanceFromScratch', 200),
+        ('page=StorageRebalance', 200),
+        ('page=ReassignTablet&tablet=all&wait=0', 200),
+        (f'page=MoveTablet&tablet={tablet_id}&node={node_id}', 200),
+        (f'page=StopTablet&tablet={tablet_id}', 200),
+        (f'page=ResumeTablet&tablet={tablet_id}', 200),
+        (f'page=UpdateResources&tablet={tablet_id}&cpu=1', 200),
+        (f'page=StopDomain&ss={domain_ss}&path={domain_path}&stop=1', 200),
+        (f'page=StopDomain&ss={domain_ss}&path={domain_path}&stop=0', 200),
+        ('page=Settings&BootQueueUpdatePeriod=1000', 200),
+        ('page=Subactors&stop=1', 200),
+        ('page=InitMigration', 400),  # cannot migrate to the root hive
+        (f'page=SetDomain&tablet={tablet_id}', 400),  # the tablet already belongs to this domain
+        ('page=NewAction', 200),
+    )
+
+
+def _hive_expected(matrix, admin_status):
+    return {token: (admin_status if status == 200 else status) for token, status in matrix.items()}
+
+
+def _hive_assert_status(response, expected_status, endpoint_path, token):
+    if expected_status is None:
+        assert response.status_code not in (401, 403), (
+            f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
+            f'to pass the access check, got {response.status_code}: {response.text[:300]}'
+        )
+    else:
+        assert response.status_code == expected_status, (
+            f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
+            f'to return {expected_status}, got {response.status_code}: {response.text[:300]}'
+        )
+
+
+def _hive_devui_cases(tablet_id, pages, secure_path_mode):
+    q_base = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
+    on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    cases = []
+    for query_suffix, admin_status in pages:
+        q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
+        # The page handler only runs on the path the flag designates. On the other path the
+        # request is either denied outright or not routed into the DevUI at all, in which case
+        # the generic tablet page is rendered with 200 whatever the page parameter says.
+        app_status = admin_status if not secure_path_mode else 200
+        secure_status = admin_status if secure_path_mode else 200
+        cases.extend(_hive_endpoint_cases([f'/tablets/app?{q}'], _hive_expected(on_app, app_status)))
+        cases.extend(_hive_endpoint_cases([f'/tablets/app/secure?{q}'], _hive_expected(admin_allowed, secure_status)))
+    # Tablets summary page is a different handler and keeps monitoring-level access.
+    cases.extend(_hive_endpoint_cases([f'/tablets?{q_base}'], monitoring_allowed))
+    return cases
+
+
+def _hive_sweep(cluster, secure_path_mode):
+    node_id = _hive_alive_node_id(cluster, secure_path_mode)
+    tablet_id = _hive_managed_tablet_id(cluster, secure_path_mode)
+    domain_ss = _schemeshard_tablet_id_from_viewer(cluster)
+    pages = _hive_pages(node_id, tablet_id, domain_ss, 1)
+    for endpoint_path, token, expected_status in _hive_devui_cases(
+        cluster.hive_tablet_id, pages, secure_path_mode
+    ):
+        response = _hive_post(cluster, endpoint_path, token)
+        _hive_assert_status(response, expected_status, endpoint_path, token)
+
+
+def test_hive_tablet_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_hive_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_hive_tablet
+    _hive_sweep(cluster, secure_path_mode=False)
+
+
+def test_hive_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
+    _hive_sweep(cluster, secure_path_mode=True)
+
+
+def test_hive_destroy_operations_with_secure_path_mode(
+    ydb_cluster_with_secure_devui_flag_and_hive_destroy_operations,
+):
+    cluster = ydb_cluster_with_secure_devui_flag_and_hive_destroy_operations
+    cluster.hive_tablet_id = DEFAULT_HIVE_ID
+    _, _, admin_allowed = tablet_devui_sid_matrix()
+    non_admins = {token: status for token, status in admin_allowed.items() if token != 'root@builtin'}
+
+    tablet_id = _hive_managed_tablet_id(cluster, True)
+    # Reset first, then delete the same tablet: both are exercised end to end.
+    for page in ('ResetTablet', 'DeleteTablet'):
+        q = f'TabletID={cluster.hive_tablet_id}&page={page}&tablet={tablet_id}&key={_hive_destroy_key(tablet_id)}'
+
+        for token, expected_status in non_admins.items():
+            for endpoint_path in (f'/tablets/app?{q}', f'/tablets/app/secure?{q}'):
+                status = _hive_post_status(cluster, endpoint_path, token)
+                assert status == expected_status, (
+                    f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
+                    f'to return {expected_status}, got {status}'
+                )
+
+        status = _hive_post_status(cluster, f'/tablets/app?{q}', 'root@builtin')
+        assert status == 403, f'Expected POST {page} on the legacy path to be denied, got {status}'
+
+        response = _hive_post(cluster, f'/tablets/app/secure?{q}', 'root@builtin')
+        assert response.status_code == 200, (
+            f'Expected POST {page} as administrator to succeed, '
+            f'got {response.status_code}: {response.text[:300]}'
+        )
+
+
+def test_hive_devui_links_stay_on_current_app_path(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
+    tid = cluster.hive_tablet_id
+    response = requests.get(
+        f'{_hive_mon_base_url(cluster)}/tablets/app/secure?TabletID={tid}',
+        headers={'Authorization': 'root@builtin'},
+        verify=False,
+    )
+
+    assert response.status_code == 200, response.text
+    assert f'location.href="?TabletID={tid}&page=MemStateNodes"' in response.text
+    assert "'?TabletID=' + hiveId" in response.text
+    assert 'hive.js' not in response.text
+    assert f'href="app?TabletID={tid}' not in response.text
+    assert f"href='app?TabletID={tid}" not in response.text
 
 
 def _schemeshard_endpoint_cases(endpoint_paths, token_statuses):
@@ -578,6 +845,195 @@ def test_schemeshard_new_action_with_enforce_user_token_and_secure_path_mode(
         )
 
 
+def _bscontroller_endpoint_cases(endpoint_paths, token_statuses):
+    return [
+        (endpoint_path, token, expected_status)
+        for endpoint_path in endpoint_paths
+        for token, expected_status in token_statuses.items()
+    ]
+
+
+def _bscontroller_token_desc(token):
+    return token if token is not None else 'null'
+
+
+def _bscontroller_mon_base_url(cluster):
+    node = cluster.nodes[1]
+    return f'https://{node.host}:{node.mon_port}'
+
+
+def _bscontroller_get_status(cluster, endpoint_path, token=None):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+    response = requests.get(
+        f'{_bscontroller_mon_base_url(cluster)}{endpoint_path}',
+        headers=headers,
+        verify=False,
+    )
+    return response.status_code
+
+
+_BSCONTROLLER_PAGES = (
+    '',  # main page
+    'page=GetDown',
+    'page=OperationLog',
+    'page=OperationLogEntry',
+    'page=HealthEvents',
+    'page=SelfHeal',
+    'page=Groups',
+    'page=GroupDetail',
+    'page=Scrub',
+    'page=Shred',
+    'page=InternalTables',
+    'page=Bridge',
+    'page=VirtualGroups',
+    'page=SetDown&group=0&down=1',
+    'page=SelfHeal&disable=1&action=disableSelfHeal',
+    'page=Shred&startshred=1&generation=0',
+    'page=StopGivingGroups',
+    'page=StartGivingGroups',  # must follow StopGivingGroups: restores group allocation
+    'page=NewAction',
+)
+
+
+def _bscontroller_devui_cases(tablet_id, secure_path_mode):
+    q_base = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    cases = []
+    for query_suffix in _BSCONTROLLER_PAGES:
+        q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
+        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app?{q}'], expected_on_app))
+        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app/secure?{q}'], admin_allowed))
+    # Tablets summary page is a different handler and keeps monitoring-level access.
+    cases.extend(_bscontroller_endpoint_cases([f'/tablets?{q_base}'], monitoring_allowed))
+    return cases
+
+
+def _bscontroller_post_exec_paths(tablet_id):
+    q = f'TabletID={tablet_id}&exec=1'
+    all_forbidden, _, admin_allowed_sids_ok = tablet_devui_sid_matrix()
+    return {
+        f'/tablets/app?{q}': all_forbidden,
+        f'/tablets/app/secure?{q}': admin_allowed_sids_ok,
+    }
+
+
+def _bscontroller_tablet_devui_mon_paths(cluster, secure_path_mode):
+    for endpoint_path, token, expected_status in _bscontroller_devui_cases(
+        BSC_TABLET_ID, secure_path_mode=secure_path_mode
+    ):
+        status = _bscontroller_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_bscontroller_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    cluster = ydb_cluster_with_enforce_user_token
+    _bscontroller_tablet_devui_mon_paths(cluster, False)
+
+
+def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+    _bscontroller_tablet_devui_mon_paths(cluster, True)
+
+
+def test_bscontroller_post_exec_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+    host = cluster.nodes[1].host
+    mon_port = cluster.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+    for endpoint_path, expected_statuses in _bscontroller_post_exec_paths(BSC_TABLET_ID).items():
+        endpoint_url = f'{base_url}{endpoint_path}'
+        for token, expected_status in expected_statuses.items():
+            headers = {'Content-Type': 'application/json'}
+            if token is not None:
+                headers['Authorization'] = token
+            response = requests.post(endpoint_url, headers=headers, data='{}', verify=False)
+            token_desc = token if token is not None else 'null'
+            if endpoint_path.startswith('/tablets/app/secure') and token == 'root@builtin':
+                # Auth passed; empty config body may be rejected later with 400.
+                assert response.status_code in (200, 400), (
+                    f'Expected POST {endpoint_path} with token={token_desc} to pass auth, got {response.status_code}'
+                )
+            else:
+                assert response.status_code == expected_status, (
+                    f'Expected POST {endpoint_path} with token={token_desc} to return {expected_status}, '
+                    f'got {response.status_code}'
+                )
+
+
+def _bscontroller_has_hardcoded_app_path(text):
+    for attr in ("href='app", 'href="app', "action='app", 'action="app'):
+        if attr in text:
+            return True
+    return False
+
+
+def test_bscontroller_links_and_forms_stay_on_current_app_path(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+    base_url = _bscontroller_mon_base_url(cluster)
+    headers = {'Authorization': 'root@builtin'}
+
+    def get(query):
+        response = requests.get(
+            f'{base_url}/tablets/app/secure?TabletID={BSC_TABLET_ID}{query}',
+            headers=headers,
+            verify=False,
+        )
+        assert response.status_code == 200, response.text
+        return response.text
+
+    main_page = get('')
+    assert f"href='?TabletID={BSC_TABLET_ID}&page=OperationLog'" in main_page
+    assert f"href='?TabletID={BSC_TABLET_ID}&page=SelfHeal'" in main_page
+    assert not _bscontroller_has_hardcoded_app_path(main_page)
+
+    internal_tables = get('&page=InternalTables')
+    assert f"href='?TabletID={BSC_TABLET_ID}&page=InternalTables&table=pdisks'" in internal_tables
+    assert not _bscontroller_has_hardcoded_app_path(internal_tables)
+
+    shred = get('&page=Shred')
+    assert "name='startshred'" in shred or 'name="startshred"' in shred
+    assert not _bscontroller_has_hardcoded_app_path(shred)
+
+    self_heal = get('&page=SelfHeal')
+    assert not _bscontroller_has_hardcoded_app_path(self_heal)
+
+    disable_self_heal = get('&page=SelfHeal&disable=1&action=disableSelfHeal')
+    assert f'content="0; ?TabletID={BSC_TABLET_ID}&page=SelfHeal"' in disable_self_heal
+    assert 'content="0; app' not in disable_self_heal
+
+
+def test_bscontroller_new_action_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token,
+        tablet_devui_new_action_paths(BSC_TABLET_ID, 'page=NewAction', secure_path_mode=False),
+    )
+
+
+def test_bscontroller_new_action_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+        tablet_devui_new_action_paths(BSC_TABLET_ID, 'page=NewAction', secure_path_mode=True),
+    )
+
+
 def _graph_shard_devui_mon_paths(graph_shard_tablet_id, secure_path_mode):
     q = f'TabletID={graph_shard_tablet_id}'
     all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
@@ -649,3 +1105,119 @@ def test_graph_shard_change_backend_links_use_secure_path(
     assert 'action=change_backend&backend=1' in response.text
     assert 'action=change_backend&backend=2' in response.text
     assert f'app?TabletID={tid}&action=change_backend' not in response.text
+
+
+def _pers_queue_endpoint_cases(endpoint_paths, token_statuses):
+    return [
+        (endpoint_path, token, expected_status)
+        for endpoint_path in endpoint_paths
+        for token, expected_status in token_statuses.items()
+    ]
+
+
+def _pers_queue_token_desc(token):
+    return token if token is not None else 'null'
+
+
+def _pers_queue_mon_base_url(cluster):
+    node = cluster.nodes[1]
+    return f'https://{node.host}:{node.mon_port}'
+
+
+def _pers_queue_get_status(cluster, endpoint_path, token=None):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+    response = requests.get(
+        f'{_pers_queue_mon_base_url(cluster)}{endpoint_path}',
+        headers=headers,
+        verify=False,
+    )
+    return response.status_code
+
+
+# Views whose every parameter is in the public whitelist, so they keep monitoring-level access.
+_PERS_QUEUE_PUBLIC_PAGES = (
+    '',  # main page
+    'kv=1',
+    'kv=1&section=channelstat',
+    'consumer=user&partitionId=0',
+    'TxId=1',
+)
+
+# SendReadSet commits or aborts a transaction. NewAction stands for a handler added later: an
+# unknown parameter is admin only without anyone having to remember to list it.
+_PERS_QUEUE_ADMIN_PAGES = (
+    'SendReadSet=1&step=1&txId=1&decision=commit&allSenderTablets=1',
+    'SendReadSet=1&step=1&txId=1&decision=abort&senderTablet=1',
+    'NewAction=1',
+)
+
+
+def _pers_queue_devui_cases(tablet_id, secure_path_mode):
+    q_base = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    cases = []
+    for query_suffix in _PERS_QUEUE_PUBLIC_PAGES:
+        q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
+        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app?{q}'], monitoring_allowed))
+        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app/secure?{q}'], admin_allowed))
+    for query_suffix in _PERS_QUEUE_ADMIN_PAGES:
+        q = f'{q_base}&{query_suffix}'
+        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app?{q}'], expected_on_app))
+        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app/secure?{q}'], admin_allowed))
+    # Tablets summary page is a different handler and keeps monitoring-level access.
+    cases.extend(_pers_queue_endpoint_cases([f'/tablets?{q_base}'], monitoring_allowed))
+    return cases
+
+
+def _pers_queue_tablet_devui_mon_paths(cluster, secure_path_mode):
+    for endpoint_path, token, expected_status in _pers_queue_devui_cases(
+        cluster.pers_queue_tablet_id, secure_path_mode=secure_path_mode
+    ):
+        status = _pers_queue_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_pers_queue_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_pers_queue_tablet_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_pers_queue_topic,
+):
+    _pers_queue_tablet_devui_mon_paths(
+        ydb_cluster_with_enforce_user_token_and_pers_queue_topic, secure_path_mode=False
+    )
+
+
+def test_pers_queue_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic,
+):
+    _pers_queue_tablet_devui_mon_paths(
+        ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic, secure_path_mode=True
+    )
+
+
+def test_pers_queue_send_read_set_form_points_to_secure_path(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic
+    tid = cluster.pers_queue_tablet_id
+    base_url = _pers_queue_mon_base_url(cluster)
+
+    on_app = requests.get(
+        f'{base_url}/tablets/app?TabletID={tid}&TxId=1',
+        headers={'Authorization': 'monitoring@builtin'},
+        verify=False,
+    )
+    assert on_app.status_code == 200, on_app.text
+    assert f"action='app/secure?TabletID={tid}'" not in on_app.text or 'SendReadSet' in on_app.text
+
+    on_secure = requests.get(
+        f'{base_url}/tablets/app/secure?TabletID={tid}&TxId=1',
+        headers={'Authorization': 'root@builtin'},
+        verify=False,
+    )
+    assert on_secure.status_code == 200, on_secure.text
+    assert "action='app" not in on_secure.text and 'action="app' not in on_secure.text

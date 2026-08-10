@@ -98,6 +98,7 @@ struct TClassifyTestCase {
     TString ContextAppName;
     TString ContextMemberName;
     TString ExplicitPoolId;
+    TString ResourcePoolForSharedReading;
 
     std::vector<std::pair<TString, i32>> ExtraPools;
 
@@ -151,7 +152,8 @@ struct TClassifyTestCase {
             .UserToken = token,
         };
 
-        return NWorkloadManager::CreateQueryClassifier(poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx));
+        return CreateQueryClassifier(poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx),
+            ResourcePoolForSharedReading.empty() ? std::optional<TString>() : ResourcePoolForSharedReading);
     }
 
     NWorkloadManager::IQueryClassifier::TPreCompileClassifyResult RunPreClassify(

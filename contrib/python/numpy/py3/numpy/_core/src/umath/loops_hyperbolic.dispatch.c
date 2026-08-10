@@ -19,6 +19,8 @@
 #include "contrib/python/numpy/py3/numpy/_core/src/common/simd/simd.h"
 #include "loops_utils.h"
 #include "loops.h"
+// Provides the various *_LOOP macros
+#include "fast_loop_macros.h"
 
 #if NPY_SIMD_FMA3 // native support
 /*
@@ -316,91 +318,91 @@ simd_tanh_f64(const double *src, npy_intp ssrc, double *dst, npy_intp sdst, npy_
         npyv_lanetype_u64 index[npyv_nlanes_f64];
         npyv_store_u64(index, idx);
 
-        #line 314
-        #line 317
+        #line 316
+        #line 319
         e0e1[0] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[0] * 18 + 0));
         
-#line 317
+#line 319
         e0e1[1] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[1] * 18 + 0));
         
         npyv_f64 b = npyv_combinel_f64(e0e1[0], e0e1[1]);
         npyv_f64 c0 = npyv_combineh_f64(e0e1[0], e0e1[1]);
         
-#line 314
-        #line 317
+#line 316
+        #line 319
         e0e1[0] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[0] * 18 + 2));
         
-#line 317
+#line 319
         e0e1[1] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[1] * 18 + 2));
         
         npyv_f64 c1 = npyv_combinel_f64(e0e1[0], e0e1[1]);
         npyv_f64 c2 = npyv_combineh_f64(e0e1[0], e0e1[1]);
         
-#line 314
-        #line 317
+#line 316
+        #line 319
         e0e1[0] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[0] * 18 + 4));
         
-#line 317
+#line 319
         e0e1[1] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[1] * 18 + 4));
         
         npyv_f64 c3 = npyv_combinel_f64(e0e1[0], e0e1[1]);
         npyv_f64 c4 = npyv_combineh_f64(e0e1[0], e0e1[1]);
         
-#line 314
-        #line 317
+#line 316
+        #line 319
         e0e1[0] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[0] * 18 + 6));
         
-#line 317
+#line 319
         e0e1[1] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[1] * 18 + 6));
         
         npyv_f64 c5 = npyv_combinel_f64(e0e1[0], e0e1[1]);
         npyv_f64 c6 = npyv_combineh_f64(e0e1[0], e0e1[1]);
         
-#line 314
-        #line 317
+#line 316
+        #line 319
         e0e1[0] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[0] * 18 + 8));
         
-#line 317
+#line 319
         e0e1[1] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[1] * 18 + 8));
         
         npyv_f64 c7 = npyv_combinel_f64(e0e1[0], e0e1[1]);
         npyv_f64 c8 = npyv_combineh_f64(e0e1[0], e0e1[1]);
         
-#line 314
-        #line 317
+#line 316
+        #line 319
         e0e1[0] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[0] * 18 + 10));
         
-#line 317
+#line 319
         e0e1[1] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[1] * 18 + 10));
         
         npyv_f64 c9 = npyv_combinel_f64(e0e1[0], e0e1[1]);
         npyv_f64 c10 = npyv_combineh_f64(e0e1[0], e0e1[1]);
         
-#line 314
-        #line 317
+#line 316
+        #line 319
         e0e1[0] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[0] * 18 + 12));
         
-#line 317
+#line 319
         e0e1[1] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[1] * 18 + 12));
         
         npyv_f64 c11 = npyv_combinel_f64(e0e1[0], e0e1[1]);
         npyv_f64 c12 = npyv_combineh_f64(e0e1[0], e0e1[1]);
         
-#line 314
-        #line 317
+#line 316
+        #line 319
         e0e1[0] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[0] * 18 + 14));
         
-#line 317
+#line 319
         e0e1[1] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[1] * 18 + 14));
         
         npyv_f64 c13 = npyv_combinel_f64(e0e1[0], e0e1[1]);
         npyv_f64 c14 = npyv_combineh_f64(e0e1[0], e0e1[1]);
         
-#line 314
-        #line 317
+#line 316
+        #line 319
         e0e1[0] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[0] * 18 + 16));
         
-#line 317
+#line 319
         e0e1[1] = npyv_reinterpret_f64_u64(npyv_load_u64(lut18x16 + index[1] * 18 + 16));
         
         npyv_f64 c15 = npyv_combinel_f64(e0e1[0], e0e1[1]);
@@ -602,22 +604,22 @@ simd_tanh_f32(const float *src, npy_intp ssrc, float *dst, npy_intp sdst, npy_in
         npyv_f32 c210b[npyv_nlanes_f32];
         npyv_lanetype_u32 index[npyv_nlanes_f32];
 
-        #line 521
+        #line 523
         index[0] = npyv_get_lane_u32(idx, 0);
         c6543[0] = npyv_reinterpret_f32_u32(npyv_load_u32(lut8x32 + index[0] * 8));
         c210b[0] = npyv_reinterpret_f32_u32(npyv_load_u32(lut8x32 + index[0] * 8 + 4));
         
-#line 521
+#line 523
         index[1] = npyv_get_lane_u32(idx, 1);
         c6543[1] = npyv_reinterpret_f32_u32(npyv_load_u32(lut8x32 + index[1] * 8));
         c210b[1] = npyv_reinterpret_f32_u32(npyv_load_u32(lut8x32 + index[1] * 8 + 4));
         
-#line 521
+#line 523
         index[2] = npyv_get_lane_u32(idx, 2);
         c6543[2] = npyv_reinterpret_f32_u32(npyv_load_u32(lut8x32 + index[2] * 8));
         c210b[2] = npyv_reinterpret_f32_u32(npyv_load_u32(lut8x32 + index[2] * 8 + 4));
         
-#line 521
+#line 523
         index[3] = npyv_get_lane_u32(idx, 3);
         c6543[3] = npyv_reinterpret_f32_u32(npyv_load_u32(lut8x32 + index[3] * 8));
         c210b[3] = npyv_reinterpret_f32_u32(npyv_load_u32(lut8x32 + index[3] * 8 + 4));
@@ -694,73 +696,67 @@ simd_tanh_f32(const float *src, npy_intp ssrc, float *dst, npy_intp sdst, npy_in
 #endif // NPY_SIMD_F32
 #endif // NPY_SIMD_FMA3
 
-#line 604
-#line 608
+#line 606
+#line 610
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_tanh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
-    const float *src = (float*)args[0];
-          float *dst = (float*)args[1];
-
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
-    npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
 #if NPY_SIMD_FMA3 && NPY_SIMD_F32
-    if (is_mem_overlap(src, steps[0], dst, steps[1], len) ||
-        !npyv_loadable_stride_f32(ssrc) || !npyv_storable_stride_f32(sdst)
+    npy_intp len = dimensions[0];
+
+    if (is_mem_overlap(args[0], steps[0], args[1], steps[1], len) ||
+        !npyv_loadable_stride_f32(steps[0]) ||
+        !npyv_storable_stride_f32(steps[1])
     ) {
-        for (; len > 0; --len, src += ssrc, dst += sdst) {
-            simd_tanh_f32(src, 1, dst, 1, 1);
+        UNARY_LOOP {
+            simd_tanh_f32((float *)ip1, 1, (float *)op1, 1, 1);
         }
     } else {
-        simd_tanh_f32(src, ssrc, dst, sdst, len);
+        npy_intp ssrc = steps[0] / sizeof(float);
+        npy_intp sdst = steps[1] / sizeof(float);
+        simd_tanh_f32((float *)args[0], ssrc, (float *)args[1], sdst, len);
     }
     npyv_cleanup();
     #if 1
         npy_clear_floatstatus_barrier((char*)dimensions);
     #endif
 #else
-    for (; len > 0; --len, src += ssrc, dst += sdst) {
-        const float src0 = *src;
-        *dst = npy_tanhf(src0);
+    UNARY_LOOP {
+        const float in1 = *(float *)ip1;
+        *(float *)op1 = npy_tanhf(in1);
     }
 #endif
 }
 
 
-#line 604
-#line 608
+#line 606
+#line 610
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_tanh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
-    const double *src = (double*)args[0];
-          double *dst = (double*)args[1];
-
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
-    npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
 #if NPY_SIMD_FMA3 && NPY_SIMD_F64
-    if (is_mem_overlap(src, steps[0], dst, steps[1], len) ||
-        !npyv_loadable_stride_f64(ssrc) || !npyv_storable_stride_f64(sdst)
+    npy_intp len = dimensions[0];
+
+    if (is_mem_overlap(args[0], steps[0], args[1], steps[1], len) ||
+        !npyv_loadable_stride_f64(steps[0]) ||
+        !npyv_storable_stride_f64(steps[1])
     ) {
-        for (; len > 0; --len, src += ssrc, dst += sdst) {
-            simd_tanh_f64(src, 1, dst, 1, 1);
+        UNARY_LOOP {
+            simd_tanh_f64((double *)ip1, 1, (double *)op1, 1, 1);
         }
     } else {
-        simd_tanh_f64(src, ssrc, dst, sdst, len);
+        npy_intp ssrc = steps[0] / sizeof(double);
+        npy_intp sdst = steps[1] / sizeof(double);
+        simd_tanh_f64((double *)args[0], ssrc, (double *)args[1], sdst, len);
     }
     npyv_cleanup();
     #if 1
         npy_clear_floatstatus_barrier((char*)dimensions);
     #endif
 #else
-    for (; len > 0; --len, src += ssrc, dst += sdst) {
-        const double src0 = *src;
-        *dst = npy_tanh(src0);
+    UNARY_LOOP {
+        const double in1 = *(double *)ip1;
+        *(double *)op1 = npy_tanh(in1);
     }
 #endif
 }

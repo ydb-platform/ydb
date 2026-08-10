@@ -144,6 +144,18 @@ TYPED_TEST(TRpcTest, TestingDelayHeavy)
     EXPECT_GT(elapsed, TDuration::MilliSeconds(500));
 }
 
+TYPED_TEST(TRpcTest, DefaultUserIsRoot)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.PassCall();
+    EXPECT_EQ(req->GetUser(), RootUserName);
+    auto rspOrError = WaitForFast(req->Invoke());
+    EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
+    const auto& rsp = rspOrError.Value();
+    // Root is expressed by leaving the field unset.
+    EXPECT_FALSE(rsp->has_user());
+}
+
 TYPED_TEST(TRpcTest, UserTag)
 {
     TTestProxy proxy(this->CreateChannel());

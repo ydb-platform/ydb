@@ -22,15 +22,37 @@ ENDIF()
 
 SET(YDB_BUILD_CONFIG ${YDB_BUILD_TYPE}${YDB_SAN_TYPE})
 
-RUN_PROGRAM(
-    ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_INTER_REF/${YDB_BUILD_CONFIG}/ydbd ydbd-inter $YDB_COMPAT_INTER_REF
-    OUT_NOAUTO ydbd-inter ydbd-inter-name
-)
+IF(${YDB_COMPAT_INTER_REF} != "current")
+    RUN_PROGRAM(
+        ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_INTER_REF/${YDB_BUILD_CONFIG}/ydbd ydbd-inter $YDB_COMPAT_INTER_REF
+        OUT_NOAUTO ydbd-inter ydbd-inter-name
+    )
+ELSE()
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
+    BUNDLE(
+        ydb/apps/ydbd NAME ydbd-inter
+    )
+    RUN_PROGRAM(
+        ydb/tests/library/compatibility/binaries/downloader append-version ydbd-inter-name current
+        OUT_NOAUTO ydbd-inter-name
+    )
+ENDIF()
 
-RUN_PROGRAM(
-    ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_INIT_REF/${YDB_BUILD_CONFIG}/ydbd ydbd-init $YDB_COMPAT_INIT_REF
-    OUT_NOAUTO ydbd-init ydbd-init-name
-)
+IF(${YDB_COMPAT_INIT_REF} != "current")
+    RUN_PROGRAM(
+        ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_INIT_REF/${YDB_BUILD_CONFIG}/ydbd ydbd-init $YDB_COMPAT_INIT_REF
+        OUT_NOAUTO ydbd-init ydbd-init-name
+    )
+ELSE()
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
+    BUNDLE(
+        ydb/apps/ydbd NAME ydbd-init
+    )
+    RUN_PROGRAM(
+        ydb/tests/library/compatibility/binaries/downloader append-version ydbd-init-name current
+        OUT_NOAUTO ydbd-init-name
+    )
+ENDIF()
 
 IF(${YDB_COMPAT_TARGET_REF} != "current")
     RUN_PROGRAM(

@@ -143,7 +143,7 @@ public:
 
     bool Remove(TKeyView /*key*/) override
     {
-        YT_LOG_ALERT("Attempt to remove an item from an empty ephemeral attribute dictionary");
+        YT_TLOG_ALERT("Attempt to remove an item from an empty ephemeral attribute dictionary");
         return false;
     }
 

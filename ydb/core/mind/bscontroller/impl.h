@@ -1,5 +1,7 @@
 #pragma once
+
 #include "defs.h"
+
 #include "bsc.h"
 #include "cluster_balancing.h"
 #include "scheme.h"
@@ -10,8 +12,25 @@
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
+#include "yaml_config_helpers.h"
 
+#include <ydb/core/base/bridge.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/mind/table_adapter.h>
+#include <ydb/core/tablet/tablet_responsiveness_pinger.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/util/backoff.h>
+
+#include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/counters_bs_controller.pb.h>
+
+#include <ydb/library/aclib/aclib.h>
 
 #include <util/generic/hash_multi_map.h>
 
@@ -897,10 +916,10 @@ public:
             }
         }
 
-        bool FillInGroupParameters(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
+        bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
             TBlobStorageController *self) const;
-        bool FillInResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const;
-        bool FillInVDiskResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const;
+        bool FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb, bool countMaxSlots) const;
+        bool FillInVDiskResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *pb) const;
 
         void UpdateSeenOperational() {
             TBlobStorageGroupInfo::TGroupFailDomains failed(Topology.get());
@@ -1662,9 +1681,15 @@ private:
     IActor* CreateSystemViewsCollector();
     void UpdateSystemViews();
 
-    bool ValidateConfigUpdates(TConfigState& state, bool suppressFailModelChecking, bool suppressDegradedGroupsChecking,
-        bool suppressDisintegratedGroupsChecking, TString *errorDescription,
-        NKikimrBlobStorage::TConfigResponse *response = nullptr);
+    struct TValidateConfigUpdatesParameters {
+        bool SuppressFailModelChecking = false;
+        bool SuppressDegradedGroupsChecking = false;
+        bool SuppressDisintegratedGroupsChecking = false;
+        bool AllowDegradedWithSinglePhantomsOnly = false;
+    };
+
+    bool ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
+            TString* errorDescription, NKikimrBlobStorage::TConfigResponse* response = nullptr);
 
     std::optional<TString> ValidateAndCommitConfigUpdate(std::optional<TConfigState>& state,
         TConfigTxFlags flags, TTransactionContext& txc,

@@ -198,7 +198,8 @@ private:
             const auto& endpointSetOrError = endpointSets[i];
             if (!endpointSetOrError.IsOK()) {
                 errors.push_back(endpointSetOrError);
-                YT_LOG_WARNING(endpointSetOrError, "Could not resolve endpoints from cluster");
+                YT_TLOG_WARNING("Could not resolve endpoints from cluster")
+                    .With(endpointSetOrError);
                 continue;
             }
 

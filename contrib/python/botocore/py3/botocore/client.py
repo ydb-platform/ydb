@@ -82,6 +82,7 @@ class ClientCreator:
         exceptions_factory=None,
         config_store=None,
         user_agent_creator=None,
+        auth_token_resolver=None,
     ):
         self._loader = loader
         self._endpoint_resolver = endpoint_resolver
@@ -97,6 +98,7 @@ class ClientCreator:
         # future).
         self._config_store = config_store
         self._user_agent_creator = user_agent_creator
+        self._auth_token_resolver = auth_token_resolver
 
     def create_client(
         self,
@@ -148,6 +150,10 @@ class ClientCreator:
             config_store=self._config_store,
             service_signature_version=service_signature_version,
         )
+        if token := self._evaluate_client_specific_token(
+            service_model.signing_name
+        ):
+            auth_token = token
         client_args = self._get_client_args(
             service_model,
             region_name,
@@ -214,10 +220,11 @@ class ClientCreator:
                 else:
                     client_config = config_use_fips_endpoint
                 logger.warning(
-                    f'transforming region from {region_name} to '
-                    f'{normalized_region_name} and setting '
+                    'transforming region from %s to %s and setting '
                     'use_fips_endpoint to true. client should not '
-                    'be configured with a fips psuedo region.'
+                    'be configured with a fips psuedo region.',
+                    region_name,
+                    normalized_region_name,
                 )
                 region_name = normalized_region_name
         return region_name, client_config
@@ -609,6 +616,15 @@ class ClientCreator:
         _api_call.__doc__ = docstring
         return _api_call
 
+    def _evaluate_client_specific_token(self, signing_name):
+        # Resolves an auth_token for the given signing_name.
+        # Returns None if no resolver is set or if resolution fails.
+        resolver = self._auth_token_resolver
+        if not resolver or not signing_name:
+            return None
+
+        return resolver(signing_name=signing_name)
+
 
 class ClientEndpointBridge:
     """Bridges endpoint data and client creation
@@ -771,7 +787,10 @@ class ClientEndpointBridge:
                 hostname, is_secure, ['http', 'https']
             )
         logger.debug(
-            f'Assuming an endpoint for {service_name}, {region_name}: {endpoint_url}'
+            'Assuming an endpoint for %s, %s: %s',
+            service_name,
+            region_name,
+            endpoint_url,
         )
         # We still want to allow the user to provide an explicit version.
         signature_version = self._resolve_signature_version(
@@ -994,6 +1013,7 @@ class BaseClient:
             'has_streaming_input': operation_model.has_streaming_input,
             'auth_type': operation_model.resolved_auth_type,
             'unsigned_payload': operation_model.unsigned_payload,
+            'auth_options': self._service_model.metadata.get('auth'),
         }
 
         api_params = self._emit_api_params(
@@ -1051,9 +1071,9 @@ class BaseClient:
 
         if http.status_code >= 300:
             error_info = parsed_response.get("Error", {})
-            error_code = error_info.get("QueryErrorCode") or error_info.get(
-                "Code"
-            )
+            error_code = request_context.get(
+                'error_code_override'
+            ) or error_info.get("Code")
             error_class = self.exceptions.from_code(error_code)
             raise error_class(parsed_response, operation_name)
         else:

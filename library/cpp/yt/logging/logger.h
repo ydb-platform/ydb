@@ -227,8 +227,6 @@ public:
     TLogger& AddTags(const TLoggingTagList& tags);
     template <class TValue>
     TLogger& AddTag(TLoggingTagKey key, const TValue& value);
-    template <class TValue>
-    TLogger& AddTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec);
     template <class... TArgs>
     TLogger& AddTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args);
 
@@ -243,10 +241,6 @@ public:
     [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value) const &;
     template <class TValue>
     [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value) &&;
-    template <class TValue>
-    [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) const &;
-    template <class TValue>
-    [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) &&;
     template <class... TArgs>
     [[nodiscard]] TLogger WithTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) const &;
     template <class... TArgs>
@@ -478,15 +472,13 @@ void LogStructuredEvent(
 ////////////////////////////////////////////////////////////////////////////////
 // Tagged logging
 //
-// Tags are supplied via a fluent |.With(name, value)| (or |.With(name, value, "%spec")|)
-// chain; they are carried as structured key/value pairs in the event payload. A single-
-// argument |.With(value)| attaches the value under a statically known key resolved by ADL
-// (e.g. |.With(error)| under the "Error" key). |.WithFormat(name, format, args...)| composes
-// one tag out of several values:
+// Tags are supplied via a fluent |.With(name, value)| chain; they are carried as structured
+// key/value pairs in the event payload. A single-argument |.With(value)| attaches the value
+// under a statically known key resolved by ADL (e.g. |.With(error)| under the "Error" key).
 //
 //     YT_TLOG_INFO("Message")
 //         .With("Key", value)
-//         .With("Count", count, "%08x")
+//         .WithFormat("Count", "%08x", count)
 //         .WithFormat("Method", "%v.%v", service, method)
 //         .With(error);
 //
@@ -556,13 +548,16 @@ void LogStructuredEvent(
 // destructor terminates. So both expand to a single-iteration |for| whose step expression
 // fires once the chain (the loop body) has completed.
 
+// The |for| deliberately has no condition: with no normal exit and a |[[noreturn]]| step,
+// the whole expansion is noreturn to the compiler. The body still runs exactly once, since
+// #Commit never returns.
 #define YT_TLOG_FATAL(message)                                              \
     for (::NYT::NLogging::NDetail::TTaggedFatalLoggingGuard loggingGuard__( \
             Logger(),                                                       \
             __LOCATION__,                                                   \
             YT_TLOG_STATIC_ANCHOR_REF(),                                    \
             (message));                                                     \
-        loggingGuard__.TryEnter();                                          \
+        /*no condition*/;                                                   \
         loggingGuard__.Commit())                                            \
         loggingGuard__.Self()
 #define YT_TLOG_FATAL_IF(condition, message)       if (condition) [[unlikely]]    YT_TLOG_FATAL(message)
@@ -570,8 +565,8 @@ void LogStructuredEvent(
 
 // See #YT_LOG_ALERT_AND_THROW for the rationale. The throw lives here -- not in the guard
 // -- because the logging library must not depend on the error library. The guard's
-// |Commit| logs the alert (when enabled) and returns the message for the |"message"|
-// attribute.
+// |Commit| logs the alert (when enabled) and returns the rendered event -- tags included,
+// so they survive in the |"message"| attribute.
 #define YT_TLOG_ALERT_AND_THROW(message)                                       \
     for (::NYT::NLogging::NDetail::TTaggedThrowingLoggingGuard loggingGuard__( \
             Logger(),                                                          \

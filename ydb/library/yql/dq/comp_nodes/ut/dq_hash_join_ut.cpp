@@ -56,6 +56,9 @@ struct TJoinTestData {
     TVector<int> ScalarizeLeftColumns;
     TVector<int> ScalarizeRightColumns;
     TBlockHashJoinSettings JoinSettings;
+    TDqProgramBuilder::TJoinFilterLambda LeftFilter;
+    TDqProgramBuilder::TJoinFilterLambda RightFilter;
+    TDqProgramBuilder::TJoinCommonFilterLambda CommonFilter;
 };
 
 void FilterRenamesForSemiAndOnlyJoins(TJoinTestData& td) {
@@ -965,6 +968,248 @@ TJoinTestData ScalarPayloadInnerJoinTestData() {
     return td;
 }
 
+TDqProgramBuilder::TJoinFilterLambda GreaterThanConstFilter(TDqSetup<false, true>* setup, ui32 column,
+                                                                  ui64 value) {
+    return [setup, column, value](TRuntimeNode::TList row) -> TRuntimeNode {
+        auto& pb = setup->GetDqProgramBuilder();
+        return pb.Coalesce(pb.Greater(row[column], pb.NewDataLiteral<ui64>(value)), pb.NewDataLiteral<bool>(false));
+    };
+}
+
+TDqProgramBuilder::TJoinFilterLambda LessThanConstFilter(TDqSetup<false, true>* setup, ui32 column, ui64 value) {
+    return [setup, column, value](TRuntimeNode::TList row) -> TRuntimeNode {
+        auto& pb = setup->GetDqProgramBuilder();
+        return pb.Coalesce(pb.Less(row[column], pb.NewDataLiteral<ui64>(value)), pb.NewDataLiteral<bool>(false));
+    };
+}
+
+// right[column] > left[column]
+TDqProgramBuilder::TJoinCommonFilterLambda RightGreaterThanLeftFilter(TDqSetup<false, true>* setup, ui32 column) {
+    return [setup, column](TRuntimeNode::TList left, TRuntimeNode::TList right) -> TRuntimeNode {
+        auto& pb = setup->GetDqProgramBuilder();
+        return pb.Coalesce(pb.Greater(right[column], left[column]), pb.NewDataLiteral<bool>(false));
+    };
+}
+
+// left[column] > right[column]
+TDqProgramBuilder::TJoinCommonFilterLambda LeftGreaterThanRightFilter(TDqSetup<false, true>* setup, ui32 column) {
+    return [setup, column](TRuntimeNode::TList left, TRuntimeNode::TList right) -> TRuntimeNode {
+        auto& pb = setup->GetDqProgramBuilder();
+        return pb.Coalesce(pb.Greater(left[column], right[column]), pb.NewDataLiteral<bool>(false));
+    };
+}
+
+TJoinTestData FilterBaseInnerData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 20, 30};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData LeftFilterInnerTestData() {
+    auto td = FilterBaseInnerData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expLeftKeys = {2, 3};
+    TVector<ui64> expLeftVals = {20, 30};
+    TVector<ui64> expRightKeys = {2, 3};
+    TVector<ui64> expRightVals = {50, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    // left[1] > 10 (drop 5)
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    return td;
+}
+
+TJoinTestData RightFilterInnerTestData() {
+    auto td = FilterBaseInnerData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expLeftKeys = {2, 3};
+    TVector<ui64> expLeftVals = {20, 30};
+    TVector<ui64> expRightKeys = {2, 3};
+    TVector<ui64> expRightVals = {50, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    // right[1] < 80 (drop 100)
+    td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, 80);
+    return td;
+}
+
+TJoinTestData CommonFilterInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 60, 30};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Kind = EJoinKind::Inner;
+    TVector<ui64> expLeftKeys = {1, 3};
+    TVector<ui64> expLeftVals = {5, 30};
+    TVector<ui64> expRightKeys = {1, 3};
+    TVector<ui64> expRightVals = {100, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    // right[1] > left[1]
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
+TJoinTestData CommonFilterReversedInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 60, 30};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Kind = EJoinKind::Inner;
+    TVector<ui64> expLeftKeys = {2};
+    TVector<ui64> expLeftVals = {60};
+    TVector<ui64> expRightKeys = {2};
+    TVector<ui64> expRightVals = {50};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    // left[1] > right[1]
+    td.CommonFilter = LeftGreaterThanRightFilter(td.Setup.get(), 1);
+    return td;
+}
+
+TJoinTestData AllFiltersInnerTestData() {
+    auto td = FilterBaseInnerData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expLeftKeys = {2, 3};
+    TVector<ui64> expLeftVals = {20, 30};
+    TVector<ui64> expRightKeys = {2, 3};
+    TVector<ui64> expRightVals = {50, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    // left[1] > 10
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    // right[1] < 80
+    td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, 80);
+    // right[1] > left[1]
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
+TJoinTestData LeftJoinLeftFilterTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 20, 30};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+
+    TVector<ui64> expLeftKeys = {1, 2, 3};
+    TVector<ui64> expLeftVals = {5, 20, 30};
+    TVector<std::optional<ui64>> expRightKeys = {std::nullopt, 2, 3};
+    TVector<std::optional<ui64>> expRightVals = {std::nullopt, 50, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+
+    td.Kind = EJoinKind::Left;
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    return td;
+}
+
+TJoinTestData LeftJoinCommonFilterTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4};
+    TVector<ui64> leftVals = {5, 60, 30, 7};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+
+    TVector<ui64> expLeftKeys = {1, 2, 3, 4};
+    TVector<ui64> expLeftVals = {5, 60, 30, 7};
+    TVector<std::optional<ui64>> expRightKeys = {1, std::nullopt, 3, std::nullopt};
+    TVector<std::optional<ui64>> expRightVals = {100, std::nullopt, 60, std::nullopt};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+
+    td.Kind = EJoinKind::Left;
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
+// The same inputs as LeftJoinCommonFilterTestData: keys 1 and 3 have a match that passes
+// right[1] > left[1], key 2 has a match that the filter rejects, key 4 has no match at all.
+TJoinTestData SemiOrOnlyCommonFilterBaseData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4};
+    TVector<ui64> leftVals = {5, 60, 30, 7};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
+TJoinTestData LeftSemiCommonFilterTestData() {
+    auto td = SemiOrOnlyCommonFilterBaseData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expKeys = {1, 3};
+    TVector<ui64> expVals = {5, 30};
+    td.Result = ConvertVectorsToTuples(setup, expKeys, expVals);
+    td.Kind = EJoinKind::LeftSemi;
+    return td;
+}
+
+TJoinTestData LeftOnlyCommonFilterTestData() {
+    auto td = SemiOrOnlyCommonFilterBaseData();
+    auto& setup = *td.Setup;
+    // Key 2 is emitted even though it has a match on the key: the filter rejects the only pair it
+    // takes part in, so the row counts as unmatched.
+    TVector<ui64> expKeys = {2, 4};
+    TVector<ui64> expVals = {60, 7};
+    td.Result = ConvertVectorsToTuples(setup, expKeys, expVals);
+    td.Kind = EJoinKind::LeftOnly;
+    return td;
+}
+
+// Key 1 has a match on the key, but the left row itself does not pass left[1] > 10.
+TJoinTestData SemiOrOnlyLeftFilterBaseData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4};
+    TVector<ui64> leftVals = {5, 20, 30, 40};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    return td;
+}
+
+TJoinTestData LeftSemiLeftFilterTestData() {
+    auto td = SemiOrOnlyLeftFilterBaseData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expKeys = {2, 3};
+    TVector<ui64> expVals = {20, 30};
+    td.Result = ConvertVectorsToTuples(setup, expKeys, expVals);
+    td.Kind = EJoinKind::LeftSemi;
+    return td;
+}
+
+TJoinTestData LeftOnlyLeftFilterTestData() {
+    auto td = SemiOrOnlyLeftFilterBaseData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expKeys = {1, 4};
+    TVector<ui64> expVals = {5, 40};
+    td.Result = ConvertVectorsToTuples(setup, expKeys, expVals);
+    td.Kind = EJoinKind::LeftOnly;
+    return td;
+}
+
 TJoinDescription MakeJoinDescription(TJoinTestData& td) {
     FilterRenamesForSemiAndOnlyJoins(td);
     TJoinDescription descr;
@@ -982,6 +1227,9 @@ TJoinDescription MakeJoinDescription(TJoinTestData& td) {
     descr.SliceBlocks = td.SliceBlocks;
     descr.ScalarizeLeftColumns = td.ScalarizeLeftColumns;
     descr.ScalarizeRightColumns = td.ScalarizeRightColumns;
+    descr.LeftFilter = td.LeftFilter;
+    descr.RightFilter = td.RightFilter;
+    descr.CommonFilter = td.CommonFilter;
     return descr;
 }
 
@@ -1151,6 +1399,50 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestBlockJoinScalarColumn) {
         Test(ScalarPayloadInnerJoinTestData(), true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftFilter, BlockJoin) {
+        Test(LeftFilterInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashRightFilter, BlockJoin) {
+        Test(RightFilterInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCommonFilter, BlockJoin) {
+        Test(CommonFilterInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCommonFilterReversed, BlockJoin) {
+        Test(CommonFilterReversedInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashAllFilters, BlockJoin) {
+        Test(AllFiltersInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftJoinLeftFilter, BlockJoin) {
+        Test(LeftJoinLeftFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftJoinCommonFilter, BlockJoin) {
+        Test(LeftJoinCommonFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinLeftFilter, BlockJoin) {
+        Test(LeftSemiLeftFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinCommonFilter, BlockJoin) {
+        Test(LeftSemiCommonFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinLeftFilter, BlockJoin) {
+        Test(LeftOnlyLeftFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinCommonFilter, BlockJoin) {
+        Test(LeftOnlyCommonFilterTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestBlockSpilling) { 

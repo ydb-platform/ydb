@@ -71,7 +71,7 @@ void TCommandBase::Execute(ICommandContextPtr context)
 {
     const auto& request = context->Request();
     Logger
-        .AddTag("RequestId", request.Id, "%" PRIx64)
+        .AddTagFormat("RequestId", "%" PRIx64, request.Id)
         .AddTag("User", request.AuthenticatedUser);
     Deserialize(*this, request.Parameters);
 

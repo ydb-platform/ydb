@@ -496,6 +496,10 @@ inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, TPlanStep p
     PlanCommit(runtime, sender, planStep, ids);
 }
 
+inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, const NOlap::TSnapshot& snapshot) {
+    PlanCommit(runtime, sender, TPlanStep{ snapshot.GetPlanStep() }, snapshot.GetTxId());
+}
+
 void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shardId);
 
 ui64 CountLocalDbTableRows(
@@ -513,6 +517,8 @@ struct TTestBlobOptions {
 TCell MakeTestCell(const TTypeInfo& typeInfo, ui32 value, std::vector<TString>& mem);
 TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTest::TTestColumn>& columns, const TTestBlobOptions& options = {},
     const std::set<std::string>& notNullColumns = {});
+TString MakeTestBlobValues(const std::vector<ui64>& values, const std::vector<NArrow::NTest::TTestColumn>& columns,
+    const TTestBlobOptions& options = {}, const std::set<std::string>& notNullColumns = {});
 TSerializedTableRange MakeTestRange(
     std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo, const std::vector<NArrow::NTest::TTestColumn>& columns);
 

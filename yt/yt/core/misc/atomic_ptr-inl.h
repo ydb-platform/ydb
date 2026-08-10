@@ -23,8 +23,8 @@ TIntrusivePtr<T> TryMakeStrongFromHazard(const THazardPtr<T>& ptr)
 
     if (!GetRefCounter(ptr.Get())->TryRef()) {
         constexpr auto& Logger = LockFreeLogger;
-        YT_LOG_TRACE("Failed to acquire intrusive ptr from hazard ptr (Ptr: %v)",
-            ptr.Get());
+        YT_TLOG_TRACE("Failed to acquire intrusive ptr from hazard ptr")
+            .With("Ptr", ptr.Get());
         return nullptr;
     }
 
@@ -209,16 +209,16 @@ bool TAtomicPtr<T, EnableAcquireHazard>::SwapIfCompare(T* comparePtr, TIntrusive
     auto comparePacked = MakeTagged(comparePtr).Pack();
     auto newPacked = MakeTagged(targetPtr).Pack();
     if (!Ptr_.compare_exchange_strong(comparePacked, newPacked)) {
-        YT_LOG_TRACE("CAS failed (Current: %v, Compare: %v, Target: %v)",
-            UnpackTagged(comparePacked).Ptr,
-            savedPtr,
-            targetPtr);
+        YT_TLOG_TRACE("CAS failed")
+            .With("Current", UnpackTagged(comparePacked).Ptr)
+            .With("Compare", savedPtr)
+            .With("Target", targetPtr);
         return false;
     }
 
-    YT_LOG_TRACE("CAS succeeded (Compare: %v, Target: %v)",
-        comparePtr,
-        targetPtr);
+    YT_TLOG_TRACE("CAS succeeded")
+        .With("Compare", comparePtr)
+        .With("Target", targetPtr);
     target.Release();
     Drop(MakeTagged(comparePtr));
     return true;

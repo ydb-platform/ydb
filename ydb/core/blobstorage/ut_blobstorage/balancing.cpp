@@ -32,7 +32,7 @@ struct TTestEnv {
         .VDiskReplPausedAtStart = false,
         .Erasure = erasure,
         .ConfigPreprocessor = [](ui32, TNodeWardenConfig& conf) {
-            auto* balancingConf = conf.BlobStorageConfig.MutableVDiskBalancingConfig();
+            auto* balancingConf = conf.BlobStorageConfig->MutableVDiskBalancingConfig();
             balancingConf->SetEnableSend(true);
             balancingConf->SetEnableDelete(true);
             balancingConf->SetBalanceOnlyHugeBlobs(false);

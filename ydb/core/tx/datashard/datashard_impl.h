@@ -326,6 +326,7 @@ class TDataShard
 
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
+    class TTxPersistSubDomainTablesMetricsLevel;
 
     class TTxRequestChangeRecords;
     class TTxRemoveChangeRecords;
@@ -595,8 +596,6 @@ class TDataShard
         struct TEvReadonlyLeaseConfirmation: public TEventLocal<TEvReadonlyLeaseConfirmation, EvReadonlyLeaseConfirmation> {};
 
         struct TEvPlanPredictedTxs : public TEventLocal<TEvPlanPredictedTxs, EvPlanPredictedTxs> {};
-
-        struct TEvStatisticsScanFinished : public TEventLocal<TEvStatisticsScanFinished, EvStatisticsScanFinished> {};
 
         struct TEvRemoveSchemaSnapshots : public TEventLocal<TEvRemoveSchemaSnapshots, EvRemoveSchemaSnapshots> {};
 
@@ -1227,6 +1226,8 @@ class TDataShard
 
             Sys_VacuumCompletedGeneration = 47,
 
+            Sys_SubDomainTablesMetricsLevel = 48,
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -1240,6 +1241,7 @@ class TDataShard
         static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeStep == 39, "SysMvcc_ImmediateWriteEdgeStep changed its value");
         static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeTxId == 40, "SysMvcc_ImmediateWriteEdgeTxId changed its value");
         static_assert(ESysTableKeys::Sys_LastLoanTableTid == 41, "Sys_LastLoanTableTid changed its value");
+        static_assert(ESysTableKeys::Sys_SubDomainTablesMetricsLevel == 48, "Sys_SubDomainTablesMetricsLevel changed its value");
 
         static constexpr ui64 MinLocalTid = TSysTables::SysTableMAX + 1; // 1000
 
@@ -1422,9 +1424,6 @@ class TDataShard
     void Handle(TEvDataShard::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvBlockFailPointUnblock::TPtr& ev, const TActorContext& ctx);
-    void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
-    void HandleSafe(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr &ev, const TActorContext &ctx);
@@ -2008,6 +2007,19 @@ public:
     bool IsSubDomainOutOfSpace() const
     {
         return SubDomainOutOfSpace;
+    }
+
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetSubDomainTablesMetricsLevel() const
+    {
+        return SubDomainTablesMetricsLevel;
+    }
+
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetEffectiveMetricsLevel(const TUserTable& table) const
+    {
+        const auto tableLevel = table.GetDetailedMetricsLevel();
+        return tableLevel != NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
+            ? tableLevel
+            : SubDomainTablesMetricsLevel;
     }
 
     ui64 GetExecutorStep() const
@@ -2840,6 +2852,8 @@ private:
     std::optional<TPathId> SubDomainPathId;
     std::optional<TPathId> WatchingSubDomainPathId;
     bool SubDomainOutOfSpace = false;
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel SubDomainTablesMetricsLevel =
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
 
     THashSet<TActorId> Actors;
     TLoanReturnTracker LoanReturnTracker;
@@ -3230,9 +3244,6 @@ private:
 
     std::vector<TTrivialLogThrottler> LogThrottlers = {ELogThrottlerType::LAST, TDuration::Seconds(1)};
 
-    ui32 StatisticsScanTableId = 0;
-    ui64 StatisticsScanId = 0;
-
     ui64 CurrentVacuumGeneration = 0;
 
     // Cache for tracking recent writes for TLI breaker linkage in deferred lock creation scenarios
@@ -3501,8 +3512,6 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
             HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
-            HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
-            HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvDataShard::TEvVacuum, Handle);
             default:

@@ -300,8 +300,7 @@ private:
                         return false;
                     }
                     if (tableItemType->HasBareYson() && 0 != rowSpec.GetNativeYtTypeFlags()) {
-                        ctx.AddError(TIssue(pos, TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
-                            << *tableItemType));
+                        ReportNonWritableBareYsonError(pos, *tableItemType->Cast<TStructExprType>(), ctx);
                         return false;
                     }
 
@@ -329,8 +328,7 @@ private:
                     }
 
                     if (tableItemType->HasBareYson() && 0 != rowSpec.GetNativeYtTypeFlags()) {
-                        ctx.AddError(TIssue(pos, TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
-                            << *tableItemType));
+                        ReportNonWritableBareYsonError(pos, *tableItemType->Cast<TStructExprType>(), ctx);
                         return false;
                     }
 
@@ -357,8 +355,7 @@ private:
             }
 
             if (tableItemType->HasBareYson() && 0 != rowSpec.GetNativeYtTypeFlags()) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
-                    << *tableItemType));
+                ReportNonWritableBareYsonError(pos, *tableItemType->Cast<TStructExprType>(), ctx);
                 return false;
             }
 
@@ -735,6 +732,12 @@ private:
             }
 
             YQL_ENSURE(nextDescription.RowSpec);
+            // Strict Yson cannot be represented in native YT types. Reject it right here to avoid internal erros later
+            if (!nextDescription.RowSpec->HasPersistableYson()) {
+                ReportNonWritableBareYsonError(pos, *nextDescription.RowSpec->GetType(), ctx);
+                return TStatus::Error;
+            }
+
             if (contentRowSpecs) {
                 size_t from = 0;
                 if (initialWrite) {
@@ -1723,6 +1726,13 @@ private:
             return TStatus::Error;
         }
 
+        if (auto reserved = FindReservedColumnName(*itemType, *State_)) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                << "Cannot write column " << TString{*reserved}.Quote() << " with reserved prefix "
+                << TString{SystemMemberPrefix}.Quote()));
+            return TStatus::Error;
+        }
+
         auto content =  writeTable.Content().Ptr();
         status = ValidateTableWrite(ctx.GetPosition(input->Pos()), table, content, itemType, {}, cluster, *settings, ctx);
         if (TStatus::Error == status.Level) {
@@ -1924,6 +1934,12 @@ private:
                 next.IsReplaced = true;
 
                 const TYtOutTableInfo outTable(rowType, GetNativeYtTypeCompatibility(create.DataSink().Cluster().StringValue(), *State_->Configuration), columnOrder);
+
+                // Strict Yson cannot be represented in native YT types. Reject it right here to avoid internal erros later
+                if (!outTable.RowSpec->HasPersistableYson()) {
+                    ReportNonWritableBareYsonError(ctx.GetPosition(create.Pos()), *rowType, ctx);
+                    return TStatus::Error;
+                }
 
                 const auto orderBySize = create.OrderBy().Size();
                 outTable.RowSpec->SortedBy.reserve(orderBySize);

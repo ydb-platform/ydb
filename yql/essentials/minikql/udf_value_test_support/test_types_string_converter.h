@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/minikql/udf_value_test_support/dynumber.h>
+#include <yql/essentials/minikql/udf_value_test_support/singular_void.h>
 #include <yql/essentials/minikql/udf_value_test_support/stream_view.h>
 #include <yql/essentials/minikql/udf_value_test_support/struct_type.h>
 #include <yql/essentials/minikql/udf_value_test_support/utf8.h>
@@ -72,6 +73,13 @@ template <>
 struct TValueToStringConverter<NTest::TUtf8> {
     static TString Convert(const NTest::TUtf8& value) {
         return value.Value;
+    }
+};
+
+template <>
+struct TValueToStringConverter<NTest::TSingularVoid> {
+    static TString Convert(const NTest::TSingularVoid&) {
+        return TString("Void");
     }
 };
 

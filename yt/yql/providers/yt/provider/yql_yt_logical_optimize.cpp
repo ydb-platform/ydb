@@ -16,6 +16,7 @@
 #include <yql/essentials/core/yql_opt_window.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_opt_match_recognize.h>
+#include <yql/essentials/core/yql_sql_combine_expander.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/utils/log/log.h>
@@ -79,6 +80,7 @@ public:
         AddHandler(1, &TCoExtendBase::Match, HNDL(ExtendOverSameMap));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
         AddHandler(1, &TCoTake::Match, HNDL(TakeOverExtend));
+        AddHandler(1, &TCoSqlCombine::Match, HNDL(SqlCombine));
 
         AddHandler(2, &TCoEquiJoin::Match, HNDL(ConvertToCommonTypeForForcedMergeJoin));
         AddHandler(2, &TCoShuffleByKeys::Match, HNDL(ShuffleByKeys));
@@ -407,6 +409,42 @@ protected:
     }
 
 protected:
+    TMaybeNode<TExprBase> SqlCombine(TExprBase node, TExprContext& ctx) const {
+        auto sqlCombine = node.Cast<TCoSqlCombine>();
+
+        TString usedCluster;
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+
+        TSyncMap syncList;
+        bool hasYtInput = false;
+        for (auto input : { sqlCombine.LeftInput(), sqlCombine.RightInput() }) {
+            if (IsYtProviderInput(input.Input())) {
+                hasYtInput = true;
+                auto cluster = DeriveClusterFromInput(input.Input(), selectionMode);
+                if (!cluster || !UpdateUsedCluster(usedCluster, *cluster, selectionMode)) {
+                    return node;
+                }
+            }
+
+            for (auto lambda : { input.PresortKeyLambda().Raw(), input.KeyExtractorLambda().Raw(), input.ListHandlerLambda().Raw() }) {
+                if (!IsYtCompleteIsolatedLambda(*lambda, syncList, usedCluster, false, selectionMode)) {
+                    return node;
+                }
+            }
+        }
+
+        if (!hasYtInput) {
+            return node;
+        }
+
+        if (!IsYtCompleteIsolatedLambda(sqlCombine.UsingLambda().Ref(), syncList, usedCluster, false, selectionMode)) {
+            return node;
+        }
+
+        return ExpandSqlCombine(node.Ptr(), ctx, *State_->Types);
+    }
+
     TMaybeNode<TExprBase> Aggregate(TExprBase node, TExprContext& ctx) const {
         auto aggregate = node.Cast<TCoAggregateBase>();
 

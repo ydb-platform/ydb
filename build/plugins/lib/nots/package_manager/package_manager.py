@@ -12,7 +12,6 @@ from .constants import (
 from .lockfile import Lockfile
 from .utils import (
     build_lockfile_path,
-    build_pre_lockfile_path,
     build_ws_config_path,
     b_rooted,
     build_nm_path,
@@ -339,7 +338,7 @@ class PackageManager(object):
         """
         Creates node_modules directory according to the lockfile.
         """
-        ws = self._prepare_workspace(local_cli)
+        ws = self._prepare_workspace()
 
         self._copy_pnpm_patches()
 
@@ -524,15 +523,7 @@ class PackageManager(object):
             raise PackageManagerError("Unable to process some lockfiles:\n{}".format("\n".join(errors)))
 
     @timeit
-    def _prepare_workspace(self, local_cli: bool):
-        if local_cli:
-            shutil.copy(build_pre_lockfile_path(self.build_path), build_lockfile_path(self.build_path))
-        else:
-            lf = self.load_lockfile(build_pre_lockfile_path(self.build_path))
-
-            lf.update_tarball_resolutions(lambda p: "file:" + os.path.join(self.build_root, p.tarball_url))
-            lf.write(build_lockfile_path(self.build_path))
-
+    def _prepare_workspace(self):
         return PnpmWorkspace.load(build_ws_config_path(self.build_path))
 
     @timeit
@@ -547,7 +538,8 @@ class PackageManager(object):
 
         dep_paths = ws.get_paths(ignore_self=True)
         self._build_merged_workspace_config(ws, dep_paths)
-        self._build_merged_pre_lockfile(tarballs_store, dep_paths, local_cli, pj.has_dependencies())
+        dep_paths = ws.get_paths(ignore_self=True)
+        self._build_merged_lockfile(tarballs_store, dep_paths, local_cli, pj.has_dependencies())
 
         return ws
 
@@ -561,14 +553,16 @@ class PackageManager(object):
         ws.packages.add(".")
         ws.write()
 
-        deps_pre_lockfile_path = build_pre_lockfile_path(os.path.join(self.build_root, deps_mod))
-        pre_lockfile_path = build_pre_lockfile_path(self.build_path)
-        shutil.copyfile(deps_pre_lockfile_path, pre_lockfile_path)
+        deps_lockfile_path = build_lockfile_path(os.path.join(self.build_root, deps_mod))
+        lockfile_path = build_lockfile_path(self.build_path)
+        lf = self.load_lockfile(deps_lockfile_path)
+        self._rebase_file_tarball_resolutions(lf, self.build_path)
+        lf.write(lockfile_path)
 
         return ws
 
     @timeit
-    def _build_merged_pre_lockfile(self, tarballs_store, dep_paths, local_cli: bool, has_deps: bool):
+    def _build_merged_lockfile(self, tarballs_store, dep_paths, local_cli: bool, has_deps: bool):
         """
         :type dep_paths: list of str
         :rtype: PnpmLockfile
@@ -580,17 +574,38 @@ class PackageManager(object):
             lf = Lockfile(lockfile_path)
             lf.data = {"lockfileVersion": "9.0"}
         # Change to the output path for correct path calcs on merging.
-        lf.path = build_pre_lockfile_path(self.build_path)
+        lf.path = build_lockfile_path(self.build_path)
         if not local_cli:
-            lf.update_tarball_resolutions(lambda p: self._tarballs_store_path(p, tarballs_store))
+            lf.update_tarball_resolutions(
+                lambda p: "file:"
+                + os.path.relpath(
+                    os.path.join(self.build_root, self._tarballs_store_path(p, tarballs_store)),
+                    self.build_path,
+                )
+            )
 
         if self.inject_peers is False:
             for dep_path in dep_paths:
-                pre_lf_path = build_pre_lockfile_path(dep_path)
-                if os.path.isfile(pre_lf_path):
-                    lf.merge(self.load_lockfile(pre_lf_path))
+                dep_lockfile_path = build_lockfile_path(dep_path)
+                if os.path.isfile(dep_lockfile_path):
+                    dep_lf = self.load_lockfile(dep_lockfile_path)
+                    self._rebase_file_tarball_resolutions(dep_lf, self.build_path)
+                    lf.merge(dep_lf)
 
         lf.write()
+
+    @staticmethod
+    def _rebase_file_tarball_resolutions(lf, target_dir):
+        source_dir = os.path.dirname(lf.path)
+
+        def rebase(pkg):
+            if not pkg.tarball_url.startswith("file:"):
+                return pkg.tarball_url
+
+            source_path = os.path.normpath(os.path.join(source_dir, pkg.tarball_url[len("file:") :]))
+            return "file:" + os.path.relpath(source_path, target_dir)
+
+        lf.update_tarball_resolutions(rebase)
 
     @timeit
     def _build_merged_workspace_config(self, ws, dep_paths):

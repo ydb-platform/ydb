@@ -25,6 +25,7 @@ SRCS(
     deferred_publication_ack_state_ut.cpp
     local_partition_ut.cpp
     producer_deferred_publication_ut.cpp
+    read_session_credentials_ut.cpp
     topic_deferred_publish_ut.cpp
     topic_to_table_ut.cpp
     topic_tx_skip_conflict_ut.cpp

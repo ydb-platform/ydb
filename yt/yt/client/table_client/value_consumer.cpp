@@ -278,7 +278,7 @@ void TBuildingValueConsumer::OnMyValue(const TUnversionedValue& value)
         (valueCopy.Type != EValueType::Null || ConvertNullToEntity_))
     {
         if (valueCopy.Type == EValueType::Null && LogNullToEntity_) {
-            YT_LOG_DEBUG("Detected conversion of null to YSON entity");
+            YT_TLOG_DEBUG("Detected conversion of null to YSON entity");
             LogNullToEntity_ = false;
         }
         Builder_.AddValue(EncodeUnversionedAnyValue(valueCopy, &MemoryPool_));

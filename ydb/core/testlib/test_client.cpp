@@ -1288,8 +1288,7 @@ namespace Tests {
             const auto registerService = [&](const bool useBatchPool) {
                 const ui32 poolId = useBatchPool ? appData.BatchPoolId : appData.UserPoolId;
                 auto counters = appData.Counters->GetSubgroup("actor_system_pool_id", ::ToString(poolId));
-                auto* actor = NConveyorComposite::TServiceOperator::CreateService(
-                    NConveyorComposite::NConfig::TConfig::BuildDefault(), counters);
+                auto* actor = NConveyorComposite::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), counters);
                 const auto aid = Runtime->Register(actor, nodeIdx, poolId, TMailboxType::Revolving, 0);
                 Runtime->RegisterService(
                     NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx), useBatchPool), aid, nodeIdx);

@@ -2843,7 +2843,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
         const auto registerService = [&](const bool useBatchPool) {
             const ui32 poolId = useBatchPool ? appData->BatchPoolId : appData->UserPoolId;
             auto poolConveyorGroup = conveyorGroup->GetSubgroup("actor_system_pool_id", ::ToString(poolId));
-            auto service = NConveyorComposite::TServiceOperator::CreateService(*serviceConfig, poolConveyorGroup);
+            auto service = NConveyorComposite::CreateService(*serviceConfig, poolConveyorGroup);
             setup->LocalServices.push_back(std::make_pair(
                 NConveyorComposite::TServiceOperator::MakeServiceId(NodeId, useBatchPool),
                 TActorSetupCmd(service, TMailboxType::HTSwap, poolId)));

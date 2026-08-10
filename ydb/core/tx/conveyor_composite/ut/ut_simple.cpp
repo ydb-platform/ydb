@@ -5,6 +5,9 @@
 #include <ydb/core/tx/conveyor_composite/usage/events.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
+
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/signals/object_counter.h>
@@ -221,6 +224,64 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
+    Y_UNIT_TEST(ProcessGuardMovePreservesProcessState) {
+        NActors::TTestActorRuntime runtime;
+        runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+
+        const auto serviceId = TServiceOperator::MakeServiceId(runtime.GetNodeId(0));
+        const auto serviceEdge = runtime.AllocateEdgeActor();
+        runtime.RegisterService(serviceId, serviceEdge);
+
+        std::vector<ui64> registrations;
+        std::vector<ui64> tasks;
+        std::vector<ui64> unregistrations;
+        auto registrationObserver = runtime.AddObserver<TEvExecution::TEvRegisterProcess>([&](auto& ev) {
+            registrations.emplace_back(ev->Get()->GetInternalProcessId());
+        });
+        auto taskObserver = runtime.AddObserver<TEvExecution::TEvNewTask>([&](auto& ev) {
+            tasks.emplace_back(ev->Get()->GetInternalProcessId());
+        });
+        auto unregistrationObserver = runtime.AddObserver<TEvExecution::TEvUnregisterProcess>([&](auto& ev) {
+            unregistrations.emplace_back(ev->Get()->GetInternalProcessId());
+        });
+
+        TAtomicCounter taskCounter;
+        ui64 activeProcessId = 0;
+        ui64 finishedProcessId = 0;
+        UNIT_ASSERT(runtime.RunCall([&] {
+            {
+                TProcessGuard guard(ESpecialTaskCategory::Scan, "active", 1, TCPULimitsConfig(), serviceId);
+                activeProcessId = guard.GetInternalProcessId();
+
+                TProcessGuard movedGuard(std::move(guard));
+                UNIT_ASSERT_VALUES_EQUAL(movedGuard.GetInternalProcessId(), activeProcessId);
+                movedGuard.SendTaskToExecute(std::make_shared<TSleepTask>(TDuration::Zero(), taskCounter));
+                movedGuard.Finish();
+            }
+            {
+                TProcessGuard guard(ESpecialTaskCategory::Scan, "finished", 2, TCPULimitsConfig(), serviceId);
+                finishedProcessId = guard.GetInternalProcessId();
+                guard.Finish();
+
+                TProcessGuard movedGuard(std::move(guard));
+                UNIT_ASSERT_VALUES_EQUAL(movedGuard.GetInternalProcessId(), finishedProcessId);
+            }
+            NActors::TActorContext::AsActorContext().Send(serviceEdge, new NActors::TEvents::TEvWakeup());
+            return true;
+        }));
+
+        runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(serviceEdge);
+
+        UNIT_ASSERT_VALUES_EQUAL(registrations.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(registrations[0], activeProcessId);
+        UNIT_ASSERT_VALUES_EQUAL(registrations[1], finishedProcessId);
+        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tasks[0], activeProcessId);
+        UNIT_ASSERT_VALUES_EQUAL(unregistrations.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(unregistrations[0], activeProcessId);
+        UNIT_ASSERT_VALUES_EQUAL(unregistrations[1], finishedProcessId);
+    }
+
     class TTestingExecutor10xDistribution: public TTestingExecutor {
     private:
         virtual TString GetConveyorConfig() override {

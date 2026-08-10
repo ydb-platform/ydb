@@ -39,7 +39,10 @@ public:
         : Category(other.Category)
         , ScopeId(other.ScopeId)
         , ExternalProcessId(other.ExternalProcessId)
-        , ServiceActorId(other.ServiceActorId) {
+        , InternalProcessId(other.InternalProcessId)
+        , Finished(other.Finished)
+        , ServiceActorId(std::move(other.ServiceActorId)) {
+        other.Finished = true;
         other.ServiceActorId.reset();
     }
 

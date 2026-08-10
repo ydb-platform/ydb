@@ -161,7 +161,7 @@ namespace NKikimr::NDDisk {
                 }
 
                 // Device overestimation tracking: reuse PDisk's measured seek/speed
-                // constants for the first iteration (see plans/io_uring_device_overestimation.md).
+                // constants for the first iteration.
                 // SetSampleSink must be called before Start().
                 if (PDiskParams) {
                     DeviceOverestimationReadSpeedBps = PDiskParams->ReadSpeedBps;

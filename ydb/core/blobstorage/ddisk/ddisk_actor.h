@@ -244,8 +244,6 @@ namespace NKikimr::NDDisk {
 #endif
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Device overestimation sample pipeline (see plans/io_uring_device_overestimation.md)
-        //
         // The io_uring completion poller thread (via UringRouter's sample sink)
         // pushes raw TDeviceIoSample-s into DeviceOverestimationSamples under
         // DeviceOverestimationSamplesMutex. Periodically (WakeupFlushDeviceOverestimationSamples)

@@ -50,12 +50,7 @@ bool TRegistrySnapshotHolders::CouldUsePortion(const TPortionInfo::TConstPtr& po
 }
 
 bool TRegistrySnapshotHolders::CouldUseTable(const TInternalPathId& pathId, const TSnapshot& dropSnapshot) const {
-    auto schemeShardLocalPathIds = PathIdTranslator.ResolveSchemeShardLocalPathIdsOptional(pathId);
-    if (!schemeShardLocalPathIds) {
-        // Table no longer resolvable — no scan can reach it, cleanup is safe.
-        return false;
-    }
-    return BuildHoldersForTable(*schemeShardLocalPathIds).CouldUseTable(dropSnapshot);
+    return GetHoldersByPathId(pathId).CouldUseTable(dropSnapshot);
 }
 
 }   // namespace NKikimr::NOlap

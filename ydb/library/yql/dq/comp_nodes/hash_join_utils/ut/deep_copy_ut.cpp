@@ -15,8 +15,8 @@ Y_UNIT_TEST_SUITE(TPackedTupleDeepCopy) {
         NKikimr::NMiniKQL::TType* intType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::Int64);
         NKikimr::NMiniKQL::TType* stringType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::String);
         TVector<TType *> types{intType, intType, stringType, stringType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Payload, NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Payload};
-        auto converter = MakeScalarLayoutConverter(TTypeInfoHelper{}, types, roles, data.HolderFactory);
+        TVector<ui32> keyColumns{0, 2};
+        auto converter = MakeScalarLayoutConverter(TTypeInfoHelper{}, types, keyColumns, data.HolderFactory);
 
         const auto intEq = MakeEquateImpl(intType);
         const auto stringEq = MakeEquateImpl(intType);
@@ -61,9 +61,8 @@ Y_UNIT_TEST_SUITE(TPackedTupleDeepCopy) {
         NKikimr::NMiniKQL::TType* intType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::Int64);
         NKikimr::NMiniKQL::TType* stringType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::String);
         TVector<TType*> types{ intType, intType, stringType, stringType };
-        TVector<NPackedTuple::EColumnRole> roles{ NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Payload,
-            NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Payload };
-        auto converter = MakeScalarLayoutConverter(TTypeInfoHelper{}, types, roles, data.HolderFactory);
+        TVector<ui32> keyColumns{ 0, 2 };
+        auto converter = MakeScalarLayoutConverter(TTypeInfoHelper{}, types, keyColumns, data.HolderFactory);
 
         const auto intEq = MakeEquateImpl(intType);
         const auto stringEq = MakeEquateImpl(intType);
@@ -120,8 +119,8 @@ Y_UNIT_TEST_SUITE(TPackedTupleDeepCopy) {
         NKikimr::NMiniKQL::TType* intType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::Int64);
         NKikimr::NMiniKQL::TType* stringType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::String);
         TVector<TType *> types{intType, intType, stringType, stringType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Payload, NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Payload};
-        auto converter = MakeScalarLayoutConverter(TTypeInfoHelper{}, types, roles, data.HolderFactory);
+        TVector<ui32> keyColumns{0, 2};
+        auto converter = MakeScalarLayoutConverter(TTypeInfoHelper{}, types, keyColumns, data.HolderFactory);
 
         const auto intEq = MakeEquateImpl(intType);
         const auto stringEq = MakeEquateImpl(intType);

@@ -8,6 +8,7 @@
 
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd.h>
 
+#include <limits>
 #include <string>
 
 namespace NKikimr {
@@ -128,11 +129,24 @@ enum class EColumnRole { Key, Payload };
 
 // Describes layout and size of particular column
 struct TColumnDesc {
+    static constexpr ui32 NoKeyOrder = std::numeric_limits<ui32>::max();
+    static constexpr ui32 NoAlias = std::numeric_limits<ui32>::max();
+
     ui32 ColumnIndex = 0;   // Index of the column in particular layout
     ui32 OriginalColumnIndex = 0; // Index of the column in input representation
     ui32 OriginalIndex = 0; // Index of the buffer in input representation
     EColumnRole Role = EColumnRole::Payload; // Role of the particular column in
                                              // tuple (Key or Payload)
+    ui32 KeyOrder = NoKeyOrder; // Position of the column among the join keys.
+                                // Keys are laid out in this order, so both join
+                                // sides get the same key layout regardless of
+                                // where the keys sit in their inputs. Unset
+                                // means the order the columns are passed in
+    ui32 AliasOf = NoAlias; // Index of the description this column reads its
+                            // input data from. Set for a key repeating an
+                            // already described column (same input column used
+                            // as a join key more than once): it is packed on
+                            // its own, but is not written back on unpack
     EColumnSizeType SizeType =
         EColumnSizeType::Fixed; // Fixed size or variable size column
     ui32 DataSize = 0; // Size of the column in bytes for fixed size part
@@ -151,6 +165,13 @@ struct TTupleLayout {
     std::vector<TColumnDesc>
         PayloadColumns;      // Vector describing payload columns
     std::vector<TColumnDesc> VariableColumns;  // Variable-size columns only
+    std::vector<TColumnDesc>
+        MaterializedVariableColumns; // Variable-size columns owning their input
+                                     // data, i.e. VariableColumns without the
+                                     // aliased ones. Used when writing data
+                                     // back to the input representation
+    ui32 MaterializedColumnsNum; // Number of columns owning their input data,
+                                 // i.e. all columns except the aliased ones
     ui32 KeyColumnsNum;      // Total number of key columns
     ui32 KeyColumnsSize;     // Total size of all key columns in bytes
     ui32 KeyColumnsOffset;   // Start of row-packed keys data

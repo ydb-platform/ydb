@@ -1043,6 +1043,343 @@ Y_UNIT_TEST(PackIsValidFuzz) {
     CTEST  << Endl;
 }
 
+Y_UNIT_TEST(KeyOrderMatchesAcrossSides) {
+    // Matching join keys must land on the same packed offsets even if they sit
+    // at different positions in the input of each side.
+    TColumnDesc leftKeyA, leftPayload, leftKeyB;
+    leftKeyA.Role = EColumnRole::Key;
+    leftKeyA.DataSize = 8;
+    leftKeyA.KeyOrder = 0;
+    leftPayload.Role = EColumnRole::Payload;
+    leftPayload.DataSize = 4;
+    leftKeyB.Role = EColumnRole::Key;
+    leftKeyB.DataSize = 8;
+    leftKeyB.KeyOrder = 1;
+
+    TColumnDesc rightKeyB, rightPayload, rightKeyA;
+    rightKeyB.Role = EColumnRole::Key;
+    rightKeyB.DataSize = 8;
+    rightKeyB.KeyOrder = 1;
+    rightPayload.Role = EColumnRole::Payload;
+    rightPayload.DataSize = 4;
+    rightKeyA.Role = EColumnRole::Key;
+    rightKeyA.DataSize = 8;
+    rightKeyA.KeyOrder = 0;
+
+    auto left = TTupleLayout::Create({leftKeyA, leftPayload, leftKeyB});
+    auto right = TTupleLayout::Create({rightKeyB, rightPayload, rightKeyA});
+
+    UNIT_ASSERT_VALUES_EQUAL(left->KeyColumnsNum, 2u);
+    UNIT_ASSERT_VALUES_EQUAL(right->KeyColumnsNum, 2u);
+    UNIT_ASSERT_VALUES_EQUAL(left->KeyColumnsSize, right->KeyColumnsSize);
+    UNIT_ASSERT_VALUES_EQUAL(left->KeyColumns[0].KeyOrder, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(left->KeyColumns[1].KeyOrder, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(right->KeyColumns[0].KeyOrder, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(right->KeyColumns[1].KeyOrder, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(left->KeyColumns[0].Offset, right->KeyColumns[0].Offset);
+    UNIT_ASSERT_VALUES_EQUAL(left->KeyColumns[1].Offset, right->KeyColumns[1].Offset);
+    UNIT_ASSERT_VALUES_EQUAL(left->KeyColumns[0].DataSize, right->KeyColumns[0].DataSize);
+    UNIT_ASSERT_VALUES_EQUAL(left->KeyColumns[1].DataSize, right->KeyColumns[1].DataSize);
+}
+
+Y_UNIT_TEST(AliasKeyPackUnpackFixed) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    // One physical ui64 column used twice as a join key, plus a payload.
+    TColumnDesc key;
+    key.Role = EColumnRole::Key;
+    key.DataSize = 8;
+    key.KeyOrder = 0;
+
+    TColumnDesc keyAlias;
+    keyAlias.Role = EColumnRole::Key;
+    keyAlias.DataSize = 8;
+    keyAlias.KeyOrder = 1;
+    keyAlias.AliasOf = 0;
+
+    TColumnDesc payload;
+    payload.Role = EColumnRole::Payload;
+    payload.DataSize = 4;
+
+    auto tl = TTupleLayout::Create({key, keyAlias, payload});
+    UNIT_ASSERT_VALUES_EQUAL(tl->KeyColumnsNum, 2u);
+    UNIT_ASSERT_VALUES_EQUAL(tl->MaterializedColumnsNum, 2u);
+    UNIT_ASSERT_VALUES_EQUAL(tl->OrigColumns.size(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(tl->OrigColumns[1].AliasOf, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(tl->OrigColumns[0].OriginalIndex, tl->OrigColumns[1].OriginalIndex);
+    UNIT_ASSERT_VALUES_EQUAL(tl->KeyColumns[0].Offset + tl->KeyColumns[0].DataSize, tl->KeyColumns[1].Offset);
+
+    constexpr ui64 nTuples = 1024;
+    std::vector<ui64> keyCol(nTuples);
+    std::vector<ui32> payloadCol(nTuples);
+    for (ui64 i = 0; i < nTuples; ++i) {
+        keyCol[i] = i * 17 + 3;
+        payloadCol[i] = static_cast<ui32>(i ^ 0xA5u);
+    }
+
+    // Only materialized columns are fed to Pack: key + payload.
+    const ui8* cols[2] = {reinterpret_cast<const ui8*>(keyCol.data()),
+                          reinterpret_cast<const ui8*>(payloadCol.data())};
+    std::vector<ui8> validKey((nTuples + 7) / 8, ~0);
+    std::vector<ui8> validPayload((nTuples + 7) / 8, ~0);
+    const ui8* colsValid[2] = {validKey.data(), validPayload.data()};
+
+    std::vector<ui8> packed(tl->TotalRowSize * nTuples);
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    tl->Pack(cols, colsValid, packed.data(), overflow, 0, nTuples);
+    UNIT_ASSERT(overflow.empty());
+
+    for (ui64 i = 0; i < nTuples; ++i) {
+        const ui8* row = packed.data() + i * tl->TotalRowSize;
+        const ui64 k0 = ReadUnaligned<ui64>(row + tl->KeyColumns[0].Offset);
+        const ui64 k1 = ReadUnaligned<ui64>(row + tl->KeyColumns[1].Offset);
+        UNIT_ASSERT_VALUES_EQUAL(k0, keyCol[i]);
+        UNIT_ASSERT_VALUES_EQUAL(k1, keyCol[i]);
+    }
+
+    std::vector<ui64> keyOut(nTuples, 0);
+    std::vector<ui32> payloadOut(nTuples, 0);
+    ui8* colsOut[2] = {reinterpret_cast<ui8*>(keyOut.data()), reinterpret_cast<ui8*>(payloadOut.data())};
+    std::vector<ui8> validKeyOut((nTuples + 7) / 8, 0);
+    std::vector<ui8> validPayloadOut((nTuples + 7) / 8, 0);
+    ui8* colsValidOut[2] = {validKeyOut.data(), validPayloadOut.data()};
+
+    tl->Unpack(colsOut, colsValidOut, packed.data(), overflow, 0, nTuples);
+    UNIT_ASSERT(std::memcmp(keyCol.data(), keyOut.data(), sizeof(ui64) * nTuples) == 0);
+    UNIT_ASSERT(std::memcmp(payloadCol.data(), payloadOut.data(), sizeof(ui32) * nTuples) == 0);
+
+    std::vector<ui64, TMKQLAllocator<ui64>> bytes;
+    tl->CalculateColumnSizes(packed.data(), nTuples, bytes);
+    UNIT_ASSERT_VALUES_EQUAL(bytes.size(), tl->MaterializedColumnsNum);
+    UNIT_ASSERT_VALUES_EQUAL(bytes[0], sizeof(ui64) * nTuples);
+    UNIT_ASSERT_VALUES_EQUAL(bytes[1], sizeof(ui32) * nTuples);
+}
+
+Y_UNIT_TEST(AliasKeyPackUnpackVariable) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc key;
+    key.Role = EColumnRole::Key;
+    key.DataSize = 16;
+    key.SizeType = EColumnSizeType::Variable;
+    key.KeyOrder = 0;
+
+    TColumnDesc keyAlias;
+    keyAlias.Role = EColumnRole::Key;
+    keyAlias.SizeType = EColumnSizeType::Variable;
+    keyAlias.KeyOrder = 1;
+    keyAlias.AliasOf = 0;
+
+    TColumnDesc payload;
+    payload.Role = EColumnRole::Payload;
+    payload.DataSize = 8;
+
+    auto tl = TTupleLayout::Create({key, keyAlias, payload});
+    UNIT_ASSERT_VALUES_EQUAL(tl->KeyColumnsNum, 2u);
+    UNIT_ASSERT_VALUES_EQUAL(tl->MaterializedColumnsNum, 2u);
+    UNIT_ASSERT_VALUES_EQUAL(tl->VariableColumns.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(tl->MaterializedVariableColumns.size(), 1u);
+
+    constexpr ui64 nTuples = 4;
+    std::vector<TString> keyStr = {
+        "a",
+        "short",
+        "this-string-is-long-enough-to-spill-into-overflow-buffer",
+        "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    };
+    std::vector<ui32> offsets(1, 0);
+    std::vector<ui8> data;
+    for (const auto& s : keyStr) {
+        data.insert(data.end(), s.begin(), s.end());
+        offsets.push_back(data.size());
+    }
+    std::vector<ui64> payloadCol(nTuples);
+    for (ui64 i = 0; i < nTuples; ++i) {
+        payloadCol[i] = i + 100;
+    }
+
+    // Variable column takes two buffers: offsets + payload bytes.
+    const ui8* cols[3] = {
+        reinterpret_cast<const ui8*>(offsets.data()),
+        data.data(),
+        reinterpret_cast<const ui8*>(payloadCol.data()),
+    };
+    std::vector<ui8> valid((nTuples + 7) / 8, ~0);
+    const ui8* colsValid[3] = {valid.data(), nullptr, valid.data()};
+
+    std::vector<ui8> packed(tl->TotalRowSize * nTuples);
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    tl->Pack(cols, colsValid, packed.data(), overflow, 0, nTuples);
+
+    for (ui64 i = 0; i < nTuples; ++i) {
+        const ui8* row = packed.data() + i * tl->TotalRowSize;
+        UNIT_ASSERT(tl->KeysEqual(row, overflow.data(), row, overflow.data()));
+    }
+
+    std::vector<ui32> offsetsOut(nTuples + 1, 0);
+    std::vector<ui8> dataOut(data.size(), 0);
+    std::vector<ui64> payloadOut(nTuples, 0);
+    ui8* colsOut[3] = {
+        reinterpret_cast<ui8*>(offsetsOut.data()),
+        dataOut.data(),
+        reinterpret_cast<ui8*>(payloadOut.data()),
+    };
+    std::vector<ui8> validOut((nTuples + 7) / 8, 0);
+    ui8* colsValidOut[3] = {validOut.data(), nullptr, validOut.data()};
+
+    tl->Unpack(colsOut, colsValidOut, packed.data(), overflow, 0, nTuples);
+    UNIT_ASSERT(offsets == offsetsOut);
+    UNIT_ASSERT(data == dataOut);
+    UNIT_ASSERT(std::memcmp(payloadCol.data(), payloadOut.data(), sizeof(ui64) * nTuples) == 0);
+
+    std::vector<ui64, TMKQLAllocator<ui64>> bytes;
+    tl->CalculateColumnSizes(packed.data(), nTuples, bytes);
+    UNIT_ASSERT_VALUES_EQUAL(bytes.size(), tl->MaterializedColumnsNum);
+    UNIT_ASSERT_VALUES_EQUAL(bytes[0], data.size());
+}
+
+Y_UNIT_TEST(AliasKeysEqualMatchesDuplicatedKey) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    // Left side: two distinct key columns. Right side: one column used twice.
+    TColumnDesc leftK0, leftK1;
+    leftK0.Role = EColumnRole::Key;
+    leftK0.DataSize = 8;
+    leftK0.KeyOrder = 0;
+    leftK1.Role = EColumnRole::Key;
+    leftK1.DataSize = 8;
+    leftK1.KeyOrder = 1;
+
+    TColumnDesc rightK, rightAlias;
+    rightK.Role = EColumnRole::Key;
+    rightK.DataSize = 8;
+    rightK.KeyOrder = 0;
+    rightAlias.Role = EColumnRole::Key;
+    rightAlias.DataSize = 8;
+    rightAlias.KeyOrder = 1;
+    rightAlias.AliasOf = 0;
+
+    auto left = TTupleLayout::Create({leftK0, leftK1});
+    auto right = TTupleLayout::Create({rightK, rightAlias});
+    UNIT_ASSERT_VALUES_EQUAL(left->KeyColumnsSize, right->KeyColumnsSize);
+    UNIT_ASSERT_VALUES_EQUAL(left->TotalRowSize, right->TotalRowSize);
+
+    constexpr ui64 nTuples = 8;
+    std::vector<ui64> left0(nTuples), left1(nTuples), right0(nTuples);
+    for (ui64 i = 0; i < nTuples; ++i) {
+        left0[i] = i + 1;
+        left1[i] = (i % 2 == 0) ? (i + 1) : (i + 1000); // match only even rows
+        right0[i] = i + 1;
+    }
+
+    const ui8* leftCols[2] = {reinterpret_cast<const ui8*>(left0.data()),
+                              reinterpret_cast<const ui8*>(left1.data())};
+    const ui8* rightCols[1] = {reinterpret_cast<const ui8*>(right0.data())};
+    std::vector<ui8> valid((nTuples + 7) / 8, ~0);
+    const ui8* leftValid[2] = {valid.data(), valid.data()};
+    const ui8* rightValid[1] = {valid.data()};
+
+    std::vector<ui8> leftPacked(left->TotalRowSize * nTuples);
+    std::vector<ui8> rightPacked(right->TotalRowSize * nTuples);
+    std::vector<ui8, TMKQLAllocator<ui8>> leftOverflow, rightOverflow;
+    left->Pack(leftCols, leftValid, leftPacked.data(), leftOverflow, 0, nTuples);
+    right->Pack(rightCols, rightValid, rightPacked.data(), rightOverflow, 0, nTuples);
+
+    for (ui64 i = 0; i < nTuples; ++i) {
+        const ui8* l = leftPacked.data() + i * left->TotalRowSize;
+        const ui8* r = rightPacked.data() + i * right->TotalRowSize;
+        const bool equal = left->KeysEqual(l, leftOverflow.data(), r, rightOverflow.data());
+        UNIT_ASSERT_VALUES_EQUAL_C(equal, (i % 2 == 0), "row " << i);
+    }
+}
+
+Y_UNIT_TEST(BenchPackUnpackNoAlias) {
+    // Micro-benchmark of the common (no AliasOf) path. Speeds are printed so
+    // they can be compared against the same test on main.
+    TScopedAlloc alloc(__LOCATION__);
+
+    constexpr ui64 nTuples = 200000;
+    constexpr ui32 nKeys = 2;
+    constexpr ui32 nPayloads = 2;
+
+    std::vector<TColumnDesc> columns;
+    for (ui32 i = 0; i < nKeys; ++i) {
+        TColumnDesc c;
+        c.Role = EColumnRole::Key;
+        c.DataSize = 8;
+        c.KeyOrder = i;
+        columns.push_back(c);
+    }
+    for (ui32 i = 0; i < nPayloads; ++i) {
+        TColumnDesc c;
+        c.Role = EColumnRole::Payload;
+        c.DataSize = 8;
+        columns.push_back(c);
+    }
+
+    auto tl = TTupleLayout::Create(columns);
+    const ui32 nCols = nKeys + nPayloads;
+    std::vector<std::vector<ui64>> colData(nCols, std::vector<ui64>(nTuples));
+    std::vector<const ui8*> cols(nCols);
+    std::vector<std::vector<ui8>> validData(nCols, std::vector<ui8>((nTuples + 7) / 8, ~0));
+    std::vector<const ui8*> colsValid(nCols);
+    for (ui32 c = 0; c < nCols; ++c) {
+        for (ui64 i = 0; i < nTuples; ++i) {
+            colData[c][i] = i * (c + 1);
+        }
+        cols[c] = reinterpret_cast<const ui8*>(colData[c].data());
+        colsValid[c] = validData[c].data();
+    }
+
+    std::vector<ui8> packed(tl->TotalRowSize * nTuples);
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+
+    // Warm-up
+    tl->Pack(cols.data(), colsValid.data(), packed.data(), overflow, 0, nTuples);
+
+    constexpr int iters = 8;
+    ui64 packUs = 0;
+    for (int i = 0; i < iters; ++i) {
+        overflow.clear();
+        auto begin = std::chrono::steady_clock::now();
+        tl->Pack(cols.data(), colsValid.data(), packed.data(), overflow, 0, nTuples);
+        auto end = std::chrono::steady_clock::now();
+        packUs += std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+    }
+
+    std::vector<std::vector<ui64>> outData(nCols, std::vector<ui64>(nTuples));
+    std::vector<ui8*> colsOut(nCols);
+    std::vector<std::vector<ui8>> validOut(nCols, std::vector<ui8>((nTuples + 7) / 8, 0));
+    std::vector<ui8*> colsValidOut(nCols);
+    for (ui32 c = 0; c < nCols; ++c) {
+        colsOut[c] = reinterpret_cast<ui8*>(outData[c].data());
+        colsValidOut[c] = validOut[c].data();
+    }
+
+    tl->Unpack(colsOut.data(), colsValidOut.data(), packed.data(), overflow, 0, nTuples);
+    ui64 unpackUs = 0;
+    for (int i = 0; i < iters; ++i) {
+        auto begin = std::chrono::steady_clock::now();
+        tl->Unpack(colsOut.data(), colsValidOut.data(), packed.data(), overflow, 0, nTuples);
+        auto end = std::chrono::steady_clock::now();
+        unpackUs += std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+    }
+
+    const ui64 bytes = tl->TotalRowSize * nTuples;
+    const ui64 packAvg = std::max<ui64>(1, packUs / iters);
+    const ui64 unpackAvg = std::max<ui64>(1, unpackUs / iters);
+    CTEST << "BenchPackUnpackNoAlias: rowSize=" << tl->TotalRowSize
+          << " nTuples=" << nTuples
+          << " pack=" << (bytes / packAvg) << "MB/s"
+          << " unpack=" << (bytes / unpackAvg) << "MB/s"
+          << " packUs=" << packAvg
+          << " unpackUs=" << unpackAvg << Endl;
+
+    for (ui32 c = 0; c < nCols; ++c) {
+        UNIT_ASSERT(std::memcmp(colData[c].data(), outData[c].data(), sizeof(ui64) * nTuples) == 0);
+    }
+}
+
 }
 
 

@@ -11,6 +11,7 @@
 
 #include <util/generic/bitops.h>
 #include <util/generic/buffer.h>
+#include <util/generic/yexception.h>
 
 #include <arrow/util/bit_util.h>
 
@@ -237,25 +238,41 @@ TTupleLayoutFallback::TTupleLayoutFallback(
     const std::vector<TColumnDesc> &columns)
     : TTupleLayout(columns) {
 
+    MaterializedColumnsNum = 0;
+
     for (ui32 i = 0, idx = 0; i < OrigColumns.size(); ++i) {
         auto &col = OrigColumns[i];
 
-        col.OriginalIndex = idx;
-        col.OriginalColumnIndex = i;
-
-        if (col.SizeType == EColumnSizeType::Variable) {
-            // we cannot handle (rare) overflow strings unless we have at least
-            // space for header; size of inlined strings is limited to 254
-            // bytes, limit maximum inline data size
-            col.DataSize = std::max<ui32>(1 + 2 * sizeof(ui32),
-                                          std::min<ui32>(255, col.DataSize));
-            idx += 2; // Variable-size takes two buffers: one for offsets, and
-                      // another for payload
+        if (col.AliasOf != TColumnDesc::NoAlias) {
+            // reads the data of an already described column, so it takes no
+            // buffers of its own
+            Y_ENSURE(col.AliasOf < i);
+            const auto &aliased = OrigColumns[col.AliasOf];
+            col.OriginalIndex = aliased.OriginalIndex;
+            col.OriginalColumnIndex = aliased.OriginalColumnIndex;
+            col.SizeType = aliased.SizeType;
+            col.DataSize = aliased.DataSize;
         } else {
-            idx += 1;
+            col.OriginalIndex = idx;
+            col.OriginalColumnIndex = MaterializedColumnsNum++;
+
+            if (col.SizeType == EColumnSizeType::Variable) {
+                // we cannot handle (rare) overflow strings unless we have at
+                // least space for header; size of inlined strings is limited to
+                // 254 bytes, limit maximum inline data size
+                col.DataSize = std::max<ui32>(
+                    1 + 2 * sizeof(ui32), std::min<ui32>(255, col.DataSize));
+                idx += 2; // Variable-size takes two buffers: one for offsets,
+                          // and another for payload
+            } else {
+                idx += 1;
+            }
         }
 
         if (col.Role == EColumnRole::Key) {
+            if (col.KeyOrder == TColumnDesc::NoKeyOrder) {
+                col.KeyOrder = KeyColumns.size();
+            }
             KeyColumns.push_back(col);
         } else {
             PayloadColumns.push_back(col);
@@ -264,19 +281,29 @@ TTupleLayoutFallback::TTupleLayoutFallback(
 
     KeyColumnsNum = KeyColumns.size();
 
-    auto ColumnDescLess = [](const TColumnDesc &a, const TColumnDesc &b) {
+    auto ColumnDescLess = [](const TColumnDesc &a, const TColumnDesc &b,
+                             ui32 aOrder, ui32 bOrder) {
         if (a.SizeType != b.SizeType) // Fixed first
             return a.SizeType == EColumnSizeType::Fixed;
 
         if (a.DataSize == b.DataSize)
-            // relative order of (otherwise) same key columns must be preserved
-            return a.OriginalIndex < b.OriginalIndex;
+            // relative order of (otherwise) same columns must be preserved
+            return aOrder < bOrder;
 
         return a.DataSize < b.DataSize;
     };
 
-    std::sort(KeyColumns.begin(), KeyColumns.end(), ColumnDescLess);
-    std::sort(PayloadColumns.begin(), PayloadColumns.end(), ColumnDescLess);
+    // keys are ordered by their position in the join key rather than by their
+    // position in the input, so matching keys of both join sides land on the
+    // same offsets
+    std::sort(KeyColumns.begin(), KeyColumns.end(),
+              [&](const TColumnDesc &a, const TColumnDesc &b) {
+                  return ColumnDescLess(a, b, a.KeyOrder, b.KeyOrder);
+              });
+    std::sort(PayloadColumns.begin(), PayloadColumns.end(),
+              [&](const TColumnDesc &a, const TColumnDesc &b) {
+                  return ColumnDescLess(a, b, a.OriginalIndex, b.OriginalIndex);
+              });
 
     KeyColumnsFixedEnd = 0;
 
@@ -340,6 +367,9 @@ TTupleLayoutFallback::TTupleLayoutFallback(
     for (auto &col : Columns) {
         if (col.SizeType == EColumnSizeType::Variable) {
             VariableColumns.push_back(col);
+            if (col.AliasOf == TColumnDesc::NoAlias) {
+                MaterializedVariableColumns.push_back(col);
+            }
         } else if (IsPowerOf2(col.DataSize) &&
                    col.DataSize < (1u << FixedPOTColumns_.size())) {
             FixedPOTColumns_[CountTrailingZeroBits(col.DataSize)].push_back(
@@ -785,7 +815,7 @@ void TTupleLayoutFallback::Unpack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
-        for (auto &col : VariableColumns) {
+        for (auto &col : MaterializedVariableColumns) {
             const auto dataOffset = ReadUnaligned<ui32>(
                 columns[col.OriginalIndex] + sizeof(ui32) * start);
             auto *const data = columns[col.OriginalIndex + 1] + dataOffset;
@@ -1299,7 +1329,7 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
             const auto new_res = res + block_row_ind * TotalRowSize;
             const auto res = new_res;
 
-            for (auto &col : VariableColumns) {
+            for (auto &col : MaterializedVariableColumns) {
                 const auto dataOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * start);
                 auto *const data = columns[col.OriginalIndex + 1] + dataOffset;
@@ -1593,7 +1623,7 @@ void TTupleLayout::CalculateColumnSizes(
     const ui8 *res, ui32 count,
     std::vector<ui64, TMKQLAllocator<ui64>> &bytes) const {
 
-    bytes.resize(Columns.size());
+    bytes.resize(MaterializedColumnsNum);
 
     // handle fixed size columns
     for (const auto& column: OrigColumns) {
@@ -1604,7 +1634,7 @@ void TTupleLayout::CalculateColumnSizes(
 
     // handle variable size columns
     for (; count--; res += TotalRowSize) {
-        for (const auto& col: VariableColumns) {
+        for (const auto& col: MaterializedVariableColumns) {
             ui32 size = ReadUnaligned<ui8>(res + col.Offset);
             if (size == 255) { // overflow buffer used
                 const auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));

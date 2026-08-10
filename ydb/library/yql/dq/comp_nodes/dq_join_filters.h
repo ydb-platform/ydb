@@ -9,6 +9,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 
+#include <algorithm>
 #include <optional>
 
 namespace NKikimr::NMiniKQL {
@@ -80,17 +81,15 @@ class TPackedTuplePairFilter {
   public:
     static std::optional<TPackedTuplePairFilter> TryCreate(TComputationContext& ctx, const TJoinFilters& filters,
                                                            const TSides<TVector<TType*>>& columnTypes,
-                                                           const TSides<TVector<ui32>>& keyColumns,
-                                                           const TSides<TVector<int>>& columnPermutation) {
+                                                           const TSides<TVector<ui32>>& keyColumns) {
         if (!filters) {
             return std::nullopt;
         }
-        return TPackedTuplePairFilter(ctx, filters, columnTypes, keyColumns, columnPermutation);
+        return TPackedTuplePairFilter(ctx, filters, columnTypes, keyColumns);
     }
 
     TPackedTuplePairFilter(TComputationContext& ctx, const TJoinFilters& filters,
-                           const TSides<TVector<TType*>>& columnTypes, const TSides<TVector<ui32>>& keyColumns,
-                           const TSides<TVector<int>>& columnPermutation)
+                           const TSides<TVector<TType*>>& columnTypes, const TSides<TVector<ui32>>& keyColumns)
         : Ctx_(&ctx)
         , Filters_(filters)
     {
@@ -103,11 +102,9 @@ class TPackedTuplePairFilter {
                             "A join filter of the " << AsString(side) << " side has no arguments to bind a row to");
                 continue;
             }
-            MKQL_ENSURE(args == types.size(), "Join filter takes " << args << " arguments but the "
-                                                                  << AsString(side) << " side has " << types.size()
-                                                                  << " columns");
-            Decoders_.SelectSide(side).emplace(helper, types, keyColumns.SelectSide(side),
-                                               columnPermutation.SelectSide(side), ctx.HolderFactory);
+            MKQL_ENSURE(args == types.size(), "Join filter takes " << args << " arguments but the " << AsString(side)
+                                                                  << " side has " << types.size() << " columns");
+            Decoders_.SelectSide(side).emplace(helper, types, keyColumns.SelectSide(side), ctx.HolderFactory);
         }
     }
 
@@ -135,34 +132,22 @@ class TPackedTuplePairFilter {
     class TRowDecoder {
       public:
         TRowDecoder(const NUdf::ITypeInfoHelper& helper, const TVector<TType*>& columnTypes,
-                    const TVector<ui32>& keyColumns, const TVector<int>& columnPermutation,
-                    const THolderFactory& holderFactory)
-            : Converter_(MakeScalarLayoutConverter(helper, columnTypes,
-                                                   MakeColumnRoles(columnTypes.size(), keyColumns), holderFactory))
-            , Permutation_(columnPermutation)
-            , Packed_(columnTypes.size())
-            , Row_(Permutation_.empty() ? 0 : columnTypes.size())
+                    const TVector<ui32>& keyColumns, const THolderFactory& holderFactory)
+            : Converter_(MakeScalarLayoutConverter(helper, columnTypes, keyColumns, holderFactory))
+            , Row_(columnTypes.size())
         {}
 
         const NUdf::TUnboxedValue* Decode(TSingleTuple tuple) {
             OneTuple_.Reset();
             OneTuple_.AppendTuple(tuple, Converter_->GetTupleLayout());
-            Converter_->Unpack(OneTuple_, 0, Packed_.data());
-            if (Permutation_.empty()) {
-                return Packed_.data();
-            }
-            for (size_t i = 0; i < Packed_.size(); ++i) {
-                Row_[Permutation_[i]] = Packed_[i];
-            }
+            Converter_->Unpack(OneTuple_, 0, Row_.data());
             return Row_.data();
         }
 
       private:
         IScalarLayoutConverter::TPtr Converter_;
-        const TVector<int> Permutation_;
         TPackResult OneTuple_;
-        TVector<NUdf::TUnboxedValue> Packed_; // packed ("keys first") column order
-        TVector<NUdf::TUnboxedValue> Row_;    // user column order, unused when Permutation_ is empty
+        TVector<NUdf::TUnboxedValue> Row_;
     };
 
     bool BindAndCheck(ESide side, TSingleTuple row) {

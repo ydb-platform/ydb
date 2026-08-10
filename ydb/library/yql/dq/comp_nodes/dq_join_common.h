@@ -908,64 +908,6 @@ TResult* DispatchHashJoinByKind(EJoinKind kind, TStringBuf unsupportedMessage, A
     Y_UNREACHABLE();
 }
 
-template <typename TKeyCols, typename TInputTypes>
-void ApplyKeyColumnPermutation(TSides<TKeyCols>& keyColumns, TSides<TInputTypes>& inputTypes, int trailingColumns,
-                               TDqRenames<ESide>& renames, TSides<TVector<int>>& outColumnPermutation) {
-    for (ESide side : EachSide) {
-        auto& keyCols = keyColumns.SelectSide(side);
-        auto& types = inputTypes.SelectSide(side);
-        const int numDataCols = std::ssize(types) - trailingColumns;
-        const int numKeys = std::ssize(keyCols);
-
-        bool needsReorder = false;
-        for (int i = 0; i < numKeys; ++i) {
-            if (static_cast<int>(keyCols[i]) != i) {
-                needsReorder = true;
-                break;
-            }
-        }
-        if (!needsReorder) {
-            continue;
-        }
-
-        TVector<int> perm(numDataCols);
-        std::iota(perm.begin(), perm.end(), 0);
-        for (int i = 0; i < numKeys; ++i) {
-            const int keyColumn = static_cast<int>(keyCols[i]);
-            MKQL_ENSURE(keyColumn >= 0 && keyColumn < numDataCols,
-                        Sprintf("key column index %i on %s side is out of range [0, %i)", keyColumn, AsString(side),
-                                numDataCols));
-            auto it = std::find(perm.begin() + i, perm.end(), keyColumn);
-            MKQL_ENSURE(it != perm.end(),
-                        Sprintf("key column index %i on %s side is duplicated or could not be placed", keyColumn,
-                                AsString(side)));
-            std::swap(perm[i], *it);
-        }
-
-        outColumnPermutation.SelectSide(side) = perm;
-
-        using TElem = std::decay_t<decltype(types[0])>;
-        const TVector<TElem> orig(types.begin(), types.begin() + numDataCols);
-        for (int i = 0; i < numDataCols; ++i) {
-            types[i] = orig[perm[i]];
-        }
-
-        TVector<int> inv(numDataCols);
-        for (int i = 0; i < numDataCols; ++i) {
-            inv[perm[i]] = i;
-        }
-        for (auto& rename : renames) {
-            if (rename.Side == side) {
-                rename.Index = inv[rename.Index];
-            }
-        }
-
-        for (int i = 0; i < numKeys; ++i) {
-            keyCols[i] = i;
-        }
-    }
-}
-
 inline TSides<TVector<TType*>> ForceOptionalOnNullableSide(const TSides<TVector<TType*>>& itemTypes, EJoinKind kind,
                                                            ESide nullableSide, const TTypeEnvironment& env) {
     TSides<TVector<TType*>> userTypes;

@@ -52,7 +52,7 @@ arrow::Datum SliceIf(const arrow::Datum& d, bool slice) {
 
 template <class TFillFn, class TCheckFn>
 void RunTest(TBlockLayoutConverterTestData& data,
-             NKikimr::NMiniKQL::TType* type, NPackedTuple::EColumnRole role,
+             NKikimr::NMiniKQL::TType* type, const TVector<ui32>& keyColumns,
              ui32 n, bool slice, TFillFn fillFn, TCheckFn checkFn) {
     const size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(type);
     const ui32 blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -67,7 +67,7 @@ void RunTest(TBlockLayoutConverterTestData& data,
     auto d = SliceIf(d0, slice);
 
     auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), {type},
-                                              {role}, data.ArrowPool);
+                                              keyColumns, data.ArrowPool);
 
     TPackResult packRes;
     converter->Pack({d}, packRes);
@@ -220,7 +220,7 @@ static void RunCase(NUdf::EDataSlot slot) {
         auto type = data.PgmBuilder.NewDataType(slot, isOpt);
 
         for (bool doSlice : {false, true}) {
-            RunTest(data, type, NPackedTuple::EColumnRole::Key, N, doSlice,
+            RunTest(data, type, TVector<ui32>{0}, N, doSlice,
                     tag.MakeFill(isOpt),
                     [&](const std::shared_ptr<arrow::ArrayData>& a,
                         const std::shared_ptr<arrow::ArrayData>& b,

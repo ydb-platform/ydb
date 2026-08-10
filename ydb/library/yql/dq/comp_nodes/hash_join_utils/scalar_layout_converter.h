@@ -35,9 +35,11 @@ public:
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
 };
 
+// keyColumns lists the input columns forming the join key, in join key order.
+// The same column may be listed several times.
 IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
     const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
-    const TVector<NPackedTuple::EColumnRole>& roles, const THolderFactory& holderFactory);
+    const TVector<ui32>& keyColumns, const THolderFactory& holderFactory);
 }
 
 

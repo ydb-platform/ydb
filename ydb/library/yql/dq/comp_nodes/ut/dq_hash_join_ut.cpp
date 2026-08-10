@@ -831,6 +831,70 @@ TJoinTestData SwappedKeyColumnsLeftSemiTestData() {
     return td;
 }
 
+// Same physical column used twice as a join key on the build side
+// (e.g. ON t1.a = t3.a AND t2.a = t3.a).
+TJoinTestData DuplicateKeyColumnsInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftCol0 = {1, 2, 3, 4};
+    TVector<ui64> leftCol1 = {1, 2, 9, 4};
+    TVector<TString> leftCol2 = {"a", "b", "c", "d"};
+
+    TVector<ui64> rightCol0 = {1, 2, 3, 4, 5};
+    TVector<TString> rightCol1 = {"x", "y", "z", "w", "v"};
+
+    TVector<ui64> expLeftCol0 = {1, 2, 4};
+    TVector<ui64> expLeftCol1 = {1, 2, 4};
+    TVector<TString> expLeftCol2 = {"a", "b", "d"};
+    TVector<ui64> expRightCol0 = {1, 2, 4};
+    TVector<TString> expRightCol1 = {"x", "y", "w"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftCol0, leftCol1, leftCol2);
+    td.Right = ConvertVectorsToTuples(setup, rightCol0, rightCol1);
+    td.Result = ConvertVectorsToTuples(setup, expLeftCol0, expLeftCol1, expLeftCol2,
+                                       expRightCol0, expRightCol1);
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {0, 0};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+// Same as above, but the duplicated key is variable-sized, so it takes its own
+// packed bytes while sharing the input column with the other key.
+TJoinTestData DuplicateStringKeyColumnsInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<TString> leftCol0 = {"a", "b", "c", "d"};
+    TVector<TString> leftCol1 = {"a", "b", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "d"};
+    TVector<ui64> leftCol2 = {1, 2, 3, 4};
+
+    TVector<TString> rightCol0 = {"a", "b", "c", "d", "e"};
+    TVector<ui64> rightCol1 = {10, 20, 30, 40, 50};
+
+    TVector<TString> expLeftCol0 = {"a", "b", "d"};
+    TVector<TString> expLeftCol1 = {"a", "b", "d"};
+    TVector<ui64> expLeftCol2 = {1, 2, 4};
+    TVector<TString> expRightCol0 = {"a", "b", "d"};
+    TVector<ui64> expRightCol1 = {10, 20, 40};
+
+    td.Left = ConvertVectorsToTuples(setup, leftCol0, leftCol1, leftCol2);
+    td.Right = ConvertVectorsToTuples(setup, rightCol0, rightCol1);
+    td.Result = ConvertVectorsToTuples(setup, expLeftCol0, expLeftCol1, expLeftCol2,
+                                       expRightCol0, expRightCol1);
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {0, 0};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
 TJoinTestData SpillingTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -1395,6 +1459,14 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestSwappedKeyColumnsLeftSemi, BlockJoin) {
         Test(SwappedKeyColumnsLeftSemiTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestDuplicateKeyColumnsInner, BlockJoin) {
+        Test(DuplicateKeyColumnsInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestDuplicateStringKeyColumnsInner, BlockJoin) {
+        Test(DuplicateStringKeyColumnsInnerTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestBlockJoinScalarColumn) {

@@ -12,6 +12,7 @@
 
 #include <util/generic/guid.h>
 #include <util/generic/serialized_enum.h>
+#include <util/system/unaligned_mem.h>
 
 #include <cstring>
 
@@ -91,9 +92,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
         TVector<NKikimr::NMiniKQL::TType*> types{int64Type};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data
         TVector<NYql::NUdf::TUnboxedValue> testValues;
@@ -122,11 +123,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
         TVector<NKikimr::NMiniKQL::TType*> types{int64Type, int64Type, int64Type, int64Type};
-        TVector<NPackedTuple::EColumnRole> roles{
-            NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Key,
-            NPackedTuple::EColumnRole::Payload, NPackedTuple::EColumnRole::Payload};
+        TVector<ui32> keyColumns{0, 1};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data
         TVector<TVector<NYql::NUdf::TUnboxedValue>> testValues;
@@ -161,9 +160,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
         TVector<NKikimr::NMiniKQL::TType*> types{stringType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data
         TVector<NYql::NUdf::TUnboxedValue> testValues;
@@ -200,11 +199,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
         TVector<NKikimr::NMiniKQL::TType*> types{int64Type, stringType, int64Type, stringType};
-        TVector<NPackedTuple::EColumnRole> roles{
-            NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Key,
-            NPackedTuple::EColumnRole::Payload, NPackedTuple::EColumnRole::Payload};
+        TVector<ui32> keyColumns{0, 1};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data
         TVector<TVector<NYql::NUdf::TUnboxedValue>> testValues;
@@ -268,9 +265,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         const auto optionalInt64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
         TVector<NKikimr::NMiniKQL::TType*> types{optionalInt64Type};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data with nulls
         TVector<NYql::NUdf::TUnboxedValue> testValues;
@@ -311,9 +308,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         const auto optionalStringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
         TVector<NKikimr::NMiniKQL::TType*> types{optionalStringType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data
         TVector<NYql::NUdf::TUnboxedValue> testValues;
@@ -362,9 +359,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
         TVector<NKikimr::NMiniKQL::TType*> types{stringType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data with empty strings
         TVector<NYql::NUdf::TUnboxedValue> testValues;
@@ -394,9 +391,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
         TVector<NKikimr::NMiniKQL::TType*> types{stringType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data with large strings (trigger overflow)
         constexpr size_t LargeSize = 256; // Larger than inline threshold
@@ -435,9 +432,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
         TVector<NKikimr::NMiniKQL::TType*> types{int64Type};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data as flat array
         constexpr ui32 numTuples = TestSize;
@@ -466,12 +463,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
         TVector<NKikimr::NMiniKQL::TType*> types{int64Type, int64Type, int64Type};
-        TVector<NPackedTuple::EColumnRole> roles{
-            NPackedTuple::EColumnRole::Key, 
-            NPackedTuple::EColumnRole::Key,
-            NPackedTuple::EColumnRole::Payload};
+        TVector<ui32> keyColumns{0, 1};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data as flat array
         constexpr ui32 numTuples = 64;
@@ -507,9 +501,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
         TVector<NKikimr::NMiniKQL::TType*> types{stringType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data
         constexpr ui32 numTuples = 64;
@@ -548,12 +542,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
         TVector<NKikimr::NMiniKQL::TType*> types{int64Type, stringType, int64Type};
-        TVector<NPackedTuple::EColumnRole> roles{
-            NPackedTuple::EColumnRole::Key, 
-            NPackedTuple::EColumnRole::Key,
-            NPackedTuple::EColumnRole::Payload};
+        TVector<ui32> keyColumns{0, 1};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data
         constexpr ui32 numTuples = 64;
@@ -603,16 +594,88 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         }
     }
 
+    Y_UNIT_TEST(TestDuplicateKeyColumns) {
+        TScalarLayoutConverterTestData data;
+
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
+        TVector<NKikimr::NMiniKQL::TType*> types{int64Type, stringType};
+        TVector<ui32> keyColumns{0, 0};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
+        const auto* layout = converter->GetTupleLayout();
+        UNIT_ASSERT_VALUES_EQUAL(layout->KeyColumnsNum, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(layout->MaterializedColumnsNum, 2u);
+
+        constexpr ui32 numTuples = 128;
+        TVector<TVector<NYql::NUdf::TUnboxedValue>> rows;
+        for (ui32 i = 0; i < numTuples; ++i) {
+            TVector<NYql::NUdf::TUnboxedValue> row;
+            row.push_back(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i + 7)));
+            const char ch = static_cast<char>('a' + (i % 26));
+            row.push_back(MakeString(NUdf::TStringRef(&ch, 1)));
+            rows.push_back(std::move(row));
+        }
+
+        TPackResult packRes;
+        for (ui32 i = 0; i < numTuples; ++i) {
+            converter->Pack(rows[i].data(), packRes);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(packRes.NTuples, numTuples);
+
+        for (ui32 i = 0; i < numTuples; ++i) {
+            const ui8* row = packRes.PackedTuples.data() + i * layout->TotalRowSize;
+            UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<ui64>(row + layout->KeyColumns[0].Offset),
+                                     static_cast<ui64>(i + 7));
+            UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<ui64>(row + layout->KeyColumns[1].Offset),
+                                     static_cast<ui64>(i + 7));
+
+            NYql::NUdf::TUnboxedValue unpacked[2];
+            converter->Unpack(packRes, i, unpacked);
+            UNIT_ASSERT_VALUES_EQUAL(unpacked[0].Get<i64>(), rows[i][0].Get<i64>());
+            UNIT_ASSERT_VALUES_EQUAL(TString(unpacked[1].AsStringRef()), TString(rows[i][1].AsStringRef()));
+        }
+    }
+
+    Y_UNIT_TEST(TestDuplicateStringKeyColumns) {
+        TScalarLayoutConverterTestData data;
+
+        const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        TVector<NKikimr::NMiniKQL::TType*> types{stringType, int64Type};
+        TVector<ui32> keyColumns{0, 0};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetTupleLayout()->KeyColumnsNum, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetTupleLayout()->MaterializedVariableColumns.size(), 1u);
+
+        constexpr ui32 numTuples = 64;
+        TVector<TString> keys;
+        TPackResult packRes;
+        for (ui32 i = 0; i < numTuples; ++i) {
+            keys.push_back(TString(20 + (i % 30), static_cast<char>('A' + (i % 26))));
+            NYql::NUdf::TUnboxedValue row[2];
+            row[0] = MakeString(NUdf::TStringRef(keys.back()));
+            row[1] = NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i));
+            converter->Pack(row, packRes);
+        }
+
+        for (ui32 i = 0; i < numTuples; ++i) {
+            NYql::NUdf::TUnboxedValue unpacked[2];
+            converter->Unpack(packRes, i, unpacked);
+            UNIT_ASSERT_VALUES_EQUAL(TString(unpacked[0].AsStringRef()), keys[i]);
+            UNIT_ASSERT_VALUES_EQUAL(unpacked[1].Get<i64>(), static_cast<i64>(i));
+        }
+    }
+
     Y_UNIT_TEST(TestBucketPack) {
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
         TVector<NKikimr::NMiniKQL::TType*> types{int64Type, int64Type};
-        TVector<NPackedTuple::EColumnRole> roles{
-            NPackedTuple::EColumnRole::Key,  // First column is key - will be used for bucketing
-            NPackedTuple::EColumnRole::Payload};
+        TVector<ui32> keyColumns{0}; // First column is key - will be used for bucketing
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         // Create test data
         constexpr ui32 numTuples = 128;
@@ -670,9 +733,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         TScalarLayoutConverterTestData data;
         const auto mkqlType = MakeFixedSizeScalarType(data.PgmBuilder, scalarType, false);
         TVector<NKikimr::NMiniKQL::TType*> types{mkqlType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         TVector<NYql::NUdf::TUnboxedValue> testValues;
         testValues.reserve(TestSize);
@@ -704,9 +767,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         TScalarLayoutConverterTestData data;
         const auto mkqlType = MakeFixedSizeScalarType(data.PgmBuilder, scalarType, true);
         TVector<NKikimr::NMiniKQL::TType*> types{mkqlType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.HolderFactory);
 
         TVector<NYql::NUdf::TUnboxedValue> testValues;
         for (size_t i = 0; i < TestSize; ++i) {

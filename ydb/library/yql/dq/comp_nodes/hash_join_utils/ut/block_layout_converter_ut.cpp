@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <algorithm>
+
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
@@ -41,7 +43,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
         TVector< NKikimr::NMiniKQL::TType*> types{int64Type};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
         size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(int64Type);
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -50,7 +52,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         constexpr auto testSize = TestSize / sizeof(i64);
 
         auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), int64Type, *data.ArrowPool, blockLen, nullptr);
-        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.ArrowPool);
 
         for (size_t i = 0; i < testSize; i++) {
             builder->Add(TBlockItem(i));
@@ -84,9 +86,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
         TVector< NKikimr::NMiniKQL::TType*> types{int64Type, int64Type, int64Type, int64Type};
-        TVector<NPackedTuple::EColumnRole> roles{
-            NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Key,
-            NPackedTuple::EColumnRole::Payload, NPackedTuple::EColumnRole::Payload};
+        TVector<ui32> keyColumns{0, 1};
 
         size_t itemSize = 4 * NMiniKQL::CalcMaxBlockItemSize(int64Type);
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
 
         constexpr auto testSize = TestSize / 4;
 
-        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.ArrowPool);
         TVector<arrow::Datum> columns;
 
         for (size_t i = 0; i < types.size(); ++i) {
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
         TVector< NKikimr::NMiniKQL::TType*> types{stringType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
         size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(stringType);
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         constexpr auto testSize = 512;
 
         auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), stringType, *data.ArrowPool, blockLen, nullptr);
-        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.ArrowPool);
 
         std::string testString;
         testString.resize(testSize);
@@ -186,9 +186,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
         TVector< NKikimr::NMiniKQL::TType*> types{stringType, stringType, stringType, stringType};
-        TVector<NPackedTuple::EColumnRole> roles{
-            NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Key,
-            NPackedTuple::EColumnRole::Payload, NPackedTuple::EColumnRole::Payload};
+        TVector<ui32> keyColumns{0, 1};
 
         size_t itemSize = 4 * NMiniKQL::CalcMaxBlockItemSize(stringType);
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -197,7 +195,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         // To fit all strings into single block
         constexpr auto testSize = 128;
 
-        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.ArrowPool);
         TVector<arrow::Datum> columns;
 
         for (size_t i = 0; i < types.size(); ++i) {
@@ -247,9 +245,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
 
         TVector< NKikimr::NMiniKQL::TType*> types{int64Type, stringType, int64Type, stringType};
-        TVector<NPackedTuple::EColumnRole> roles{
-            NPackedTuple::EColumnRole::Payload, NPackedTuple::EColumnRole::Key,
-            NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Payload};
+        TVector<ui32> keyColumns{1, 2};
 
         size_t itemSize = 2 * NMiniKQL::CalcMaxBlockItemSize(stringType) + 2 * NMiniKQL::CalcMaxBlockItemSize(int64Type);
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -257,7 +253,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
 
         constexpr auto testSize = 128;
 
-        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.ArrowPool);
         TVector<arrow::Datum> columns;
 
         for (size_t i = 0; i < types.size(); ++i) {
@@ -322,7 +318,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
 
         const auto optionalInt64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
         TVector< NKikimr::NMiniKQL::TType*> types{optionalInt64Type};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
         size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(optionalInt64Type);
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -331,7 +327,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         constexpr auto testSize = TestSize / sizeof(i64);
 
         auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), optionalInt64Type, *data.ArrowPool, blockLen, nullptr);
-        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.ArrowPool);
 
         for (size_t i = 0; i < testSize; i++) {
             if (i % 2) {
@@ -377,7 +373,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         t.push_back(data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true));
         const auto tupleType = data.PgmBuilder.NewTupleType(t);
         TVector< NKikimr::NMiniKQL::TType*> types{tupleType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
         size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(tupleType);
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -386,7 +382,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         constexpr auto testSize = 512;
 
         auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tupleType, *data.ArrowPool, blockLen, nullptr);
-        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.ArrowPool);
 
         std::string testString;
         testString.resize(testSize);
@@ -442,7 +438,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
 
         const auto tzDatetimeType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::TzDatetime, false);
         TVector< NKikimr::NMiniKQL::TType*> types{tzDatetimeType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
         size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(tzDatetimeType);
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -451,7 +447,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         constexpr auto testSize = TestSize / (sizeof(TDtLayout) + sizeof(ui16));
 
         auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tzDatetimeType, *data.ArrowPool, blockLen, nullptr);
-        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.ArrowPool);
 
         for (size_t i = 0; i < testSize; i++) {
             TBlockItem dt = TBlockItem(i);
@@ -489,9 +485,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
 
         const auto optStringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
         TVector<NKikimr::NMiniKQL::TType*> types{optStringType};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Payload};
+        TVector<ui32> keyColumns;
 
-        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.ArrowPool);
 
         // array has a non-null validity bitmap
         TPackResult packWithNulls;
@@ -542,12 +538,108 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         UNIT_ASSERT_C(!item2, "Row 2 must be NULL");
     }
 
+    Y_UNIT_TEST(TestDuplicateKeyColumns) {
+        TBlockLayoutConverterTestData data;
+
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
+        // Column 0 is used twice as a join key (ON t.a = l.x AND t.a = r.y).
+        TVector<NKikimr::NMiniKQL::TType*> types{int64Type, stringType};
+        TVector<ui32> keyColumns{0, 0};
+
+        constexpr auto testSize = 256;
+        size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(int64Type) + NMiniKQL::CalcMaxBlockItemSize(stringType);
+        size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
+
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.ArrowPool);
+        const auto* layout = converter->GetTupleLayout();
+        UNIT_ASSERT_VALUES_EQUAL(layout->KeyColumnsNum, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(layout->MaterializedColumnsNum, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(layout->OrigColumns.size(), 3u);
+        const bool hasAlias = std::any_of(layout->OrigColumns.begin(), layout->OrigColumns.end(),
+                                          [](const auto& c) { return c.AliasOf != NPackedTuple::TColumnDesc::NoAlias; });
+        UNIT_ASSERT(hasAlias);
+
+        auto intBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), int64Type, *data.ArrowPool, blockLen, nullptr);
+        auto strBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), stringType, *data.ArrowPool, blockLen, nullptr);
+        for (size_t i = 0; i < testSize; ++i) {
+            intBuilder->Add(TBlockItem(static_cast<i64>(i * 3)));
+            const char ch = static_cast<char>('a' + (i % 26));
+            strBuilder->Add(TBlockItem(TStringRef(&ch, 1)));
+        }
+        TVector<arrow::Datum> columns{intBuilder->Build(true), strBuilder->Build(true)};
+
+        TPackResult packRes;
+        converter->Pack(columns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL(packRes.NTuples, testSize);
+
+        for (size_t i = 0; i < testSize; ++i) {
+            const ui8* row = packRes.PackedTuples.data() + i * layout->TotalRowSize;
+            const ui64 k0 = ReadUnaligned<ui64>(row + layout->KeyColumns[0].Offset);
+            const ui64 k1 = ReadUnaligned<ui64>(row + layout->KeyColumns[1].Offset);
+            UNIT_ASSERT_VALUES_EQUAL(k0, static_cast<ui64>(i * 3));
+            UNIT_ASSERT_VALUES_EQUAL(k1, static_cast<ui64>(i * 3));
+        }
+
+        TVector<arrow::Datum> unpacked;
+        converter->Unpack(packRes, unpacked);
+        UNIT_ASSERT_VALUES_EQUAL(unpacked.size(), 2u);
+
+        auto intReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), int64Type);
+        auto strReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), stringType);
+        for (size_t i = 0; i < testSize; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(intReader->GetItem(*unpacked[0].array(), i).Get<i64>(), static_cast<i64>(i * 3));
+            const char ch = static_cast<char>('a' + (i % 26));
+            UNIT_ASSERT_VALUES_EQUAL(strReader->GetItem(*unpacked[1].array(), i).AsStringRef(), TStringRef(&ch, 1));
+        }
+    }
+
+    Y_UNIT_TEST(TestDuplicateStringKeyColumns) {
+        TBlockLayoutConverterTestData data;
+
+        const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        TVector<NKikimr::NMiniKQL::TType*> types{stringType, int64Type};
+        TVector<ui32> keyColumns{0, 0};
+
+        constexpr auto testSize = 64;
+        size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(stringType) + NMiniKQL::CalcMaxBlockItemSize(int64Type);
+        size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
+
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.ArrowPool);
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetTupleLayout()->KeyColumnsNum, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetTupleLayout()->MaterializedVariableColumns.size(), 1u);
+
+        auto strBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), stringType, *data.ArrowPool, blockLen, nullptr);
+        auto intBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), int64Type, *data.ArrowPool, blockLen, nullptr);
+        TVector<TString> values;
+        for (size_t i = 0; i < testSize; ++i) {
+            values.push_back(TString(16 + (i % 40), static_cast<char>('A' + (i % 26))));
+            strBuilder->Add(TBlockItem(TStringRef(values.back())));
+            intBuilder->Add(TBlockItem(static_cast<i64>(i)));
+        }
+        TVector<arrow::Datum> columns{strBuilder->Build(true), intBuilder->Build(true)};
+
+        TPackResult packRes;
+        converter->Pack(columns, packRes);
+
+        TVector<arrow::Datum> unpacked;
+        converter->Unpack(packRes, unpacked);
+        auto strReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), stringType);
+        auto intReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), int64Type);
+        for (size_t i = 0; i < testSize; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(strReader->GetItem(*unpacked[0].array(), i).AsStringRef(),
+                                     TStringRef(values[i]));
+            UNIT_ASSERT_VALUES_EQUAL(intReader->GetItem(*unpacked[1].array(), i).Get<i64>(), static_cast<i64>(i));
+        }
+    }
+
     Y_UNIT_TEST(TestBuckets) {
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
         TVector< NKikimr::NMiniKQL::TType*> types{int64Type};
-        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+        TVector<ui32> keyColumns{0};
 
         size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(int64Type);
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -556,7 +648,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         constexpr auto testSize = TestSize / sizeof(i64);
 
         auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), int64Type, *data.ArrowPool, blockLen, nullptr);
-        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, keyColumns, data.ArrowPool);
 
         for (size_t i = 0; i < testSize; i++) {
             builder->Add(TBlockItem(i));

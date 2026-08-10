@@ -25,20 +25,18 @@ struct TDqScalarJoinMetadata {
     TDqJoinImplRenames Renames;
     EJoinKind Kind;
     TSides<TVector<TType*>> UserTypes;
-    TSides<TVector<int>> ColumnPermutation;
 };
 
 class TScalarPackedTupleSource : public NNonCopyable::TMoveOnly {
 public:
     TScalarPackedTupleSource(TComputationContext& ctx, IComputationWideFlowNode* flow, IScalarLayoutConverter* converter,
-                             int columns, const TVector<int>& columnPermutation)
+                             int columns)
         : Ctx_(&ctx)
         , Flow_(flow)
         , Buff_(columns)
         , Pointers_(columns)
         , Converter_(converter)
         , Columns_(columns)
-        , ColumnPermutation_(columnPermutation)
     {
         for (int index = 0; index < columns; ++index) {
             Pointers_[index] = &Buff_[index];
@@ -72,14 +70,8 @@ public:
                 }
                 return Yield{};
             case EFetchResult::One: {
-                if (ColumnPermutation_.empty()) {
-                    for (int i = 0; i < Columns_; ++i) {
-                        BatchValues_.push_back(Buff_[i]);
-                    }
-                } else {
-                    for (int i = 0; i < Columns_; ++i) {
-                        BatchValues_.push_back(Buff_[ColumnPermutation_[i]]);
-                    }
+                for (int i = 0; i < Columns_; ++i) {
+                    BatchValues_.push_back(Buff_[i]);
                 }
                 ++BatchCount_;
                 // loop to accumulate more until batch full or finish
@@ -107,7 +99,6 @@ private:
     TMKQLVector<NYql::NUdf::TUnboxedValue*> Pointers_;
     IScalarLayoutConverter* Converter_;
     int Columns_;
-    TVector<int> ColumnPermutation_;
     static constexpr int BatchSize_ = 1024;
     TMKQLVector<NYql::NUdf::TUnboxedValue> BatchValues_;
     int BatchCount_ = 0;
@@ -212,11 +203,9 @@ private:
             , JoinCtx_(&ctx)
             , Join_(TSides<TScalarPackedTupleSource>{
                         .Build = {ctx, flows.Build, Converters_.Build.get(),
-                                  static_cast<int>(std::ssize(Meta_->InputTypes.Build)),
-                                  Meta_->ColumnPermutation.Build},
+                                  static_cast<int>(std::ssize(Meta_->InputTypes.Build))},
                         .Probe = {ctx, flows.Probe, Converters_.Probe.get(),
-                                  static_cast<int>(std::ssize(Meta_->InputTypes.Probe)),
-                                  Meta_->ColumnPermutation.Probe}},
+                                  static_cast<int>(std::ssize(Meta_->InputTypes.Probe))}},
                     ctx, "ScalarHashJoinPacked",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
                                                               .Probe = Converters_.Probe->GetTupleLayout()})
@@ -276,16 +265,13 @@ private:
         TSides<std::unique_ptr<IScalarLayoutConverter>> converters;
         TTypeInfoHelper helper;
         for(ESide side: EachSide) {
-            const auto roles =
-                MakeColumnRoles(Meta_->UserTypes.SelectSide(side).size(), Meta_->KeyColumns.SelectSide(side));
-            converters.SelectSide(side) =
-                MakeScalarLayoutConverter(helper, Meta_->UserTypes.SelectSide(side), roles, ctx.HolderFactory);
+            converters.SelectSide(side) = MakeScalarLayoutConverter(
+                helper, Meta_->UserTypes.SelectSide(side), Meta_->KeyColumns.SelectSide(side), ctx.HolderFactory);
         }
 
         state = ctx.HolderFactory.Create<TStreamState>(
             ctx, Flows_, std::move(converters), Meta_.get(),
-            TPackedTuplePairFilter::TryCreate(ctx, Filters_, Meta_->UserTypes, Meta_->KeyColumns,
-                                              Meta_->ColumnPermutation));
+            TPackedTuplePairFilter::TryCreate(ctx, Filters_, Meta_->UserTypes, Meta_->KeyColumns));
     }
 
     void RegisterDependencies() const final {
@@ -348,8 +334,6 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     ValidateRenames(parsed.UserRenames, joinKind, std::ssize(meta.InputTypes.Probe), std::ssize(meta.InputTypes.Build));
     meta.Renames = BuildImplRenames(parsed.UserRenames);
 
-    ApplyKeyColumnPermutation(meta.KeyColumns, meta.InputTypes, /* trailingColumns */ 0, meta.Renames,
-                              meta.ColumnPermutation);
     meta.UserTypes = ForceOptionalOnNullableSide(meta.InputTypes, joinKind, ESide::Build, ctx.Env);
 
     const TSides<IComputationWideFlowNode*> flows{.Build = rightFlow, .Probe = leftFlow};

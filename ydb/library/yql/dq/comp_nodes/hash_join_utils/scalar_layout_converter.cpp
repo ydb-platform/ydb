@@ -647,15 +647,13 @@ class TScalarLayoutConverter : public IScalarLayoutConverter {
 public:
     TScalarLayoutConverter(
         TVector<IColumnDataExtractor::TPtr>&& packers,
-        const TVector<NPackedTuple::EColumnRole>& roles,
+        const TVector<ui32>& keyColumns,
         const THolderFactory& holderFactory
     )
         : Extractors_(std::move(packers))
         , InnerMapping_(Extractors_.size())
         , HolderFactory_(holderFactory)
     {
-        Y_ENSURE(roles.size() == Extractors_.size());
-
         ui32 colCounter = 0;
         TVector<NPackedTuple::TColumnDesc> columnDescrs;
         for (size_t i = 0; i < Extractors_.size(); ++i) {
@@ -667,9 +665,7 @@ public:
             // Each inner extractor corresponds to one column description
             // InnerMapping tracks which InnerExtractors belong to this top-level extractor
             for (size_t j = 0; j < InnerExtractors_.size() - prevSize; ++j) {
-                NPackedTuple::TColumnDesc descr;
-                descr.Role = roles[i];
-                columnDescrs.push_back(descr);
+                columnDescrs.emplace_back();
                 mapping.push_back(colCounter);
                 colCounter++;
             }
@@ -681,6 +677,8 @@ public:
             descr.DataSize = packer->GetElementSize();
             descr.SizeType = packer->GetElementSizeType();
         }
+
+        MarkJoinKeyColumns(InnerMapping_, keyColumns, columnDescrs);
 
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);
         
@@ -875,7 +873,7 @@ private:
 
 IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
     const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
-    const TVector<NPackedTuple::EColumnRole>& roles, const THolderFactory& holderFactory)
+    const TVector<ui32>& keyColumns, const THolderFactory& holderFactory)
 {
     TVector<IColumnDataExtractor::TPtr> packers;
 
@@ -883,7 +881,7 @@ IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
         packers.emplace_back(DispatchByArrowTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, type));
     }
 
-    return std::make_unique<TScalarLayoutConverter>(std::move(packers), roles, holderFactory);
+    return std::make_unique<TScalarLayoutConverter>(std::move(packers), keyColumns, holderFactory);
 }
 
 } // namespace NKikimr::NMiniKQL

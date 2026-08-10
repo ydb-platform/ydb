@@ -35,7 +35,6 @@ struct TDqBlockJoinContext {
     // at runtime (inside DoCalculate) whose lifetime depends on the
     // TComputationContext – which may differ between iterations/retries.
     TSides<TVector<TType*>> UserTypes;
-    TSides<TVector<int>> ColumnPermutation;
 };
 
 class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
@@ -48,9 +47,9 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         , ArrowPool_(&ctx.ArrowMemoryPool)
         , Stream_(stream.SelectSide(side))
         , StreamValues_(Stream_->GetValue(ctx))
-        , Buff_(ctx.MutableValues.get() + meta->TempStateIndes.SelectSide(side), meta->InputTypes.SelectSide(side).size())
+        , Buff_(ctx.MutableValues.get() + meta->TempStateIndes.SelectSide(side),
+                std::ssize(meta->InputTypes.SelectSide(side)))
         , ArrowBlockToInternalConverter_(converters.SelectSide(side).get())
-        , ColumnPermutation_(meta->ColumnPermutation.SelectSide(side))
     {}
 
     bool Finished() const {
@@ -73,15 +72,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             }
             return Yield{};
         }
-        const size_t cols = UserDataCols();
-        TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), cols});
-        if (!ColumnPermutation_.empty()) {
-            TVector<arrow::Datum> permuted(cols);
-            for (size_t j = 0; j < cols; ++j) {
-                permuted[j] = std::move(columns[ColumnPermutation_[j]]);
-            }
-            columns = std::move(permuted);
-        }
+        TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), static_cast<size_t>(UserDataCols())});
         NormalizeScalarColumns(columns);
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
@@ -129,7 +120,6 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
     NYql::NUdf::TUnboxedValue StreamValues_;
     std::span<NYql::NUdf::TUnboxedValue> Buff_;
     IBlockLayoutConverter* ArrowBlockToInternalConverter_;
-    TVector<int> ColumnPermutation_;
 };
 
 template<EJoinKind Kind>
@@ -214,14 +204,14 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         TSides<std::unique_ptr<IBlockLayoutConverter>> layouts;
         const auto& userTypes = Meta_->UserTypes;
         for(ESide side: EachSide) {
-            const auto roles = MakeColumnRoles(userTypes.SelectSide(side).size(), Meta_->KeyColumns.SelectSide(side));
-            layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
+            layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side),
+                                                                Meta_->KeyColumns.SelectSide(side), &ctx.ArrowMemoryPool);
         }
         const auto& userNullTypes = (Kind == EJoinKind::Left && Meta_->Settings.LeftIsBuild()) ? userTypes.Probe : userTypes.Build;
 
         return ctx.HolderFactory.Create<TStreamValue>(
             ctx, Streams_, std::move(layouts), Meta_.get(), userNullTypes,
-            TPackedTuplePairFilter::TryCreate(ctx, Filters_, userTypes, Meta_->KeyColumns, Meta_->ColumnPermutation));
+            TPackedTuplePairFilter::TryCreate(ctx, Filters_, userTypes, Meta_->KeyColumns));
     }
 
   private:
@@ -372,11 +362,9 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         }
     }
 
-    ApplyKeyColumnPermutation(meta.KeyColumns, meta.InputTypes, /* trailingColumns */ 1, meta.Renames,
-                              meta.ColumnPermutation);
-
-    for(ESide side: EachSide) {
-        meta.TempStateIndes.SelectSide(side) = std::exchange(ctx.Mutables.CurValueIndex, meta.InputTypes.SelectSide(side).size() + ctx.Mutables.CurValueIndex);
+    for (ESide side : EachSide) {
+        meta.TempStateIndes.SelectSide(side) = std::exchange(
+            ctx.Mutables.CurValueIndex, std::ssize(meta.InputTypes.SelectSide(side)) + ctx.Mutables.CurValueIndex);
     }
 
     TSides<TVector<TType*>> itemTypes;

@@ -87,13 +87,34 @@ struct TPackResult {
 using TPackedTuple = std::vector<ui8, TMKQLAllocator<ui8>>;
 using TOverflow = std::vector<ui8, TMKQLAllocator<ui8>>;
 
-template <typename TKeyColumns>
-TVector<NPackedTuple::EColumnRole> MakeColumnRoles(size_t width, const TKeyColumns& keyColumns) {
-    TVector<NPackedTuple::EColumnRole> roles(width, NPackedTuple::EColumnRole::Payload);
+// Marks the join key columns in a tuple description built from the input columns.
+// Keys are marked in join key order, so both join sides end up with the same key
+// layout no matter where the keys sit in their inputs. A column used as a key
+// several times (e.g. ON t.a = l.x AND t.a = r.y) gets one description per
+// occurrence, all of them reading the same input data.
+// innerMapping maps an input column to the descriptions it is built from.
+inline void MarkJoinKeyColumns(const TVector<TVector<ui32>>& innerMapping, const TVector<ui32>& keyColumns,
+                               TVector<NPackedTuple::TColumnDesc>& descrs) {
+    TVector<bool> isKey(innerMapping.size(), false);
+    ui32 keyOrder = 0;
     for (auto column : keyColumns) {
-        roles[column] = NPackedTuple::EColumnRole::Key;
+        MKQL_ENSURE(static_cast<size_t>(column) < innerMapping.size(),
+                    Sprintf("join key column index %zu is out of range [0, %zu)", static_cast<size_t>(column),
+                            innerMapping.size()));
+        for (ui32 inner : innerMapping[column]) {
+            if (isKey[column]) {
+                auto duplicate = descrs[inner];
+                duplicate.AliasOf = inner;
+                duplicate.Role = NPackedTuple::EColumnRole::Key;
+                duplicate.KeyOrder = keyOrder++;
+                descrs.push_back(duplicate);
+            } else {
+                descrs[inner].Role = NPackedTuple::EColumnRole::Key;
+                descrs[inner].KeyOrder = keyOrder++;
+            }
+        }
+        isKey[column] = true;
     }
-    return roles;
 }
 
 }   // namespace NKikimr::NMiniKQL

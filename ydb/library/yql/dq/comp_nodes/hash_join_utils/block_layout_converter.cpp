@@ -675,7 +675,7 @@ class TBlockLayoutConverter : public IBlockLayoutConverter {
 public:
     TBlockLayoutConverter(
         TVector<IColumnDataExtractor::TPtr>&& extractors,
-        const TVector<NPackedTuple::EColumnRole>& roles,
+        const TVector<ui32>& keyColumns,
         bool rememberNullBitmaps = true // remember bitmaps which are equal to nullptr to not allocate memory for them in unpack
     )
         : Extractors_(std::move(extractors))
@@ -683,8 +683,6 @@ public:
         , RememberNullBitmaps_(rememberNullBitmaps)
         , IsBitmapNull_(Extractors_.size(), true)
     {
-        Y_ENSURE(roles.size() == Extractors_.size());
-
         ui32 colCounter = 0;
         TVector<NPackedTuple::TColumnDesc> columnDescrs;
         for (size_t i = 0; i < Extractors_.size(); ++i) {
@@ -695,7 +693,6 @@ public:
 
             for (size_t j = 0; j < InnerExtractors_.size() - prevSize; ++j) {
                 NPackedTuple::TColumnDesc descr;
-                descr.Role = roles[i];
                 columnDescrs.push_back(descr);
                 mapping.push_back(colCounter);
                 colCounter++;
@@ -707,6 +704,8 @@ public:
             descr.DataSize = InnerExtractors_[i]->GetElementSize();
             descr.SizeType = InnerExtractors_[i]->GetElementSizeType();
         }
+
+        MarkJoinKeyColumns(InnerMapping_, keyColumns, columnDescrs);
 
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);
     }
@@ -802,7 +801,7 @@ private:
 
 IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
     const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
-    const TVector<NPackedTuple::EColumnRole>& roles, arrow::MemoryPool* pool,
+    const TVector<ui32>& keyColumns, arrow::MemoryPool* pool,
     bool rememberNullBitmaps)
 {
     TVector<IColumnDataExtractor::TPtr> extractors;
@@ -811,7 +810,7 @@ IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
         extractors.emplace_back(DispatchByArrowTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, pool));
     }
 
-    return std::make_unique<TBlockLayoutConverter>(std::move(extractors), roles, rememberNullBitmaps);
+    return std::make_unique<TBlockLayoutConverter>(std::move(extractors), keyColumns, rememberNullBitmaps);
 }
 
 } // namespace NKikimr::NMiniKQL

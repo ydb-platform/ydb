@@ -140,6 +140,9 @@ struct TDirectReadRestoreEnv {
     // Normal-path Publish completed → TEvDirectReadResponse to read session.
     std::atomic<ui64> DirectReadResponseCount{0};
 
+    // Prepare/Publish delivered while Forget responses are held (late reply onto Forget stage).
+    std::atomic<ui64> LateNonForgetReplyDuringForget{0};
+
     NActors::TTestActorRuntime& Runtime() {
         return *Server->CleverServer->GetRuntime();
     }
@@ -249,12 +252,16 @@ struct TDirectReadRestoreEnv {
                 return true;
             }
 
-            if (!HoldRestorePreparePublish.load()) {
-                return false;
-            }
-            if (part.HasCmdPrepareReadResult() || part.HasCmdPublishReadResult()) {
+            if (HoldRestorePreparePublish.load()
+                    && (part.HasCmdPrepareReadResult() || part.HasCmdPublishReadResult())) {
                 ++HeldPrepareOrPublish;
                 return true; // drop — keep restore stuck in Prepare
+            }
+
+            // Late Prepare/Publish reaching the actor while Forget stage is held under test.
+            if (HoldForgetResponses.load()
+                    && (part.HasCmdPrepareReadResult() || part.HasCmdPublishReadResult())) {
+                ++LateNonForgetReplyDuringForget;
             }
             return false;
         });
@@ -659,11 +666,16 @@ protected:
             "Prepare/Publish must complete after releasing held Prepares (not silent-hang)");
     }
 
-    // 8. Release a late reply onto the current restore stage; only assert survival.
+    // 8. Release a late reply onto Forget stage; wait until it is delivered (or ENSURE fires).
     template <typename TRelease>
     void ReleaseLateReplyAndAssertSurvived(TRelease&& release, const TString& what) {
+        const ui64 lateBefore = Env.LateNonForgetReplyDuringForget.load();
+        const ui64 unexpectedBefore = Env.UnexpectedErrorCloseSession.load();
         release();
-        Runtime().SimulateSleep(TDuration::MilliSeconds(200));
+        WaitUntil(Runtime(), [&] {
+            return Env.LateNonForgetReplyDuringForget.load() > lateBefore
+                || Env.UnexpectedErrorCloseSession.load() > unexpectedBefore;
+        });
         AssertNoUnexpectedClose(what);
     }
 

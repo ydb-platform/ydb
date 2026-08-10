@@ -247,6 +247,47 @@ Y_UNIT_TEST(DescribePartitionTimesOutWhenLocationStuck) {
     AssertStatus(result, Ydb::StatusIds::TIMEOUT, "Describe request timed out");
 }
 
+Y_UNIT_TEST(DescribePartitionFailsAfterStatsRetriesExhausted) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_describe_part_stats_retries";
+    CreateTopic(runtime, path);
+
+    size_t broken = 0;
+    auto* rt = &runtime;
+    auto breakObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
+        [&broken, rt](TEvPipeCache::TEvForward::TPtr& ev) {
+            if (!ev || !ev->Get()->Ev) {
+                return;
+            }
+            if (ev->Get()->Ev->Type() != TEvPersQueue::TEvStatus::EventType) {
+                return;
+            }
+            ++broken;
+            const ui64 tabletId = ev->Get()->TabletId;
+            const ui64 subscribeCookie = ev->Get()->Options.SubscribeCookie;
+            rt->Send(new IEventHandle(
+                ev->Sender,
+                ev->Recipient,
+                new TEvPipeCache::TEvDeliveryProblem(tabletId, true /*notDelivered*/),
+                0,
+                subscribeCookie));
+            ev.Reset();
+        });
+
+    Ydb::Topic::DescribePartitionRequest request;
+    request.set_path(path);
+    request.set_partition_id(0);
+    request.set_include_stats(true);
+
+    auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+        runtime, request, CreateDescribePartitionActor, path);
+
+    // Initial attempt + 5 backoff retries, then fail on the next DeliveryProblem.
+    UNIT_ASSERT_VALUES_EQUAL(broken, 6u);
+    AssertStatus(result, Ydb::StatusIds::UNAVAILABLE, "unresponsive");
+}
+
 Y_UNIT_TEST(DescribeUnknownConsumer) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();

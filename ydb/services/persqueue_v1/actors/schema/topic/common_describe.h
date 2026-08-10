@@ -198,6 +198,9 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                     HandleRequestTimeout();
                     return;
                 }
+                if (HandleStatsRetryWakeup(ev->Get<TEvents::TEvWakeup>()->Tag)) {
+                    return;
+                }
                 [[fallthrough]];
             default:
                 this->StateFuncBase(ev);
@@ -316,7 +319,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             if (ev->Get()->TabletId == ReadBalancerTabletId) {
                 ScheduleLocationsRetry();
             } else {
-                RequestStats(ev->Get()->TabletId);
+                ScheduleStatsRetry(ev->Get()->TabletId);
             }
         }
 
@@ -361,8 +364,42 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
         void RequestStats(ui64 tabletId) {
             LOG_D("Stats " << tabletId);
+            StatsBackoff.try_emplace(
+                tabletId, 5, TDuration::MilliSeconds(25), TDuration::MilliSeconds(250));
             SendToTablet(tabletId, CreateStatusRequest().release(), tabletId);
             TabletsInflight.insert(tabletId);
+        }
+
+        void ScheduleStatsRetry(ui64 tabletId) {
+            auto [it, _] = StatsBackoff.try_emplace(
+                tabletId, 10, TDuration::MilliSeconds(25), TDuration::MilliSeconds(250));
+            if (!it->second.HasMore()) {
+                LOG_W("Stats retries exceeded for tablet " << tabletId);
+                TabletsInflight.erase(tabletId);
+                this->ReplyWithError(
+                    Ydb::StatusIds::UNAVAILABLE,
+                    TStringBuilder() << "Tablet " << tabletId << " unresponsive",
+                    Ydb::PersQueue::ErrorCode::ERROR);
+                return;
+            }
+            if (!StatsRetryPending.insert(tabletId).second) {
+                return;
+            }
+            const auto delay = it->second.Next();
+            LOG_D("Stats retry " << tabletId << " " << it->second.GetIteration() << " in " << delay);
+            // Wakeup tag is the tablet id (distinct from LocationsRetry/RequestTimeout tags).
+            this->Schedule(delay, new TEvents::TEvWakeup(tabletId));
+        }
+
+        bool HandleStatsRetryWakeup(ui64 tabletId) {
+            if (!StatsRetryPending.erase(tabletId)) {
+                return false;
+            }
+            if (!TabletsInflight.contains(tabletId)) {
+                return true;
+            }
+            RequestStats(tabletId);
+            return true;
         }
 
         void FailLocationsUnavailable() {
@@ -428,6 +465,8 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         bool LocationsRetryPending = false;
         TBackoff LocationsBackoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
         std::optional<TInstant> RequestStartTime;
+        absl::flat_hash_map<ui64, TBackoff> StatsBackoff;
+        absl::flat_hash_set<ui64> StatsRetryPending;
 
         Ydb::Scheme::Entry SelfEntry;
 

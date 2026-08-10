@@ -179,9 +179,21 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_C(!FindRootChild(*userUploader, "Session.query.QUERY_ACTION_EXECUTE"),
             "dev tree leaked into user uploader");
         UNIT_ASSERT_C(userRoot->FindOne("KQP proxy"), "KQP proxy phase missing");
+        auto session = userRoot->FindOne("Session");
+        UNIT_ASSERT_C(session, "KQP session actor span missing");
+        const auto* sessionSpan = FindSpan(*userUploader, "Session");
+        UNIT_ASSERT(sessionSpan);
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindAttribute(*sessionSpan, "ydb.actor.type")->value().string_value(),
+            "TKqpSessionActor");
 
-        auto execute = userRoot->BFSFindOne("Execute");
+        auto execute = session->get().BFSFindOne("Execute");
         UNIT_ASSERT_C(execute, "user Execute phase missing (executer live span)");
+        const auto* executeSpan = FindSpan(*userUploader, "Execute");
+        UNIT_ASSERT(executeSpan);
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindAttribute(*executeSpan, "ydb.actor.type")->value().string_value(),
+            "TKqpDataExecuter");
         UNIT_ASSERT_C(execute->get().BFSFindOne("Run"), "user Run phase missing");
         auto prepare = execute->get().FindOne("Prepare");
         UNIT_ASSERT_C(prepare, "user Prepare group missing");
@@ -189,7 +201,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_C(resolveTables, "ResolveTables not under Prepare");
         UNIT_ASSERT_C(resolveTables->get().FindOne("Partitioning"), "Partitioning not under ResolveTables");
 
-        auto compile = userRoot->FindOne("Compile");
+        auto compile = session->get().FindOne("Compile");
         UNIT_ASSERT_C(compile, "user Compile phase missing");
         UNIT_ASSERT_C(compile->get().BFSFindOne("Load metadata /Root/table-1"),
             "metadata request missing under Compile");
@@ -206,6 +218,9 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         const auto* runSpan = FindSpan(*userUploader, "Run");
         UNIT_ASSERT(runSpan);
         UNIT_ASSERT_VALUES_EQUAL(stage->parent_span_id(), runSpan->span_id());
+        const auto* taskActor = FindAttribute(*task, "ydb.actor.type");
+        UNIT_ASSERT(taskActor);
+        UNIT_ASSERT_VALUES_EQUAL(taskActor->value().string_value(), "TKqpComputeActor");
 
         UNIT_ASSERT_C(!userRoot->BFSFindOne("ComputeActor"), "user tree leaked engine internals");
 
@@ -525,6 +540,16 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT(userUploader->BuildTraceTrees());
         UNIT_ASSERT_C(FindReadShardSpan(*userUploader, "first_to_last_message"),
             "scan did not export its first-to-last-message boundary");
+        const auto* executeSpan = FindSpan(*userUploader, "Execute");
+        UNIT_ASSERT(executeSpan);
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindAttribute(*executeSpan, "ydb.actor.type")->value().string_value(),
+            "TKqpScanExecuter");
+        const auto* taskSpan = FindSpanWithAttribute(*userUploader, "ydb.task_id");
+        UNIT_ASSERT(taskSpan);
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindAttribute(*taskSpan, "ydb.actor.type")->value().string_value(),
+            "TKqpScanComputeActor");
         AssertChildSpansAreWithinParents(*userUploader);
     }
 }

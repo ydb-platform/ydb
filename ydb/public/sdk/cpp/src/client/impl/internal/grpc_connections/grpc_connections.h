@@ -119,6 +119,8 @@ public:
 
     void ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline);
     void ScheduleDelayedTask(TSimpleCb&& fn, TDeadline::Duration delay);
+    // unlike ScheduleFuture completes on the callback queue, not on grpc completion thread    
+    NThreading::TFuture<void> ScheduleDelayedTaskAsFuture(TSimpleCb&& fn, TDeadline::duration delay = TDeadline::Duration::zero());
 
     NThreading::TFuture<bool> ScheduleFuture(
         TDuration timeout,

@@ -3595,6 +3595,10 @@ class JSONFileCache:
         return value
 
 
+def generate_login_cache_key(sign_in_session_name):
+    return hashlib.sha256(sign_in_session_name.encode('utf-8')).hexdigest()
+
+
 def is_s3express_bucket(bucket):
     if bucket is None:
         return False
@@ -3688,3 +3692,32 @@ CLIENT_NAME_TO_HYPHENIZED_SERVICE_ID_OVERRIDES = {
     'stepfunctions': 'sfn',
     'storagegateway': 'storage-gateway',
 }
+
+
+def get_login_token_cache_directory():
+    """Returns which directory contains the login_session token files"""
+    if 'AWS_LOGIN_CACHE_DIRECTORY' in os.environ:
+        path = os.path.expandvars(os.environ['AWS_LOGIN_CACHE_DIRECTORY'])
+        path = os.path.expanduser(path)
+        return path
+    else:
+        return os.path.expanduser(os.path.join('~', '.aws', 'login', 'cache'))
+
+
+class LoginTokenLoader:
+    """Loads and saves login access tokens to disk"""
+
+    def __init__(self, cache=None):
+        if cache is None:
+            cache = {}
+        self._cache = cache
+
+    def save_token(self, session_name, token):
+        cache_key = generate_login_cache_key(session_name)
+        self._cache[cache_key] = token
+
+    def load_token(self, session_name):
+        cache_key = generate_login_cache_key(session_name)
+        if cache_key not in self._cache:
+            return None
+        return self._cache[cache_key]

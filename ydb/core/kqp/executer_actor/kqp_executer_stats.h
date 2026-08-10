@@ -459,6 +459,7 @@ public:
     bool CollectUserFacingTaskStats = false;
     TUserFacingTraceTaskStats UserFacingTaskStats;
     std::unordered_map<ui32, TUserFacingStageAgg> UserFacingStageAggs;
+    TUserFacingBufferLookupStats UserFacingBufferLookup;
 
     // The response export moves compute stats; the trace snapshot must copy them first.
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,

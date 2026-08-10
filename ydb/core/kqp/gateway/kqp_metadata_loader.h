@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/common/compilation/user_facing_trace.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -11,12 +12,34 @@
 
 #include <util/system/mutex.h>
 
+#include <memory>
+#include <mutex>
+#include <utility>
+#include <vector>
+
 namespace NKikimr::NKqp {
 
 // only exposed to be unit-tested
 NExternalSource::TAuth MakeAuth(const NYql::TExternalSource& metadata);
 std::shared_ptr<NExternalSource::TMetadata> ConvertToExternalSourceMetadata(const NYql::TKikimrTableMetadata& tableMetadata);
 bool EnrichMetadata(NYql::TKikimrTableMetadata& tableMetadata, const NExternalSource::TMetadata& dynamicMetadata);
+
+class TUserFacingCompileDependencyCollector {
+public:
+    void Record(EUserFacingCompileDependency dependency, TString target, TInstant start, TInstant end) {
+        std::lock_guard guard(Mutex);
+        Spans.push_back({dependency, std::move(target), start, end});
+    }
+
+    std::shared_ptr<const std::vector<TUserFacingCompileSpan>> Snapshot() const {
+        std::lock_guard guard(Mutex);
+        return std::make_shared<const std::vector<TUserFacingCompileSpan>>(Spans);
+    }
+
+private:
+    mutable std::mutex Mutex;
+    std::vector<TUserFacingCompileSpan> Spans;
+};
 
 class TKqpTableMetadataLoader : public NYql::IKikimrGateway::IKqpTableMetadataLoader {
 public:
@@ -26,13 +49,15 @@ public:
         NYql::TKikimrConfiguration::TPtr config,
         bool needCollectSchemeData = false,
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt)
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt,
+        std::shared_ptr<TUserFacingCompileDependencyCollector> userFacingCompileCollector = {})
         : Cluster(cluster)
         , NeedCollectSchemeData(needCollectSchemeData)
         , ActorSystem(actorSystem)
         , Config(config)
         , TempTablesState(std::move(tempTablesState))
         , FederatedQuerySetup(federatedQuerySetup)
+        , UserFacingCompileCollector(std::move(userFacingCompileCollector))
     {}
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadata(
@@ -76,6 +101,7 @@ private:
     NYql::TKikimrConfiguration::TPtr Config;
     TKqpTempTablesState::TConstPtr TempTablesState;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    std::shared_ptr<TUserFacingCompileDependencyCollector> UserFacingCompileCollector;
 };
 
 } // namespace NKikimr::NKqp

@@ -60,7 +60,8 @@ struct TKqpCompileRequest {
         TMaybe<TQueryAst> queryAst = {},
         std::shared_ptr<NYql::TExprContext> splitCtx = nullptr,
         NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool usePessimisticLocks = false)
+        bool usePessimisticLocks = false,
+        bool collectUserFacingTrace = false)
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
@@ -80,6 +81,7 @@ struct TKqpCompileRequest {
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
         , UsePessimisticLocks(usePessimisticLocks)
+        , CollectUserFacingTrace(collectUserFacingTrace)
     {}
 
     TActorId Sender;
@@ -105,6 +107,7 @@ struct TKqpCompileRequest {
     NYql::TExprNode::TPtr SplitExpr;
 
     bool UsePessimisticLocks;
+    bool CollectUserFacingTrace;
 
     bool FindInCache = true;
 
@@ -521,7 +524,8 @@ private:
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
-            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
+            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks,
+            request.CollectUserFacingTrace);
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
@@ -602,7 +606,8 @@ private:
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
-                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), Nothing(), nullptr, nullptr, request.UsePessimisticLocks);
+                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), Nothing(), nullptr, nullptr, request.UsePessimisticLocks,
+                request.CollectUserFacingTrace);
                 compileRequest.FindInCache = false;
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
@@ -648,6 +653,7 @@ private:
         auto compileActorId = ev->Sender;
         auto& compileResult = ev->Get()->CompileResult;
         auto& compileStats = ev->Get()->Stats;
+        const auto userFacingCompileSpans = ev->Get()->UserFacingCompileSpans;
 
         Y_ABORT_UNLESS(compileResult->Query);
 
@@ -662,7 +668,8 @@ private:
 
         if (compileResult->NeedToSplit) {
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
-                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
+                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan),
+                userFacingCompileSpans);
             ProcessQueue(ctx);
             return;
         }
@@ -687,7 +694,8 @@ private:
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     Reply(request.Sender, compileResult, compileStats, ctx,
-                        request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan));
+                        request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan),
+                        userFacingCompileSpans);
                 }
             } else {
                 if (!hasTempTablesNameClashes) {
@@ -699,7 +707,8 @@ private:
 
             LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileActorId.ToString());
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
-                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
+                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan),
+                userFacingCompileSpans);
         }
         catch (const std::exception& e) {
             LogException("TEvCompileResponse", ev->Sender, e, ctx);
@@ -921,7 +930,8 @@ private:
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
-            request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
+            request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks,
+            request.CollectUserFacingTrace);
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 
@@ -939,7 +949,8 @@ private:
 
     void Reply(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
         const TKqpStatsCompile& compileStats, const TActorContext& ctx, ui64 cookie,
-        NLWTrace::TOrbit orbit, NWilson::TSpan span)
+        NLWTrace::TOrbit orbit, NWilson::TSpan span,
+        std::shared_ptr<const std::vector<TUserFacingCompileSpan>> userFacingCompileSpans = {})
     {
         const auto& query = compileResult->Query;
         LWTRACK(KqpCompileServiceReply,
@@ -954,6 +965,7 @@ private:
 
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit));
         responseEv->Stats = compileStats;
+        responseEv->UserFacingCompileSpans = std::move(userFacingCompileSpans);
 
         if (span) {
             span.End();

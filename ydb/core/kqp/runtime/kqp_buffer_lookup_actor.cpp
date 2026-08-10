@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
+#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_worker.h>
@@ -335,6 +336,9 @@ public:
     }
 
     void StartTableRead(ui64 cookie, ui64 shardId, bool isUniqueCheck, bool failOnUniqueCheck, THolder<TEvDataShard::TEvRead> request) {
+        if (Settings.CollectUserFacingShards) {
+            UserFacingShardReads.OnStart(shardId);
+        }
         Settings.Counters->CreatedIterators->Inc();
         auto& record = request->Record;
 
@@ -436,6 +440,11 @@ public:
         auto& read = readIt->second;
         const auto shardId = read.ShardId;
         const auto cookie = read.LookupCookie;
+
+        if (Settings.CollectUserFacingShards) {
+            UserFacingShardReads.OnFinish(shardId, record.GetRowCount(), read.RetryAttempts,
+                record.HasNodeId() ? record.GetNodeId() : 0);
+        }
 
         auto& shardState = ShardToState.at(shardId);
 
@@ -833,14 +842,16 @@ public:
         ReadRowsCount = 0;
         ReadBytesCount = 0;
 
-        // Add lock stats for broken locks
-        if (BrokenLocksCount > 0) {
+        if (BrokenLocksCount > 0 || !UserFacingShardReads.Empty()) {
             NKqpProto::TKqpTaskExtraStats extraStats;
             if (stats->HasExtra()) {
                 stats->GetExtra().UnpackTo(&extraStats);
             }
-            extraStats.MutableLockStats()->SetBrokenAsVictim(
-                extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocksCount);
+            if (BrokenLocksCount > 0) {
+                extraStats.MutableLockStats()->SetBrokenAsVictim(
+                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocksCount);
+            }
+            UserFacingShardReads.Export(extraStats, 0);
             stats->MutableExtra()->PackFrom(extraStats);
             BrokenLocksCount = 0;
         }
@@ -868,6 +879,7 @@ private:
     THashMap<ui64, TLookupState> CookieToLookupState;
     THashMap<ui64, TShardState> ShardToState;
     THashMap<ui64, TReadState> ReadIdToState;
+    TUserFacingShardReadCollector UserFacingShardReads;
 
     ui64 ReadId = 0;
 

@@ -984,7 +984,7 @@ private:
         OnEmptyResult();
 
         StartCheckpointCoordinator();
-
+        this->BeginUserFacingPhase(EUserFacingTracePhase::RunTasks);
         if (!ExecuteTasks()) {
             return;
         }
@@ -993,7 +993,7 @@ private:
             return;
         }
 
-        ExecuterStateSpan = this->MakePhaseSpan(TWilsonKqp::DataExecuterRunTasks, "RunTasks", EUserFacingTracePhase::RunTasks);
+        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         YDB_LOG_DEBUG("Become ExecuteState",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},

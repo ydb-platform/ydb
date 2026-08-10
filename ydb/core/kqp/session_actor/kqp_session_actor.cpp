@@ -336,6 +336,7 @@ public:
         QueryState = std::make_shared<TKqpQueryState>(
             ev, QueryId, Settings.Database, Settings.ApplicationName, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
             Settings.TableService, Settings.QueryService, SessionId, AppData()->MonotonicTimeProvider->Now(), Settings.MutableExecuterConfig->RuntimeParameterSizeLimit.load());
+        InitializeUserFacingQueryText(*QueryState);
         if (QueryState->UserRequestContext->TraceId.empty()) {
             QueryState->UserRequestContext->TraceId = UlidGen.Next().ToString();
         }
@@ -2368,7 +2369,9 @@ public:
                 .QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0,
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
-                .Alloc = std::move(alloc)
+                .Alloc = std::move(alloc),
+                .CollectUserFacingShards = QueryState && QueryState->UserFacingTraceId
+                    && QueryState->UserFacingTraceId.GetVerbosity() >= TComponentTracingLevels::TQueryProcessor::Basic,
             };
 
             settings.UserCtx = CreateUserContext();
@@ -3505,10 +3508,7 @@ public:
                 if (QueryState->KqpSessionSpan) {
                     QueryState->KqpSessionSpan.EndError(response.DebugString());
                 }
-                NYql::TIssues issues;
-                NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
-                FinishUserFacingSpan(*QueryState, /*success*/ false, Ydb::StatusIds::StatusCode_Name(status),
-                    issues.ToOneLineString());
+                FinishUserFacingSpan(*QueryState, /*success*/ false, Ydb::StatusIds::StatusCode_Name(status));
                 LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
             }
         }

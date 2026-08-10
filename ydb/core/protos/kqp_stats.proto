@@ -58,12 +58,18 @@ message TKqpLockStats {
 
 // Per-shard read details retained for sampled user-facing traces.
 message TKqpShardReadStats {
+    enum ETiming {
+        REQUEST_TO_LAST_MESSAGE = 0;
+        FIRST_TO_LAST_MESSAGE = 1;
+    }
+
     uint64 ShardId = 1;
     uint64 StartTimeMs = 2;  // absolute epoch milliseconds
     uint64 FinishTimeMs = 3;
     uint32 Retries = 4;
     uint64 Rows = 5;
     uint32 NodeId = 6;
+    ETiming Timing = 7;
 }
 
 // extra for NYql.NDqProto.TDqTaskStats

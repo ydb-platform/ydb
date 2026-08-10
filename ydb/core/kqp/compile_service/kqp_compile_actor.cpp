@@ -67,7 +67,8 @@ public:
         ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst,
         std::shared_ptr<NYql::TExprContext> splitCtx,
         NYql::TExprNode::TPtr splitExpr,
-        bool usePessimisticLocks)
+        bool usePessimisticLocks,
+        bool collectUserFacingTrace)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -96,6 +97,9 @@ public:
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
     {
+        if (collectUserFacingTrace) {
+            UserFacingCompileCollector = std::make_shared<TUserFacingCompileDependencyCollector>();
+        }
         Config = BuildConfiguration(tableServiceConfig);
         PerStatementResult = perStatementResult && Config->GetEnablePerStatementQueryExecution();
     }
@@ -369,7 +373,8 @@ private:
         counters->TxProxyMon = Counters->TxProxyMon;
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup);
+                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
+                UserFacingCompileCollector);
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
             ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig);
         Gateway->SetToken(QueryId.Cluster, UserToken);
@@ -475,6 +480,9 @@ private:
             KqpCompileResult->ReplayMessageUserView = std::move(*ReplayMessageUserView);
         }
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(KqpCompileResult);
+        if (UserFacingCompileCollector) {
+            responseEv->UserFacingCompileSpans = UserFacingCompileCollector->Snapshot();
+        }
 
         responseEv->ReplayMessage = std::move(ReplayMessage);
         ReplayMessage = std::nullopt;
@@ -743,6 +751,7 @@ private:
 
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     NWilson::TSpan CompileActorSpan;
+    std::shared_ptr<TUserFacingCompileDependencyCollector> UserFacingCompileCollector;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     bool CollectFullDiagnostics;
@@ -765,7 +774,8 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
     bool perStatementResult, std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
-    bool usePessimisticLocks)
+    bool usePessimisticLocks,
+    bool collectUserFacingTrace)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig,
                                 moduleResolverState, counters, gUCSettings, applicationName,
@@ -773,7 +783,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
                                 perStatementResult, compileAction, std::move(queryAst),
-                                std::move(splitCtx), std::move(splitExpr), usePessimisticLocks);
+                                std::move(splitCtx), std::move(splitExpr), usePessimisticLocks, collectUserFacingTrace);
 }
 
 } // namespace NKikimr::NKqp

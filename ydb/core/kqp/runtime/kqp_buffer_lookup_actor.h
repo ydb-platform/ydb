@@ -73,6 +73,7 @@ struct TKqpBufferTableLookupSettings {
     TIntrusivePtr<TKqpCounters> Counters;
 
     NWilson::TTraceId ParentTraceId;
+    bool CollectUserFacingShards = false;
 
     TString Database;
     TString PoolId;

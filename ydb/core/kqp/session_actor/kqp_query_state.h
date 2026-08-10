@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/compilation/user_facing_trace.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -197,8 +198,10 @@ public:
     NWilson::TSpan KqpSessionSpan;
     NWilson::TTraceId UserFacingTraceId;
     TString UserFacingRootName;
+    TString ObfuscatedQueryText;
     TInstant CompileWallStart;
     TInstant CompileWallEnd;
+    std::shared_ptr<const std::vector<TUserFacingCompileSpan>> UserFacingCompileSpans;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx

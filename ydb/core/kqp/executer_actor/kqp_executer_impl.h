@@ -1962,6 +1962,7 @@ protected:
                     Stats->CopyExecStats(UserFacingTraceData->ExecStats);
                     UserFacingTraceData->TaskStats = std::move(Stats->UserFacingTaskStats);
                     UserFacingTraceData->StageAggs = std::move(Stats->UserFacingStageAggs);
+                    UserFacingTraceData->BufferLookup = std::move(Stats->UserFacingBufferLookup);
                     ResponseEv->UserFacingTraceData = std::move(UserFacingTraceData);
                 }
 

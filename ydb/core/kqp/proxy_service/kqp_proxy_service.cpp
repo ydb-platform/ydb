@@ -733,6 +733,11 @@ public:
             return;
         }
 
+        const ui64 proxyRequestStartUs = TInstant::Now().MicroSeconds();
+        if (ev->Get()->Record.HasUserFacingTraceId() && !ev->Get()->Record.GetProxyRequestStartTimeUs()) {
+            ev->Get()->Record.SetProxyRequestStartTimeUs(proxyRequestStartUs);
+        }
+
         // TODO: not the best place for adding database.
         auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(ev->Get()->GetDatabaseId());
         Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
@@ -853,6 +858,13 @@ public:
             {"targetId", targetId});
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
+        if (ev->Get()->Record.HasUserFacingTraceId()) {
+            auto* hop = ev->Get()->Record.AddProxyRequestHops();
+            hop->SetNodeId(SelfId().NodeId());
+            hop->SetTargetNodeId(targetId.NodeId());
+            hop->SetStartTimeUs(proxyRequestStartUs);
+            hop->SetEndTimeUs(TInstant::Now().MicroSeconds());
+        }
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 

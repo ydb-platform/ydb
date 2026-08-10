@@ -10,8 +10,12 @@
 #include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include "user_facing_trace.h"
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+
+#include <memory>
+#include <vector>
 
 namespace NKikimr::NKqp::NPrivateEvents {
 
@@ -22,7 +26,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing(),
         bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool isWarmupCompilation = false, bool usePessimisticLocks = false)
+        bool isWarmupCompilation = false, bool usePessimisticLocks = false, bool collectUserFacingTrace = false)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -45,6 +49,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         , SplitExpr(std::move(splitExpr))
         , IsWarmupCompilation(isWarmupCompilation)
         , UsePessimisticLocks(usePessimisticLocks)
+        , CollectUserFacingTrace(collectUserFacingTrace)
     {
         Y_ENSURE(Uid.Defined() != Query.Defined());
     }
@@ -79,6 +84,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
 
     bool IsWarmupCompilation = false;
     bool UsePessimisticLocks = false;
+    bool CollectUserFacingTrace = false;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
@@ -88,7 +94,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, TKqpTempTablesState::TConstPtr tempTablesState = nullptr, TMaybe<TQueryAst> queryAst = Nothing(),
         bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool usePessimisticLocks = false)
+        bool usePessimisticLocks = false, bool collectUserFacingTrace = false)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -107,6 +113,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
         , UsePessimisticLocks(usePessimisticLocks)
+        , CollectUserFacingTrace(collectUserFacingTrace)
     {
     }
 
@@ -133,6 +140,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
     std::shared_ptr<NYql::TExprContext> SplitCtx = nullptr;
     NYql::TExprNode::TPtr SplitExpr = nullptr;
     bool UsePessimisticLocks = false;
+    bool CollectUserFacingTrace = false;
 };
 
 struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {
@@ -143,6 +151,7 @@ struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::Ev
 
     TKqpCompileResult::TConstPtr CompileResult;
     TKqpStatsCompile Stats;
+    std::shared_ptr<const std::vector<TUserFacingCompileSpan>> UserFacingCompileSpans;
     std::optional<TString> ReplayMessage;
 
     NLWTrace::TOrbit Orbit;

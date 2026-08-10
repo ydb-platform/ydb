@@ -1078,6 +1078,16 @@ void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txSta
 void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskStats) {
     NKqpProto::TKqpTaskExtraStats extraStats;
     if (taskStats.GetExtra().UnpackTo(&extraStats)) {
+        if (CollectUserFacingTaskStats) {
+            for (const auto& shard : extraStats.GetShardReads()) {
+                if (UserFacingBufferLookup.ShardReads.size() >= MaxUserFacingShardReadsPerTask) {
+                    ++UserFacingBufferLookup.ShardReadsTruncated;
+                    continue;
+                }
+                UserFacingBufferLookup.ShardReads.push_back(shard);
+            }
+            UserFacingBufferLookup.ShardReadsTruncated += extraStats.GetShardReadsTruncated();
+        }
         LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
         LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
         for (auto id : extraStats.GetLockStats().GetBreakerQuerySpanIds()) {

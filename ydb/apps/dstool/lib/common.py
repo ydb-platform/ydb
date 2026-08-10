@@ -27,7 +27,9 @@ import ydb.core.protos.whiteboard_disk_states_pb2 as whiteboard_disk_states
 import ydb.core.protos.cms_pb2 as kikimr_cms
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
 import ydb.public.api.protos.ydb_bridge_common_pb2 as ydb_bridge_common
+import ydb.public.api.protos.draft.ydb_distributed_storage_pb2 as ydb_distributed_storage
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
+from ydb.public.api.grpc.draft import ydb_distributed_storage_v1_pb2_grpc as distributed_storage_grpc_server
 from ydb.public.api.grpc.draft import ydb_nbs_v1_pb2_grpc as nbs_grpc_server
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.apps.dstool.lib.arg_parser import print_error_with_usage
@@ -368,6 +370,10 @@ class ConnectionError(Exception):
     pass
 
 
+class DistributedStorageUnavailable(Exception):
+    pass
+
+
 class QueryError(Exception):
     pass
 
@@ -394,14 +400,30 @@ def get_random_endpoints_for_query(request_type=None, items_count=1, filter=None
     return endpoints[:items_count]
 
 
-def retry_query_with_endpoints(query, endpoints, request_type, query_name, max_retries=5):
+def _raise_retry_error(errors):
+    if errors and all(isinstance(error, DistributedStorageUnavailable) for error in errors):
+        raise errors[-1]
+    raise ConnectionError("Can't connect to specified addresses")
+
+
+def retry_query_with_endpoints(query, endpoints, request_type, query_name, max_retries=5, errors=None):
+    errors = [] if errors is None else errors
     try_index = 0
     result = None
     for endpoint in endpoints:
         try:
             result = query(endpoint)
             break
+        except DistributedStorageUnavailable as e:
+            errors.append(e)
+            try_index += 1
+            print_if_verbose(connection_params.args,
+                             'INFO: distributed storage service is unavailable at %s: %s'
+                             % (endpoint.host_with_port, e), file=sys.stderr)
+            if try_index == max_retries:
+                _raise_retry_error(errors)
         except Exception as e:
+            errors.append(e)
             try_index += 1
             if isinstance(e, urllib.error.URLError):
                 bad_hosts.add(endpoint.host_with_port)
@@ -410,7 +432,7 @@ def retry_query_with_endpoints(query, endpoints, request_type, query_name, max_r
                 if request_type == 'http' and try_index == max_retries:
                     print('HINT: consider trying different protocol for endpoints when experiencing massive fetch failures from different hosts', file=sys.stderr)
             if try_index == max_retries:
-                raise ConnectionError("Can't connect to specified addresses")
+                _raise_retry_error(errors)
     return try_index, result
 
 
@@ -442,13 +464,18 @@ def query_random_host_with_retry(retries=5, request_type=None):
 
             try_index = 0
             result = None
+            errors = []
             if explicit_endpoint:
-                try_index, result = retry_query_with_endpoints(send_query, [explicit_endpoint] * retries, request_type, func.__name__, retries)
+                try_index, result = retry_query_with_endpoints(send_query, [explicit_endpoint] * retries,
+                                                               request_type, func.__name__, retries, errors)
                 return result
 
             if endpoints:
-                try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__, retries)
-                return result
+                try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__,
+                                                               retries, errors)
+                if result is not None:
+                    return result
+                _raise_retry_error(errors)
 
             if result is not None:
                 return result
@@ -456,7 +483,8 @@ def query_random_host_with_retry(retries=5, request_type=None):
             print_if_verbose(connection_params.args, 'INFO: using random hosts', file=sys.stderr)
 
             endpoints = get_random_endpoints_for_query(request_type=request_type, items_count=retries - try_index, filter=filter_good_endpoints)
-            sub_try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__, retries - try_index)
+            sub_try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__,
+                                                               retries - try_index, errors)
             try_index += sub_try_index
 
             if result is not None:
@@ -472,7 +500,8 @@ def query_random_host_with_retry(retries=5, request_type=None):
                     connection_params.printed_warning_about_not_assigned_http_protocol = True
                 print_if_verbose(connection_params.args, 'INFO: failed with http endpoints, try to use grpc endpoints', file=sys.stderr)
                 endpoints = get_random_endpoints_for_query(request_type='grpc', items_count=retries - try_index, filter=filter_good_endpoints)
-                sub_try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__, retries - try_index)
+                sub_try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type,
+                                                                   func.__name__, retries - try_index, errors)
                 try_index += sub_try_index
 
             if request_type == 'grpc' and connection_params.http_endpoints:
@@ -485,7 +514,8 @@ def query_random_host_with_retry(retries=5, request_type=None):
                     connection_params.printed_warning_about_not_assigned_grpc_protocol = True
                 print_if_verbose(connection_params.args, 'INFO: failed with grpc endpoints, try to use http endpoints', file=sys.stderr)
                 endpoints = get_random_endpoints_for_query(request_type='http', items_count=retries - try_index, filter=filter_good_endpoints)
-                sub_try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__, retries - try_index)
+                sub_try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type,
+                                                                   func.__name__, retries - try_index, errors)
                 try_index += sub_try_index
 
             if result is not None:
@@ -495,7 +525,11 @@ def query_random_host_with_retry(retries=5, request_type=None):
 
             endpoints = get_random_endpoints_for_query(request_type=None, items_count=retries - try_index, filter=None)
             endpoints = list(islice(cycle(endpoints), retries - try_index))
-            sub_try_index, result = retry_query_with_endpoints(lambda endpoint: func(*args, **kwargs, endpoint=endpoint), endpoints, request_type, func.__name__, retries - try_index)
+            sub_try_index, result = retry_query_with_endpoints(
+                lambda endpoint: func(*args, **kwargs, endpoint=endpoint), endpoints, request_type,
+                func.__name__, retries - try_index, errors)
+            if result is None:
+                _raise_retry_error(errors)
             return result
 
         return wrapped
@@ -545,6 +579,8 @@ def invoke_grpc(
     stub_factory=kikimr_grpc.TGRpcServerStub,
     endpoints=None,
     metadata=None,
+    result_handler=None,
+    report_unimplemented=False,
 ):
     options = [
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
@@ -561,9 +597,19 @@ def invoke_grpc(
                 res = getattr(stub, func)(*params)
             else:
                 res = getattr(stub, func)(*params, metadata=metadata)
-            if connection_params.debug:
+            if result_handler is not None:
+                res = result_handler(res)
+            elif connection_params.debug:
                 print('INFO: result <<< %s >>>' % text_format.MessageToString(res, as_one_line=True), file=sys.stderr)
             return res
+        except grpc.RpcError as e:
+            if report_unimplemented and e.code() == grpc.StatusCode.UNIMPLEMENTED:
+                raise DistributedStorageUnavailable(
+                    'gRPC method %s is unavailable at %s: %s'
+                    % (func, endpoint.host_with_grpc_port, e.details())) from e
+            if connection_params.debug:
+                print('ERROR: exception %s' % e, file=sys.stderr)
+            raise ConnectionError("Can't connect to specified addresses by gRPC protocol")
         except Exception as e:
             if connection_params.debug:
                 print('ERROR: exception %s' % e, file=sys.stderr)
@@ -579,6 +625,52 @@ def invoke_grpc(
         with grpc.insecure_channel(hostport, options) as channel:
             retval = work(channel)
     return retval
+
+
+def invoke_distributed_storage_request(request_type, request, result_handler=None):
+    return invoke_grpc(
+        request_type,
+        request,
+        stub_factory=distributed_storage_grpc_server.DistributedStorageServiceStub,
+        metadata=_auth_metadata(),
+        result_handler=result_handler,
+        report_unimplemented=True,
+    )
+
+
+def fetch_storage_state(storage_pools=False, groups=False, vdisks=False, pdisks=False, nodes=False,
+                        devices=False, settings=False):
+    request = ydb_distributed_storage.StorageStateRequest(
+        include_storage_pools=storage_pools,
+        include_groups=groups,
+        include_vdisks=vdisks,
+        include_pdisks=pdisks,
+        include_nodes=nodes,
+        include_devices=devices,
+        include_settings=settings,
+    )
+
+    def consume(responses):
+        result = ydb_distributed_storage.StorageStateResult()
+        error_response = None
+        for response in responses:
+            if connection_params.debug:
+                print('INFO: result <<< %s >>>' % text_format.MessageToString(response, as_one_line=True),
+                      file=sys.stderr)
+            if response.status != StatusIds.SUCCESS:
+                error_response = response
+            elif response.HasField('result'):
+                result.MergeFrom(response.result)
+        return result, error_response
+
+    result, error_response = invoke_distributed_storage_request('StreamStorageState', request,
+                                                                result_handler=consume)
+    if error_response is not None:
+        request_s = text_format.MessageToString(request, as_one_line=True)
+        response_s = text_format.MessageToString(error_response, as_one_line=True)
+        raise QueryError('Failed to fetch distributed storage state; request: %s; response: %s'
+                         % (request_s, response_s))
+    return result
 
 
 def invoke_grpc_bsc_request(request, endpoint=None):
@@ -1303,21 +1395,41 @@ def fetch_node_to_endpoint_map(nodes=None):
     return res
 
 
-def get_vslots_by_vdisk_ids(base_config, vdisk_ids):
-    vdisk_vslot_map = {}
-    for v in base_config.VSlot:
-        vdisk_vslot_map['[%08x:_:%u:%u:%u]' % (v.GroupId, v.FailRealmIdx, v.FailDomainIdx, v.VDiskIdx)] = v
-        vdisk_vslot_map['[%08x:%u:%u:%u:%u]' % (v.GroupId, v.GroupGeneration, v.FailRealmIdx, v.FailDomainIdx, v.VDiskIdx)] = v
-        vdisk_vslot_map['(%d-%u-%u-%u-%u)' % (v.GroupId, v.GroupGeneration, v.FailRealmIdx, v.FailDomainIdx, v.VDiskIdx)] = v
+def _vdisk_id_strings(group_id, group_generation, fail_realm_idx, fail_domain_idx, vdisk_idx):
+    return (
+        '[%08x:_:%u:%u:%u]' % (group_id, fail_realm_idx, fail_domain_idx, vdisk_idx),
+        '[%08x:%u:%u:%u:%u]' % (group_id, group_generation, fail_realm_idx, fail_domain_idx, vdisk_idx),
+        '(%d-%u-%u-%u-%u)' % (group_id, group_generation, fail_realm_idx, fail_domain_idx, vdisk_idx),
+    )
 
+
+def _get_items_by_vdisk_ids(items_by_id, vdisk_ids):
     res = []
     for string in vdisk_ids:
         for vdisk_id in string.split():
-            if vdisk_id not in vdisk_vslot_map:
+            if vdisk_id not in items_by_id:
                 raise Exception('VDisk with id %s not found' % vdisk_id)
-            vslot = vdisk_vslot_map[vdisk_id]
-            res.append(vslot)
+            res.append(items_by_id[vdisk_id])
     return res
+
+
+def get_vslots_by_vdisk_ids(base_config, vdisk_ids):
+    vdisk_vslot_map = {}
+    for vslot in base_config.VSlot:
+        for vdisk_id in _vdisk_id_strings(*get_vdisk_id(vslot)):
+            vdisk_vslot_map[vdisk_id] = vslot
+    return _get_items_by_vdisk_ids(vdisk_vslot_map, vdisk_ids)
+
+
+def get_vdisks_by_vdisk_ids(vdisks, vdisk_ids):
+    vdisk_map = {}
+    for vdisk in vdisks:
+        identifier = vdisk.id
+        for vdisk_id in _vdisk_id_strings(identifier.group_id, identifier.group_generation,
+                                          identifier.fail_realm_idx, identifier.fail_domain_idx,
+                                          identifier.vdisk_idx):
+            vdisk_map[vdisk_id] = vdisk
+    return _get_items_by_vdisk_ids(vdisk_map, vdisk_ids)
 
 
 def vdisk_is_ok(vslot):

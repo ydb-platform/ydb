@@ -45,6 +45,7 @@ CLUSTER_CONFIG = dict(
     },
     enable_audit_log=True,
     extra_feature_flags=['enable_column_statistics'],
+    extra_grpc_services=['distributed_storage'],
     audit_log_config={
         'file_backend': {
             'format': 'json',

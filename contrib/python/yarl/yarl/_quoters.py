@@ -1,6 +1,5 @@
 """Quoting and unquoting utilities for URL parts."""
 
-from typing import Union
 from urllib.parse import quote
 
 from ._quoting import _Quoter, _Unquoter
@@ -22,7 +21,7 @@ QS_UNQUOTER = _Unquoter(qs=True)
 UNQUOTER_PLUS = _Unquoter(plus=True)  # to match urllib.parse.unquote_plus
 
 
-def human_quote(s: Union[str, None], unsafe: str) -> Union[str, None]:
+def human_quote(s: str | None, unsafe: str) -> str | None:
     if not s:
         return s
     for c in "%" + unsafe:

@@ -59,8 +59,6 @@ If you have existing queries without an explicit index (without the `VIEW` secti
 
 {% endnote %}
 
-In transactional applications, such informational queries are executed using paginated data output, which prevents the cost and execution time from growing as the number of records matching the filter conditions increases. The approach to writing [paged queries](../dev/paging.md) described using the primary key example is also applicable to columns included in a secondary index.
-
 ### Automatic index usage in queries
 
 Explicitly specifying the `VIEW` section takes precedence over the optimizer's decision to use secondary indexes. That is, the query

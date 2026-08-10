@@ -1180,15 +1180,9 @@ private:
                 }
             }
 
-            std::optional<uint64_t> maxOffset;
-            if (Self.SourceParams.GetStopAtCurrentEndOffsets() && event.GetEndOffset()) {
-                maxOffset = event.GetEndOffset() - 1;
-            }
-
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << "StartPartitionSessionEvent received (end offset " << event.GetEndOffset() 
-                << "), confirm StartPartitionSession with start offset " << partitionInfo.Offset
-                << ", max offset " << maxOffset);
-            event.Confirm(partitionInfo.Offset, std::nullopt, maxOffset);
+                << "), confirm StartPartitionSession with start offset " << partitionInfo.Offset);
+            event.Confirm(partitionInfo.Offset, std::nullopt);
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {

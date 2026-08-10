@@ -36,7 +36,7 @@
 
 #include <library/cpp/streams/zstd/zstd.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 #include <library/cpp/yt/misc/range_formatters.h>
 
 #include <library/cpp/yt/string/string_builder.h>
@@ -88,7 +88,7 @@ void WriteWellKnownTag(TTaggedPayloadWriter* writer, TStringBuf key, TStringBuf 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(NLogging::TLogger, Logger, "Test");
+YT_DEFINE_LEAKY_GLOBAL(NLogging::TLogger, Logger, "Test");
 
 std::string GenerateLogFileName()
 {

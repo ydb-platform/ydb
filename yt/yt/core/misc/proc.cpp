@@ -74,7 +74,7 @@ namespace NYT {
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Proc");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Proc");
 
 std::string LinuxErrorCodeFormatter(int code)
 {

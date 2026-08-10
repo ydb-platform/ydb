@@ -35,7 +35,7 @@ const TFairShareThreadPoolTag DefaultExecutionTag = "default";
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FairShareThreadPool");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "FairShareThreadPool");
 
 DECLARE_REFCOUNTED_CLASS(TBucketMapping)
 DECLARE_REFCOUNTED_CLASS(TTwoLevelFairShareQueue)

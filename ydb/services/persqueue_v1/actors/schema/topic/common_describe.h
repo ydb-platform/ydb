@@ -287,7 +287,8 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
         void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
             LOG_D("Handle TEvDeliveryProblem. TabletId=" << ev->Get()->TabletId);
-            if (OnUndelivered(ev)) {
+            // OnUndelivered returns true for the current pipe subscription; false means a stale notification.
+            if (!OnUndelivered(ev)) {
                 return;
             }
 

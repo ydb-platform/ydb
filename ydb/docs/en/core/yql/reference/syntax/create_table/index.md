@@ -69,10 +69,10 @@ Data type of the column. The full list of data types supported by {{ ydb-short-n
 Index definition on the table. Supported:
 
 * [secondary indexes](secondary_index.md),
-* [secondary indexes](vector_index.md),
-* [vector indexes](fulltext_index.md),
-* [full-text indexes](bloom_skip_index.md),
-* [Bloom indexes](min_max_index.md),
+* [vector indexes](vector_index.md),
+* [full-text indexes](fulltext_index.md),
+* [Bloom indexes](bloom_skip_index.md),
+* [min-max index](min_max_index.md),
 * [JSON indexes](json_index.md).
 
 ### PRIMARY KEY

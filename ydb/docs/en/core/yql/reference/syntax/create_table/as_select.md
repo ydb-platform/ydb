@@ -30,7 +30,7 @@ If `SELECT` returns two or more rows with the same primary key value, after the 
 {% endnote %}
 
 * `CREATE TABLE AS` is supported only in the [implicit transaction control](../../../../concepts/transactions.md#implicit) mode. The table will appear at the specified path already populated.
-* `CREATE TABLE AS` can only be a sigle [DML](https://en.wikipedia.org/wiki/Data_manipulation_language)/[DDL](https://en.wikipedia.org/wiki/Data_definition_language) statement in a query. It's possible to use [PRAGMA](../pragma.md), [DECLARE](../declare.md) or [named expressions](../expressions.md#named-nodes) in the same query.
+* `CREATE TABLE AS` can only be a single [DML](https://en.wikipedia.org/wiki/Data_manipulation_language)/[DDL](https://en.wikipedia.org/wiki/Data_definition_language) statement in a query. It's possible to use [PRAGMA](../pragma.md), [DECLARE](../declare.md) or [named expressions](../expressions.md#named-nodes) in the same query.
 * `CREATE TABLE AS` doesn't cause lock conflicts with other transactions. It doesn't use locks. Reads use a consistent snapshot. Moving or splitting [tablets](../../../../concepts/glossary.md#tablet) doesn't cause errors.
 * `CREATE TABLE AS` allows using [column-oriented tables](../../../../concepts/glossary.md#column-oriented-table) and [row-oriented tables](../../../../concepts/glossary.md#row-oriented-table) in the same query.
 * `CREATE TABLE AS` creates a table in the temporary directory `.tmp/sessions`, and after successful data write moves it to the specified location. If the operation is interrupted due to an error, the temporary table is not deleted immediately but remains in the system for some time.

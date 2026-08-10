@@ -871,7 +871,7 @@ Distributed transactions in {{ ydb-short-name }} are inspired by the research pa
 
 #### Optimistic locking {#optimistic-locking}
 
-As in many other database management systems, {{ ydb-short-name }} queries can place locks on specific data fragments, such as table rows, to ensure that concurrent changes do not bring them into an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the beginning of transactions, but when attempting to commit them. The first approach is called **perssimistic locking** (for example, used in PostgreSQL), and the second is called **optimistic locking** (used in {{ ydb-short-name }}).
+As in many other database management systems, {{ ydb-short-name }} queries can place locks on specific data fragments, such as table rows, to ensure that concurrent changes do not bring them into an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the beginning of transactions, but when attempting to commit them. The first approach is called **pessimistic locking** (for example, used in PostgreSQL), and the second is called **optimistic locking** (used in {{ ydb-short-name }}).
 
 #### Transaction lock invalidation {#tli}
 

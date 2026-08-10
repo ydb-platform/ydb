@@ -5,4 +5,4 @@
 This section contains practical materials on local index types:
 
 * [{#T}](../bloom-skip-indexes.md) — Bloom indexes for accelerating selective queries by skipping data fragments.
-* [{#T}](../min_max-skip-index.md) — Bloom skip indexes that speed up selective queries by skipping data fragments.
+* [{#T}](../min_max-skip-index.md) — min_max index that skips data fragments based on saved value ranges.

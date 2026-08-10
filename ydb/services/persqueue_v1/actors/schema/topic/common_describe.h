@@ -46,6 +46,9 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
         static constexpr NKikimrServices::EServiceKikimr Service = NKikimrServices::EServiceKikimr::PQ_SCHEMA;
         static constexpr TDuration RequestTimeout = TDuration::Seconds(10);
+        static constexpr size_t StatsMaxRetries = 15;
+        static constexpr TDuration StatsRetryInitialDelay = TDuration::MilliSeconds(25);
+        static constexpr TDuration StatsRetryMaxDelay = TDuration::MilliSeconds(250);
         static constexpr ui64 LocationsRetryWakeupTag = 100;
         static constexpr ui64 RequestTimeoutWakeupTag = 101;
 
@@ -364,15 +367,14 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
         void RequestStats(ui64 tabletId) {
             LOG_D("Stats " << tabletId);
-            StatsBackoff.try_emplace(
-                tabletId, 5, TDuration::MilliSeconds(25), TDuration::MilliSeconds(250));
+            StatsBackoff.try_emplace(tabletId, StatsMaxRetries, StatsRetryInitialDelay, StatsRetryMaxDelay);
             SendToTablet(tabletId, CreateStatusRequest().release(), tabletId);
             TabletsInflight.insert(tabletId);
         }
 
         void ScheduleStatsRetry(ui64 tabletId) {
             auto [it, _] = StatsBackoff.try_emplace(
-                tabletId, 10, TDuration::MilliSeconds(25), TDuration::MilliSeconds(250));
+                tabletId, StatsMaxRetries, StatsRetryInitialDelay, StatsRetryMaxDelay);
             if (!it->second.HasMore()) {
                 LOG_W("Stats retries exceeded for tablet " << tabletId);
                 TabletsInflight.erase(tabletId);

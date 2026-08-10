@@ -131,9 +131,10 @@ struct TDirectReadRestoreEnv {
     std::atomic<ui64> HeldForgetResponses{0};
     TVector<THolder<IEventHandle>> HeldForgetEvents;
 
-    // PARTITION_ENSURE → OnUnhandledException → CloseSession("unexpected error: ...").
-    std::atomic<ui64> UnexpectedErrorCloseSession{0};
-    TString UnexpectedErrorCloseReason;
+    // Any TEvCloseSession with ErrorCode != OK (ENSURE, empty-queue CloseSessionAndDie, bad ack, …).
+    // Teardown DropHooks() clears the observer before gRPC cancel, so shutdown noise is ignored.
+    std::atomic<ui64> ErrorCloseSession{0};
+    TString ErrorCloseReason;
 
     // OnDirectReadsRestored → TEvUpdateSession; proves restore finished (not silent-hang).
     std::atomic<ui64> UpdateSessionCount{0};
@@ -270,10 +271,9 @@ struct TDirectReadRestoreEnv {
 
         runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = ev->CastAsLocal<NGRpcProxy::V1::TEvPQProxy::TEvCloseSession>()) {
-                // OnUnhandledException always prefixes with "unexpected error:".
-                if (msg->Reason.Contains("unexpected error:")) {
-                    UnexpectedErrorCloseReason = msg->Reason;
-                    ++UnexpectedErrorCloseSession;
+                if (msg->ErrorCode != Ydb::PersQueue::ErrorCode::OK) {
+                    ErrorCloseReason = msg->Reason;
+                    ++ErrorCloseSession;
                 }
             }
             if (ev->CastAsLocal<NGRpcProxy::V1::TEvPQProxy::TEvUpdateSession>()) {
@@ -610,20 +610,20 @@ protected:
         Client.SendDirectReadAckNoWait(Runtime(), directReadId);
         WaitUntil(Runtime(), [&] {
             return Env.DirectReadAckCount.load() > before
-                || Env.UnexpectedErrorCloseSession.load() > 0;
+                || Env.ErrorCloseSession.load() > 0;
         });
-        AssertNoUnexpectedClose("DirectReadAck must not kill partition actor");
+        AssertNoErrorClose("DirectReadAck must not kill partition actor");
     }
 
     // 9–10. Shared asserts.
-    void AssertNoUnexpectedClose(const TString& what) {
-        UNIT_ASSERT_C(Env.UnexpectedErrorCloseSession.load() == 0,
+    void AssertNoErrorClose(const TString& what) {
+        UNIT_ASSERT_C(Env.ErrorCloseSession.load() == 0,
             what
                 << "; heldPrepare=" << Env.HeldPrepareResponses.load()
                 << "; heldPublish=" << Env.HeldPublishResponses.load()
                 << "; heldForget=" << Env.HeldForgetResponses.load()
                 << "; heldRestorePP=" << Env.HeldPrepareOrPublish.load()
-                << "; reason=" << Env.UnexpectedErrorCloseReason);
+                << "; reason=" << Env.ErrorCloseReason);
     }
 
     void AssertUpdateSessionAdvanced(ui64 before, const TString& what) {
@@ -639,9 +639,9 @@ protected:
         Env.ReleaseHeldPrepares();
         WaitUntil(Runtime(), [&] {
             return Env.HeldPublishResponses.load() >= 1
-                || Env.UnexpectedErrorCloseSession.load() > 0;
+                || Env.ErrorCloseSession.load() > 0;
         });
-        AssertNoUnexpectedClose(
+        AssertNoErrorClose(
             "late Prepare during Publish restore must not kill partition actor via unhandled exception");
         UNIT_ASSERT_C(Env.HeldPublishResponses.load() >= 1,
             "expected Publish stage after releasing held Prepares");
@@ -654,9 +654,9 @@ protected:
         release();
         WaitUntil(Runtime(), [&] {
             return Env.UpdateSessionCount.load() > before
-                || Env.UnexpectedErrorCloseSession.load() > 0;
+                || Env.ErrorCloseSession.load() > 0;
         });
-        AssertNoUnexpectedClose(what);
+        AssertNoErrorClose(what);
         AssertUpdateSessionAdvanced(before,
             "restore must complete with TEvUpdateSession (not silent-hang)");
     }
@@ -668,9 +668,9 @@ protected:
         release();
         WaitUntil(Runtime(), [&] {
             return Env.DirectReadResponseCount.load() > before
-                || Env.UnexpectedErrorCloseSession.load() > 0;
+                || Env.ErrorCloseSession.load() > 0;
         });
-        AssertNoUnexpectedClose(what);
+        AssertNoErrorClose(what);
         AssertDirectReadAdvanced(before,
             "Prepare/Publish must complete after releasing held Prepares (not silent-hang)");
     }
@@ -679,22 +679,22 @@ protected:
     template <typename TRelease>
     void ReleaseLateReplyAndAssertSurvived(TRelease&& release, const TString& what) {
         const ui64 lateBefore = Env.LateNonForgetReplyDuringForget.load();
-        const ui64 unexpectedBefore = Env.UnexpectedErrorCloseSession.load();
+        const ui64 errorCloseBefore = Env.ErrorCloseSession.load();
         release();
         WaitUntil(Runtime(), [&] {
             return Env.LateNonForgetReplyDuringForget.load() > lateBefore
-                || Env.UnexpectedErrorCloseSession.load() > unexpectedBefore;
+                || Env.ErrorCloseSession.load() > errorCloseBefore;
         });
-        AssertNoUnexpectedClose(what);
+        AssertNoErrorClose(what);
     }
 
     // Wait for UpdateSession after an already-triggered action (e.g. nested reboot).
     void WaitAndAssertUpdateSessionAdvanced(ui64 before, const TString& what) {
         WaitUntil(Runtime(), [&] {
             return Env.UpdateSessionCount.load() > before
-                || Env.UnexpectedErrorCloseSession.load() > 0;
+                || Env.ErrorCloseSession.load() > 0;
         });
-        AssertNoUnexpectedClose(what);
+        AssertNoErrorClose(what);
         AssertUpdateSessionAdvanced(before,
             "restore must complete with TEvUpdateSession (not silent-hang)");
     }

@@ -12,7 +12,7 @@
 namespace NKikimr::NBackup {
 
 // Max block size must always be at least size of table row (~8 MB) serialized into text csv format.
-// Real value is bound to 32 MB in TBackupTask.TScanSettings.BytesBatchSize setting.
+// Default export batch size is 32 MB (data_shard_config.backup_bytes_batch_size / ScanSettings.BytesBatchSize).
 static constexpr size_t MAX_BLOCK_SIZE = 50_MB;
 
 TString NormalizeEncryptionAlgorithmName(const TString& name);

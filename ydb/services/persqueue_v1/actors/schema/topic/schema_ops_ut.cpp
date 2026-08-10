@@ -74,13 +74,14 @@ std::shared_ptr<TResultHolder<TResponse>> DoActorRequest(
     const TRequest& request,
     NActors::IActor* (*factory)(NGRpcService::IRequestOpCtx*),
     const TString& path,
-    const TString& database = "/Root")
+    const TString& database = "/Root",
+    TDuration waitTimeout = TDuration::Seconds(10))
 {
     auto result = std::make_shared<TResultHolder<TResponse>>();
     auto edgeActor = runtime.AllocateEdgeActor();
     auto* ctx = new TRequestCtx<TRequest, TResponse>(request, path, database, result, edgeActor);
     runtime.Register(factory(ctx));
-    runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edgeActor, TDuration::Seconds(10));
+    runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edgeActor, waitTimeout);
     UNIT_ASSERT_C(result->ResultStatus, "The operation is still in progress");
     return result;
 }
@@ -207,6 +208,43 @@ Y_UNIT_TEST(DescribePartitionRetriesOnLocationDeliveryProblem) {
     UNIT_ASSERT(describeResult);
     UNIT_ASSERT(describeResult->partition().has_partition_location());
     UNIT_ASSERT_GT(describeResult->partition().partition_location().node_id(), 0);
+}
+
+Y_UNIT_TEST(DescribePartitionTimesOutWhenLocationStuck) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_describe_part_timeout";
+    CreateTopic(runtime, path);
+
+    // Drop location forwards so the actor never gets a response and must hit RequestTimeout.
+    auto dropObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
+        [](TEvPipeCache::TEvForward::TPtr& ev) {
+            if (ev && ev->Get()->Ev &&
+                ev->Get()->Ev->Type() == TEvPersQueue::TEvGetPartitionsLocation::EventType)
+            {
+                ev.Reset();
+            }
+        });
+
+    Ydb::Topic::DescribePartitionRequest request;
+    request.set_path(path);
+    request.set_partition_id(0);
+    request.set_include_location(true);
+
+    auto result = std::make_shared<TResultHolder<Ydb::Topic::DescribePartitionResponse>>();
+    auto edgeActor = runtime.AllocateEdgeActor();
+    auto* ctx = new TRequestCtx<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+        request, path, "/Root", result, edgeActor);
+    auto actorId = runtime.Register(CreateDescribePartitionActor(ctx));
+    runtime.EnableScheduleForActor(actorId, true);
+
+    // Reach StateWork (location request stuck), then jump past RequestTimeout.
+    runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
+    runtime.AdvanceCurrentTime(TDuration::Seconds(11));
+
+    runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edgeActor, TDuration::Seconds(5));
+    UNIT_ASSERT_C(result->ResultStatus, "The operation is still in progress");
+    AssertStatus(result, Ydb::StatusIds::TIMEOUT, "Describe request timed out");
 }
 
 Y_UNIT_TEST(DescribeUnknownConsumer) {

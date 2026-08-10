@@ -17,17 +17,13 @@
  *  5. Merge posting lists using one of two algorithms:
  *       - TAndOptimizedMergeAlgorithm -- leapfrog/galloping merge for AND semantics.
  *       - TDefaultMergeAlgorithm       -- min-heap merge for OR / minimum_should_match.
- *  6. (Relevance mode with imbalanced tokens) Use a two-layer (L1/L2) approach:
- *     L1 merges only the rarest tokens, then L2 verifies candidates against the
- *     remaining frequent tokens via point lookups, avoiding full scans of large
- *     posting lists.
- *  7. For matched documents, optionally read document lengths from the docs table
+ *  6. For matched documents, optionally read document lengths from the docs table
  *     and compute BM25 scores.  When a LIMIT is specified, maintain a TopK buffer
  *     with amortized O(1) nth_element compaction so only the highest-scoring
  *     documents survive.
- *  8. Fetch full row data from the main table (unless "covered" -- all requested
+ *  7. Fetch full row data from the main table (unless "covered" -- all requested
  *     columns are already available from the index key).
- *  9. Stream result rows to the compute actor via ResultQueue / NotifyCA().
+ *  8. Stream result rows to the compute actor via ResultQueue / NotifyCA().
  *
  * === Tables involved (relevance index) ===
  *
@@ -111,10 +107,8 @@ constexpr double EPSILON = 1e-6;
 // should be filled with the computed BM25 relevance score rather than a table cell.
 constexpr i32 RELEVANCE_COLUMN_MARKER = -1;
 
-// When token document-frequencies differ by more than this factor, the rarer tokens
-// are used for L1 merge and the frequent ones are deferred to L2 point lookups.
-// For n-gram queries the frequent n-grams are dropped entirely because n-gram
-// results are post-filtered anyway.
+// For n-gram queries, when token document-frequencies differ by more than this factor,
+// the frequent n-grams are skipped during search because n-gram results are post-filtered.
 constexpr double NGRAM_IMBALANCE_FACTOR = 10;
 
 // Traits for the doc-id integer type. Specialised for the four supported PK widths.
@@ -565,41 +559,6 @@ public:
         return TTableRange(KeyCells);
     }
 };
-
-/**
- * TL1DocumentInfo -- wraps a TDocumentInfo with the token word for L2 verification.
- *
- * When a document matches in the L1 merge (rarest tokens), we need to verify it
- * against each frequent (L2) token by doing a point lookup in the posting table
- * for the key (token, doc_id).  TL1DocumentInfo stores that composite key in
- * IndexKey so it can be used with TReadItemsQueue::Sequential().
- */
-template <typename TDocId>
-class TL1DocumentInfo : public TSimpleRefCount<TL1DocumentInfo<TDocId>> {
-public:
-    using TPtr = TIntrusivePtr<TL1DocumentInfo<TDocId>>;
-    typename TDocumentInfo<TDocId>::TPtr Document;
-    TString Word;
-    TOwnedCellVec IndexKey;
-
-    TL1DocumentInfo(typename TDocumentInfo<TDocId>::TPtr& document, TString word, TConstArrayRef<TCell> prefix = {})
-        : Document(document)
-        , Word(word)
-    {
-        TCell tokenCell(Word.data(), Word.size());
-        TVector<TCell> point;
-        point.reserve(prefix.size() + 2);
-        point.insert(point.end(), prefix.begin(), prefix.end());
-        point.push_back(tokenCell);
-        point.push_back(TCell::Make<TDocId>(document->DocumentNumId));
-        IndexKey = TOwnedCellVec(point);
-    }
-
-    TTableRange GetPoint() const {
-        return TTableRange(IndexKey);
-    }
-};
-
 
 /**
  * TDocIdHeapEntry -- lightweight (word_index, doc_id) pair used in the merge priority queue.
@@ -1078,9 +1037,6 @@ public:
  *   - WordIndex: position of this token in the Words[] vector (also the stream
  *     index for the merge algorithm).
  *   - Word: the tokenized search term string.
- *   - L1 / L2: flags controlling which merge layer this token participates in.
- *     L1 tokens participate in the primary merge; L2 tokens are verified via
- *     point lookups against L1-matched candidates.
  *   - StartReadKeyFrom: resume point after a completed shard read; set to
  *     maxDocId+1 so the next BuildRangesToRead() continues from where we left off.
  *   - Frequency: document frequency from the dict table (used for IDF and
@@ -1101,12 +1057,9 @@ public:
     // Empty for a non-prefixed index. Prepended to every posting read key.
     TConstArrayRef<TCell> Prefix;
     TOwnedTableRange WordKeyCells;
-    bool L1 = true;
-    bool L2 = false;
     // Set from the `+term` query syntax: a required (Lucene MUST) term that every
-    // matching document must contain. Drives the required-term L1/L2 split.
+    // matching document must contain.
     bool Required = false;
-    ui32 L2StreamIndex = 0;
     TDocId StartReadKeyFrom = std::numeric_limits<TDocId>::min();
     // at the start we begin with the inclusive boundary
     bool StartReadKeyFromInclusive = true;
@@ -1200,7 +1153,7 @@ public:
  * criteria (AND / OR with minimum_should_match).
  *
  * Key state:
- *   - Streams[]: one TTokenStream per L1 (or L2) token.
+ *   - Streams[]: one TTokenStream per token.
  *   - MinShouldMatch: minimum number of tokens a document must match.
  *   - FinishedTokens: count of streams that have been fully consumed.
  *   - WithFrequencies: whether to extract term frequencies for BM25 scoring.
@@ -1301,10 +1254,9 @@ class TAndOptimizedMergeAlgorithm : public IMergeAlgorithm<TDocId> {
     std::deque<ui32> ReadyStreams;
 
 public:
-    TAndOptimizedMergeAlgorithm(std::vector<std::unique_ptr<TTokenStream<TDocId>>>&& streams, ui64 minShouldMatch, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
-        : TBase(std::move(streams), minShouldMatch, withFrequencies, keyColumnTypes)
+    TAndOptimizedMergeAlgorithm(std::vector<std::unique_ptr<TTokenStream<TDocId>>>&& streams, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
+        : TBase(std::move(streams), streams.size(), withFrequencies, keyColumnTypes)
     {
-        YQL_ENSURE(Streams.size() == TokenCount, "Misuse of TAndOptimizedMatchAlgo: minShouldMatch must be equal to tokenCount");
     }
 
     void AddResult(ui64 tokenIndex, std::unique_ptr<TEvDataShard::TEvReadResult> msg) override {
@@ -1463,12 +1415,20 @@ class TDefaultMergeAlgorithm : public IMergeAlgorithm<TDocId> {
     using TBase::WithFrequencies;
 
     std::priority_queue<THeapEntry, TStackVec<THeapEntry, 64>, typename THeapEntry::TCompare> MergeQueue;
+    std::vector<bool> RequiredTokens;
+    size_t RequiredCount = 0;
 
 public:
-    TDefaultMergeAlgorithm(std::vector<std::unique_ptr<TTokenStream<TDocId>>>&& streams, ui64 minShouldMatch, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
+    TDefaultMergeAlgorithm(std::vector<std::unique_ptr<TTokenStream<TDocId>>>&& streams,
+        std::vector<bool>&& requiredTokens, ui64 minShouldMatch,
+        bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
         : TBase(std::move(streams), minShouldMatch, withFrequencies, keyColumnTypes)
-        , MergeQueue(DocIdCompare)
+        , MergeQueue(DocIdCompare), RequiredTokens(std::move(requiredTokens))
     {
+        YQL_ENSURE(RequiredTokens.size() == Streams.size());
+        for (bool& req: RequiredTokens) {
+            RequiredCount += (req ? 1 : 0);
+        }
     }
 
     void AddResult(ui64 tokenIndex, std::unique_ptr<TEvDataShard::TEvReadResult> msg) override {
@@ -1504,6 +1464,7 @@ public:
     std::vector<TDocInfoPtr> FindMatches() override {
         std::vector<TDocInfoPtr> matches;
         std::vector<size_t> matchedTokens;
+        size_t matchedRequired = 0;
         while(!MergeQueue.empty() && MergeQueue.size() + FinishedTokens == TokenCount) {
             if (MergeQueue.size() < MinShouldMatch) {
                 break;
@@ -1512,14 +1473,17 @@ public:
             THeapEntry doc = std::move(MergeQueue.top());
             matchedTokens.clear();
             matchedTokens.push_back(doc.WordIndex);
+            matchedRequired = (RequiredTokens[doc.WordIndex] ? 1 : 0);
 
             MergeQueue.pop();
             while(!MergeQueue.empty() && DocIdEquals(doc, MergeQueue.top())) {
-                matchedTokens.push_back(MergeQueue.top().WordIndex);
+                auto tokenIndex = MergeQueue.top().WordIndex;
+                matchedTokens.push_back(tokenIndex);
+                matchedRequired += (RequiredTokens[tokenIndex] ? 1 : 0);
                 MergeQueue.pop();
             }
 
-            if (matchedTokens.size() >= MinShouldMatch) {
+            if (matchedTokens.size() >= MinShouldMatch && matchedRequired >= RequiredCount) {
                 auto match = MakeIntrusive<TDocumentInfo<TDocId>>(doc.DocId);
                 if (WithFrequencies) {
                     match->TokenFrequencies.resize(TokenCount, 0);
@@ -1866,18 +1830,17 @@ public:
 // Discriminator for in-flight TEvRead requests so HandleReadResult can
 // dispatch the response to the correct processing path.
 enum EReadKind : ui32 {
-    EReadKind_Word = 0,           // L1 posting list range scan
+    EReadKind_Word = 0,           // Posting list range scan
     EReadKind_WordStats = 1,      // Dict table: per-token document frequency
     EReadKind_DocumentStats = 2,  // Docs table: per-document length
     EReadKind_Document = 3,       // Main table: full row data for matched docs
     EReadKind_TotalStats = 4,     // Stats table: corpus-wide aggregates
-    EReadKind_Word_L2 = 5,        // L2 posting list point lookups
-    EReadKind_RowIdResolve = 6,   // Unique index: __ydb_row_id -> PK resolution
+    EReadKind_RowIdResolve = 5,   // Unique index: __ydb_row_id -> PK resolution
 };
 
 // Metadata stored for each in-flight read so we can route the response.
 // Cookie semantics depend on ReadKind: for EReadKind_Word it's the word index;
-// for EReadKind_Word_L2 it's the word index; for others it may be a read id.
+// for others it may be a read id.
 struct TReadInfo {
     ui64 ReadKind;
     ui64 Cookie;
@@ -2235,8 +2198,6 @@ public:
  * Used for three kinds of reads:
  *   - DocsReadingQueue (TItem = TDocumentInfo::TPtr): reads from docs table
  *     (document lengths) and main table (full rows).
- *   - L2ReadingQueue (TItem = TL1DocumentInfo::TPtr): L2 point lookups in the
- *     posting table to verify candidates.
  *   - WordsReadingQueue (TItem = TWordReadState::TPtr): dict table lookups for
  *     per-token document frequencies.
  *
@@ -2244,10 +2205,6 @@ public:
  *   - TSentReadItems: a group of items sent in a single TEvRead to one shard.
  *     Items are consumed in order as TEvReadResult rows arrive, using
  *     GetItem()/PopItem().
- *   - TPendingSequentialRead: for L2 reads, items must be sent to the same
- *     shard sequentially (one batch at a time) because the merge algorithm
- *     needs results in doc_id order.  SentItemsPrefixSize tracks how many
- *     items from the front are currently in-flight.
  *   - Enqueue(): groups items by shard (using GetRangePartitioning on each
  *     item's point key), assigns ReadIds, and sends TEvRead requests.
  *   - Sequential(): appends items to a per-cookie pending queue and sends
@@ -2438,10 +2395,9 @@ public:
  *     search query into tokens.  If relevance mode, ReadTotalStats() and
  *     EnrichWordInfo() issue reads against the stats and dict tables.
  *
- *   Phase 3 - Merge: StartWordReads() configures the L1 (and optionally L2)
- *     merge algorithms and kicks off posting list reads.  L1WordResult()
- *     feeds data into L1MergeAlgo; matched documents flow to either
- *     ScheduleL2Read() or FetchDocumentDetails().
+ *   Phase 3 - Merge: StartWordReads() configures the merge algorithm and
+ *     kicks off posting list reads.  WordResult() feeds data into MergeAlgo;
+ *     matched documents flow to either FetchDocumentDetails().
  *
  *   Phase 4 - Fetch: FetchDocumentDetails() reads document lengths (if BM25),
  *     computes scores, maintains a TopK buffer with amortized O(1) nth_element
@@ -2472,8 +2428,6 @@ private:
     using TBase = TActorBootstrapped<TThis>;
     using TDocInfo = TDocumentInfo<TDocId>;
     using TDocInfoPtr = typename TDocInfo::TPtr;
-    using TL1DocInfo = TL1DocumentInfo<TDocId>;
-    using TL1DocInfoPtr = typename TL1DocInfo::TPtr;
     using TWordState = TWordReadState<TDocId>;
     using TWordStatePtr = typename TWordState::TPtr;
     using TMergeAlgo = IMergeAlgorithm<TDocId>;
@@ -2565,9 +2519,8 @@ private:
     bool ResolveInProgress = true;   // True while SchemeCache resolve is pending
     bool PendingNotify = false;      // True when a TEvNewAsyncInputDataArrived is in flight
 
-    ui64 ProducedItemsCount = 0;                          // Rows already delivered to compute actor
+    ui64 ProducedItemsCount = 0;                           // Rows already delivered to compute actor
     std::deque<TDocInfoPtr> ResultQueue;                   // Ready-to-deliver document rows
-    std::deque<TDocInfoPtr> L1MergedDocuments;             // L1-matched docs awaiting L2 verification
     bool IsNgram = false;                                  // True if the index uses n-gram tokenization
 
     TActorId PipeCacheId;  // Per-node pipe cache for datashard communication
@@ -2605,14 +2558,12 @@ private:
     // Read infrastructure.
     TReadsState ReadsState;                                // Tracks all in-flight reads
     TReadItemsQueue<TDocInfoPtr> DocsReadingQueue;         // Docs table + main table reads
-    TReadItemsQueue<TL1DocInfoPtr> L2ReadingQueue;         // L2 posting list point lookups
     TReadItemsQueue<TWordStatePtr> WordsReadingQueue;      // Dict table lookups
     TVector<TWordStatePtr> Words;                          // Tokenized query terms
 
-    // Merge algorithms: L1 handles the primary merge (all or rare tokens),
-    // L2 (optional) handles verification of frequent tokens.
-    std::unique_ptr<TMergeAlgo> L1MergeAlgo;
-    std::unique_ptr<TMergeAlgo> L2MergeAlgo;
+    // Merge algorithm.
+    std::unique_ptr<TMergeAlgo> MergeAlgo;
+
     // Helper to bind allocator
     TGuard<NMiniKQL::TScopedAlloc> BindAllocator() {
         return TGuard<NMiniKQL::TScopedAlloc>(*Alloc);
@@ -2700,7 +2651,7 @@ private:
             docInfos.clear();
         }
 
-        if (Limit > 0 && !TopKQueue.empty() && L1MergeAlgo->Done() && (!L2MergeAlgo || L2MergeAlgo->Done())) {
+        if (Limit > 0 && !TopKQueue.empty() && MergeAlgo->Done()) {
             YQL_ENSURE(docInfos.empty());
             CompactTopK(static_cast<size_t>(Limit) + 1);
             docInfos.reserve(TopKQueue.size());
@@ -2778,8 +2729,7 @@ private:
     // This is the central orchestration point called after stats/dict reads complete.
     // Steps:
     //   1. Detect token frequency imbalance.  For n-gram queries, drop the
-    //      most frequent n-grams.  For relevance AND queries, split tokens
-    //      into L1 (rare, full scan) and L2 (frequent, point lookups).
+    //      most frequent n-grams.
     //   2. Compute MinimumShouldMatch from the query operator and settings.
     //   3. Create TQueryCtx with IDF values from dict table frequencies.
     //   4. Build TTokenStream instances and instantiate the appropriate
@@ -2787,9 +2737,8 @@ private:
     //        - AND -> TAndOptimizedMergeAlgorithm (leapfrog)
     //        - OR  -> TDefaultMergeAlgorithm (min-heap)
     //   5. Apply user-overridden BM25 K1/B factors.
-    //   6. Issue initial posting list reads for all L1 tokens.
+    //   6. Issue initial posting list reads for all tokens.
     void StartWordReads() {
-        bool needL2Layer = false;
         TString explain;
         EDefaultOperator defaultOperator = DefaultOperatorFromString(Settings->GetDefaultOperator(), explain);
         if (!explain.empty()) {
@@ -2800,43 +2749,19 @@ private:
         // `+term` required-term mode (Lucene MUST). Under the OR operator, terms
         // marked required must appear in every match while minimum_should_match
         // applies to the remaining optional terms. Required terms drive the read as
-        // a strict AND (L1); optional terms are verified per candidate (L2,
-        // threshold). When every term is required it degenerates to a strict AND
-        // with no L2 layer. This is mutually exclusive with the imbalance heuristic.
+        // a strict AND; optional terms are verified per candidate (threshold).
+        // When every term is required it degenerates to a strict AND.
         size_t requiredCount = 0;
-        for (const auto& word : Words) {
-            if (word->Required) {
+        for (size_t i = 0; i < Words.size(); ++i) {
+            Words[i]->WordIndex = i;
+            if (Words[i]->Required) {
                 ++requiredCount;
             }
         }
         const bool hasRequired = defaultOperator == EDefaultOperator::Or && requiredCount >= 1;
         const bool requiredDriven = hasRequired && requiredCount < Words.size();
 
-        if (hasRequired) {
-            // Order required terms first (L1) and optional terms after (L2); the
-            // reassigned contiguous WordIndex doubles as the L1/L2 stream index.
-            TVector<TWordStatePtr> ordered;
-            ordered.reserve(Words.size());
-            for (auto& word : Words) {
-                if (word->Required) {
-                    word->L1 = true;
-                    word->L2 = false;
-                    ordered.emplace_back(std::move(word));
-                }
-            }
-            for (auto& word : Words) {
-                if (word) { // remaining (optional) terms, required ones were moved out
-                    word->L1 = false;
-                    word->L2 = true;
-                    ordered.emplace_back(std::move(word));
-                }
-            }
-            std::swap(Words, ordered);
-            for (size_t i = 0; i < Words.size(); ++i) {
-                Words[i]->WordIndex = i;
-            }
-            needL2Layer = requiredDriven;
-        } else if (IsNgram || MainTableReader->GetWithRelevance()) {
+        if (defaultOperator == EDefaultOperator::And && IsNgram) {
             // Queries often contain 'imbalanced' ngrams. I.e. some ngrams
             // are really frequent and others aren't, like one with 5.5 million
             // documents and other with 400 documents. In such cases we can
@@ -2867,22 +2792,6 @@ private:
                     newWords[i]->WordIndex = i;
                 }
                 std::swap(Words, newWords);
-            } else if (MainTableReader->GetWithRelevance() && bestTokenLimit < Words.size() && defaultOperator == EDefaultOperator::And) {
-                CA_LOG_I("Selecting " << bestTokenLimit << " balanced tokens out of " << Words.size()
-                    << " (imbalance: " << Words[byFreq[0]]->Frequency << " vs " << Words[byFreq[bestTokenLimit]]->Frequency << ")");
-
-                needL2Layer = true;
-                TVector<TWordStatePtr> newWords;
-                for (size_t i = 0; i < Words.size(); i++) {
-                    newWords.emplace_back(std::move(Words[byFreq[i]]));
-                    newWords[i]->WordIndex = i;
-                    if (i >= bestTokenLimit) {
-                        newWords.back()->L2 = true;
-                        newWords.back()->L1 = false;
-                    }
-                }
-
-                std::swap(Words, newWords);
             }
         }
 
@@ -2890,7 +2799,7 @@ private:
         if (requiredDriven) {
             // minimum_should_match counts only the optional (non-required) terms.
             const size_t optionalCount = Words.size() - requiredCount;
-            minimumShouldMatch = MinimumShouldMatchFromString(optionalCount, defaultOperator, Settings->GetMinimumShouldMatch(), explain);
+            minimumShouldMatch = requiredCount + MinimumShouldMatchFromString(optionalCount, defaultOperator, Settings->GetMinimumShouldMatch(), explain);
         } else if (hasRequired) {
             // Every term is required -> strict AND; minimum_should_match is moot.
             minimumShouldMatch = Words.size();
@@ -2911,62 +2820,24 @@ private:
             }
         }
 
-        std::vector<std::unique_ptr<TTokenStream<TDocId>>> l1streams;
-        std::vector<std::unique_ptr<TTokenStream<TDocId>>> l2streams;
-
+        std::vector<std::unique_ptr<TTokenStream<TDocId>>> streams;
+        std::vector<bool> required;
         for (size_t i = 0; i < Words.size(); ++i) {
             auto& wordInfo = Words[i];
-            if (wordInfo->L1) {
-                l1streams.emplace_back(MakeStream());
-            } else {
-                int idx = l2streams.size();
-                wordInfo->L2StreamIndex = idx;
-                l2streams.emplace_back(MakeStream());
-            }
+            streams.emplace_back(MakeStream());
+            required.push_back(wordInfo->Required);
         }
 
-        if (needL2Layer) {
-            YQL_ENSURE(l2streams.size() > 0);
-            YQL_ENSURE(l1streams.size() > 0);
-        } else {
-            YQL_ENSURE(l1streams.size() > 0);
-            YQL_ENSURE(l2streams.size() == 0);
-        }
-
-        if (l2streams.size() > 0) {
-            if (requiredDriven) {
-                // Optional terms: a candidate passes when at least minimum_should_match
-                // of them are present. Threshold merge over the per-candidate lookups.
-                L2MergeAlgo = std::make_unique<TDefaultMergeAlgorithm<TDocId>>(
-                    std::move(l2streams),
-                    minimumShouldMatch,
-                    MainTableReader->GetWithRelevance(),
-                    MainTableReader->GetKeyColumnTypes()
-                );
-            } else {
-                YQL_ENSURE(defaultOperator == EDefaultOperator::And);
-                L2MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm<TDocId>>(
-                    std::move(l2streams),
-                    minimumShouldMatch,
-                    MainTableReader->GetWithRelevance(),
-                    MainTableReader->GetKeyColumnTypes()
-                );
-            }
-        }
-
-        if (defaultOperator == EDefaultOperator::And || hasRequired) {
-            // Strict AND over the L1 tokens: AND default operator, or the required
-            // terms of a `+term` query (every required term must be present).
-            const ui64 l1MinShouldMatch = hasRequired ? l1streams.size() : minimumShouldMatch;
-            L1MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm<TDocId>>(
-                std::move(l1streams),
-                l1MinShouldMatch,
+        if (defaultOperator == EDefaultOperator::And || requiredCount >= Words.size()) {
+            MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm<TDocId>>(
+                std::move(streams),
                 MainTableReader->GetWithRelevance(),
                 MainTableReader->GetKeyColumnTypes()
             );
         } else {
-            L1MergeAlgo = std::make_unique<TDefaultMergeAlgorithm<TDocId>>(
-                std::move(l1streams),
+            MergeAlgo = std::make_unique<TDefaultMergeAlgorithm<TDocId>>(
+                std::move(streams),
+                std::move(required),
                 minimumShouldMatch,
                 MainTableReader->GetWithRelevance(),
                 MainTableReader->GetKeyColumnTypes()
@@ -2982,9 +2853,7 @@ private:
         }
 
         for (auto& word : Words) {
-            if (word->L1) {
-                ContinueWordRead(word);
-            }
+            ContinueWordRead(word);
         }
     }
 
@@ -3057,7 +2926,6 @@ public:
         , UseRowIdAsDocId(UniqueIndexReader != nullptr)
         , ReadsState(Counters, LogPrefix)
         , DocsReadingQueue(this->SelfId(), ReadsState)
-        , L2ReadingQueue(this->SelfId(), ReadsState)
         , WordsReadingQueue(this->SelfId(), ReadsState)
     {
         Y_ABORT_UNLESS(Arena);
@@ -3250,9 +3118,6 @@ public:
                 break;
             case EReadKind_WordStats:
                 WordsReadingQueue.Retry(DictTableReader.Get(), EReadKind_WordStats, readId);
-                break;
-            case EReadKind_Word_L2:
-                L2ReadingQueue.RetrySequential(IndexTableReader.Get(), EReadKind_Word_L2, readId, readInfo.Cookie);
                 break;
             case EReadKind_TotalStats:
                 RetryTotalStatsRead(readId);
@@ -3625,138 +3490,29 @@ public:
         }
     }
 
-    // Process L2 posting list point-lookup results for a frequent token.
-    // Feeds results into L2MergeAlgo, advances the sequential read schedule,
-    // and runs L2 merge to find documents that pass both L1 and L2 checks.
-    void L2WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult> msg, ui64 recReadId, ui64 wordIndex, bool finished) {
-        YQL_ENSURE(wordIndex < Words.size());
-        auto& wordInfo = Words[wordIndex];
-        YQL_ENSURE(wordInfo->L2);
-
-        L2MergeAlgo->AddResult(wordInfo->L2StreamIndex, std::move(msg));
-        auto& readItems = L2ReadingQueue.GetReadItems(recReadId);
-        TDocId maxKeyBarrier = L2MergeAlgo->GetMaxTokenKey(wordInfo->L2StreamIndex);
-        while(!readItems.Empty() && readItems.GetItem()->Document->DocumentNumId <= maxKeyBarrier) {
-            readItems.PopItem();
-        }
-
-        auto& schedule = L2ReadingQueue.GetSequentialSchedule(wordIndex);
-        while(schedule.HasSentItems() && schedule.GetItem()->Document->DocumentNumId <= maxKeyBarrier) {
-            schedule.PopItem();
-        }
-
-        if (finished) {
-            L2ReadingQueue.ClearReadItems(readItems);
-            // drop tail of items - these items doesn't exists in the database
-            while(schedule.HasSentItems()) {
-                schedule.PopItem();
-            }
-        }
-
-        L2ReadingQueue.UpdateReadStatus(recReadId, readItems, finished);
-        if (finished) {
-            L2ReadingQueue.SendNextSequentialRead(IndexTableReader.Get(), EReadKind_Word_L2, wordIndex);
-            if (L2ReadingQueue.GetSequentialSchedule(wordIndex).Empty() && L1MergeAlgo->Done()) {
-                L2MergeAlgo->FinishTokenStream(wordInfo->L2StreamIndex);
-            }
-        }
-
-        std::vector<TDocInfoPtr> matches = L2MergeAlgo->FindMatches();
-        MergeL2MatchFrequencies(matches);
-        FetchDocumentDetails(matches);
-    }
-
-    // For each L1-matched document, schedule point lookups in the posting table
-    // for every L2 (frequent) token.  Uses Sequential() to ensure reads go to
-    // one shard at a time, preserving doc_id order for the L2 merge.
-    // Saves L1 matches in L1MergedDocuments so their token frequencies can be
-    // merged with L2 results later.
-    void ScheduleL2Read(std::vector<TDocInfoPtr>& l1matched) {
-        for(int i = Words.size() - 1; i >= 0; i--) {
-            auto& word = Words[i];
-            if (word->L1) {
-                continue;
-            }
-
-            std::vector<TL1DocInfoPtr> remappedMatches;
-            remappedMatches.reserve(l1matched.size());
-            for(auto& match: l1matched) {
-                remappedMatches.emplace_back(MakeIntrusive<TL1DocInfo>(match, word->Word, PrefixCells));
-            }
-
-            L2ReadingQueue.Sequential(IndexTableReader.Get(), EReadKind_Word_L2, remappedMatches, i);
-            if (L2ReadingQueue.GetSequentialSchedule(i).Empty() && L1MergeAlgo->Done()) {
-                L2MergeAlgo->FinishTokenStream(Words[i]->L2StreamIndex);
-            }
-        }
-
-        L1MergedDocuments.insert(L1MergedDocuments.end(), l1matched.begin(), l1matched.end());
-
-        std::vector<TDocInfoPtr> matches = L2MergeAlgo->FindMatches();
-        CA_LOG_D("L2Merge done: " << L2MergeAlgo->Done());
-        MergeL2MatchFrequencies(matches);
-        FetchDocumentDetails(matches);
-    }
-
-    // Combine token frequencies from L1 and L2 matches into a single vector
-    // covering all query tokens.  L1 frequencies come from L1MergedDocuments,
-    // L2 frequencies come from the L2 merge result.  The combined vector is
-    // stored in the match's TokenFrequencies for BM25 scoring.
-    void MergeL2MatchFrequencies(std::vector<TDocInfoPtr>& matches) {
-        for (auto& match : matches) {
-            while (!L1MergedDocuments.empty() &&
-                   L1MergedDocuments.front()->DocumentNumId != match->DocumentNumId) {
-                L1MergedDocuments.pop_front();
-            }
-
-            YQL_ENSURE(!L1MergedDocuments.empty(), "L2 match has no corresponding L1 document");
-            auto& l1Doc = L1MergedDocuments.front();
-
-            std::vector<ui32> combined(Words.size(), 0);
-            for (size_t wi = 0; wi < Words.size(); ++wi) {
-                if (Words[wi]->L1 && wi < l1Doc->TokenFrequencies.size()) {
-                    combined[wi] = l1Doc->TokenFrequencies[wi];
-                }
-            }
-            for (size_t wi = 0; wi < Words.size(); ++wi) {
-                if (Words[wi]->L2 && Words[wi]->L2StreamIndex < match->TokenFrequencies.size()) {
-                    combined[wi] = match->TokenFrequencies[Words[wi]->L2StreamIndex];
-                }
-            }
-            match->TokenFrequencies = std::move(combined);
-            L1MergedDocuments.pop_front();
-        }
-    }
-
-    // Process L1 posting list read results for a token.
-    // Feeds data into L1MergeAlgo, updates the resume key (StartReadKeyFrom),
+    // Process posting list read results for a token.
+    // Feeds data into MergeAlgo, updates the resume key (StartReadKeyFrom),
     // and when the current shard is exhausted, tries to continue from the next
-    // shard partition.  Runs L1 merge and routes matches to either L2 verification
-    // (if L2MergeAlgo exists) or directly to FetchDocumentDetails.
-    void L1WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult> msg, ui64 wordIndex, bool finished) {
+    // shard partition. Runs merge and routes matches to FetchDocumentDetails.
+    void WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult> msg, ui64 wordIndex, bool finished) {
         YQL_ENSURE(wordIndex < Words.size());
         auto& incomingWordInfo = Words[wordIndex];
-        YQL_ENSURE(incomingWordInfo->L1);
 
         const bool hasRows = msg->GetRowsCount() > 0;
-        L1MergeAlgo->AddResult(wordIndex, std::move(msg));
+        MergeAlgo->AddResult(wordIndex, std::move(msg));
         if (hasRows) {
-            incomingWordInfo->StartReadKeyFrom = L1MergeAlgo->GetMaxTokenKey(wordIndex);
+            incomingWordInfo->StartReadKeyFrom = MergeAlgo->GetMaxTokenKey(wordIndex);
             incomingWordInfo->StartReadKeyFromInclusive = false;
         }
 
         if (finished) {
             if (!ContinueWordRead(incomingWordInfo)) {
-                L1MergeAlgo->FinishTokenStream(wordIndex);
+                MergeAlgo->FinishTokenStream(wordIndex);
             }
         }
 
-        std::vector<TDocInfoPtr> matches = L1MergeAlgo->FindMatches();
-        if (L2MergeAlgo) {
-            ScheduleL2Read(matches);
-        } else {
-            FetchDocumentDetails(matches);
-        }
+        std::vector<TDocInfoPtr> matches = MergeAlgo->FindMatches();
+        FetchDocumentDetails(matches);
     }
 
     template<typename TReader>
@@ -3780,13 +3536,8 @@ public:
 
     void FillExtraStats(NDqProto::TDqTaskStats* stats, bool last, const NYql::NDq::TDqMeteringStats*) override {
         if (last) {
-            if (L1MergeAlgo) {
-                auto [rows, bytes] = L1MergeAlgo->GetStats();
-                IndexTableReader->RecvStats(rows, bytes);
-            }
-
-            if (L2MergeAlgo) {
-                auto [rows, bytes] = L2MergeAlgo->GetStats();
+            if (MergeAlgo) {
+                auto [rows, bytes] = MergeAlgo->GetStats();
                 IndexTableReader->RecvStats(rows, bytes);
             }
 
@@ -3834,7 +3585,6 @@ public:
     static TStringBuf ReadKindName(EReadKind readKind) {
         switch (readKind) {
             case EReadKind_Word:          return "posting";
-            case EReadKind_Word_L2:       return "posting(L2)";
             case EReadKind_WordStats:     return "dict";
             case EReadKind_DocumentStats: return "docs";
             case EReadKind_Document:      return "main";
@@ -3847,7 +3597,6 @@ public:
     TString GetReadTablePath(EReadKind readKind) const {
         switch (readKind) {
             case EReadKind_Word:
-            case EReadKind_Word_L2:
                 return IndexTableReader ? IndexTableReader->GetTablePath() : TString();
             case EReadKind_WordStats:
                 return DictTableReader ? DictTableReader->GetTablePath() : TString();
@@ -3976,10 +3725,7 @@ public:
                 WordStatsResult(msg, readId, record.GetFinished());
                 break;
             case EReadKind_Word:
-                L1WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult>(ev->Release().Release()), cookie, record.GetFinished());
-                break;
-            case EReadKind_Word_L2:
-                L2WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult>(ev->Release().Release()), readId, cookie, record.GetFinished());
+                WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult>(ev->Release().Release()), cookie, record.GetFinished());
                 break;
             case EReadKind_TotalStats:
                 HandleTotalStatsResult(msg);

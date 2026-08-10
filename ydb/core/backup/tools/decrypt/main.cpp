@@ -156,11 +156,15 @@ int main(int argc, const char* argv[]) {
         printIV();
         progress.Print(Cerr);
         return 0;
+    } catch (const TSystemError& ex) {
+        Cerr << "Error: " << ex.what() << Endl;
+        progress.Print(Cerr);
+        return 1;
     } catch (const std::exception& ex) {
         Cerr << "Error: " << ex.what() << Endl;
         if (deserializer) {
             progress.ProcessedBytes = deserializer->GetProcessedInputBytes();
-            Cerr << Endl << "Decryption stopped at encrypted-file offset " << progress.ProcessedBytes
+            Cerr << Endl << "Decryption stopped at encrypted-file offset" << progress.ProcessedBytes
                 << ": the block starting there could not be read" << Endl;
             if (const auto iv = deserializer->GetIV()) {
                 Cerr << "IV: " << iv.GetHexString() << Endl;

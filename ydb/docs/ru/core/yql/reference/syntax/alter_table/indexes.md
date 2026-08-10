@@ -19,6 +19,12 @@ ALTER TABLE `<table_name>`
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
+{% if backend_name == "YDB" and oss == true %}
+
+Также добавить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI.
+
+{% endif %}
+
 Параметры для всех типов индексов:
 
 * `parallel` - максимальное число параллельных обработчиков на основе [партиций](../../../../concepts/glossary.md#partition), задействованных в построении индекса (целое число между `1` и `MaxBuildIndexShardsInFlight` из `SchemeShardConfig`).
@@ -45,15 +51,13 @@ ALTER TABLE `<table_name>`
 
 {% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
 
-{% if backend_name == "YDB" and oss == true %}
+### Параметры локального min_max-индекса {#local-min-max}
 
-Также добавить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI.
-
-{% endif %}
+{% include [min_max_index_parameters.md](../_includes/min_max_index_parameters.md) %}
 
 ### Ограничения
 
-Операция `ADD INDEX` для создания глобальных вторичных (`GLOBAL`, `UNIQUE` и т.п.) и векторных индексов поддерживается только для строковых таблиц. Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) через `ADD INDEX` [поддерживаются только локальные блум-индексы](#local-bloom).
+Операция `ADD INDEX` для создания глобальных вторичных (`GLOBAL`, `UNIQUE` и т.п.) и векторных индексов поддерживается только для строковых таблиц. Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) через `ADD INDEX` поддерживаются только локальные индексы: [блум-индекс](#local-bloom) и [min_max-индекс](#local-min-max).
 
 Особенности локальных блум-индексов:
 
@@ -62,6 +66,16 @@ ALTER TABLE `<table_name>`
 {% note info "Ограничения" %}
 
 {% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
+
+{% endnote %}
+
+Особенности локального min_max-индекса:
+
+{% include [min_max_index_features.md](../_includes/min_max_index_features.md) %}
+
+{% note info "Ограничения" %}
+
+{% include [min_max_index_limitations.md](../_includes/min_max_index_limitations.md) %}
 
 {% endnote %}
 
@@ -125,6 +139,14 @@ ALTER TABLE `/Root/Table`
   );
 ```
 
+min_max-индекс:
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_created_at LOCAL USING min_max
+  ON (created_at);
+```
+
 ## Изменение параметров индекса {#alter-index}
 
 Индексы имеют параметры, зависящие от типа, которые можно настраивать. Глобальные индексы, [синхронные]({{ concept_secondary_index }}#sync) или [асинхронные]({{ concept_secondary_index }}#async), реализованы в виде скрытых таблиц, и их параметры автоматического партиционирования и реплик можно регулировать так же, как и настройки обычных таблиц.
@@ -154,6 +176,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
   * для локальных блум-индексов (см. [Параметры локальных блум-индексов](#local-bloom)):
     * `FALSE_POSITIVE_PROBABILITY`
     * `NGRAM_SIZE` и `CASE_SENSITIVE` (только для `bloom_ngram_filter`)
+  * min_max-индекс не поддерживает `ALTER INDEX`.
 
 {% note info %}
 

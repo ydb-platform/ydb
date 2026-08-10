@@ -52,52 +52,72 @@ runs:
     - name: Resolve suite config
       id: suite
       shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
       run: |
         set -euo pipefail
-        case "${{ inputs.suite }}" in
+        case "${SUITE}" in
           cpp_sdk|cli|cli_workload) ;;
-          *) echo "Unknown suite: ${{ inputs.suite }}" >&2; exit 1 ;;
+          *) echo "Unknown suite: ${SUITE}" >&2; exit 1 ;;
         esac
         CFG_FILE=$(mktemp)
         trap 'rm -f "$CFG_FILE"' EXIT
-        python3 .github/scripts/tests/codecov_suites.py json-suite "${{ inputs.suite }}" > "$CFG_FILE"
+        python3 .github/scripts/tests/codecov_suites.py json-suite "${SUITE}" > "$CFG_FILE"
         EXCL=$(python3 .github/scripts/tests/codecov_suites.py exclude-regexp)
         echo "exclude_regexp=${EXCL}" >> "$GITHUB_OUTPUT"
-        python3 -c 'import json,os,sys; cfg=json.load(open(sys.argv[1],encoding="utf-8")); open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8").write("regexp="+cfg["regexp"]+"\nflag="+cfg["flag"]+"\ntargets="+" ".join(cfg["targets"])+"\n")' "$CFG_FILE"
+        python3 -c '
+import json, os, sys
+cfg = json.load(open(sys.argv[1], encoding="utf-8"))
+out = os.environ["GITHUB_OUTPUT"]
+with open(out, "a", encoding="utf-8") as fh:
+    fh.write("regexp=" + cfg["regexp"] + "\n")
+    fh.write("flag=" + cfg["flag"] + "\n")
+    fh.write("targets_json=" + json.dumps(cfg["targets"]) + "\n")
+' "$CFG_FILE"
 
     - name: Ya make with clang coverage
       id: ya
       shell: bash
       env:
         BUILD_PRESET: profile
+        SUITE: ${{ inputs.suite }}
+        REGEXP: ${{ steps.suite.outputs.regexp }}
+        EXCL: ${{ steps.suite.outputs.exclude_regexp }}
+        TARGETS_JSON: ${{ steps.suite.outputs.targets_json }}
+        TEST_THREADS: ${{ inputs.test_threads }}
+        LINK_THREADS: ${{ inputs.link_threads }}
+        BAZEL_REMOTE_URI: ${{ inputs.bazel_remote_uri }}
+        BAZEL_REMOTE_USERNAME: ${{ inputs.bazel_remote_username }}
+        BAZEL_REMOTE_PASSWORD: ${{ inputs.bazel_remote_password }}
       run: |
         set -euxo pipefail
-        OUT="$(pwd)/coverage_workspace/${{ inputs.suite }}"
+        OUT="$(pwd)/coverage_workspace/${SUITE}"
         mkdir -p "$OUT"
         echo "out_dir=$OUT" >> "$GITHUB_OUTPUT"
 
         BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
         trap 'rm -f "$BAZEL_REMOTE_PASSWORD_FILE"' EXIT
-        echo -n "${{ inputs.bazel_remote_password }}" > "$BAZEL_REMOTE_PASSWORD_FILE"
+        echo -n "${BAZEL_REMOTE_PASSWORD}" > "$BAZEL_REMOTE_PASSWORD_FILE"
 
-        REGEXP='${{ steps.suite.outputs.regexp }}'
-        EXCL='${{ steps.suite.outputs.exclude_regexp }}'
-        # shellcheck disable=SC2206
-        TARGETS=( ${{ steps.suite.outputs.targets }} )
+        mapfile -t TARGETS < <(python3 -c 'import json,sys; print("\n".join(json.loads(sys.argv[1])))' "${TARGETS_JSON}")
+        if [ "${#TARGETS[@]}" -eq 0 ]; then
+          echo "No ya targets resolved for suite ${SUITE}" >&2
+          exit 1
+        fi
 
         params=(
           -tA --build profile
           --clang-coverage --coverage-report --keep-temps
           "-DCOVERAGE_TARGET_REGEXP=${REGEXP}"
           "--coverage-exclude-regexp=${EXCL}"
-          --test-threads "${{ inputs.test_threads }}"
-          --link-threads "${{ inputs.link_threads }}"
+          --test-threads "${TEST_THREADS}"
+          --link-threads "${LINK_THREADS}"
           --output "$OUT"
           --no-dir-outputs
         )
-        if [ -n "${{ inputs.bazel_remote_uri }}" ]; then
-          params+=(--bazel-remote-store --bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
-          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+        if [ -n "${BAZEL_REMOTE_URI}" ]; then
+          params+=(--bazel-remote-store --bazel-remote-base-uri "${BAZEL_REMOTE_URI}")
+          params+=(--bazel-remote-username "${BAZEL_REMOTE_USERNAME}")
           params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
           params+=(
             --bazel-remote-put
@@ -111,11 +131,13 @@ runs:
 
     - name: Export filtered LCOV
       shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
+        OUT: ${{ steps.ya.outputs.out_dir }}
       run: |
         set -euxo pipefail
-        OUT="${{ steps.ya.outputs.out_dir }}"
         python3 .github/scripts/tests/export_coverage_lcov.py \
-          --suite "${{ inputs.suite }}" \
+          --suite "${SUITE}" \
           --ya-output "$OUT" \
           --output "$OUT/coverage.lcov"
 
@@ -132,7 +154,7 @@ runs:
       run: |
         set -euxo pipefail
         # Prefer PyPI: self-hosted runners often cannot download cli.codecov.io (HTML instead of binary).
-        pip3 install --user 'codecov-cli'
+        pip3 install --user 'codecov-cli==11.3.1'
         export PATH="${HOME}/.local/bin:${PATH}"
         upload_args=(
           -t "${CODECOV_TOKEN}"
@@ -172,7 +194,8 @@ runs:
           exit 0
         fi
         if ! command -v aws >/dev/null 2>&1; then
-          pip3 install --user awscli
+          # Pin: same version that succeeded in dogfood on self-hosted runners.
+          pip3 install --user 'awscli==1.46.0'
           export PATH="$HOME/.local/bin:$PATH"
         fi
 

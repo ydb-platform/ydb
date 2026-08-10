@@ -108,18 +108,23 @@ def parse_ya_llvm_cov_cmd(log_text: str) -> tuple[str, list[str]]:
 
 
 def path_matches_prefixes(path: str, prefixes: list[str]) -> bool:
+    """True if path is under any prefix as a path segment (not a mere substring)."""
     norm = path.replace("\\", "/")
     for pref in prefixes:
         p = pref.rstrip("/")
-        if (
-            f"/{p}/" in f"/{norm}/"
-            or norm.startswith(pref)
-            or norm.endswith("/" + p)
-            or p in norm
-        ):
-            idx = norm.find(p)
-            if idx != -1 and (idx == 0 or norm[idx - 1] == "/"):
+        if not p:
+            continue
+        idx = 0
+        while True:
+            idx = norm.find(p, idx)
+            if idx == -1:
+                break
+            end = idx + len(p)
+            left_ok = idx == 0 or norm[idx - 1] == "/"
+            right_ok = end == len(norm) or norm[end] == "/"
+            if left_ok and right_ok:
                 return True
+            idx = end
     return False
 
 

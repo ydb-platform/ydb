@@ -13,6 +13,8 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
+#include <optional>
+
 namespace NKikimr::NGRpcProxy::V1::NTopic {
 
     template<class T>
@@ -43,7 +45,9 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         using TBase = TGrpcProxyActor<TDerived, TRequest>;
 
         static constexpr NKikimrServices::EServiceKikimr Service = NKikimrServices::EServiceKikimr::PQ_SCHEMA;
+        static constexpr TDuration RequestTimeout = TDuration::Seconds(10);
         static constexpr ui64 LocationsRetryWakeupTag = 100;
+        static constexpr ui64 RequestTimeoutWakeupTag = 101;
 
     public:
         TDescribeBaseActor(NGRpcService::IRequestOpCtx* request, NPQ::NDescriber::TAccessRights accessRights)
@@ -69,6 +73,9 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
         void DoAction() {
             LOG_D("DoAction " << this->GetProtoRequest()->path());
+            RequestStartTime = TActivationContext::Now();
+            this->Schedule(RequestTimeout, new TEvents::TEvWakeup(RequestTimeoutWakeupTag));
+
             this->RegisterWithSameMailbox(NPQ::NDescriber::CreateDescriberActor(
                 this->SelfId(),
                 this->GetDatabase(),
@@ -94,6 +101,12 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, Handle);
                 sFunc(TEvents::TEvPoison, PassAway);
+            case TEvents::TEvWakeup::EventType:
+                if (ev->Get<TEvents::TEvWakeup>()->Tag == RequestTimeoutWakeupTag) {
+                    HandleRequestTimeout();
+                    return;
+                }
+                [[fallthrough]];
             default:
                 this->StateFuncBase(ev);
             }
@@ -179,6 +192,10 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             case TEvents::TEvWakeup::EventType:
                 if (ev->Get<TEvents::TEvWakeup>()->Tag == LocationsRetryWakeupTag) {
                     HandleLocationsRetryWakeup();
+                    return;
+                }
+                if (ev->Get<TEvents::TEvWakeup>()->Tag == RequestTimeoutWakeupTag) {
+                    HandleRequestTimeout();
                     return;
                 }
                 [[fallthrough]];
@@ -326,7 +343,9 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                     }
                 }
                 LOG_D("PartitionsLocation " << ReadBalancerTabletId << " partitions " << JoinSeq(", ", partitionIds));
-                SendToTablet(ReadBalancerTabletId, new TEvPersQueue::TEvGetPartitionsLocation(partitionIds));
+                SendToTablet(
+                    ReadBalancerTabletId,
+                    new TEvPersQueue::TEvGetPartitionsLocation(partitionIds, RemainingRequestTimeout()));
             }
             if (!ReadSessionsReceived && this->GetProtoRequest()->include_stats()) {
                 auto ev = CreateReadSessionsInfoRequest();
@@ -377,6 +396,25 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             RequestReadBalancer();
         }
 
+        TDuration RemainingRequestTimeout() const {
+            if (!RequestStartTime) {
+                return RequestTimeout;
+            }
+            const auto now = TActivationContext::Now();
+            if (now >= *RequestStartTime + RequestTimeout) {
+                return TDuration::Zero();
+            }
+            return *RequestStartTime + RequestTimeout - now;
+        }
+
+        void HandleRequestTimeout() {
+            LOG_W("Describe request timed out");
+            this->ReplyWithError(
+                Ydb::StatusIds::TIMEOUT,
+                "Describe request timed out",
+                Ydb::PersQueue::ErrorCode::ERROR);
+        }
+
     protected:
         const NPQ::NDescriber::TAccessRights AccessRights;
 
@@ -389,6 +427,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         bool ReadSessionsReceived = false;
         bool LocationsRetryPending = false;
         TBackoff LocationsBackoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
+        std::optional<TInstant> RequestStartTime;
 
         Ydb::Scheme::Entry SelfEntry;
 

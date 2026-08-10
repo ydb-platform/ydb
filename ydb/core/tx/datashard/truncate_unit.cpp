@@ -93,7 +93,7 @@ EExecutionStatus TTruncateUnit::Execute(
     userTable->StatsNeedUpdate = true;
 
     // Passing locksDb invalidates every lock of this shard, like any other schema change does.
-    DataShard.AddUserTable(pathId, userTable, &locksDb);
+    DataShard.ReplaceUserTable(pathId, userTable, locksDb);
     if (userTable->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, actorCtx);
     }

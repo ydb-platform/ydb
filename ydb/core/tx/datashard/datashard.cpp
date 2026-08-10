@@ -2113,7 +2113,7 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
 
     newTableInfo->SetSchema(schema);
     TDataShardLocksDb locksDb(*this, txc);
-    AddUserTable(pathId, newTableInfo, &locksDb);
+    ReplaceUserTable(pathId, newTableInfo, locksDb);
 
     if (newTableInfo->NeedSchemaSnapshots()) {
         AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);

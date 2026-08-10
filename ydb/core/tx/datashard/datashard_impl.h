@@ -1772,13 +1772,19 @@ public:
         TableInfos.erase(tableId.LocalPathId);
     }
 
-    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo, ILocksDb* locksDb = nullptr) {
-        if (locksDb) {
-            SysLocks.RemoveSchema(tableId, locksDb);
-        }
+    void SetUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
+    }
+
+    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
+        SetUserTable(tableId, tableInfo);
+    }
+
+    void ReplaceUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo, ILocksDb& locksDb) {
+        SysLocks.RemoveSchema(tableId, &locksDb);
+        SetUserTable(tableId, tableInfo);
     }
 
     bool IsUserTable(const TTableId& tableId) const {

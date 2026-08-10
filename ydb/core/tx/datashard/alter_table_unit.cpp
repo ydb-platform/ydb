@@ -167,7 +167,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     auto oldInfo = DataShard.FindUserTable(tableId);
     auto newInfo = DataShard.AlterUserTable(ctx, txc, alterTableTx);
     TDataShardLocksDb locksDb(DataShard, txc);
-    DataShard.AddUserTable(tableId, newInfo, &locksDb);
+    DataShard.ReplaceUserTable(tableId, newInfo, locksDb);
 
     if (newInfo->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);

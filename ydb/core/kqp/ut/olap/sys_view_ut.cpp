@@ -390,6 +390,60 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         }
     }
 
+    Y_UNIT_TEST(StatsSysViewOrderByPKWithLimitPassthrough) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableColumnShardConfig()->SetEnableSysViewOrderByLimitPushdown(true);
+        // Cap held portions at 1 so the limit sync point passes portions straight through to KQP as soon as it holds a
+        // second portion.
+        settings.AppConfig.MutableColumnShardConfig()->MutableLimitSyncPointConfig()->SetSysViewMaxHeldPortions(1);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        // Single shard + no compaction: every write stays a separate portion on one tablet, so the
+        // per-tablet limit sync point holds more than the cap and the passthrough path is exercised.
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        for (ui64 i = 0; i < 10; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
+        }
+        csController->WaitActualization(TDuration::Seconds(5));
+
+        const ui32 limit = 3;
+
+        auto tableClient = kikimr.GetTableClient();
+        auto allRows = ExecuteScanQuery(tableClient, R"(
+            SELECT PathId, TabletId, PortionId
+            FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+            ORDER BY PathId, TabletId, PortionId
+        )");
+        UNIT_ASSERT_GT(allRows.size(), limit);
+        // Precondition for the passthrough path: the single tablet must hold more portions than the cap.
+        THashSet<ui64> portionIds;
+        for (const auto& row : allRows) {
+            portionIds.insert(GetUint64(row.at("PortionId")));
+        }
+        UNIT_ASSERT_GT(portionIds.size(), 1u);
+
+        for (const bool desc : {false, true}) {
+            const TString dir = desc ? "DESC" : "ASC";
+            auto rows = ExecuteScanQuery(tableClient, Sprintf(R"(
+                SELECT PathId, TabletId, PortionId
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+                ORDER BY PathId %s, TabletId %s, PortionId %s
+                LIMIT %u
+            )", dir.c_str(), dir.c_str(), dir.c_str(), limit));
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), limit);
+            for (ui32 i = 0; i < limit; ++i) {
+                const auto& expected = desc ? allRows[allRows.size() - 1 - i] : allRows[i];
+                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("TabletId")), GetUint64(expected.at("TabletId")));
+                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("PortionId")), GetUint64(expected.at("PortionId")));
+            }
+        }
+
+        // Confirm the correctness above was actually validated on the passthrough path, not the normal one.
+        UNIT_ASSERT_GT(csController->GetSysViewLimitPassthroughsCount().Val(), 0);
+    }
+
     Y_UNIT_TEST(StatsSysViewOrderByPKWithIndexes) {
         const TString tablePath = "/Root/olapStore/olapTable";
         const ui32 insertRowsCount = 10;

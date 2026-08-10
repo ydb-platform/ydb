@@ -37,6 +37,7 @@ private:
     YDB_READONLY(TAtomicCounter, ActualizationRefreshSchemeCount, 0);
     YDB_READONLY(TAtomicCounter, ActualizationRefreshTieringCount, 0);
     YDB_READONLY(TAtomicCounter, ShardingFiltersCount, 0);
+    YDB_READONLY(TAtomicCounter, SysViewLimitPassthroughsCount, 0);
 
     YDB_READONLY(TAtomicCounter, RequestTracingSnapshotsSave, 0);
     YDB_READONLY(TAtomicCounter, RequestTracingSnapshotsRemove, 0);
@@ -52,6 +53,10 @@ protected:
 
     virtual void OnSelectShardingFilter() override {
         ShardingFiltersCount.Inc();
+    }
+
+    virtual void OnSysViewLimitSyncPointPassthrough() override {
+        SysViewLimitPassthroughsCount.Inc();
     }
 
     virtual void AddPortionForActualizer(const i32 portionsCount) override {

@@ -20,6 +20,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#include <stdexcept>
+
 using namespace NActors;
 using namespace NKikimr;
 using namespace NKikimr::NPQ;

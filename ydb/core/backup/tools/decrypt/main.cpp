@@ -81,12 +81,17 @@ struct TProgress {
 int main(int argc, const char* argv[]) {
     TOptions options(argc, argv);
 
-    std::optional<TFileOutput> outputFile;
-    IOutputStream* out = &Cout;
-    if (options.OutputFile) {
-        outputFile.emplace(options.OutputFile);
-        out = &*outputFile;
-    }
+if (options.NoOutput && options.OutputFile) {
+    Cerr << "Error: --output-file cannot be used together with --no-output" << Endl;
+    return 1;
+}
+
+std::optional<TFileOutput> outputFile;
+IOutputStream* out = &Cout;
+if (!options.NoOutput && options.OutputFile) {
+    outputFile.emplace(options.OutputFile);
+    out = &*outputFile;
+}
 
     NKikimr::NBackup::TEncryptedFileDeserializer deserializer(options.Key);
     TProgress progress;

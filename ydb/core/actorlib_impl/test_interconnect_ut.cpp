@@ -507,27 +507,23 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
     Y_UNIT_TEST(TestNotifyUndeliveredOnMissedActor) {
         TTestBasicRuntime runtime(2);
+        runtime.SetDispatchTimeout(TDuration::Seconds(10));
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(0);
+        const TActorId missingActor(0xFFFFF, "null");
 
-        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 1),
+        runtime.Send(new IEventHandle(missingActor,
                                       edge,
-                                      new TEvInterconnect::TEvConnectNode),
+                                      new TEvents::TEvPing,
+                                      IEventHandle::FlagSubscribeOnSession | IEventHandle::FlagTrackDelivery, 13),
                      0, true);
 
         TAutoPtr<IEventHandle> handle;
-        runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
-
-        runtime.Send(new IEventHandle(TActorId(runtime.GetNodeId(1), "null"),
-                                      edge,
-                                      new TEvents::TEvPing,
-                                      IEventHandle::FlagTrackDelivery, 13),
-                     0, true);
-
         const auto event = runtime.GrabEdgeEvent<TEvents::TEvUndelivered>(handle);
         UNIT_ASSERT_EQUAL(handle->Cookie, 13);
+        UNIT_ASSERT_EQUAL(handle->Sender, missingActor);
         UNIT_ASSERT_EQUAL(event->SourceType, TEvents::TEvPing::EventType);
-        UNIT_ASSERT_EQUAL(event->Reason, TEvents::TEvUndelivered::ReasonActorUnknown);
+        UNIT_ASSERT_EQUAL(event->Reason, TEvents::TEvUndelivered::Disconnected);
     }
 
     Y_UNIT_TEST(TestBlobEventUpToMebibytes) {

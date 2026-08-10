@@ -74,7 +74,6 @@ RECURSE(
     runtime
     session_actor
     tests
-    workload_service
 )
 
 RECURSE_FOR_TESTS(

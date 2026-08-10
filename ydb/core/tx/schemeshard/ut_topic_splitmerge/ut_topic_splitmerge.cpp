@@ -209,6 +209,74 @@ void ValidateDescribeUsableByBoundaryChooser(const NKikimrSchemeOp::TPersQueueGr
     UNIT_ASSERT(chooser.GetPartition(TString(reinterpret_cast<const char*>(maxKey), sizeof(maxKey))));
 }
 
+// Prove Describe is still on the committed pre-alter snapshot (ReassignIds done, FinishAlter not).
+// Topic AlterVersion / NextPartitionId bump only in FinishAlter; new partition ids stay hidden.
+void ValidateInFlightCommittedDescribeSnapshot(
+        const NKikimrSchemeOp::TPersQueueGroupDescription& before,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& inFlight)
+{
+    UNIT_ASSERT_VALUES_EQUAL_C(before.GetAlterVersion(), inFlight.GetAlterVersion(),
+        "mid-alter Describe must keep committed AlterVersion until FinishAlter");
+    UNIT_ASSERT_VALUES_EQUAL_C(before.GetNextPartitionId(), inFlight.GetNextPartitionId(),
+        "mid-alter Describe must keep committed NextPartitionId until FinishAlter");
+    UNIT_ASSERT_VALUES_EQUAL_C(before.PartitionsSize(), inFlight.PartitionsSize(),
+        "mid-alter Describe must not expose partitions created by the in-flight alter");
+
+    THashMap<ui32, NKikimrPQ::ETopicPartitionStatus> beforeStatus;
+    THashSet<ui32> beforeIds;
+    for (const auto& p : before.GetPartitions()) {
+        beforeIds.insert(p.GetPartitionId());
+        beforeStatus[p.GetPartitionId()] = p.GetStatus();
+        UNIT_ASSERT_C(p.GetPartitionId() < before.GetNextPartitionId(),
+            "pre-alter partition id out of committed NextPartitionId range");
+    }
+
+    THashSet<ui32> inFlightIds;
+    ui32 activeInFlight = 0;
+    for (const auto& p : inFlight.GetPartitions()) {
+        const ui32 id = p.GetPartitionId();
+        inFlightIds.insert(id);
+        UNIT_ASSERT_C(beforeIds.contains(id),
+            "mid-alter Describe exposed unexpected partition id " << id);
+        UNIT_ASSERT_C(id < inFlight.GetNextPartitionId(),
+            "visible partition id must belong to committed NextPartitionId range");
+
+        if (p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+            ++activeInFlight;
+            // Parents deactivated by ReassignIds are still reported Active and must not
+            // advertise child links created by this alter.
+            UNIT_ASSERT_C(p.ChildPartitionIdsSize() == 0,
+                "mid-alter Active partition " << id << " must not expose in-flight child links");
+        }
+
+        // Partitions that were Active before the alter must remain Active in the snapshot.
+        const auto* statusBefore = beforeStatus.FindPtr(id);
+        UNIT_ASSERT_C(statusBefore, "mid-alter partition " << id << " missing from pre-alter map");
+        if (*statusBefore == NKikimrPQ::ETopicPartitionStatus::Active) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Active),
+                static_cast<int>(p.GetStatus()),
+                "pre-alter Active partition " << id << " must stay Active mid-alter");
+        }
+    }
+
+    UNIT_ASSERT_C(beforeIds == inFlightIds,
+        "mid-alter visible partition set must equal the committed pre-alter set");
+    UNIT_ASSERT_C(activeInFlight > 0, "mid-alter snapshot must keep Active partitions");
+}
+
+void ValidateAlterFinishedDescribeProgress(
+        const NKikimrSchemeOp::TPersQueueGroupDescription& before,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& done)
+{
+    UNIT_ASSERT_C(done.GetAlterVersion() > before.GetAlterVersion(),
+        "FinishAlter must bump AlterVersion");
+    UNIT_ASSERT_C(done.GetNextPartitionId() > before.GetNextPartitionId(),
+        "FinishAlter must bump NextPartitionId when partitions were added");
+    UNIT_ASSERT_C(done.PartitionsSize() > before.PartitionsSize(),
+        "finished alter must expose newly created partitions");
+}
+
 void ValidatePartition(const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition,
                        NKikimrPQ::ETopicPartitionStatus status, TMaybe<TString> fromBound, TMaybe<TString> toBound) {
     const auto id = partition.GetPartitionId();
@@ -1727,7 +1795,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
         CreateSubDomain(runtime, env, ++txId);
         CreateTopic(runtime, env, ++txId, 1);
 
-        ValidateDescribeUsableByBoundaryChooser(DescribeTopic(runtime));
+        auto topicBefore = DescribeTopic(runtime);
+        ValidateDescribeUsableByBoundaryChooser(topicBefore);
+        UNIT_ASSERT_VALUES_EQUAL(1, topicBefore.PartitionsSize());
+        UNIT_ASSERT_VALUES_EQUAL(1, topicBefore.GetNextPartitionId());
 
         ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
         scheme.SetName("Topic1");
@@ -1748,19 +1819,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
         auto topicInFlight = DescribeTopic(runtime);
         Cerr << "===== Describe during MinPartitionCount alter =====" << Endl
              << topicInFlight.DebugString() << Endl << Flush;
+        ValidateInFlightCommittedDescribeSnapshot(topicBefore, topicInFlight);
         ValidateDescribeUsableByBoundaryChooser(topicInFlight);
 
-        // Children of the in-flight alter must not be visible yet.
-        for (const auto& p : topicInFlight.GetPartitions()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(p.GetPartitionId(), 0,
-                "only the pre-alter partition must be visible mid-alter, got " << p.GetPartitionId());
-            UNIT_ASSERT_VALUES_EQUAL(
-                static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Active),
-                static_cast<int>(p.GetStatus()));
-        }
+        UNIT_ASSERT_VALUES_EQUAL(1, topicInFlight.PartitionsSize());
+        UNIT_ASSERT_VALUES_EQUAL(0, topicInFlight.GetPartitions()[0].GetPartitionId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Active),
+            static_cast<int>(topicInFlight.GetPartitions()[0].GetStatus()));
+        UNIT_ASSERT_VALUES_EQUAL(0, topicInFlight.GetPartitions()[0].ChildPartitionIdsSize());
 
         env.TestWaitNotification(runtime, txId);
         auto topicDone = DescribeTopic(runtime);
+        ValidateAlterFinishedDescribeProgress(topicBefore, topicDone);
         ValidateDescribeUsableByBoundaryChooser(topicDone);
         UNIT_ASSERT_VALUES_EQUAL(9, topicDone.GetPartitions().size());
     } // Y_UNIT_TEST(DescribeDuringMinPartitionCountAlterKeepsOpenEndedActive)
@@ -1774,13 +1845,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
         CreateSubDomain(runtime, env, ++txId);
         CreateTopic(runtime, env, ++txId, 3);
 
-        auto topic = DescribeTopic(runtime);
-        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 3);
-        ValidateDescribeUsableByBoundaryChooser(topic);
+        auto topicBefore = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topicBefore.GetPartitions().size(), 3);
+        ValidateDescribeUsableByBoundaryChooser(topicBefore);
 
         ui32 openEndedId = Max<ui32>();
         ui32 activeBefore = 0;
-        for (const auto& p : topic.GetPartitions()) {
+        for (const auto& p : topicBefore.GetPartitions()) {
             if (p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
                 ++activeBefore;
                 if (!p.HasKeyRange() || !p.GetKeyRange().HasToBound()) {
@@ -1811,28 +1882,52 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
         auto topicInFlight = DescribeTopic(runtime);
         Cerr << "===== Describe during split of open-ended partition =====" << Endl
              << topicInFlight.DebugString() << Endl << Flush;
+        ValidateInFlightCommittedDescribeSnapshot(topicBefore, topicInFlight);
         ValidateDescribeUsableByBoundaryChooser(topicInFlight);
 
-        ui32 activeInFlight = 0;
         bool openEndedStillActive = false;
         for (const auto& p : topicInFlight.GetPartitions()) {
-            if (p.GetStatus() != NKikimrPQ::ETopicPartitionStatus::Active) {
-                continue;
-            }
-            ++activeInFlight;
             if (p.GetPartitionId() == openEndedId) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Active),
+                    static_cast<int>(p.GetStatus()));
+                UNIT_ASSERT_VALUES_EQUAL(0, p.ChildPartitionIdsSize());
                 openEndedStillActive = true;
-                UNIT_ASSERT_C(p.ChildPartitionIdsSize() == 0,
-                    "in-flight split parent must not expose new child links yet");
             }
+            // No partition created by this alter may appear yet.
+            UNIT_ASSERT_C(p.GetPartitionId() < topicBefore.GetNextPartitionId(),
+                "mid-alter must not expose new partition " << p.GetPartitionId());
         }
-        UNIT_ASSERT_VALUES_EQUAL(activeInFlight, activeBefore);
         UNIT_ASSERT(openEndedStillActive);
 
         env.TestWaitNotification(runtime, txId);
         auto topicDone = DescribeTopic(runtime);
+        ValidateAlterFinishedDescribeProgress(topicBefore, topicDone);
         ValidateDescribeUsableByBoundaryChooser(topicDone);
         UNIT_ASSERT_VALUES_EQUAL(5, topicDone.GetPartitions().size());
+
+        // Split parent is Inactive after FinishAlter; children are visible.
+        bool parentInactive = false;
+        ui32 openEndedChildren = 0;
+        for (const auto& p : topicDone.GetPartitions()) {
+            if (p.GetPartitionId() == openEndedId) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Inactive),
+                    static_cast<int>(p.GetStatus()));
+                UNIT_ASSERT_VALUES_EQUAL(2, p.ChildPartitionIdsSize());
+                parentInactive = true;
+            }
+            for (const auto parent : p.GetParentPartitionIds()) {
+                if (parent == openEndedId) {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Active),
+                        static_cast<int>(p.GetStatus()));
+                    ++openEndedChildren;
+                }
+            }
+        }
+        UNIT_ASSERT(parentInactive);
+        UNIT_ASSERT_VALUES_EQUAL(2, openEndedChildren);
     } // Y_UNIT_TEST(DescribeDuringSplitOfOpenEndedPartitionKeepsCoverage)
 
     Y_UNIT_TEST(DescribeDuringMergeAlterKeepsOpenEndedActive) {
@@ -1844,8 +1939,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
         CreateSubDomain(runtime, env, ++txId);
         CreateTopic(runtime, env, ++txId, 3);
 
-        auto topic = DescribeTopic(runtime);
-        ValidateDescribeUsableByBoundaryChooser(topic);
+        auto topicBefore = DescribeTopic(runtime);
+        ValidateDescribeUsableByBoundaryChooser(topicBefore);
+        UNIT_ASSERT_VALUES_EQUAL(3, topicBefore.GetNextPartitionId());
 
         // Merge two leftmost partitions (0 and 1).
         ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
@@ -1865,24 +1961,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
         auto topicInFlight = DescribeTopic(runtime);
         Cerr << "===== Describe during merge alter =====" << Endl
              << topicInFlight.DebugString() << Endl << Flush;
+        ValidateInFlightCommittedDescribeSnapshot(topicBefore, topicInFlight);
         ValidateDescribeUsableByBoundaryChooser(topicInFlight);
 
-        // Pre-alter active parents must still be Active; merge child must be hidden.
-        THashSet<ui32> visibleIds;
+        // Pre-alter active parents must still be Active; merge child (id >= NextPartitionId) hidden.
         for (const auto& p : topicInFlight.GetPartitions()) {
-            visibleIds.insert(p.GetPartitionId());
+            UNIT_ASSERT_C(p.GetPartitionId() < topicBefore.GetNextPartitionId(),
+                "mid-alter must not expose merge child partition " << p.GetPartitionId());
             if (p.GetPartitionId() == 0 || p.GetPartitionId() == 1) {
                 UNIT_ASSERT_VALUES_EQUAL(
                     static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Active),
                     static_cast<int>(p.GetStatus()));
+                UNIT_ASSERT_VALUES_EQUAL(0, p.ChildPartitionIdsSize());
             }
         }
-        UNIT_ASSERT(visibleIds.contains(0));
-        UNIT_ASSERT(visibleIds.contains(1));
-        UNIT_ASSERT(visibleIds.contains(2));
-        UNIT_ASSERT_VALUES_EQUAL(visibleIds.size(), 3);
 
         env.TestWaitNotification(runtime, txId);
-        ValidateDescribeUsableByBoundaryChooser(DescribeTopic(runtime));
+        auto topicDone = DescribeTopic(runtime);
+        ValidateAlterFinishedDescribeProgress(topicBefore, topicDone);
+        ValidateDescribeUsableByBoundaryChooser(topicDone);
+        UNIT_ASSERT_VALUES_EQUAL(4, topicDone.PartitionsSize());
     } // Y_UNIT_TEST(DescribeDuringMergeAlterKeepsOpenEndedActive)
 }

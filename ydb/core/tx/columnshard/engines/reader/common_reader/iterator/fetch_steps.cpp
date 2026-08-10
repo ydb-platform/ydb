@@ -1,14 +1,9 @@
 #include "fetch_steps.h"
 #include "source.h"
 
-<<<<<<< HEAD
 #include <ydb/core/formats/arrow/common/container.h>
-=======
-#include <ydb/core/formats/arrow/container/container.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
-#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
->>>>>>> d7a42430c5d (Fix trace verify (#49129))
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>

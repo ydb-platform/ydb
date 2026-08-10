@@ -317,7 +317,7 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
         try {
             TBuffer encryptedBlock = Encryption->AddBlock(TStringBuf(Buffer.Data(), Buffer.Size()), last);
             Buffer = std::move(encryptedBlock);
-        } catch (const yexception& ex) {
+        } catch (const std::exception& ex) {
             ErrorString = ex.what();
             return Nothing();
         }
@@ -450,12 +450,12 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
     case EDataFormat::Parquet:
         {
             bufferSettings.WithoutCompression();
-            
+
             auto maybeSettings = ParquetExportSettingsFromTask(Task);
             auto settings = maybeSettings.value_or(TParquetExportSettings{});
             settings
                 .WithColumns(Columns);
-            
+
             switch (CodecFromTask(Task)) {
             case ECompressionCodec::None:
                 break;

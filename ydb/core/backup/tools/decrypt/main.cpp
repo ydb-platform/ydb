@@ -80,49 +80,51 @@ struct TProgress {
 
 int main(int argc, const char* argv[]) {
     TOptions options(argc, argv);
-
-if (options.NoOutput && options.OutputFile) {
-    Cerr << "Error: --output-file cannot be used together with --no-output" << Endl;
-    return 1;
-}
-
-std::optional<TFileOutput> outputFile;
-IOutputStream* out = &Cout;
-if (!options.NoOutput && options.OutputFile) {
-    outputFile.emplace(options.OutputFile);
-    out = &*outputFile;
-}
-
-    NKikimr::NBackup::TEncryptedFileDeserializer deserializer(options.Key);
     TProgress progress;
 
-    auto printIV = [&]() {
-        if (const auto iv = deserializer.GetIV()) {
-            Cerr << "IV: " << iv.GetHexString() << Endl;
-        }
-    };
+    if (options.NoOutput && options.OutputFile) {
+        Cerr << "Error: --output-file cannot be used together with --no-output" << Endl;
+        return 1;
+    }
 
-    auto drainBlocks = [&]() {
-        while (TMaybe<TBuffer> block = deserializer.GetNextBlock()) {
-            const ui64 blockStart = progress.ProcessedBytes;
-            progress.ProcessedBytes = deserializer.GetProcessedInputBytes();
-            ++progress.BlocksRead;
-            progress.DecryptedBytes += block->Size();
-
-            if (options.Verbose) {
-                Cerr << "Block " << progress.BlocksRead
-                    << ": offset " << blockStart
-                    << ", encrypted size " << (progress.ProcessedBytes - blockStart)
-                    << ", decrypted size " << block->Size() << Endl;
-            }
-
-            if (!options.NoOutput) {
-                out->Write(block->Data(), block->Size());
-            }
-        }
-    };
+    std::optional<TFileOutput> outputFile;
+    IOutputStream* out = &Cout;
+    std::optional<NKikimr::NBackup::TEncryptedFileDeserializer> deserializer;
 
     try {
+        if (!options.NoOutput && options.OutputFile) {
+            outputFile.emplace(options.OutputFile);
+            out = &*outputFile;
+        }
+
+        deserializer.emplace(options.Key);
+
+        auto printIV = [&]() {
+            if (const auto iv = deserializer->GetIV()) {
+                Cerr << "IV: " << iv.GetHexString() << Endl;
+            }
+        };
+
+        auto drainBlocks = [&]() {
+            while (TMaybe<TBuffer> block = deserializer->GetNextBlock()) {
+                const ui64 blockStart = progress.ProcessedBytes;
+                progress.ProcessedBytes = deserializer->GetProcessedInputBytes();
+                ++progress.BlocksRead;
+                progress.DecryptedBytes += block->Size();
+
+                if (options.Verbose) {
+                    Cerr << "Block " << progress.BlocksRead
+                        << ": offset " << blockStart
+                        << ", encrypted size " << (progress.ProcessedBytes - blockStart)
+                        << ", decrypted size " << block->Size() << Endl;
+                }
+
+                if (!options.NoOutput) {
+                    out->Write(block->Data(), block->Size());
+                }
+            }
+        };
+
         std::optional<TFileInput> inputFile;
         IInputStream* in = &Cin;
         if (options.InputFile) {
@@ -133,10 +135,10 @@ if (!options.NoOutput && options.OutputFile) {
         char buffer[4_MB];
         while (size_t bytes = in->Read(buffer, sizeof(buffer))) {
             progress.InputBytes += bytes;
-            deserializer.AddData(TBuffer(buffer, bytes), false);
+            deserializer->AddData(TBuffer(buffer, bytes), false);
             drainBlocks();
         }
-        deserializer.AddData(TBuffer(), true);
+        deserializer->AddData(TBuffer(), true);
         drainBlocks();
 
         if (!options.NoOutput) {
@@ -147,12 +149,15 @@ if (!options.NoOutput && options.OutputFile) {
         progress.Print(Cerr);
         return 0;
     } catch (const std::exception& ex) {
-        progress.ProcessedBytes = deserializer.GetProcessedInputBytes();
-
         Cerr << "Error: " << ex.what() << Endl;
-        Cerr << Endl << "Decryption stopped at encrypted-file offset " << progress.ProcessedBytes
-            << ": the block starting there could not be read" << Endl;
-        printIV();
+        if (deserializer) {
+            progress.ProcessedBytes = deserializer->GetProcessedInputBytes();
+            Cerr << Endl << "Decryption stopped at encrypted-file offset " << progress.ProcessedBytes
+                << ": the block starting there could not be read" << Endl;
+            if (const auto iv = deserializer->GetIV()) {
+                Cerr << "IV: " << iv.GetHexString() << Endl;
+            }
+        }
         progress.Print(Cerr);
         return 1;
     }

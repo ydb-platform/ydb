@@ -8,6 +8,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <stdexcept>
+
 using namespace NActors;
 using namespace NKikimr;
 using namespace NKikimr::NPQ;

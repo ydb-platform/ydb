@@ -3,6 +3,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -1039,8 +1040,8 @@ void TestDropMvccAndCleanupWithActiveScan(const bool enableSnapshotsLocking) {
     }
 
     // Start an active scan at writeSnapshot (BEFORE the drop) and hold it open while
-    // minSnapshotForNewReads advances past dropSnapshot. Cleanup must defer dropping
-    // portions because of the in-flight pre-drop snapshot (local tracker or registry).
+    // minSnapshotForNewReads advances past dropSnapshot. Soft-remove of dropped-table portions
+    // is unconditional; CouldUsePortion must defer their physical drop while the scan is in flight.
     {
         TShardReader activeScan(runtime, TTestTxConfig::TxTablet0, tableId, writeSnapshot);
         activeScan.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
@@ -1056,7 +1057,7 @@ void TestDropMvccAndCleanupWithActiveScan(const bool enableSnapshotsLocking) {
 
         if (enableSnapshotsLocking) {
             // Local TShardReader does not publish into SnapshotRegistry; pin writeSnapshot
-            // explicitly so TRegistrySnapshotHolders::CouldUseTable sees the active scan.
+            // explicitly so CouldUsePortion sees the active scan in TxInFlight.
             auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
             registryBuilder->AddSnapshot({}, TRowVersion(writeSnapshot.GetPlanStep(), writeSnapshot.GetTxId()));
             registryBuilder->SetOldestCollectionTime(runtime.GetCurrentTime());
@@ -1071,14 +1072,122 @@ void TestDropMvccAndCleanupWithActiveScan(const bool enableSnapshotsLocking) {
         }
 
         // Drain the scan — it must return the pre-drop data.
-        // CouldUseTable must have blocked cleanup of the dropped table's portions.
         activeScan.Ack();
         auto rb = activeScan.ContinueReadAll();
         UNIT_ASSERT_C(activeScan.IsCorrectlyFinished(), "pre-drop active scan must finish without error after cleanup cycles");
         UNIT_ASSERT_C(rb, "pre-drop active scan must return a batch");
         UNIT_ASSERT_VALUES_EQUAL_C(rb->num_rows(), PORTION_ROWS,
-            "pre-drop active scan must return all written rows — CouldUseTable must have protected portions while scan was in flight");
+            "pre-drop active scan must return all written rows — CouldUsePortion must have protected portions while scan was in flight");
     }
+}
+
+// Empty dropped tables (and tables whose portions are already gone) have no portion-level pin left.
+// SetupCleanupTables must keep metadata until CouldUseTable allows erase.
+void TestEmptyDroppedTableCleanupWaitsForReadWindow(const bool enableSnapshotsLocking) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(enableSnapshotsLocking);
+    if (enableSnapshotsLocking) {
+        auto& longTx = runtime.GetAppData(0).LongTxServiceConfig;
+        longTx.SetLocalSnapshotPromotionTimeSeconds(1);
+        longTx.SetMaxClockSkewMs(1000);
+        longTx.SetSnapshotsExchangeIntervalSeconds(1);
+        longTx.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+    }
+
+    constexpr auto maxReadStaleness = TDuration::Seconds(5);
+    auto controller = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    controller->SetOverrideMaxReadStaleness(maxReadStaleness);
+    controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+    controller->SetOverrideUsedSnapshotLivetime(TDuration::Zero());
+    controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+    {
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+    }
+
+    const ui64 tableId = 1;
+    ui64 txId = 100;
+    const auto createPlanStep = SetupSchema(runtime, sender, tableId, TestTableDescription(), "none", ++txId);
+    const auto preDropSnapshot = NOlap::TSnapshot(createPlanStep, Max<ui64>());
+
+    const auto dropTxId = ++txId;
+    const auto dropPlanStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), dropTxId);
+    const auto dropSnapshot = NOlap::TSnapshot(dropPlanStep, dropTxId);
+    PlanSchemaTx(runtime, sender, dropSnapshot);
+
+    const auto pathId =
+        *controller->GetTheOnlyShard()->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(tableId), false);
+    auto isPendingDrop = [&] {
+        for (const auto& [_, pathIds] : controller->GetTheOnlyShard()->GetTablesManager().GetPathsToDrop()) {
+            if (pathIds.contains(pathId)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    auto triggerCleanup = [&] {
+        Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
+        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+    };
+    auto assertPreDropReadOk = [&] {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, preDropSnapshot);
+        reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT_C(reader.IsCorrectlyFinished(), "pre-drop read must succeed while empty dropped table metadata is retained");
+        UNIT_ASSERT_VALUES_EQUAL(rb ? rb->num_rows() : 0, 0);
+    };
+    auto pinRegistrySnapshot = [&](const std::optional<NOlap::TSnapshot>& snapshot) {
+        if (!enableSnapshotsLocking) {
+            return;
+        }
+        auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
+        if (snapshot) {
+            registryBuilder->AddSnapshot({}, TRowVersion(snapshot->GetPlanStep(), snapshot->GetTxId()));
+        }
+        registryBuilder->SetOldestCollectionTime(runtime.GetCurrentTime());
+        runtime.GetAppData(0).SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());
+    };
+
+    UNIT_ASSERT(isPendingDrop());
+    assertPreDropReadOk();
+
+    controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+    triggerCleanup();
+    UNIT_ASSERT_C(isPendingDrop(), "empty dropped table must stay while new-scan window still covers pre-drop snapshots");
+    assertPreDropReadOk();
+
+    TShardReader activeScan(runtime, TTestTxConfig::TxTablet0, tableId, preDropSnapshot);
+    activeScan.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
+    UNIT_ASSERT_C(activeScan.InitializeScanner(), "active pre-drop scan on empty table must start");
+    pinRegistrySnapshot(preDropSnapshot);
+
+    runtime.SimulateSleep(enableSnapshotsLocking ? TDuration::Seconds(3) : TDuration::Seconds(6));
+    PlanCommit(runtime, sender, TPlanStep{ dropPlanStep.Val() + maxReadStaleness.MilliSeconds() + 1 }, TSet<ui64>{});
+    for (ui32 i = 0; i < 5; ++i) {
+        pinRegistrySnapshot(preDropSnapshot);
+        triggerCleanup();
+    }
+    UNIT_ASSERT_C(isPendingDrop(), "CouldUseTable must defer empty-table metadata erase while pre-drop snapshot is active");
+
+    activeScan.Ack();
+    auto rb = activeScan.ContinueReadAll();
+    UNIT_ASSERT_C(activeScan.IsCorrectlyFinished(), "pre-drop active scan must finish after deferred cleanup attempts");
+    UNIT_ASSERT_VALUES_EQUAL(rb ? rb->num_rows() : 0, 0);
+
+    pinRegistrySnapshot(std::nullopt);
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPingSnapshotsUsage());
+    runtime.SimulateSleep(TDuration::MilliSeconds(200));
+
+    for (ui32 i = 0; i < 60 && isPendingDrop(); ++i) {
+        triggerCleanup();
+    }
+    UNIT_ASSERT_C(!isPendingDrop(), "empty dropped table metadata must be erased after CouldUseTable allows cleanup");
+    UNIT_ASSERT(!controller->GetTheOnlyShard()->GetTablesManager().HasTable(pathId, /*withDeleted=*/true));
 }
 
 void TestCompaction(std::optional<ui32> numWrites = {}) {
@@ -1405,6 +1514,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
     Y_UNIT_TEST_DUO(DropMvccAndCleanupWithActiveScan, EnableSnapshotsLocking) {
         TestDropMvccAndCleanupWithActiveScan(EnableSnapshotsLocking);
+    }
+    Y_UNIT_TEST_DUO(EmptyDroppedTableCleanupWaitsForReadWindow, EnableSnapshotsLocking) {
+        TestEmptyDroppedTableCleanupWaitsForReadWindow(EnableSnapshotsLocking);
     }
 }
 

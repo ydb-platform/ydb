@@ -968,12 +968,22 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
-    THashSet<TInternalPathId> pathIdsEmptyInInsertTable;
-    for (const auto& [_, pathIds] : TablesManager.GetPathsToDrop()) {
-        pathIdsEmptyInInsertTable.insert(pathIds.begin(), pathIds.end());
+    const auto snapshotHolders = GetSnapshotHolders();
+    THashSet<TInternalPathId> pathIdsToCleanup;
+    for (const auto& [dropSnapshot, pathIds] : TablesManager.GetPathsToDrop()) {
+        for (const TInternalPathId pathId : pathIds) {
+            if (snapshotHolders->CouldUseTable(pathId, dropSnapshot)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+                    ("event", "CleanupTableMetadataDeferredByActiveScan")
+                    ("path_id", pathId)
+                    ("drop_snapshot", dropSnapshot.DebugString());
+                continue;
+            }
+            pathIdsToCleanup.insert(pathId);
+        }
     }
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable, DataLocksManager);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsToCleanup, DataLocksManager);
     if (!changes) {
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
             {"background", "cleanup"},

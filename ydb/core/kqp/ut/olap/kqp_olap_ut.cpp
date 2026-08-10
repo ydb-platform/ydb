@@ -11,7 +11,6 @@
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
-#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
@@ -5092,21 +5091,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DropTable, EnableSnapshotsLocking) {
+    Y_UNIT_TEST(DropTable) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.FeatureFlags.SetEnableSnapshotsLocking(EnableSnapshotsLocking);
         TKikimrRunner kikimr(settings);
-        if (EnableSnapshotsLocking) {
-            auto& longTx = kikimr.GetTestServer().GetRuntime()->GetAppData().LongTxServiceConfig;
-            longTx.SetSnapshotsExchangeIntervalSeconds(1);
-            longTx.SetSnapshotsRegistryUpdateIntervalSeconds(1);
-            longTx.SetLocalSnapshotPromotionTimeSeconds(1);
-            longTx.SetMaxClockSkewMs(1000);
-            longTx.SetPrefillTimeoutSeconds(1);
-        }
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 20);
         auto client = kikimr.GetTableClient();
@@ -5117,17 +5107,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
-        ui64 rows = std::numeric_limits<ui64>::max();
-        do {
-            csController->WaitCleaning(TDuration::Seconds(5));
+        csController->WaitCleaning(TDuration::Seconds(5));
+
+        {
             auto result = kikimr.GetQueryClient()
                               .ExecuteQuery("SELECT * FROM `olapStore/.sys/store_primary_index_portion_stats`", NQuery::TTxControl::NoTx())
                               .GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            rows = result.GetResultSet(0).RowsCount();
-        } while (rows != 0 && TInstant::Now() < deadline);
-        UNIT_ASSERT_VALUES_EQUAL(rows, 0);
+            UNIT_ASSERT_EQUAL(result.GetResultSet(0).RowsCount(), 0);
+        }
     }
 
     Y_UNIT_TEST(OlapTxMode) {

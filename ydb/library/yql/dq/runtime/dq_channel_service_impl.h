@@ -371,6 +371,7 @@ public:
     ui64 SeqNo = 0;
     bool Leading = false;
     ui64 ChannelSeqNo = 0;
+    bool Quoted = false;
 };
 
 class TOutputBuffer : public IChannelBuffer {

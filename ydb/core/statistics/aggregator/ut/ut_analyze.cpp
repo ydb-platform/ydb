@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -96,11 +97,46 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
             UNIT_ASSERT(ev->Get()->Record.GetUseBatchPool());
             ++scans;
         });
+        THashSet<TActorId> userConveyorServices;
+        THashSet<TActorId> batchConveyorServices;
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const auto nodeId = runtime.GetNodeId(nodeIndex);
+            userConveyorServices.emplace(NConveyorComposite::TServiceOperator::MakeServiceId(nodeId, false));
+            batchConveyorServices.emplace(NConveyorComposite::TServiceOperator::MakeServiceId(nodeId, true));
+        }
+        THashSet<ui64> userScanProcesses;
+        THashSet<ui64> batchScanProcesses;
+        auto conveyorProcessesObserver = runtime.AddObserver<NConveyorComposite::TEvExecution::TEvRegisterProcess>([&](auto& ev) {
+            if (ev->Get()->GetCategory() != NConveyorComposite::ESpecialTaskCategory::Scan) {
+                return;
+            }
+            if (userConveyorServices.contains(ev->Recipient)) {
+                userScanProcesses.emplace(ev->Get()->GetInternalProcessId());
+            } else if (batchConveyorServices.contains(ev->Recipient)) {
+                batchScanProcesses.emplace(ev->Get()->GetInternalProcessId());
+            }
+        });
+        size_t batchScanTasks = 0;
+        auto conveyorTasksObserver = runtime.AddObserver<NConveyorComposite::TEvExecution::TEvNewTask>([&](auto& ev) {
+            if (ev->Get()->GetCategory() != NConveyorComposite::ESpecialTaskCategory::Scan) {
+                return;
+            }
+            if (userScanProcesses.contains(ev->Get()->GetInternalProcessId())) {
+                UNIT_ASSERT(userConveyorServices.contains(ev->Recipient));
+            } else if (batchScanProcesses.contains(ev->Get()->GetInternalProcessId())) {
+                UNIT_ASSERT(batchConveyorServices.contains(ev->Recipient));
+                ++batchScanTasks;
+            }
+        });
 
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
 
         UNIT_ASSERT_GT(taskRequests, 0);
         UNIT_ASSERT_GT(scans, 0);
+        if (ColumnShard) {
+            UNIT_ASSERT_GT(batchScanProcesses.size(), 0);
+            UNIT_ASSERT_GT(batchScanTasks, 0);
+        }
     }
 
     Y_UNIT_TEST_TWIN(QueryDoesNotUseBatchPool, ColumnShard) {
@@ -114,10 +150,49 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
             UNIT_ASSERT(!ev->Get()->Record.GetUseBatchPool());
             ++scans;
         });
+        THashSet<TActorId> userConveyorServices;
+        THashSet<TActorId> batchConveyorServices;
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const auto nodeId = runtime.GetNodeId(nodeIndex);
+            userConveyorServices.emplace(NConveyorComposite::TServiceOperator::MakeServiceId(nodeId, false));
+            batchConveyorServices.emplace(NConveyorComposite::TServiceOperator::MakeServiceId(nodeId, true));
+        }
+        THashSet<ui64> userScanProcesses;
+        THashSet<ui64> batchScanProcesses;
+        auto conveyorProcessesObserver = runtime.AddObserver<NConveyorComposite::TEvExecution::TEvRegisterProcess>([&](auto& ev) {
+            if (ev->Get()->GetCategory() != NConveyorComposite::ESpecialTaskCategory::Scan) {
+                return;
+            }
+            if (userConveyorServices.contains(ev->Recipient)) {
+                userScanProcesses.emplace(ev->Get()->GetInternalProcessId());
+            } else if (batchConveyorServices.contains(ev->Recipient)) {
+                batchScanProcesses.emplace(ev->Get()->GetInternalProcessId());
+            }
+        });
+        size_t userScanTasks = 0;
+        size_t batchScanTasks = 0;
+        auto conveyorTasksObserver = runtime.AddObserver<NConveyorComposite::TEvExecution::TEvNewTask>([&](auto& ev) {
+            if (ev->Get()->GetCategory() != NConveyorComposite::ESpecialTaskCategory::Scan) {
+                return;
+            }
+            if (userScanProcesses.contains(ev->Get()->GetInternalProcessId())) {
+                UNIT_ASSERT(userConveyorServices.contains(ev->Recipient));
+                ++userScanTasks;
+            } else if (batchScanProcesses.contains(ev->Get()->GetInternalProcessId())) {
+                UNIT_ASSERT(batchConveyorServices.contains(ev->Recipient));
+                ++batchScanTasks;
+            }
+        });
 
         ExecuteYqlScript(env, "SELECT COUNT(*) FROM `Root/Database/Table`;");
 
         UNIT_ASSERT_GT(scans, 0);
+        if (ColumnShard) {
+            UNIT_ASSERT_GT(userScanProcesses.size(), 0);
+            UNIT_ASSERT_GT(userScanTasks, 0);
+            UNIT_ASSERT_VALUES_EQUAL(batchScanProcesses.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(batchScanTasks, 0);
+        }
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeSpecificColumns, ColumnShard) {

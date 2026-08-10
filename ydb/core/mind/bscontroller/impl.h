@@ -1608,9 +1608,15 @@ private:
     IActor* CreateSystemViewsCollector();
     void UpdateSystemViews();
 
-    bool ValidateConfigUpdates(TConfigState& state, bool suppressFailModelChecking, bool suppressDegradedGroupsChecking,
-        bool suppressDisintegratedGroupsChecking, TString *errorDescription,
-        NKikimrBlobStorage::TConfigResponse *response = nullptr);
+    struct TValidateConfigUpdatesParameters {
+        bool SuppressFailModelChecking = false;
+        bool SuppressDegradedGroupsChecking = false;
+        bool SuppressDisintegratedGroupsChecking = false;
+        bool AllowDegradedWithSinglePhantomsOnly = false;
+    };
+
+    bool ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
+            TString* errorDescription, NKikimrBlobStorage::TConfigResponse* response = nullptr);
 
     std::optional<TString> ValidateAndCommitConfigUpdate(std::optional<TConfigState>& state,
         TConfigTxFlags flags, TTransactionContext& txc,

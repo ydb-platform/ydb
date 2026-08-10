@@ -2883,6 +2883,10 @@ message TColumnShardConfig {
     optional TReadRetryPolicy ReadRetryPolicy = 70;
     optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
     optional bool EnableBulkUpsertValidation = 72 [default = true];
+    // When enabled, an oversized secondary-index chunk on a blob storage is split across several blobs (each
+    // under MaxBlobSize) instead of being dropped. Off by default so the whole fleet can read the split
+    // representation before any node starts writing it (two-phase rollout).
+    optional bool EnableIndexBlobSplit = 73 [default = false];
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

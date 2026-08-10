@@ -35,10 +35,10 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , WriteMode(directBlockGroup->GetOracle()->GetWriteMode())
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
-          {{"t", ToString(WriteMode)},
-           {"lsn", ToString(bundle->GetLsn())},
-           {"r", bundle->GetRange().Print()},
-           {"rv", bundle->GetVChunkRange().Print()}}))
+          {{"t", WriteMode},
+           {"lsn", bundle->GetLsn()},
+           {"r", bundle->GetRange()},
+           {"rv", bundle->GetVChunkRange()}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Bundle(std::move(bundle))

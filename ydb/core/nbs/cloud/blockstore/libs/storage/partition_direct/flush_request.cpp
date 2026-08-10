@@ -25,13 +25,14 @@ TFlushRequestExecutor::TFlushRequestExecutor(
           GetCycleCount(),
           {{"t", "Flush"},
            {"src",
-            PrintHostAndNodeId(
-                route.SourceHostIndex,
-                directBlockGroup->GetNodeId(route.SourceHostIndex))},
+            THostAndNodeId{
+                .HostIndex = route.SourceHostIndex,
+                .NodeId = directBlockGroup->GetNodeId(route.SourceHostIndex)}},
            {"dst",
-            PrintHostAndNodeId(
-                route.DestinationHostIndex,
-                directBlockGroup->GetNodeId(route.DestinationHostIndex))}}))
+            THostAndNodeId{
+                .HostIndex = route.DestinationHostIndex,
+                .NodeId =
+                    directBlockGroup->GetNodeId(route.DestinationHostIndex)}}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Span(std::move(span))

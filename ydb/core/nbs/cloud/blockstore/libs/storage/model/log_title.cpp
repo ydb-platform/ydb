@@ -7,6 +7,8 @@
 #include <util/string/builder.h>
 #include <util/system/datetime.h>
 
+#include <variant>
+
 namespace NYdb::NBS {
 
 namespace {
@@ -148,6 +150,24 @@ TString ToString(const TLogTitle::TInterconnectTransport& data)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TLogTag::TLogTag(TStringBuf key, TStringBuf value)
+    : Key(key)
+    , Printer(+[](IOutputStream& out, const void* storage)
+              { out << *static_cast<const TStringBuf*>(storage); })
+{
+    static_assert(sizeof(TStringBuf) <= MaxValueSize);
+    static_assert(alignof(TStringBuf) <= 8);
+    std::memcpy(Storage, &value, sizeof(TStringBuf));
+}
+
+void TLogTag::Out(IOutputStream& out) const
+{
+    out << Key << ":";
+    Printer(out, Storage);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 // static
 TString TLogTitle::GetPartitionPrefix(
     ui64 tabletId,
@@ -163,34 +183,19 @@ TString TLogTitle::GetPartitionPrefix(
 
 TChildLogTitle TLogTitle::GetChild(const ui64 startTime) const
 {
-    TStringBuilder childPrefix;
-    childPrefix << CachedPrefix;
-    const auto duration = CyclesToDurationSafe(startTime - StartTime);
-    childPrefix << " t:" << FormatDuration(duration);
-
-    return {childPrefix, startTime};
+    return GetChildWithTags(startTime, std::span<const TLogTag>{});
 }
 
 TChildLogTitle TLogTitle::GetChildWithTags(
     const ui64 startTime,
-    std::span<const std::pair<TString, TString>> additionalTags) const
+    std::span<const TLogTag> additionalTags) const
 {
-    TStringBuilder childPrefix;
-    childPrefix << CachedPrefix;
-
-    for (const auto& [key, value]: additionalTags) {
-        childPrefix << " " << key << ":" << value;
-    }
-
-    const auto duration = CyclesToDurationSafe(startTime - StartTime);
-    childPrefix << " t:" << FormatDuration(duration);
-
-    return {childPrefix, startTime};
+    return {CachedPrefix, StartTime, startTime, additionalTags};
 }
 
 TChildLogTitle TLogTitle::GetChildWithTags(
     const ui64 startTime,
-    std::initializer_list<std::pair<TString, TString>> additionalTags) const
+    std::initializer_list<TLogTag> additionalTags) const
 {
     return GetChildWithTags(startTime, std::span(additionalTags));
 }
@@ -272,16 +277,36 @@ void TLogTitle::Rebuild()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TChildLogTitle::TChildLogTitle(TString cachedPrefix, ui64 startTime)
-    : CachedPrefix(std::move(cachedPrefix))
+TChildLogTitle::TChildLogTitle(
+    TString parentPrefix,
+    ui64 parentStartTime,
+    ui64 startTime,
+    std::span<const TLogTag> tags)
+    : ParentPrefix(std::move(parentPrefix))
+    , ParentStartTime(parentStartTime)
     , StartTime(startTime)
-{}
+    , TagCount(tags.size())
+{
+    Y_ABORT_UNLESS(tags.size() <= MaxTagCount);
+    for (size_t i = 0; i < TagCount; ++i) {
+        Tags[i] = tags[i];
+    }
+}
 
 TString TChildLogTitle::GetWithTime() const
 {
-    const auto duration = CyclesToDurationSafe(GetCycleCount() - StartTime);
     TStringBuilder builder;
-    builder << CachedPrefix << " + " << FormatDuration(duration) << "]";
+    builder << ParentPrefix;
+
+    for (size_t i = 0; i < TagCount; ++i) {
+        builder << " ";
+        Tags[i].Out(builder.Out);
+    }
+
+    const auto sinceParent = CyclesToDurationSafe(StartTime - ParentStartTime);
+    const auto sinceStart = CyclesToDurationSafe(GetCycleCount() - StartTime);
+    builder << " t:" << FormatDuration(sinceParent) << " + "
+            << FormatDuration(sinceStart) << "]";
     return builder;
 }
 

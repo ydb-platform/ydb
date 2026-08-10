@@ -24,7 +24,7 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
     : ActorSystem(actorSystem)
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
-          {{"t", "MultiRead"}, {"r", request->Headers.Range.Print()}}))
+          {{"t", "MultiRead"}, {"r", request->Headers.Range}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , CallContext(std::move(callContext))

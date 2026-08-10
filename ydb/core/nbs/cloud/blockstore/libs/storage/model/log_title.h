@@ -1,15 +1,71 @@
 #pragma once
 
+#include <util/generic/strbuf.h>
 #include <util/generic/string.h>
+#include <util/stream/output.h>
 #include <util/system/types.h>
+#include <util/system/yassert.h>
 
+#include <array>
+#include <concepts>
+#include <cstring>
+#include <initializer_list>
 #include <span>
+#include <type_traits>
+#include <variant>
 
 namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TChildLogTitle;
+
+////////////////////////////////////////////////////////////////////////////////
+
+// A log tag that stores its value inline and formats only when Out() is called.
+// The printer is instantiated at the call site, so log_title never needs to
+// know about the concrete value type.
+class TLogTag
+{
+    static constexpr size_t MaxValueSize = 16;
+
+public:
+    TLogTag() = default;
+
+    TLogTag(TStringBuf key, TStringBuf value);
+
+    // The value is copied, so it need not outlive the tag. A TStringBuf value
+    // must point at storage that does (string literals do).
+    template <typename T>
+        requires std::is_trivially_copyable_v<T> &&
+                     (sizeof(T) <= MaxValueSize) && (alignof(T) <= 8) &&
+                     (!std::convertible_to<const T&, TStringBuf>)
+    TLogTag(TStringBuf key, const T& value)
+        : Key(key)
+        , Printer(+[](IOutputStream& out, const void* storage)
+                  { out << *static_cast<const T*>(storage); })
+    {
+        static_assert(sizeof(T) <= MaxValueSize);
+        std::memcpy(Storage, &value, sizeof(T));
+    }
+
+    // Would store a dangling TStringBuf into a temporary TString.
+    // Constrained to exact TString so string literals still pick the
+    // TStringBuf overload rather than becoming ambiguous with TString's
+    // converting constructor.
+    template <typename T>
+        requires std::same_as<std::remove_cvref_t<T>, TString>
+    TLogTag(TStringBuf key, const T& value) = delete;
+
+    void Out(IOutputStream& out) const;
+
+private:
+    TStringBuf Key;
+    void (*Printer)(IOutputStream&, const void*) = nullptr;
+    alignas(8) char Storage[MaxValueSize] = {};
+};
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TLogTitle
 {
@@ -111,12 +167,11 @@ public:
 
     [[nodiscard]] TChildLogTitle GetChildWithTags(
         ui64 startTime,
-        std::span<const std::pair<TString, TString>> additionalTags) const;
+        std::span<const TLogTag> additionalTags) const;
 
     [[nodiscard]] TChildLogTitle GetChildWithTags(
         ui64 startTime,
-        std::initializer_list<std::pair<TString, TString>> additionalTags)
-        const;
+        std::initializer_list<TLogTag> additionalTags) const;
 
     [[nodiscard]] TString Get(EDetails details) const;
 
@@ -136,10 +191,19 @@ class TChildLogTitle
 private:
     friend class TLogTitle;
 
-    const TString CachedPrefix;
-    const ui64 StartTime;
+    static constexpr size_t MaxTagCount = 4;
 
-    TChildLogTitle(TString cachedPrefix, ui64 startTime);
+    TString ParentPrefix;
+    ui64 ParentStartTime = 0;
+    ui64 StartTime = 0;
+    std::array<TLogTag, MaxTagCount> Tags;
+    size_t TagCount = 0;
+
+    TChildLogTitle(
+        TString parentPrefix,
+        ui64 parentStartTime,
+        ui64 startTime,
+        std::span<const TLogTag> tags);
 
 public:
     [[nodiscard]] TString GetWithTime() const;

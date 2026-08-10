@@ -13,6 +13,10 @@ from itertools import chain, islice
 
 import random
 
+# TODO:
+# Mostly identical to yqv1 test ydb/tests/fq/generic/streaming/test_json.py
+# Keep in sync (until yqv1 will be decomissioned)
+
 USER_TOKEN = "root@builtin"
 
 MAX_WRITE_STREAM_SIZE = 500
@@ -42,13 +46,14 @@ def ResequenceId(messages, field="id"):
     return res
 
 
-def freeze(json):
-    t = type(json)
+def freeze(obj):
+    # Designed for (deserialized) json
+    t = type(obj)
     if t == dict:
-        return frozenset((k, freeze(v)) for k, v in json.items())
+        return frozenset((k, freeze(v)) for k, v in obj.items())
     if t == list:
-        return tuple(map(freeze, json))
-    return json
+        return tuple(map(freeze, obj))
+    return obj
 
 
 def create_secret(kikimr: Kikimr, secret_name: str) -> None:

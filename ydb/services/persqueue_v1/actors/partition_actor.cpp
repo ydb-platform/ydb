@@ -783,12 +783,12 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
                 YDB_LOG_WARN_CTX(ctx, "Direct read restore Prepare with empty DirectReadsToRestore",
                     {"PQLOGPREFIX", PQ_LOG_PREFIX},
                     {"partition", Partition},
-                    {"cookie", result.GetCookie()},
+                    {"response_cookie", result.GetCookie()},
                     {"result", result.ShortDebugString()});
                 ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
                     TStringBuilder() << "direct read restore Prepare with empty DirectReadsToRestore"
                         << ", session=" << Session
-                        << ", cookie=" << Cookie,
+                        << ", session_cookie=" << Cookie,
                     PersQueue::ErrorCode::ERROR));
                 return;
             }
@@ -832,12 +832,12 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
                 YDB_LOG_WARN_CTX(ctx, "Direct read restore Publish with empty DirectReadsToPublish",
                     {"PQLOGPREFIX", PQ_LOG_PREFIX},
                     {"partition", Partition},
-                    {"cookie", result.GetCookie()},
+                    {"response_cookie", result.GetCookie()},
                     {"result", result.ShortDebugString()});
                 ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
                     TStringBuilder() << "direct read restore Publish with empty DirectReadsToPublish"
                         << ", session=" << Session
-                        << ", cookie=" << Cookie,
+                        << ", session_cookie=" << Cookie,
                     PersQueue::ErrorCode::ERROR));
                 return;
             }
@@ -871,12 +871,12 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
                 YDB_LOG_WARN_CTX(ctx, "Direct read restore Forget with empty DirectReadsToForget",
                     {"PQLOGPREFIX", PQ_LOG_PREFIX},
                     {"partition", Partition},
-                    {"cookie", result.GetCookie()},
+                    {"response_cookie", result.GetCookie()},
                     {"result", result.ShortDebugString()});
                 ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
                     TStringBuilder() << "direct read restore Forget with empty DirectReadsToForget"
                         << ", session=" << Session
-                        << ", cookie=" << Cookie,
+                        << ", session_cookie=" << Cookie,
                     PersQueue::ErrorCode::ERROR));
                 return;
             }

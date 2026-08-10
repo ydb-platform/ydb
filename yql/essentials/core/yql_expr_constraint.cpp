@@ -1120,8 +1120,6 @@ private:
             FilterFromHead<TPartOfChoppedConstraintNode>(input, filter, ctx);
             FilterFromHead<TPartOfUniqueConstraintNode>(input, filter, ctx);
             FilterFromHead<TPartOfDistinctConstraintNode>(input, filter, ctx);
-            FilterFromHead<TStreamingConstraintNode, true>(input, filter, ctx);
-            FilterFromHead<TPartOfStreamingConstraintNode>(input, filter, ctx);
         }
         else if (outItemType->GetKind() == ETypeAnnotationKind::Variant) {
             if (auto multi = input->Head().GetConstraint<TMultiConstraintNode>()) {
@@ -1137,16 +1135,12 @@ private:
                     FilterFromHead<TPartOfChoppedConstraintNode>(*input, constr, filter, ctx);
                     FilterFromHead<TPartOfUniqueConstraintNode>(*input, constr, filter, ctx);
                     FilterFromHead<TPartOfDistinctConstraintNode>(*input, constr, filter, ctx);
-                    FilterFromHead<TPartOfStreamingConstraintNode>(*input, constr, filter, ctx);
                 }
                 input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
             }
-            if (input->Head().GetConstraint<TStreamingConstraintNode>()) {
-                input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
-            }
         }
 
-        return FromFirst<TEmptyConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
+        return FromFirst<TEmptyConstraintNode, TVarIndexConstraintNode, TStreamingConstraintNode>(input, output, ctx);
     }
 
     // TODO: Empty for false condition
@@ -2260,9 +2254,19 @@ private:
                     if (input->Child(i)->ChildrenSize() > 1) {
                         argConstraints.push_back(ctx.MakeConstraint<TMultiConstraintNode>(std::move(items)));
                         argConstraints.push_back(ctx.MakeConstraint<TVarIndexConstraintNode>(input->Child(i)->ChildrenSize()));
+
+                        if (inputStreaming) {
+                            argConstraints.push_back(inputStreaming);
+                        }
                     } else {
                         argConstraints = items.front().second.GetAllConstraints();
+
+                        if (inputStreaming && !items.front().second.GetConstraint<TStreamingConstraintNode>()) {
+                            argConstraints.push_back(inputStreaming);
+                        }
                     }
+                } else if (inputStreaming) {
+                    argConstraints.push_back(inputStreaming);
                 }
 
                 status = status.Combine(UpdateLambdaConstraints(input->ChildRef(++i), ctx, {argConstraints}));
@@ -2715,6 +2719,11 @@ private:
                     input->SetConstraints(*c);
                 }
             }
+
+            if (const auto c = input->Head().GetConstraint<TStreamingConstraintNode>();
+                c && !input->GetConstraint<TStreamingConstraintNode>()) {
+                input->AddConstraint(c);
+            }
         }
         return TStatus::Ok;
     }
@@ -2782,16 +2791,18 @@ private:
                 unique = unique->RenameFields(ctx, rename);
             if (distinct)
                 distinct = distinct->RenameFields(ctx, rename);
-            if (streaming)
+            if (streaming) {
                 streaming = streaming->RenameFields(ctx, rename);
+            }
         }
 
         if (unique)
             input->AddConstraint(unique->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
         if (distinct)
             input->AddConstraint(distinct->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
-        if (streaming)
+        if (streaming) {
             input->AddConstraint(streaming->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
+        }
 
         return TStatus::Ok;
     }

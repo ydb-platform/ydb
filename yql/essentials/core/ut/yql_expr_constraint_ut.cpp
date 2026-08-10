@@ -4921,7 +4921,7 @@ Y_UNIT_TEST(MultiItemStreamingConstraintWithSwitch) {
 
 (let data (Switch (Iterator data) '0 '('0) (lambda '(s) (FlatMap s (lambda '(item) (Just item)))) '('1) (lambda '(s) s)))
 
-(let result (Nth (Demux data) '1))
+(let result (Nth (Demux data) '0))
 
 (let world (Write! world res (Key) (Collect result) '()))
 (let world (Commit! world res))
@@ -4932,10 +4932,10 @@ Y_UNIT_TEST(MultiItemStreamingConstraintWithSwitch) {
     const auto exprRoot = ParseAndAnnotate(s, exprCtx);
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "Mux", "Streaming");
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "Switch", "Streaming");
-    CheckConstraint<TMultiConstraintNode>(exprRoot, "Switch", "Multi(0:{},1:{Streaming(event_time)})");
-    CheckConstraint<TStreamingConstraintNode>(exprRoot, "FlatMap", "");
+    CheckConstraint<TMultiConstraintNode>(exprRoot, "Switch", "Multi(0:{Streaming},1:{Streaming(event_time)})");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "FlatMap", "Streaming");
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "Demux", "Streaming");
-    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Nth", "Streaming(event_time)");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Nth", "Streaming");
 }
 
 Y_UNIT_TEST(StreamingConstraintEventTimeProjection) {

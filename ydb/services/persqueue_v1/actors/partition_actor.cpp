@@ -785,11 +785,11 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
                     {"partition", Partition},
                     {"response_cookie", result.GetCookie()},
                     {"result", result.ShortDebugString()});
-                ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+                CloseSessionAndDie(
                     TStringBuilder() << "direct read restore Prepare with empty DirectReadsToRestore"
                         << ", session=" << Session
                         << ", session_cookie=" << Cookie,
-                    PersQueue::ErrorCode::ERROR));
+                    PersQueue::ErrorCode::ERROR, ctx);
                 return;
             }
             if (DirectReadsToRestore.begin()->first != result.GetCmdPrepareReadResult().GetDirectReadId()) {
@@ -834,11 +834,11 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
                     {"partition", Partition},
                     {"response_cookie", result.GetCookie()},
                     {"result", result.ShortDebugString()});
-                ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+                CloseSessionAndDie(
                     TStringBuilder() << "direct read restore Publish with empty DirectReadsToPublish"
                         << ", session=" << Session
                         << ", session_cookie=" << Cookie,
-                    PersQueue::ErrorCode::ERROR));
+                    PersQueue::ErrorCode::ERROR, ctx);
                 return;
             }
             if (*DirectReadsToPublish.begin() != result.GetCmdPublishReadResult().GetDirectReadId()) {
@@ -873,11 +873,11 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
                     {"partition", Partition},
                     {"response_cookie", result.GetCookie()},
                     {"result", result.ShortDebugString()});
-                ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+                CloseSessionAndDie(
                     TStringBuilder() << "direct read restore Forget with empty DirectReadsToForget"
                         << ", session=" << Session
                         << ", session_cookie=" << Cookie,
-                    PersQueue::ErrorCode::ERROR));
+                    PersQueue::ErrorCode::ERROR, ctx);
                 return;
             }
             if (*DirectReadsToForget.begin() != result.GetCmdForgetReadResult().GetDirectReadId()) {
@@ -1943,13 +1943,19 @@ void TPartitionActor::Die(const TActorContext& ctx) {
     TActorBootstrapped<TPartitionActor>::Die(ctx);
 }
 
+void TPartitionActor::CloseSessionAndDie(const TString& reason, PersQueue::ErrorCode::ErrorCode code,
+                                         const TActorContext& ctx) {
+    ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(reason, code));
+    Die(ctx);
+}
+
 bool TPartitionActor::OnUnhandledException(const std::exception& exc) {
     NPQ::DoLogUnhandledException(NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "[" << Session <<"][" << Partition << "] ", exc);
 
-    ActorContext().Send(ParentId, new TEvPQProxy::TEvCloseSession(
-        TStringBuilder() << "unexpected error: " << exc.what(), PersQueue::ErrorCode::ERROR));
-
-    this->Die(ActorContext());
+    CloseSessionAndDie(
+        TStringBuilder() << "unexpected error: " << exc.what(),
+        PersQueue::ErrorCode::ERROR,
+        ActorContext());
 
     return true;
 }

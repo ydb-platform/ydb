@@ -1,6 +1,8 @@
 #pragma once
 
 #include <util/generic/fwd.h>
+#include <util/generic/ylimits.h>
+#include <util/stream/output.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -70,6 +72,14 @@ struct THostRoute
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct THostAndNodeId
+{
+    THostIndex HostIndex = InvalidHostIndex;
+    ui32 NodeId = Max<ui32>();
+};
+
+IOutputStream& operator<<(IOutputStream& out, THostAndNodeId value);
 
 TString PrintHostIndex(THostIndex hostIndex);
 TString PrintNodeId(ui32 nodeId);

@@ -25,6 +25,17 @@ TString THostRoute::DebugPrint() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+IOutputStream& operator<<(IOutputStream& out, THostAndNodeId value)
+{
+    out << "H" << static_cast<ui32>(value.HostIndex) << "#";
+    if (value.NodeId == Max<ui32>()) {
+        out << "??";
+    } else {
+        out << value.NodeId;
+    }
+    return out;
+}
+
 TString PrintHostIndex(THostIndex hostIndex)
 {
     TStringBuilder result;
@@ -42,12 +53,7 @@ TString PrintNodeId(ui32 nodeId)
 TString PrintHostAndNodeId(THostIndex hostIndex, ui32 nodeId)
 {
     TStringBuilder result;
-    result << PrintHostIndex(hostIndex) << "#";
-    if (nodeId == Max<ui32>()) {
-        result << "??";
-    } else {
-        result << nodeId;
-    }
+    result << THostAndNodeId{.HostIndex = hostIndex, .NodeId = nodeId};
     return result;
 }
 

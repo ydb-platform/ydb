@@ -184,11 +184,11 @@ Y_UNIT_TEST(OptionalTupleVariant_OptionalInnerUi32_MixedNull) {
 Y_UNIT_TEST(OptionalTupleVariant_Ui32_NoNull) {
     using TVariant = std::variant<ui32, ui32>;
     TVector<TMaybe<TVariant>> data = {
-        TMaybe<TVariant>{TVariant(std::in_place_index<0>, 1u)},
-        TMaybe<TVariant>{TVariant(std::in_place_index<1>, 2u)},
-        TMaybe<TVariant>{TVariant(std::in_place_index<0>, 3u)},
+        TMaybe<TVariant>{TVariant(std::in_place_index<0>, 1U)},
+        TMaybe<TVariant>{TVariant(std::in_place_index<1>, 2U)},
+        TMaybe<TVariant>{TVariant(std::in_place_index<0>, 3U)},
     };
-    TVector<TMaybe<ui32>> expected = {ui32{1u}, ui32{2u}, ui32{3u}};
+    TVector<TMaybe<ui32>> expected = {ui32{1U}, ui32{2U}, ui32{3U}};
     TestBlockVariantItem(data, expected);
 }
 
@@ -295,7 +295,7 @@ Y_UNIT_TEST(OptionalStructVariant_Ui32_NoNull) {
         TMaybe<TVariant>{TVariant{TMemberB{2}}},
         TMaybe<TVariant>{TVariant{TMemberA{3}}},
     };
-    TVector<TMaybe<ui32>> expected = {ui32{1u}, ui32{2u}, ui32{3u}};
+    TVector<TMaybe<ui32>> expected = {ui32{1U}, ui32{2U}, ui32{3U}};
     TestBlockVariantItem(data, expected);
 }
 

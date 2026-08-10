@@ -46,8 +46,8 @@ public:
     ui64 OutputLength = 0;
     ui64 Written = 0;
     const std::vector<bool> Directions;
-    const ui64 Count_;
-    const std::vector<TBlockType*> Columns_;
+    const ui64 TopCount;
+    const std::vector<TBlockType*> Columns;
     const std::vector<ui32> KeyIndicies;
     std::vector<std::vector<arrow::Datum>> SortInput;
     std::vector<ui64> SortPermutation;
@@ -134,19 +134,19 @@ public:
         : TBlockState(memInfo, columns.size() + 1U)
         , IsFinished(HasCount && !count)
         , Directions(directions, directions + keyIndicies.size())
-        , Count_(count)
-        , Columns_(columns)
+        , TopCount(count)
+        , Columns(columns)
         , KeyIndicies(keyIndicies)
-        , SortInput(Columns_.size())
-        , SortArrays(Columns_.size())
-        , ScalarValues(Columns_.size())
-        , LeftReaders(Columns_.size())
-        , RightReaders(Columns_.size())
-        , Builders(Columns_.size())
+        , SortInput(Columns.size())
+        , SortArrays(Columns.size())
+        , ScalarValues(Columns.size())
+        , LeftReaders(Columns.size())
+        , RightReaders(Columns.size())
+        , Builders(Columns.size())
         , Comparators(KeyIndicies.size())
     {
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
-            if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            if (Columns[i]->GetShape() == TBlockType::EShape::Scalar) {
                 continue;
             }
 
@@ -155,12 +155,12 @@ public:
         }
 
         for (ui32 k = 0; k < KeyIndicies.size(); ++k) {
-            Comparators[k] = TBlockTypeHelper().MakeComparator(Columns_[KeyIndicies[k]]->GetItemType());
+            Comparators[k] = TBlockTypeHelper().MakeComparator(Columns[KeyIndicies[k]]->GetItemType());
         }
 
         BuilderMaxLength = GetStorageLength();
         size_t maxBlockItemSize = 0;
-        for (auto Column : Columns_) {
+        for (auto Column : Columns) {
             if (Column->GetShape() == TBlockType::EShape::Scalar) {
                 continue;
             }
@@ -170,12 +170,12 @@ public:
 
         BuilderMaxLength = Max(BuilderMaxLength, CalcBlockLen(maxBlockItemSize));
 
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
-            if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            if (Columns[i]->GetShape() == TBlockType::EShape::Scalar) {
                 continue;
             }
 
-            Builders[i] = MakeArrayBuilder(TTypeInfoHelper(), Columns_[i]->GetItemType(), ctx.ArrowMemoryPool, BuilderMaxLength, &ctx.Builder->GetPgBuilder());
+            Builders[i] = MakeArrayBuilder(TTypeInfoHelper(), Columns[i]->GetItemType(), ctx.ArrowMemoryPool, BuilderMaxLength, &ctx.Builder->GetPgBuilder());
         }
     }
 
@@ -187,8 +187,8 @@ public:
         const ui64 blockLen = TArrowBlock::From(Values.back()).GetDatum().template scalar_as<arrow::UInt64Scalar>().value;
 
         if (!ScalarsFilled) {
-            for (ui32 i = 0; i < Columns_.size(); ++i) {
-                if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+            for (ui32 i = 0; i < Columns.size(); ++i) {
+                if (Columns[i]->GetShape() == TBlockType::EShape::Scalar) {
                     ScalarValues[i] = std::move(Values[i]);
                 }
             }
@@ -197,8 +197,8 @@ public:
         }
 
         if constexpr (!HasCount) {
-            for (ui32 i = 0; i < Columns_.size(); ++i) {
-                if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
+            for (ui32 i = 0; i < Columns.size(); ++i) {
+                if (Columns[i]->GetShape() != TBlockType::EShape::Scalar) {
                     auto datum = TArrowBlock::From(Values[i]).GetDatum();
                     SortInput[i].emplace_back(datum);
                 }
@@ -211,28 +211,28 @@ public:
 
         // shrink input block
         std::optional<std::vector<ui64>> blockIndicies;
-        if (blockLen > Count_) {
+        if (blockLen > TopCount) {
             blockIndicies.emplace();
             blockIndicies->reserve(blockLen);
             for (ui64 row = 0; row < blockLen; ++row) {
                 blockIndicies->emplace_back(row);
             }
 
-            std::vector<TChunkedArrayIndex> arrayIndicies(Columns_.size());
-            for (ui32 i = 0; i < Columns_.size(); ++i) {
-                if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
+            std::vector<TChunkedArrayIndex> arrayIndicies(Columns.size());
+            for (ui32 i = 0; i < Columns.size(); ++i) {
+                if (Columns[i]->GetShape() != TBlockType::EShape::Scalar) {
                     auto datum = TArrowBlock::From(Values[i]).GetDatum();
                     arrayIndicies[i] = MakeChunkedArrayIndex(datum);
                 }
             }
 
             const TBlockLess cmp(KeyIndicies, *this, arrayIndicies);
-            NYql::FastNthElement(blockIndicies->begin(), blockIndicies->begin() + Count_, blockIndicies->end(), cmp);
+            NYql::FastNthElement(blockIndicies->begin(), blockIndicies->begin() + TopCount, blockIndicies->end(), cmp);
         }
 
         // copy all to builders
-        AddTop(Columns_, blockIndicies, blockLen);
-        if (BuilderLength + Count_ > BuilderMaxLength) {
+        AddTop(Columns, blockIndicies, blockLen);
+        if (BuilderLength + TopCount > BuilderMaxLength) {
             CompressBuilders(false);
         }
 
@@ -240,15 +240,15 @@ public:
     }
 
     ui64 GetStorageLength() const {
-        return 2 * Count_;
+        return 2 * TopCount;
     }
 
     void CompressBuilders(bool sort) {
         Y_ABORT_UNLESS(ScalarsFilled);
-        std::vector<TChunkedArrayIndex> arrayIndicies(Columns_.size());
-        std::vector<arrow::Datum> tmpDatums(Columns_.size());
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
-            if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
+        std::vector<TChunkedArrayIndex> arrayIndicies(Columns.size());
+        std::vector<arrow::Datum> tmpDatums(Columns.size());
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            if (Columns[i]->GetShape() != TBlockType::EShape::Scalar) {
                 auto datum = Builders[i]->Build(false);
                 arrayIndicies[i] = MakeChunkedArrayIndex(datum);
                 tmpDatums[i] = std::move(datum);
@@ -261,9 +261,9 @@ public:
             blockIndicies.push_back(row);
         }
 
-        const ui64 blockLen = Min(BuilderLength, Count_);
+        const ui64 blockLen = Min(BuilderLength, TopCount);
         const TBlockLess cmp(KeyIndicies, *this, arrayIndicies);
-        if (BuilderLength <= Count_) {
+        if (BuilderLength <= TopCount) {
             if (sort) {
                 std::sort(blockIndicies.begin(), blockIndicies.end(), cmp);
             }
@@ -275,8 +275,8 @@ public:
             }
         }
 
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
-            if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            if (Columns[i]->GetShape() == TBlockType::EShape::Scalar) {
                 continue;
             }
 
@@ -293,7 +293,7 @@ public:
             SortPermutation.emplace_back(i);
         }
 
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
+        for (ui32 i = 0; i < Columns.size(); ++i) {
             ui64 offset = 0;
             for (const auto& datum : SortInput[i]) {
                 if (datum.is_scalar()) {
@@ -335,12 +335,12 @@ public:
                 return false;
             }
 
-            if (BuilderLength > Count_ || Sort) {
+            if (BuilderLength > TopCount || Sort) {
                 CompressBuilders(Sort);
             }
 
-            for (ui32 i = 0; i < Columns_.size(); ++i) {
-                if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+            for (ui32 i = 0; i < Columns.size(); ++i) {
+                if (Columns[i]->GetShape() == TBlockType::EShape::Scalar) {
                     Values[i] = ScalarValues[i];
                 } else {
                     Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders[i]->Build(true)), validationMode);
@@ -357,8 +357,8 @@ public:
         auto blockLen = Min(BuilderMaxLength, OutputLength - Written);
         const bool isLast = (Written + blockLen == OutputLength);
 
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
-            if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            if (Columns[i]->GetShape() == TBlockType::EShape::Scalar) {
                 Values[i] = ScalarValues[i];
             } else {
                 Builders[i]->AddMany(SortArrays[i].data(), SortArrays[i].size(), SortPermutation.data() + Written, blockLen);
@@ -382,14 +382,14 @@ public:
             const auto& datum = TArrowBlock::From(Values[i]).GetDatum();
             auto arrayIndex = MakeChunkedArrayIndex(datum);
             if (blockIndicies) {
-                Builders[i]->AddMany(arrayIndex.data(), arrayIndex.size(), blockIndicies->data(), Count_);
+                Builders[i]->AddMany(arrayIndex.data(), arrayIndex.size(), blockIndicies->data(), TopCount);
             } else {
                 Builders[i]->AddMany(arrayIndex.data(), arrayIndex.size(), ui64(0), blockLen);
             }
         }
 
         if (blockIndicies) {
-            BuilderLength += Count_;
+            BuilderLength += TopCount;
         } else {
             BuilderLength += blockLen;
         }
@@ -460,7 +460,7 @@ private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
             auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
             Y_DEBUG_ABORT_UNLESS(blockState.Values.size() == width);
-            Y_DEBUG_ABORT_UNLESS(blockState.Values.size() == blockState.Columns_.size() + 1);
+            Y_DEBUG_ABORT_UNLESS(blockState.Values.size() == blockState.Columns.size() + 1);
             auto* inputFields = blockState.Pointer;
 
             if (!blockState.Count) {

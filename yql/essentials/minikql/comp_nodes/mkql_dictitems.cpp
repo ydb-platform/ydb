@@ -93,7 +93,7 @@ public:
             const NUdf::TUnboxedValue&& dict,
             TComputationContext& compCtx, const TSelf* self)
             : TComputationValue<TValue>(memInfo)
-            , Dict_(std::move(dict))
+            , Dict_(dict)
             , CompCtx_(compCtx)
             , Self_(self)
         {
@@ -169,7 +169,7 @@ private:
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt1Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -243,7 +243,7 @@ public:
             const NUdf::TUnboxedValue&& dict,
             TComputationContext&, const TSelf*)
             : TComputationValue<TValue>(memInfo)
-            , Dict_(std::move(dict))
+            , Dict_(dict)
         {
         }
 

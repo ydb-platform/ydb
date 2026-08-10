@@ -58,7 +58,7 @@ public:
         return EFetchResult::One;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*&) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*&) const override {
         return {ConstantInt::get(Type::getInt32Ty(ctx.Codegen.GetContext()), static_cast<i32>(EFetchResult::One)), {}};
     }
 #endif

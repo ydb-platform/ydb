@@ -34,7 +34,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    llvm::Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    llvm::Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenState = dynamic_cast<ICodegeneratorExternalNode*>(State_);

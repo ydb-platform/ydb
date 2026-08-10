@@ -22,7 +22,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto check = IsExists(value, block, context);
         if (Node_->IsTemporaryValue()) {
@@ -47,7 +47,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext&, Value* value, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext&, Value* value, BasicBlock*& block) const override {
         return BinaryOperator::CreateAdd(value, ConstantInt::get(value->getType(), 1), "incr", block);
     }
 #endif
@@ -70,7 +70,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto state = GetNodeValue(State_, ctx, block);
         const auto value = GetNodeValue(Arg_, ctx, block);

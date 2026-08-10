@@ -5,6 +5,8 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/swap_bytes.h>
 
+#include <array>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -28,12 +30,12 @@ public:
         return NUdf::TUnboxedValuePod::Embedded(NUdf::TStringRef(reinterpret_cast<const char*>(&v), sizeof(v)));
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
-        const uint64_t one[] = {0ULL, sizeof(Type) << 48ULL};
-        const auto size = ConstantInt::get(value->getType(), APInt(128, 2, one));
-        const uint64_t two[] = {0xFFFFFFFFFFFFFFFFULL, 0xFF00FFFFFFFFFFFFULL};
-        const auto mask = ConstantInt::get(value->getType(), APInt(128, 2, two));
+        const std::array<uint64_t, 2> one = {0ULL, sizeof(Type) << 48ULL};
+        const auto size = ConstantInt::get(value->getType(), APInt(128, one));
+        const std::array<uint64_t, 2> two = {0xFFFFFFFFFFFFFFFFULL, 0xFF00FFFFFFFFFFFFULL};
+        const auto mask = ConstantInt::get(value->getType(), APInt(128, two));
         const auto result = BinaryOperator::CreateOr(BinaryOperator::CreateAnd(value, mask, "and", block), size, "or", block);
         if constexpr (IsOptional) {
             return SelectInst::Create(IsExists(value, block, context), result, GetEmpty(context), "select", block);
@@ -87,10 +89,10 @@ public:
 
         const auto v = NYql::SwapBytes(value.Get<Type>());
         const auto tzId = NYql::SwapBytes(value.GetTimezoneId());
-        char buf[sizeof(Type) + sizeof(ui16)];
-        std::memcpy(buf, &v, sizeof(v));
-        std::memcpy(buf + sizeof(Type), &tzId, sizeof(tzId));
-        return NUdf::TUnboxedValuePod::Embedded(NUdf::TStringRef(buf, sizeof(buf)));
+        std::array<char, sizeof(Type) + sizeof(ui16)> buf;
+        std::memcpy(buf.data(), &v, sizeof(v));
+        std::memcpy(buf.data() + sizeof(Type), &tzId, sizeof(tzId));
+        return NUdf::TUnboxedValuePod::Embedded(NUdf::TStringRef(buf.data(), buf.size()));
     }
 };
 
@@ -107,7 +109,7 @@ public:
         return value;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext&, Value* value, BasicBlock*&) const {
+    Value* DoGenerateGetValue(const TCodegenContext&, Value* value, BasicBlock*&) const override {
         return value;
     }
 #endif

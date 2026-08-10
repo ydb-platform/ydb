@@ -23,10 +23,11 @@
 #include <arrow/array/builder_primitive.h>
 #include <arrow/chunked_array.h>
 
+#include <array>
+
 // #define USE_STD_UNORDERED
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -240,9 +241,14 @@ private:
 };
 
 #else
-    #define TDynamicHashMapImpl TRobinHoodHashMap
-    #define TFixedHashMapImpl TRobinHoodHashFixedMap
-    #define THashSetImpl TRobinHoodHashSet
+template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TSettings>
+using TDynamicHashMapImpl = TRobinHoodHashMap<TKey, TEqual, THash, TAllocator, TSettings>;
+
+template <typename TKey, typename TPayload, typename TEqual, typename THash, typename TAllocator, typename TSettings>
+using TFixedHashMapImpl = TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>;
+
+template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TSettings>
+using THashSetImpl = TRobinHoodHashSet<TKey, TEqual, THash, TAllocator, TSettings>;
 #endif
 
 using TState8 = ui64;
@@ -279,7 +285,7 @@ private:
 
     struct TInplace {
         ui8 SmallLength;
-        char Buffer[SSO_Length];
+        std::array<char, SSO_Length> Buffer;
     };
 
 public:
@@ -294,8 +300,8 @@ public:
 
     static TSSOKey Inplace(TStringBuf data) {
         Y_ASSERT(CanBeInplace(data));
-        TSSOKey ret(1 | (data.Size() << 1), 0);
-        memcpy(ret.U.I.Buffer, data.Data(), data.Size());
+        TSSOKey ret(1 | (data.Size() << 1), /*ptr=*/nullptr);
+        memcpy(ret.U_.I.Buffer.data(), data.Data(), data.Size());
         return ret;
     }
 
@@ -304,43 +310,42 @@ public:
     }
 
     bool IsInplace() const {
-        return U.I.SmallLength & 1;
+        return U_.I.SmallLength & 1;
     }
 
     TStringBuf AsView() const {
         if (IsInplace()) {
             // inplace
-            return TStringBuf(U.I.Buffer, U.I.SmallLength >> 1);
+            return TStringBuf(U_.I.Buffer.data(), U_.I.SmallLength >> 1);
         } else {
             // external
-            return TStringBuf(U.E.Ptr, U.E.Length >> 1);
+            return TStringBuf(U_.E.Ptr, U_.E.Length >> 1);
         }
     }
 
     void UpdateExternalPointer(const char* ptr) {
         Y_ASSERT(!IsInplace());
-        U.E.Ptr = ptr;
+        U_.E.Ptr = ptr;
     }
 
 private:
     TSSOKey(ui64 length, const char* ptr) {
-        U.E.Length = length;
-        U.E.Ptr = ptr;
+        U_.E.Length = length;
+        U_.E.Ptr = ptr;
     }
 
 private:
     union {
         TExternal E;
         TInplace I;
-        char A[SSO_Length + 1];
-    } U;
+        std::array<char, SSO_Length + 1> A;
+    } U_;
 };
 
 static_assert(sizeof(TSSOKey) == TSSOKey::SSO_Length + 1);
 
 } // namespace
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 namespace std {
 template <>
@@ -386,7 +391,7 @@ template <>
 struct hash<NKikimr::NMiniKQL::TExternalFixedSizeKey> {
     using argument_type = NKikimr::NMiniKQL::TExternalFixedSizeKey;
     using result_type = size_t;
-    hash(ui32 length)
+    explicit hash(ui32 length)
         : Length(length)
     {
     }
@@ -401,7 +406,7 @@ struct hash<NKikimr::NMiniKQL::TExternalFixedSizeKey> {
 template <>
 struct equal_to<NKikimr::NMiniKQL::TExternalFixedSizeKey> {
     using argument_type = NKikimr::NMiniKQL::TExternalFixedSizeKey;
-    equal_to(ui32 length)
+    explicit equal_to(ui32 length)
         : Length(length)
     {
     }
@@ -419,8 +424,7 @@ struct equal_to<NKikimr::NMiniKQL::TExternalFixedSizeKey> {
 };
 } // namespace std
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -447,7 +451,7 @@ size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
 
 size_t CalcMaxBlockLenForOutput(TType* out) {
     const auto wideComponents = GetWideComponents(out);
-    MKQL_ENSURE(wideComponents.size() > 0, "Expecting at least one output column");
+    MKQL_ENSURE(!wideComponents.empty(), "Expecting at least one output column");
 
     size_t maxBlockItemSize = 0;
     for (ui32 i = 0; i < wideComponents.size() - 1; ++i) {
@@ -519,9 +523,9 @@ struct TBlockCombineAllState: public TComputationValue<TBlockCombineAllState> {
 
         HasValues = true;
         char* ptr = AggStates.data();
-        for (size_t i = 0; i < Aggs.size(); ++i) {
-            Aggs[i]->AddMany(ptr, InputValues.data(), batchLength, filtered);
-            ptr += Aggs[i]->StateSize;
+        for (const auto& agg : Aggs) {
+            agg->AddMany(ptr, InputValues.data(), batchLength, filtered);
+            ptr += agg->StateSize;
         }
     }
 
@@ -568,7 +572,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(Width_, FilterColumn_, AggsParams_, ctx);
-        return ctx.HolderFactory.Create<TStreamValue>(std::move(state), std::move(Stream_->GetValue(ctx)));
+        return ctx.HolderFactory.Create<TStreamValue>(state, std::move(Stream_->GetValue(ctx)));
     }
 
 private:
@@ -584,7 +588,7 @@ private:
         }
 
     private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
             TState& state = *static_cast<TState*>(State_.AsBoxed().Get());
             auto* inputFields = state.InputValues.data();
             const size_t inputWidth = state.Width;
@@ -861,8 +865,8 @@ public:
         HasValues = true;
         std::vector<arrow::Datum> keysDatum;
         keysDatum.reserve(Keys.size());
-        for (ui32 i = 0; i < Keys.size(); ++i) {
-            keysDatum.emplace_back(TArrowBlock::From(InputValues[Keys[i].Index]).GetDatum());
+        for (auto key : Keys) {
+            keysDatum.emplace_back(TArrowBlock::From(InputValues[key.Index]).GetDatum());
         }
 
         std::array<TOutputBuffer, PrefetchBatchSize> out;
@@ -1021,7 +1025,7 @@ public:
                     }
 
                     if (OutputBlockSize == MaxBlockLen) {
-                        Flush(false, holderFactory, validationMode);
+                        Flush(/*final=*/false, holderFactory, validationMode);
                         // return EFetchResult::One;
                         exit = true;
                         break;
@@ -1040,7 +1044,7 @@ public:
                 if (done) {
                     break;
                 }
-                Flush(false, holderFactory, validationMode);
+                Flush(/*final=*/false, holderFactory, validationMode);
                 exit = true;
                 break;
             }
@@ -1052,7 +1056,7 @@ public:
             if (!OutputBlockSize) {
                 return false;
             }
-            Flush(true, holderFactory, validationMode);
+            Flush(/*final=*/true, holderFactory, validationMode);
         }
 
         FillArrays();
@@ -1505,7 +1509,8 @@ ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<
             p.Column = argColumns[0];
             p.StateType = AS_TYPE(TBlockType, tupleType->GetElementType(p.Column))->GetItemType();
             p.ReturnType = returnTypes[i + keysCount];
-            TStringBuf left, right;
+            TStringBuf left;
+            TStringBuf right;
             if (TStringBuf(name).TrySplit('#', left, right)) {
                 p.Hint = FromString<ui32>(right);
             }
@@ -1723,7 +1728,7 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     std::vector<TAggParams<IBlockAggregatorCombineAll>> aggsParams;
-    FillAggParams<IBlockAggregatorCombineAll>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false, false, returnWideComponents, 0);
+    FillAggParams<IBlockAggregatorCombineAll>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, /*overState=*/false, /*many=*/false, returnWideComponents, 0);
 
     return new TBlockCombineAllWrapper(ctx.Mutables, wideStream, filterColumn, tupleType->GetElementsCount(), std::move(aggsParams));
 }
@@ -1749,12 +1754,12 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
     std::vector<TKeyParams> keys;
     for (ui32 i = 0; i < keysVal->GetValuesCount(); ++i) {
         ui32 index = AS_VALUE(TDataLiteral, keysVal->GetValue(i))->AsValue().Get<ui32>();
-        keys.emplace_back(TKeyParams{index, tupleType->GetElementType(index)});
+        keys.emplace_back(TKeyParams{.Index = index, .Type = tupleType->GetElementType(index)});
     }
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(3));
     std::vector<TAggParams<IBlockAggregatorCombineKeys>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, false, false, returnWideComponents, keys.size());
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, /*overState=*/false, /*many=*/false, returnWideComponents, keys.size());
 
     TMaybe<ui32> totalKeysSize;
     bool isFixed = false;
@@ -1779,12 +1784,12 @@ IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TCompu
     std::vector<TKeyParams> keys;
     for (ui32 i = 0; i < keysVal->GetValuesCount(); ++i) {
         ui32 index = AS_VALUE(TDataLiteral, keysVal->GetValue(i))->AsValue().Get<ui32>();
-        keys.emplace_back(TKeyParams{index, tupleType->GetElementType(index)});
+        keys.emplace_back(TKeyParams{.Index = index, .Type = tupleType->GetElementType(index)});
     }
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     std::vector<TAggParams<IBlockAggregatorFinalizeKeys>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true, false, returnWideComponents, keys.size());
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, /*overState=*/true, /*many=*/false, returnWideComponents, keys.size());
 
     TMaybe<ui32> totalKeysSize;
     bool isFixed = false;
@@ -1813,12 +1818,12 @@ IComputationNode* WrapBlockMergeManyFinalizeHashed(TCallable& callable, const TC
     std::vector<TKeyParams> keys;
     for (ui32 i = 0; i < keysVal->GetValuesCount(); ++i) {
         ui32 index = AS_VALUE(TDataLiteral, keysVal->GetValue(i))->AsValue().Get<ui32>();
-        keys.emplace_back(TKeyParams{index, tupleType->GetElementType(index)});
+        keys.emplace_back(TKeyParams{.Index = index, .Type = tupleType->GetElementType(index)});
     }
 
     const auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     std::vector<TAggParams<IBlockAggregatorFinalizeKeys>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true, true, returnWideComponents, keys.size());
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, /*overState=*/true, /*many=*/true, returnWideComponents, keys.size());
 
     TMaybe<ui32> totalKeysSize;
     bool isFixed = false;
@@ -1839,5 +1844,4 @@ IComputationNode* WrapBlockMergeManyFinalizeHashed(TCallable& callable, const TC
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

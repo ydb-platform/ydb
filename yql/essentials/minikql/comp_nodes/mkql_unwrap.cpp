@@ -33,7 +33,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         Value* value = GetNodeValue(Optional(), ctx, block);
         auto& context = ctx.Codegen.GetContext();
 

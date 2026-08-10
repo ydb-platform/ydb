@@ -10,6 +10,8 @@
 
 namespace NKikimr::NMiniKQL {
 
+namespace {
+
 using NTest::TSingularVoid;
 // XXX: Emulate type transformations similar to the one made by
 // type annotation and compilation phases. As a result, the name
@@ -18,8 +20,8 @@ using NTest::TSingularVoid;
 // compilation) differs from the type, resolved for the underline
 // function at runtime.
 template <typename TUdf>
-static TType* TweakUdfType(const NYql::NUdf::TStringRef& name, TType* userType,
-                           const TTypeEnvironment& env)
+TType* TweakUdfType(const NYql::NUdf::TStringRef& name, TType* userType,
+                    const TTypeEnvironment& env)
 {
     NYql::TRuntimeSettings::TConstPtr runtimeSettings = NYql::MakeRuntimeSettings();
     TFunctionTypeInfoBuilder typeInfoBuilder(NYql::UnknownLangVersion, *runtimeSettings, env,
@@ -482,8 +484,6 @@ Y_UNIT_TEST_LLVM(NewToIncremental) {
 // call of the Datetime::Format UDF with the basic date resource
 // parameter against the underline function, expecting the
 // extended date resource as an argument.
-
-namespace {
 
 extern const char TMResourceName[] = "DateTime2.TM";
 extern const char TM64ResourceName[] = "DateTime2.TM64";

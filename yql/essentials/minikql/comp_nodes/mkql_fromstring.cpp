@@ -73,7 +73,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
@@ -82,7 +82,7 @@ public:
         const auto name = "DecimalFromString";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalFromString));
         const auto fnType =
-            FunctionType::get(valType, {valType, psType, psType}, false);
+            FunctionType::get(valType, {valType, psType, psType}, /*isVarArg=*/false);
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto zero = ConstantInt::get(valType, 0ULL);
@@ -183,7 +183,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
@@ -192,7 +192,7 @@ public:
         const auto name = "DataFromString";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DataFromString));
         const auto fnType =
-            FunctionType::get(valType, {valType, slotType}, false);
+            FunctionType::get(valType, {valType, slotType}, /*isVarArg=*/false);
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto zero = ConstantInt::get(valType, 0ULL);

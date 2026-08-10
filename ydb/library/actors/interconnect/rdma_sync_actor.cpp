@@ -351,11 +351,13 @@ namespace {
                 return;
             }
 
+            PollerToken.Reset(); // unregister the socket before the handshake actor registers it again
             Send(Creator, new TEvRdmaSyncResult(std::move(session)));
         }
 
     private:
         void Finish(TString error) {
+            PollerToken.Reset();
             Send(Creator, new TEvRdmaSyncResult(std::move(error)));
         }
 
@@ -385,12 +387,28 @@ namespace {
             return true;
         }
 
-        bool WaitPoller(bool read, bool write, const char* state, TString& error) {
+        bool Y_NO_INLINE WaitPoller(bool read, bool write, const char* state, TString& error) {
             if (!PollerToken->RequestNotificationAfterWouldBlock(read, write)) {
-                auto ev = TActorCoroImpl::WaitForEvent();
-                if (!ev || ev->GetTypeRewrite() != TEvPollerReady::EventType) {
+                for (;;) {
+                    auto ev = TActorCoroImpl::WaitForEvent();
+                    if (!ev) {
+                        error = Sprintf("unable to wait for TEvPollerReady in %s", state);
+                        return false;
+                    }
+                    if (ev->GetTypeRewrite() == TEvPollerReady::EventType) {
+                        break;
+                    }
+                    if (ev->GetTypeRewrite() == TEvRdmaIoReceiveDone::EventType) {
+                        if (!HandleRdmaReceiveEvent(
+                                THolder<TEvRdmaIoReceiveDone::THandle>(
+                                    static_cast<TEvRdmaIoReceiveDone::THandle*>(ev.Release())),
+                                error)) {
+                            return false;
+                        }
+                        continue;
+                    }
                     error = Sprintf("unexpected event while waiting for TEvPollerReady in %s: 0x%08" PRIx32,
-                        state, ev ? ev->GetTypeRewrite() : 0);
+                        state, ev->GetTypeRewrite());
                     return false;
                 }
             }
@@ -786,7 +804,7 @@ namespace {
             return false;
         }
 
-        bool HandleRdmaReceiveEvent(THolder<TEvRdmaIoReceiveDone::THandle> ev, TString& error) {
+        bool Y_NO_INLINE HandleRdmaReceiveEvent(THolder<TEvRdmaIoReceiveDone::THandle> ev, TString& error) {
             if (!ev->Get()->IsSuccess()) {
                 error = TStringBuilder()
                     << "RDMA sync RECEIVE failed, err source: " << ev->Get()->GetErrSource()

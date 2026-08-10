@@ -40,6 +40,7 @@ CLUSTER_CONFIG = dict(
     static_pdisk_config={'expected_slot_count': 9},
     dynamic_pdisks_config={'expected_slot_count': 9},
     dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0, num_groups=1)],
+    extra_grpc_services=['distributed_storage'],
     additional_log_configs={
         'BS_NODE': LogLevels.DEBUG,
         'BS_CONTROLLER': LogLevels.DEBUG,
@@ -88,6 +89,16 @@ class TestBase:
                 if cmd.HasField('HostKey'):
                     cmd.HostKey.IcPort = 999999
 
+    def _canonical_grpc_param(self, param):
+        canonical_param = type(param)()
+        canonical_param.CopyFrom(param)
+        if hasattr(canonical_param, 'Request'):
+            self._canonize_request(canonical_param.Request)
+        descriptor = getattr(canonical_param, 'DESCRIPTOR', None)
+        if descriptor is not None and 'SecurityToken' in descriptor.fields_by_name:
+            canonical_param.ClearField('SecurityToken')
+        return canonical_param
+
     def _canonize_table_output(self, rows, canonize_columns=None):
         for row in rows:
             if 'Guid' in row and row['Guid'] > 1000:
@@ -133,8 +144,8 @@ class TestBase:
 
             grpc_calls.append(f'=== Invoke {func} ===')
             for param in params:
-                self._canonize_request(param.Request)
-                grpc_calls.append(text_format.MessageToString(param, as_one_line=False))
+                canonical_param = self._canonical_grpc_param(param)
+                grpc_calls.append(text_format.MessageToString(canonical_param, as_one_line=False))
 
             if with_response:
                 grpc_calls.append('--- Response ---')

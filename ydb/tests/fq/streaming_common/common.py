@@ -54,8 +54,8 @@ def get_ydb_config(request, enable_fq_connector=None):
     )  # TODO YQ-5431
     enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
-        "enable_dq_source_stream_lookup_join_shuffle_mode", False
-    )  # TODO YQ-5453
+        "enable_dq_source_stream_lookup_join_shuffle_mode", True
+    )
 
     extra_feature_flags = {
         "enable_external_data_sources",

@@ -2361,8 +2361,8 @@ bool TNbsDbgLikeActor::SendDDiskRead(TPerDbgState& dbg, ui32 dbgIndex,
 {
     const TPeerBitset& effectiveMask = flushMask.any() ? flushMask : kAllPrimaryHostsMask;
     const ui32 k = PickRandomSetBit(effectiveMask, Rng.GenRand());
-        Y_ABORT_UNLESS(dbg.DDToken[k]);
-        auto creds = NDDisk::TQueryCredentials::ToDDisk(*dbg.DDToken[k]);
+    Y_ABORT_UNLESS(dbg.DDToken[k]);
+    auto creds = NDDisk::TQueryCredentials::ToDDisk(*dbg.DDToken[k]);
     NDDisk::TBlockSelector selector(vChunkIndex, static_cast<ui32>(offset), size);
     auto ev = std::make_unique<NDDisk::TEvRead>(
         creds, selector, NDDisk::TReadInstruction(true));

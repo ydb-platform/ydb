@@ -571,9 +571,9 @@ namespace NKikimr::NDDisk {
         void Handle(TEvConnect::TPtr ev);
         void Handle(TEvDisconnect::TPtr ev);
 
-        TConnectionToken IssueConnectionToken(ui32 connectionIndex, TConnectionInfo& connection) const;
+        TConnectionToken IssueConnectionToken(ui32 connectionIndex, TConnectionInfo& connection);
 
-        void RememberConnectionToken(TConnectionInfo& connection, EConnectionTokenInvalidationReason reason) const;
+        void RememberConnectionToken(TConnectionInfo& connection, EConnectionTokenInvalidationReason reason);
 
         enum class EConnectionResolution : ui8 {
             Resolved,

@@ -6,7 +6,7 @@
 
 namespace NKikimr::NDDisk {
 
-    TConnectionToken TDDiskActor::IssueConnectionToken(ui32 connectionIndex, TConnectionInfo& connection) const {
+    TConnectionToken TDDiskActor::IssueConnectionToken(ui32 connectionIndex, TConnectionInfo& connection) {
         if (++connection.TokenSequenceNo == 0) {
             ++connection.TokenSequenceNo;
         }
@@ -22,7 +22,7 @@ namespace NKikimr::NDDisk {
         );
     }
 
-    void TDDiskActor::RememberConnectionToken(TConnectionInfo& connection, EConnectionTokenInvalidationReason reason) const {
+    void TDDiskActor::RememberConnectionToken(TConnectionInfo& connection, EConnectionTokenInvalidationReason reason) {
         if (!connection.Token) {
             return;
         }

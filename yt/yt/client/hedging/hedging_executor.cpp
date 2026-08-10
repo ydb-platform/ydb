@@ -169,9 +169,10 @@ void THedgingExecutor::OnFinishRequest(
             node.AdaptivePenalty += BanPenalty_;
         }
         node.Counter->ErrorRequestCount.Increment();
-        YT_LOG_WARNING(error, "Cluster banned (ClusterName: %v, Deadline: %v)",
-            node.ClusterName,
-            banUntil);
+        YT_TLOG_WARNING("Cluster banned")
+            .With("ClusterName", node.ClusterName)
+            .With("Deadline", banUntil)
+            .With(error);
     }
     node.Counter->EffectivePenalty.Update(effectivePenalty);
     node.Counter->ExternalPenalty.Update(externalPenalty);

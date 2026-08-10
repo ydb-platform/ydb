@@ -341,7 +341,7 @@ private:
             YT_TLOG_DEBUG("Request attempt started")
                 .With("RequestId", Request_->GetRequestId())
                 .WithFormat("Method", "%v.%v", Request_->GetService(), Request_->GetMethod())
-                .WithIf(!Request_->GetUser().empty(), "User", Request_->GetUser())
+                .With("User", Request_->GetUser())
                 .WithIf(
                     !Request_->GetUserTag().empty() && Request_->GetUserTag() != Request_->GetUser(),
                     "UserTag",

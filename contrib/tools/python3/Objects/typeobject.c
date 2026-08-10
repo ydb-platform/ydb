@@ -4253,6 +4253,13 @@ type_new_get_bases(type_new_ctx *ctx, PyObject **type)
 
     if (winner != ctx->metatype) {
         if (winner->tp_new != type_new) {
+            /* Check if tp_new is NULL (cannot instantiate this type) */
+            if (winner->tp_new == NULL) {
+                PyErr_Format(PyExc_TypeError,
+                             "cannot create '%.400s' instances",
+                             winner->tp_name);
+                return -1;
+            }
             /* Pass it to the winner */
             *type = winner->tp_new(winner, ctx->args, ctx->kwds);
             if (*type == NULL) {
@@ -4592,6 +4599,7 @@ _PyType_FromMetaclass_impl(
     Py_ssize_t name_buf_len = strlen(spec->name) + 1;
     _ht_tpname = PyMem_Malloc(name_buf_len);
     if (_ht_tpname == NULL) {
+        PyErr_NoMemory();
         goto finally;
     }
     memcpy(_ht_tpname, spec->name, name_buf_len);
@@ -4873,7 +4881,7 @@ _PyType_FromMetaclass_impl(
 
     assert(_PyType_CheckConsistency(type));
 
- finally:
+finally:
     if (PyErr_Occurred()) {
         Py_CLEAR(res);
     }

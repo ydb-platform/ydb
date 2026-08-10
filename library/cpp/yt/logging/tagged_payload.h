@@ -202,8 +202,13 @@ TTaggedLogEventPayload MakeTaggedPayloadFromMessage(TStringBuf message);
 //! views into #payload, which must outlive it.
 TStringBuf GetMessageFromTaggedPayload(const TTaggedLogEventPayload& payload);
 
-//! Consumer convenience: renders the payload as |Message (Key: Value, ...)|, or just
-//! the message if it carries no tags.
+//! Consumer convenience: renders the payload into #builder as |Message (Key: Value, ...)|,
+//! well-known tags on trailing lines. Pass a #TStringBuilder or -- to avoid allocating --
+//! a #TRawFormatter.
+template <class TBuilder>
+void FormatTaggedPayload(TBuilder* builder, const TTaggedLogEventPayload& payload);
+
+//! Same, returning a string.
 std::string FormatTaggedPayload(const TTaggedLogEventPayload& payload);
 
 ////////////////////////////////////////////////////////////////////////////////

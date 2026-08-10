@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(3.13.14)
+VERSION(3.13.15)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.13.14.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.13.15.tar.gz)
 
 LICENSE(Python-2.0)
 
@@ -164,6 +164,7 @@ SRCS(
     Modules/_testlimitedcapi/abstract.c
     Modules/_testlimitedcapi/bytearray.c
     Modules/_testlimitedcapi/bytes.c
+    Modules/_testlimitedcapi/capsule.c
     Modules/_testlimitedcapi/complex.c
     Modules/_testlimitedcapi/dict.c
     Modules/_testlimitedcapi/eval.c
@@ -175,6 +176,7 @@ SRCS(
     Modules/_testlimitedcapi/long.c
     Modules/_testlimitedcapi/object.c
     Modules/_testlimitedcapi/pyos.c
+    Modules/_testlimitedcapi/run.c
     Modules/_testlimitedcapi/set.c
     Modules/_testlimitedcapi/sys.c
     Modules/_testlimitedcapi/tuple.c

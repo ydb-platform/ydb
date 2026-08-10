@@ -254,7 +254,7 @@ ITransactionPtr TClient::AttachTransaction(
         options.PingPeriod,
         std::move(stickyParameters),
         rsp->sequence_number_source_id(),
-        "Transaction attached");
+        "Attached");
 }
 
 TFuture<IPrerequisitePtr> TClient::AttachChaosLease(

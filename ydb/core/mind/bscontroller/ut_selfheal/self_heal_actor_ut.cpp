@@ -57,7 +57,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> CreateGroup() {
 }
 
 TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-        std::set<ui32> faultyIndexes, std::vector<E> status) {
+        std::set<ui32> faultyIndexes, std::vector<E> status, std::set<ui32> phantomsOnlyIndexes = {}) {
     TEvControllerUpdateSelfHealInfo::TGroupContent res;
     res.Generation = info->GroupGeneration;
     res.Type = info->Type;
@@ -68,10 +68,10 @@ TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlob
         x.RequiresReassignment = x.UnavailabilityRisk = faultyIndexes.count(i);
         x.Decommitted = false;
         x.IsSelfHealReasonDecommit = false;
-        x.OnlyPhantomsRemain = false;
-        x.IsReady = !x.UnavailabilityRisk;
-        x.ReadySince = TMonotonic::Zero();
         x.VDiskStatus = i < status.size() ? status[i] : E::READY;
+        x.OnlyPhantomsRemain = x.VDiskStatus == E::REPLICATING && phantomsOnlyIndexes.count(i);
+        x.IsReady = x.VDiskStatus == E::READY;
+        x.ReadySince = TMonotonic::Zero();
     }
     return res;
 }
@@ -94,6 +94,13 @@ void ValidateCmd(const TActorId& parentId, TTestActorSystem& runtime, ui32 group
     UNIT_ASSERT_VALUES_EQUAL(reassign.GetVDiskIdx(), vdiskIdx);
 }
 
+void ValidateNoCmd(const TActorId& parentId, TTestActorSystem& runtime) {
+    runtime.Schedule(TDuration::Minutes(30),
+        new IEventHandle(TEvents::TSystem::Wakeup, 0, parentId, {}, nullptr, 0), nullptr, 1);
+    auto res = runtime.WaitForEdgeActorEvent({parentId});
+    UNIT_ASSERT_EQUAL(res->GetTypeRewrite(), TEvents::TSystem::Wakeup);
+}
+
 Y_UNIT_TEST_SUITE(SelfHealActorTest) {
 
     Y_UNIT_TEST(SingleErrorDisk) {
@@ -107,6 +114,28 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
         });
     }
 
+    Y_UNIT_TEST(AliveDiskWithPhantomsOnlyIsNotReassigned) {
+        RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
+            auto info = CreateGroup();
+            RegisterDiskResponders(runtime, info);
+            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+            ev->GroupsToUpdate[info->GroupID] = Convert(info, {0}, {E::READY, E::REPLICATING}, {1});
+            runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
+            ValidateNoCmd(parentId, runtime);
+        });
+    }
+
+    Y_UNIT_TEST(FailedDiskWithPhantomsOnlyIsReassigned) {
+        RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
+            auto info = CreateGroup();
+            RegisterDiskResponders(runtime, info);
+            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+            ev->GroupsToUpdate[info->GroupID] = Convert(info, {0}, {E::ERROR, E::REPLICATING}, {1});
+            runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
+            ValidateCmd(parentId, runtime, 0x82000000, 1, 0, 0, 0);
+        });
+    }
+
     Y_UNIT_TEST(NoMoreThanOneReplicating) {
         RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
             auto info = CreateGroup();
@@ -114,9 +143,7 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
             ev->GroupsToUpdate[info->GroupID] = Convert(info, {0}, {E::ERROR, E::REPLICATING});
             runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
-            runtime.Schedule(TDuration::Minutes(30), new IEventHandle(TEvents::TSystem::Wakeup, 0, parentId, {}, nullptr, 0), nullptr, 1);
-            auto res = runtime.WaitForEdgeActorEvent({parentId});
-            UNIT_ASSERT_EQUAL(res->GetTypeRewrite(), TEvents::TSystem::Wakeup);
+            ValidateNoCmd(parentId, runtime);
         });
     }
 

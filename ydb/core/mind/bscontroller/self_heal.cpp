@@ -579,8 +579,10 @@ namespace NKikimr::NBsController {
             // partially (meaning only phantoms left)
 
             // so, first we check that we have no replicating or starting disk in the group; but we allow one
-            // semi-replicated disk to prevent selfheal blocking
+            // semi-replicated disk to prevent selfheal blocking. Still count it when checking whether moving an alive
+            // disk would consume the remaining failure-model margin.
             TBlobStorageGroupInfo::TGroupVDisks failedByReadiness(topology);
+            TBlobStorageGroupInfo::TGroupVDisks failedByReadinessWithPhantomsOnly(topology);
             TBlobStorageGroupInfo::TGroupVDisks failedByUnavailabilityRisk(topology);
             bool alreadySeenReplicatingWithPhantomsOnly = false;
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
@@ -600,8 +602,11 @@ namespace NKikimr::NBsController {
                         break;
                 }
 
-                if (!IsReady(vdisk, now) && !replicatingWithPhantomsOnly) {
-                    failedByReadiness |= {topology, vdiskId};
+                if (!IsReady(vdisk, now)) {
+                    failedByReadinessWithPhantomsOnly |= {topology, vdiskId};
+                    if (!replicatingWithPhantomsOnly) {
+                        failedByReadiness |= {topology, vdiskId};
+                    }
                 }
                 if (vdisk.UnavailabilityRisk) {
                     failedByUnavailabilityRisk |= {topology, vdiskId};
@@ -609,14 +614,19 @@ namespace NKikimr::NBsController {
             }
 
             const auto& checker = topology->GetQuorumChecker();
-            const auto failed = failedByReadiness | failedByUnavailabilityRisk;
+            const TBlobStorageGroupInfo::TGroupVDisks failed =
+                failedByReadinessWithPhantomsOnly | failedByUnavailabilityRisk;
 
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
                 if (vdisk.RequiresReassignment) {
-                    const auto newFailed = failed | TBlobStorageGroupInfo::TGroupVDisks(topology, vdiskId);
+                    const TBlobStorageGroupInfo::TGroupVDisks newFailed =
+                        failed | TBlobStorageGroupInfo::TGroupVDisks(topology, vdiskId);
+                    const TBlobStorageGroupInfo::TGroupVDisks newFailedByReadiness =
+                        failedByReadinessWithPhantomsOnly | TBlobStorageGroupInfo::TGroupVDisks(topology, vdiskId);
                     if (!checker.CheckFailModelForGroup(newFailed)) {
                         continue; // healing this disk would break the group
-                    } else if (checker.IsDegraded(failed) < checker.IsDegraded(newFailed)) {
+                    } else if (checker.IsDegraded(failedByReadinessWithPhantomsOnly) <
+                            checker.IsDegraded(newFailedByReadiness)) {
                         continue; // this group will become degraded when applying self-heal logic, skip disk
                     }
                     *isSelfHealReasonDecommit = vdisk.IsSelfHealReasonDecommit;

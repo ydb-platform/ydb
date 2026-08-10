@@ -402,7 +402,8 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
     }
 
     auto MakeCatchDiskStatuses = [](ui32 groupId, const THashSet<ui32>& phantomOnlyDomains,
-                                    const THashSet<ui32>& faultyDomains) {
+                                    const THashSet<ui32>& faultyDomains,
+                                    const THashSet<ui32>& aliveDomains = {}) {
         return [=](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerUpdateDiskStatus::EventType) {
                 auto* vdiskStatuses = ev->Get<TEvBlobStorage::TEvControllerUpdateDiskStatus>()->Record.MutableVDiskStatus();
@@ -426,6 +427,9 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
                         // this VDisk is REPLICATING with only phantom blobs remaining
                         status.SetOnlyPhantomsRemain(true);
                         status.SetStatus(NKikimrBlobStorage::EVDiskStatus::REPLICATING);
+                    } else if (aliveDomains.contains(domain)) {
+                        status.SetOnlyPhantomsRemain(false);
+                        status.SetStatus(NKikimrBlobStorage::EVDiskStatus::READY);
                     } else if (faultyDomains.contains(domain)) {
                         // this VDisk's PDisk is FAULTY, so it doesn't report its status
                         return false;
@@ -436,7 +440,7 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
         };
     };
 
-    Y_UNIT_TEST(SelfHealOnlyPhantom) {
+    Y_UNIT_TEST(SelfHealDoesNotMoveAliveDiskWithPhantomOnly) {
         const TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
         TEnvironmentSetup env({
             .NodeCount = erasure.BlobSubgroupSize() + 1,
@@ -453,14 +457,15 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
 
         ChangeDiskStatus(env, originalPDiskId, NKikimrBlobStorage::EDriveStatus::FAULTY, NKikimrBlobStorage::TMaintenanceStatus::NOT_SET);
 
-        env.Runtime->FilterFunction = MakeCatchDiskStatuses(groupId, /*phantomOnlyDomains=*/{0}, /*faultyDomains=*/{1});
+        env.Runtime->FilterFunction = MakeCatchDiskStatuses(groupId, /*phantomOnlyDomains=*/{0},
+            /*faultyDomains=*/{}, /*aliveDomains=*/{1});
 
         env.UpdateSettings(true, true, false); // enable self-heal
         env.Sim(TDuration::Seconds(30));
 
         TPDiskId newPDiskId = GetPDiskIdByVDisk(env, groupId, 0, 1, 0);
 
-        UNIT_ASSERT_C(newPDiskId != originalPDiskId, "Expected VDisk (0, 1, 0) to be moved");
+        UNIT_ASSERT_C(newPDiskId == originalPDiskId, "Expected alive VDisk (0, 1, 0) not to be moved");
     }
 
     Y_UNIT_TEST(SelfHealWithTwoFailedDisksAndOnePhantomOnly) {

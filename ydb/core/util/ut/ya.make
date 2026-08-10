@@ -33,6 +33,7 @@ SRCS(
     log_priority_mute_checker_ut.cpp
     lz4_data_generator_ut.cpp
     max_tracker_ut.cpp
+    metrics_ut.cpp
     numerical_maybe_ut.cpp
     operation_queue_priority_ut.cpp
     operation_queue_ut.cpp

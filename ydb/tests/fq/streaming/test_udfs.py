@@ -203,12 +203,8 @@ END DO
 
         time.sleep(5)
         second_node = list(kikimr_udfs.cluster.nodes.values())[1]
-<<<<<<< HEAD
-        kikimr_udfs.ydb_client = YdbClient(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
-        kikimr_udfs.ydb_client.wait_connection()
-=======
-        second_ydb_client = YdbClient.from_driver_config(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
->>>>>>> ac361c4273b (YQ-5572 fixes streaming query issues after node restart (#49402))
+        second_ydb_client = YdbClient(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
+        second_ydb_client.wait_connection()
         logger.info("Checking query state after restart")
 
         validate_query(precompute_sql, tests_count, status=["SUSPENDED", "FAILED", "STARTING", "RUNNING"], check_issues=False, retry_count=[0, 1], client=second_ydb_client)

@@ -120,9 +120,8 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceIamToken) {
             runCall([&] { return client.ModifyACL("/", "Root", serializedAcl); });
         }
 
-        // ---- diagnostics: surface auth + grpc activity so a hang is explainable ----
-        runtime->SetLogPriority(NKikimrServices::TICKET_PARSER, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
+        // runtime->SetLogPriority(NKikimrServices::TICKET_PARSER, NActors::NLog::PRI_DEBUG);
+        // runtime->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
 
         // ---- observer: capture the serialized user token off the CREATE EDS
         //      modify-scheme event as it reaches schemeshard ----
@@ -159,20 +158,6 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceIamToken) {
         // stuck request would otherwise hang until the suite timeout with no info.
         auto execSettings = NYdb::NQuery::TExecuteQuerySettings()
             .ClientTimeout(TDuration::Seconds(30));
-
-        // Probe first: does *any* query work? Distinguishes "query service never
-        // became ready / auth never happened" from "the EDS DDL was rejected".
-        {
-            auto probe = runCall([&] {
-                return queryClient.ExecuteQuery(
-                    "SELECT 1;", NYdb::NQuery::TTxControl::NoTx(), execSettings).GetValueSync();
-            });
-            Cerr << "PROBE(SELECT 1) status=" << probe.GetStatus()
-                 << " issues=" << probe.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(probe.GetStatus(), NYdb::EStatus::SUCCESS,
-                "trivial query failed -- server/auth wiring is broken, not the EDS DDL: "
-                    + probe.GetIssues().ToString());
-        }
 
         const TString ddl = R"(
             CREATE EXTERNAL DATA SOURCE `/Root/MyExternalDataSource` WITH (

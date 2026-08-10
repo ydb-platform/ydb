@@ -2183,7 +2183,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->IncrementPathDbRefCount(pathId);
                 
                 const auto pathIt = Self->PathsById.find(pathId);
-                if (pathIt == Self->PathsById.end() || pathIt->second->StepCreated != InvalidStepId) {
+                if (pathIt == Self->PathsById.end() || (pathIt->second->StepCreated != InvalidStepId && !pathIt->second->Dropped())) {
                     Self->TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Add(1);
                     if (const auto& props = streamingQuery->Properties.GetProperties();
                         props.contains("run") && props.at("run") == "true") {

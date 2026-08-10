@@ -84,8 +84,8 @@ class TAlterStreamingQuery : public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            // RunDelta_ is 0 on restart (init already loaded the updated state from DB)
-            return MakeHolder<TPropose>(OperationId, RunDelta_);
+            // RunDelta is 0 on restart (init already loaded the updated state from DB)
+            return MakeHolder<TPropose>(OperationId, RunDelta);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -235,7 +235,7 @@ public:
             const auto& newProps = queryInfo->Properties.GetProperties();
             const bool wasRun = oldProps.contains("run") && oldProps.at("run") == "true";
             const bool willRun = newProps.contains("run") && newProps.at("run") == "true";
-            RunDelta_ = static_cast<i64>(willRun) - static_cast<i64>(wasRun);
+            RunDelta = static_cast<i64>(willRun) - static_cast<i64>(wasRun);
         }
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
@@ -259,7 +259,7 @@ public:
     }
 
 private:
-    i64 RunDelta_ = 0;
+    i64 RunDelta = 0;
 };
 
 }  // anonymous namespace

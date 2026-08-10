@@ -5098,15 +5098,19 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.FeatureFlags.SetEnableSnapshotsLocking(EnableSnapshotsLocking);
+        TKikimrRunner kikimr(settings);
         if (EnableSnapshotsLocking) {
-            auto& longTx = *settings.AppConfig.MutableLongTxServiceConfig();
+            // AppConfig.LongTxServiceConfig is not propagated through the test server setup path;
+            // ColumnShard/LongTx read AppData dynamically. Shorten the freshness margin so
+            // MinSnapshotForNewReads can advance past the drop snapshot within the wait window
+            // (otherwise CouldUseTable keeps deferring dropped-table cleanup forever).
+            auto& longTx = kikimr.GetTestServer().GetRuntime()->GetAppData().LongTxServiceConfig;
             longTx.SetSnapshotsExchangeIntervalSeconds(1);
             longTx.SetSnapshotsRegistryUpdateIntervalSeconds(1);
             longTx.SetLocalSnapshotPromotionTimeSeconds(1);
             longTx.SetMaxClockSkewMs(1000);
             longTx.SetPrefillTimeoutSeconds(1);
         }
-        TKikimrRunner kikimr(settings);
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 20);
         auto client = kikimr.GetTableClient();

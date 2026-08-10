@@ -162,6 +162,7 @@ TLogTag::TLogTag(TStringBuf key, TStringBuf value)
 
 void TLogTag::Out(IOutputStream& out) const
 {
+    Y_ABORT_UNLESS(Printer);
     out << Key << ":";
     Printer(out, Storage);
 }
@@ -183,21 +184,14 @@ TString TLogTitle::GetPartitionPrefix(
 
 TChildLogTitle TLogTitle::GetChild(const ui64 startTime) const
 {
-    return GetChildWithTags(startTime, std::span<const TLogTag>{});
+    return MakeChild(startTime, std::span<const TLogTag>{});
 }
 
-TChildLogTitle TLogTitle::GetChildWithTags(
+TChildLogTitle TLogTitle::MakeChild(
     const ui64 startTime,
-    std::span<const TLogTag> additionalTags) const
+    std::span<const TLogTag> tags) const
 {
-    return {CachedPrefix, StartTime, startTime, additionalTags};
-}
-
-TChildLogTitle TLogTitle::GetChildWithTags(
-    const ui64 startTime,
-    std::initializer_list<TLogTag> additionalTags) const
-{
-    return GetChildWithTags(startTime, std::span(additionalTags));
+    return {CachedPrefix, StartTime, startTime, tags};
 }
 
 TString TLogTitle::Get(EDetails details) const
@@ -287,7 +281,7 @@ TChildLogTitle::TChildLogTitle(
     , StartTime(startTime)
     , TagCount(tags.size())
 {
-    Y_ABORT_UNLESS(tags.size() <= MaxTagCount);
+    Y_DEBUG_ABORT_UNLESS(tags.size() <= MaxLogTagCount);
     for (size_t i = 0; i < TagCount; ++i) {
         Tags[i] = tags[i];
     }

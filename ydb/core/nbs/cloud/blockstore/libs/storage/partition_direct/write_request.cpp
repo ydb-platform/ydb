@@ -35,7 +35,9 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , WriteMode(directBlockGroup->GetOracle()->GetWriteMode())
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
-          {{"t", WriteMode},
+          {{"t",
+            WriteMode == EWriteMode::IndirectWrite ? "IndirectWrite"
+                                                   : "DirectWrite"},
            {"lsn", bundle->GetLsn()},
            {"r", bundle->GetRange()},
            {"rv", bundle->GetVChunkRange()}}))

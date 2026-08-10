@@ -9,7 +9,6 @@
 #include <array>
 #include <concepts>
 #include <cstring>
-#include <initializer_list>
 #include <span>
 #include <type_traits>
 #include <variant>
@@ -17,6 +16,8 @@
 namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+inline constexpr size_t MaxLogTagCount = 4;
 
 class TChildLogTitle;
 
@@ -165,13 +166,10 @@ public:
 
     [[nodiscard]] TChildLogTitle GetChild(const ui64 startTime) const;
 
+    template <size_t N>
     [[nodiscard]] TChildLogTitle GetChildWithTags(
         ui64 startTime,
-        std::span<const TLogTag> additionalTags) const;
-
-    [[nodiscard]] TChildLogTitle GetChildWithTags(
-        ui64 startTime,
-        std::initializer_list<TLogTag> additionalTags) const;
+        const TLogTag (&tags)[N]) const;
 
     [[nodiscard]] TString Get(EDetails details) const;
 
@@ -184,6 +182,10 @@ public:
 
 private:
     void Rebuild();
+
+    [[nodiscard]] TChildLogTitle MakeChild(
+        ui64 startTime,
+        std::span<const TLogTag> tags) const;
 };
 
 class TChildLogTitle
@@ -191,12 +193,10 @@ class TChildLogTitle
 private:
     friend class TLogTitle;
 
-    static constexpr size_t MaxTagCount = 4;
-
     TString ParentPrefix;
     ui64 ParentStartTime = 0;
     ui64 StartTime = 0;
-    std::array<TLogTag, MaxTagCount> Tags;
+    std::array<TLogTag, MaxLogTagCount> Tags;
     size_t TagCount = 0;
 
     TChildLogTitle(
@@ -208,5 +208,16 @@ private:
 public:
     [[nodiscard]] TString GetWithTime() const;
 };
+
+template <size_t N>
+TChildLogTitle TLogTitle::GetChildWithTags(
+    const ui64 startTime,
+    const TLogTag (&tags)[N]) const
+{
+    static_assert(
+        N <= MaxLogTagCount,
+        "too many log tags, raise MaxLogTagCount");
+    return MakeChild(startTime, std::span<const TLogTag>(tags, N));
+}
 
 }   // namespace NYdb::NBS

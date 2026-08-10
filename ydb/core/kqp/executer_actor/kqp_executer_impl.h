@@ -183,6 +183,13 @@ public:
         StartTime = TAppData::TimeProvider->Now();
         if (collectUserTrace) {
             UserFacingTraceData = std::make_unique<TUserFacingTraceExecutionData>();
+            if constexpr (ExecType == EExecType::Data) {
+                UserFacingTraceData->ExecuterActorType = "TKqpDataExecuter";
+                UserFacingTraceData->ComputeActorType = "TKqpComputeActor";
+            } else {
+                UserFacingTraceData->ExecuterActorType = "TKqpScanExecuter";
+                UserFacingTraceData->ComputeActorType = "TKqpScanComputeActor";
+            }
             // Wilson span timestamps use wall clock rather than the simulated runtime clock.
             UserFacingTraceData->Timeline.Execute.Start = TInstant::Now();
         }

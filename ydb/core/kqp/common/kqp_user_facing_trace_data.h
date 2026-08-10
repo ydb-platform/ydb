@@ -202,6 +202,8 @@ struct TUserFacingStageHint {
 };
 
 struct TUserFacingTraceExecutionData {
+    TString ExecuterActorType;
+    TString ComputeActorType;
     TUserFacingTraceTimeline Timeline;
     TUserFacingTraceTaskStats TaskStats;
     std::unordered_map<ui32, TUserFacingStageHint> StageHints;

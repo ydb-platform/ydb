@@ -151,8 +151,9 @@ public:
         } catch(const std::exception& ex) {
             TError error(ex);
 
-            YT_LOG_DEBUG(error, "Error handling HTTP request (Path: %v)",
-                req->GetUrl().Path);
+            YT_TLOG_DEBUG("Error handling HTTP request")
+                .With("Path", req->GetUrl().Path)
+                .With(error);
 
             FillYTErrorHeaders(rsp, error);
             rsp->SetStatus(EStatusCode::InternalServerError);
@@ -436,58 +437,13 @@ NTracing::TSpanId GetSpanId(const IRequestPtr& req)
     return IntFromString<NTracing::TSpanId, 16>(*id);
 }
 
-bool TryParseTraceParent(TStringBuf traceParent, NTracing::TSpanContext& spanContext)
-{
-    // An adaptation of https://github.com/census-instrumentation/opencensus-go/blob/ae11cd04b/plugin/ochttp/propagation/tracecontext/propagation.go#L49-L106
-
-    auto parts = StringSplitter(traceParent).Split('-').ToList<std::string>();
-    if (parts.size() < 3 || parts.size() > 4) {
-        return false;
-    }
-
-    // NB: We support three-part form in which version is assumed to be zero.
-    ui8 version = 0;
-    if (parts.size() == 4) {
-        if (parts[0].size() != 2) {
-            return false;
-        }
-        if (!TryIntFromString<16>(parts[0], version)) {
-            return false;
-        }
-        parts.erase(parts.begin());
-    }
-
-    // Now we have exactly three parts: traceId-spanId-options.
-
-    // Parse trace context.
-    if (!NTracing::TTraceId::FromStringHex32(parts[0], &spanContext.TraceId)) {
-        return false;
-    }
-
-    if (parts[1].size() != 16) {
-        return false;
-    }
-    if (!TryIntFromString<16>(parts[1], spanContext.SpanId)) {
-        return false;
-    }
-
-    ui8 options = 0;
-    if (!TryIntFromString<16>(parts[2], options)) {
-        return false;
-    }
-    spanContext.Sampled = static_cast<bool>(options & 1u);
-    spanContext.Debug = static_cast<bool>(options & 2u);
-
-    return true;
-}
-
 NTracing::TTraceContextPtr GetOrCreateTraceContext(const IRequestPtr& req)
 {
     const auto& headers = req->GetHeaders();
     NTracing::TTraceContextPtr traceContext;
     if (auto* traceParent = headers->Find("traceparent")) {
         NTracing::TSpanContext parentSpan;
-        if (TryParseTraceParent(*traceParent, parentSpan)) {
+        if (NTracing::TryParseTraceParent(*traceParent, parentSpan)) {
             traceContext = NTracing::TTraceContext::NewChildFromSpan(parentSpan, "HttpServer");
         }
     }

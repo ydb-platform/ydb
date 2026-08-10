@@ -45,6 +45,7 @@
 #include "numpy/ndarraytypes.h"
 #include "numpy/npy_3kcompat.h"
 #include "common.h"
+#include "npy_pycompat.h"
 
 #include "contrib/python/numpy/py3/numpy/_core/src/multiarray/arrayobject.h"
 #include "dispatching.h"
@@ -122,8 +123,9 @@ PyUFunc_AddLoop(PyUFuncObject *ufunc, PyObject *info, int ignore_duplicate)
     PyObject *loops = ufunc->_loops;
     Py_ssize_t length = PyList_Size(loops);
     for (Py_ssize_t i = 0; i < length; i++) {
-        PyObject *item = PyList_GetItem(loops, i);
+        PyObject *item = PyList_GetItemRef(loops, i);
         PyObject *cur_DType_tuple = PyTuple_GetItem(item, 0);
+        Py_DECREF(item);
         int cmp = PyObject_RichCompareBool(cur_DType_tuple, DType_tuple, Py_EQ);
         if (cmp < 0) {
             return -1;
@@ -974,7 +976,11 @@ promote_and_get_ufuncimpl(PyUFuncObject *ufunc,
         }
     }
 
-    int current_promotion_state = npy_promotion_state;
+    int error_res = 0;
+    PyObject *all_dtypes;
+    PyArrayMethodObject *method;
+    Py_BEGIN_CRITICAL_SECTION((PyObject *)ufunc);
+    int current_promotion_state = get_npy_promotion_state();
 
     if (force_legacy_promotion && legacy_promotion_is_possible
             && current_promotion_state == NPY_USE_LEGACY_PROMOTION
@@ -987,41 +993,50 @@ promote_and_get_ufuncimpl(PyUFuncObject *ufunc,
         int cacheable = 1;  /* unused, as we modify the original `op_dtypes` */
         if (legacy_promote_using_legacy_type_resolver(ufunc,
                 ops, signature, op_dtypes, &cacheable, NPY_FALSE) < 0) {
-            goto handle_error;
+            error_res = -1;
         }
     }
 
-    /* Pause warnings and always use "new" path */
-    npy_promotion_state = NPY_USE_WEAK_PROMOTION;
-    PyObject *info = promote_and_get_info_and_ufuncimpl(ufunc,
-            ops, signature, op_dtypes, legacy_promotion_is_possible);
-    npy_promotion_state = current_promotion_state;
+    PyObject *info = NULL;
+    if (error_res == 0) {
+        /* Pause warnings and always use "new" path */
+        set_npy_promotion_state(NPY_USE_WEAK_PROMOTION);
+        info = promote_and_get_info_and_ufuncimpl(ufunc,
+                ops, signature, op_dtypes, legacy_promotion_is_possible);
+        set_npy_promotion_state(current_promotion_state);
 
-    if (info == NULL) {
+        if (info == NULL) {
+            error_res = -1;
+        }
+    }
+
+    if (error_res == 0) {
+        method = (PyArrayMethodObject *)PyTuple_GET_ITEM(info, 1);
+        all_dtypes = PyTuple_GET_ITEM(info, 0);
+
+        /* If necessary, check if the old result would have been different */
+        if (NPY_UNLIKELY(current_promotion_state == NPY_USE_WEAK_PROMOTION_AND_WARN)
+                && (force_legacy_promotion || promoting_pyscalars)
+                && npy_give_promotion_warnings()) {
+            PyArray_DTypeMeta *check_dtypes[NPY_MAXARGS];
+            for (int i = 0; i < nargs; i++) {
+                check_dtypes[i] = (PyArray_DTypeMeta *)PyTuple_GET_ITEM(
+                        all_dtypes, i);
+            }
+            /* Before calling to the legacy promotion, pretend that is the state: */
+            set_npy_promotion_state(NPY_USE_LEGACY_PROMOTION);
+            int res = legacy_promote_using_legacy_type_resolver(ufunc,
+                    ops, signature, check_dtypes, NULL, NPY_TRUE);
+            /* Reset the promotion state: */
+            set_npy_promotion_state(NPY_USE_WEAK_PROMOTION_AND_WARN);
+            if (res < 0) {
+                error_res = 0;
+            }
+        }
+    }
+    Py_END_CRITICAL_SECTION();
+    if (error_res < 0) {
         goto handle_error;
-    }
-
-    PyArrayMethodObject *method = (PyArrayMethodObject *)PyTuple_GET_ITEM(info, 1);
-    PyObject *all_dtypes = PyTuple_GET_ITEM(info, 0);
-
-    /* If necessary, check if the old result would have been different */
-    if (NPY_UNLIKELY(npy_promotion_state == NPY_USE_WEAK_PROMOTION_AND_WARN)
-            && (force_legacy_promotion || promoting_pyscalars)
-            && npy_give_promotion_warnings()) {
-        PyArray_DTypeMeta *check_dtypes[NPY_MAXARGS];
-        for (int i = 0; i < nargs; i++) {
-            check_dtypes[i] = (PyArray_DTypeMeta *)PyTuple_GET_ITEM(
-                    all_dtypes, i);
-        }
-        /* Before calling to the legacy promotion, pretend that is the state: */
-        npy_promotion_state = NPY_USE_LEGACY_PROMOTION;
-        int res = legacy_promote_using_legacy_type_resolver(ufunc,
-                ops, signature, check_dtypes, NULL, NPY_TRUE);
-        /* Reset the promotion state: */
-        npy_promotion_state = NPY_USE_WEAK_PROMOTION_AND_WARN;
-        if (res < 0) {
-            goto handle_error;
-        }
     }
 
     /*
@@ -1070,7 +1085,7 @@ promote_and_get_ufuncimpl(PyUFuncObject *ufunc,
      * then we chain it, because DTypePromotionError effectively means that there
      * is no loop available.  (We failed finding a loop by using promotion.)
      */
-    else if (PyErr_ExceptionMatches(npy_DTypePromotionError)) {
+    else if (PyErr_ExceptionMatches(npy_static_pydata.DTypePromotionError)) {
         PyObject *err_type = NULL, *err_value = NULL, *err_traceback = NULL;
         PyErr_Fetch(&err_type, &err_value, &err_traceback);
         raise_no_loop_found_error(ufunc, (PyObject **)op_dtypes);
@@ -1288,8 +1303,9 @@ get_info_no_cast(PyUFuncObject *ufunc, PyArray_DTypeMeta *op_dtype,
     PyObject *loops = ufunc->_loops;
     Py_ssize_t length = PyList_Size(loops);
     for (Py_ssize_t i = 0; i < length; i++) {
-        PyObject *item = PyList_GetItem(loops, i);
+        PyObject *item = PyList_GetItemRef(loops, i);
         PyObject *cur_DType_tuple = PyTuple_GetItem(item, 0);
+        Py_DECREF(item);
         int cmp = PyObject_RichCompareBool(cur_DType_tuple,
                                            t_dtypes, Py_EQ);
         if (cmp < 0) {

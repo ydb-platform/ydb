@@ -8,6 +8,7 @@ BENCHMARK_OPTS(--benchmark_min_time=0.05s)
 
 SRCS(
     requests_benchmark.cpp
+    time_predictor_benchmark.cpp
     ../base_test_fixture.cpp
     ../direct_block_group_mock.cpp
     ../write_request_test_fixture.cpp

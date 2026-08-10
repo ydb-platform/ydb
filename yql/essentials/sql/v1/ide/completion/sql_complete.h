@@ -52,7 +52,6 @@ struct TCompletion {
     TVector<TCandidate> Candidates;
 };
 
-// TODO(YQL-19747): Make it thread-safe.
 class ISqlCompletionEngine {
 public:
     using TPtr = THolder<ISqlCompletionEngine>;
@@ -60,10 +59,10 @@ public:
     virtual ~ISqlCompletionEngine() = default;
 
     virtual NThreading::TFuture<TCompletion>
-    Complete(TCompletionInput input, TEnvironment env = {}) = 0;
+    Complete(TCompletionInput input, TEnvironment env = {}) const = 0;
 
     virtual NThreading::TFuture<TCompletion> // TODO(YQL-19747): Migrate YDB CLI to `Complete` method
-    CompleteAsync(TCompletionInput input, TEnvironment env = {}) = 0;
+    CompleteAsync(TCompletionInput input, TEnvironment env = {}) const = 0;
 };
 
 using TLexerSupplier = std::function<NSQLTranslation::ILexer::TPtr(bool ansi)>;

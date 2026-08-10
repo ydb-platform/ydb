@@ -62,6 +62,8 @@
 /ydb/library/yql/udfs/common/knn @ydb-platform/datashard
 /ydb/services/fq @ydb-platform/fq
 /ydb/services/metadata @ydb-platform/fq
+/ydb/services/udf_store @ydb-platform/fq
+/ydb/library/wasm @ydb-platform/fq
 /ydb/services/workload_manager @ydb-platform/fq
 /ydb/core/resource_pools @ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq

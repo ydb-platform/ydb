@@ -50,6 +50,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners.datacenter import (
     ClusterDataCenterStopNodesNemesis,
 )
 from ydb.tests.stability.nemesis.internal.nemesis.runners.network import (
+    DnsNemesis,
     NetworkNemesis,
     TimeSkewNemesis,
 )
@@ -96,6 +97,7 @@ __all__ = [
     "ClusterDataCenterRouteUnreachableNemesis",
     "ClusterDataCenterStopNodesNemesis",
     # network
+    "DnsNemesis",
     "NetworkNemesis",
     "TimeSkewNemesis",
     # cluster_host

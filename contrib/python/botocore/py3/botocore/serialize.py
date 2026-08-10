@@ -66,10 +66,34 @@ ISO8601 = '%Y-%m-%dT%H:%M:%SZ'
 ISO8601_MICRO = '%Y-%m-%dT%H:%M:%S.%fZ'
 HOST_PREFIX_RE = re.compile(r"^[A-Za-z0-9\.\-]+$")
 
+TIMESTAMP_PRECISION_DEFAULT = 'default'
+TIMESTAMP_PRECISION_MILLISECOND = 'millisecond'
+TIMESTAMP_PRECISION_OPTIONS = (
+    TIMESTAMP_PRECISION_DEFAULT,
+    TIMESTAMP_PRECISION_MILLISECOND,
+)
 
-def create_serializer(protocol_name, include_validation=True):
+
+def create_serializer(
+    protocol_name,
+    include_validation=True,
+    timestamp_precision=TIMESTAMP_PRECISION_DEFAULT,
+):
+    """Create a serializer for the given protocol.
+    :param protocol_name: The protocol name to create a serializer for.
+    :type protocol_name: str
+    :param include_validation: Whether to include parameter validation.
+    :type include_validation: bool
+    :param timestamp_precision: Timestamp precision level.
+        - 'default': Microseconds for ISO timestamps, seconds for Unix and RFC
+        - 'millisecond': Millisecond precision (ISO/Unix), seconds for RFC
+    :type timestamp_precision: str
+    :return: A serializer instance for the given protocol.
+    """
     # TODO: Unknown protocols.
-    serializer = SERIALIZERS[protocol_name]()
+    serializer = SERIALIZERS[protocol_name](
+        timestamp_precision=timestamp_precision
+    )
     if include_validation:
         validator = validate.ParamValidator()
         serializer = validate.ParamValidationDecorator(validator, serializer)
@@ -84,6 +108,13 @@ class Serializer:
     # tests.
     MAP_TYPE = dict
     DEFAULT_ENCODING = 'utf-8'
+
+    def __init__(self, timestamp_precision=TIMESTAMP_PRECISION_DEFAULT):
+        if timestamp_precision not in TIMESTAMP_PRECISION_OPTIONS:
+            raise ValueError(
+                f"Invalid timestamp precision found while creating serializer: {timestamp_precision}"
+            )
+        self._timestamp_precision = timestamp_precision
 
     def serialize_to_request(self, parameters, operation_model):
         """Serialize parameters into an HTTP request.
@@ -139,18 +170,36 @@ class Serializer:
     # Some extra utility methods subclasses can use.
 
     def _timestamp_iso8601(self, value):
-        if value.microsecond > 0:
-            timestamp_format = ISO8601_MICRO
+        """Return ISO8601 timestamp with precision based on timestamp_precision."""
+        # Smithy's standard is milliseconds, so we truncate the timestamp if the millisecond flag is set to true
+        if self._timestamp_precision == TIMESTAMP_PRECISION_MILLISECOND:
+            milliseconds = value.microsecond // 1000
+            return (
+                value.strftime('%Y-%m-%dT%H:%M:%S') + f'.{milliseconds:03d}Z'
+            )
         else:
-            timestamp_format = ISO8601
-        return value.strftime(timestamp_format)
+            # Otherwise we continue supporting microseconds in iso8601 for legacy reasons
+            if value.microsecond > 0:
+                timestamp_format = ISO8601_MICRO
+            else:
+                timestamp_format = ISO8601
+            return value.strftime(timestamp_format)
 
     def _timestamp_unixtimestamp(self, value):
-        return int(calendar.timegm(value.timetuple()))
+        """Return unix timestamp with precision based on timestamp_precision."""
+        # As of the addition of the precision flag, we support millisecond precision here as well
+        if self._timestamp_precision == TIMESTAMP_PRECISION_MILLISECOND:
+            base_timestamp = calendar.timegm(value.timetuple())
+            milliseconds = (value.microsecond // 1000) / 1000.0
+            return base_timestamp + milliseconds
+        else:
+            return int(calendar.timegm(value.timetuple()))
 
     def _timestamp_rfc822(self, value):
+        """Return RFC822 timestamp (always second precision - RFC doesn't support sub-second)."""
+        # RFC 2822 doesn't support sub-second precision, so always use second precision format
         if isinstance(value, datetime.datetime):
-            value = self._timestamp_unixtimestamp(value)
+            value = int(calendar.timegm(value.timetuple()))
         return formatdate(value, usegmt=True)
 
     def _convert_timestamp_to_str(self, value, timestamp_format=None):

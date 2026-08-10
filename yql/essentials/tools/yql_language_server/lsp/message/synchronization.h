@@ -3,6 +3,7 @@
 #include "text_document.h"
 
 #include <yql/essentials/utils/json/from.h>
+#include <yql/essentials/utils/meta/reflection.h>
 
 namespace NLsp {
 
@@ -31,6 +32,15 @@ struct TDidCloseTextDocumentParams {
 };
 
 } // namespace NLsp
+
+namespace NYql::NReflection {
+
+YQL_DEFINE_REFLECTING(NLsp::TDidOpenTextDocumentParams, (TextDocument));
+YQL_DEFINE_REFLECTING(NLsp::TTextDocumentContentChangeEvent, (Range)(Text));
+YQL_DEFINE_REFLECTING(NLsp::TDidChangeTextDocumentParams, (TextDocument)(ContentChanges));
+YQL_DEFINE_REFLECTING(NLsp::TDidCloseTextDocumentParams, (TextDocument));
+
+} // namespace NYql::NReflection
 
 namespace NYql::NJson {
 

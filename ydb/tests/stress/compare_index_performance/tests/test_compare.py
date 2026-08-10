@@ -59,7 +59,16 @@ def _truthy(raw):
 
 
 def _parse_feature_flags(raw):
-    return [f for f in raw.split(',') if f]
+    flags = {}
+    for f in raw.split(','):
+        if not f:
+            continue
+        if '=' in f:
+            k, v = f.split('=', 1)
+            flags[k] = v.lower() not in ('false', '0', 'no', 'off')
+        else:
+            flags[f] = True
+    return flags
 
 
 def _coerce_config_value(v):
@@ -80,12 +89,31 @@ def _coerce_config_value(v):
 
 
 def _parse_table_service_config(raw):
+    # Keys may be dotted paths into nested submessages, e.g.
+    # `resource_manager.kqp_level_cache_max_size_bytes=314572800`, which is
+    # expanded into {'resource_manager': {'kqp_level_cache_max_size_bytes': ...}}.
     tsc = {}
     for item in raw.split(','):
         if '=' in item:
             k, v = item.split('=', 1)
-            tsc[k] = _coerce_config_value(v)
+            *parents, leaf = k.split('.')
+            node = tsc
+            for p in parents:
+                node = node.setdefault(p, {})
+            node[leaf] = _coerce_config_value(v)
     return tsc
+
+
+def _deep_update(dst, src):
+    # Recursive dict merge: unlike dict.update(), setting a single key of a
+    # nested submessage keeps the sibling defaults of that submessage
+    # (e.g. table_service_config.resource_manager.channel_buffer_size).
+    for k, v in src.items():
+        if isinstance(v, dict) and isinstance(dst.get(k), dict):
+            _deep_update(dst[k], v)
+        else:
+            dst[k] = v
+    return dst
 
 
 # --- Statistics helpers ---
@@ -296,9 +324,15 @@ class TestCompareIndexPerformance:
         config = KikimrConfigGenerator(
             binary_paths=[ydbd_path],
             erasure=Erasure.from_string(yatest.common.get_param('stress_default_erasure', default='NONE')),
-            extra_feature_flags=flags,
-            table_service_config=tsc or None,
+            extra_feature_flags=[k for k, on in flags.items() if on],
+            disabled_feature_flags=[k for k, on in flags.items() if not on],
         )
+        # Merged here rather than via the KikimrConfigGenerator(table_service_config=...)
+        # argument: that one does a shallow dict.update(), which would drop the
+        # default siblings of any submessage we touch. The config is only
+        # serialized on cluster.start(), so mutating it now is in time.
+        if tsc:
+            _deep_update(config.yaml_config.setdefault("table_service_config", {}), tsc)
         cluster = KiKiMR(config)
         cluster.start()
         # A stray SIGINT keeps aborting the flamegraph run during teardown even
@@ -734,8 +768,8 @@ class TestCompareIndexPerformance:
         current_ydbd = self._current_ydbd()
 
         # Fulltext requires the feature flag enabled on both clusters.
-        baseline_flags = self.baseline_flags + ["enable_fulltext_index"]
-        current_flags = self.current_flags + ["enable_fulltext_index"]
+        baseline_flags = {**self.baseline_flags, "enable_fulltext_index": True}
+        current_flags = {**self.current_flags, "enable_fulltext_index": True}
 
         main_values = []
         current_values = []

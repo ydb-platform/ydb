@@ -1482,6 +1482,20 @@ TEST_F(TLoggingTest, LogFatalIsSafe)
 
     EXPECT_THAT(*exceptionExpression, testing::HasSubstr("YT_LOG_FATAL(Fatal message)"));
     EXPECT_TRUE(coreDumper->SafeCoreDumped);
+
+    // The trap text carries the tags as well.
+    exceptionExpression.reset();
+
+    try {
+        YT_TLOG_FATAL("Fatal message")
+            .With("Arg1", 1);
+    } catch (const TAssertionFailedException& ex) {
+        exceptionExpression = ex.GetExpression();
+    }
+
+    ASSERT_TRUE(exceptionExpression.has_value());
+
+    EXPECT_THAT(*exceptionExpression, testing::HasSubstr("YT_LOG_FATAL(Fatal message (Arg1: 1))"));
 }
 
 // Windows does not support request tracing for now.

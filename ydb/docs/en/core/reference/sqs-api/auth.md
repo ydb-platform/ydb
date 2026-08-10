@@ -1,8 +1,8 @@
 # Authentication
 
-In the open-source version of {{ ydb-short-name }}, working with topics via the SQS protocol is supported only without authentication.
+In the Open Source version of {{ ydb-short-name }}, working with topics via the SQS protocol is supported only without authentication.
 
-## Cluster setup
+## Cluster configuration
 
 To disable authentication, in the `security_config` section of the [cluster configuration file](../configuration/security_config.md#security-auth), set the `enforce_user_token_requirement` parameter to `false`:
 

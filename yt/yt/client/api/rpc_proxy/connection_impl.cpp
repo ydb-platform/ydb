@@ -309,7 +309,7 @@ void TConnection::ClearMetadataCaches()
 
 void TConnection::Terminate()
 {
-    YT_LOG_DEBUG("Terminating connection");
+    YT_TLOG_DEBUG("Terminating connection");
     if (Terminated_.exchange(true)) {
         return;
     }
@@ -331,7 +331,8 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
     auto correlationId = TGuid::Create();
 
     try {
-        YT_LOG_DEBUG("Updating proxy list via HTTP (CorrelationId: %v)", correlationId);
+        YT_TLOG_DEBUG("Updating proxy list via HTTP")
+            .With("CorrelationId", correlationId);
 
         auto poller = NYT::NBus::NTcp::TDispatcher::Get()->GetXferPoller();
         auto headers = New<THeaders>();
@@ -372,7 +373,8 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
         }
 
         auto body = rsp->ReadAll();
-        YT_LOG_DEBUG("Received proxy list via HTTP (CorrelationId: %v)", correlationId);
+        YT_TLOG_DEBUG("Received proxy list via HTTP")
+            .With("CorrelationId", correlationId);
 
         auto node = ConvertTo<INodePtr>(TYsonString(ToString(body)));
         node = node->AsMap()->FindChild("proxies");
@@ -386,7 +388,7 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
 
 std::vector<std::string> TConnection::DiscoverProxiesViaServiceDiscovery()
 {
-    YT_LOG_DEBUG("Updating proxy list via Service Discovery");
+    YT_TLOG_DEBUG("Updating proxy list via Service Discovery");
 
     if (!ServiceDiscovery_) {
         THROW_ERROR_EXCEPTION("No service discovery configured");
@@ -409,11 +411,10 @@ std::vector<std::string> TConnection::DiscoverProxiesViaServiceDiscovery()
     for (int i = 0; i < std::ssize(endpointSets); ++i) {
         if (!endpointSets[i].IsOK()) {
             errors.push_back(endpointSets[i]);
-            YT_LOG_WARNING(
-                endpointSets[i],
-                "Could not resolve endpoints from cluster (Cluster: %v, EndpointSetId: %v)",
-                clusters[i],
-                Config_->ProxyEndpoints->EndpointSetId);
+            YT_TLOG_WARNING("Could not resolve endpoints from cluster")
+                .With("Cluster", clusters[i])
+                .With("EndpointSetId", Config_->ProxyEndpoints->EndpointSetId)
+                .With(endpointSets[i]);
             continue;
         }
 
@@ -443,7 +444,7 @@ void TConnection::OnProxyListUpdate()
     }
 
     try {
-        YT_LOG_DEBUG("Updating proxy list");
+        YT_TLOG_DEBUG("Updating proxy list");
 
         auto proxies = [&] {
             if (Config_->ProxyEndpoints) {
@@ -474,8 +475,9 @@ void TConnection::OnProxyListUpdate()
         }
 
         auto backoff = UpdateProxyListBackoffStrategy_.GetBackoff();
-        YT_LOG_WARNING(ex, "Error updating proxy list, backing off and retrying (Backoff: %v)",
-            backoff);
+        YT_TLOG_WARNING("Error updating proxy list, backing off and retrying")
+            .With("Backoff", backoff)
+            .With(ex);
         ScheduleProxyListUpdate(backoff);
     }
 }

@@ -62,8 +62,8 @@ TFuture<IConnectionPtr> TConnectionPool::Connect(
         while (auto pooledConnection = Cache_.TryExtract(address)) {
             if (CheckPooledConnection(*pooledConnection)) {
                 auto connection = std::move(pooledConnection->Connection);
-                YT_LOG_DEBUG("Connection is extracted from cache (ConnectionId: %v)",
-                    connection->GetId());
+                YT_TLOG_DEBUG("Connection is extracted from cache")
+                    .With("ConnectionId", connection->GetId());
                 return MakeFuture<IConnectionPtr>(std::move(connection));
             }
         }
@@ -74,8 +74,8 @@ TFuture<IConnectionPtr> TConnectionPool::Connect(
 
 void TConnectionPool::Release(const IConnectionPtr& connection)
 {
-    YT_LOG_DEBUG("Connection is put to cache (ConnectionId: %v)",
-        connection->GetId());
+    YT_TLOG_DEBUG("Connection is put to cache")
+        .With("ConnectionId", connection->GetId());
 
     {
         auto guard = Guard(SpinLock_);
@@ -87,14 +87,14 @@ bool TConnectionPool::CheckPooledConnection(const TPooledConnection& pooledConne
 {
     auto idleTime = pooledConnection.GetIdleTime();
     if (idleTime > Config_->ConnectionIdleTimeout) {
-        YT_LOG_DEBUG("Connection evicted from cache due to idle timeout (ConnectionId: %v)",
-            pooledConnection.Connection->GetId());
+        YT_TLOG_DEBUG("Connection evicted from cache due to idle timeout")
+            .With("ConnectionId", pooledConnection.Connection->GetId());
         return false;
     }
 
     if (!pooledConnection.IsValid()) {
-        YT_LOG_DEBUG("Connection evicted from cache due to invalid state (ConnectionId: %v)",
-            pooledConnection.Connection->GetId());
+        YT_TLOG_DEBUG("Connection evicted from cache due to invalid state")
+            .With("ConnectionId", pooledConnection.Connection->GetId());
         return false;
     }
 

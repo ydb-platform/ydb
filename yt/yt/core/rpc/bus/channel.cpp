@@ -230,10 +230,11 @@ private:
                 const auto& attrs = bus->GetEndpointAttributes();
                 // NB: Some bus backends (e.g. UCX) do not expose verification/encryption
                 // attributes, so read them optionally to avoid throwing here.
-                YT_LOG_DEBUG("Created bus (ConnectionType: Client, VerificationMode: %v, EncryptionMode: %v, Endpoint: %v)",
-                    attrs.Find<EVerificationMode>("verification_mode"),
-                    attrs.Find<EEncryptionMode>("encryption_mode"),
-                    attrs.Find<std::string>("address"));
+                YT_TLOG_DEBUG("Created bus")
+                    .With("ConnectionType", "Client")
+                    .With("VerificationMode", attrs.Find<EVerificationMode>("verification_mode"))
+                    .With("EncryptionMode", attrs.Find<EEncryptionMode>("encryption_mode"))
+                    .With("Endpoint", attrs.Find<std::string>("address"));
 
                 session->Initialize(bus);
                 bucket.Sessions.push_back(session);
@@ -381,11 +382,10 @@ private:
                 // For these requests we still need to register a timeout cookie with TDelayedExecutor
                 // since this also provides proper cleanup and cancellation when global shutdown happens.
                 if (NRpc::TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
-                    YT_LOG_ALERT("Request without timeout (RequestId: %v, Method: %v.%v, Endpoint: %v)",
-                        requestControl->GetRequestId(),
-                        requestControl->GetService(),
-                        requestControl->GetMethod(),
-                        Bus_->GetEndpointDescription());
+                    YT_TLOG_ALERT("Request without timeout")
+                        .With("RequestId", requestControl->GetRequestId())
+                        .WithFormat("Method", "%v.%v", requestControl->GetService(), requestControl->GetMethod())
+                        .With("Endpoint", Bus_->GetEndpointDescription());
                 }
                 auto effectiveTimeout = options.Timeout.value_or(NRpc::TDispatcher::Get()->GetDefaultRequestTimeout());
                 auto timeoutCookie = TDelayedExecutor::Submit(
@@ -396,11 +396,10 @@ private:
             }
 
             if (auto readyFuture = GetBusReadyFuture()) {
-                YT_LOG_DEBUG("Waiting for bus to become ready (RequestId: %v, Method: %v.%v, Endpoint: %v)",
-                    requestControl->GetRequestId(),
-                    requestControl->GetService(),
-                    requestControl->GetMethod(),
-                    Bus_->GetEndpointDescription());
+                YT_TLOG_DEBUG("Waiting for bus to become ready")
+                    .With("RequestId", requestControl->GetRequestId())
+                    .WithFormat("Method", "%v.%v", requestControl->GetService(), requestControl->GetMethod())
+                    .With("Endpoint", Bus_->GetEndpointDescription());
 
                 readyFuture.Subscribe(BIND(
                     [
@@ -410,8 +409,9 @@ private:
                         request = std::move(request)
                     ] (const TError& error) {
                         if (!BusReady_.exchange(true)) {
-                            YT_LOG_DEBUG(error, "Bus has become ready (Endpoint: %v)",
-                                Bus_->GetEndpointDescription());
+                            YT_TLOG_DEBUG("Bus has become ready")
+                                .With("Endpoint", Bus_->GetEndpointDescription())
+                                .With(error);
                         }
                         DoSendRequest(
                             std::move(request),
@@ -442,14 +442,14 @@ private:
 
                 auto it = bucket->ActiveRequestMap.find(requestId);
                 if (it == bucket->ActiveRequestMap.end()) {
-                    YT_LOG_DEBUG("Attempt to cancel an unknown request, ignored (RequestId: %v)",
-                        requestId);
+                    YT_TLOG_DEBUG("Attempt to cancel an unknown request, ignored")
+                        .With("RequestId", requestId);
                     return;
                 }
 
                 if (requestControl != it->second) {
-                    YT_LOG_DEBUG("Attempt to cancel a resent request, ignored (RequestId: %v)",
-                        requestId);
+                    YT_TLOG_DEBUG("Attempt to cancel a resent request, ignored")
+                        .With("RequestId", requestId);
                     return;
                 }
 
@@ -565,8 +565,8 @@ private:
                 if (it != bucket->ActiveRequestMap.end() && requestControl == it->second) {
                     bucket->ActiveRequestMap.erase(it);
                 } else {
-                    YT_LOG_DEBUG("Timeout occurred for an unknown or resent request (RequestId: %v)",
-                        requestId);
+                    YT_TLOG_DEBUG("Timeout occurred for an unknown or resent request")
+                        .With("RequestId", requestId);
                 }
 
                 requestControl->ProfileTimeout();
@@ -605,8 +605,8 @@ private:
                 if (it != bucket->ActiveRequestMap.end() && requestControl == it->second) {
                     bucket->ActiveRequestMap.erase(it);
                 } else {
-                    YT_LOG_DEBUG("Acknowledgement timeout occurred for an unknown or resent request (RequestId: %v)",
-                        requestId);
+                    YT_TLOG_DEBUG("Acknowledgement timeout occurred for an unknown or resent request")
+                        .With("RequestId", requestId);
                 }
 
                 requestControl->ProfileTimeout();
@@ -666,8 +666,8 @@ private:
                     break;
 
                 default:
-                    YT_LOG_ERROR("Incoming message has invalid type, ignored (Type: %x)",
-                        static_cast<ui32>(messageType));
+                    YT_TLOG_ERROR("Incoming message has invalid type, ignored")
+                        .WithFormat("Type", "%x", static_cast<ui32>(messageType));
                     break;
             }
         }
@@ -913,6 +913,8 @@ private:
 
             requestControl->ProfileRequest(requestMessage);
 
+            // NB: The trailing request info is a caller-supplied, pre-formatted tag list
+            // (see SetRequestInfo), so it has to be spliced into the message text as-is.
             YT_LOG_DEBUG("Request sent (RequestId: %v, Method: %v.%v, Timeout: %v, TrackingLevel: %v, "
                 "ChecksummedPartCount: %v, MultiplexingBand: %v, Endpoint: %v, BodySize: %v, AttachmentsSize: %v%v)",
                 requestId,
@@ -933,7 +935,8 @@ private:
         {
             NProto::TResponseHeader header;
             if (!TryParseResponseHeader(message, &header)) {
-                YT_LOG_ERROR("Error parsing response header (PacketId: %v)", packetId);
+                YT_TLOG_ERROR("Error parsing response header")
+                    .With("PacketId", packetId);
                 return;
             }
 
@@ -946,14 +949,13 @@ private:
                 auto guard = Guard(*bucket);
 
                 if (bucket->Terminated) {
-                    YT_LOG_WARNING("Response received via a terminated channel "
-                        "(RequestId: %v, PacketId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
-                        requestId,
-                        packetId,
-                        header.service(),
-                        header.method(),
-                        GetMessageBodySize(message),
-                        GetTotalMessageAttachmentSize(message));
+                    YT_TLOG_WARNING("Response received via a terminated channel")
+                        .With("RequestId", requestId)
+                        .With("PacketId", packetId)
+                        .With("Service", header.service())
+                        .With("Method", header.method())
+                        .With("BodySize", GetMessageBodySize(message))
+                        .With("AttachmentSize", GetTotalMessageAttachmentSize(message));
 
                     return;
                 }
@@ -961,14 +963,13 @@ private:
                 auto it = bucket->ActiveRequestMap.find(requestId);
                 if (it == bucket->ActiveRequestMap.end()) {
                     // This may happen when the other party responds to an already timed-out request.
-                    YT_LOG_DEBUG("Response for an incorrect or obsolete request received "
-                        "(RequestId: %v, PacketId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
-                        requestId,
-                        packetId,
-                        header.service(),
-                        header.method(),
-                        GetMessageBodySize(message),
-                        GetTotalMessageAttachmentSize(message));
+                    YT_TLOG_DEBUG("Response for an incorrect or obsolete request received")
+                        .With("RequestId", requestId)
+                        .With("PacketId", packetId)
+                        .With("Service", header.service())
+                        .With("Method", header.method())
+                        .With("BodySize", GetMessageBodySize(message))
+                        .With("AttachmentSize", GetTotalMessageAttachmentSize(message));
 
                     if (header.has_service()) {
                         const auto* counters = TClientRequestPerformanceProfiler::FindPerformanceCounters(
@@ -1009,7 +1010,8 @@ private:
                 } else {
                     requestControl->ProfileError(error);
                     if (error.GetCode() == EErrorCode::PoisonPill) {
-                        YT_LOG_FATAL(error, "Poison pill received");
+                        YT_TLOG_FATAL("Poison pill received")
+                            .With(error);
                     }
                     NotifyError(
                         requestControl,
@@ -1024,7 +1026,7 @@ private:
         {
             NProto::TStreamingPayloadHeader header;
             if (!TryParseStreamingPayloadHeader(message, &header)) {
-                YT_LOG_ERROR("Error parsing streaming payload header");
+                YT_TLOG_ERROR("Error parsing streaming payload header");
                 return;
             }
 
@@ -1035,8 +1037,8 @@ private:
             auto [responseHandler, traceContextGuard] = FindResponseHandlerAndTraceContextGuard(requestId);
 
             if (!responseHandler) {
-                YT_LOG_ERROR("Received streaming payload for an unknown request; ignored (RequestId: %v)",
-                    requestId);
+                YT_TLOG_ERROR("Received streaming payload for an unknown request; ignored")
+                    .With("RequestId", requestId);
                 return;
             }
 
@@ -1058,15 +1060,14 @@ private:
                 return;
             }
 
-            YT_LOG_DEBUG("Response streaming payload received (RequestId: %v, SequenceNumber: %v, Sizes: %v, "
-                "Codec: %v, Closed: %v)",
-                requestId,
-                sequenceNumber,
-                MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
+            YT_TLOG_DEBUG("Response streaming payload received")
+                .With("RequestId", requestId)
+                .With("SequenceNumber", sequenceNumber)
+                .With("Sizes", MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
                     builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
-                }),
-                *codecId,
-                !attachments.back());
+                }))
+                .With("Codec", *codecId)
+                .With("Closed", !attachments.back());
 
             TStreamingPayload payload{
                 *codecId,
@@ -1080,7 +1081,7 @@ private:
         {
             NProto::TStreamingFeedbackHeader header;
             if (!TryParseStreamingFeedbackHeader(message, &header)) {
-                YT_LOG_ERROR("Error parsing streaming feedback header");
+                YT_TLOG_ERROR("Error parsing streaming feedback header");
                 return;
             }
 
@@ -1090,14 +1091,14 @@ private:
             auto [responseHandler, traceContextGuard] = FindResponseHandlerAndTraceContextGuard(requestId);
 
             if (!responseHandler) {
-                YT_LOG_DEBUG("Received streaming feedback for an unknown request; ignored (RequestId: %v)",
-                    requestId);
+                YT_TLOG_DEBUG("Received streaming feedback for an unknown request; ignored")
+                    .With("RequestId", requestId);
                 return;
             }
 
-            YT_LOG_DEBUG("Response streaming feedback received (RequestId: %v, ReadPosition: %v)",
-                requestId,
-                readPosition);
+            YT_TLOG_DEBUG("Response streaming feedback received")
+                .With("RequestId", requestId)
+                .With("ReadPosition", readPosition);
 
             TStreamingFeedback feedback{
                 readPosition
@@ -1123,8 +1124,9 @@ private:
                 auto it = bucket->ActiveRequestMap.find(requestId);
                 if (it == bucket->ActiveRequestMap.end()) {
                     // This one may easily get the actual response before the acknowledgment.
-                    YT_LOG_DEBUG(error, "Acknowledgment received for an unknown request, ignored (RequestId: %v)",
-                        requestId);
+                    YT_TLOG_DEBUG("Acknowledgment received for an unknown request, ignored")
+                        .With("RequestId", requestId)
+                        .With(error);
                     return;
                 }
 
@@ -1189,7 +1191,8 @@ private:
             TRequestId requestId,
             const IClientResponseHandlerPtr& responseHandler) noexcept
         {
-            YT_LOG_DEBUG("Request acknowledged (RequestId: %v)", requestId);
+            YT_TLOG_DEBUG("Request acknowledged")
+                .With("RequestId", requestId);
 
             responseHandler->HandleAcknowledgement();
         }
@@ -1201,12 +1204,11 @@ private:
             TSharedRefArray message,
             NYT::NBus::IDirectPlacementTransferPtr transfer) noexcept
         {
-            YT_LOG_DEBUG("Response received (RequestId: %v, Method: %v.%v, TotalTime: %v, AttachmentsSize: %v)",
-                requestId,
-                requestControl->GetService(),
-                requestControl->GetMethod(),
-                requestControl->GetTotalTime(),
-                GetTotalMessageAttachmentSize(message));
+            YT_TLOG_DEBUG("Response received")
+                .With("RequestId", requestId)
+                .WithFormat("Method", "%v.%v", requestControl->GetService(), requestControl->GetMethod())
+                .With("TotalTime", requestControl->GetTotalTime())
+                .With("AttachmentsSize", GetTotalMessageAttachmentSize(message));
 
             responseHandler->HandleResponse(
                 std::move(message),

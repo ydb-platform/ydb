@@ -993,6 +993,7 @@ public:
             ResultItemTypes_);
 
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
+                                                      ResultItemTypes_.size(),
                                                       std::move(joinState),
                                                       LeftKeyColumns_,
                                                       RightIOMap_,
@@ -1002,20 +1003,21 @@ public:
     }
 
 private:
-    class TStreamValue: public TComputationValue<TStreamValue> {
-        using TBase = TComputationValue<TStreamValue>;
+    class TStreamValue: public TBlockStreamValue<TStreamValue> {
+        using TBase = TBlockStreamValue<TStreamValue>;
 
     public:
         TStreamValue(
             TMemoryUsageInfo* memInfo,
             const THolderFactory& holderFactory,
+            size_t outputWidth,
             NUdf::TUnboxedValue&& joinState,
             const TVector<ui32>& leftKeyColumns,
             const TVector<ui32>& rightIOMap,
             NUdf::TUnboxedValue&& leftStream,
             NUdf::TUnboxedValue&& rightBlockIndex,
             NYql::EDatumValidationMode validationMode)
-            : TBase(memInfo)
+            : TBase(memInfo, holderFactory, outputWidth)
             , JoinState_(joinState)
             , LeftKeyColumns_(leftKeyColumns)
             , RightIOMap_(rightIOMap)
@@ -1027,8 +1029,7 @@ private:
             LookupBatchKeyItems_.resize(PrefetchBatchSize * LeftKeyColumns_.size());
         }
 
-    private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
+        NUdf::EFetchStatus DoWideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
             auto& indexState = *static_cast<TIndexState*>(RightBlockIndex_.GetResource());
             auto& storageState = *static_cast<TStorageState*>(indexState.GetBlockStorage().GetResource());
@@ -1212,6 +1213,7 @@ public:
             ResultItemTypes_);
 
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
+                                                      ResultItemTypes_.size(),
                                                       joinState,
                                                       RightIOMap_,
                                                       std::move(LeftStream_->GetValue(ctx)),
@@ -1220,19 +1222,20 @@ public:
     }
 
 private:
-    class TStreamValue: public TComputationValue<TStreamValue> {
-        using TBase = TComputationValue<TStreamValue>;
+    class TStreamValue: public TBlockStreamValue<TStreamValue> {
+        using TBase = TBlockStreamValue<TStreamValue>;
 
     public:
         TStreamValue(
             TMemoryUsageInfo* memInfo,
             const THolderFactory& holderFactory,
+            size_t outputWidth,
             NUdf::TUnboxedValue&& joinState,
             const TVector<ui32>& rightIOMap,
             NUdf::TUnboxedValue&& leftStream,
             NUdf::TUnboxedValue&& rightBlockStorage,
             NYql::EDatumValidationMode validationMode)
-            : TBase(memInfo)
+            : TBase(memInfo, holderFactory, outputWidth)
             , JoinState_(joinState)
             , RightIOMap_(rightIOMap)
             , LeftStream_(leftStream)
@@ -1242,8 +1245,7 @@ private:
         {
         }
 
-    private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
+        NUdf::EFetchStatus DoWideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
             auto& storageState = *static_cast<TStorageState*>(RightBlockStorage_.GetResource());
 

@@ -86,6 +86,33 @@ class TestFailureModelIsMandatory:
             with pytest.raises(FailureModelConfigError):
                 ClusterTopologyModel(path)
 
+    @pytest.mark.parametrize(
+        "doc",
+        [
+            {"static_erasure": "block-4-2", "hosts": _hosts([("h1", "r1", "dc1")])},
+            {"erasure": "block-4-2", "hosts": _hosts([("h1", "r1", "dc1")])},
+            {"config": {"static_erasure": "block-4-2", "hosts": _hosts([("h1", "r1", "dc1")])}},
+            {"config": {"erasure": "block-4-2", "hosts": _hosts([("h1", "r1", "dc1")])}},
+        ],
+        ids=["top_static_erasure", "top_erasure", "nested_static_erasure", "nested_erasure"],
+    )
+    def test_accepts_every_erasure_spelling_and_nesting(self, tmp_path, doc):
+        """``ydb/tools/cfg`` takes ``static_erasure`` or ``erasure``, and a V2 config nests both the
+        erasure mode and ``hosts`` under ``config:`` — all four must build the same model."""
+        path = tmp_path / "cluster.yaml"
+        path.write_text(yaml.safe_dump(doc), encoding="utf-8")
+        topology = ClusterTopologyModel(str(path))
+        assert topology.tolerance.erasure == "block-4-2"
+        assert topology.domain_of("h1") == fail_domain_key("dc1", "r1")
+
+    def test_missing_erasure_names_where_it_looked(self, tmp_path):
+        path = tmp_path / "cluster.yaml"
+        path.write_text(
+            yaml.safe_dump({"config": {"hosts": _hosts([("h1", "r1", "dc1")])}}), encoding="utf-8"
+        )
+        with pytest.raises(FailureModelConfigError, match="no erasure mode found"):
+            ClusterTopologyModel(str(path))
+
     def test_mirror3dc_requires_datacenter(self):
         # Realms may be sacrificed whole, so a host with an unknown realm is not decidable.
         with pytest.raises(FailureModelConfigError, match="data_center"):
@@ -145,6 +172,12 @@ class TestFilterSafeAndRecording:
         candidates = [ChaosTarget.for_node(f"h{i}", node_id=i) for i in (1, 2, 3)]
         safe = guard.filter_safe(candidates, ImpactScope.NODE)
         assert {t.host for t in safe} == {"h1", "h2"}, "the budget is 2 domains"
+
+    def test_filter_safe_independent_keeps_all_individually_ok(self, block42_topology):
+        guard = FailureModelGuard(block42_topology)
+        candidates = [ChaosTarget.for_node(f"h{i}", node_id=i) for i in (1, 2, 3)]
+        safe = guard.filter_safe(candidates, ImpactScope.NODE, jointly=False)
+        assert {t.host for t in safe} == {"h1", "h2", "h3"}
 
     def test_filter_safe_mirror3dc_one_realm_plus_one_domain(self, mirror3dc_topology):
         guard = FailureModelGuard(mirror3dc_topology)

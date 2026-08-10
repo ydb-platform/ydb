@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/logging/tagged_payload.h>
 
+#include <library/cpp/yt/string/raw_formatter.h>
+
 #include <string>
 #include <vector>
 
@@ -138,6 +140,33 @@ TEST(TTaggedPayloadTest, FormatWellKnownTagTrailing)
     WriteWellKnownTag(&writer, "Error", "boom");
     // Regular tags stay inline; the well-known tag is appended after the |(...)| group.
     EXPECT_EQ(FormatTaggedPayload(writer.Finish()), "Message (Key: Value)\nboom");
+}
+
+TEST(TTaggedPayloadTest, FormatIntoFormatter)
+{
+    TRawFormatter<256> formatter;
+    FormatTaggedPayload(&formatter, Encode("Message", {{"Key", "Value"}}));
+    EXPECT_EQ(formatter.GetBuffer(), "Message (Key: Value)");
+}
+
+TEST(TTaggedPayloadTest, FormatIntoFullFormatter)
+{
+    // A full buffer clips the tail, closing paren included.
+    TRawFormatter<12> formatter;
+    FormatTaggedPayload(&formatter, Encode("Message", {{"Key", "Value"}}));
+    EXPECT_EQ(formatter.GetBuffer(), "Message (Key");
+}
+
+TEST(TTaggedPayloadTest, FormatWellKnownTagIntoFormatter)
+{
+    TTaggedPayloadWriter writer;
+    WriteMessage(&writer, "Message");
+    WriteTag(&writer, "Key", "Value");
+    WriteWellKnownTag(&writer, "Error", "boom");
+
+    TRawFormatter<256> formatter;
+    FormatTaggedPayload(&formatter, writer.Finish());
+    EXPECT_EQ(formatter.GetBuffer(), "Message (Key: Value)\nboom");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -6,7 +6,6 @@
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/providers/pq/common/yql_names.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -387,7 +386,7 @@ public:
     }
 
     static bool IsInfiniteSourceType(const TString& sourceType) {
-        return sourceType == NYql::PqSource; // Now it is the only infinite source type. Others are finite.
+        return sourceType == PqSource; // Now it is the only infinite source type. Others are finite.
     }
 
     void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {

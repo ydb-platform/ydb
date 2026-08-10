@@ -436,7 +436,7 @@ class TestWatermarksInYdb(StreamingTestBase):
             self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(0, "fst-0"), partition_id=0)
             self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(0, "snd-0"), partition_id=1)
 
-            # Let both partitions become idle and trigger state cleanup.
+            # Let both partitions become idle after the last ingested event.
             time.sleep(idle_timeout_seconds + 1)
 
             # Events fst-10 (p0) and snd-10 (p1) share window [10,11). Both must be
@@ -445,12 +445,26 @@ class TestWatermarksInYdb(StreamingTestBase):
             self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(10, "fst-10"), partition_id=0)
             self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(10, "snd-10"), partition_id=1)
 
-            # Events at ts=20 are expected to be dropped (after idle cleanup).
+            # Events at ts=20 close window [10,11) via event-time watermarks; their own
+            # window [20,21) is never closed, so they must not appear in the output.
+            # Wait for ingest and for output to advance (windows closed) before reading —
+            # a bare checkpoint wait here can hang under load after a full-topic idle.
+            output_bytes_before = self.get_streaming_query_metric(
+                kikimr, query_path, "streaming.query.output.bytes"
+            )
+            input_bytes_before = self.get_streaming_query_metric(
+                kikimr, query_path, "streaming.query.input.bytes"
+            )
             self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
             self._write_topic(ydb_client, [self._event(20, "snd-20")], partition_id=1)
-
-            # Persist the final watermark before reading the output topic.
-            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            self.wait_streaming_query_metric(
+                kikimr, query_path, "streaming.query.input.bytes",
+                expected_value=input_bytes_before + 2,
+            )
+            self.wait_streaming_query_metric(
+                kikimr, query_path, "streaming.query.output.bytes",
+                expected_value=output_bytes_before + 1,
+            )
 
             expected = ["fst-0", "snd-0", "fst-10", "snd-10"]
             self._read_topic_check_rows(ydb_client, expected)

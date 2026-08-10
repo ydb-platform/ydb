@@ -195,10 +195,10 @@ private:
         const auto deadline = TInstant::Now() + Config_->RequestTimeout;
         const auto sanitizedUrl = SanitizeUrl(url);
 
-        YT_LOG_DEBUG("Making request (Url: %v, Deadline: %v, MaxAttemptCount: %v)",
-            sanitizedUrl,
-            deadline,
-            Config_->MaxAttemptCount);
+        YT_TLOG_DEBUG("Making request")
+            .With("Url", sanitizedUrl)
+            .With("Deadline", deadline)
+            .With("MaxAttemptCount", Config_->MaxAttemptCount);
 
         std::vector<TError> accumulatedErrors;
         int attempt = 0;
@@ -209,12 +209,11 @@ private:
                 << error
                 << TErrorAttribute("attempt", attempt);
 
-            YT_LOG_WARNING(
-                attemptError,
-                "Request attempt failed (Url: %v, Attempt: %v, Retriable: %v)",
-                sanitizedUrl,
-                attempt,
-                isRetriableError);
+            YT_TLOG_WARNING("Request attempt failed")
+                .With("Url", sanitizedUrl)
+                .With("Attempt", attempt)
+                .With("Retriable", isRetriableError)
+                .With(attemptError);
 
             accumulatedErrors.push_back(std::move(attemptError));
             return isRetriableError && TInstant::Now() < deadline && attempt < Config_->MaxAttemptCount;

@@ -425,6 +425,14 @@ public:
         return DoWith(tag, value, "v"_sb);
     }
 
+    //! Attaches the tag only when #condition holds, for fields a message omits rather
+    //! than renders empty. NB: #value is evaluated either way.
+    template <class TValue>
+    TTaggedLoggingGuard& WithIf(bool condition, TLoggingTagKey tag, const TValue& value) &
+    {
+        return condition ? DoWith(tag, value, "v"_sb) : *this;
+    }
+
     //! Attaches a keyed tag composed from several values, e.g. |.WithFormat("Method", "%v.%v", service, method)|.
     template <class... TArgs>
     TTaggedLoggingGuard& WithFormat(TLoggingTagKey tag, TFormatString<TArgs...> format, TArgs&&... args) &
@@ -432,6 +440,15 @@ public:
         Format(Writer_.BeginTag(tag.Get()), format, std::forward<TArgs>(args)...);
         Writer_.EndTag();
         return *this;
+    }
+
+    //! Attaches a composed tag only when #condition holds. NB: #args are evaluated either way.
+    template <class... TArgs>
+    TTaggedLoggingGuard& WithFormatIf(bool condition, TLoggingTagKey tag, TFormatString<TArgs...> format, TArgs&&... args) &
+    {
+        return condition
+            ? WithFormat(tag, format, std::forward<TArgs>(args)...)
+            : *this;
     }
 
     //! Splices a pre-built list of keyed tags, preserving them as individual tags. Chosen
@@ -551,7 +568,8 @@ TWellKnownTaggedLoggingGuard TTaggedLoggingGuard::With(const TValue& value) &
 
 //! Terminal guard for the fluent |YT_TLOG_FATAL| macros. Builds the message
 //! unconditionally and, once the |.With| chain completes, emits the event at |Fatal|
-//! level -- which aborts the process. The enclosing |for| invokes #Commit in its step.
+//! level -- which aborts the process. The enclosing |for| invokes #Commit in its step;
+//! since #Commit is |[[noreturn]]|, the body runs a single time.
 class TTaggedFatalLoggingGuard
     : public TTaggedLoggingGuard
 {
@@ -564,15 +582,6 @@ public:
         : TTaggedLoggingGuard(logger, ELogLevel::Fatal, sourceLocation, anchorRef, message, /*alwaysBuildMessage*/ true)
     { }
 
-    //! Returns true exactly once, so the enclosing |for| runs the |.With| chain a single
-    //! time before its step expression commits the event.
-    bool TryEnter()
-    {
-        bool pending = Pending_;
-        Pending_ = false;
-        return pending;
-    }
-
     //! Emits the event at |Fatal| level; the log manager aborts the process.
     [[noreturn]] void Commit() &
     {
@@ -580,16 +589,13 @@ public:
         LogEventImpl(LoggingContext_, Logger_, ELogLevel::Fatal, SourceLocation_, Anchor_, Writer_.Finish());
         Y_UNREACHABLE();
     }
-
-private:
-    bool Pending_ = true;
 };
 
 //! Terminal guard for the fluent |YT_TLOG_ALERT_AND_THROW| macros. Builds the message
 //! unconditionally; once the |.With| chain completes, #Commit emits the event at |Alert|
-//! level (when enabled) and returns the message so the macro can attach it to the thrown
-//! error. The throw lives in the macro -- the logging library must not depend on the
-//! error library, and a destructor must not throw.
+//! level (when enabled) and returns it rendered -- tags included -- for the macro to
+//! attach to the thrown error. The throw lives in the macro -- the logging library must
+//! not depend on the error library, and a destructor must not throw.
 class TTaggedThrowingLoggingGuard
     : public TTaggedLoggingGuard
 {
@@ -611,11 +617,11 @@ public:
         return pending;
     }
 
-    //! Emits the alert event (when enabled) and returns its message for the error payload.
+    //! Emits the alert event (when enabled) and returns it rendered, tags included.
     std::string Commit() &
     {
         auto payload = Writer_.Finish();
-        std::string message(GetMessageFromTaggedPayload(payload));
+        auto message = FormatTaggedPayload(payload);
         if (Enabled_) {
             Enabled_ = false; // The event is emitted here, not from the base destructor.
             LogEventImpl(LoggingContext_, Logger_, EffectiveLevel_, SourceLocation_, Anchor_, std::move(payload));
@@ -639,7 +645,19 @@ public:
     }
 
     template <class... TArgs>
+    TNullTaggedLoggingGuard& WithIf(TArgs&&...)
+    {
+        return *this;
+    }
+
+    template <class... TArgs>
     TNullTaggedLoggingGuard& WithFormat(TArgs&&...)
+    {
+        return *this;
+    }
+
+    template <class... TArgs>
+    TNullTaggedLoggingGuard& WithFormatIf(TArgs&&...)
     {
         return *this;
     }

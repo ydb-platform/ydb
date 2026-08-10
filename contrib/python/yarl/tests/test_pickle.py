@@ -5,7 +5,7 @@ from yarl import URL
 # serialize
 
 
-def test_pickle():
+def test_pickle() -> None:
     u1 = URL("picklepickle")
     hash(u1)
     v = pickle.dumps(u1)
@@ -15,23 +15,23 @@ def test_pickle():
     assert hash(u1) == hash(u2)
 
 
-def test_default_style_state():
+def test_default_style_state() -> None:
     u = object.__new__(URL)
     val = ("set_state", "set_state", "set_state", "set_state", "set_state")
-    u.__setstate__((None, {"_val": val, "_strict": False, "_cache": {"hash": 1}}))
+    u.__setstate__((None, {"_val": val}))
     assert u._val == val
     assert hash(u) != 1
 
 
-def test_empty_url_is_not_cached():
+def test_empty_url_is_not_cached() -> None:
     u = URL.__new__(URL)
     val = ("set_state", "set_state", "set_state", "set_state", "set_state")
-    u.__setstate__((None, {"_val": val, "_strict": False, "_cache": {"hash": 1}}))
+    u.__setstate__((None, {"_val": val}))
     assert u._val == val
     assert hash(u) != 1
 
 
-def test_pickle_does_not_pollute_cache():
+def test_pickle_does_not_pollute_cache() -> None:
     """Verify the unpickling does not pollute the cache.
 
     Since unpickle will call URL.__new__ with default

@@ -57,7 +57,7 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
         InitConfigTransaction(tx);
         break;
     case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-        TX_ENSURE(false);
+        TX_ENSURE(false)("reason", "unreachable");
     }
 
     TX_ENSURE(tx.HasSourceActor());
@@ -161,7 +161,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
         OnProposeTransaction(event.GetConfig(), extractTabletId);
         break;
     default:
-        TX_ENSURE(false);
+        TX_ENSURE(false)("reason", "unreachable");
     }
 
     PartitionRepliesCount = 0;
@@ -476,7 +476,7 @@ NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
         AddCmdWriteConfigTx(tx);
         break;
     case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-        TX_ENSURE(false);
+        TX_ENSURE(false)("reason", "unreachable");
     }
 
     tx.MutableOperations()->Reserve(Operations.size());

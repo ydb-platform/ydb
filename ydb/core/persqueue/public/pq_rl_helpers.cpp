@@ -37,7 +37,7 @@ bool TRlHelpers::IsQuotaInflight() const {
 }
 
 bool TRlHelpers::IsQuotaRequired() const {
-    AFL_ENSURE(MeteringMode.Defined());
+    AFL_ENSURE(MeteringMode.Defined())("reason", "metering mode must be defined");
     return MeteringMode == NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS && Ctx;
 }
 

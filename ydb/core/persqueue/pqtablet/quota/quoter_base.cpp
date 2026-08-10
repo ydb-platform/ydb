@@ -118,7 +118,7 @@ void TPartitionQuoterBase::CheckTotalPartitionQuota(TRequestContext&& context) {
 
 void TPartitionQuoterBase::HandleAccountQuotaApproved(NAccountQuoterEvents::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     auto pendingIter = PendingAccountQuotaRequests.find(ev->Get()->Request->Cookie);
-    AFL_ENSURE(!pendingIter.IsEnd());
+    AFL_ENSURE(!pendingIter.IsEnd())("reason", "pending iterator at end");
 
     TRequestContext context{std::move(pendingIter->second.Request), pendingIter->second.PartitionActor, ev->Get()->WaitTime, ctx.Now()};
     context.Request->Request = std::move(ev->Get()->Request->Request);
@@ -217,7 +217,7 @@ void TPartitionQuoterBase::ScheduleWakeUp(const TActorContext& ctx) {
 }
 
 void TPartitionQuoterBase::HandleAcquireExclusiveLock(TEvPQ::TEvAcquireExclusiveLock::TPtr& ev, const TActorContext& ctx) {
-    AFL_ENSURE(ExclusiveLockState != EExclusiveLockState::EAcquired);
+    AFL_ENSURE(ExclusiveLockState != EExclusiveLockState::EAcquired)("ExclusiveLockState", static_cast<int>(ExclusiveLockState));
     switch (ExclusiveLockState) {
     case EExclusiveLockState::EReleased:
         ExclusiveLockState = EExclusiveLockState::EAcquiring;

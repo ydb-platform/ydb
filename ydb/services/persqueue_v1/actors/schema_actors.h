@@ -208,11 +208,11 @@ public:
     void ApplyResponse(TTabletInfo&,
                       NKikimr::TEvPersQueue::TEvStatusResponse::TPtr&,
                       const TActorContext&) override {
-        AFL_ENSURE(false)("reason", "TPartitionsLocationActor: unexpected TEvStatusResponse");
+        AFL_ENSURE(false)("reason", "TPartitionsLocationActor: unexpected TEvStatusResponse")("settings_mode", static_cast<int>(Settings.Mode))("partitions_count", Settings.Partitions.size());
     }
     virtual void ApplyResponse(TTabletInfo&, TEvPersQueue::TEvReadSessionsInfoResponse::TPtr&,
                                const TActorContext&) override {
-        AFL_ENSURE(false)("reason", "TPartitionsLocationActor: unexpected TEvReadSessionsInfoResponse");
+        AFL_ENSURE(false)("reason", "TPartitionsLocationActor: unexpected TEvReadSessionsInfoResponse")("settings_mode", static_cast<int>(Settings.Mode))("partitions_count", Settings.Partitions.size());
     }
 
     void Finalize();

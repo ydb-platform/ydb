@@ -96,7 +96,7 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
     }
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
-    PQ_ENSURE(factory);
+    PQ_ENSURE(factory)("reason", "PersQueueMirrorReaderFactory must be set");
     auto future = factory->GetTopicDescription(Config, CredentialsProvider);
     future.Subscribe(
         [
@@ -131,7 +131,7 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*
     CredentialsProvider = nullptr;
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
-    PQ_ENSURE(factory);
+    PQ_ENSURE(factory)("reason", "PersQueueMirrorReaderFactory must be set");
     auto future = factory->GetCredentialsProvider(Config.GetCredentials());
     future.Subscribe(
         [

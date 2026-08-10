@@ -37,7 +37,9 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
         return !wasMemoryLimitReached;
     }
 
-    AFL_ENSURE(Layout.empty() || Offset > Layout.back().Offset);
+    AFL_ENSURE(Layout.empty() || Offset > Layout.back().Offset)
+        ("reason", "offset must be monotonic")("offset", Offset)
+        ("layout_back_offset", Layout.empty() ? 0 : Layout.back().Offset)("layout_size", Layout.size());
 
     ui64 rest = Size;
     if (!Layout.empty() && Layout.back().Size < LayoutUnitSize) {
@@ -84,7 +86,8 @@ bool TInFlightController::Remove(ui64 Offset) {
         if (Layout.size() == 1) {
             TotalSize = 0;
         } else {
-            AFL_ENSURE(TotalSize >= it->Size);
+            AFL_ENSURE(TotalSize >= it->Size)
+                ("reason", "total size must cover removed entry")("total_size", TotalSize)("entry_size", it->Size)("offset", Offset);
             TotalSize -= it->Size;
         }
     }

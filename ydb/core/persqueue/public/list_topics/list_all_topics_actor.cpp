@@ -70,7 +70,9 @@ class TListAllTopicsActor : public NActors::TActorBootstrapped<TListAllTopicsAct
     }
 
     void TListAllTopicsActor::SendResponse() {
-        AFL_ENSURE(WaitingList.size() == 0 && RequestsInFlight == 0);
+        AFL_ENSURE(WaitingList.size() == 0 && RequestsInFlight == 0)
+            ("reason", "all navigate requests must be completed")("waiting_list_size", WaitingList.size())
+            ("requests_in_flight", RequestsInFlight)("database_path", DatabasePath);
 
         for (TString& topic : Topics) {
             topic = TFsPath(topic).RelativePath(DatabasePath).GetPath();

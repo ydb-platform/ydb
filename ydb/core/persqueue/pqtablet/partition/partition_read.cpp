@@ -241,7 +241,7 @@ void TPartition::FailStaleSessionReadRequests(const TString& user, const TActorC
 
 void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
-    PQ_ENSURE(record.HasSender());
+    PQ_ENSURE(record.HasSender())("reason", "sender required");
 
     auto now = ctx.Now();
 
@@ -271,7 +271,7 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
         THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
         auto res = HasDataRequests.insert(std::move(req));
         HasDataDeadlines.insert(dl);
-        PQ_ENSURE(res.second);
+        PQ_ENSURE(res.second)("reason", "insert failed")("offset", record.GetOffset())("cookie", cookie)("client_id", record.HasClientId() ? record.GetClientId() : TString());
 
         if (InitDone && record.HasClientId() && !record.GetClientId().empty()) {
             auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
@@ -432,7 +432,7 @@ static void AddResultDebugInfo(const TEvPQ::TEvBlobResponse* response, T* readRe
 ui64 GetFirstHeaderOffset(const TKey& key, const TString& blob)
 {
     TBlobIterator it(key, blob);
-    AFL_ENSURE(it.IsValid());
+    AFL_ENSURE(it.IsValid())("reason", "invalid blob iterator");
     return it.GetBatch().GetOffset();
 }
 
@@ -476,8 +476,8 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                                                 ui32& cnt, ui32& size, ui32& lastBlobSize,
                                                 const TActorContext& ctx)
 {
-    AFL_ENSURE(begin <= end);
-    AFL_ENSURE(end <= blobs.size());
+    AFL_ENSURE(begin <= end)("begin", begin)("end", end);
+    AFL_ENSURE(end <= blobs.size())("end", end)("blobs_size", blobs.size());
 
     for (ui32 blobIdx = begin; blobIdx < end; ++blobIdx) {
         AFL_ENSURE(Blobs[blobIdx].Offset == blobs[blobIdx].Offset)("l", Blobs[blobIdx].Offset)("r", blobs[blobIdx].Offset);
@@ -520,8 +520,8 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             Offset = offset;
             PartNo = partNo;
         }
-        AFL_ENSURE(offset <= Offset);
-        AFL_ENSURE(offset < Offset || partNo <= PartNo);
+        AFL_ENSURE(offset <= Offset)("offset", offset)("Offset", Offset);
+        AFL_ENSURE(offset < Offset || partNo <= PartNo)("offset", offset)("Offset", Offset)("partNo", partNo)("PartNo", PartNo);
         const ui64 blobKeyOffset = blobs[blobIdx].Key.GetOffset();
         const ui64 firstHeaderOffset = blobBatches->front().GetOffset();
 
@@ -680,7 +680,7 @@ TReadAnswer TReadInfo::FormAnswer(
         return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (cnt >= Count || (size >= Size && !ReadToBlobEnd));
     };
 
-    AFL_ENSURE(blobs.size() == Blobs.size());
+    AFL_ENSURE(blobs.size() == Blobs.size())("blobs_size", blobs.size())("Blobs_size", Blobs.size());
     response->Check();
     bool needStop = false;
 
@@ -815,7 +815,7 @@ void CollectReadRequestFromBody(ui64 startOffset, const ui16 partNo, const ui32 
                                 TPartitionBlobEncoder& zone,
                                 TVector<TRequestedBlob>& result)
 {
-    AFL_ENSURE(rcount && rsize);
+    AFL_ENSURE(rcount && rsize)("reason", "rcount and rsize must be non-null");
     startOffset = Max(startOffset, zone.DataKeysBody.empty() ? zone.StartOffset : zone.DataKeysBody.front().Key.GetOffset());
     auto blobs = zone.GetBlobsFromBody(startOffset,
                                        partNo,
@@ -860,7 +860,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
         const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount,
         ui32* rsize, ui64* insideHeadOffset, ui64 lastOffset
 ) {
-    PQ_ENSURE(rcount && rsize);
+    PQ_ENSURE(rcount && rsize)("reason", "rcount and rsize must be non-null");
     return CompactionBlobEncoder.GetBlobsFromHead(startOffset,
                                                   partNo,
                                                   maxCount,
@@ -922,7 +922,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         return;
     }
 
-    PQ_ENSURE(read->Offset <= GetEndOffset());
+    PQ_ENSURE(read->Offset <= GetEndOffset())("offset", read->Offset)("EndOffset", GetEndOffset());
 
     const TString& user = read->ClientId;
     auto& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
@@ -1070,7 +1070,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
         return;
     }
 
-    PQ_ENSURE(!ReadingTimestamp);
+    PQ_ENSURE(!ReadingTimestamp)("reason", "ReadingTimestamp must be false");
 
     ReadingTimestamp = true;
     ReadingForUser = user;
@@ -1078,7 +1078,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     ReadingForUserReadRuleGeneration = userInfo.ReadRuleGeneration;
 
     for (const auto& user : UpdateUserInfoTimestamp) {
-        PQ_ENSURE(user.first != ReadingForUser || user.second != ReadingForUserReadRuleGeneration);
+        PQ_ENSURE(user.first != ReadingForUser || user.second != ReadingForUserReadRuleGeneration)("user", user.first)("ReadingForUser", ReadingForUser)("user_gen", user.second)("ReadingForUserReadRuleGeneration", ReadingForUserReadRuleGeneration);
     }
 
     YDB_LOG_DEBUG_COMP(Service, "Topic partition user send read request for offset initiated queuesize startOffset ReadingTimestamp rrg",
@@ -1141,9 +1141,9 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
         {"userInfoWriteTimestampMilliSeconds", userInfo->WriteTimestamp.MilliSeconds()},
         {"updateUserInfoTimestampSize", UpdateUserInfoTimestamp.size()},
         {"startOffset", GetStartOffset()});
-    PQ_ENSURE(userInfo->ReadScheduled);
+    PQ_ENSURE(userInfo->ReadScheduled)("reason", "expected userInfo->ReadScheduled");
     userInfo->ReadScheduled = false;
-    PQ_ENSURE(ReadingForUser != "");
+    PQ_ENSURE(ReadingForUser != "")("ReadingForUser", ReadingForUser);
 
     if (!userInfo->ActualTimestamps) {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Reading Timestamp failed for offset",
@@ -1191,14 +1191,14 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
             continue;
         ReadTimestampForOffset(user, *userInfo, ctx);
     }
-    PQ_ENSURE(ReadingTimestamp || UpdateUserInfoTimestamp.empty());
+    PQ_ENSURE(ReadingTimestamp || UpdateUserInfoTimestamp.empty())("ReadingTimestamp", ReadingTimestamp)("UpdateUserInfoTimestamp_size", UpdateUserInfoTimestamp.size());
 }
 
 void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription) {
     ui32 count = 0;
     ui32 size = 0;
 
-    PQ_ENSURE(!info.User.empty());
+    PQ_ENSURE(!info.User.empty())("reason", "user must not be empty")("destination", info.Destination);
     auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
 
     if (subscription) {
@@ -1236,7 +1236,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         {"lastOffset", lastOffset},
         {"offset", GetEndOffset()});
 
-    PQ_ENSURE(info.BlobKeyTokens.Size() == info.Blobs.size());
+    PQ_ENSURE(info.BlobKeyTokens.Size() == info.Blobs.size())("BlobKeyTokens_size", info.BlobKeyTokens.Size())("Blobs_size", info.Blobs.size());
     if (info.Destination != 0) {
         ++userInfo.ActiveReads;
         userInfo.UpdateReadingTimeAndState(GetEndOffset(), ctx.Now());
@@ -1251,11 +1251,12 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         return;
     }
 
+    const TString readUser = info.User;
     bool res = ReadInfo.emplace(cookie, std::move(info)).second;
     YDB_LOG_DEBUG_COMP(Service, "Reading cookie Send blob request",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"cookie", cookie});
-    PQ_ENSURE(res);
+    PQ_ENSURE(res)("reason", "operation failed")("cookie", cookie)("user", readUser);
 
     auto request = MakeHolder<TEvPQ::TEvBlobRequest>(cookie, Partition,
                                                      std::move(blobs));

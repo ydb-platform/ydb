@@ -48,7 +48,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
 
     auto request = dynamic_cast<const Ydb::Topic::CommitOffsetRequest*>(GetProtoRequest());
-    AFL_ENSURE(request);
+    AFL_ENSURE(request)("reason", "commit offset request expected");
     ClientId = NPersQueue::ConvertNewConsumerName(request->consumer(), ctx);
     PartitionId = request->partition_id();
 
@@ -123,7 +123,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         AnswerError("empty list of topics", PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
         return;
     }
-    AFL_ENSURE(TopicAndTablets.size() == 1);
+    AFL_ENSURE(TopicAndTablets.size() == 1)("topic_and_tablets_size", TopicAndTablets.size())("client_id", ClientId)("partition_id", PartitionId);
     auto& [_, topicInitInfo] = *TopicAndTablets.begin();
 
     if (topicInitInfo.Partitions.find(PartitionId) == topicInitInfo.Partitions.end()) {
@@ -219,7 +219,7 @@ void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActo
     // Convert to correct response.
 
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
-    AFL_ENSURE(!partitionResult.HasCmdReadResult());
+    AFL_ENSURE(!partitionResult.HasCmdReadResult())("reason", "commit response must not have read result")("client_id", ClientId)("partition_id", PartitionId);
 
     YDB_LOG_DEBUG_CTX(ctx, "CommitOffset, commit done");
 
@@ -246,7 +246,7 @@ void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topi
     request.MutablePartitionRequest()->SetTopic(topic.TopicNameConverter->GetPrimaryPath());
     request.MutablePartitionRequest()->SetPartition(commitRequest->partition_id());
 
-    AFL_ENSURE(PipeClient);
+    AFL_ENSURE(PipeClient)("reason", "pipe client expected for commit")("client_id", ClientId)("partition_id", commitRequest->partition_id())("tablet_id", tabletId);
 
     auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
     commit->SetClientId(ClientId);

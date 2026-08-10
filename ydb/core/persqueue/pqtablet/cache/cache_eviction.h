@@ -380,7 +380,7 @@ namespace NKikimr::NPQ {
 
         void SavePrefetchBlobs(const TActorContext& ctx, const TKvRequest& kvReq, const TVector<bool>& store)
         {
-            AFL_ENSURE(store.size() == kvReq.Blobs.size());
+            AFL_ENSURE(store.size() == kvReq.Blobs.size())("store_size", store.size())("blobs_size", kvReq.Blobs.size());
 
             auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
@@ -394,7 +394,7 @@ namespace NKikimr::NPQ {
                 {
                     TValueL1 value;
                     if (CheckExists(ctx, blob, value)) {
-                        AFL_ENSURE(value.Source == TValueL1::SourceHead);
+                        AFL_ENSURE(value.Source == TValueL1::SourceHead)("Source", static_cast<int>(value.Source));
                         continue;
                     }
                 }

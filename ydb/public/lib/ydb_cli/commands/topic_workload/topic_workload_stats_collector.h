@@ -18,6 +18,9 @@ namespace NYdb {
                 std::shared_ptr<std::atomic_bool> errorFlag,
                 bool transferMode);
 
+            // Must be called before worker threads that call Add*Event start.
+            void Prepare();
+
             void PrintWindowStatsLoop();
 
             void PrintHeader(bool total = false) const;
@@ -81,7 +84,9 @@ namespace NYdb {
             THolder<TTopicWorkloadStats> WindowStats;
             TTopicWorkloadStats TotalStats;
 
+            // Set in Prepare() before workers start; read-only afterwards.
             TInstant WarmupTime;
+            TInstant StartTime;
         };
     }
 }

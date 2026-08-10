@@ -11,6 +11,7 @@ int TTopicReadScenario::DoRun(const TClientCommand::TConfig& config)
 {
     std::vector<std::future<void>> threads;
 
+    StatsCollector->Prepare();
     StartConsumerThreads(threads, config.Database);
 
     StatsCollector->PrintWindowStatsLoop();

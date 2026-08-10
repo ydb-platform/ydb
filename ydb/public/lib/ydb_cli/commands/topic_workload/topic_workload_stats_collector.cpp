@@ -88,17 +88,22 @@ void TTopicWorkloadStatsCollector::PrintHeader(bool total) const {
     Cout << header << Flush;
 }
 
+void TTopicWorkloadStatsCollector::Prepare() {
+    StartTime = Now();
+    WarmupTime = StartTime + TDuration::Seconds(WarmupSec);
+}
+
 void TTopicWorkloadStatsCollector::PrintWindowStatsLoop() {
+    Y_ABORT_UNLESS(StartTime != TInstant(), "Prepare() must be called before PrintWindowStatsLoop()");
+
     PrintHeader();
 
-    auto startTime = Now();
-    WarmupTime = startTime + TDuration::Seconds(WarmupSec);
-    auto stopTime = startTime + TDuration::Seconds(TotalSec + 1);
+    auto stopTime = StartTime + TDuration::Seconds(TotalSec + 1);
 
     int windowIt = 1;
     auto windowDuration = TDuration::Seconds(WindowSec);
     while (Now() < stopTime && !*ErrorFlag) {
-        auto windowTime = [startTime, windowDuration](int index) {
+        auto windowTime = [startTime = StartTime, windowDuration](int index) {
             return startTime + index * windowDuration;
         };
         if (Now() > windowTime(windowIt) && !*ErrorFlag) {

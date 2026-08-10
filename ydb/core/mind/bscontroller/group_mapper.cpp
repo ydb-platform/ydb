@@ -150,6 +150,18 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            bool HasEnoughSpace(const TPDiskInfo& pdisk) const {
+                if (pdisk.SpaceAvailable < RequiredSpace) {
+                    return false;
+                }
+                if (pdisk.SlotSizeInBytes && RequiredSpace > 0
+                        && pdisk.SlotSizeInBytes < static_cast<ui64>(RequiredSpace)) {
+                    // the group occupies a single fixed-size slot on this disk
+                    return false;
+                }
+                return true;
+            }
+
             bool DiskIsUsable(const TPDiskInfo& pdisk) const {
                 if (!pdisk.IsUsable()) {
                     return false; // disk is not usable in this case
@@ -160,7 +172,7 @@ namespace NKikimr::NBsController {
                 if (RequireOperational && !pdisk.Operational) {
                     return false;
                 }
-                if (pdisk.SpaceAvailable < RequiredSpace) {
+                if (!HasEnoughSpace(pdisk)) {
                     return false;
                 }
                 return true;
@@ -1094,7 +1106,7 @@ namespace NKikimr::NBsController {
 
                         s << std::exchange(minus, "") << "s[" << pdisk->NumSlots << "/" << pdisk->MaxSlots << "]";
                     }
-                    if (pdisk->SpaceAvailable < diskManager.RequiredSpace) {
+                    if (!diskManager.HasEnoughSpace(*pdisk)) {
                         totalStats.NotEnoughSpace++;
                         domainStats.NotEnoughSpace++;
                         diskIsOk = false;

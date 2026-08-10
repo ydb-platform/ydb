@@ -493,6 +493,7 @@ struct TPDiskMon {
     // yard subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> PDiskGroup;
     TReqCounters YardInit;
+    TReqCounters ChangeExpectedSlotCount;
     TReqCounters CheckSpace;
     TReqCounters YardConfigureScheduler;
     TReqCounters ChunkReserve;

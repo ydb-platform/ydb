@@ -16,6 +16,7 @@
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
 #include "query_autocomplete_helper.h"
+#include "storage_groups.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -627,6 +628,30 @@ Y_UNIT_TEST_SUITE(Viewer) {
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 70, 100, false);
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 80, 100, true);
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 90, 100, true);
+    }
+
+    Y_UNIT_TEST(StorageGroupUsageWithExpectedSlotSize)
+    {
+        // The test checks that ExpectedSlotSize takes precedence over EnforcedDynamicSlotSize
+        // and TotalSize / ExpectedSlotCount when calculating the slot size
+
+        TStorageGroups::TGroup group;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 25;
+        vdisk.AvailableSize = 900;
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.ExpectedSlotSize = 100;
+        pdisk.EnforcedDynamicSlotSize = 1000;
+        pdisk.TotalSize = 10000;
+        pdisk.AvailableSize = 9000;
+        pdisk.ExpectedSlotCount = 10;
+
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetSlotTotalSize(), 100);
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 75);
     }
 
     const TPathId SHARED_DOMAIN_KEY = {7000000000, 1};

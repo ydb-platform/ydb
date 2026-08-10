@@ -5,10 +5,10 @@
 #include "source.h"
 #include "sub_columns_fetching.h"
 
-#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/program/index.h>
 #include <ydb/core/formats/arrow/program/original.h>
+#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
@@ -64,7 +64,8 @@ TStepAction::TStepAction(
     : TBase(ownerActorId, source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard())
     , Source(std::move(source))
     , Cursor(std::move(cursor))
-    , CachedSourceId(Source->GetDeprecatedPortionId()) {
+    , CachedSourceId(Source->GetDeprecatedPortionId())
+{
     if (changeSyncSection) {
         Source->StartAsyncSection();
     } else {
@@ -79,19 +80,11 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
         return;
     }
     const auto& scanOrbit = source->GetContext()->GetCommonContext()->GetScanOrbit();
-    if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit())
-        && !(scanOrbit && NLWTrace::HasShuttles(*scanOrbit))
-        && !LWPROBE_ENABLED(ProgramConst)
-        && !LWPROBE_ENABLED(ProgramCalculation)
-        && !LWPROBE_ENABLED(ProgramProjection)
-        && !LWPROBE_ENABLED(ProgramFilter)
-        && !LWPROBE_ENABLED(ProgramAggregation)
-        && !LWPROBE_ENABLED(ProgramFetchOriginalData)
-        && !LWPROBE_ENABLED(ProgramAssembleOriginalData)
-        && !LWPROBE_ENABLED(ProgramCheckIndexData)
-        && !LWPROBE_ENABLED(ProgramCheckHeaderData)
-        && !LWPROBE_ENABLED(ProgramStreamLogic)
-        && !LWPROBE_ENABLED(ProgramReserveMemory)) {
+    if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit()) && !(scanOrbit && NLWTrace::HasShuttles(*scanOrbit)) &&
+        !LWPROBE_ENABLED(ProgramConst) && !LWPROBE_ENABLED(ProgramCalculation) && !LWPROBE_ENABLED(ProgramProjection) &&
+        !LWPROBE_ENABLED(ProgramFilter) && !LWPROBE_ENABLED(ProgramAggregation) && !LWPROBE_ENABLED(ProgramFetchOriginalData) &&
+        !LWPROBE_ENABLED(ProgramAssembleOriginalData) && !LWPROBE_ENABLED(ProgramCheckIndexData) && !LWPROBE_ENABLED(ProgramCheckHeaderData) &&
+        !LWPROBE_ENABLED(ProgramStreamLogic) && !LWPROBE_ENABLED(ProgramReserveMemory)) {
         source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
         source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
         return;
@@ -179,38 +172,36 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
         case NArrow::NSSA::EProcessorType::Aggregation:
             LWTRACK(ProgramAggregation, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
-        case NArrow::NSSA::EProcessorType::FetchOriginalData:
-            {
-                ui64 blobBytes = 0;
-                ui64 rawBytes = 0;
-                auto* fetchProcessor = dynamic_cast<const NArrow::NSSA::TOriginalColumnDataProcessor*>(processor.get());
-                if (fetchProcessor) {
-                    std::set<ui32> dataColumnIds;
-                    for (auto&& [colId, addr] : fetchProcessor->GetDataAddresses()) {
-                        dataColumnIds.insert(colId);
-                    }
-                    if (!dataColumnIds.empty()) {
-                        blobBytes += source->GetColumnBlobBytes(dataColumnIds);
-                        rawBytes += source->GetColumnRawBytes(dataColumnIds);
-                    }
-                    if (!fetchProcessor->GetIndexContext().empty() && source->HasPortionAccessor() && source->GetSourceSchemaOptional()) {
-                        const auto& accessor = source->GetPortionAccessor();
-                        std::set<ui32> indexEntityIds;
-                        const auto& indexInfo = source->GetSourceSchemaOptional()->GetIndexInfo();
-                        for (auto&& [colId, idxCtx] : fetchProcessor->GetIndexContext()) {
-                            for (auto&& [subCol, ops] : idxCtx.GetOperationsBySubColumn().GetData()) {
-                                NIndexes::NRequest::TOriginalDataAddress addr(colId, subCol);
-                                for (auto&& op : ops) {
-                                    for (auto&& skipIdx : indexInfo.FindSkipIndexes(addr, op)) {
-                                        indexEntityIds.insert(skipIdx->GetIndexId());
-                                    }
+        case NArrow::NSSA::EProcessorType::FetchOriginalData: {
+            ui64 blobBytes = 0;
+            ui64 rawBytes = 0;
+            auto* fetchProcessor = dynamic_cast<const NArrow::NSSA::TOriginalColumnDataProcessor*>(processor.get());
+            if (fetchProcessor) {
+                std::set<ui32> dataColumnIds;
+                for (auto&& [colId, addr] : fetchProcessor->GetDataAddresses()) {
+                    dataColumnIds.insert(colId);
+                }
+                if (!dataColumnIds.empty()) {
+                    blobBytes += source->GetColumnBlobBytes(dataColumnIds);
+                    rawBytes += source->GetColumnRawBytes(dataColumnIds);
+                }
+                if (!fetchProcessor->GetIndexContext().empty() && source->HasPortionAccessor() && source->GetSourceSchemaOptional()) {
+                    const auto& accessor = source->GetPortionAccessor();
+                    std::set<ui32> indexEntityIds;
+                    const auto& indexInfo = source->GetSourceSchemaOptional()->GetIndexInfo();
+                    for (auto&& [colId, idxCtx] : fetchProcessor->GetIndexContext()) {
+                        for (auto&& [subCol, ops] : idxCtx.GetOperationsBySubColumn().GetData()) {
+                            NIndexes::NRequest::TOriginalDataAddress addr(colId, subCol);
+                            for (auto&& op : ops) {
+                                for (auto&& skipIdx : indexInfo.FindSkipIndexes(addr, op)) {
+                                    indexEntityIds.insert(skipIdx->GetIndexId());
                                 }
                             }
                         }
-                        if (!indexEntityIds.empty()) {
-                            blobBytes += accessor.GetIndexBlobBytes(indexEntityIds, false);
-                            rawBytes += accessor.GetIndexRawBytes(indexEntityIds, false);
-                        }
+                    }
+                    if (!indexEntityIds.empty()) {
+                        blobBytes += accessor.GetIndexBlobBytes(indexEntityIds, false);
+                        rawBytes += accessor.GetIndexRawBytes(indexEntityIds, false);
                     }
                 }
                 bool hasSubColumns = false;
@@ -226,73 +217,14 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                 if (!hasSubColumns) {
                     source->AddBytesRead(blobBytes);
                 }
-<<<<<<< HEAD
-                LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS, blobBytes, rawBytes, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
-            }
-            break;
-=======
             }
             LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS, blobBytes, rawBytes, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
         } break;
->>>>>>> d7a42430c5d (Fix trace verify (#49129))
         case NArrow::NSSA::EProcessorType::AssembleOriginalData:
             LWTRACK(ProgramAssembleOriginalData, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::CheckIndexData:
-<<<<<<< HEAD
-            {
-                TString indexStatus = "Unknown";
-                ui32 indexFilteredRows = source->GetRecordsCount();
-                auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
-                if (indexProcessor && source->GetSourceSchemaOptional()) {
-                    const auto& idxCtx = indexProcessor->GetIndexContext();
-                    NIndexes::NRequest::TOriginalDataAddress addr(idxCtx.GetColumnId(), idxCtx.GetSubColumnName());
-                    auto skipIndexes = source->GetSourceSchemaOptional()->GetIndexInfo().FindSkipIndexes(addr, idxCtx.GetOperation());
-                    bool hasActualIndexData = false;
-                    if (!skipIndexes.empty() && source->HasPortionAccessor()) {
-                        std::set<ui32> indexEntityIds;
-                        for (auto&& skipIdx : skipIndexes) {
-                            indexEntityIds.insert(skipIdx->GetIndexId());
-                        }
-                        hasActualIndexData = source->GetPortionAccessor().GetIndexBlobBytes(indexEntityIds, false) > 0;
-                    }
-                    if (skipIndexes.empty() || !hasActualIndexData) {
-                        indexStatus = "NoIndex";
-                        indexFilteredRows = source->GetRecordsCount();
-                    } else {
-                        // After DoExecute in index.cpp:
-                        // - AllDenied/AllAccepted: output column stored, filter NOT modified
-                        // - Partial: no output column, filter modified via AddFilter
-                        const ui32 outputColumnId = indexProcessor->GetOutputColumnIdOnce();
-                        const auto& outputAccessor = resources.GetAccessorOptional(outputColumnId);
-                        if (outputAccessor) {
-                            // Output column exists → AllDenied or AllAccepted
-                            auto* sparsed = dynamic_cast<const NArrow::NAccessor::TSparsedArray*>(outputAccessor.get());
-                            if (sparsed && sparsed->GetDefaultValue() && sparsed->GetDefaultValue()->is_valid) {
-                                auto* uint8Scalar = dynamic_cast<const arrow::UInt8Scalar*>(sparsed->GetDefaultValue().get());
-                                if (uint8Scalar && uint8Scalar->value == 0) {
-                                    indexStatus = "AllDenied";
-                                    indexFilteredRows = 0;
-                                } else {
-                                    indexStatus = "AllAccepted";
-                                    indexFilteredRows = source->GetRecordsCount();
-                                }
-                            } else {
-                                indexStatus = "AllAccepted";
-                                indexFilteredRows = source->GetRecordsCount();
-                            }
-                        } else {
-                            // No output column → Partial (filter was applied via AddFilter)
-                            indexStatus = "Partial";
-                            indexFilteredRows = resources.GetFilter().GetFilteredCount().value_or(source->GetRecordsCount());
-                        }
-                    }
-                }
-                LWTRACK(ProgramCheckIndexData, PROGRAM_PROBE_ARGS, indexFilteredRows, indexStatus, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
-            }
-=======
             LWTRACK(ProgramCheckIndexData, PROGRAM_PROBE_ARGS, indexFilteredRows, indexStatus, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
->>>>>>> d7a42430c5d (Fix trace verify (#49129))
             break;
         case NArrow::NSSA::EProcessorType::CheckHeaderData:
             LWTRACK(ProgramCheckHeaderData, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
@@ -383,20 +315,13 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         }
     }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fgraph"));
-<<<<<<< HEAD
-    AFL_DEBUG(NKikimrServices::SSA_GRAPH_EXECUTION)(
-        "graph_constructed", Program->DebugDOT(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutedIds()));
-    source->MutableStageData().ReturnTable(source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().ExtractResources());
-=======
     const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
     if (!visitor || !visitor->MutableContext().HasResources()) {
         // Nested continuation already took ownership of progress — do not advance this cursor.
         return false;
     }
-    YDB_LOG_DEBUG_COMP(NKikimrServices::SSA_GRAPH_EXECUTION, "",
-        {"graphConstructed", Program->DebugDOT(visitor->GetExecutedIds())});
+    AFL_DEBUG(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", Program->DebugDOT(visitor->GetExecutedIds()));
     source->MutableStageData().ReturnTable(visitor->MutableContext().ExtractResources());
->>>>>>> d7a42430c5d (Fix trace verify (#49129))
 
     return true;
 }

@@ -21,7 +21,7 @@
 |------|----------|--------|
 | 1 | PRAGMA + proto-поле `TKqpPhyTx.EnableCsWriteAffinity` | ✅ Выполнено |
 | 2 | Выделение WriteActor в отдельный stage (по прагме) | ✅ Выполнено |
-| 3 | Поля `TargetShardIds` / `ExpectedNodeId` в `TKqpTableSinkSettings` | ⬜ Не начато |
+| 3 | Поля `TargetShardIds` / `ExpectedNodeId` в `TKqpTableSinkSettings` | ✅ Выполнено |
 | 4 | Пометка sink для affinity в `BuildFillTableEffect()` | ⬜ Не начато |
 | 5 | Множественные задачи sink stage в TasksGraph | ⬜ Не начато |
 | 6 | Планировщик (проверка, изменений не требуется) | ⬜ Не начато |
@@ -215,7 +215,7 @@ Y_UNIT_TEST_TWIN(CTAS_WriteAffinity_Twin, EnableCsWriteAffinity) {
 
 ---
 
-## Этап 3: Прототип — поля в TKqpTableSinkSettings
+## Этап 3: Прототип — поля в TKqpTableSinkSettings ✅ ВЫПОЛНЕНО
 
 **Цель**: Добавить опциональные поля `TargetShardIds` и `ExpectedNodeId` в `TKqpTableSinkSettings`.
 
@@ -227,7 +227,11 @@ Y_UNIT_TEST_TWIN(CTAS_WriteAffinity_Twin, EnableCsWriteAffinity) {
 ```protobuf
 message TKqpTableSinkSettings {
     // ... поля 3..29 ...
+    // Target shard IDs for per-node shard affinity (CTAS with EnableCsWriteAffinity).
+    // When populated, the WriteActor will only write to the specified shards.
     repeated uint64 TargetShardIds = 30;
+    // Expected node ID for task scheduling affinity.
+    // When set, the task will be scheduled on the specified node.
     optional uint64 ExpectedNodeId = 31;
 }
 ```

@@ -8,6 +8,7 @@
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
+#include <ydb/core/tablet/resource_broker.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
@@ -81,6 +82,7 @@ struct TEnvironmentSetup {
         const bool StartFakeWilsonCollectors = false;
         const bool EnableChunkKeeper = true;
         const bool EnablePersistentPhantomFlagStorage = false;
+        const bool SetupResourceBroker = false;
     };
 
     const TSettings Settings;
@@ -627,6 +629,12 @@ config:
             }
             Runtime->RegisterService(NRetroTracing::MakeRetroCollectorId(),
                     Runtime->Register(CreateDistributedRetroCollector(), nodeId));
+            if (Settings.SetupResourceBroker) {
+                NKikimrResourceBroker::TResourceBrokerConfig brokerConfig = NResourceBroker::MakeDefaultConfig();
+                Runtime->RegisterService(NResourceBroker::MakeResourceBrokerID(),
+                    Runtime->Register(NResourceBroker::CreateResourceBrokerActor(
+                        brokerConfig, MakeIntrusive<::NMonitoring::TDynamicCounters>()), nodeId));
+            }
         }
     }
 

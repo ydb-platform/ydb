@@ -77,9 +77,6 @@ public:
         using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
         llvm::PointerType* StructPtrType_;
 
-    protected:
-        using TBase::Context;
-
     public:
         std::vector<llvm::Type*> GetFieldsArray() {
             std::vector<llvm::Type*> result = TBase::GetFields();
@@ -93,7 +90,7 @@ public:
         }
     };
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);

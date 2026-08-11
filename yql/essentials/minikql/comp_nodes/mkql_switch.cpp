@@ -9,9 +9,13 @@
 
 #include <util/string/cast.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
+#ifndef MKQL_DISABLE_CODEGEN
 using NYql::EnsureDynamicCast;
+#endif
 
 namespace {
 
@@ -54,7 +58,7 @@ private:
     const ui32 FieldsCount_ = 0;
 
 protected:
-    using TBase::Context;
+    using TBase::GetContext;
 
     ui32 GetFieldsCount() const {
         return FieldsCount_;
@@ -73,11 +77,11 @@ public:
     }
 
     llvm::Constant* GetIndex() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 0);
     }
 
     llvm::Constant* GetIsFinished() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 1);
     }
 
     explicit TLLVMFieldsStructureForState(llvm::LLVMContext& context)
@@ -173,19 +177,20 @@ public:
         , MemLimit_(memLimit)
         , Handlers_(std::move(handlers))
     {
-        for (ui32 handlerIndex = 0; handlerIndex < Handlers_.size(); ++handlerIndex) {
-            Handlers_[handlerIndex].Item->SetGetter([stateIndex = mutables.CurValueIndex - 1, handlerIndex, this](TComputationContext& context) {
+        for (const auto& handler : Handlers_) {
+            handler.Item->SetGetter([stateIndex = mutables.CurValueIndex - 1, handler = &handler, this](TComputationContext& context) {
                 NUdf::TUnboxedValue& state = context.MutableValues[stateIndex];
                 if (state.IsInvalid()) {
                     MakeState(context, state);
                 }
 
                 auto ptr = static_cast<TFlowState*>(state.AsBoxed().Get());
-                return ptr->Handler(Handlers_[handlerIndex], context);
+                return ptr->Handler(*handler, context);
             });
 
 #ifndef MKQL_DISABLE_CODEGEN
-            EnsureDynamicCast<ICodegeneratorExternalNode*>(Handlers_[handlerIndex].Item)->SetValueGetterBuilder([handlerIndex, this](const TCodegenContext& ctx) {
+            const auto handlerIndex = static_cast<ui32>(&handler - Handlers_.data());
+            EnsureDynamicCast<ICodegeneratorExternalNode*>(handler.Item)->SetValueGetterBuilder([handlerIndex, this](const TCodegenContext& ctx) {
                 return GenerateHandler(handlerIndex, ctx.Codegen);
             });
 #endif
@@ -270,7 +275,7 @@ private:
         llvm::IntegerType* IndexType_;
 
     protected:
-        using TBase::Context;
+        using TBase::GetContext;
 
     public:
         std::vector<llvm::Type*> GetFieldsArray() {
@@ -281,11 +286,11 @@ private:
         }
 
         llvm::Constant* GetPosition() const {
-            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+            return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 0);
         }
 
         llvm::Constant* GetBuffer() const {
-            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+            return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 1);
         }
 
         explicit TLLVMFieldsStructureForFlowState(llvm::LLVMContext& context)
@@ -308,7 +313,7 @@ private:
         }
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto funcType = FunctionType::get(valueType, {PointerType::getUnqual(GetCompContextType(context))}, false);
+        const auto funcType = FunctionType::get(valueType, {PointerType::getUnqual(GetCompContextType(context))}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -594,10 +599,10 @@ private:
     public:
         using TBase = TComputationValue<TChildStream>;
 
-        TChildStream(TMemoryUsageInfo* memInfo, const TSwitchHandler& handler,
+        TChildStream(TMemoryUsageInfo* memInfo, TSwitchHandler handler,
                      TComputationContext& ctx, const TPagedUnboxedValueList* buffer)
             : TBase(memInfo)
-            , Handler_(handler)
+            , Handler_(std::move(handler))
             , Ctx_(ctx)
             , Buffer_(buffer)
         {
@@ -821,9 +826,6 @@ private:
     private:
         using TBase = TLLVMFieldsStructureForState;
 
-    protected:
-        using TBase::Context;
-
     public:
         std::vector<llvm::Type*> GetFieldsArray() {
             std::vector<llvm::Type*> result = TBase::GetFields();
@@ -865,7 +867,7 @@ private:
         TLLVMFieldsStructureForValueBase fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, statePtrType, ptrValueType}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, statePtrType, ptrValueType}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());

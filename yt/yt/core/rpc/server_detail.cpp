@@ -158,11 +158,10 @@ void TServiceContextBase::ReplyEpilogue()
             TDispatcher::Get()->ShouldAlertOnMissingRequestInfo())
         {
             const auto& Logger = RpcServerLogger();
-            YT_LOG_ALERT("Missing request info (RequestId: %v, Method: %v.%v, State: %v)",
-                RequestId_,
-                RequestHeader_->service(),
-                RequestHeader_->method(),
-                RequestInfoState_);
+            YT_TLOG_ALERT("Missing request info")
+                .With("RequestId", RequestId_)
+                .WithFormat("Method", "%v.%v", RequestHeader_->service(), RequestHeader_->method())
+                .With("State", RequestInfoState_);
         }
     }
 
@@ -894,9 +893,9 @@ void TServerBase::RegisterService(IServicePtr service)
         DoRegisterService(service);
     }
 
-    YT_LOG_INFO("RPC service registered (ServiceName: %v, RealmId: %v)",
-        serviceId.ServiceName,
-        serviceId.RealmId);
+    YT_TLOG_INFO("RPC service registered")
+        .With("ServiceName", serviceId.ServiceName)
+        .With("RealmId", serviceId.RealmId);
 }
 
 bool TServerBase::UnregisterService(IServicePtr service)
@@ -925,9 +924,9 @@ bool TServerBase::UnregisterService(IServicePtr service)
         DoUnregisterService(service);
     }
 
-    YT_LOG_INFO("RPC service unregistered (ServiceName: %v, RealmId: %v)",
-        serviceId.ServiceName,
-        serviceId.RealmId);
+    YT_TLOG_INFO("RPC service unregistered")
+        .With("ServiceName", serviceId.ServiceName)
+        .With("RealmId", serviceId.RealmId);
     return true;
 }
 
@@ -1039,7 +1038,7 @@ void TServerBase::Start()
 
     DoStart();
 
-    YT_LOG_INFO("RPC server started");
+    YT_TLOG_INFO("RPC server started");
 }
 
 TFuture<void> TServerBase::Stop(bool graceful)
@@ -1048,11 +1047,11 @@ TFuture<void> TServerBase::Stop(bool graceful)
         return OKFuture;
     }
 
-    YT_LOG_INFO("Stopping RPC server (Graceful: %v)",
-        graceful);
+    YT_TLOG_INFO("Stopping RPC server")
+        .With("Graceful", graceful);
 
     return DoStop(graceful).Apply(BIND([this, this_ = MakeStrong(this)] {
-        YT_LOG_INFO("RPC server stopped");
+        YT_TLOG_INFO("RPC server stopped");
     }));
 }
 

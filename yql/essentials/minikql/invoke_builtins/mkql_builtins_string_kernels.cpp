@@ -1,8 +1,7 @@
 #include "mkql_builtins_string_kernels.h"
 #include "mkql_builtins_impl.h" // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -562,5 +561,4 @@ void RegisterWith(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["StringContains"] = std::move(family);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

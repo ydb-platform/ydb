@@ -1028,6 +1028,13 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockVariantItem(blockVariantValue);
     });
 
+    AddCallable("BlockDynamicVariant", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto varType = ctx.BuildType(*node.Child(2), *node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+        const auto item = MkqlBuildExpr(node.Head(), ctx);
+        const auto index = MkqlBuildExpr(*node.Child(1), ctx);
+        return ctx.ProgramBuilder.BlockDynamicVariant(item, index, varType);
+    });
+
     AddCallable("Visit", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto variantObj = MkqlBuildExpr(node.Head(), ctx);
         const auto type = node.Head().GetTypeAnn()->Cast<TVariantExprType>();

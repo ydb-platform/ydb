@@ -6,9 +6,13 @@
 
 #include <util/string/cast.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
+#ifndef MKQL_DISABLE_CODEGEN
 using NYql::EnsureDynamicCast;
+#endif
 
 namespace {
 
@@ -43,7 +47,7 @@ public:
         return NewItems_[pos]->GetValue(ctx).Release();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
@@ -115,12 +119,12 @@ private:
     public:
         class TIterator: public TComputationValue<TIterator> {
         public:
-            TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, const TComputationNodePtrVector& newItems)
+            TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, TComputationNodePtrVector newItems)
                 : TComputationValue<TIterator>(memInfo)
                 , CompCtx_(compCtx)
                 , Iter_(std::move(iter))
                 , Item_(item)
-                , NewItems_(newItems)
+                , NewItems_(std::move(newItems))
             {
             }
 
@@ -148,12 +152,12 @@ private:
             size_t Position_ = 0U;
         };
 
-        TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, IComputationExternalNode* item, const TComputationNodePtrVector& newItems)
+        TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, IComputationExternalNode* item, TComputationNodePtrVector newItems)
             : TCustomListValue(memInfo)
             , CompCtx_(compCtx)
             , List_(std::move(list))
             , Item_(item)
-            , NewItems_(newItems)
+            , NewItems_(std::move(newItems))
         {
         }
 
@@ -223,7 +227,7 @@ public:
         return ctx.HolderFactory.Create<TCodegenValue>(Map_, &ctx, value);
     }
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
@@ -341,7 +345,7 @@ private:
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt1Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(positionType), PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(positionType), PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -360,7 +364,7 @@ private:
 
         const auto container = static_cast<Value*>(containerArg);
 
-        const auto position = new LoadInst(positionType, positionArg, "position", false, block);
+        const auto position = new LoadInst(positionType, positionArg, "position", /*isVolatile=*/false, block);
 
         const auto zero = BasicBlock::Create(context, "zero", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -456,7 +460,7 @@ public:
         return NewItems_[pos]->GetValue(ctx).Release();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);

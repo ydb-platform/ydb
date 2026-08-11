@@ -5,6 +5,8 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
+#include <array>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -34,7 +36,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
+    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
@@ -65,8 +67,8 @@ public:
 
         block = emb;
 
-        const uint64_t init[] = {0xFFFFFFFFFFFFFFFFULL, 0x3FFFFFFFFFFFFFFULL};
-        const auto mask = ConstantInt::get(valueType, APInt(128, 2, init));
+        const std::array<uint64_t, 2> init = {0xFFFFFFFFFFFFFFFFULL, 0x3FFFFFFFFFFFFFFULL};
+        const auto mask = ConstantInt::get(valueType, APInt(128, init));
         const auto clean = BinaryOperator::CreateAnd(var, mask, "clean", block);
         if constexpr (IsOptional) {
             new StoreInst(MakeOptional(context, clean, block), pointer, block);

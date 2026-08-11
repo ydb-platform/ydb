@@ -21,8 +21,9 @@ public:
     }
 
     void Add(const void* state) final {
-        auto typedState = static_cast<const TState*>(state);
-        Builder_.Add(TBlockItem(typedState->Count));
+        static_assert(std::is_trivially_copyable<TState>::value);
+        const auto stateValue = ReadUnaligned<TState>(state);
+        Builder_.Add(TBlockItem(stateValue.Count));
     }
 
     NUdf::TUnboxedValue Build() final {
@@ -88,8 +89,10 @@ public:
     }
 
     void InitKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
-        new (state) TState();
-        UpdateKey(state, batchNum, columns, row);
+        TState stateToReturn;
+        UpdateKey(&stateToReturn, batchNum, columns, row);
+        static_assert(std::is_trivially_copyable<TState>::value);
+        WriteUnaligned<TState>(state, stateToReturn);
     }
 
     void DestroyState(void* state) noexcept final {
@@ -101,8 +104,10 @@ public:
         Y_UNUSED(batchNum);
         Y_UNUSED(columns);
         Y_UNUSED(row);
-        auto typedState = static_cast<TState*>(state);
-        typedState->Count += 1;
+        static_assert(std::is_trivially_copyable<TState>::value);
+        auto stateValue = ReadUnaligned<TState>(state);
+        stateValue.Count += 1;
+        WriteUnaligned<TState>(state, stateValue);
     }
 
     std::unique_ptr<IAggColumnBuilder> MakeStateBuilder(ui64 size) final {
@@ -122,8 +127,10 @@ public:
     }
 
     void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
-        new (state) TState();
-        UpdateState(state, batchNum, columns, row);
+        TState stateToReturn;
+        UpdateState(&stateToReturn, batchNum, columns, row);
+        static_assert(std::is_trivially_copyable<TState>::value);
+        WriteUnaligned<TState>(state, stateToReturn);
     }
 
     void DestroyState(void* state) noexcept final {

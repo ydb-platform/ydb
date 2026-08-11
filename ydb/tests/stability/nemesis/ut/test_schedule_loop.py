@@ -66,7 +66,12 @@ def _schedule(guard, probe, dispatched, store) -> OrchestratorNemesisSchedule:
         failure_guard=guard,
         recovery_probe=probe,
     )
-    sched.dispatch_command = lambda cmd, track_history: dispatched.append(cmd)
+
+    def _fake_dispatch(cmd, track_history):
+        dispatched.append(cmd)
+        return True
+
+    sched.dispatch_command = _fake_dispatch
     return sched
 
 

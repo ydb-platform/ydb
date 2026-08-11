@@ -33,6 +33,24 @@
       "documentation":"<p>Registers the Amazon Web Services Marketplace token for your Amazon Web Services account to activate your Oracle Database@Amazon Web Services subscription.</p>",
       "idempotent":true
     },
+    "AssociateIamRoleToResource":{
+      "name":"AssociateIamRoleToResource",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"AssociateIamRoleToResourceInput"},
+      "output":{"shape":"AssociateIamRoleToResourceOutput"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Associates an Amazon Web Services Identity and Access Management (IAM) service role with a specified resource to enable Amazon Web Services service integration.</p>"
+    },
     "CreateCloudAutonomousVmCluster":{
       "name":"CreateCloudAutonomousVmCluster",
       "http":{
@@ -127,7 +145,7 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Creates a peering connection between an ODB network and either another ODB network or a customer-owned VPC.</p> <p>A peering connection enables private connectivity between the networks for application-tier communication.</p>",
+      "documentation":"<p>Creates a peering connection between an ODB network and a VPC.</p> <p>A peering connection enables private connectivity between the networks for application-tier communication.</p>",
       "idempotent":true
     },
     "DeleteCloudAutonomousVmCluster":{
@@ -221,6 +239,24 @@
       "documentation":"<p>Deletes an ODB peering connection.</p> <p>When you delete an ODB peering connection, the underlying VPC peering connection is also deleted.</p>",
       "idempotent":true
     },
+    "DisassociateIamRoleFromResource":{
+      "name":"DisassociateIamRoleFromResource",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DisassociateIamRoleFromResourceInput"},
+      "output":{"shape":"DisassociateIamRoleFromResourceOutput"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Disassociates an Amazon Web Services Identity and Access Management (IAM) service role from a specified resource to disable Amazon Web Services service integration.</p>"
+    },
     "GetCloudAutonomousVmCluster":{
       "name":"GetCloudAutonomousVmCluster",
       "http":{
@@ -236,7 +272,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Gets information about a specific Autonomous VM cluster.</p>"
+      "documentation":"<p>Gets information about a specific Autonomous VM cluster.</p>",
+      "readonly":true
     },
     "GetCloudExadataInfrastructure":{
       "name":"GetCloudExadataInfrastructure",
@@ -253,7 +290,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about the specified Exadata infrastructure.</p>"
+      "documentation":"<p>Returns information about the specified Exadata infrastructure.</p>",
+      "readonly":true
     },
     "GetCloudExadataInfrastructureUnallocatedResources":{
       "name":"GetCloudExadataInfrastructureUnallocatedResources",
@@ -270,7 +308,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Retrieves information about unallocated resources in a specified Cloud Exadata Infrastructure.</p>"
+      "documentation":"<p>Retrieves information about unallocated resources in a specified Cloud Exadata Infrastructure.</p>",
+      "readonly":true
     },
     "GetCloudVmCluster":{
       "name":"GetCloudVmCluster",
@@ -287,7 +326,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about the specified VM cluster.</p>"
+      "documentation":"<p>Returns information about the specified VM cluster.</p>",
+      "readonly":true
     },
     "GetDbNode":{
       "name":"GetDbNode",
@@ -304,7 +344,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about the specified DB node.</p>"
+      "documentation":"<p>Returns information about the specified DB node.</p>",
+      "readonly":true
     },
     "GetDbServer":{
       "name":"GetDbServer",
@@ -321,7 +362,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about the specified database server.</p>"
+      "documentation":"<p>Returns information about the specified database server.</p>",
+      "readonly":true
     },
     "GetOciOnboardingStatus":{
       "name":"GetOciOnboardingStatus",
@@ -337,7 +379,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Returns the tenancy activation link and onboarding status for your Amazon Web Services account.</p>"
+      "documentation":"<p>Returns the tenancy activation link and onboarding status for your Amazon Web Services account.</p>",
+      "readonly":true
     },
     "GetOdbNetwork":{
       "name":"GetOdbNetwork",
@@ -354,7 +397,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about the specified ODB network.</p>"
+      "documentation":"<p>Returns information about the specified ODB network.</p>",
+      "readonly":true
     },
     "GetOdbPeeringConnection":{
       "name":"GetOdbPeeringConnection",
@@ -371,7 +415,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Retrieves information about an ODB peering connection.</p>"
+      "documentation":"<p>Retrieves information about an ODB peering connection.</p>",
+      "readonly":true
     },
     "InitializeService":{
       "name":"InitializeService",
@@ -405,7 +450,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Lists all Autonomous VMs in an Autonomous VM cluster.</p>"
+      "documentation":"<p>Lists all Autonomous VMs in an Autonomous VM cluster.</p>",
+      "readonly":true
     },
     "ListCloudAutonomousVmClusters":{
       "name":"ListCloudAutonomousVmClusters",
@@ -422,7 +468,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Lists all Autonomous VM clusters in a specified Cloud Exadata infrastructure.</p>"
+      "documentation":"<p>Lists all Autonomous VM clusters in a specified Cloud Exadata infrastructure.</p>",
+      "readonly":true
     },
     "ListCloudExadataInfrastructures":{
       "name":"ListCloudExadataInfrastructures",
@@ -438,7 +485,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Returns information about the Exadata infrastructures owned by your Amazon Web Services account.</p>"
+      "documentation":"<p>Returns information about the Exadata infrastructures owned by your Amazon Web Services account.</p>",
+      "readonly":true
     },
     "ListCloudVmClusters":{
       "name":"ListCloudVmClusters",
@@ -455,7 +503,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about the VM clusters owned by your Amazon Web Services account or only the ones on the specified Exadata infrastructure.</p>"
+      "documentation":"<p>Returns information about the VM clusters owned by your Amazon Web Services account or only the ones on the specified Exadata infrastructure.</p>",
+      "readonly":true
     },
     "ListDbNodes":{
       "name":"ListDbNodes",
@@ -472,7 +521,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about the DB nodes for the specified VM cluster.</p>"
+      "documentation":"<p>Returns information about the DB nodes for the specified VM cluster.</p>",
+      "readonly":true
     },
     "ListDbServers":{
       "name":"ListDbServers",
@@ -489,7 +539,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about the database servers that belong to the specified Exadata infrastructure.</p>"
+      "documentation":"<p>Returns information about the database servers that belong to the specified Exadata infrastructure.</p>",
+      "readonly":true
     },
     "ListDbSystemShapes":{
       "name":"ListDbSystemShapes",
@@ -505,7 +556,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Returns information about the shapes that are available for an Exadata infrastructure.</p>"
+      "documentation":"<p>Returns information about the shapes that are available for an Exadata infrastructure.</p>",
+      "readonly":true
     },
     "ListGiVersions":{
       "name":"ListGiVersions",
@@ -521,7 +573,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Returns information about Oracle Grid Infrastructure (GI) software versions that are available for a VM cluster for the specified shape.</p>"
+      "documentation":"<p>Returns information about Oracle Grid Infrastructure (GI) software versions that are available for a VM cluster for the specified shape.</p>",
+      "readonly":true
     },
     "ListOdbNetworks":{
       "name":"ListOdbNetworks",
@@ -537,7 +590,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Returns information about the ODB networks owned by your Amazon Web Services account.</p>"
+      "documentation":"<p>Returns information about the ODB networks owned by your Amazon Web Services account.</p>",
+      "readonly":true
     },
     "ListOdbPeeringConnections":{
       "name":"ListOdbPeeringConnections",
@@ -554,7 +608,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Lists all ODB peering connections or those associated with a specific ODB network.</p>"
+      "documentation":"<p>Lists all ODB peering connections or those associated with a specific ODB network.</p>",
+      "readonly":true
     },
     "ListSystemVersions":{
       "name":"ListSystemVersions",
@@ -571,7 +626,8 @@
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about the system versions that are available for a VM cluster for the specified <code>giVersion</code> and <code>shape</code>.</p>"
+      "documentation":"<p>Returns information about the system versions that are available for a VM cluster for the specified <code>giVersion</code> and <code>shape</code>.</p>",
+      "readonly":true
     },
     "ListTagsForResource":{
       "name":"ListTagsForResource",
@@ -584,7 +640,8 @@
       "errors":[
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Returns information about the tags applied to this resource.</p>"
+      "documentation":"<p>Returns information about the tags applied to this resource.</p>",
+      "readonly":true
     },
     "RebootDbNode":{
       "name":"RebootDbNode",
@@ -701,6 +758,24 @@
         {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Updates properties of a specified ODB network.</p>"
+    },
+    "UpdateOdbPeeringConnection":{
+      "name":"UpdateOdbPeeringConnection",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"UpdateOdbPeeringConnectionInput"},
+      "output":{"shape":"UpdateOdbPeeringConnectionOutput"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Modifies the settings of an Oracle Database@Amazon Web Services peering connection. You can update the display name and add or remove CIDR blocks from the peering connection.</p>"
     }
   },
   "shapes":{
@@ -733,6 +808,38 @@
       },
       "documentation":"<p>You don't have sufficient access to perform this action. Make sure you have the required permissions and try again.</p>",
       "exception":true
+    },
+    "AssociateIamRoleToResourceInput":{
+      "type":"structure",
+      "required":[
+        "iamRoleArn",
+        "awsIntegration",
+        "resourceArn"
+      ],
+      "members":{
+        "iamRoleArn":{
+          "shape":"RoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM service role to associate with the resource.</p>"
+        },
+        "awsIntegration":{
+          "shape":"SupportedAwsIntegration",
+          "documentation":"<p>The Amazon Web Services integration configuration settings for the IAM service role association.</p>"
+        },
+        "resourceArn":{
+          "shape":"AssociateIamRoleToResourceInputResourceArnString",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the target resource to associate with the IAM service role.</p>"
+        }
+      }
+    },
+    "AssociateIamRoleToResourceInputResourceArnString":{
+      "type":"string",
+      "max":2048,
+      "min":20,
+      "pattern":"arn:(?:aws|aws-cn|aws-us-gov|aws-iso-[a-z]?|aws-iso):odb:[a-z0-9-]+:\\d{12}:cloud-vm-cluster/[a-z0-9-_]+"
+    },
+    "AssociateIamRoleToResourceOutput":{
+      "type":"structure",
+      "members":{}
     },
     "AutonomousVirtualMachineList":{
       "type":"list",
@@ -922,7 +1029,7 @@
         },
         "licenseModel":{
           "shape":"LicenseModel",
-          "documentation":"<p>The Oracle license model that applies to the Autonomous VM cluster. Valid values are <code>LICENSE_INCLUDED</code> or <code>BRING_YOUR_OWN_LICENSE</code>.</p>"
+          "documentation":"<p>The Oracle license model that applies to the Autonomous VM cluster.</p>"
         },
         "maintenanceWindow":{
           "shape":"MaintenanceWindow",
@@ -1747,6 +1854,10 @@
         "computeModel":{
           "shape":"ComputeModel",
           "documentation":"<p>The OCI model compute model used when you create or clone an instance: ECPU or OCPU. An ECPU is an abstracted measure of compute resources. ECPUs are based on the number of cores elastically allocated from a pool of compute and storage servers. An OCPU is a legacy physical measure of compute resources. OCPUs are based on the physical core of a processor with hyper-threading enabled. </p>"
+        },
+        "iamRoles":{
+          "shape":"IamRoleList",
+          "documentation":"<p>The Amazon Web Services Identity and Access Management (IAM) service roles associated with the VM cluster.</p>"
         }
       },
       "documentation":"<p>Information about a VM cluster.</p>"
@@ -1912,6 +2023,10 @@
         "computeModel":{
           "shape":"ComputeModel",
           "documentation":"<p>The OCI model compute model used when you create or clone an instance: ECPU or OCPU. An ECPU is an abstracted measure of compute resources. ECPUs are based on the number of cores elastically allocated from a pool of compute and storage servers. An OCPU is a legacy physical measure of compute resources. OCPUs are based on the physical core of a processor with hyper-threading enabled. </p>"
+        },
+        "iamRoles":{
+          "shape":"IamRoleList",
+          "documentation":"<p>The Amazon Web Services Identity and Access Management (IAM) service roles associated with the VM cluster in the summary information.</p>"
         }
       },
       "documentation":"<p>Information about a VM cluster.</p>"
@@ -2327,7 +2442,7 @@
     "CreateCloudVmClusterInputCpuCoreCountInteger":{
       "type":"integer",
       "box":true,
-      "max":368,
+      "max":10000,
       "min":0
     },
     "CreateCloudVmClusterInputGiVersionString":{
@@ -2427,9 +2542,29 @@
           "shape":"Access",
           "documentation":"<p>Specifies the configuration for Zero-ETL access from the ODB network.</p>"
         },
+        "stsAccess":{
+          "shape":"Access",
+          "documentation":"<p>The Amazon Web Services Security Token Service (STS) access configuration for the ODB network.</p>"
+        },
+        "kmsAccess":{
+          "shape":"Access",
+          "documentation":"<p>The Amazon Web Services Key Management Service (KMS) access configuration for the ODB network.</p>"
+        },
         "s3PolicyDocument":{
           "shape":"PolicyDocument",
           "documentation":"<p>Specifies the endpoint policy for Amazon S3 access from the ODB network.</p>"
+        },
+        "stsPolicyDocument":{
+          "shape":"PolicyDocument",
+          "documentation":"<p>The STS policy document that defines permissions for token service usage within the ODB network.</p>"
+        },
+        "kmsPolicyDocument":{
+          "shape":"PolicyDocument",
+          "documentation":"<p>The KMS policy document that defines permissions for key usage within the ODB network.</p>"
+        },
+        "crossRegionS3RestoreSourcesToEnable":{
+          "shape":"StringList",
+          "documentation":"<p>The cross-Region Amazon S3 restore sources to enable for the ODB network.</p>"
         },
         "tags":{
           "shape":"RequestTagMap",
@@ -2515,6 +2650,10 @@
           "shape":"ResourceDisplayName",
           "documentation":"<p>The display name for the ODB peering connection.</p>"
         },
+        "peerNetworkCidrsToBeAdded":{
+          "shape":"PeeredCidrList",
+          "documentation":"<p>A list of CIDR blocks to add to the peering connection. These CIDR blocks define the IP address ranges that can communicate through the peering connection.</p>"
+        },
         "clientToken":{
           "shape":"CreateOdbPeeringConnectionInputClientTokenString",
           "documentation":"<p>The client token for the ODB peering connection request.</p> <p>Constraints:</p> <ul> <li> <p>Must be unique for each request.</p> </li> </ul>",
@@ -2542,7 +2681,7 @@
         },
         "status":{
           "shape":"ResourceStatus",
-          "documentation":"<p>The status of the ODB peering connection.</p> <p>Valid Values: <code>provisioning | active | terminating | terminated | failed</code> </p>"
+          "documentation":"<p>The status of the ODB peering connection.</p>"
         },
         "statusReason":{
           "shape":"String",
@@ -2553,6 +2692,28 @@
           "documentation":"<p>The unique identifier of the ODB peering connection.</p>"
         }
       }
+    },
+    "CrossRegionS3RestoreSourcesAccess":{
+      "type":"structure",
+      "members":{
+        "region":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Web Services Region for cross-Region S3 restore access.</p>"
+        },
+        "ipv4Addresses":{
+          "shape":"StringList",
+          "documentation":"<p>The IPv4 addresses allowed for cross-Region S3 restore access.</p>"
+        },
+        "status":{
+          "shape":"ManagedResourceStatus",
+          "documentation":"<p>The current status of the cross-Region S3 restore access configuration.</p>"
+        }
+      },
+      "documentation":"<p>The configuration access for the cross-Region Amazon S3 database restore source for the ODB network.</p>"
+    },
+    "CrossRegionS3RestoreSourcesAccessList":{
+      "type":"list",
+      "member":{"shape":"CrossRegionS3RestoreSourcesAccess"}
     },
     "CustomerContact":{
       "type":"structure",
@@ -3277,6 +3438,38 @@
       "type":"structure",
       "members":{}
     },
+    "DisassociateIamRoleFromResourceInput":{
+      "type":"structure",
+      "required":[
+        "iamRoleArn",
+        "awsIntegration",
+        "resourceArn"
+      ],
+      "members":{
+        "iamRoleArn":{
+          "shape":"RoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM service role to disassociate from the resource.</p>"
+        },
+        "awsIntegration":{
+          "shape":"SupportedAwsIntegration",
+          "documentation":"<p>The Amazon Web Services integration configuration settings for the IAM service role disassociation.</p>"
+        },
+        "resourceArn":{
+          "shape":"DisassociateIamRoleFromResourceInputResourceArnString",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the target resource to disassociate from the IAM service role.</p>"
+        }
+      }
+    },
+    "DisassociateIamRoleFromResourceInputResourceArnString":{
+      "type":"string",
+      "max":2048,
+      "min":20,
+      "pattern":"arn:(?:aws|aws-cn|aws-us-gov|aws-iso-[a-z]?|aws-iso):odb:[a-z0-9-]+:\\d{12}:cloud-vm-cluster/[a-z0-9-_]+"
+    },
+    "DisassociateIamRoleFromResourceOutput":{
+      "type":"structure",
+      "members":{}
+    },
     "DiskRedundancy":{
       "type":"string",
       "enum":[
@@ -3458,6 +3651,10 @@
         "newTenancyActivationLink":{
           "shape":"String",
           "documentation":"<p>A new OCI tenancy activation link for your Amazon Web Services account.</p>"
+        },
+        "ociIdentityDomain":{
+          "shape":"OciIdentityDomain",
+          "documentation":"<p>The Oracle Cloud Infrastructure (OCI) identity domain information in the onboarding status response.</p>"
         }
       }
     },
@@ -3514,9 +3711,52 @@
       "type":"list",
       "member":{"shape":"Integer"}
     },
+    "IamRole":{
+      "type":"structure",
+      "members":{
+        "iamRoleArn":{
+          "shape":"RoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM service role.</p>"
+        },
+        "status":{
+          "shape":"IamRoleStatus",
+          "documentation":"<p>The current status of the IAM service role.</p>"
+        },
+        "statusReason":{
+          "shape":"String",
+          "documentation":"<p>Additional information about the current status of the IAM service role, if applicable.</p>"
+        },
+        "awsIntegration":{
+          "shape":"SupportedAwsIntegration",
+          "documentation":"<p>The Amazon Web Services integration configuration settings for the IAM service role.</p>"
+        }
+      },
+      "documentation":"<p>Information about an Amazon Web Services Identity and Access Management (IAM) service role associated with a resource.</p>"
+    },
+    "IamRoleList":{
+      "type":"list",
+      "member":{"shape":"IamRole"}
+    },
+    "IamRoleStatus":{
+      "type":"string",
+      "enum":[
+        "ASSOCIATING",
+        "DISASSOCIATING",
+        "FAILED",
+        "CONNECTED",
+        "DISCONNECTED",
+        "PARTIALLY_CONNECTED",
+        "UNKNOWN"
+      ]
+    },
     "InitializeServiceInput":{
       "type":"structure",
-      "members":{}
+      "members":{
+        "ociIdentityDomain":{
+          "shape":"Boolean",
+          "documentation":"<p>The Oracle Cloud Infrastructure (OCI) identity domain configuration for service initialization.</p>"
+        }
+      }
     },
     "InitializeServiceOutput":{
       "type":"structure",
@@ -3550,6 +3790,28 @@
         "FAILED",
         "UPDATING"
       ]
+    },
+    "KmsAccess":{
+      "type":"structure",
+      "members":{
+        "status":{
+          "shape":"ManagedResourceStatus",
+          "documentation":"<p>The current status of the KMS access configuration.</p>"
+        },
+        "ipv4Addresses":{
+          "shape":"StringList",
+          "documentation":"<p>The IPv4 addresses allowed for KMS access.</p>"
+        },
+        "domainName":{
+          "shape":"String",
+          "documentation":"<p>The domain name for KMS access configuration.</p>"
+        },
+        "kmsPolicyDocument":{
+          "shape":"String",
+          "documentation":"<p>The KMS policy document that defines permissions for key usage.</p>"
+        }
+      },
+      "documentation":"<p>Configuration for Amazon Web Services Key Management Service (KMS) access from the ODB network.</p>"
     },
     "LicenseModel":{
       "type":"string",
@@ -4143,7 +4405,7 @@
       "members":{
         "status":{
           "shape":"ManagedResourceStatus",
-          "documentation":"<p>The status of the managed Amazon S3 backup access.</p> <p>Valid Values: <code>enabled | disabled</code> </p>"
+          "documentation":"<p>The status of the managed Amazon S3 backup access.</p>"
         },
         "ipv4Addresses":{
           "shape":"StringList",
@@ -4182,6 +4444,18 @@
         "s3Access":{
           "shape":"S3Access",
           "documentation":"<p>The Amazon S3 access configuration.</p>"
+        },
+        "stsAccess":{
+          "shape":"StsAccess",
+          "documentation":"<p>The Amazon Web Services Security Token Service (STS) access configuration for managed services.</p>"
+        },
+        "kmsAccess":{
+          "shape":"KmsAccess",
+          "documentation":"<p>The Amazon Web Services Key Management Service (KMS) access configuration for managed services.</p>"
+        },
+        "crossRegionS3RestoreSourcesAccess":{
+          "shape":"CrossRegionS3RestoreSourcesAccessList",
+          "documentation":"<p>The access configuration for the cross-Region Amazon S3 database restore source.</p>"
         }
       },
       "documentation":"<p>The managed services configuration for the ODB network.</p>"
@@ -4249,6 +4523,36 @@
     "OciDnsForwardingConfigList":{
       "type":"list",
       "member":{"shape":"OciDnsForwardingConfig"}
+    },
+    "OciIdentityDomain":{
+      "type":"structure",
+      "members":{
+        "ociIdentityDomainId":{
+          "shape":"String",
+          "documentation":"<p>The unique identifier of the OCI identity domain.</p>"
+        },
+        "ociIdentityDomainResourceUrl":{
+          "shape":"String",
+          "documentation":"<p>The resource URL for accessing the OCI identity domain.</p>"
+        },
+        "ociIdentityDomainUrl":{
+          "shape":"String",
+          "documentation":"<p>The URL of the OCI identity domain.</p>"
+        },
+        "status":{
+          "shape":"ResourceStatus",
+          "documentation":"<p>The current status of the OCI identity domain.</p>"
+        },
+        "statusReason":{
+          "shape":"String",
+          "documentation":"<p>Additional information about the current status of the OCI identity domain, if applicable.</p>"
+        },
+        "accountSetupCloudFormationUrl":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Web Services CloudFormation URL for setting up the account integration with the OCI identity domain.</p>"
+        }
+      },
+      "documentation":"<p>Information about an Oracle Cloud Infrastructure (OCI) identity domain configuration.</p>"
     },
     "OciOnboardingStatus":{
       "type":"string",
@@ -4548,7 +4852,7 @@
         },
         "status":{
           "shape":"ResourceStatus",
-          "documentation":"<p>The status of the ODB peering connection.</p> <p>Valid Values: <code>provisioning | active | terminating | terminated | failed</code> </p>"
+          "documentation":"<p>The status of the ODB peering connection.</p>"
         },
         "statusReason":{
           "shape":"String",
@@ -4569,6 +4873,10 @@
         "odbPeeringConnectionType":{
           "shape":"String",
           "documentation":"<p>The type of the ODB peering connection.</p> <p>Valid Values: <code>ODB-VPC | ODB-ODB</code> </p>"
+        },
+        "peerNetworkCidrs":{
+          "shape":"PeeredCidrList",
+          "documentation":"<p>The CIDR blocks associated with the peering connection. These CIDR blocks define the IP address ranges that can communicate through the peering connection.</p>"
         },
         "createdAt":{
           "shape":"SyntheticTimestamp_date_time",
@@ -4599,7 +4907,7 @@
         },
         "status":{
           "shape":"ResourceStatus",
-          "documentation":"<p>The status of the ODB peering connection.</p> <p>Valid Values: <code>provisioning | active | terminating | terminated | failed</code> </p>"
+          "documentation":"<p>The status of the ODB peering connection.</p>"
         },
         "statusReason":{
           "shape":"String",
@@ -4621,6 +4929,10 @@
           "shape":"String",
           "documentation":"<p>The type of the ODB peering connection.</p> <p>Valid Values: <code>ODB-VPC | ODB-ODB</code> </p>"
         },
+        "peerNetworkCidrs":{
+          "shape":"PeeredCidrList",
+          "documentation":"<p>The CIDR blocks associated with the peering connection. These CIDR blocks define the IP address ranges that can communicate through the peering connection.</p>"
+        },
         "createdAt":{
           "shape":"SyntheticTimestamp_date_time",
           "documentation":"<p>The timestamp when the ODB peering connection was created.</p>"
@@ -4638,6 +4950,16 @@
         "ROLLING",
         "NONROLLING"
       ]
+    },
+    "PeeredCidr":{
+      "type":"string",
+      "max":18,
+      "min":1,
+      "pattern":"(?:(?:\\d|[01]?\\d\\d|2[0-4]\\d|25[0-5])\\.){3}(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d|\\d)\\/(?:[1-2][0-9]|3[0-2]|[1-9])"
+    },
+    "PeeredCidrList":{
+      "type":"list",
+      "member":{"shape":"PeeredCidr"}
     },
     "PolicyDocument":{
       "type":"string",
@@ -4757,12 +5079,18 @@
       "max":200,
       "min":0
     },
+    "RoleArn":{
+      "type":"string",
+      "max":2048,
+      "min":20,
+      "pattern":"arn:(?:aws|aws-cn|aws-us-gov|aws-iso-{0,1}[a-z]{0,1}):iam::[0-9]{12}:role/.+"
+    },
     "S3Access":{
       "type":"structure",
       "members":{
         "status":{
           "shape":"ManagedResourceStatus",
-          "documentation":"<p>The status of the Amazon S3 access.</p> <p>Valid Values: <code>enabled | disabled</code> </p>"
+          "documentation":"<p>The status of the Amazon S3 access.</p>"
         },
         "ipv4Addresses":{
           "shape":"StringList",
@@ -4796,7 +5124,7 @@
         },
         "vpcEndpointType":{
           "shape":"VpcEndpointType",
-          "documentation":"<p>The type of the VPC endpoint.</p> <p>Valid Values: <code>Interface | Gateway</code> </p>"
+          "documentation":"<p>The type of the VPC endpoint.</p>"
         }
       },
       "documentation":"<p>The configuration for a service network endpoint.</p>"
@@ -4912,6 +5240,32 @@
       "member":{"shape":"String"},
       "max":1024,
       "min":1
+    },
+    "StsAccess":{
+      "type":"structure",
+      "members":{
+        "status":{
+          "shape":"ManagedResourceStatus",
+          "documentation":"<p>The current status of the STS access configuration.</p>"
+        },
+        "ipv4Addresses":{
+          "shape":"StringList",
+          "documentation":"<p>The IPv4 addresses allowed for STS access.</p>"
+        },
+        "domainName":{
+          "shape":"String",
+          "documentation":"<p>The domain name for STS access configuration.</p>"
+        },
+        "stsPolicyDocument":{
+          "shape":"String",
+          "documentation":"<p>The STS policy document that defines permissions for token service usage.</p>"
+        }
+      },
+      "documentation":"<p>Configuration for Amazon Web Services Security Token Service (STS) access from the ODB network.</p>"
+    },
+    "SupportedAwsIntegration":{
+      "type":"string",
+      "enum":["KmsTde"]
     },
     "SyntheticTimestamp_date_time":{
       "type":"timestamp",
@@ -5071,9 +5425,33 @@
           "shape":"Access",
           "documentation":"<p>Specifies the updated configuration for Zero-ETL access from the ODB network.</p>"
         },
+        "stsAccess":{
+          "shape":"Access",
+          "documentation":"<p>The Amazon Web Services Security Token Service (STS) access configuration for the ODB network.</p>"
+        },
+        "kmsAccess":{
+          "shape":"Access",
+          "documentation":"<p>The Amazon Web Services Key Management Service (KMS) access configuration for the ODB network.</p>"
+        },
         "s3PolicyDocument":{
           "shape":"PolicyDocument",
           "documentation":"<p>Specifies the updated endpoint policy for Amazon S3 access from the ODB network.</p>"
+        },
+        "stsPolicyDocument":{
+          "shape":"PolicyDocument",
+          "documentation":"<p>The STS policy document that defines permissions for token service usage within the ODB network.</p>"
+        },
+        "kmsPolicyDocument":{
+          "shape":"PolicyDocument",
+          "documentation":"<p>The KMS policy document that defines permissions for key usage within the ODB network.</p>"
+        },
+        "crossRegionS3RestoreSourcesToEnable":{
+          "shape":"StringList",
+          "documentation":"<p>The cross-Region Amazon S3 restore sources to enable for the ODB network.</p>"
+        },
+        "crossRegionS3RestoreSourcesToDisable":{
+          "shape":"StringList",
+          "documentation":"<p>The cross-Region Amazon S3 restore sources to disable for the ODB network.</p>"
         }
       }
     },
@@ -5096,6 +5474,50 @@
         "odbNetworkId":{
           "shape":"String",
           "documentation":"<p>The unique identifier of the ODB network.</p>"
+        }
+      }
+    },
+    "UpdateOdbPeeringConnectionInput":{
+      "type":"structure",
+      "required":["odbPeeringConnectionId"],
+      "members":{
+        "odbPeeringConnectionId":{
+          "shape":"ResourceIdOrArn",
+          "documentation":"<p>The identifier of the Oracle Database@Amazon Web Services peering connection to update.</p>"
+        },
+        "displayName":{
+          "shape":"ResourceDisplayName",
+          "documentation":"<p>A new display name for the peering connection.</p>"
+        },
+        "peerNetworkCidrsToBeAdded":{
+          "shape":"PeeredCidrList",
+          "documentation":"<p>A list of CIDR blocks to add to the peering connection. These CIDR blocks define the IP address ranges that can communicate through the peering connection. The CIDR blocks must not overlap with existing CIDR blocks in the Oracle Database@Amazon Web Services network.</p>"
+        },
+        "peerNetworkCidrsToBeRemoved":{
+          "shape":"PeeredCidrList",
+          "documentation":"<p>A list of CIDR blocks to remove from the peering connection. The CIDR blocks must currently exist in the peering connection.</p>"
+        }
+      }
+    },
+    "UpdateOdbPeeringConnectionOutput":{
+      "type":"structure",
+      "required":["odbPeeringConnectionId"],
+      "members":{
+        "displayName":{
+          "shape":"String",
+          "documentation":"<p>The display name of the peering connection.</p>"
+        },
+        "status":{
+          "shape":"ResourceStatus",
+          "documentation":"<p>The status of the peering connection update operation.</p>"
+        },
+        "statusReason":{
+          "shape":"String",
+          "documentation":"<p>Additional information about the status of the peering connection update operation.</p>"
+        },
+        "odbPeeringConnectionId":{
+          "shape":"String",
+          "documentation":"<p>The identifier of the Oracle Database@Amazon Web Services peering connection that was updated.</p>"
         }
       }
     },
@@ -5163,7 +5585,7 @@
       "members":{
         "status":{
           "shape":"ManagedResourceStatus",
-          "documentation":"<p>The status of the Zero-ETL access.</p> <p>Valid Values: <code>enabled | disabled</code> </p>"
+          "documentation":"<p>The status of the Zero-ETL access.</p>"
         },
         "cidr":{
           "shape":"String",
@@ -5173,5 +5595,5 @@
       "documentation":"<p>The configuration for Zero-ETL access from the ODB network.</p>"
     }
   },
-  "documentation":"<p>Oracle Database@Amazon Web Services is an offering that enables you to access Oracle Exadata infrastructure managed by Oracle Cloud Infrastructure (OCI) inside Amazon Web Services data centers. You can migrate your Oracle Exadata workloads, establish low-latency connectivity with applications running on Amazon Web Services, and integrate with Amazon Web Services services. For example, you can run application servers in a virtual private cloud (VPC) and access an Oracle Exadata system running in Oracle Database@Amazon Web Services. You can get started with Oracle Database@Amazon Web Services by using the familiar Amazon Web Services Management Console, APIs, or CLI.</p> <p>This interface reference for Oracle Database@Amazon Web Services contains documentation for a programming or command line interface that you can use to manage Oracle Database@Amazon Web Services. Oracle Database@Amazon Web Services is asynchronous, which means that some interfaces might require techniques such as polling or callback functions to determine when a command has been applied. The reference structure is as follows.</p> <note> <p>In this preview release documentation, the links in the \"See Also\" sections do not work.</p> </note> <p> <b>Oracle Database@Amazon Web Services API Reference</b> </p> <ul> <li> <p>For the alphabetical list of API actions, see .</p> </li> <li> <p>For the alphabetical list of data types, see .</p> </li> <li> <p>For a list of common parameters, see <a>CommonParameters</a>.</p> </li> <li> <p>For descriptions of the error codes, see <a>CommonErrors</a>.</p> </li> </ul>"
+  "documentation":"<p>Oracle Database@Amazon Web Services is an offering that enables you to access Oracle Exadata infrastructure managed by Oracle Cloud Infrastructure (OCI) inside Amazon Web Services data centers. You can migrate your Oracle Exadata workloads, establish low-latency connectivity with applications running on Amazon Web Services, and integrate with Amazon Web Services services. For example, you can run application servers in a Virtual Private Cloud (VPC) and access an Oracle Exadata system running in Oracle Database@Amazon Web Services. You can get started with Oracle Database@Amazon Web Services by using the familiar Amazon Web Services Management Console, APIs, or CLI.</p> <p>This interface reference for Oracle Database@Amazon Web Services contains documentation for a programming or command line interface that you can use to manage Oracle Database@Amazon Web Services. Oracle Database@Amazon Web Services is asynchronous, which means that some interfaces might require techniques such as polling or callback functions to determine when a command has been applied. The reference structure is as follows.</p> <p> <b>Oracle Database@Amazon Web Services API Reference</b> </p> <ul> <li> <p>For the alphabetical list of API actions, see <a href=\"https://docs.aws.amazon.com/odb/latest/APIReference/API_Operations.html\">API Actions</a>.</p> </li> <li> <p>For the alphabetical list of data types, see <a href=\"https://docs.aws.amazon.com/odb/latest/APIReference/API_Types.html\">Data Types</a>.</p> </li> <li> <p>For a list of common query parameters, see <a href=\"https://docs.aws.amazon.com/odb/latest/APIReference/CommonParameters.html\">Common Parameters</a>.</p> </li> <li> <p>For descriptions of the error codes, see <a href=\"https://docs.aws.amazon.com/odb/latest/APIReference/CommonErrors.html\">Common Errors</a>.</p> </li> </ul>"
 }

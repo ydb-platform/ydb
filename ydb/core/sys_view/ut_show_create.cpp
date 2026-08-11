@@ -2136,6 +2136,7 @@ Y_UNIT_TEST(TableColumnUpsertOptions) {
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES`=`1048576`, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `DEDUPLICATION_ENABLED`=`false`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
                 `COMPACTION_PLANNER.FEATURES`=`{"levels" : [{"class_name" : "Zero", "portions_live_duration" : "5s", "expected_blobs_size" : 1000000000000, "portions_count_available" : 2},
                                 {"class_name" : "Zero"}]}`);
@@ -2154,7 +2155,7 @@ Y_UNIT_TEST(TableColumnUpsertOptions) {
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED` = `true`, `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES` = `1048576`, `SCAN_READER_POLICY_NAME` = 'SIMPLE', `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_count_available":2,"portions_live_duration":"5.000000s","class_name":"Zero","expected_blobs_size":1000000000000},{"class_name":"Zero"}]}`, `METADATA_MEMORY_MANAGER.CLASS_NAME` = 'local_db', `METADATA_MEMORY_MANAGER.FEATURES` = `{"memory_cache_size":0,"fetch_on_start":false}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED` = `true`, `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES` = `1048576`, `SCAN_READER_POLICY_NAME` = 'SIMPLE', `DEDUPLICATION_ENABLED` = `false`, `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_count_available":2,"portions_live_duration":"5.000000s","class_name":"Zero","expected_blobs_size":1000000000000},{"class_name":"Zero"}]}`, `METADATA_MEMORY_MANAGER.CLASS_NAME` = 'local_db', `METADATA_MEMORY_MANAGER.FEATURES` = `{"memory_cache_size":0,"fetch_on_start":false}`);
         )"
     );
 }

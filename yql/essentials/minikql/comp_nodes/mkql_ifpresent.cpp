@@ -34,7 +34,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
@@ -98,7 +98,7 @@ class TFlowIfPresentWrapper: public TStatelessFlowCodegeneratorNode<TFlowIfPrese
 public:
     TFlowIfPresentWrapper(EValueRepresentation kind, IComputationNode* optional, IComputationExternalNode* item, IComputationNode* presentBranch,
                           IComputationNode* missingBranch)
-        : TBaseComputation(nullptr, kind)
+        : TBaseComputation(/*source=*/nullptr, kind)
         , Optional_(optional)
         , Item_(item)
         , PresentBranch_(presentBranch)
@@ -119,7 +119,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
@@ -204,7 +204,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);

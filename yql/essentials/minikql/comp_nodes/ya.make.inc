@@ -1,6 +1,8 @@
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/invoke_builtins/header.ya.make.inc)
 
+ENABLE(TIDY_ALLOW_GENERATED)
+
 SET(ORIG_SRC_DIR ${ARCADIA_ROOT}/yql/essentials/minikql/comp_nodes)
 
 SET(ORIG_SOURCES
@@ -17,6 +19,7 @@ SET(ORIG_SOURCES
     mkql_block_coalesce.cpp
     mkql_block_container.cpp
     mkql_block_decimal.cpp
+    mkql_block_dynamic_variant.cpp
     mkql_block_exists.cpp
     mkql_block_getelem.cpp
     mkql_block_guess.cpp
@@ -184,6 +187,7 @@ PEERDIR(
     yql/essentials/public/udf/arrow
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils
+    yql/essentials/utils/meta
     yql/essentials/public/issue/protos
 )
 

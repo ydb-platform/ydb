@@ -2246,6 +2246,43 @@ Y_UNIT_TEST_F(SetOffset, TPartitionFixture)
     WaitProxyResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
 }
 
+// Compactification replies with IsInternal=true. Those must not be treated as timestamp-read
+// completions: otherwise ReadingTimestamp/ReadScheduled get out of sync and the next
+// TEvProxyResponse hits PQ_ENSURE(userInfo->ReadScheduled) (issue #49357).
+Y_UNIT_TEST_F(InternalErrorDoesNotBreakTimestampRead, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+    const TString session = "session";
+
+    CreatePartition({
+        .Partition = partition,
+        .Begin = 0,
+        .End = 10,
+        .Config = {.Consumers = {{.Consumer = client, .Offset = 0, .Session = session}}},
+    });
+
+    auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT_C(blobRequest != nullptr, "expected timestamp-read blob request");
+
+    SendEvent(new TEvPQ::TEvError(
+        NPersQueue::NErrorCode::ERROR,
+        "compaction internal error",
+        /*cookie=*/0,
+        /*isInternal=*/true));
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(200));
+
+    auto restartedBlobRequest =
+        Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::MilliSeconds(200));
+    UNIT_ASSERT_C(
+        restartedBlobRequest == nullptr,
+        "IsInternal TEvError must not restart an in-flight timestamp read");
+
+    // Partition stays responsive with the original timestamp read still in flight.
+    SendGetOffset(1, client);
+    WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK, .Offset = 0});
+}
+
 Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionTxTestHelper)
 {
     const TPartitionId partition{0};

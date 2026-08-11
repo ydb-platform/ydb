@@ -124,9 +124,11 @@ table_service_config:
 
 ### Directory configuration
 
-#### local_file_config.root
+#### local_file_config.root {#root}
 
-**Type:** `string`  \n**Default:** `""` (temporary directory)  \n**Description:** File directory for storing spilling files.
+**Type:** `string`  
+**Default:** `""` (temporary directory)  
+**Description:** File directory for storing spilling files.
 
 For each `ydbd` process, a separate directory with a unique name is created. Spilling directories have the following name format:
 
@@ -155,7 +157,7 @@ Where:
 **Important notes:**
 
 - When the process starts, all existing spilling directories in the specified directory are automatically deleted. Spilling directories have a special name format that includes an instance identifier generated once when the ydbd process starts. When a new process starts, all directories in the spilling directory that match the name format but have a different `spilling_service_id` from the current one are deleted.
-- The directory must have sufficient read and write permissions for the user under which ydbd runs.
+- The directory must have sufficient read and write permissions for the user under which `ydbd` runs. If [static](../../concepts/glossary.md#static-node) and [dynamic](../../concepts/glossary.md#dynamic) nodes run under different OS users and share the same `root`, both users must have read and write access to this directory (for example, `rwx` for `other`, mode `1777`).
 
 {% note info %}
 

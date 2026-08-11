@@ -6,7 +6,9 @@
 
 namespace NKikimr::NMiniKQL {
 
+#ifndef MKQL_DISABLE_CODEGEN
 using NYql::EnsureDynamicCast;
+#endif
 
 namespace {
 
@@ -47,7 +49,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input_);
         MKQL_ENSURE(codegenInput, "Input must be codegenerator node.");
 
@@ -146,7 +148,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input_);
         MKQL_ENSURE(codegenInput, "Input must be codegenerator node.");
 
@@ -252,7 +254,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input_);
         MKQL_ENSURE(codegenInput, "Input must be codegenerator node.");
 
@@ -363,7 +365,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input_);
         MKQL_ENSURE(codegenInput, "Input must be codegenerator node.");
 
@@ -490,7 +492,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -564,13 +566,48 @@ private:
     const ui32 WideFieldsIndex_;
 };
 
+template <typename TDerived, bool IsStateful>
+class TFlatMapFlowCodegeneratorBase;
+
+template <typename TDerived>
+class TFlatMapFlowCodegeneratorBase<TDerived, false>
+    : public TStatelessFlowCodegeneratorNode<TDerived> {
+    using TBase = TStatelessFlowCodegeneratorNode<TDerived>;
+
+protected:
+    TFlatMapFlowCodegeneratorBase(TComputationMutables& mutables, IComputationNode* flow, EValueRepresentation kind)
+        : TBase(mutables, flow, kind)
+    {
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
+        return static_cast<const TDerived*>(this)->GenerateGetValue(ctx, block);
+    }
+#endif
+};
+
+template <typename TDerived>
+class TFlatMapFlowCodegeneratorBase<TDerived, true>
+    : public TStatefulFlowCodegeneratorNode<TDerived> {
+    using TBase = TStatefulFlowCodegeneratorNode<TDerived>;
+
+protected:
+    TFlatMapFlowCodegeneratorBase(TComputationMutables& mutables, IComputationNode* flow, EValueRepresentation kind)
+        : TBase(mutables, flow, kind)
+    {
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
+        return static_cast<const TDerived*>(this)->GenerateGetValue(ctx, statePtr, block);
+    }
+#endif
+};
+
 template <bool IsMultiRowPerItem, bool ResultContainerOpt>
-class TFlowFlatMapWrapper: public std::conditional_t<IsMultiRowPerItem,
-                                                     TStatefulFlowCodegeneratorNode<TFlowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
-                                                     TStatelessFlowCodegeneratorNode<TFlowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>> {
-    using TBaseComputation = std::conditional_t<IsMultiRowPerItem,
-                                                TStatefulFlowCodegeneratorNode<TFlowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
-                                                TStatelessFlowCodegeneratorNode<TFlowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>>;
+class TFlowFlatMapWrapper: public TFlatMapFlowCodegeneratorBase<TFlowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>, IsMultiRowPerItem> {
+    using TBaseComputation = TFlatMapFlowCodegeneratorBase<TFlowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>, IsMultiRowPerItem>;
 
 public:
     TFlowFlatMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationExternalNode* item, IComputationNode* newItem)
@@ -625,7 +662,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* GenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
@@ -655,7 +692,7 @@ public:
         return result;
     }
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* currentPtr, BasicBlock*& block) const {
+    Value* GenerateGetValue(const TCodegenContext& ctx, Value* currentPtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto statusType = Type::getInt32Ty(context);
@@ -711,7 +748,7 @@ public:
 
             block = skip;
 
-            const auto list = DoGenerateGetValue(ctx, block);
+            const auto list = GenerateGetValue(ctx, block);
             result->addIncoming(list, block);
             BranchInst::Create(over, good, IsSpecial(list, block, context), block);
 
@@ -746,18 +783,14 @@ private:
 };
 
 template <bool IsMultiRowPerItem, bool ResultContainerOpt>
-class TNarrowFlatMapWrapper: public std::conditional_t<IsMultiRowPerItem,
-                                                       TStatefulFlowCodegeneratorNode<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
-                                                       TStatelessFlowCodegeneratorNode<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>> {
-    using TBaseComputation = std::conditional_t<IsMultiRowPerItem,
-                                                TStatefulFlowCodegeneratorNode<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
-                                                TStatelessFlowCodegeneratorNode<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>>;
+class TNarrowFlatMapWrapper: public TFlatMapFlowCodegeneratorBase<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>, IsMultiRowPerItem> {
+    using TBaseComputation = TFlatMapFlowCodegeneratorBase<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>, IsMultiRowPerItem>;
 
 public:
     TNarrowFlatMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationWideFlowNode* flow, const TComputationExternalNodePtrVector&& items, IComputationNode* newItem)
         : TBaseComputation(mutables, flow, kind)
         , Flow_(flow)
-        , Items_(std::move(items))
+        , Items_(items)
         , NewItem_(newItem)
         , PasstroughItem_(GetPasstroughtMap(TComputationNodePtrVector{NewItem_}, Items_).front())
         , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Items_.size()))
@@ -819,7 +852,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* GenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
@@ -862,7 +895,7 @@ public:
         return result;
     }
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* currentPtr, BasicBlock*& block) const {
+    Value* GenerateGetValue(const TCodegenContext& ctx, Value* currentPtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto statusType = Type::getInt32Ty(context);
@@ -918,7 +951,7 @@ public:
 
             block = skip;
 
-            const auto list = DoGenerateGetValue(ctx, block);
+            const auto list = GenerateGetValue(ctx, block);
             result->addIncoming(list, block);
             BranchInst::Create(over, good, IsSpecial(list, block, context), block);
 
@@ -1243,7 +1276,7 @@ protected:
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = IsInputStream ? Type::getInt32Ty(context) : Type::getInt1Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -1312,7 +1345,7 @@ protected:
         const auto contextType = GetCompContextType(context);
         const auto statusType = IsInputStream ? Type::getInt32Ty(context) : Type::getInt1Ty(context);
         const auto stateType = ResultContainerOpt ? Type::getInt32Ty(context) : Type::getInt1Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -1508,7 +1541,7 @@ public:
         return ctx.HolderFactory.Create<typename TBaseWrapper::TCodegenValue>(this->FlatMap_, &ctx, value);
     }
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(this->Item_);
@@ -1559,7 +1592,7 @@ public:
             {
                 block = hmsk;
 
-                const auto fnType = FunctionType::get(vector->getType(), {size->getType()}, false);
+                const auto fnType = FunctionType::get(vector->getType(), {size->getType()}, /*isVarArg=*/false);
                 const auto name = "MyArrayAlloc";
                 ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&MyArrayAlloc));
                 const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
@@ -1628,7 +1661,7 @@ public:
                 const auto psrc = CastInst::Create(Instruction::BitCast, vector, pType, "psrc", block);
                 const auto bytes = BinaryOperator::CreateShl(idx, ConstantInt::get(idx->getType(), 4), "bytes", block);
 
-                const auto fnType = FunctionType::get(Type::getVoidTy(context), {pType, pType, bytes->getType(), Type::getInt1Ty(context)}, false);
+                const auto fnType = FunctionType::get(Type::getVoidTy(context), {pType, pType, bytes->getType(), Type::getInt1Ty(context)}, /*isVarArg=*/false);
                 const auto memcpyName = (LLVM_VERSION_MAJOR < 16) ? "llvm.memcpy.p0i8.p0i8.i64" : "llvm.memcpy.p0.p0.i64";
                 const auto func = ctx.Codegen.GetModule().getOrInsertFunction(memcpyName, fnType);
                 CallInst::Create(func, {pdst, psrc, bytes, ConstantInt::getFalse(context)}, "", block);
@@ -1642,7 +1675,7 @@ public:
             {
                 block = free;
 
-                const auto fnType = FunctionType::get(Type::getVoidTy(context), {vector->getType(), size->getType()}, false);
+                const auto fnType = FunctionType::get(Type::getVoidTy(context), {vector->getType(), size->getType()}, /*isVarArg=*/false);
                 const auto name = "MyArrayFree";
                 ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&MyArrayFree));
                 const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);

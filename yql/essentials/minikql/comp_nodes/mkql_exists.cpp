@@ -20,7 +20,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto check = IsExists(value, block, context);
         if (Node_->IsTemporaryValue()) {

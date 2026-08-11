@@ -27,8 +27,8 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
-static YT_DEFINE_GLOBAL(std::atomic<int>, ConcurrentCalls);
+static YT_DEFINE_LEAKY_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
+static YT_DEFINE_LEAKY_GLOBAL(std::atomic<int>, ConcurrentCalls);
 
 ////////////////////////////////////////////////////////////////////////////////
 

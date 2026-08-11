@@ -1,28 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-import gzip
-import inspect
-import io
-import json
 import logging
-import re
 import ssl
 import sys
-import time
 import uuid
-import zlib
-import zoneinfo
 from base64 import b64encode
 from collections.abc import Awaitable, Callable, Generator, Sequence
-from datetime import timezone, tzinfo
-from importlib import import_module
-from importlib.metadata import version as dist_version
+from datetime import tzinfo
 from typing import TYPE_CHECKING, Any, BinaryIO, cast
 
 import aiohttp
-import lz4.frame
-import zstandard
 
 if TYPE_CHECKING:
     import numpy
@@ -31,28 +19,38 @@ if TYPE_CHECKING:
     import pyarrow
 
 from clickhouse_connect import common
-from clickhouse_connect.datatypes import dynamic as dynamic_module
 from clickhouse_connect.datatypes.base import ClickHouseType
 from clickhouse_connect.datatypes.registry import get_from_name
-from clickhouse_connect.driver import httputil, options, tzutil
-from clickhouse_connect.driver.asyncqueue import EOF_SENTINEL, AsyncSyncQueue
-from clickhouse_connect.driver.binding import bind_query, quote_identifier, use_form_encoding
-from clickhouse_connect.driver.client import Client, _apply_arrow_tz_policy
-from clickhouse_connect.driver.common import StreamContext, coerce_bool, dict_copy
-from clickhouse_connect.driver.compression import available_compression
-from clickhouse_connect.driver.constants import CH_VERSION_WITH_PROTOCOL, PROTOCOL_VERSION_WITH_LOW_CARD
-from clickhouse_connect.driver.ctypes import RespBuffCls
-from clickhouse_connect.driver.exceptions import (
-    DatabaseError,
-    DataError,
-    OperationalError,
-    ProgrammingError,
-    error_code_from_header,
-    error_name_from_body,
+from clickhouse_connect.driver import httputil, options
+from clickhouse_connect.driver._backend.http_async import HttpAsyncBackend, release_lease
+from clickhouse_connect.driver._backend.httpcommon import (
+    add_integration_tag,
+    apply_http_server_settings,
+    auth_failed_ex_code,  # noqa: F401  (compatibility re-export)
+    columns_only_re,  # noqa: F401  (compatibility re-export)
+    decompress_response,  # noqa: F401  (compatibility re-export)
+    ex_header,  # noqa: F401  (compatibility re-export)
+    ex_tag_header,
+    negotiate_compression,
+    parse_command_body,
 )
+from clickhouse_connect.driver._backend.models import ClientConfig, QueryRuntime
+from clickhouse_connect.driver._backend.operations import CommandOp, Operation, QueryOp, RawQueryOp
+from clickhouse_connect.driver._backend.orchestration import init_sequence, insert_context_sequence, run_async
+from clickhouse_connect.driver.binding import (
+    bind_query,
+    use_form_encoding,  # noqa: F401  (compatibility re-export)
+)
+from clickhouse_connect.driver.client import _INTERNAL_QUERY_FORMATS, Client, _apply_arrow_tz_policy
+from clickhouse_connect.driver.common import (
+    StreamContext,
+    coerce_bool,
+    dict_copy,  # noqa: F401  (compatibility re-export)
+)
+from clickhouse_connect.driver.ctypes import RespBuffCls
+from clickhouse_connect.driver.exceptions import DataError, ProgrammingError
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.models import ColumnDef, SettingDef
 from clickhouse_connect.driver.options import check_arrow, check_numpy, check_pandas, check_polars
 from clickhouse_connect.driver.query import (
     QueryContext,
@@ -61,44 +59,18 @@ from clickhouse_connect.driver.query import (
     TzSource,
     arrow_buffer,
 )
-from clickhouse_connect.driver.streaming import StreamingFileAdapter, StreamingInsertSource, StreamingResponseSource
+from clickhouse_connect.driver.streaming import (
+    QueuedStreamSource,
+    StreamingFileAdapter,
+    StreamingInsertSource,
+    StreamingResponseSource,
+    start_streaming_response,
+)
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.transform import NativeTransform
 from clickhouse_connect.driver.types import Closable
 
 logger = logging.getLogger(__name__)
-columns_only_re = re.compile(r"LIMIT 0\s*$", re.IGNORECASE)
-ex_header = "X-ClickHouse-Exception-Code"
-auth_failed_ex_code = "516"  # ClickHouse AUTHENTICATION_FAILED
-ex_tag_header = "X-ClickHouse-Exception-Tag"
-
-if "br" in available_compression:
-    import brotli
-else:
-    brotli = None
-
-
-def decompress_response(data: bytes, encoding: str | None) -> bytes:
-    """Decompress response data based on Content-Encoding header."""
-
-    if not encoding or encoding == "identity":
-        return data
-
-    if encoding == "lz4":
-        lz4_decom = lz4.frame.LZ4FrameDecompressor()
-        return lz4_decom.decompress(data, len(data))
-    if encoding == "zstd":
-        zstd_decom = zstandard.ZstdDecompressor()
-        return zstd_decom.stream_reader(io.BytesIO(data)).read()
-    if encoding == "br":
-        if brotli is not None:
-            return brotli.decompress(data)
-        raise OperationalError("Brotli compression requested but not installed.")
-    if encoding == "gzip":
-        return gzip.decompress(data)
-    if encoding == "deflate":
-        return zlib.decompress(data)
-    raise OperationalError(f"Unsupported compression type: '{encoding}'. Supported compression: {', '.join(available_compression)}")
 
 
 class BytesSource:
@@ -113,68 +85,6 @@ class BytesSource:
 
     def close(self):
         """No-op close method for compatibility."""
-
-
-class _SessionLease:
-    """An aiohttp.ClientSession with an in-flight request count, so close()
-    can wait for outstanding requests to drain before tearing down the session."""
-
-    __slots__ = ("session", "_inflight", "_drained")
-
-    def __init__(self, session: aiohttp.ClientSession):
-        self.session = session
-        self._inflight = 0
-        self._drained = asyncio.Event()
-        self._drained.set()
-
-    def acquire(self) -> None:
-        self._inflight += 1
-        if self._inflight == 1:
-            self._drained.clear()
-
-    def release(self) -> None:
-        self._inflight -= 1
-        if self._inflight == 0:
-            self._drained.set()
-
-    async def wait_drained(self) -> None:
-        await self._drained.wait()
-
-
-def _one_shot(fn: Callable[[], None]) -> Callable[[], None]:
-    """Returns a wrapper that invokes fn at most once."""
-    fired = False
-
-    def call():
-        nonlocal fired
-        if not fired:
-            fired = True
-            fn()
-
-    return call
-
-
-def _release_lease(response: aiohttp.ClientResponse | None) -> None:
-    if response is None:
-        return
-    release = getattr(response, "_lease_release", None)
-    if release is not None:
-        release()
-
-
-_REMOTE_CLOSE_ERRORS = (ConnectionResetError, BrokenPipeError)
-
-
-def _is_retryable_async_connection_error(error: aiohttp.ClientConnectionError) -> bool:
-    if isinstance(error, (aiohttp.ServerTimeoutError, aiohttp.ClientConnectorError, aiohttp.ServerFingerprintMismatch)):
-        return False
-    if isinstance(error, aiohttp.ServerDisconnectedError):
-        return True
-    if isinstance(error, _REMOTE_CLOSE_ERRORS):
-        return True
-    if isinstance(error.__cause__, _REMOTE_CLOSE_ERRORS):
-        return True
-    return isinstance(error.__context__, _REMOTE_CLOSE_ERRORS)
 
 
 class AsyncClient(Client):
@@ -245,7 +155,6 @@ class AsyncClient(Client):
             proxy_path = "/" + proxy_path
         self.uri = f"{interface}://{host}:{port}{proxy_path}"
         self.url = self.uri
-        self.form_encode_query_params = form_encode_query_params
         self._rename_response_column = rename_response_column
         self._initial_settings = settings
         self.headers = {}
@@ -255,17 +164,18 @@ class AsyncClient(Client):
                 verify = True
                 tls_mode = tls_mode or "proxy"
 
-        self._token_provider = token_provider  # initial token is resolved in _initialize()
+        # The initial token from token_provider is resolved in _initialize()
 
-        # Priority: access_token > mutual TLS > basic auth
+        # Auth headers follow the sync client: mutual TLS headers are set
+        # independently, and a bearer token wins over basic auth.
         if client_cert and (tls_mode is None or tls_mode == "mutual"):
             if not username:
                 raise ProgrammingError("username parameter is required for Mutual TLS authentication")
             self.headers["X-ClickHouse-User"] = username
             self.headers["X-ClickHouse-SSL-Certificate-Auth"] = "on"
-        elif access_token:
+        if access_token:
             self.headers["Authorization"] = f"Bearer {access_token}"
-        elif username and (not client_cert or tls_mode in ("strict", "proxy")):
+        elif (not client_cert or tls_mode in ("strict", "proxy")) and username:
             credentials = b64encode(f"{username}:{password}".encode()).decode()
             self.headers["Authorization"] = f"Basic {credentials}"
 
@@ -318,9 +228,7 @@ class AsyncClient(Client):
             if client_cert:
                 ssl_context.load_cert_chain(client_cert, client_cert_key)
 
-        self._ssl_context = ssl_context
-        self._proxy_url = proxy_url
-        self._connector_kwargs: dict[str, Any] = {
+        connector_kwargs: dict[str, Any] = {
             "limit": connector_limit,
             "limit_per_host": connector_limit_per_host,
             "keepalive_timeout": keepalive_timeout,
@@ -331,17 +239,13 @@ class AsyncClient(Client):
         # The underlying SSL connection leak was fixed in 3.12.7 and 3.13.1+
         # https://github.com/python/cpython/pull/118960
         if sys.version_info < (3, 12, 7) or sys.version_info[:3] == (3, 13, 0):
-            self._connector_kwargs["enable_cleanup_closed"] = True
+            connector_kwargs["enable_cleanup_closed"] = True
 
-        self._session_lease: _SessionLease | None = None
-        self._session_lock = asyncio.Lock()
-        self._read_format = "Native"
         self._write_format = "Native"
         self._transform = NativeTransform()
         self._client_settings: dict[str, str] = {}
         self._initialized = False
         self._reported_libs: set[str] = set()
-        self._last_pool_reset: float | None = None
         self.headers["User-Agent"] = self.headers["User-Agent"].replace("mode:sync;", "mode:async;")
         if headers:
             self.headers.update(headers)
@@ -350,12 +254,24 @@ class AsyncClient(Client):
         self._compress_param = compress
         self._session_id_param = session_id
         self._autogenerate_session_id_param = autogenerate_session_id
-        self._autogenerate_query_id = (
-            common.get_setting("autogenerate_query_id") if autogenerate_query_id is None else autogenerate_query_id
+
+        # The backend owns transport state. The headers and client_settings
+        # dicts are shared by reference with this facade, so they are mutated
+        # in place, never rebound.
+        self._backend = HttpAsyncBackend(
+            url=self.url,
+            headers=self.headers,
+            client_settings=self._client_settings,
+            timeout=self._timeout,
+            connector_kwargs=connector_kwargs,
+            ssl_context=ssl_context,
+            proxy_url=proxy_url,
+            server_host_name=server_host_name,
+            token_provider=token_provider,
+            autogenerate_query_id=(common.get_setting("autogenerate_query_id") if autogenerate_query_id is None else autogenerate_query_id),
+            read_format="Native",
+            form_encode_query_params=form_encode_query_params,
         )
-        self._active_session = None
-        self._send_progress = None
-        self._progress_interval = None
 
         # Call parent init with autoconnect=False to set up config without blocking I/O
         super().__init__(
@@ -372,28 +288,66 @@ class AsyncClient(Client):
 
     @property
     def _session(self) -> aiohttp.ClientSession | None:
-        lease = self._session_lease
-        return lease.session if lease is not None else None
+        return self._backend.session
 
     @_session.setter
     def _session(self, value: aiohttp.ClientSession | None) -> None:
-        self._session_lease = _SessionLease(value) if value is not None else None
+        self._backend.session = value
+
+    @property
+    def show_clickhouse_errors(self) -> bool:  # type: ignore[override]
+        return self._backend.show_clickhouse_errors
+
+    @show_clickhouse_errors.setter
+    def show_clickhouse_errors(self, value: bool) -> None:
+        self._backend.show_clickhouse_errors = value
+
+    @property
+    def _autogenerate_query_id(self) -> bool:
+        return self._backend.autogenerate_query_id
+
+    @_autogenerate_query_id.setter
+    def _autogenerate_query_id(self, value: bool) -> None:
+        self._backend.autogenerate_query_id = value
+
+    @property
+    def _token_provider(self) -> Callable[[], str | Awaitable[str]] | None:
+        return self._backend.token_provider
+
+    @property
+    def _proxy_url(self) -> str | None:
+        return self._backend.proxy_url
+
+    @property
+    def form_encode_query_params(self) -> bool:
+        return self._backend.form_encode_query_params
+
+    @form_encode_query_params.setter
+    def form_encode_query_params(self, value: bool) -> None:
+        self._backend.form_encode_query_params = value
+
+    @property
+    def _read_format(self) -> str:
+        return self._backend.read_format
+
+    @_read_format.setter
+    def _read_format(self, value: str) -> None:
+        self._backend.read_format = value
+
+    @property
+    def compression(self) -> str | None:  # type: ignore[override]
+        return self._backend.compression
+
+    @compression.setter
+    def compression(self, value: str | None) -> None:
+        self._backend.compression = value
 
     async def _initialize(self):
         """
         Async equivalent of Client._init_common_settings.
         Fetches server version, timezone, and settings.
         """
-        if not self._session:
-            connector = aiohttp.TCPConnector(**self._connector_kwargs)
-            self._session = aiohttp.ClientSession(
-                connector=connector,
-                timeout=self._timeout,
-                headers=self.headers,
-                trust_env=False,
-                auto_decompress=False,
-                skip_auto_headers={"Accept-Encoding"},
-            )
+        self._backend.ensure_session()
 
         if self._initialized:
             return
@@ -402,74 +356,17 @@ class AsyncClient(Client):
             self.set_access_token(await self._resolve_token())
 
         try:
-            tz_source = self._deferred_tz_source
-
-            self.server_tz, self._dst_safe = timezone.utc, True
-            row = await self.command("SELECT version(), timezone()", use_database=False)
-            self.server_version, server_tz_str = tuple(row)
-            try:
-                server_tz = tzutil.resolve_zone(server_tz_str)
-                server_tz, self._dst_safe = tzutil.normalize_timezone(server_tz, trust_fixed_offset=True)
-                self.server_tz = server_tz
-            except zoneinfo.ZoneInfoNotFoundError:
-                logger.warning(
-                    "Server timezone %s could not be resolved, falling back to UTC; %s",
-                    server_tz_str,
-                    tzutil.TZDATA_HINT,
-                )
-            if tz_source == "auto":
-                self._apply_server_tz = self._dst_safe
-            else:
-                self._apply_server_tz = tz_source == "server"
-
-            if not self._apply_server_tz and not tzutil.local_tz_dst_safe:
-                logger.warning("local timezone %s may return unexpected times due to Daylight Savings Time", tzutil.local_tz.tzname(None))
-
-            readonly = "readonly"
-            if not self.min_version("19.17"):
-                readonly = common.get_setting("readonly")
-
-            server_settings = await self.query(f"SELECT name, value, {readonly} as readonly FROM system.settings LIMIT 10000")
-            self.server_settings = {row["name"]: SettingDef(**row) for row in server_settings.named_results()}
-
-            if self.min_version(CH_VERSION_WITH_PROTOCOL) and common.get_setting("use_protocol_version"):
-                try:
-                    test_data = await self.raw_query(
-                        "SELECT 1 AS check", fmt="Native", settings={"client_protocol_version": PROTOCOL_VERSION_WITH_LOW_CARD}
-                    )
-                    if test_data[8:16] == b"\x01\x01\x05check":
-                        self.protocol_version = PROTOCOL_VERSION_WITH_LOW_CARD
-                except Exception:
-                    pass
-
-            cancel_setting = self._setting_status("cancel_http_readonly_queries_on_client_close")
-            if (
-                cancel_setting.is_writable
-                and not cancel_setting.is_set
-                and "cancel_http_readonly_queries_on_client_close" not in (self._initial_settings or {})
-            ):
-                self._client_settings["cancel_http_readonly_queries_on_client_close"] = "1"
+            config = ClientConfig(settings=self._initial_settings or {}, timezone_policy=self._deferred_tz_source)
+            init_result = await run_async(init_sequence(config), self._execute_operation)
+            self._apply_init_result(init_result)
 
             if self._initial_settings:
                 for key, value in self._initial_settings.items():
                     self.set_client_setting(key, value)
 
-            compress = self._compress_param
-            if coerce_bool(compress):
-                compression = ",".join(available_compression)
-                self.write_compression = available_compression[0]
-            elif compress and compress not in ("False", "false", "0"):
-                if compress not in available_compression:
-                    raise ProgrammingError(f"Unsupported compression method {compress}")
-                compression = compress
-                self.write_compression = compress
-            else:
-                compression = None
-
-            comp_setting = self._setting_status("enable_http_compression")
-            self._send_comp_setting = not comp_setting.is_set and comp_setting.is_writable
-            if comp_setting.is_set or comp_setting.is_writable:
-                self.compression = compression
+            compression, write_compression = negotiate_compression(self._compress_param)
+            if write_compression:
+                self.write_compression = write_compression
 
             session_id = self._session_id_param
             autogenerate_session_id = self._autogenerate_session_id_param
@@ -484,20 +381,7 @@ class AsyncClient(Client):
             elif autogenerate_session_id:
                 self.set_client_setting("session_id", str(uuid.uuid4()))
 
-            send_setting = self._setting_status("send_progress_in_http_headers")
-            self._send_progress = not send_setting.is_set and send_setting.is_writable
-            if (send_setting.is_set or send_setting.is_writable) and self._setting_status("http_headers_progress_interval_ms").is_writable:
-                self._progress_interval = str(min(120000, max(10000, (self._send_receive_timeout - 5) * 1000)))
-
-            if self._setting_status("date_time_input_format").is_writable:
-                self.set_client_setting("date_time_input_format", "best_effort")
-            if (
-                self._setting_status("allow_experimental_json_type").is_set
-                and self._setting_status("cast_string_to_dynamic_use_inference").is_writable
-            ):
-                self.set_client_setting("cast_string_to_dynamic_use_inference", "1")
-            if self.min_version("24.8") and not self.min_version("24.10"):
-                dynamic_module.json_serialization_format = 0
+            apply_http_server_settings(self, self._backend, compression, self._send_receive_timeout)
 
             self._initialized = True
         except Exception:
@@ -505,6 +389,17 @@ class AsyncClient(Client):
                 await self._session.close()
                 self._session = None
             raise
+
+    async def _execute_operation(self, operation: Operation) -> object:
+        """Execute an orchestration operation through this client's semantic methods."""
+        settings = dict(operation.settings) or None
+        if isinstance(operation, CommandOp):
+            return await self.command(operation.text, settings=settings, use_database=operation.use_database)
+        if isinstance(operation, QueryOp):
+            return await self.query(operation.text, settings=settings, query_formats=dict(_INTERNAL_QUERY_FORMATS))
+        if isinstance(operation, RawQueryOp):
+            return await self.raw_query(operation.text, settings=settings, fmt=operation.fmt)
+        raise TypeError(f"Unsupported operation type: {type(operation).__name__}")
 
     async def __aenter__(self) -> AsyncClient:
         """Async context manager entry."""
@@ -518,31 +413,12 @@ class AsyncClient(Client):
         return False
 
     async def close(self) -> None:  # type: ignore[override]
-        async with self._session_lock:
-            old_lease = self._session_lease
-            self._session_lease = None
-        if old_lease is not None:
-            await old_lease.wait_drained()
-            await old_lease.session.close()
+        await self._backend.close()
 
     async def close_connections(self) -> None:  # type: ignore[override]
         """Rotate the connection pool: new requests use a fresh session; in-flight
         requests keep using the old session until they complete, then it's closed."""
-        async with self._session_lock:
-            old_lease = self._session_lease
-            connector = aiohttp.TCPConnector(**self._connector_kwargs)
-            new_session = aiohttp.ClientSession(
-                connector=connector,
-                timeout=self._timeout,
-                headers=self.headers,
-                trust_env=False,
-                auto_decompress=False,
-                skip_auto_headers={"Accept-Encoding"},
-            )
-            self._session_lease = _SessionLease(new_session)
-        if old_lease is not None:
-            await old_lease.wait_drained()
-            await old_lease.session.close()
+        await self._backend.close_connections()
 
     def set_client_setting(self, key: str, value: Any) -> None:
         str_value = self._validate_setting(key, value, common.get_setting("invalid_setting_action"))
@@ -553,154 +429,34 @@ class AsyncClient(Client):
         return self._client_settings.get(key)
 
     async def _resolve_token(self) -> str:
-        # Run sync providers off the event loop; await async providers.
-        # The provider may be called concurrently if multiple requests get a 516 at the same time;
-        # it must be safe to invoke in parallel (e.g. if it hits an IdP, consider rate limiting).
-        result = await asyncio.get_running_loop().run_in_executor(None, cast(Callable[[], str | Awaitable[str]], self._token_provider))
-        if inspect.isawaitable(result):
-            result = await result
-        return result
+        return await self._backend.resolve_token()
 
     def set_access_token(self, access_token: str) -> None:
-        auth_header = self.headers.get("Authorization")
-        if auth_header and not auth_header.startswith("Bearer"):
-            raise ProgrammingError("Cannot set access token when a different auth type is used")
-        self.headers["Authorization"] = f"Bearer {access_token}"
-        if self._session:
-            self._session.headers["Authorization"] = f"Bearer {access_token}"
-
-    def _prep_query(self, context: QueryContext):
-        final_query = super()._prep_query(context)
-        if context.is_insert:
-            return final_query
-        fmt = f"\n FORMAT {self._read_format}"
-        if isinstance(final_query, bytes):
-            return final_query + fmt.encode()
-        return final_query + fmt
+        self._backend.set_access_token(access_token)
 
     async def _query_with_context(self, context: QueryContext) -> QueryResult:  # type: ignore[override]
-        headers: dict[str, Any] = {}
-        params: dict[str, str] = {}
-        if self.database:
-            params["database"] = self.database
-        if self.protocol_version:
-            params["client_protocol_version"] = str(self.protocol_version)
-            context.block_info = True
-        params.update(self._validate_settings(context.settings))
         context.rename_response_column = self._rename_response_column
-        use_form = use_form_encoding(context.final_query, context.bind_params, self.form_encode_query_params)
-
-        files: dict[str, Any] | None = None
-        if not context.is_insert and columns_only_re.search(context.uncommented_query):
-            fmt_json_query = f"{context.final_query}\n FORMAT JSON"
-            fields = {"query": fmt_json_query}
-            fields.update(context.bind_params)
-
-            if use_form:
-                files = {}
-                if context.external_data:
-                    params.update(context.external_data.query_params)
-                    files.update(context.external_data.form_data)
-
-                for k, v in fields.items():
-                    files[k] = (None, str(v))
-                response = await self._raw_request(None, params, headers, files=files, retries=self.query_retries)
-            elif context.external_data:
-                params.update(context.bind_params)
-                params.update(context.external_data.query_params)
-                params["query"] = fmt_json_query
-                response = await self._raw_request(None, params, headers, files=context.external_data.form_data, retries=self.query_retries)
-            else:
-                params.update(context.bind_params)
-                response = await self._raw_request(fmt_json_query, params, headers, retries=self.query_retries)
-
-            try:
-                body = await response.read()
-                encoding = response.headers.get("Content-Encoding")
-            finally:
-                _release_lease(response)
-            loop = asyncio.get_running_loop()
-
-            def decompress_and_parse_json():
-                if encoding:
-                    decompressed_body = decompress_response(body, encoding)
-                else:
-                    decompressed_body = body
-                return json.loads(decompressed_body)
-
-            # Offload to executor
-            json_result = await loop.run_in_executor(None, decompress_and_parse_json)
-
-            names: list[str] = []
-            types: list[ClickHouseType] = []
-            renamer = context.column_renamer
-            for col in json_result["meta"]:
-                name = col["name"]
-                if renamer is not None:
-                    try:
-                        name = renamer(name)
-                    except Exception as e:
-                        logger.debug("Failed to rename col '%s'. Skipping rename. Error: %s", name, e)
-                names.append(name)
-                types.append(get_from_name(col["type"]))
-            return QueryResult([], None, tuple(names), tuple(types))  # type: ignore[arg-type]
-
-        if self.compression:
-            headers["Accept-Encoding"] = self.compression
-            if self._send_comp_setting:
-                params["enable_http_compression"] = "1"
-
-        final_query = self._prep_query(context)
-
-        files = None
-        data: Any = None
-
-        if use_form:
-            fields = {"query": final_query}
-            fields.update(context.bind_params)
-
-            files = {}
-            if context.external_data:
-                params.update(context.external_data.query_params)
-                files.update(context.external_data.form_data)
-
-            for k, v in fields.items():
-                files[k] = (None, str(v))
-        elif context.external_data:
-            params.update(context.bind_params)
-            params.update(context.external_data.query_params)
-            params["query"] = final_query
-            files = context.external_data.form_data
-        else:
-            params.update(context.bind_params)
-            data = final_query
-            headers["Content-Type"] = "text/plain; charset=utf-8"
-
-        headers = dict_copy(headers, context.transport_settings)
-
-        response = await self._raw_request(
-            data,
-            params,
-            headers,
-            files=files,
-            server_wait=not context.streaming,
-            stream=True,
+        if self.protocol_version:
+            context.block_info = True
+        runtime = QueryRuntime(
+            database=self.database,
+            protocol_version=self.protocol_version,
+            settings=self._validate_settings(context.settings),
             retries=self.query_retries,
         )
-        encoding = response.headers.get("Content-Encoding")
-        tz_header = response.headers.get("X-ClickHouse-Timezone")
-        exception_tag = response.headers.get(ex_tag_header)
+        execution = await self._backend.execute_query(context, runtime, self._prep_query(context))
+        if execution.columns is not None:
+            return self._columns_only_result(context, execution.columns)
 
+        streaming_source = cast(StreamingResponseSource, execution.source)
         loop = asyncio.get_running_loop()
-        streaming_source = StreamingResponseSource(response, encoding=encoding, exception_tag=exception_tag)
-        await streaming_source.start_producer(loop)
 
         def parse_streaming():
             """Parse response from streaming queue (runs in executor)."""
             # Wrap streaming source with ResponseBuffer. The streaming source provides a
             #  .gen property that yields decompressed chunks.
             byte_source = RespBuffCls(streaming_source)
-            context.set_response_tz(self._check_tz_change(tz_header))
+            context.set_response_tz(self._check_tz_change(execution.response_tz_name))
             result = self._transform.parse_response(byte_source, context)
 
             # For Pandas/Numpy, we must materialize in the executor because the resulting objects
@@ -723,7 +479,7 @@ class AsyncClient(Client):
         except Exception:
             await streaming_source.aclose()
             raise
-        query_result.summary = self._summary(response)
+        query_result.summary = execution.summary
 
         # Attach streaming_source to query_result.source to ensure it gets closed
         #  when the query result is closed (e.g. by StreamContext.__exit__)
@@ -966,99 +722,22 @@ class AsyncClient(Client):
         """
         See BaseClient doc_string for this method
         """
-        cmd, bind_params = bind_query(cmd, parameters, self.server_tz)
-        params = bind_params.copy()
-        headers = {}
-        payload = None
-        files = None
-
-        if external_data:
-            if data:
-                raise ProgrammingError("Cannot combine command data with external data") from None
-            files = external_data.form_data
-            params.update(external_data.query_params)
-        elif isinstance(data, str):
-            headers["Content-Type"] = "text/plain; charset=utf-8"
-            payload = data.encode()
-        elif isinstance(data, bytes):
-            headers["Content-Type"] = "application/octet-stream"
-            payload = data
-
-        if payload is None and not cmd:
-            raise ProgrammingError("Command sent without query or recognized data") from None
-
-        if payload or files:
-            if isinstance(cmd, bytes):
-                raise ProgrammingError("Binary parameter bind cannot be combined with command data or external data") from None
-            params["query"] = cmd
-        else:
-            payload = cmd
-
-        if use_database and self.database:
-            params["database"] = self.database
-        params.update(self._validate_settings(settings or {}))
-        headers = dict_copy(headers, transport_settings)
-        method = "POST" if payload or files else "GET"
-        response = await self._raw_request(payload, params, headers, files=files, method=method, server_wait=False)
-        try:
-            body = await response.read()
-            encoding = response.headers.get("Content-Encoding")
-            summary = self._summary(response)
-            result_format = response.headers.get("X-ClickHouse-Format")
-        finally:
-            _release_lease(response)
-
-        if not body:
-            # A result-producing statement sends a format header even when the result is empty.
-            if result_format is not None:
-                return ""
-            return QuerySummary(summary)
-
-        loop = asyncio.get_running_loop()
-
-        def decompress_and_decode():
-            if encoding:
-                decompressed_body = decompress_response(body, encoding)
-            else:
-                decompressed_body = body
-            try:
-                result = decompressed_body.decode()[:-1].split("\t")
-                if len(result) == 1:
-                    try:
-                        return int(result[0])
-                    except ValueError:
-                        return result[0]
-                return result
-            except UnicodeDecodeError:
-                return str(decompressed_body)
-
-        return await loop.run_in_executor(None, decompress_and_decode)
+        bound_cmd, bind_params = bind_query(cmd, parameters, self.server_tz)
+        runtime = QueryRuntime(
+            database=self.database if use_database else None,
+            settings=self._validate_settings(settings or {}),
+        )
+        execution = await self._backend.execute_command(bound_cmd, bind_params, data, external_data, runtime, transport_settings)
+        if execution.body:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, parse_command_body, execution.body)
+        # A result-producing statement reports its output format even when the result is empty
+        if execution.result_format is not None:
+            return ""
+        return QuerySummary(execution.summary)
 
     async def ping(self) -> bool:  # type: ignore[override]
-        async with self._session_lock:
-            lease = self._session_lease
-            if lease is None or lease.session.closed:
-                return False
-            session = lease.session
-            lease.acquire()
-        try:
-            url = f"{self.url}/ping"
-            timeout = aiohttp.ClientTimeout(total=3.0)
-            get_kwargs: dict[str, Any] = {"timeout": timeout}
-            if self._proxy_url:
-                get_kwargs["proxy"] = self._proxy_url
-            if self.server_host_name:
-                get_kwargs["headers"] = {"Host": self.server_host_name}
-                if self._ssl_context is not None:
-                    get_kwargs["ssl"] = self._ssl_context
-                    get_kwargs["server_hostname"] = self.server_host_name
-            async with session.get(url, **get_kwargs) as response:
-                return 200 <= response.status < 300
-        except (aiohttp.ClientError, asyncio.TimeoutError):
-            logger.debug("ping failed", exc_info=True)
-            return False
-        finally:
-            lease.release()
+        return await self._backend.ping()
 
     async def raw_query(  # type: ignore[override]
         self,
@@ -1073,22 +752,8 @@ class AsyncClient(Client):
         """
         See BaseClient doc_string for this method
         """
-        body, params, headers, files = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
-        if transport_settings:
-            headers = dict_copy(headers, transport_settings)
-
-        response = await self._raw_request(body, params, headers=headers, files=files, retries=self.query_retries)
-        try:
-            response_data = await response.read()
-            encoding = response.headers.get("Content-Encoding")
-        finally:
-            _release_lease(response)
-
-        if encoding:
-            loop = asyncio.get_running_loop()
-            response_data = await loop.run_in_executor(None, decompress_response, response_data, encoding)
-
-        return response_data
+        final_query, bind_params, runtime = self._prep_raw_query_runtime(query, parameters, settings, fmt, use_database)
+        return await self._backend.execute_raw_query(final_query, bind_params, external_data, runtime, transport_settings)
 
     async def raw_stream(  # type: ignore[override]
         self,
@@ -1101,13 +766,8 @@ class AsyncClient(Client):
         transport_settings: dict[str, str] | None = None,
     ) -> StreamContext:
 
-        body, params, headers, files = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
-        if transport_settings:
-            headers = dict_copy(headers, transport_settings)
-
-        response = await self._raw_request(
-            body, params, headers=headers, files=files, stream=True, server_wait=False, retries=self.query_retries
-        )
+        final_query, bind_params, runtime = self._prep_raw_query_runtime(query, parameters, settings, fmt, use_database)
+        response = await self._backend.execute_raw_stream(final_query, bind_params, external_data, runtime, transport_settings)
 
         async def byte_iterator():
             async for chunk in response.content.iter_any():
@@ -1118,56 +778,9 @@ class AsyncClient(Client):
                 try:
                     response.close()
                 finally:
-                    _release_lease(response)
+                    release_lease(response)
 
         return StreamContext(_RawStreamSource(), byte_iterator())
-
-    def _prep_raw_query(self, query, parameters, settings, fmt, use_database, external_data):
-        """
-        Prepare raw query for execution.
-
-        Note: Unlike sync client which returns (body, params, fields), this async version
-        returns (body, params, headers, files) because aiohttp requires headers to be
-        configured before the request() call, while urllib3 can add them during request.
-        """
-        if fmt:
-            query += f"\n FORMAT {fmt}"
-
-        final_query, bind_params = bind_query(query, parameters, self.server_tz)
-        params = self._validate_settings(settings or {})
-        if use_database and self.database:
-            params["database"] = self.database
-
-        headers = {}
-        files = None
-        body = None
-
-        use_form = use_form_encoding(final_query, bind_params, self.form_encode_query_params)
-        if external_data and not use_form and isinstance(final_query, bytes):
-            raise ProgrammingError("Binary query cannot be placed in URL when using External Data; enable form encoding.")
-
-        if use_form:
-            files = {}
-            files["query"] = (None, final_query if isinstance(final_query, str) else final_query.decode())
-            for k, v in bind_params.items():
-                files[k] = (None, str(v))
-
-            if external_data:
-                params.update(external_data.query_params)
-                files.update(external_data.form_data)
-
-            body = None
-        elif external_data:
-            params.update(bind_params)
-            params["query"] = final_query
-            params.update(external_data.query_params)
-            files = external_data.form_data
-            body = None
-        else:
-            params.update(bind_params)
-            body = final_query.encode() if isinstance(final_query, str) else final_query
-
-        return body, params, headers, files
 
     async def insert(  # type: ignore[override]
         self,
@@ -1245,32 +858,13 @@ class AsyncClient(Client):
         self._add_integration_tag("arrow")
         settings = self._update_arrow_settings(settings, use_strings)
 
-        body, params, headers, files = self._prep_raw_query(
-            query,
-            parameters,
-            settings,
-            fmt="ArrowStream",
-            use_database=True,
-            external_data=external_data,
-        )
-        if transport_settings:
-            headers = dict_copy(headers, transport_settings)
-
-        response = await self._raw_request(
-            body,
-            params,
-            headers=headers,
-            files=files,
-            stream=True,
-            server_wait=False,
-            retries=self.query_retries,
-        )
+        final_query, bind_params, runtime = self._prep_raw_query_runtime(query, parameters, settings, "ArrowStream", True)
+        response = await self._backend.execute_raw_stream(final_query, bind_params, external_data, runtime, transport_settings)
         encoding = response.headers.get("Content-Encoding")
         exception_tag = response.headers.get(ex_tag_header)
 
         loop = asyncio.get_running_loop()
-        streaming_source = StreamingResponseSource(response, encoding=encoding, exception_tag=exception_tag)
-        await streaming_source.start_producer(loop)
+        streaming_source = await start_streaming_response(response, encoding=encoding, exception_tag=exception_tag)
 
         def parse_arrow_stream():
             file_adapter = StreamingFileAdapter(streaming_source)
@@ -1307,75 +901,27 @@ class AsyncClient(Client):
         self._add_integration_tag("arrow")
         settings = self._update_arrow_settings(settings, use_strings)
 
-        body, params, headers, files = self._prep_raw_query(
-            query, parameters, settings, fmt="ArrowStream", use_database=True, external_data=external_data
-        )
-        if transport_settings:
-            headers = dict_copy(headers, transport_settings)
-
-        response = await self._raw_request(
-            body, params, headers=headers, files=files, stream=True, server_wait=False, retries=self.query_retries
-        )
+        final_query, bind_params, runtime = self._prep_raw_query_runtime(query, parameters, settings, "ArrowStream", True)
+        response = await self._backend.execute_raw_stream(final_query, bind_params, external_data, runtime, transport_settings)
         encoding = response.headers.get("Content-Encoding")
         exception_tag = response.headers.get(ex_tag_header)
 
-        loop = asyncio.get_running_loop()
-        streaming_source = StreamingResponseSource(response, encoding=encoding, exception_tag=exception_tag)
-        await streaming_source.start_producer(loop)
+        streaming_source = await start_streaming_response(response, encoding=encoding, exception_tag=exception_tag)
+        return self._arrow_batch_stream(streaming_source, lambda batch: _apply_arrow_tz_policy(batch, self.tz_mode))
 
-        queue: AsyncSyncQueue = AsyncSyncQueue(maxsize=10)
+    def _arrow_batch_stream(self, streaming_source: StreamingResponseSource, converter) -> StreamContext:
+        """Parse an Arrow byte stream in an executor, yielding converted record
+        batches to the event loop through the queued stream source."""
+        queued = QueuedStreamSource(streaming_source)
 
-        class _ArrowStreamSource(Closable):
-            def __init__(self, source, q):
-                self._source = source
-                self._queue = q
+        def batches():
+            file_adapter = StreamingFileAdapter(streaming_source)
+            reader = options.arrow.ipc.open_stream(file_adapter)
+            for batch in reader:
+                yield converter(batch)
 
-            async def aclose(self):
-                self._queue.shutdown()
-                await self._source.aclose()
-
-            def close(self):
-                self._queue.shutdown()
-                self._source.close()
-
-        def parse_arrow_streaming():
-            """Parse Arrow stream incrementally in executor (off event loop)."""
-            try:
-                file_adapter = StreamingFileAdapter(streaming_source)
-                reader = options.arrow.ipc.open_stream(file_adapter)
-
-                for batch in reader:
-                    try:
-                        batch = _apply_arrow_tz_policy(batch, self.tz_mode)
-                        queue.sync_q.put(batch)
-                    except RuntimeError:
-                        return
-
-                try:
-                    queue.sync_q.put(EOF_SENTINEL)
-                except RuntimeError:
-                    return
-            except Exception as e:
-                try:
-                    queue.sync_q.put(e)
-                except Exception:
-                    pass
-            finally:
-                queue.shutdown()
-
-        loop.run_in_executor(None, parse_arrow_streaming)
-
-        async def arrow_batch_generator():
-            """Async generator that yields record batches without blocking event loop."""
-            while True:
-                item = await queue.async_q.get()
-                if item is EOF_SENTINEL:
-                    break
-                if isinstance(item, Exception):
-                    raise item
-                yield item
-
-        return StreamContext(_ArrowStreamSource(streaming_source, queue), arrow_batch_generator())
+        queued.pump(batches)
+        return StreamContext(queued, queued.items())
 
     async def query_df_arrow(
         self,
@@ -1477,76 +1023,13 @@ class AsyncClient(Client):
             raise ValueError(f"dataframe_library must be 'pandas' or 'polars', got '{dataframe_library}'")
         settings = self._update_arrow_settings(settings, use_strings)
 
-        body, params, headers, files = self._prep_raw_query(
-            query, parameters, settings, fmt="ArrowStream", use_database=True, external_data=external_data
-        )
-        if transport_settings:
-            headers = dict_copy(headers, transport_settings)
-
-        response = await self._raw_request(
-            body, params, headers=headers, files=files, stream=True, server_wait=False, retries=self.query_retries
-        )
+        final_query, bind_params, runtime = self._prep_raw_query_runtime(query, parameters, settings, "ArrowStream", True)
+        response = await self._backend.execute_raw_stream(final_query, bind_params, external_data, runtime, transport_settings)
         encoding = response.headers.get("Content-Encoding")
         exception_tag = response.headers.get(ex_tag_header)
 
-        loop = asyncio.get_running_loop()
-        streaming_source = StreamingResponseSource(response, encoding=encoding, exception_tag=exception_tag)
-        await streaming_source.start_producer(loop)
-
-        queue: AsyncSyncQueue = AsyncSyncQueue(maxsize=10)
-
-        class _ArrowDFStreamSource(Closable):
-            def __init__(self, source, q):
-                self._source = source
-                self._queue = q
-
-            async def aclose(self):
-                self._queue.shutdown()
-                await self._source.aclose()
-
-            def close(self):
-                self._queue.shutdown()
-                self._source.close()
-
-        def parse_and_convert_streaming():
-            """Parse Arrow stream and convert to DataFrames in executor (off event loop)."""
-            try:
-                file_adapter = StreamingFileAdapter(streaming_source)
-
-                # PyArrow reads incrementally from adapter (which pulls from queue)
-                reader = options.arrow.ipc.open_stream(file_adapter)
-
-                for batch in reader:
-                    try:
-                        queue.sync_q.put(converter(batch))
-                    except RuntimeError:
-                        return
-
-                try:
-                    queue.sync_q.put(EOF_SENTINEL)
-                except RuntimeError:
-                    return
-            except Exception as e:
-                try:
-                    queue.sync_q.put(e)
-                except Exception:
-                    pass
-            finally:
-                queue.shutdown()
-
-        loop.run_in_executor(None, parse_and_convert_streaming)
-
-        async def df_generator():
-            """Async generator that yields DataFrames without blocking event loop."""
-            while True:
-                item = await queue.async_q.get()
-                if item is EOF_SENTINEL:
-                    break
-                if isinstance(item, Exception):
-                    raise item
-                yield item
-
-        return StreamContext(_ArrowDFStreamSource(streaming_source, queue), df_generator())
+        streaming_source = await start_streaming_response(response, encoding=encoding, exception_tag=exception_tag)
+        return self._arrow_batch_stream(streaming_source, converter)
 
     async def insert_arrow(  # type: ignore[override]
         self,
@@ -1660,44 +1143,19 @@ class AsyncClient(Client):
         :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         :return: Reusable insert context
         """
-        full_table = table
-        if "." not in table:
-            if database:
-                full_table = f"{quote_identifier(database)}.{quote_identifier(table)}"
-            else:
-                full_table = quote_identifier(table)
-        column_defs = []
-        if column_types is None and column_type_names is None:
-            describe_result = await self.query(f"DESCRIBE TABLE {full_table}", settings=settings)
-            column_defs = [
-                ColumnDef(**row) for row in describe_result.named_results() if row["default_type"] not in ("ALIAS", "MATERIALIZED")
-            ]
-        if column_names is None or isinstance(column_names, str) and column_names == "*":
-            column_names = [cd.name for cd in column_defs]
-            column_types = [cd.ch_type for cd in column_defs]
-        elif isinstance(column_names, str):
-            column_names = [column_names]
-        if len(column_names) == 0:
-            raise ValueError("Column names must be specified for insert")
-        if not column_types:
-            if column_type_names:
-                column_types = [get_from_name(name) for name in column_type_names]
-            else:
-                column_map = {d.name: d for d in column_defs}
-                try:
-                    column_types = [column_map[name].ch_type for name in column_names]
-                except KeyError as ex:
-                    raise ProgrammingError(f"Unrecognized column {ex} in table {table}") from None
-        if len(column_names) != len(column_types):
-            raise ProgrammingError("Column names do not match column types") from None
-        return InsertContext(
-            full_table,
-            column_names,
-            column_types,
-            column_oriented=column_oriented,
-            settings=settings,
-            transport_settings=transport_settings,
-            data=data,
+        return await run_async(
+            insert_context_sequence(
+                table,
+                column_names,
+                database,
+                column_types,
+                column_type_names,
+                column_oriented,
+                settings,
+                data,
+                transport_settings,
+            ),
+            self._execute_operation,
         )
 
     async def data_insert(self, context: InsertContext) -> QuerySummary:  # type: ignore[override]
@@ -1730,27 +1188,9 @@ class AsyncClient(Client):
             active_source.start_producer()
             return active_source.async_generator()
 
-        headers: dict[str, Any] = {"Content-Type": "application/octet-stream"}
-        if isinstance(context.compression, str):
-            headers["Content-Encoding"] = context.compression
-
-        params = {}
-        if self.database:
-            params["database"] = self.database
-        params.update(self._validate_settings(context.settings))
-        headers = dict_copy(headers, context.transport_settings)
-
-        response = None
+        runtime = QueryRuntime(database=self.database, settings=self._validate_settings(context.settings))
         try:
-            response = await self._raw_request(
-                active_source.async_generator(),
-                params,
-                headers=headers,
-                server_wait=False,
-                retry_body=rebuild_body,
-            )
-            logger.debug("Context insert response code: %d", response.status)
-            summary = self._summary(response)
+            summary = await self._backend.execute_data_insert(context, runtime, active_source.async_generator(), rebuild_body)
         except Exception:
             await active_source.close()
 
@@ -1762,9 +1202,6 @@ class AsyncClient(Client):
         finally:
             await active_source.close()
             context.data = None
-            if response is not None:
-                response.close()
-                _release_lease(response)
 
         return QuerySummary(summary)
 
@@ -1829,129 +1266,22 @@ class AsyncClient(Client):
         """
         See BaseClient doc_string for this method
         """
-        params = {}
-        headers = {"Content-Type": "application/octet-stream"}
-        if compression:
-            headers["Content-Encoding"] = compression
-
-        if table:
-            cols = f" ({', '.join([quote_identifier(x) for x in column_names])})" if column_names is not None else ""
-            fmt_str = fmt if fmt else self._write_format
-            query = f"INSERT INTO {table}{cols} FORMAT {fmt_str}"
-            if not compression and isinstance(insert_block, str):
-                insert_block = query + "\n" + insert_block
-            elif not compression and isinstance(insert_block, (bytes, bytearray)):
-                insert_block = (query + "\n").encode() + insert_block
-            else:
-                # Generators, file-like objects, and compressed data: send the
-                # INSERT query as a URL param and stream the body as-is.
-                params["query"] = query
-
-        if self.database:
-            params["database"] = self.database
-        params.update(self._validate_settings(settings or {}))
-        headers = dict_copy(headers, transport_settings)
-
-        response = await self._raw_request(insert_block, params, headers, server_wait=False)
-        try:
-            logger.debug("Raw insert response code: %d", response.status)
-            return QuerySummary(self._summary(response))
-        finally:
-            response.close()
-            _release_lease(response)
+        runtime = QueryRuntime(database=self.database, settings=self._validate_settings(settings or {}))
+        summary = await self._backend.execute_raw_insert(
+            table, column_names, insert_block, fmt if fmt else self._write_format, compression, runtime, transport_settings
+        )
+        return QuerySummary(summary)
 
     def _add_integration_tag(self, name: str):
         """
         Dynamically adds a product (like pandas or sqlalchemy) to the User-Agent string details section.
         """
-        if not common.get_setting("send_integration_tags") or name in self._reported_libs:
-            return
-
-        try:
-            ver = "unknown"
-            try:
-                ver = dist_version(name)
-            except Exception:
-                try:
-                    mod = import_module(name)
-                    ver = getattr(mod, "__version__", "unknown")
-                except Exception:
-                    pass
-
-            product_info = f"{name}/{ver}"
-
-            ua = self.headers.get("User-Agent", "")
-            start = ua.find("(")
-            if start == -1:
-                return
-            end = ua.find(")", start + 1)
-            if end == -1:
-                return
-
-            details = ua[start + 1 : end].strip()
-
-            if product_info in details:
-                self._reported_libs.add(name)
-                return
-
-            new_details = f"{product_info}; {details}" if details else product_info
-            new_ua = f"{ua[: start + 1]}{new_details}{ua[end:]}"
-            self.headers["User-Agent"] = new_ua.strip()
-            if self._session:
-                self._session.headers["User-Agent"] = new_ua.strip()
-
-            self._reported_libs.add(name)
-            logger.debug("Added '%s' to User-Agent", product_info)
-
-        except Exception as e:
-            logger.debug("Problem adding '%s' to User-Agent: %s", name, e)
+        new_ua = add_integration_tag(self.headers, self._reported_libs, name)
+        if new_ua and self._session:
+            self._session.headers["User-Agent"] = new_ua
 
     async def _error_handler(self, response: aiohttp.ClientResponse, retried: bool = False):
-        """
-        Handles HTTP errors. Tries to be robust and provide maximum context.
-        """
-        try:
-            body = ""
-            full_body = ""
-            try:
-                raw_body = await response.read()
-                encoding = response.headers.get("Content-Encoding")
-                loop = asyncio.get_running_loop()
-
-                if encoding:
-
-                    def decompress_and_decode():
-                        return decompress_response(raw_body, encoding).decode(errors="backslashreplace")
-
-                    full_body = await loop.run_in_executor(None, decompress_and_decode)
-                else:
-                    full_body = await loop.run_in_executor(None, lambda: raw_body.decode(errors="backslashreplace"))
-                body = common.format_error(full_body).strip()
-            except Exception:
-                logger.warning("Failed to read error response body", exc_info=True)
-
-            err_code = response.headers.get(ex_header)
-            code = error_code_from_header(err_code)
-            name = error_name_from_body(full_body) if self.show_clickhouse_errors else None
-
-            if self.show_clickhouse_errors:
-                if err_code:
-                    err_str = f"Received ClickHouse exception, code: {err_code}"
-                else:
-                    err_str = f"HTTP driver received HTTP status {response.status}"
-
-                if body:
-                    err_str = f"{err_str}, server response: {body}"
-            else:
-                err_str = "The ClickHouse server returned an error"
-
-            err_str = f"{err_str} (for url {self.url})"
-
-        finally:
-            response.close()
-
-        err_type = OperationalError if retried else DatabaseError
-        raise err_type(err_str, code=code, name=name) from None
+        await self._backend.error_handler(response, retried)
 
     async def _raw_request(
         self,
@@ -1965,158 +1295,14 @@ class AsyncClient(Client):
         retries: int = 0,
         retry_body: Callable[[], Awaitable[Any]] | None = None,
     ) -> aiohttp.ClientResponse:
-        if self._session is None:
-            raise ProgrammingError(
-                "Session not initialized. Use 'async with get_async_client(...)' or call 'await client._initialize()' first."
-            )
-
-        reset_seconds = common.get_setting("max_connection_age")
-        if reset_seconds:
-            now = time.time()
-            if self._last_pool_reset is None:
-                self._last_pool_reset = now
-            elif self._last_pool_reset < now - reset_seconds:
-                # Stamp before await so concurrent callers don't all queue redundant resets.
-                self._last_pool_reset = now
-                logger.debug("connection expiration - resetting connection pool")
-                await self.close_connections()
-
-        final_params = dict_copy(self._client_settings, params)
-        if server_wait:
-            final_params.setdefault("wait_end_of_query", "1")
-        if self._send_progress:
-            final_params.setdefault("send_progress_in_http_headers", "1")
-        if self._progress_interval:
-            final_params.setdefault("http_headers_progress_interval_ms", self._progress_interval)
-        if self._autogenerate_query_id and "query_id" not in final_params:
-            final_params["query_id"] = str(uuid.uuid4())
-
-        req_headers = dict_copy(self.headers, headers)
-        if self.server_host_name:
-            req_headers["Host"] = self.server_host_name
-        query_session = final_params.get("session_id")
-        attempts = 0
-        auth_retried = False
-
-        while True:
-            attempts += 1
-
-            if query_session:
-                if query_session == self._active_session:
-                    raise ProgrammingError(
-                        "Attempt to execute concurrent queries within the same session. "
-                        "Please use a separate client instance per concurrent query."
-                    )
-                self._active_session = query_session
-
-            # Snapshot+acquire under lock so close_connections() can't pass the
-            # drain check between our session read and our refcount increment.
-            async with self._session_lock:
-                lease = self._session_lease
-                if lease is None or lease.session.closed:
-                    if query_session:
-                        self._active_session = None
-                    raise ProgrammingError("Client session is unavailable; the client may have been closed.")
-                session = lease.session
-                lease.acquire()
-            lease_released = False
-            try:
-                # Construct full URL (aiohttp doesn't have base_url)
-                url = f"{self.url}/"
-                request_kwargs = {"method": method, "url": url, "params": final_params, "headers": req_headers}
-                if self.server_host_name and self._ssl_context is not None:
-                    request_kwargs["ssl"] = self._ssl_context
-                    request_kwargs["server_hostname"] = self.server_host_name
-                if hasattr(self, "_proxy_url") and self._proxy_url:
-                    request_kwargs["proxy"] = self._proxy_url
-                if files:
-                    # IMPORTANT: Must set content_type on text fields to force multipart/form-data encoding
-                    # Without content_type, aiohttp uses application/x-www-form-urlencoded
-                    form = aiohttp.FormData()
-                    for field_name, field_value in files.items():
-                        if isinstance(field_value, tuple):
-                            if field_value[0] is None:
-                                form.add_field(field_name, str(field_value[1]), content_type="text/plain")
-                            else:
-                                filename = field_value[0]
-                                file_data = field_value[1]
-                                content_type = field_value[2] if len(field_value) > 2 else None
-                                form.add_field(field_name, file_data, filename=filename, content_type=content_type)
-                        else:
-                            form.add_field(field_name, field_value, content_type="text/plain")
-                    request_kwargs["data"] = form
-                elif isinstance(data, (bytes, bytearray, memoryview)):
-                    request_kwargs["data"] = io.BytesIO(data)
-                elif isinstance(data, str):
-                    request_kwargs["data"] = io.BytesIO(data.encode())
-                else:
-                    request_kwargs["data"] = data
-
-                response = await session.request(**request_kwargs)
-                if 200 <= response.status < 300 and not response.headers.get(ex_header):
-                    # Caller releases lease after consuming the body.
-                    response._lease_release = _one_shot(lease.release)  # type: ignore[attr-defined]
-                    lease_released = True
-                    return response
-
-                if response.status in (429, 503, 504):
-                    if attempts > retries:
-                        await self._error_handler(response, retried=True)
-                    else:
-                        logger.debug("Retrying request with status code %s (attempt %s/%s)", response.status, attempts, retries + 1)
-                        await asyncio.sleep(0.1 * attempts)
-                        response.close()
-                        continue
-                if self._token_provider and not auth_retried and response.headers.get(ex_header) == auth_failed_ex_code:
-                    if retry_body is None and not (data is None or isinstance(data, (bytes, bytearray, str, dict))):
-                        await self._error_handler(response)  # non-replayable body, surface the auth error instead of retrying
-                    auth_retried = True
-                    self.set_access_token(await self._resolve_token())
-                    req_headers["Authorization"] = self.headers["Authorization"]
-                    if retry_body is not None:
-                        data = await retry_body()
-                    logger.debug("Refreshing access token after authentication failure")
-                    response.close()
-                    continue
-                await self._error_handler(response)
-
-            except aiohttp.ClientConnectionError as e:
-                msg = str(e)
-                if _is_retryable_async_connection_error(e):
-                    # Always allow at least one retry on a clean connection error so a single stale
-                    # keep-alive socket doesn't surface to the caller, and additionally honor the
-                    # retries budget when it is larger (e.g. query_retries for reads), so that
-                    # bursts of stale pooled connections can be drained before giving up.
-                    max_attempts = max(2, retries + 1)
-                    if attempts < max_attempts:
-                        if retry_body is not None:
-                            data = await retry_body()
-                            logger.debug("Retrying after connection error with rebuilt body (attempt %s/%s)", attempts, max_attempts)
-                            await asyncio.sleep(0.1 * attempts)
-                            continue
-                        if data is None or isinstance(data, (bytes, bytearray, str, dict)):
-                            logger.debug("Retrying after connection error from remote host (attempt %s/%s)", attempts, max_attempts)
-                            await asyncio.sleep(0.1 * attempts)
-                            continue
-                logger.debug("Non-retryable aiohttp connection error type=%s", type(e).__name__)
-                raise OperationalError(f"Network Error: {msg}") from e
-
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                raise OperationalError(f"Network Error: {str(e)}") from e
-
-            finally:
-                if not lease_released:
-                    lease.release()
-                if query_session:
-                    self._active_session = None
-
-    @staticmethod
-    def _summary(response: aiohttp.ClientResponse):
-        summary = {}
-        if "X-ClickHouse-Summary" in response.headers:
-            try:
-                summary = json.loads(response.headers["X-ClickHouse-Summary"])
-            except json.JSONDecodeError:
-                pass
-        summary["query_id"] = response.headers.get("X-ClickHouse-Query-Id", "")
-        return summary
+        return await self._backend.request(
+            data,
+            params,
+            headers=headers,
+            files=files,
+            method=method,
+            stream=stream,
+            server_wait=server_wait,
+            retries=retries,
+            retry_body=retry_body,
+        )

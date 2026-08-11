@@ -9,12 +9,15 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/core/persqueue/events
     ydb/core/persqueue/public
+    ydb/core/testlib/actors
     ydb/core/testlib/grpc_request
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
     library/cpp/testing/unittest
+    library/cpp/threading/future
 )
 
 ENV(INSIDE_YDB="1")

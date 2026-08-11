@@ -36,60 +36,62 @@ struct TSubplanEntry {
     TVector<TInfoUnit> DependentIUs;
 };
 
-struct TSubplans {
+class TSubplans {
+public:
     void Add(const TInfoUnit& binding, TIntrusivePtr<ISimpleOperator> plan, ESubplanType type, TVector<TInfoUnit> tuple = {}) {
         OrderedList.push_back(binding);
-        PlanMap.insert({binding, TSubplanEntry(std::move(plan), type, std::move(tuple), binding)});
+        Entries.insert({binding, TSubplanEntry(std::move(plan), type, std::move(tuple), binding)});
     }
 
     void ReplacePlan(const TInfoUnit& binding, TIntrusivePtr<ISimpleOperator> plan) {
-        auto entry = PlanMap.at(binding);
+        auto entry = Entries.at(binding);
         entry.Plan = std::move(plan);
-        PlanMap.erase(binding);
-        PlanMap.insert({binding, std::move(entry)});
+        Entries.erase(binding);
+        Entries.insert({binding, std::move(entry)});
     }
 
     void AddDependentIU(const TInfoUnit& binding, const TInfoUnit& iu) {
-        PlanMap.at(binding).DependentIUs.push_back(iu);
+        Entries.at(binding).DependentIUs.push_back(iu);
     }
 
     TVector<TSubplanEntry> Get() {
         TVector<TSubplanEntry> result;
         for (const auto& iu : OrderedList) {
-            result.push_back(PlanMap.at(iu));
+            result.push_back(Entries.at(iu));
         }
         return result;
     }
 
     void Remove(const TInfoUnit& binding) {
         std::erase(OrderedList, binding);
-        PlanMap.erase(binding);
+        Entries.erase(binding);
     }
 
     const TSubplanEntry* Find(const TInfoUnit& binding) const {
-        const auto it = PlanMap.find(binding);
-        return it == PlanMap.end() ? nullptr : &it->second;
+        const auto it = Entries.find(binding);
+        return it == Entries.end() ? nullptr : &it->second;
     }
 
     const TSubplanEntry& At(const TInfoUnit& binding) const {
-        return PlanMap.at(binding);
+        return Entries.at(binding);
     }
 
     bool Empty() const {
-        return PlanMap.empty();
+        return Entries.empty();
     }
 
     auto begin() const {
-        return PlanMap.begin();
+        return Entries.begin();
     }
 
     auto end() const {
-        return PlanMap.end();
+        return Entries.end();
     }
 
     bool RenameReferences(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx);
 
-    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> PlanMap;
+private:
+    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> Entries;
     TVector<TInfoUnit> OrderedList;
 };
 

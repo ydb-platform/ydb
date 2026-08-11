@@ -97,17 +97,17 @@ bool RenameExternalSubplanReferences(
 } // anonymous namespace
 
 bool TSubplans::RenameReferences(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    if (renameMap.empty() || PlanMap.empty()) {
+    if (renameMap.empty() || Entries.empty()) {
         return false;
     }
 
-    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> renamedPlanMap;
+    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> renamedEntries;
     TVector<TInfoUnit> renamedOrderedList;
     renamedOrderedList.reserve(OrderedList.size());
     bool changed = false;
 
     for (const auto& iu : OrderedList) {
-        auto entry = PlanMap.at(iu);
+        auto entry = Entries.at(iu);
         const auto renamedIU = RenameInfoUnit(iu, renameMap);
 
         changed |= renamedIU != iu;
@@ -120,12 +120,12 @@ bool TSubplans::RenameReferences(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit:
         changed |= RenameInfoUnits(entry.DependentIUs, renameMap);
         changed |= RenameExternalSubplanReferences(CastOperator<IOperator>(entry.Plan), renameMap, ctx);
 
-        const auto inserted = renamedPlanMap.emplace(renamedIU, std::move(entry)).second;
+        const auto inserted = renamedEntries.emplace(renamedIU, std::move(entry)).second;
         Y_ENSURE(inserted, "Subplan rename produced duplicate binding " << renamedIU.GetFullName());
         renamedOrderedList.push_back(renamedIU);
     }
 
-    PlanMap = std::move(renamedPlanMap);
+    Entries = std::move(renamedEntries);
     OrderedList = std::move(renamedOrderedList);
     return changed;
 }

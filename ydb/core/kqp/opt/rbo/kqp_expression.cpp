@@ -939,19 +939,18 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanPro
     if (node->IsCallable("Member")) {
         auto member = TCoMember(node);
         auto iu = TInfoUnit(member.Name().StringValue());
-        if (props.Subplans.PlanMap.contains(iu)){
-            const auto& subplan = props.Subplans.PlanMap.at(iu);
+        if (const auto* subplan = props.Subplans.Find(iu)) {
             if (withSubplanContext) {
                 iu.SetSubplanContext(true);
-                iu.AddDependencies(subplan.Tuple);
-                iu.AddDependencies(subplan.DependentIUs);
+                iu.AddDependencies(subplan->Tuple);
+                iu.AddDependencies(subplan->DependentIUs);
                 IUs.push_back(iu);
             }
             if (withDependencies) {
-                for (const auto& dep : subplan.Tuple) {
+                for (const auto& dep : subplan->Tuple) {
                     AddUniqueInfoUnit(IUs, dep);
                 }
-                for (const auto& dep : subplan.DependentIUs) {
+                for (const auto& dep : subplan->DependentIUs) {
                     AddUniqueInfoUnit(IUs, dep);
                 }
             }

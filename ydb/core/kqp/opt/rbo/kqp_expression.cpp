@@ -25,6 +25,37 @@ void AddUniqueInfoUnit(TVector<TInfoUnit>& ius, const TInfoUnit& iu) {
     }
 }
 
+void AddResolvedInfoUnit(
+    const TInfoUnit& iu,
+    TVector<TInfoUnit>& result,
+    const TPlanProps& props,
+    bool withSubplanContext,
+    bool withDependencies)
+{
+    const auto* subplan = props.Subplans.Find(iu);
+    if (!subplan) {
+        result.push_back(iu);
+        return;
+    }
+
+    if (withSubplanContext) {
+        auto subplanIU = iu;
+        subplanIU.SetSubplanContext(true);
+        subplanIU.AddDependencies(subplan->Tuple);
+        subplanIU.AddDependencies(subplan->DependentIUs);
+        result.push_back(std::move(subplanIU));
+    }
+
+    if (withDependencies) {
+        for (const auto& dependency : subplan->Tuple) {
+            AddUniqueInfoUnit(result, dependency);
+        }
+        for (const auto& dependency : subplan->DependentIUs) {
+            AddUniqueInfoUnit(result, dependency);
+        }
+    }
+}
+
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx) {
     if (input->IsCallable("Member")) {
         auto member = TCoMember(input);
@@ -938,26 +969,7 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanProps& props, bool withSubplanContext, bool withDependencies) {
     if (node->IsCallable("Member")) {
         auto member = TCoMember(node);
-        auto iu = TInfoUnit(member.Name().StringValue());
-        if (const auto* subplan = props.Subplans.Find(iu)) {
-            if (withSubplanContext) {
-                iu.SetSubplanContext(true);
-                iu.AddDependencies(subplan->Tuple);
-                iu.AddDependencies(subplan->DependentIUs);
-                IUs.push_back(iu);
-            }
-            if (withDependencies) {
-                for (const auto& dep : subplan->Tuple) {
-                    AddUniqueInfoUnit(IUs, dep);
-                }
-                for (const auto& dep : subplan->DependentIUs) {
-                    AddUniqueInfoUnit(IUs, dep);
-                }
-            }
-        }
-        else {
-            IUs.push_back(iu);
-        }
+        AddResolvedInfoUnit(TInfoUnit(member.Name().StringValue()), IUs, props, withSubplanContext, withDependencies);
         return;
     }
 

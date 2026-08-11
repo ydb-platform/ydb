@@ -599,7 +599,7 @@ namespace NYql::NDq {
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
             auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), /*database=*/AppData()->TenantName, Token, actorSystem);
-            result.Subscribe([actorSystem, selfId, state = std::move(state)] (const NThreading::TFuture<TResponse>& future) mutable {
+            result.Subscribe([actorSystem, selfId, state = std::move(state)](const NThreading::TFuture<TResponse>& future) mutable {
                 actorSystem->Send(selfId, new TEvQueryCreateSessionResponse(future, std::move(state)));
             });
         }

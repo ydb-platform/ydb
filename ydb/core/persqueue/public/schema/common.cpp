@@ -1,7 +1,6 @@
 #include "common.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/persqueue/public/config.h>
@@ -16,7 +15,7 @@
 
 namespace NKikimr::NPQ::NSchema {
 
-std::pair<TString, TString> GetWorkingDirAndName(const TString& fullName) {
+std::pair <TString, TString> GetWorkingDirAndName(const TString& fullName) {
     try {
         return NKikimr::NGRpcService::SplitPath(fullName);
     } catch (const std::exception &ex) {
@@ -500,7 +499,7 @@ TConsumerVersionInfoByName CollectConsumerVersionInfo(
     for (const auto& consumer : config.GetConsumers()) {
         result[consumer.GetName()] = {
             consumer.GetModificationVersion(),
-            NKikimr::CanonizeAndNormalizePath(database, GetDLQTopicPath(consumer)),
+            GetNormalizedDLQTopicPath(consumer, database),
         };
     }
     return result;
@@ -512,7 +511,7 @@ void ApplyConsumerVersionUpdates(
     const TString& database
 ) {
     for (auto& consumer : *config.MutableConsumers()) {
-        const TString newDlqTopicPath = NKikimr::CanonizeAndNormalizePath(database, GetDLQTopicPath(consumer));
+        const TString newDlqTopicPath = GetNormalizedDLQTopicPath(consumer, database);
         if (const auto* oldInfo = oldConsumerInfoByName.FindPtr(consumer.GetName())) {
             if (newDlqTopicPath != oldInfo->DlqTopicPath) {
                 UpdateConsumerVersion(consumer, config);

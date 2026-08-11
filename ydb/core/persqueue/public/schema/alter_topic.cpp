@@ -6,8 +6,6 @@
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
-#include <vector>
-
 namespace NKikimr::NPQ::NSchema {
 
 namespace {

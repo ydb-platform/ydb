@@ -19,7 +19,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/containers/absl
     ydb/core/persqueue/events
     ydb/core/persqueue/public
     ydb/core/persqueue/public/cluster_tracker

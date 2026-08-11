@@ -76,6 +76,8 @@ const NKikimrPQ::TPQTabletConfig_TPartition* GetPartitionConfigFromAllPartitions
     return nullptr;
 }
 
+namespace {
+
 TString GetDLQTopicPath(const NKikimrPQ::TPQTabletConfig_TConsumer& consumer) {
     if (consumer.GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
         return {};
@@ -93,6 +95,12 @@ TString GetDLQTopicPath(const NKikimrPQ::TPQTabletConfig_TConsumer& consumer) {
     return dlq;
 }
 
+} // namespace
+
+TString GetNormalizedDLQTopicPath(const NKikimrPQ::TPQTabletConfig_TConsumer& consumer, const TString& database) {
+    return CanonizeAndNormalizePath(database, GetDLQTopicPath(consumer));
+}
+
 THashSet<TString> CollectDLQTopicPaths(
     const NKikimrPQ::TPQTabletConfig& config,
     const TString& database,
@@ -105,12 +113,10 @@ THashSet<TString> CollectDLQTopicPaths(
             continue;
         }
 
-        const auto dlq = GetDLQTopicPath(consumer);
-        if (dlq.empty()) {
-            continue;
+        const auto dlq = GetNormalizedDLQTopicPath(consumer, database);
+        if (!dlq.empty()) {
+            result.insert(dlq);
         }
-
-        result.insert(NKikimr::CanonizeAndNormalizePath(database, dlq));
     }
 
     return result;

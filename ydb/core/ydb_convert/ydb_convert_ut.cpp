@@ -1223,7 +1223,7 @@ Y_UNIT_TEST_SUITE(ConvertDirectoryEntryTest) {
         Ydb::Scheme::Entry to;
         ConvertDirectoryEntry(from, &to, true);
 
-        UNIT_ASSERT(to.interrupt_permissions_inheritance());
+        UNIT_ASSERT(to.interrupt_permission_inheritance());
     }
 
     Y_UNIT_TEST(DefaultInterruptPermissionsInheritance) {
@@ -1231,7 +1231,7 @@ Y_UNIT_TEST_SUITE(ConvertDirectoryEntryTest) {
         Ydb::Scheme::Entry to;
         ConvertDirectoryEntry(from, &to, true);
 
-        UNIT_ASSERT(!to.interrupt_permissions_inheritance());
+        UNIT_ASSERT(!to.interrupt_permission_inheritance());
     }
 
     Y_UNIT_TEST(SkipAclProcessing) {
@@ -1246,7 +1246,7 @@ Y_UNIT_TEST_SUITE(ConvertDirectoryEntryTest) {
         Ydb::Scheme::Entry to;
         ConvertDirectoryEntry(from, &to, false);
 
-        UNIT_ASSERT(!to.interrupt_permissions_inheritance());
+        UNIT_ASSERT(!to.interrupt_permission_inheritance());
         UNIT_ASSERT_EQUAL(to.permissions_size(), 0);
     }
 }

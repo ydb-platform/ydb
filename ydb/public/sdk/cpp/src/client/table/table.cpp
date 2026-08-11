@@ -466,7 +466,7 @@ public:
         Proto_ = std::move(desc);
 
         Owner_ = Proto_.self().owner();
-        InterruptInheritance_ = Proto_.self().interrupt_permissions_inheritance();
+        InterruptInheritance_ = Proto_.self().interrupt_permission_inheritance();
         PermissionToSchemeEntry(Proto_.self().permissions(), &Permissions_);
         PermissionToSchemeEntry(Proto_.self().effective_permissions(), &EffectivePermissions_);
 

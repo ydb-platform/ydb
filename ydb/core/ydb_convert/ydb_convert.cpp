@@ -42,6 +42,20 @@ namespace {
         return true;
     }
 
+    void FillPermissionsField(
+        const NACLib::TACL& acl,
+        google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions>* permissions
+    ) {
+        Y_ENSURE(permissions);
+        for (const auto& ace : acl.GetACE()) {
+            auto entry = permissions->Add();
+            entry->set_subject(ace.GetSID());
+            for (const auto& name : ConvertACLMaskToYdbPermissionNames(ace.GetAccessRight())) {
+                entry->add_permission_names(name);
+            }
+        }
+    }
+
 } // anonymous namespace
 
 template<typename TOut>
@@ -815,16 +829,34 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
 }
 
 void FillPermissionsFromAcl(
-    const NACLib::TACL& acl,
-    google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions>* permissions
+    const NKikimrSchemeOp::TDirEntry& from,
+    const bool withEffectiveAcl,
+    Ydb::Scheme::Entry* to
 ) {
-    for (const auto& ace : acl.GetACE()) {
-        auto entry = permissions->Add();
-        entry->set_subject(ace.GetSID());
-        auto str = ConvertACLMaskToYdbPermissionNames(ace.GetAccessRight());
-        for (auto n : str) {
-            entry->add_permission_names(n);
-        }
+    Y_ENSURE(to);
+    const NACLib::TACL acl(from.GetACL());
+    FillPermissionsField(acl, to->mutable_permissions());
+    to->set_interrupt_permission_inheritance(acl.GetInterruptInheritance());
+
+    if (withEffectiveAcl) {
+        FillPermissionsField(NACLib::TACL(from.GetEffectiveACL()), to->mutable_effective_permissions());
+    }
+}
+
+void FillPermissionsFromAcl(
+    const NKikimrSchemeOp::TDirEntry& from,
+    const bool withEffectiveAcl,
+    Ydb::Scheme::ModifyPermissionsRequest* to
+) {
+    Y_ENSURE(!withEffectiveAcl);
+    const NACLib::TACL acl(from.GetACL());
+    NProtoBuf::RepeatedPtrField<Ydb::Scheme::Permissions> toGrant;
+    FillPermissionsField(acl, &toGrant);
+    for (const auto& permission : toGrant) {
+        *to->mutable_actions()->Add()->mutable_grant() = permission;
+    }
+    if (acl.GetInterruptInheritance()) {
+        to->set_interrupt_inheritance(true);
     }
 }
 
@@ -1010,10 +1042,7 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
     timestamp.set_tx_id(from.GetCreateTxId());
 
     if (processAcl) {
-        FillPermissionsFromAcl(NACLib::TACL(from.GetEffectiveACL()), to->mutable_effective_permissions());
-        const NACLib::TACL acl(from.GetACL());
-        FillPermissionsFromAcl(acl, to->mutable_permissions());
-        to->set_interrupt_permissions_inheritance(acl.GetInterruptInheritance());
+        FillPermissionsFromAcl(from, /* withEffectiveAcl */ true, to);
     }
 }
 

@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(PrintAllPermissionsTests) {
             "Permissions: \n"
             "none\n"
             "\n"
-            "Is permissions inheritance interrupted: true\n"
+            "Is permission inheritance interrupted: true\n"
             "\n"
             "Effective permissions: \n"
             "none\n"
@@ -300,7 +300,7 @@ Y_UNIT_TEST_SUITE(PrintAllPermissionsTests) {
             "Permissions: \n"
             "database:ydb.generic.full\n"
             "\n"
-            "Is permissions inheritance interrupted: true\n"
+            "Is permission inheritance interrupted: true\n"
             "\n"
             "Effective permissions: \n"
             "USERS:ydb.database.connect\n"
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(PrintAllPermissionsTests) {
 Y_UNIT_TEST_SUITE(TSchemeEntryInterruptInheritanceTests) {
     Y_UNIT_TEST(FromProto) {
         Ydb::Scheme::Entry proto;
-        proto.set_interrupt_permissions_inheritance(true);
+        proto.set_interrupt_permission_inheritance(true);
 
         const NYdb::NScheme::TSchemeEntry entry(proto);
         UNIT_ASSERT_VALUES_EQUAL(entry.InterruptInheritance, true);

@@ -32,8 +32,10 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
 
 void ConvertYdbResultToKqpResult(const Ydb::ResultSet& input, NKikimrMiniKQL::TResult& output);
 
-void FillPermissionsFromAcl(const NACLib::TACL& acl,
-    google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions>* permissions);
+void FillPermissionsFromAcl(const NKikimrSchemeOp::TDirEntry& from, const bool withEffectiveAcl,
+    Ydb::Scheme::Entry* to);
+void FillPermissionsFromAcl(const NKikimrSchemeOp::TDirEntry& from, const bool withEffectiveAcl,
+    Ydb::Scheme::ModifyPermissionsRequest* to);
 
 struct TACLAttrs {
     ui32 AccessMask;

@@ -61,7 +61,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
 {
     Owner_ = Proto_.self().owner();
     CreationTimestamp_ = NScheme::TVirtualTimestamp(Proto_.self().created_at());
-    InterruptInheritance_ = Proto_.self().interrupt_permissions_inheritance();
+    InterruptInheritance_ = Proto_.self().interrupt_permission_inheritance();
     PermissionToSchemeEntry(Proto_.self().permissions(), &Permissions_);
     PermissionToSchemeEntry(Proto_.self().effective_permissions(), &EffectivePermissions_);
 

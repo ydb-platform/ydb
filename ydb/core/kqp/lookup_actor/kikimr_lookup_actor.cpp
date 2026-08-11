@@ -19,15 +19,12 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/udf_type_printer.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -70,30 +67,26 @@ void Backtick(IOutputStream& os, const std::string_view s) {
 
 namespace NYql::NDq {
 
-    using namespace NActors;
+namespace {
+    // TODO consider moving to lookup parameters (...but likely not)
+    constexpr ui32 RetriesLimit = 22;
+    constexpr TDuration MinRetryDelay = TDuration::MilliSeconds(10);
+    constexpr TDuration MaxRetryDelay = TDuration::Seconds(30);
+    // = retry for at most 6 minutes
+    constexpr ui64 ChannelBufferSize = 1_MB;
 
-    namespace {
-        // TODO consider moving to lookup parameters (...but likely not)
-        constexpr ui32 RetriesLimit = 22;
-        constexpr TDuration MinRetryDelay = TDuration::MilliSeconds(10);
-        constexpr TDuration MaxRetryDelay = TDuration::Seconds(30);
-        // = retry for at most 6 minutes
-        constexpr ui64 ChannelBufferSize = 1_MB;
-
-        const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
-            Y_ABORT_UNLESS(t1);
-            Y_ABORT_UNLESS(t2);
-            NKikimr::NMiniKQL::TStructTypeBuilder resultTypeBuilder{env};
-            for (ui32 i = 0; i != t1->GetMembersCount(); ++i) {
-                resultTypeBuilder.Add(t1->GetMemberName(i), t1->GetMemberType(i));
-            }
-            for (ui32 i = 0; i != t2->GetMembersCount(); ++i) {
-                resultTypeBuilder.Add(t2->GetMemberName(i), t2->GetMemberType(i));
-            }
-            return resultTypeBuilder.Build();
+    const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
+        Y_ABORT_UNLESS(t1);
+        Y_ABORT_UNLESS(t2);
+        NKikimr::NMiniKQL::TStructTypeBuilder resultTypeBuilder{env};
+        for (ui32 i = 0; i != t1->GetMembersCount(); ++i) {
+            resultTypeBuilder.Add(t1->GetMemberName(i), t1->GetMemberType(i));
         }
-
-    } // namespace
+        for (ui32 i = 0; i != t2->GetMembersCount(); ++i) {
+            resultTypeBuilder.Add(t2->GetMemberName(i), t2->GetMemberType(i));
+        }
+        return resultTypeBuilder.Build();
+    }
 
     class TKikimrLookupActor
         : public NYql::NDq::IDqAsyncLookupSource,
@@ -128,9 +121,7 @@ namespace NYql::NDq {
         // Event ids
         enum EEventIds: ui32 {
             EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-            EvYdbExecuteDataQueryResponse = EvBegin,
-            EvYdbCreateSessionResponse,
-            EvQueryCreateSessionResponse,
+            EvQueryCreateSessionResponse = EvBegin,
             EvQuerySessionState,
             EvQueryExecuteQueryResponsePart,
             EvError,
@@ -947,6 +938,8 @@ namespace NYql::NDq {
         ::NMonitoring::TDynamicCounters::TCounterPtr ActiveSessions;
         static constexpr size_t MaxSupportedFullscanRequest = 20000;
     };
+
+    } // namespace
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateKikimrLookupActor(
         NActors::TActorId parentId,

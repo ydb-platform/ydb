@@ -53,6 +53,32 @@ TString MakeFederationAccountDatabase(const TString& federationRoot, const TStri
     return CanonizePath(NKikimr::JoinPath({federationRoot, account}));
 }
 
+// Federation retries append account/topic under FederationRoot. Build that relative
+// suffix from the navigated absolute path vs the request database — never from a
+// database-prefixed originalPath (would become FederationRoot/Root/account/...).
+TMaybe<TString> MakeFederationRelativeTopicPath(const TString& databasePath, const TString& originalPath, const TString& realPath) {
+    if (!databasePath.empty()) {
+        const auto dbParts = NKikimr::SplitPath(databasePath);
+        const auto realParts = NKikimr::SplitPath(realPath);
+        if (realParts.size() <= dbParts.size()) {
+            return Nothing();
+        }
+        for (size_t i = 0; i < dbParts.size(); ++i) {
+            if (dbParts[i] != realParts[i]) {
+                return Nothing();
+            }
+        }
+        return NKikimr::JoinPath(TVector<TString>(realParts.begin() + dbParts.size(), realParts.end()));
+    }
+
+    // No database in the request: originalPath must already be account/topic-shaped.
+    const auto parts = NKikimr::SplitPath(originalPath);
+    if (parts.size() < 2 || parts[0].empty()) {
+        return Nothing();
+    }
+    return NKikimr::JoinPath(parts);
+}
+
 class TDescribeActor : public TActorBootstrapped<TDescribeActor> {
 public:
     TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, absl::flat_hash_set<TString>&& topicPaths, const TDescribeSettings& settings)
@@ -302,13 +328,18 @@ private:
             return false;
         }
 
-        const auto account = ExtractFederationAccount(originalPath);
+        const auto relativePath = MakeFederationRelativeTopicPath(DatabasePath, originalPath, realPath);
+        if (!relativePath.Defined()) {
+            return false;
+        }
+
+        const auto account = ExtractFederationAccount(*relativePath);
         if (!account.Defined()) {
             return false;
         }
 
         const auto accountDatabase = MakeFederationAccountDatabase(FederationRoot, *account);
-        const auto federationPath = MakeFederationTopicPath(FederationRoot, originalPath);
+        const auto federationPath = MakeFederationTopicPath(FederationRoot, *relativePath);
         // Same path string can still need a retry with DatabaseName = account DB
         // (e.g. DatabasePath == FederationRoot: /Root/account/topic under /Root).
         if (federationPath == realPath && RequestDatabaseName == accountDatabase) {

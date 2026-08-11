@@ -695,6 +695,31 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, fullTopicPath);
     }
 
+    Y_UNIT_TEST(TopicWithFederationRootAbsoluteDatabasePrefixedPath) {
+        // originalPath includes DatabasePath (/Root/...). Federation retry must strip
+        // that prefix, not append FederationRoot + /Root/account/...
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        const TString federationRoot = "/Root/Federation";
+        const TString absoluteTopicName = "/Root/account/topic1";
+        const TString fullTopicPath = federationRoot + "/account/topic1";
+
+        ExecuteDDL(*setup, "CREATE TOPIC `Federation/account/topic1`");
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(federationRoot);
+
+        StartDescribe(runtime, {absoluteTopicName});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains(absoluteTopicName));
+        auto& topicInfo = topics[absoluteTopicName];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, fullTopicPath);
+    }
+
     Y_UNIT_TEST(TopicWithFederationRootLeadingSlash) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         EnableDescriberLogs(*setup);
@@ -821,6 +846,28 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("topic1"));
         UNIT_ASSERT_VALUES_EQUAL(topics["topic1"].Status, NDescriber::EStatus::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(CDCWithFederationRoot) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        ExecuteDDL(*setup, "CREATE TABLE `Federation/account/table1` (id Uint64, PRIMARY KEY (id))");
+        ExecuteDDL(*setup, "ALTER TABLE `Federation/account/table1` ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/Federation");
+
+        StartDescribe(runtime, {"account/table1/feed"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("account/table1/feed"));
+        auto& topicInfo = topics["account/table1/feed"];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStream, true);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStreamName, "feed");
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/Federation/account/table1/feed/streamImpl");
     }
 
     Y_UNIT_TEST(CDCWithEmptyDatabase) {

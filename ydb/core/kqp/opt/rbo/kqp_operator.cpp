@@ -1594,7 +1594,7 @@ void TOpIterator::Advance() {
             return;
         }
 
-        if (RecurseIntoSubplans) {
+        if (RecurseIntoSubplans && !PlanProps->Subplans.Empty()) {
             if (!frame.SubplanCandidates) {
                 frame.SubplanCandidates = &frame.Current->GetSubplanCandidates();
             }

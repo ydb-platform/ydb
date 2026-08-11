@@ -117,7 +117,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies, 
     TEvBlobStorage::TEvPut ev(blobId, std::move(data), TInstant::Max(), NKikimrBlobStorage::TabletLog,
             TEvBlobStorage::TEvPut::TacticDefault);
 
-    TPutImpl putImpl(group.GetInfo(), groupQueues, &ev, mon, false, TActorId(), 0, NWilson::TTraceId(), TAccelerationParams{});
+    TPutImpl putImpl(group.GetInfo(), groupQueues, &ev, mon, false, TActorId(), 0, NWilson::TTraceId(), TAccelerationParams{}, false);
 
     for (ui32 idx = 0; idx < domainCount; ++idx) {
         group.SetPredictedDelayNs(idx, 1);
@@ -383,10 +383,10 @@ struct TTestPutAllOk {
             TPutImpl::TPutResultVec putResults;
             if constexpr (IsVPut) {
                 putImpl.ConstructInPlace(Group.GetInfo(), GroupQueues, events[0]->Get(), Mon, false, TActorId(), 0, NWilson::TTraceId(),
-                        TAccelerationParams{});
+                        TAccelerationParams{}, false);
             } else {
                 putImpl.ConstructInPlace(Group.GetInfo(), GroupQueues, events, Mon,
-                        NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault, false, TAccelerationParams{});
+                        NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault, false, TAccelerationParams{}, false);
             }
 
             putImpl->GenerateInitialRequests(LogCtx, PartSets);
@@ -433,7 +433,7 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
     TString data = AlphaData(size);
     TEvBlobStorage::TEvPut ev(blobId, data, TInstant::Max(), NKikimrBlobStorage::TabletLog,
             TEvBlobStorage::TEvPut::TacticMinLatency);
-    TPutImpl putImpl(env.Info, env.GroupQueues, &ev, env.Mon, true, TActorId(), 0, NWilson::TTraceId(), TAccelerationParams{});
+    TPutImpl putImpl(env.Info, env.GroupQueues, &ev, env.Mon, true, TActorId(), 0, NWilson::TTraceId(), TAccelerationParams{}, false);
 
     TLogContext logCtx(NKikimrServices::BS_PROXY_PUT, false);
     logCtx.LogAcc.IsLogEnabled = false;

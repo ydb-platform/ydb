@@ -418,6 +418,13 @@ def test_get_term_overrides_narrow_wider_still_empty():
     assert overrides.narrow_wider == ()
 
 
+@pytest.mark.parametrize('func', [wcwidth.wcstwidth, wcwidth.width])
+def test_narrow_wider_width(func):
+    """Verify width() & wcstwidth() match result of narrow_wider overrides."""
+    assert wcwidth.wcswidth('\u261d') == 1
+    assert func('\u261d', term_program='kitty') == 2
+
+
 @pytest.mark.parametrize('codepoint', [
     '\u00ad',
     '\u0600',

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/virtual_timestamp.h>
 
 namespace Ydb {
     class VirtualTimestamp;
@@ -55,25 +56,6 @@ enum class ESchemeEntryType : i32 {
     StreamingQuery = 24,
     BackupCollection = 25,
     Secret = 26,
-};
-
-struct TVirtualTimestamp {
-    uint64_t PlanStep = 0;
-    uint64_t TxId = 0;
-
-    TVirtualTimestamp() = default;
-    TVirtualTimestamp(uint64_t planStep, uint64_t txId);
-    TVirtualTimestamp(const ::Ydb::VirtualTimestamp& proto);
-
-    std::string ToString() const;
-    void Out(IOutputStream& out) const;
-
-    bool operator<(const TVirtualTimestamp& rhs) const;
-    bool operator<=(const TVirtualTimestamp& rhs) const;
-    bool operator>(const TVirtualTimestamp& rhs) const;
-    bool operator>=(const TVirtualTimestamp& rhs) const;
-    bool operator==(const TVirtualTimestamp& rhs) const;
-    bool operator!=(const TVirtualTimestamp& rhs) const;
 };
 
 struct TSchemeEntry {

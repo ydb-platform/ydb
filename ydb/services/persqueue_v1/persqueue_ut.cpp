@@ -2289,6 +2289,82 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
     }
 
+    // CommitOffset while the partition actor is waiting for data via HasData must close the
+    // stream with SESSION_EXPIRED without the client sending another Read.
+    Y_UNIT_TEST(TopicServiceCommitOffsetWhileWaitingForData) {
+        auto server = SetupLbFederationServerWithTopic("topic_wait_hasdata", 1, {"user"});
+        server->EnableLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY });
+        server->EnableLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
+        server->EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
+        server->EnableLogs({ NKikimrServices::PERSQUEUE }, NLog::EPriority::PRI_DEBUG);
+
+        const TString topicPath = "account/topic_wait_hasdata";
+
+        auto Channel_ = grpc::CreateChannel("localhost:" + ToString(server->GrpcPort), grpc::InsecureChannelCredentials());
+        auto TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
+
+        grpc::ClientContext readContext;
+        readContext.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+        auto readStream = TopicStubP_->StreamRead(&readContext);
+        UNIT_ASSERT(readStream);
+
+        // Empty topic: after StartPartitionSession the partition actor enters WaitForData / HasData.
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            req.mutable_init_request()->add_topics_read_settings()->set_path(topicPath);
+            req.mutable_init_request()->set_consumer("user");
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), topicPath);
+
+            const i64 assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+            req.Clear();
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+            req.mutable_start_partition_session_response()->set_read_offset(0);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+
+        // Let HasData reach the tablet and stay pending (no data on empty topic).
+        Sleep(TDuration::Seconds(1));
+
+        {
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path(topicPath);
+            req.set_consumer("user");
+            req.set_offset(0);
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+
+        {
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "=== Got response (expect session expired via HasData invalidate): "
+                 << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(resp.status(), Ydb::StatusIds::SESSION_EXPIRED);
+            UNIT_ASSERT_GE(resp.issues_size(), 1);
+            UNIT_ASSERT_STRING_CONTAINS(resp.issues(0).message(), "no such session");
+        }
+    }
+
     Y_UNIT_TEST(TopicServiceCommitOffsetBadOffsets) {
         auto server = SetupLbFederationServer();
         server->EnableLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY });

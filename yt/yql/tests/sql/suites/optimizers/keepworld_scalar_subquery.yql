@@ -1,0 +1,21 @@
+pragma config.flags('OptimizerFlags', 'KeepWorld', 'CheckMissingWorld');
+use plato;
+
+pragma yt.MapJoinLimit = "0";
+
+$subq = (select cast(subkey as Double) from Input limit 1);
+
+$t = (
+    select
+        t.key as key,
+        cast(t.subkey as Double) / $subq as coef
+    from Input as t
+);
+
+select
+    t.key as key,
+    t.coef as coef
+from $t as t
+left join any Input as i
+using (key)
+order by t.key;

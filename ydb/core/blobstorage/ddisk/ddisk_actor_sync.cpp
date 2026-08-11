@@ -199,7 +199,8 @@ namespace NKikimr::NDDisk {
                     }
                 }
 
-                Y_DEBUG_ABORT_UNLESS(SyncReadCookiesInFlight.emplace(requestId).second);
+                const bool inserted = SyncReadCookiesInFlight.emplace(requestId).second;
+                Y_DEBUG_ABORT_UNLESS(inserted);
                 const TActorId& sourceActorId = fromPersistentBuffer
                     ? sourceInfo.PersistentBufferActorId
                     : sourceInfo.DDiskActorId;

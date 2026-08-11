@@ -120,6 +120,12 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 
     void HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+    void EnqueuePartitionsLocationRequest(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+    void ProcessPartitionsLocationQueue(const TActorContext& ctx);
+    bool TryRespondPartitionsLocation(const TActorId& sender, const NKikimrPQ::TGetPartitionsLocation& request, const TActorContext& ctx);
+    bool AllPartitionPipesReady() const;
+    void SchedulePartitionsLocationWakeup(const TActorContext& ctx);
+    void SendPartitionsLocationError(const TActorId& sender, const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr&, const TActorContext&);
 
@@ -254,10 +260,12 @@ private:
         TActorId PipeActor;
         TMaybe<ui64> NodeId;
         TMaybe<ui32> Generation;
+        bool Ready = false;
     };
 
     std::unordered_map<ui64, TPipeLocation> TabletPipes;
     std::unordered_set<ui64> PipesRequested;
+    ui32 ReadyPartitionTablets = 0;
 
     TDatabaseInfo DatabaseInfo;
 
@@ -279,6 +287,16 @@ private:
 
     std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
     std::deque<TAutoPtr<TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
+
+    static constexpr ui64 PARTITIONS_LOCATION_WAKEUP_TAG = 11;
+
+    struct TPartitionsLocationRequest {
+        TActorId Sender;
+        NKikimrPQ::TGetPartitionsLocation Record;
+        TInstant Deadline;
+    };
+    std::deque<TPartitionsLocationRequest> PartitionsLocationQueue;
+    bool PartitionsLocationWakeupScheduled = false;
 
     using TMLPRequests = std::variant<
         TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr

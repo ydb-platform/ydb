@@ -2,7 +2,7 @@ PROTO_LIBRARY()
 PROTOC_FATAL_WARNINGS()
 
     PEERDIR(
-        contrib/libs/opentelemetry-proto
+        contrib/proto/opentelemetry
     )
 
     EXCLUDE_TAGS(

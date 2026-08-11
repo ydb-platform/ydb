@@ -560,6 +560,60 @@ IGraphTransformer::TStatus BlockVariantItemWrapper(const TExprNode::TPtr& input,
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockDynamicVariantWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto payloadNode = input->Child(0);
+    if (!EnsureBlockOrScalarType(*payloadNode, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto indexNode = input->Child(1);
+    if (!EnsureBlockOrScalarType(*indexNode, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (auto status = EnsureTypeRewrite(input->ChildRef(2), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+    auto variantType = input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    if (!EnsureVariantType(input->Child(2)->Pos(), *variantType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* alternativeType = ResolveCommonVariantAlternativeType(*input, *variantType->Cast<TVariantExprType>(), ctx);
+    if (!alternativeType) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool payloadIsScalar;
+    const TTypeAnnotationNode* blockPayloadItemType = GetBlockItemType(*payloadNode->GetTypeAnn(), payloadIsScalar);
+    if (!EnsurePayloadMatchesAlternative(*payloadNode, *blockPayloadItemType, *alternativeType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool indexIsScalar;
+    const TTypeAnnotationNode* blockIndexItemType = GetBlockItemType(*indexNode->GetTypeAnn(), indexIsScalar);
+    const TTypeAnnotationNode* indexDataType = blockIndexItemType;
+    if (indexDataType->GetKind() == ETypeAnnotationKind::Optional) {
+        indexDataType = indexDataType->Cast<TOptionalExprType>()->GetItemType();
+    }
+
+    const EDataSlot expectedIndexSlot = variantType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple
+        ? EDataSlot::Uint32
+        : EDataSlot::Utf8;
+    if (!EnsureSpecificDataType(indexNode->Pos(), *indexDataType, expectedIndexSlot, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TOptionalExprType>(variantType);
+    input->SetTypeAnn(MakeBlockOrScalarType(resultType, payloadIsScalar && indexIsScalar, ctx.Expr));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {

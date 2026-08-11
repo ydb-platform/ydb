@@ -1,8 +1,7 @@
 #include "mkql_builtins_impl.h"                       // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h> // UnpackOptionalData
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 namespace {
 
 std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBufferAndResize(size_t size, arrow::MemoryPool* pool) {
@@ -323,12 +322,12 @@ TPlainKernel::TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::
                            NUdf::TDataTypeId returnType, std::unique_ptr<arrow::compute::ScalarKernel>&& arrowKernel,
                            TKernel::ENullMode nullMode)
     : TKernel(family, argTypes, returnType, nullMode)
-    , ArrowKernel(std::move(arrowKernel))
+    , ArrowKernel_(std::move(arrowKernel))
 {
 }
 
 const arrow::compute::ScalarKernel& TPlainKernel::GetArrowKernel() const {
-    return *ArrowKernel;
+    return *ArrowKernel_;
 }
 
 std::shared_ptr<arrow::compute::ScalarKernel> TPlainKernel::MakeArrowKernel(const TVector<TType*>&, TType*) const {
@@ -343,7 +342,7 @@ TDecimalKernel::TDecimalKernel(const TKernelFamily& family, const std::vector<NU
                                NUdf::TDataTypeId returnType, TStatelessArrayKernelExec exec,
                                TKernel::ENullMode nullMode)
     : TKernel(family, argTypes, returnType, nullMode)
-    , Exec(exec)
+    , Exec_(exec)
 {
 }
 
@@ -378,7 +377,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(co
             GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal),
             GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal)},
         GetPrimitiveOutputArrowType(*dataResultType->GetDataSlot()),
-        Exec);
+        Exec_);
     k->null_handling = arrow::compute::NullHandling::INTERSECTION;
     k->init = [precision](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
         auto state = std::make_unique<TDecimalKernel::TKernelState>();
@@ -449,5 +448,4 @@ void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::E
     owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, std::move(k), nullMode));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

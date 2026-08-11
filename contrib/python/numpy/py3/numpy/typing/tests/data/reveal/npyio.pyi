@@ -7,8 +7,7 @@ from collections.abc import Mapping
 
 import numpy.typing as npt
 import numpy as np
-from numpy.lib.npyio import BagObj, NpzFile
-from numpy.ma.mrecords import MaskedRecords
+from numpy.lib._npyio_impl import BagObj
 
 if sys.version_info >= (3, 11):
     from typing import assert_type
@@ -20,8 +19,7 @@ pathlib_path: pathlib.Path
 str_file: IO[str]
 bytes_file: IO[bytes]
 
-bag_obj: BagObj[int]
-npz_file: NpzFile
+npz_file: np.lib.npyio.NpzFile
 
 AR_i8: npt.NDArray[np.int64]
 AR_LIKE_f8: list[float]
@@ -36,19 +34,16 @@ class BytesReader:
 bytes_writer: BytesWriter
 bytes_reader: BytesReader
 
-assert_type(bag_obj.a, int)
-assert_type(bag_obj.b, int)
-
 assert_type(npz_file.zip, zipfile.ZipFile)
 assert_type(npz_file.fid, None | IO[str])
 assert_type(npz_file.files, list[str])
 assert_type(npz_file.allow_pickle, bool)
 assert_type(npz_file.pickle_kwargs, None | Mapping[str, Any])
-assert_type(npz_file.f, BagObj[NpzFile])
+assert_type(npz_file.f, BagObj[np.lib.npyio.NpzFile])
 assert_type(npz_file["test"], npt.NDArray[Any])
 assert_type(len(npz_file), int)
 with npz_file as f:
-    assert_type(f, NpzFile)
+    assert_type(f, np.lib.npyio.NpzFile)
 
 assert_type(np.load(bytes_file), Any)
 assert_type(np.load(pathlib_path, allow_pickle=True), Any)
@@ -92,11 +87,3 @@ assert_type(np.genfromtxt(str_file, comments="test"), npt.NDArray[Any])
 assert_type(np.genfromtxt(str_path, delimiter="\n"), npt.NDArray[Any])
 assert_type(np.genfromtxt(str_path, ndmin=2), npt.NDArray[Any])
 assert_type(np.genfromtxt(["1", "2", "3"], ndmin=2), npt.NDArray[Any])
-
-assert_type(np.recfromtxt(bytes_file), np.recarray[Any, np.dtype[np.record]])
-assert_type(np.recfromtxt(pathlib_path, usemask=True), MaskedRecords[Any, np.dtype[np.void]])
-assert_type(np.recfromtxt(["1", "2", "3"]), np.recarray[Any, np.dtype[np.record]])
-
-assert_type(np.recfromcsv(bytes_file), np.recarray[Any, np.dtype[np.record]])
-assert_type(np.recfromcsv(pathlib_path, usemask=True), MaskedRecords[Any, np.dtype[np.void]])
-assert_type(np.recfromcsv(["1", "2", "3"]), np.recarray[Any, np.dtype[np.record]])

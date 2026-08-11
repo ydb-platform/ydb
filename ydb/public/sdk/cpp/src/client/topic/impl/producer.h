@@ -13,12 +13,16 @@
 
 namespace NYdb::inline Dev::NTopic {
 
+struct TProducerMessageInfoTestHelper;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TProducer
 
 class TProducer : public IProducer,
                   public TContinuationTokenIssuer,
                   public std::enable_shared_from_this<TProducer> {
+    friend struct TProducerMessageInfoTestHelper;
+
 private:
     static constexpr size_t MAX_EPOCH = 1'000'000'000;
     static constexpr TDuration DEFAULT_START_BLOCK_TIMEOUT = TDuration::MilliSeconds(1);
@@ -52,6 +56,7 @@ private:
         std::optional<TInstant> CreateTimestamp;
         TMessageMeta MessageMeta;
         std::optional<std::reference_wrapper<TTransactionBase>> Tx;
+        std::optional<TDeferredPublication> DeferredPublication;
         std::uint32_t Partition;
         bool Sent = false;
         NThreading::TPromise<TFlushResult> FlushPromise;

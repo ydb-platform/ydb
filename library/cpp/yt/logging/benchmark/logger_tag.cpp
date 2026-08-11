@@ -19,7 +19,10 @@ void BM_WithTag(benchmark::State& state)
 {
     TLogger logger("Benchmark");
     for (auto _ : state) {
-        auto tagged = logger.WithTag("RequestId: %v, User: %v, Realm: %v", RequestId, User, Realm);
+        auto tagged = logger
+            .WithTag("RequestId", RequestId)
+            .WithTag("User", User)
+            .WithTag("Realm", Realm);
         benchmark::DoNotOptimize(tagged);
     }
 }

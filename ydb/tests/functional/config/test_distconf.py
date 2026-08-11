@@ -4,12 +4,14 @@ import yaml
 import tempfile
 import os
 import socket
+import requests
 from hamcrest import assert_that
 import time
 import pytest
 import functools
 
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.wait_for import wait_for
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
@@ -159,6 +161,116 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             timeout_seconds=3
         )
         self.check_kikimr_is_operational(table_path, tablet_ids)
+
+    @pytest.mark.parametrize("target_kind", ["root", "direct"], ids=["root", "direct-bound"])
+    def test_replace_static_node_fqdn(self, target_kind):
+        target_node_id = None
+
+        def find_target_node():
+            nonlocal target_node_id
+            for node in self.cluster.nodes.values():
+                try:
+                    response = requests.get(
+                        f"http://{node.host}:{node.mon_port}/actors/nodewarden",
+                        params={"page": "distconf", "json": ""},
+                        timeout=2,
+                    )
+                    response.raise_for_status()
+                    state = response.json()
+                    if state["scepter"] is None:
+                        continue
+                    if target_kind == "root":
+                        target_node_id = state["self_node_id"]
+                        return True
+                    if state["direct_bound_nodes"]:
+                        target_node_id = state["direct_bound_nodes"][0]["node_id"]
+                        return True
+                except (KeyError, ValueError, requests.RequestException):
+                    pass
+            return False
+
+        assert_that(wait_for(find_target_node, timeout_seconds=60))
+        target_node = self.cluster.nodes[target_node_id]
+        observer_node = next(
+            node for node_id, node in self.cluster.nodes.items()
+            if node_id != target_node_id
+        )
+        observer_swagger_client = SwaggerClient(observer_node.host, observer_node.mon_port)
+        new_fqdn = socket.getfqdn().lower()
+
+        fetched_config = yaml.safe_load(fetch_config(self.cluster.config_client))
+        hosts = fetched_config["config"]["hosts"]
+        target_host_index = next(
+            index for index, host in enumerate(hosts)
+            if host["port"] == target_node.ic_port
+        )
+        target_host = hosts[target_host_index]
+
+        assert_that(target_host["port"] == target_node.ic_port)
+        assert_that("node_id" not in target_host)
+        assert_that(target_host["host"] != new_fqdn)
+        socket.getaddrinfo(new_fqdn, target_node.ic_port)
+
+        pdisk_info = observer_swagger_client.pdisk_info(target_node_id)
+        pdisks_before_restart = {
+            (pdisk["PDiskId"], pdisk["Path"], pdisk["Guid"])
+            for pdisk in pdisk_info["PDiskStateInfo"]
+        }
+        assert_that(pdisks_before_restart)
+
+        target_host["host"] = new_fqdn
+        expected_version = bump_config_version(fetched_config)
+        replace_config_response = self.cluster.config_client.replace_config(yaml.dump(fetched_config))
+        logger.debug(f"replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        def config_is_applied_to_target_node():
+            try:
+                node_config = target_node.read_node_config()
+                node_host = node_config["config"]["hosts"][target_host_index]
+                return (
+                    node_config["metadata"]["version"] == expected_version
+                    and node_host["host"] == new_fqdn
+                    and "node_id" not in node_host
+                )
+            except (KeyError, OSError, TypeError, yaml.YAMLError):
+                return False
+
+        assert_that(wait_for(config_is_applied_to_target_node, timeout_seconds=60))
+
+        target_node.stop()
+        target_node.enable_node_id_auto_detection()
+        target_node.start()
+
+        def node_reconnected_with_new_fqdn():
+            try:
+                node_info = next(
+                    node for node in observer_swagger_client.nodes_info()["Nodes"]
+                    if node["NodeId"] == target_node_id
+                )
+                system_state = node_info["SystemState"]
+                return (
+                    not node_info.get("Disconnected", False)
+                    and system_state["Host"].lower() == new_fqdn
+                    and system_state["SystemState"] == "Green"
+                )
+            except (KeyError, StopIteration):
+                return False
+
+        assert_that(wait_for(node_reconnected_with_new_fqdn, timeout_seconds=120))
+
+        def pdisks_reconnected_to_same_node():
+            try:
+                pdisk_info = observer_swagger_client.pdisk_info(target_node_id)
+                pdisks = {
+                    (pdisk["PDiskId"], pdisk["Path"], pdisk["Guid"])
+                    for pdisk in pdisk_info["PDiskStateInfo"]
+                }
+                return pdisks == pdisks_before_restart
+            except KeyError:
+                return False
+
+        assert_that(wait_for(pdisks_reconnected_to_same_node, timeout_seconds=120))
 
     def test_cluster_expand_with_distconf(self):
         table_path = '/Root/mydb/mytable_with_expand'

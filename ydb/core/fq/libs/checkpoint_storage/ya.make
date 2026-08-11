@@ -12,7 +12,6 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     ydb/library/actors/core
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/ydb

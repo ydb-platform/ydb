@@ -16,8 +16,9 @@ bool IsSupportedColumnType(const NSchemeShard::TOlapColumnSchema& columnInfo, co
     const auto extractorProto = dataExtractor.SerializeToProto();
     const auto typeId = columnInfo.GetType().GetTypeId();
     const bool isUtf8Column = typeId == NScheme::NTypeIds::Utf8;
+    const bool isStringColumn = typeId == NScheme::NTypeIds::String;
     const bool isJsonSubColumn = typeId == NScheme::NTypeIds::JsonDocument && extractorProto.HasSubColumn();
-    return isUtf8Column || isJsonSubColumn;
+    return isUtf8Column || isJsonSubColumn || isStringColumn;
 }
 
 }   // namespace

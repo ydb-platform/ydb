@@ -55,7 +55,7 @@ using namespace NYson;
 // We use this logger to (try our best) to avoid perpetual log message production.
 // Currently it is impossible to disable logging along a chain of invocations completely,
 // so some induced log messages will loop back into our writer.
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, SystemLogger, SystemLoggingCategoryName);
+static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, SystemLogger, SystemLoggingCategoryName);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -91,10 +91,9 @@ public:
             Invoker_,
             BIND(&TDynamicTableLogWriter::DoFlush, MakeWeak(this)),
             Config_->FlushPeriod))
-        , Logger(SystemLogger().WithTag(
-            "LogWriterName: %v, TablePath: %v",
-            name,
-            Config_->TablePath))
+        , Logger(SystemLogger()
+            .WithTag("LogWriterName", name)
+            .WithTag("TablePath", Config_->TablePath))
         , Profiler_(TProfiler("/dynamic_table_logging")
             .WithSparse()
             .WithTag("writer", name)
@@ -108,7 +107,8 @@ public:
     {
         FlushExecutor_->Start();
 
-        YT_LOG_INFO("Created dynamic table log writer (Config: %v)", ConvertToYsonString(Config_, EYsonFormat::Text));
+        YT_TLOG_INFO("Created dynamic table log writer")
+            .With("Config", ConvertToYsonString(Config_, EYsonFormat::Text));
 
         Profiler_.AddFuncGauge("/backlog_events", MakeStrong(this), [this] {
             return BacklogEventCount_.load(std::memory_order::relaxed);
@@ -183,14 +183,14 @@ private:
 
         if (Suspended_ && backlogWeight < Config_->LowBacklogWeightWatermark) {
             Suspended_ = false;
-            YT_LOG_INFO("Backlog weight has dropped below low watermark, dynamic table logging resumed (LowBacklogWeightWatermark: %v)",
-                Config_->LowBacklogWeightWatermark);
+            YT_TLOG_INFO("Backlog weight has dropped below low watermark, dynamic table logging resumed")
+                .With("LowBacklogWeightWatermark", Config_->LowBacklogWeightWatermark);
         }
 
         if (!Suspended_ && backlogWeight > Config_->HighBacklogWeightWatermark) {
             Suspended_ = true;
-            YT_LOG_WARNING("Backlog weight has exceeded high watermark, dynamic table logging suspended (HighBacklogWeightWatermark: %v)",
-                Config_->HighBacklogWeightWatermark);
+            YT_TLOG_WARNING("Backlog weight has exceeded high watermark, dynamic table logging suspended")
+                .With("HighBacklogWeightWatermark", Config_->HighBacklogWeightWatermark);
         }
 
         if (Suspended_) {
@@ -280,16 +280,16 @@ private:
                 IncrementSegmentSize(dataWeightWritten);
                 return;
             } catch (const std::exception& ex) {
-                YT_LOG_ERROR(ex, "Error flushing log events to dynamic table");
+                YT_TLOG_ERROR("Error flushing log events to dynamic table")
+                    .With(ex);
             }
 
             if (backoff.Next()) {
                 TDelayedExecutor::WaitForDuration(backoff.GetBackoff());
             } else {
-                YT_LOG_ERROR(
-                    "Flush retries exhausted, dropping log events (EventCount: %v, TotalSize: %v)",
-                    bufferToFlush.RowCount,
-                    bufferToFlush.YsonRows.size());
+                YT_TLOG_ERROR("Flush retries exhausted, dropping log events")
+                    .With("EventCount", bufferToFlush.RowCount)
+                    .With("TotalSize", bufferToFlush.YsonRows.size());
                 DroppedEventsCounter_.Increment(bufferToFlush.RowCount);
                 break;
             }

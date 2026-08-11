@@ -8,11 +8,11 @@
 
 #include <yt/yt/core/json/json_writer.h>
 
-#include <yt/yt/core/misc/string_builder.h>
-
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <yt/yt_proto/yt/formats/extension.pb.h>
+
+#include <library/cpp/yt/string/string_builder.h>
 
 #include <google/protobuf/io/tokenizer.h>
 #include <google/protobuf/text_format.h>

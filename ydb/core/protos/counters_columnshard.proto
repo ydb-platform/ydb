@@ -50,6 +50,8 @@ enum ESimpleCounters {
     COUNTER_EVICTED_RAW_BYTES = 40                          [(CounterOpts) = {Name: "Index/EvictedBytesRaw"}];
     COUNTER_WRITES_IN_FLY = 41                              [(CounterOpts) = {Name: "WritesInFly"}];
     COUNTER_TX_COMPLETE_LAG = 42                            [(CounterOpts) = {Name: "TxCompleteLag"}];
+    COUNTER_DATA_BYTES = 43                                 [(CounterOpts) = {Name: "DataBytes"}];
+    COUNTER_INDEX_BYTES = 44                                [(CounterOpts) = {Name: "IndexBytes"}];
 }
 
 enum ECumulativeCounters {

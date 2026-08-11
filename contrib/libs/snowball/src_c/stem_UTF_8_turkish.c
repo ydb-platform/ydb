@@ -1,6 +1,17 @@
-/* Generated from turkish.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from turkish.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_UTF_8_turkish.h"
+
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
+
+struct SN_local {
+    struct SN_env z;
+    unsigned char b_continue_stemming_noun_suffixes;
+};
+
+typedef struct SN_local SN_local;
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,6 +20,7 @@ extern int turkish_UTF_8_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
+
 static int r_stem_suffix_chain_before_ki(struct SN_env * z);
 static int r_stem_noun_suffixes(struct SN_env * z);
 static int r_stem_nominal_verb_suffixes(struct SN_env * z);
@@ -42,7 +54,6 @@ static int r_mark_ncA(struct SN_env * z);
 static int r_mark_nA(struct SN_env * z);
 static int r_mark_lArI(struct SN_env * z);
 static int r_mark_lAr(struct SN_env * z);
-static int r_mark_ki(struct SN_env * z);
 static int r_mark_DUr(struct SN_env * z);
 static int r_mark_DAn(struct SN_env * z);
 static int r_mark_DA(struct SN_env * z);
@@ -50,18 +61,26 @@ static int r_mark_cAsInA(struct SN_env * z);
 static int r_is_reserved_word(struct SN_env * z);
 static int r_check_vowel_harmony(struct SN_env * z);
 static int r_append_U_to_stems_ending_with_d_or_g(struct SN_env * z);
-#ifdef __cplusplus
-extern "C" {
-#endif
 
+static const symbol s_0[] = { 0xC4, 0xB1 };
+static const symbol s_1[] = { 0xC3, 0xB6 };
+static const symbol s_2[] = { 0xC3, 0xBC };
+static const symbol s_3[] = { 'k', 'e', 'n' };
+static const symbol s_4[] = { 'k', 'i' };
+static const symbol s_5[] = { 'p' };
+static const symbol s_6[] = { 0xC3, 0xA7 };
+static const symbol s_7[] = { 't' };
+static const symbol s_8[] = { 'k' };
+static const symbol s_9[] = { 0xC4, 0xB1 };
+static const symbol s_10[] = { 0xC4, 0xB1 };
+static const symbol s_11[] = { 'i' };
+static const symbol s_12[] = { 'u' };
+static const symbol s_13[] = { 0xC3, 0xB6 };
+static const symbol s_14[] = { 0xC3, 0xBC };
+static const symbol s_15[] = { 0xC3, 0xBC };
+static const symbol s_16[] = { 'a', 'd' };
+static const symbol s_17[] = { 's', 'o', 'y' };
 
-extern struct SN_env * turkish_UTF_8_create_env(void);
-extern void turkish_UTF_8_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_0[1] = { 'm' };
 static const symbol s_0_1[1] = { 'n' };
 static const symbol s_0_2[3] = { 'm', 'i', 'z' };
@@ -112,13 +131,6 @@ static const struct among a_3[4] = {
 { 2, s_3_1, 0, -1, 0},
 { 3, s_3_2, 0, -1, 0},
 { 3, s_3_3, 0, -1, 0}
-};
-
-static const symbol s_4_0[1] = { 'a' };
-static const symbol s_4_1[1] = { 'e' };
-static const struct among a_4[2] = {
-{ 1, s_4_0, 0, -1, 0},
-{ 1, s_4_1, 0, -1, 0}
 };
 
 static const symbol s_5_0[2] = { 'n', 'a' };
@@ -390,246 +402,186 @@ static const unsigned char g_vowel5[] = { 65 };
 
 static const unsigned char g_vowel6[] = { 65 };
 
-static const symbol s_0[] = { 0xC4, 0xB1 };
-static const symbol s_1[] = { 0xC3, 0xB6 };
-static const symbol s_2[] = { 0xC3, 0xBC };
-static const symbol s_3[] = { 'k', 'i' };
-static const symbol s_4[] = { 'k', 'e', 'n' };
-static const symbol s_5[] = { 'p' };
-static const symbol s_6[] = { 0xC3, 0xA7 };
-static const symbol s_7[] = { 't' };
-static const symbol s_8[] = { 'k' };
-static const symbol s_9[] = { 0xC4, 0xB1 };
-static const symbol s_10[] = { 0xC4, 0xB1 };
-static const symbol s_11[] = { 'i' };
-static const symbol s_12[] = { 'u' };
-static const symbol s_13[] = { 0xC3, 0xB6 };
-static const symbol s_14[] = { 0xC3, 0xBC };
-static const symbol s_15[] = { 0xC3, 0xBC };
-static const symbol s_16[] = { 'a', 'd' };
-static const symbol s_17[] = { 's', 'o', 'y' };
-
 static int r_check_vowel_harmony(struct SN_env * z) {
     {
         int v_1 = z->l - z->c;
         if (out_grouping_b_U(z, g_vowel, 97, 305, 1) < 0) return 0;
-        {
+        do {
             int v_2 = z->l - z->c;
-            if (z->c <= z->lb || z->p[z->c - 1] != 'a') goto lab1;
+            if (z->c <= z->lb || z->p[z->c - 1] != 'a') goto lab0;
             z->c--;
-            if (out_grouping_b_U(z, g_vowel1, 97, 305, 1) < 0) goto lab1;
-            goto lab0;
+            if (out_grouping_b_U(z, g_vowel1, 97, 305, 1) < 0) goto lab0;
+            break;
+        lab0:
+            z->c = z->l - v_2;
+            if (z->c <= z->lb || z->p[z->c - 1] != 'e') goto lab1;
+            z->c--;
+            if (out_grouping_b_U(z, g_vowel2, 101, 252, 1) < 0) goto lab1;
+            break;
         lab1:
             z->c = z->l - v_2;
-            if (z->c <= z->lb || z->p[z->c - 1] != 'e') goto lab2;
-            z->c--;
-            if (out_grouping_b_U(z, g_vowel2, 101, 252, 1) < 0) goto lab2;
-            goto lab0;
+            if (!(eq_s_b(z, 2, s_0))) goto lab2;
+            if (out_grouping_b_U(z, g_vowel3, 97, 305, 1) < 0) goto lab2;
+            break;
         lab2:
             z->c = z->l - v_2;
-            if (!(eq_s_b(z, 2, s_0))) goto lab3;
-            if (out_grouping_b_U(z, g_vowel3, 97, 305, 1) < 0) goto lab3;
-            goto lab0;
+            if (z->c <= z->lb || z->p[z->c - 1] != 'i') goto lab3;
+            z->c--;
+            if (out_grouping_b_U(z, g_vowel4, 101, 105, 1) < 0) goto lab3;
+            break;
         lab3:
             z->c = z->l - v_2;
-            if (z->c <= z->lb || z->p[z->c - 1] != 'i') goto lab4;
+            if (z->c <= z->lb || z->p[z->c - 1] != 'o') goto lab4;
             z->c--;
-            if (out_grouping_b_U(z, g_vowel4, 101, 105, 1) < 0) goto lab4;
-            goto lab0;
+            if (out_grouping_b_U(z, g_vowel5, 111, 117, 1) < 0) goto lab4;
+            break;
         lab4:
             z->c = z->l - v_2;
-            if (z->c <= z->lb || z->p[z->c - 1] != 'o') goto lab5;
-            z->c--;
-            if (out_grouping_b_U(z, g_vowel5, 111, 117, 1) < 0) goto lab5;
-            goto lab0;
+            if (!(eq_s_b(z, 2, s_1))) goto lab5;
+            if (out_grouping_b_U(z, g_vowel6, 246, 252, 1) < 0) goto lab5;
+            break;
         lab5:
             z->c = z->l - v_2;
-            if (!(eq_s_b(z, 2, s_1))) goto lab6;
-            if (out_grouping_b_U(z, g_vowel6, 246, 252, 1) < 0) goto lab6;
-            goto lab0;
-        lab6:
-            z->c = z->l - v_2;
-            if (z->c <= z->lb || z->p[z->c - 1] != 'u') goto lab7;
+            if (z->c <= z->lb || z->p[z->c - 1] != 'u') goto lab6;
             z->c--;
-            if (out_grouping_b_U(z, g_vowel5, 111, 117, 1) < 0) goto lab7;
-            goto lab0;
-        lab7:
+            if (out_grouping_b_U(z, g_vowel5, 111, 117, 1) < 0) goto lab6;
+            break;
+        lab6:
             z->c = z->l - v_2;
             if (!(eq_s_b(z, 2, s_2))) return 0;
             if (out_grouping_b_U(z, g_vowel6, 246, 252, 1) < 0) return 0;
-        }
-    lab0:
+        } while (0);
         z->c = z->l - v_1;
     }
     return 1;
 }
 
 static int r_mark_suffix_with_optional_n_consonant(struct SN_env * z) {
-    {
+    do {
         int v_1 = z->l - z->c;
-        if (z->c <= z->lb || z->p[z->c - 1] != 'n') goto lab1;
+        if (z->c <= z->lb || z->p[z->c - 1] != 'n') goto lab0;
         z->c--;
         {
             int v_2 = z->l - z->c;
-            if (in_grouping_b_U(z, g_vowel, 97, 305, 0)) goto lab1;
+            if (in_grouping_b_U(z, g_vowel, 97, 305, 0)) goto lab0;
             z->c = z->l - v_2;
         }
-        goto lab0;
-    lab1:
+        break;
+    lab0:
         z->c = z->l - v_1;
+        if (z->c <= z->lb || z->p[z->c - 1] != 'n') goto lab1;
+        z->c--;
+        return 0;
+    lab1:
         {
             int v_3 = z->l - z->c;
-            {
-                int v_4 = z->l - z->c;
-                if (z->c <= z->lb || z->p[z->c - 1] != 'n') goto lab2;
-                z->c--;
-                z->c = z->l - v_4;
-            }
-            return 0;
-        lab2:
-            z->c = z->l - v_3;
-        }
-        {
-            int v_5 = z->l - z->c;
             {
                 int ret = skip_b_utf8(z->p, z->c, z->lb, 1);
                 if (ret < 0) return 0;
                 z->c = ret;
             }
             if (in_grouping_b_U(z, g_vowel, 97, 305, 0)) return 0;
-            z->c = z->l - v_5;
+            z->c = z->l - v_3;
         }
-    }
-lab0:
+    } while (0);
     return 1;
 }
 
 static int r_mark_suffix_with_optional_s_consonant(struct SN_env * z) {
-    {
+    do {
         int v_1 = z->l - z->c;
-        if (z->c <= z->lb || z->p[z->c - 1] != 's') goto lab1;
+        if (z->c <= z->lb || z->p[z->c - 1] != 's') goto lab0;
         z->c--;
         {
             int v_2 = z->l - z->c;
-            if (in_grouping_b_U(z, g_vowel, 97, 305, 0)) goto lab1;
+            if (in_grouping_b_U(z, g_vowel, 97, 305, 0)) goto lab0;
             z->c = z->l - v_2;
         }
-        goto lab0;
-    lab1:
+        break;
+    lab0:
         z->c = z->l - v_1;
+        if (z->c <= z->lb || z->p[z->c - 1] != 's') goto lab1;
+        z->c--;
+        return 0;
+    lab1:
         {
             int v_3 = z->l - z->c;
-            {
-                int v_4 = z->l - z->c;
-                if (z->c <= z->lb || z->p[z->c - 1] != 's') goto lab2;
-                z->c--;
-                z->c = z->l - v_4;
-            }
-            return 0;
-        lab2:
-            z->c = z->l - v_3;
-        }
-        {
-            int v_5 = z->l - z->c;
             {
                 int ret = skip_b_utf8(z->p, z->c, z->lb, 1);
                 if (ret < 0) return 0;
                 z->c = ret;
             }
             if (in_grouping_b_U(z, g_vowel, 97, 305, 0)) return 0;
-            z->c = z->l - v_5;
+            z->c = z->l - v_3;
         }
-    }
-lab0:
+    } while (0);
     return 1;
 }
 
 static int r_mark_suffix_with_optional_y_consonant(struct SN_env * z) {
-    {
+    do {
         int v_1 = z->l - z->c;
-        if (z->c <= z->lb || z->p[z->c - 1] != 'y') goto lab1;
+        if (z->c <= z->lb || z->p[z->c - 1] != 'y') goto lab0;
         z->c--;
         {
             int v_2 = z->l - z->c;
-            if (in_grouping_b_U(z, g_vowel, 97, 305, 0)) goto lab1;
+            if (in_grouping_b_U(z, g_vowel, 97, 305, 0)) goto lab0;
             z->c = z->l - v_2;
         }
-        goto lab0;
-    lab1:
+        break;
+    lab0:
         z->c = z->l - v_1;
+        if (z->c <= z->lb || z->p[z->c - 1] != 'y') goto lab1;
+        z->c--;
+        return 0;
+    lab1:
         {
             int v_3 = z->l - z->c;
-            {
-                int v_4 = z->l - z->c;
-                if (z->c <= z->lb || z->p[z->c - 1] != 'y') goto lab2;
-                z->c--;
-                z->c = z->l - v_4;
-            }
-            return 0;
-        lab2:
-            z->c = z->l - v_3;
-        }
-        {
-            int v_5 = z->l - z->c;
             {
                 int ret = skip_b_utf8(z->p, z->c, z->lb, 1);
                 if (ret < 0) return 0;
                 z->c = ret;
             }
             if (in_grouping_b_U(z, g_vowel, 97, 305, 0)) return 0;
-            z->c = z->l - v_5;
+            z->c = z->l - v_3;
         }
-    }
-lab0:
+    } while (0);
     return 1;
 }
 
 static int r_mark_suffix_with_optional_U_vowel(struct SN_env * z) {
-    {
+    do {
         int v_1 = z->l - z->c;
-        if (in_grouping_b_U(z, g_U, 105, 305, 0)) goto lab1;
+        if (in_grouping_b_U(z, g_U, 105, 305, 0)) goto lab0;
         {
             int v_2 = z->l - z->c;
-            if (out_grouping_b_U(z, g_vowel, 97, 305, 0)) goto lab1;
+            if (out_grouping_b_U(z, g_vowel, 97, 305, 0)) goto lab0;
             z->c = z->l - v_2;
         }
-        goto lab0;
-    lab1:
+        break;
+    lab0:
         z->c = z->l - v_1;
+        if (in_grouping_b_U(z, g_U, 105, 305, 0)) goto lab1;
+        return 0;
+    lab1:
         {
             int v_3 = z->l - z->c;
-            {
-                int v_4 = z->l - z->c;
-                if (in_grouping_b_U(z, g_U, 105, 305, 0)) goto lab2;
-                z->c = z->l - v_4;
-            }
-            return 0;
-        lab2:
-            z->c = z->l - v_3;
-        }
-        {
-            int v_5 = z->l - z->c;
             {
                 int ret = skip_b_utf8(z->p, z->c, z->lb, 1);
                 if (ret < 0) return 0;
                 z->c = ret;
             }
             if (out_grouping_b_U(z, g_vowel, 97, 305, 0)) return 0;
-            z->c = z->l - v_5;
+            z->c = z->l - v_3;
         }
-    }
-lab0:
+    } while (0);
     return 1;
 }
 
 static int r_mark_possessives(struct SN_env * z) {
     if (z->c <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((67133440 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    if (!find_among_b(z, a_0, 10)) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_U_vowel(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    if (!find_among_b(z, a_0, 10, 0)) return 0;
+    return r_mark_suffix_with_optional_U_vowel(z);
 }
 
 static int r_mark_sU(struct SN_env * z) {
@@ -638,17 +590,12 @@ static int r_mark_sU(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (in_grouping_b_U(z, g_U, 105, 305, 0)) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_s_consonant(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    return r_mark_suffix_with_optional_s_consonant(z);
 }
 
 static int r_mark_lArI(struct SN_env * z) {
     if (z->c - 3 <= z->lb || (z->p[z->c - 1] != 105 && z->p[z->c - 1] != 177)) return 0;
-    if (!find_among_b(z, a_1, 2)) return 0;
-    return 1;
+    return find_among_b(z, a_1, 2, 0) != 0;
 }
 
 static int r_mark_yU(struct SN_env * z) {
@@ -657,11 +604,7 @@ static int r_mark_yU(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (in_grouping_b_U(z, g_U, 105, 305, 0)) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_y_consonant(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    return r_mark_suffix_with_optional_y_consonant(z);
 }
 
 static int r_mark_nU(struct SN_env * z) {
@@ -669,8 +612,7 @@ static int r_mark_nU(struct SN_env * z) {
         int ret = r_check_vowel_harmony(z);
         if (ret <= 0) return ret;
     }
-    if (!find_among_b(z, a_2, 4)) return 0;
-    return 1;
+    return find_among_b(z, a_2, 4, 0) != 0;
 }
 
 static int r_mark_nUn(struct SN_env * z) {
@@ -679,12 +621,8 @@ static int r_mark_nUn(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 1 <= z->lb || z->p[z->c - 1] != 110) return 0;
-    if (!find_among_b(z, a_3, 4)) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_n_consonant(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    if (!find_among_b(z, a_3, 4, 0)) return 0;
+    return r_mark_suffix_with_optional_n_consonant(z);
 }
 
 static int r_mark_yA(struct SN_env * z) {
@@ -693,12 +631,8 @@ static int r_mark_yA(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c <= z->lb || (z->p[z->c - 1] != 97 && z->p[z->c - 1] != 101)) return 0;
-    if (!find_among_b(z, a_4, 2)) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_y_consonant(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    z->c--;
+    return r_mark_suffix_with_optional_y_consonant(z);
 }
 
 static int r_mark_nA(struct SN_env * z) {
@@ -707,8 +641,7 @@ static int r_mark_nA(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 1 <= z->lb || (z->p[z->c - 1] != 97 && z->p[z->c - 1] != 101)) return 0;
-    if (!find_among_b(z, a_5, 2)) return 0;
-    return 1;
+    return find_among_b(z, a_5, 2, 0) != 0;
 }
 
 static int r_mark_DA(struct SN_env * z) {
@@ -717,8 +650,7 @@ static int r_mark_DA(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 1 <= z->lb || (z->p[z->c - 1] != 97 && z->p[z->c - 1] != 101)) return 0;
-    if (!find_among_b(z, a_6, 4)) return 0;
-    return 1;
+    return find_among_b(z, a_6, 4, 0) != 0;
 }
 
 static int r_mark_ndA(struct SN_env * z) {
@@ -727,8 +659,7 @@ static int r_mark_ndA(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 2 <= z->lb || (z->p[z->c - 1] != 97 && z->p[z->c - 1] != 101)) return 0;
-    if (!find_among_b(z, a_7, 2)) return 0;
-    return 1;
+    return find_among_b(z, a_7, 2, 0) != 0;
 }
 
 static int r_mark_DAn(struct SN_env * z) {
@@ -737,8 +668,7 @@ static int r_mark_DAn(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 2 <= z->lb || z->p[z->c - 1] != 110) return 0;
-    if (!find_among_b(z, a_8, 4)) return 0;
-    return 1;
+    return find_among_b(z, a_8, 4, 0) != 0;
 }
 
 static int r_mark_ndAn(struct SN_env * z) {
@@ -747,8 +677,7 @@ static int r_mark_ndAn(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 3 <= z->lb || z->p[z->c - 1] != 110) return 0;
-    if (!find_among_b(z, a_9, 2)) return 0;
-    return 1;
+    return find_among_b(z, a_9, 2, 0) != 0;
 }
 
 static int r_mark_ylA(struct SN_env * z) {
@@ -757,17 +686,8 @@ static int r_mark_ylA(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 1 <= z->lb || (z->p[z->c - 1] != 97 && z->p[z->c - 1] != 101)) return 0;
-    if (!find_among_b(z, a_10, 2)) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_y_consonant(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
-}
-
-static int r_mark_ki(struct SN_env * z) {
-    if (!(eq_s_b(z, 2, s_3))) return 0;
-    return 1;
+    if (!find_among_b(z, a_10, 2, 0)) return 0;
+    return r_mark_suffix_with_optional_y_consonant(z);
 }
 
 static int r_mark_ncA(struct SN_env * z) {
@@ -776,12 +696,8 @@ static int r_mark_ncA(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 1 <= z->lb || (z->p[z->c - 1] != 97 && z->p[z->c - 1] != 101)) return 0;
-    if (!find_among_b(z, a_11, 2)) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_n_consonant(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    if (!find_among_b(z, a_11, 2, 0)) return 0;
+    return r_mark_suffix_with_optional_n_consonant(z);
 }
 
 static int r_mark_yUm(struct SN_env * z) {
@@ -790,12 +706,8 @@ static int r_mark_yUm(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 1 <= z->lb || z->p[z->c - 1] != 109) return 0;
-    if (!find_among_b(z, a_12, 4)) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_y_consonant(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    if (!find_among_b(z, a_12, 4, 0)) return 0;
+    return r_mark_suffix_with_optional_y_consonant(z);
 }
 
 static int r_mark_sUn(struct SN_env * z) {
@@ -804,8 +716,7 @@ static int r_mark_sUn(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 2 <= z->lb || z->p[z->c - 1] != 110) return 0;
-    if (!find_among_b(z, a_13, 4)) return 0;
-    return 1;
+    return find_among_b(z, a_13, 4, 0) != 0;
 }
 
 static int r_mark_yUz(struct SN_env * z) {
@@ -814,18 +725,13 @@ static int r_mark_yUz(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 1 <= z->lb || z->p[z->c - 1] != 122) return 0;
-    if (!find_among_b(z, a_14, 4)) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_y_consonant(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    if (!find_among_b(z, a_14, 4, 0)) return 0;
+    return r_mark_suffix_with_optional_y_consonant(z);
 }
 
 static int r_mark_sUnUz(struct SN_env * z) {
     if (z->c - 4 <= z->lb || z->p[z->c - 1] != 122) return 0;
-    if (!find_among_b(z, a_15, 4)) return 0;
-    return 1;
+    return find_among_b(z, a_15, 4, 0) != 0;
 }
 
 static int r_mark_lAr(struct SN_env * z) {
@@ -834,8 +740,7 @@ static int r_mark_lAr(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 2 <= z->lb || z->p[z->c - 1] != 114) return 0;
-    if (!find_among_b(z, a_16, 2)) return 0;
-    return 1;
+    return find_among_b(z, a_16, 2, 0) != 0;
 }
 
 static int r_mark_nUz(struct SN_env * z) {
@@ -844,8 +749,7 @@ static int r_mark_nUz(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 2 <= z->lb || z->p[z->c - 1] != 122) return 0;
-    if (!find_among_b(z, a_17, 4)) return 0;
-    return 1;
+    return find_among_b(z, a_17, 4, 0) != 0;
 }
 
 static int r_mark_DUr(struct SN_env * z) {
@@ -854,14 +758,12 @@ static int r_mark_DUr(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 2 <= z->lb || z->p[z->c - 1] != 114) return 0;
-    if (!find_among_b(z, a_18, 8)) return 0;
-    return 1;
+    return find_among_b(z, a_18, 8, 0) != 0;
 }
 
 static int r_mark_cAsInA(struct SN_env * z) {
     if (z->c - 5 <= z->lb || (z->p[z->c - 1] != 97 && z->p[z->c - 1] != 101)) return 0;
-    if (!find_among_b(z, a_19, 2)) return 0;
-    return 1;
+    return find_among_b(z, a_19, 2, 0) != 0;
 }
 
 static int r_mark_yDU(struct SN_env * z) {
@@ -869,22 +771,14 @@ static int r_mark_yDU(struct SN_env * z) {
         int ret = r_check_vowel_harmony(z);
         if (ret <= 0) return ret;
     }
-    if (!find_among_b(z, a_20, 32)) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_y_consonant(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    if (!find_among_b(z, a_20, 32, 0)) return 0;
+    return r_mark_suffix_with_optional_y_consonant(z);
 }
 
 static int r_mark_ysA(struct SN_env * z) {
     if (z->c - 1 <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((26658 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    if (!find_among_b(z, a_21, 8)) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_y_consonant(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    if (!find_among_b(z, a_21, 8, 0)) return 0;
+    return r_mark_suffix_with_optional_y_consonant(z);
 }
 
 static int r_mark_ymUs_(struct SN_env * z) {
@@ -893,124 +787,114 @@ static int r_mark_ymUs_(struct SN_env * z) {
         if (ret <= 0) return ret;
     }
     if (z->c - 3 <= z->lb || z->p[z->c - 1] != 159) return 0;
-    if (!find_among_b(z, a_22, 4)) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_y_consonant(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    if (!find_among_b(z, a_22, 4, 0)) return 0;
+    return r_mark_suffix_with_optional_y_consonant(z);
 }
 
 static int r_mark_yken(struct SN_env * z) {
-    if (!(eq_s_b(z, 3, s_4))) return 0;
-    {
-        int ret = r_mark_suffix_with_optional_y_consonant(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    if (!(eq_s_b(z, 3, s_3))) return 0;
+    return r_mark_suffix_with_optional_y_consonant(z);
 }
 
 static int r_stem_nominal_verb_suffixes(struct SN_env * z) {
     z->ket = z->c;
-    z->I[0] = 1;
-    {
+    ((SN_local *)z)->b_continue_stemming_noun_suffixes = 1;
+    do {
         int v_1 = z->l - z->c;
-        {
+        do {
             int v_2 = z->l - z->c;
             {
                 int ret = r_mark_ymUs_(z);
-                if (ret == 0) goto lab3;
-                if (ret < 0) return ret;
-            }
-            goto lab2;
-        lab3:
-            z->c = z->l - v_2;
-            {
-                int ret = r_mark_yDU(z);
-                if (ret == 0) goto lab4;
-                if (ret < 0) return ret;
-            }
-            goto lab2;
-        lab4:
-            z->c = z->l - v_2;
-            {
-                int ret = r_mark_ysA(z);
-                if (ret == 0) goto lab5;
-                if (ret < 0) return ret;
-            }
-            goto lab2;
-        lab5:
-            z->c = z->l - v_2;
-            {
-                int ret = r_mark_yken(z);
                 if (ret == 0) goto lab1;
                 if (ret < 0) return ret;
             }
-        }
-    lab2:
-        goto lab0;
-    lab1:
+            break;
+        lab1:
+            z->c = z->l - v_2;
+            {
+                int ret = r_mark_yDU(z);
+                if (ret == 0) goto lab2;
+                if (ret < 0) return ret;
+            }
+            break;
+        lab2:
+            z->c = z->l - v_2;
+            {
+                int ret = r_mark_ysA(z);
+                if (ret == 0) goto lab3;
+                if (ret < 0) return ret;
+            }
+            break;
+        lab3:
+            z->c = z->l - v_2;
+            {
+                int ret = r_mark_yken(z);
+                if (ret == 0) goto lab0;
+                if (ret < 0) return ret;
+            }
+        } while (0);
+        break;
+    lab0:
         z->c = z->l - v_1;
         {
             int ret = r_mark_cAsInA(z);
-            if (ret == 0) goto lab6;
+            if (ret == 0) goto lab4;
             if (ret < 0) return ret;
         }
-        {
+        do {
             int v_3 = z->l - z->c;
             {
                 int ret = r_mark_sUnUz(z);
-                if (ret == 0) goto lab8;
+                if (ret == 0) goto lab5;
                 if (ret < 0) return ret;
             }
-            goto lab7;
-        lab8:
+            break;
+        lab5:
             z->c = z->l - v_3;
             {
                 int ret = r_mark_lAr(z);
-                if (ret == 0) goto lab9;
+                if (ret == 0) goto lab6;
                 if (ret < 0) return ret;
             }
-            goto lab7;
-        lab9:
+            break;
+        lab6:
             z->c = z->l - v_3;
             {
                 int ret = r_mark_yUm(z);
-                if (ret == 0) goto lab10;
+                if (ret == 0) goto lab7;
                 if (ret < 0) return ret;
             }
-            goto lab7;
-        lab10:
+            break;
+        lab7:
             z->c = z->l - v_3;
             {
                 int ret = r_mark_sUn(z);
-                if (ret == 0) goto lab11;
+                if (ret == 0) goto lab8;
                 if (ret < 0) return ret;
             }
-            goto lab7;
-        lab11:
+            break;
+        lab8:
             z->c = z->l - v_3;
             {
                 int ret = r_mark_yUz(z);
-                if (ret == 0) goto lab12;
+                if (ret == 0) goto lab9;
                 if (ret < 0) return ret;
             }
-            goto lab7;
-        lab12:
+            break;
+        lab9:
             z->c = z->l - v_3;
-        }
-    lab7:
+        } while (0);
         {
             int ret = r_mark_ymUs_(z);
-            if (ret == 0) goto lab6;
+            if (ret == 0) goto lab4;
             if (ret < 0) return ret;
         }
-        goto lab0;
-    lab6:
+        break;
+    lab4:
         z->c = z->l - v_1;
         {
             int ret = r_mark_lAr(z);
-            if (ret == 0) goto lab13;
+            if (ret == 0) goto lab10;
             if (ret < 0) return ret;
         }
         z->bra = z->c;
@@ -1021,104 +905,101 @@ static int r_stem_nominal_verb_suffixes(struct SN_env * z) {
         {
             int v_4 = z->l - z->c;
             z->ket = z->c;
-            {
+            do {
                 int v_5 = z->l - z->c;
                 {
                     int ret = r_mark_DUr(z);
-                    if (ret == 0) goto lab16;
+                    if (ret == 0) goto lab12;
                     if (ret < 0) return ret;
                 }
-                goto lab15;
-            lab16:
+                break;
+            lab12:
                 z->c = z->l - v_5;
                 {
                     int ret = r_mark_yDU(z);
-                    if (ret == 0) goto lab17;
+                    if (ret == 0) goto lab13;
                     if (ret < 0) return ret;
                 }
-                goto lab15;
-            lab17:
+                break;
+            lab13:
                 z->c = z->l - v_5;
                 {
                     int ret = r_mark_ysA(z);
-                    if (ret == 0) goto lab18;
+                    if (ret == 0) goto lab14;
                     if (ret < 0) return ret;
                 }
-                goto lab15;
-            lab18:
+                break;
+            lab14:
                 z->c = z->l - v_5;
                 {
                     int ret = r_mark_ymUs_(z);
-                    if (ret == 0) { z->c = z->l - v_4; goto lab14; }
+                    if (ret == 0) { z->c = z->l - v_4; goto lab11; }
                     if (ret < 0) return ret;
                 }
-            }
-        lab15:
-        lab14:
+            } while (0);
+        lab11:
             ;
         }
-        z->I[0] = 0;
-        goto lab0;
-    lab13:
+        ((SN_local *)z)->b_continue_stemming_noun_suffixes = 0;
+        break;
+    lab10:
         z->c = z->l - v_1;
         {
             int ret = r_mark_nUz(z);
-            if (ret == 0) goto lab19;
+            if (ret == 0) goto lab15;
             if (ret < 0) return ret;
         }
-        {
+        do {
             int v_6 = z->l - z->c;
             {
                 int ret = r_mark_yDU(z);
-                if (ret == 0) goto lab21;
+                if (ret == 0) goto lab16;
                 if (ret < 0) return ret;
             }
-            goto lab20;
-        lab21:
+            break;
+        lab16:
             z->c = z->l - v_6;
             {
                 int ret = r_mark_ysA(z);
-                if (ret == 0) goto lab19;
+                if (ret == 0) goto lab15;
                 if (ret < 0) return ret;
             }
-        }
-    lab20:
-        goto lab0;
-    lab19:
+        } while (0);
+        break;
+    lab15:
         z->c = z->l - v_1;
-        {
+        do {
             int v_7 = z->l - z->c;
             {
                 int ret = r_mark_sUnUz(z);
-                if (ret == 0) goto lab24;
+                if (ret == 0) goto lab18;
                 if (ret < 0) return ret;
             }
-            goto lab23;
-        lab24:
+            break;
+        lab18:
             z->c = z->l - v_7;
             {
                 int ret = r_mark_yUz(z);
-                if (ret == 0) goto lab25;
+                if (ret == 0) goto lab19;
                 if (ret < 0) return ret;
             }
-            goto lab23;
-        lab25:
+            break;
+        lab19:
             z->c = z->l - v_7;
             {
                 int ret = r_mark_sUn(z);
-                if (ret == 0) goto lab26;
+                if (ret == 0) goto lab20;
                 if (ret < 0) return ret;
             }
-            goto lab23;
-        lab26:
+            break;
+        lab20:
             z->c = z->l - v_7;
             {
                 int ret = r_mark_yUm(z);
-                if (ret == 0) goto lab22;
+                if (ret == 0) goto lab17;
                 if (ret < 0) return ret;
             }
-        }
-    lab23:
+        } while (0);
         z->bra = z->c;
         {
             int ret = slice_del(z);
@@ -1129,14 +1010,14 @@ static int r_stem_nominal_verb_suffixes(struct SN_env * z) {
             z->ket = z->c;
             {
                 int ret = r_mark_ymUs_(z);
-                if (ret == 0) { z->c = z->l - v_8; goto lab27; }
+                if (ret == 0) { z->c = z->l - v_8; goto lab21; }
                 if (ret < 0) return ret;
             }
-        lab27:
+        lab21:
             ;
         }
-        goto lab0;
-    lab22:
+        break;
+    lab17:
         z->c = z->l - v_1;
         {
             int ret = r_mark_DUr(z);
@@ -1150,60 +1031,58 @@ static int r_stem_nominal_verb_suffixes(struct SN_env * z) {
         {
             int v_9 = z->l - z->c;
             z->ket = z->c;
-            {
+            do {
                 int v_10 = z->l - z->c;
                 {
                     int ret = r_mark_sUnUz(z);
-                    if (ret == 0) goto lab30;
+                    if (ret == 0) goto lab23;
                     if (ret < 0) return ret;
                 }
-                goto lab29;
-            lab30:
+                break;
+            lab23:
                 z->c = z->l - v_10;
                 {
                     int ret = r_mark_lAr(z);
-                    if (ret == 0) goto lab31;
+                    if (ret == 0) goto lab24;
                     if (ret < 0) return ret;
                 }
-                goto lab29;
-            lab31:
+                break;
+            lab24:
                 z->c = z->l - v_10;
                 {
                     int ret = r_mark_yUm(z);
-                    if (ret == 0) goto lab32;
+                    if (ret == 0) goto lab25;
                     if (ret < 0) return ret;
                 }
-                goto lab29;
-            lab32:
+                break;
+            lab25:
                 z->c = z->l - v_10;
                 {
                     int ret = r_mark_sUn(z);
-                    if (ret == 0) goto lab33;
+                    if (ret == 0) goto lab26;
                     if (ret < 0) return ret;
                 }
-                goto lab29;
-            lab33:
+                break;
+            lab26:
                 z->c = z->l - v_10;
                 {
                     int ret = r_mark_yUz(z);
-                    if (ret == 0) goto lab34;
+                    if (ret == 0) goto lab27;
                     if (ret < 0) return ret;
                 }
-                goto lab29;
-            lab34:
+                break;
+            lab27:
                 z->c = z->l - v_10;
-            }
-        lab29:
+            } while (0);
             {
                 int ret = r_mark_ymUs_(z);
-                if (ret == 0) { z->c = z->l - v_9; goto lab28; }
+                if (ret == 0) { z->c = z->l - v_9; goto lab22; }
                 if (ret < 0) return ret;
             }
-        lab28:
+        lab22:
             ;
         }
-    }
-lab0:
+    } while (0);
     z->bra = z->c;
     {
         int ret = slice_del(z);
@@ -1214,15 +1093,12 @@ lab0:
 
 static int r_stem_suffix_chain_before_ki(struct SN_env * z) {
     z->ket = z->c;
-    {
-        int ret = r_mark_ki(z);
-        if (ret <= 0) return ret;
-    }
-    {
+    if (!(eq_s_b(z, 2, s_4))) return 0;
+    do {
         int v_1 = z->l - z->c;
         {
             int ret = r_mark_DA(z);
-            if (ret == 0) goto lab1;
+            if (ret == 0) goto lab0;
             if (ret < 0) return ret;
         }
         z->bra = z->c;
@@ -1233,11 +1109,11 @@ static int r_stem_suffix_chain_before_ki(struct SN_env * z) {
         {
             int v_2 = z->l - z->c;
             z->ket = z->c;
-            {
+            do {
                 int v_3 = z->l - z->c;
                 {
                     int ret = r_mark_lAr(z);
-                    if (ret == 0) goto lab4;
+                    if (ret == 0) goto lab2;
                     if (ret < 0) return ret;
                 }
                 z->bra = z->c;
@@ -1249,18 +1125,18 @@ static int r_stem_suffix_chain_before_ki(struct SN_env * z) {
                     int v_4 = z->l - z->c;
                     {
                         int ret = r_stem_suffix_chain_before_ki(z);
-                        if (ret == 0) { z->c = z->l - v_4; goto lab5; }
+                        if (ret == 0) { z->c = z->l - v_4; goto lab3; }
                         if (ret < 0) return ret;
                     }
-                lab5:
+                lab3:
                     ;
                 }
-                goto lab3;
-            lab4:
+                break;
+            lab2:
                 z->c = z->l - v_3;
                 {
                     int ret = r_mark_possessives(z);
-                    if (ret == 0) { z->c = z->l - v_2; goto lab2; }
+                    if (ret == 0) { z->c = z->l - v_2; goto lab1; }
                     if (ret < 0) return ret;
                 }
                 z->bra = z->c;
@@ -1273,7 +1149,7 @@ static int r_stem_suffix_chain_before_ki(struct SN_env * z) {
                     z->ket = z->c;
                     {
                         int ret = r_mark_lAr(z);
-                        if (ret == 0) { z->c = z->l - v_5; goto lab6; }
+                        if (ret == 0) { z->c = z->l - v_5; goto lab4; }
                         if (ret < 0) return ret;
                     }
                     z->bra = z->c;
@@ -1283,23 +1159,22 @@ static int r_stem_suffix_chain_before_ki(struct SN_env * z) {
                     }
                     {
                         int ret = r_stem_suffix_chain_before_ki(z);
-                        if (ret == 0) { z->c = z->l - v_5; goto lab6; }
+                        if (ret == 0) { z->c = z->l - v_5; goto lab4; }
                         if (ret < 0) return ret;
                     }
-                lab6:
+                lab4:
                     ;
                 }
-            }
-        lab3:
-        lab2:
+            } while (0);
+        lab1:
             ;
         }
-        goto lab0;
-    lab1:
+        break;
+    lab0:
         z->c = z->l - v_1;
         {
             int ret = r_mark_nUn(z);
-            if (ret == 0) goto lab7;
+            if (ret == 0) goto lab5;
             if (ret < 0) return ret;
         }
         z->bra = z->c;
@@ -1310,11 +1185,11 @@ static int r_stem_suffix_chain_before_ki(struct SN_env * z) {
         {
             int v_6 = z->l - z->c;
             z->ket = z->c;
-            {
+            do {
                 int v_7 = z->l - z->c;
                 {
                     int ret = r_mark_lArI(z);
-                    if (ret == 0) goto lab10;
+                    if (ret == 0) goto lab7;
                     if (ret < 0) return ret;
                 }
                 z->bra = z->c;
@@ -1322,27 +1197,26 @@ static int r_stem_suffix_chain_before_ki(struct SN_env * z) {
                     int ret = slice_del(z);
                     if (ret < 0) return ret;
                 }
-                goto lab9;
-            lab10:
+                break;
+            lab7:
                 z->c = z->l - v_7;
                 z->ket = z->c;
-                {
+                do {
                     int v_8 = z->l - z->c;
                     {
                         int ret = r_mark_possessives(z);
-                        if (ret == 0) goto lab13;
+                        if (ret == 0) goto lab9;
                         if (ret < 0) return ret;
                     }
-                    goto lab12;
-                lab13:
+                    break;
+                lab9:
                     z->c = z->l - v_8;
                     {
                         int ret = r_mark_sU(z);
-                        if (ret == 0) goto lab11;
+                        if (ret == 0) goto lab8;
                         if (ret < 0) return ret;
                     }
-                }
-            lab12:
+                } while (0);
                 z->bra = z->c;
                 {
                     int ret = slice_del(z);
@@ -1353,7 +1227,7 @@ static int r_stem_suffix_chain_before_ki(struct SN_env * z) {
                     z->ket = z->c;
                     {
                         int ret = r_mark_lAr(z);
-                        if (ret == 0) { z->c = z->l - v_9; goto lab14; }
+                        if (ret == 0) { z->c = z->l - v_9; goto lab10; }
                         if (ret < 0) return ret;
                     }
                     z->bra = z->c;
@@ -1363,37 +1237,36 @@ static int r_stem_suffix_chain_before_ki(struct SN_env * z) {
                     }
                     {
                         int ret = r_stem_suffix_chain_before_ki(z);
-                        if (ret == 0) { z->c = z->l - v_9; goto lab14; }
+                        if (ret == 0) { z->c = z->l - v_9; goto lab10; }
                         if (ret < 0) return ret;
                     }
-                lab14:
+                lab10:
                     ;
                 }
-                goto lab9;
-            lab11:
+                break;
+            lab8:
                 z->c = z->l - v_7;
                 {
                     int ret = r_stem_suffix_chain_before_ki(z);
-                    if (ret == 0) { z->c = z->l - v_6; goto lab8; }
+                    if (ret == 0) { z->c = z->l - v_6; goto lab6; }
                     if (ret < 0) return ret;
                 }
-            }
-        lab9:
-        lab8:
+            } while (0);
+        lab6:
             ;
         }
-        goto lab0;
-    lab7:
+        break;
+    lab5:
         z->c = z->l - v_1;
         {
             int ret = r_mark_ndA(z);
             if (ret <= 0) return ret;
         }
-        {
+        do {
             int v_10 = z->l - z->c;
             {
                 int ret = r_mark_lArI(z);
-                if (ret == 0) goto lab16;
+                if (ret == 0) goto lab11;
                 if (ret < 0) return ret;
             }
             z->bra = z->c;
@@ -1401,12 +1274,12 @@ static int r_stem_suffix_chain_before_ki(struct SN_env * z) {
                 int ret = slice_del(z);
                 if (ret < 0) return ret;
             }
-            goto lab15;
-        lab16:
+            break;
+        lab11:
             z->c = z->l - v_10;
             {
                 int ret = r_mark_sU(z);
-                if (ret == 0) goto lab17;
+                if (ret == 0) goto lab12;
                 if (ret < 0) return ret;
             }
             z->bra = z->c;
@@ -1419,7 +1292,7 @@ static int r_stem_suffix_chain_before_ki(struct SN_env * z) {
                 z->ket = z->c;
                 {
                     int ret = r_mark_lAr(z);
-                    if (ret == 0) { z->c = z->l - v_11; goto lab18; }
+                    if (ret == 0) { z->c = z->l - v_11; goto lab13; }
                     if (ret < 0) return ret;
                 }
                 z->bra = z->c;
@@ -1429,34 +1302,31 @@ static int r_stem_suffix_chain_before_ki(struct SN_env * z) {
                 }
                 {
                     int ret = r_stem_suffix_chain_before_ki(z);
-                    if (ret == 0) { z->c = z->l - v_11; goto lab18; }
+                    if (ret == 0) { z->c = z->l - v_11; goto lab13; }
                     if (ret < 0) return ret;
                 }
-            lab18:
+            lab13:
                 ;
             }
-            goto lab15;
-        lab17:
+            break;
+        lab12:
             z->c = z->l - v_10;
             {
                 int ret = r_stem_suffix_chain_before_ki(z);
                 if (ret <= 0) return ret;
             }
-        }
-    lab15:
-        ;
-    }
-lab0:
+        } while (0);
+    } while (0);
     return 1;
 }
 
 static int r_stem_noun_suffixes(struct SN_env * z) {
-    {
+    do {
         int v_1 = z->l - z->c;
         z->ket = z->c;
         {
             int ret = r_mark_lAr(z);
-            if (ret == 0) goto lab1;
+            if (ret == 0) goto lab0;
             if (ret < 0) return ret;
         }
         z->bra = z->c;
@@ -1468,19 +1338,19 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
             int v_2 = z->l - z->c;
             {
                 int ret = r_stem_suffix_chain_before_ki(z);
-                if (ret == 0) { z->c = z->l - v_2; goto lab2; }
+                if (ret == 0) { z->c = z->l - v_2; goto lab1; }
                 if (ret < 0) return ret;
             }
-        lab2:
+        lab1:
             ;
         }
-        goto lab0;
-    lab1:
+        break;
+    lab0:
         z->c = z->l - v_1;
         z->ket = z->c;
         {
             int ret = r_mark_ncA(z);
-            if (ret == 0) goto lab3;
+            if (ret == 0) goto lab2;
             if (ret < 0) return ret;
         }
         z->bra = z->c;
@@ -1490,12 +1360,12 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
         }
         {
             int v_3 = z->l - z->c;
-            {
+            do {
                 int v_4 = z->l - z->c;
                 z->ket = z->c;
                 {
                     int ret = r_mark_lArI(z);
-                    if (ret == 0) goto lab6;
+                    if (ret == 0) goto lab4;
                     if (ret < 0) return ret;
                 }
                 z->bra = z->c;
@@ -1503,27 +1373,26 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                     int ret = slice_del(z);
                     if (ret < 0) return ret;
                 }
-                goto lab5;
-            lab6:
+                break;
+            lab4:
                 z->c = z->l - v_4;
                 z->ket = z->c;
-                {
+                do {
                     int v_5 = z->l - z->c;
                     {
                         int ret = r_mark_possessives(z);
-                        if (ret == 0) goto lab9;
+                        if (ret == 0) goto lab6;
                         if (ret < 0) return ret;
                     }
-                    goto lab8;
-                lab9:
+                    break;
+                lab6:
                     z->c = z->l - v_5;
                     {
                         int ret = r_mark_sU(z);
-                        if (ret == 0) goto lab7;
+                        if (ret == 0) goto lab5;
                         if (ret < 0) return ret;
                     }
-                }
-            lab8:
+                } while (0);
                 z->bra = z->c;
                 {
                     int ret = slice_del(z);
@@ -1534,7 +1403,7 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                     z->ket = z->c;
                     {
                         int ret = r_mark_lAr(z);
-                        if (ret == 0) { z->c = z->l - v_6; goto lab10; }
+                        if (ret == 0) { z->c = z->l - v_6; goto lab7; }
                         if (ret < 0) return ret;
                     }
                     z->bra = z->c;
@@ -1544,19 +1413,19 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                     }
                     {
                         int ret = r_stem_suffix_chain_before_ki(z);
-                        if (ret == 0) { z->c = z->l - v_6; goto lab10; }
+                        if (ret == 0) { z->c = z->l - v_6; goto lab7; }
                         if (ret < 0) return ret;
                     }
-                lab10:
+                lab7:
                     ;
                 }
-                goto lab5;
-            lab7:
+                break;
+            lab5:
                 z->c = z->l - v_4;
                 z->ket = z->c;
                 {
                     int ret = r_mark_lAr(z);
-                    if (ret == 0) { z->c = z->l - v_3; goto lab4; }
+                    if (ret == 0) { z->c = z->l - v_3; goto lab3; }
                     if (ret < 0) return ret;
                 }
                 z->bra = z->c;
@@ -1566,40 +1435,38 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                 }
                 {
                     int ret = r_stem_suffix_chain_before_ki(z);
-                    if (ret == 0) { z->c = z->l - v_3; goto lab4; }
+                    if (ret == 0) { z->c = z->l - v_3; goto lab3; }
                     if (ret < 0) return ret;
                 }
-            }
-        lab5:
-        lab4:
+            } while (0);
+        lab3:
             ;
         }
-        goto lab0;
-    lab3:
+        break;
+    lab2:
         z->c = z->l - v_1;
         z->ket = z->c;
-        {
+        do {
             int v_7 = z->l - z->c;
             {
                 int ret = r_mark_ndA(z);
-                if (ret == 0) goto lab13;
+                if (ret == 0) goto lab9;
                 if (ret < 0) return ret;
             }
-            goto lab12;
-        lab13:
+            break;
+        lab9:
             z->c = z->l - v_7;
             {
                 int ret = r_mark_nA(z);
-                if (ret == 0) goto lab11;
+                if (ret == 0) goto lab8;
                 if (ret < 0) return ret;
             }
-        }
-    lab12:
-        {
+        } while (0);
+        do {
             int v_8 = z->l - z->c;
             {
                 int ret = r_mark_lArI(z);
-                if (ret == 0) goto lab15;
+                if (ret == 0) goto lab10;
                 if (ret < 0) return ret;
             }
             z->bra = z->c;
@@ -1607,12 +1474,12 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                 int ret = slice_del(z);
                 if (ret < 0) return ret;
             }
-            goto lab14;
-        lab15:
+            break;
+        lab10:
             z->c = z->l - v_8;
             {
                 int ret = r_mark_sU(z);
-                if (ret == 0) goto lab16;
+                if (ret == 0) goto lab11;
                 if (ret < 0) return ret;
             }
             z->bra = z->c;
@@ -1625,7 +1492,7 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                 z->ket = z->c;
                 {
                     int ret = r_mark_lAr(z);
-                    if (ret == 0) { z->c = z->l - v_9; goto lab17; }
+                    if (ret == 0) { z->c = z->l - v_9; goto lab12; }
                     if (ret < 0) return ret;
                 }
                 z->bra = z->c;
@@ -1635,48 +1502,46 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                 }
                 {
                     int ret = r_stem_suffix_chain_before_ki(z);
-                    if (ret == 0) { z->c = z->l - v_9; goto lab17; }
+                    if (ret == 0) { z->c = z->l - v_9; goto lab12; }
                     if (ret < 0) return ret;
                 }
-            lab17:
+            lab12:
                 ;
             }
-            goto lab14;
-        lab16:
+            break;
+        lab11:
             z->c = z->l - v_8;
             {
                 int ret = r_stem_suffix_chain_before_ki(z);
-                if (ret == 0) goto lab11;
+                if (ret == 0) goto lab8;
                 if (ret < 0) return ret;
             }
-        }
-    lab14:
-        goto lab0;
-    lab11:
+        } while (0);
+        break;
+    lab8:
         z->c = z->l - v_1;
         z->ket = z->c;
-        {
+        do {
             int v_10 = z->l - z->c;
             {
                 int ret = r_mark_ndAn(z);
-                if (ret == 0) goto lab20;
+                if (ret == 0) goto lab14;
                 if (ret < 0) return ret;
             }
-            goto lab19;
-        lab20:
+            break;
+        lab14:
             z->c = z->l - v_10;
             {
                 int ret = r_mark_nU(z);
-                if (ret == 0) goto lab18;
+                if (ret == 0) goto lab13;
                 if (ret < 0) return ret;
             }
-        }
-    lab19:
-        {
+        } while (0);
+        do {
             int v_11 = z->l - z->c;
             {
                 int ret = r_mark_sU(z);
-                if (ret == 0) goto lab22;
+                if (ret == 0) goto lab15;
                 if (ret < 0) return ret;
             }
             z->bra = z->c;
@@ -1689,7 +1554,7 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                 z->ket = z->c;
                 {
                     int ret = r_mark_lAr(z);
-                    if (ret == 0) { z->c = z->l - v_12; goto lab23; }
+                    if (ret == 0) { z->c = z->l - v_12; goto lab16; }
                     if (ret < 0) return ret;
                 }
                 z->bra = z->c;
@@ -1699,29 +1564,28 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                 }
                 {
                     int ret = r_stem_suffix_chain_before_ki(z);
-                    if (ret == 0) { z->c = z->l - v_12; goto lab23; }
+                    if (ret == 0) { z->c = z->l - v_12; goto lab16; }
                     if (ret < 0) return ret;
                 }
-            lab23:
+            lab16:
                 ;
             }
-            goto lab21;
-        lab22:
+            break;
+        lab15:
             z->c = z->l - v_11;
             {
                 int ret = r_mark_lArI(z);
-                if (ret == 0) goto lab18;
+                if (ret == 0) goto lab13;
                 if (ret < 0) return ret;
             }
-        }
-    lab21:
-        goto lab0;
-    lab18:
+        } while (0);
+        break;
+    lab13:
         z->c = z->l - v_1;
         z->ket = z->c;
         {
             int ret = r_mark_DAn(z);
-            if (ret == 0) goto lab24;
+            if (ret == 0) goto lab17;
             if (ret < 0) return ret;
         }
         z->bra = z->c;
@@ -1732,11 +1596,11 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
         {
             int v_13 = z->l - z->c;
             z->ket = z->c;
-            {
+            do {
                 int v_14 = z->l - z->c;
                 {
                     int ret = r_mark_possessives(z);
-                    if (ret == 0) goto lab27;
+                    if (ret == 0) goto lab19;
                     if (ret < 0) return ret;
                 }
                 z->bra = z->c;
@@ -1749,7 +1613,7 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                     z->ket = z->c;
                     {
                         int ret = r_mark_lAr(z);
-                        if (ret == 0) { z->c = z->l - v_15; goto lab28; }
+                        if (ret == 0) { z->c = z->l - v_15; goto lab20; }
                         if (ret < 0) return ret;
                     }
                     z->bra = z->c;
@@ -1759,18 +1623,18 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                     }
                     {
                         int ret = r_stem_suffix_chain_before_ki(z);
-                        if (ret == 0) { z->c = z->l - v_15; goto lab28; }
+                        if (ret == 0) { z->c = z->l - v_15; goto lab20; }
                         if (ret < 0) return ret;
                     }
-                lab28:
+                lab20:
                     ;
                 }
-                goto lab26;
-            lab27:
+                break;
+            lab19:
                 z->c = z->l - v_14;
                 {
                     int ret = r_mark_lAr(z);
-                    if (ret == 0) goto lab29;
+                    if (ret == 0) goto lab21;
                     if (ret < 0) return ret;
                 }
                 z->bra = z->c;
@@ -1782,46 +1646,44 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                     int v_16 = z->l - z->c;
                     {
                         int ret = r_stem_suffix_chain_before_ki(z);
-                        if (ret == 0) { z->c = z->l - v_16; goto lab30; }
+                        if (ret == 0) { z->c = z->l - v_16; goto lab22; }
                         if (ret < 0) return ret;
                     }
-                lab30:
+                lab22:
                     ;
                 }
-                goto lab26;
-            lab29:
+                break;
+            lab21:
                 z->c = z->l - v_14;
                 {
                     int ret = r_stem_suffix_chain_before_ki(z);
-                    if (ret == 0) { z->c = z->l - v_13; goto lab25; }
+                    if (ret == 0) { z->c = z->l - v_13; goto lab18; }
                     if (ret < 0) return ret;
                 }
-            }
-        lab26:
-        lab25:
+            } while (0);
+        lab18:
             ;
         }
-        goto lab0;
-    lab24:
+        break;
+    lab17:
         z->c = z->l - v_1;
         z->ket = z->c;
-        {
+        do {
             int v_17 = z->l - z->c;
             {
                 int ret = r_mark_nUn(z);
-                if (ret == 0) goto lab33;
+                if (ret == 0) goto lab24;
                 if (ret < 0) return ret;
             }
-            goto lab32;
-        lab33:
+            break;
+        lab24:
             z->c = z->l - v_17;
             {
                 int ret = r_mark_ylA(z);
-                if (ret == 0) goto lab31;
+                if (ret == 0) goto lab23;
                 if (ret < 0) return ret;
             }
-        }
-    lab32:
+        } while (0);
         z->bra = z->c;
         {
             int ret = slice_del(z);
@@ -1829,12 +1691,12 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
         }
         {
             int v_18 = z->l - z->c;
-            {
+            do {
                 int v_19 = z->l - z->c;
                 z->ket = z->c;
                 {
                     int ret = r_mark_lAr(z);
-                    if (ret == 0) goto lab36;
+                    if (ret == 0) goto lab26;
                     if (ret < 0) return ret;
                 }
                 z->bra = z->c;
@@ -1844,30 +1706,29 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                 }
                 {
                     int ret = r_stem_suffix_chain_before_ki(z);
-                    if (ret == 0) goto lab36;
+                    if (ret == 0) goto lab26;
                     if (ret < 0) return ret;
                 }
-                goto lab35;
-            lab36:
+                break;
+            lab26:
                 z->c = z->l - v_19;
                 z->ket = z->c;
-                {
+                do {
                     int v_20 = z->l - z->c;
                     {
                         int ret = r_mark_possessives(z);
-                        if (ret == 0) goto lab39;
+                        if (ret == 0) goto lab28;
                         if (ret < 0) return ret;
                     }
-                    goto lab38;
-                lab39:
+                    break;
+                lab28:
                     z->c = z->l - v_20;
                     {
                         int ret = r_mark_sU(z);
-                        if (ret == 0) goto lab37;
+                        if (ret == 0) goto lab27;
                         if (ret < 0) return ret;
                     }
-                }
-            lab38:
+                } while (0);
                 z->bra = z->c;
                 {
                     int ret = slice_del(z);
@@ -1878,7 +1739,7 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                     z->ket = z->c;
                     {
                         int ret = r_mark_lAr(z);
-                        if (ret == 0) { z->c = z->l - v_21; goto lab40; }
+                        if (ret == 0) { z->c = z->l - v_21; goto lab29; }
                         if (ret < 0) return ret;
                     }
                     z->bra = z->c;
@@ -1888,32 +1749,31 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                     }
                     {
                         int ret = r_stem_suffix_chain_before_ki(z);
-                        if (ret == 0) { z->c = z->l - v_21; goto lab40; }
+                        if (ret == 0) { z->c = z->l - v_21; goto lab29; }
                         if (ret < 0) return ret;
                     }
-                lab40:
+                lab29:
                     ;
                 }
-                goto lab35;
-            lab37:
+                break;
+            lab27:
                 z->c = z->l - v_19;
                 {
                     int ret = r_stem_suffix_chain_before_ki(z);
-                    if (ret == 0) { z->c = z->l - v_18; goto lab34; }
+                    if (ret == 0) { z->c = z->l - v_18; goto lab25; }
                     if (ret < 0) return ret;
                 }
-            }
-        lab35:
-        lab34:
+            } while (0);
+        lab25:
             ;
         }
-        goto lab0;
-    lab31:
+        break;
+    lab23:
         z->c = z->l - v_1;
         z->ket = z->c;
         {
             int ret = r_mark_lArI(z);
-            if (ret == 0) goto lab41;
+            if (ret == 0) goto lab30;
             if (ret < 0) return ret;
         }
         z->bra = z->c;
@@ -1921,43 +1781,42 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
             int ret = slice_del(z);
             if (ret < 0) return ret;
         }
-        goto lab0;
-    lab41:
+        break;
+    lab30:
         z->c = z->l - v_1;
         {
             int ret = r_stem_suffix_chain_before_ki(z);
-            if (ret == 0) goto lab42;
+            if (ret == 0) goto lab31;
             if (ret < 0) return ret;
         }
-        goto lab0;
-    lab42:
+        break;
+    lab31:
         z->c = z->l - v_1;
         z->ket = z->c;
-        {
+        do {
             int v_22 = z->l - z->c;
             {
                 int ret = r_mark_DA(z);
-                if (ret == 0) goto lab45;
+                if (ret == 0) goto lab33;
                 if (ret < 0) return ret;
             }
-            goto lab44;
-        lab45:
+            break;
+        lab33:
             z->c = z->l - v_22;
             {
                 int ret = r_mark_yU(z);
-                if (ret == 0) goto lab46;
+                if (ret == 0) goto lab34;
                 if (ret < 0) return ret;
             }
-            goto lab44;
-        lab46:
+            break;
+        lab34:
             z->c = z->l - v_22;
             {
                 int ret = r_mark_yA(z);
-                if (ret == 0) goto lab43;
+                if (ret == 0) goto lab32;
                 if (ret < 0) return ret;
             }
-        }
-    lab44:
+        } while (0);
         z->bra = z->c;
         {
             int ret = slice_del(z);
@@ -1966,11 +1825,11 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
         {
             int v_23 = z->l - z->c;
             z->ket = z->c;
-            {
+            do {
                 int v_24 = z->l - z->c;
                 {
                     int ret = r_mark_possessives(z);
-                    if (ret == 0) goto lab49;
+                    if (ret == 0) goto lab36;
                     if (ret < 0) return ret;
                 }
                 z->bra = z->c;
@@ -1983,22 +1842,21 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
                     z->ket = z->c;
                     {
                         int ret = r_mark_lAr(z);
-                        if (ret == 0) { z->c = z->l - v_25; goto lab50; }
+                        if (ret == 0) { z->c = z->l - v_25; goto lab37; }
                         if (ret < 0) return ret;
                     }
-                lab50:
+                lab37:
                     ;
                 }
-                goto lab48;
-            lab49:
+                break;
+            lab36:
                 z->c = z->l - v_24;
                 {
                     int ret = r_mark_lAr(z);
-                    if (ret == 0) { z->c = z->l - v_23; goto lab47; }
+                    if (ret == 0) { z->c = z->l - v_23; goto lab35; }
                     if (ret < 0) return ret;
                 }
-            }
-        lab48:
+            } while (0);
             z->bra = z->c;
             {
                 int ret = slice_del(z);
@@ -2007,32 +1865,31 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
             z->ket = z->c;
             {
                 int ret = r_stem_suffix_chain_before_ki(z);
-                if (ret == 0) { z->c = z->l - v_23; goto lab47; }
+                if (ret == 0) { z->c = z->l - v_23; goto lab35; }
                 if (ret < 0) return ret;
             }
-        lab47:
+        lab35:
             ;
         }
-        goto lab0;
-    lab43:
+        break;
+    lab32:
         z->c = z->l - v_1;
         z->ket = z->c;
-        {
+        do {
             int v_26 = z->l - z->c;
             {
                 int ret = r_mark_possessives(z);
-                if (ret == 0) goto lab52;
+                if (ret == 0) goto lab38;
                 if (ret < 0) return ret;
             }
-            goto lab51;
-        lab52:
+            break;
+        lab38:
             z->c = z->l - v_26;
             {
                 int ret = r_mark_sU(z);
                 if (ret <= 0) return ret;
             }
-        }
-    lab51:
+        } while (0);
         z->bra = z->c;
         {
             int ret = slice_del(z);
@@ -2043,7 +1900,7 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
             z->ket = z->c;
             {
                 int ret = r_mark_lAr(z);
-                if (ret == 0) { z->c = z->l - v_27; goto lab53; }
+                if (ret == 0) { z->c = z->l - v_27; goto lab39; }
                 if (ret < 0) return ret;
             }
             z->bra = z->c;
@@ -2053,21 +1910,20 @@ static int r_stem_noun_suffixes(struct SN_env * z) {
             }
             {
                 int ret = r_stem_suffix_chain_before_ki(z);
-                if (ret == 0) { z->c = z->l - v_27; goto lab53; }
+                if (ret == 0) { z->c = z->l - v_27; goto lab39; }
                 if (ret < 0) return ret;
             }
-        lab53:
+        lab39:
             ;
         }
-    }
-lab0:
+    } while (0);
     return 1;
 }
 
 static int r_post_process_last_consonants(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
-    among_var = find_among_b(z, a_23, 4);
+    among_var = find_among_b(z, a_23, 4, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -2102,88 +1958,72 @@ static int r_post_process_last_consonants(struct SN_env * z) {
 static int r_append_U_to_stems_ending_with_d_or_g(struct SN_env * z) {
     z->ket = z->c;
     z->bra = z->c;
-    {
-        int v_1 = z->l - z->c;
-        if (z->c <= z->lb || z->p[z->c - 1] != 'd') goto lab1;
+    do {
+        if (z->c <= z->lb || z->p[z->c - 1] != 'd') goto lab0;
         z->c--;
-        goto lab0;
-    lab1:
-        z->c = z->l - v_1;
+        break;
+    lab0:
         if (z->c <= z->lb || z->p[z->c - 1] != 'g') return 0;
         z->c--;
-    }
-lab0:
+    } while (0);
     if (out_grouping_b_U(z, g_vowel, 97, 305, 1) < 0) return 0;
-    {
-        int v_2 = z->l - z->c;
-        {
-            int v_3 = z->l - z->c;
-            if (z->c <= z->lb || z->p[z->c - 1] != 'a') goto lab5;
+    do {
+        int v_1 = z->l - z->c;
+        do {
+            if (z->c <= z->lb || z->p[z->c - 1] != 'a') goto lab2;
             z->c--;
-            goto lab4;
-        lab5:
-            z->c = z->l - v_3;
-            if (!(eq_s_b(z, 2, s_9))) goto lab3;
-        }
-    lab4:
+            break;
+        lab2:
+            if (!(eq_s_b(z, 2, s_9))) goto lab1;
+        } while (0);
         {
             int ret = slice_from_s(z, 2, s_10);
             if (ret < 0) return ret;
         }
-        goto lab2;
-    lab3:
-        z->c = z->l - v_2;
-        {
-            int v_4 = z->l - z->c;
-            if (z->c <= z->lb || z->p[z->c - 1] != 'e') goto lab8;
+        break;
+    lab1:
+        z->c = z->l - v_1;
+        do {
+            if (z->c <= z->lb || z->p[z->c - 1] != 'e') goto lab4;
             z->c--;
-            goto lab7;
-        lab8:
-            z->c = z->l - v_4;
-            if (z->c <= z->lb || z->p[z->c - 1] != 'i') goto lab6;
+            break;
+        lab4:
+            if (z->c <= z->lb || z->p[z->c - 1] != 'i') goto lab3;
             z->c--;
-        }
-    lab7:
+        } while (0);
         {
             int ret = slice_from_s(z, 1, s_11);
             if (ret < 0) return ret;
         }
-        goto lab2;
-    lab6:
-        z->c = z->l - v_2;
-        {
-            int v_5 = z->l - z->c;
-            if (z->c <= z->lb || z->p[z->c - 1] != 'o') goto lab11;
+        break;
+    lab3:
+        z->c = z->l - v_1;
+        do {
+            if (z->c <= z->lb || z->p[z->c - 1] != 'o') goto lab6;
             z->c--;
-            goto lab10;
-        lab11:
-            z->c = z->l - v_5;
-            if (z->c <= z->lb || z->p[z->c - 1] != 'u') goto lab9;
+            break;
+        lab6:
+            if (z->c <= z->lb || z->p[z->c - 1] != 'u') goto lab5;
             z->c--;
-        }
-    lab10:
+        } while (0);
         {
             int ret = slice_from_s(z, 1, s_12);
             if (ret < 0) return ret;
         }
-        goto lab2;
-    lab9:
-        z->c = z->l - v_2;
-        {
-            int v_6 = z->l - z->c;
-            if (!(eq_s_b(z, 2, s_13))) goto lab13;
-            goto lab12;
-        lab13:
-            z->c = z->l - v_6;
+        break;
+    lab5:
+        z->c = z->l - v_1;
+        do {
+            if (!(eq_s_b(z, 2, s_13))) goto lab7;
+            break;
+        lab7:
             if (!(eq_s_b(z, 2, s_14))) return 0;
-        }
-    lab12:
+        } while (0);
         {
             int ret = slice_from_s(z, 2, s_15);
             if (ret < 0) return ret;
         }
-    }
-lab2:
+    } while (0);
     return 1;
 }
 
@@ -2195,8 +2035,7 @@ static int r_is_reserved_word(struct SN_env * z) {
     lab0:
         ;
     }
-    if (z->c > z->lb) return 0;
-    return 1;
+    return z->c <= z->lb;
 }
 
 static int r_remove_proper_noun_suffix(struct SN_env * z) {
@@ -2205,14 +2044,10 @@ static int r_remove_proper_noun_suffix(struct SN_env * z) {
         z->bra = z->c;
         while (1) {
             int v_2 = z->c;
-            {
-                int v_3 = z->c;
-                if (z->c == z->l || z->p[z->c] != '\'') goto lab2;
-                z->c++;
-                goto lab1;
-            lab2:
-                z->c = v_3;
-            }
+            if (z->c == z->l || z->p[z->c] != '\'') goto lab2;
+            z->c++;
+            goto lab1;
+        lab2:
             z->c = v_2;
             break;
         lab1:
@@ -2232,20 +2067,20 @@ static int r_remove_proper_noun_suffix(struct SN_env * z) {
         z->c = v_1;
     }
     {
-        int v_4 = z->c;
+        int v_3 = z->c;
         {
             int ret = skip_utf8(z->p, z->c, z->l, 2);
             if (ret < 0) goto lab3;
             z->c = ret;
         }
         while (1) {
-            int v_5 = z->c;
+            int v_4 = z->c;
             if (z->c == z->l || z->p[z->c] != '\'') goto lab4;
             z->c++;
-            z->c = v_5;
+            z->c = v_4;
             break;
         lab4:
-            z->c = v_5;
+            z->c = v_4;
             {
                 int ret = skip_utf8(z->p, z->c, z->l, 1);
                 if (ret < 0) goto lab3;
@@ -2260,7 +2095,7 @@ static int r_remove_proper_noun_suffix(struct SN_env * z) {
             if (ret < 0) return ret;
         }
     lab3:
-        z->c = v_4;
+        z->c = v_3;
     }
     return 1;
 }
@@ -2333,7 +2168,7 @@ extern int turkish_UTF_8_stem(struct SN_env * z) {
         }
         z->c = z->l - v_1;
     }
-    if (!(z->I[0])) return 0;
+    if (!((SN_local *)z)->b_continue_stemming_noun_suffixes) return 0;
     {
         int v_2 = z->l - z->c;
         {
@@ -2343,14 +2178,18 @@ extern int turkish_UTF_8_stem(struct SN_env * z) {
         z->c = z->l - v_2;
     }
     z->c = z->lb;
-    {
-        int ret = r_postlude(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    return r_postlude(z);
 }
 
-extern struct SN_env * turkish_UTF_8_create_env(void) { return SN_create_env(0, 1); }
+extern struct SN_env * turkish_UTF_8_create_env(void) {
+    struct SN_env * z = SN_new_env(sizeof(SN_local));
+    if (z) {
+        ((SN_local *)z)->b_continue_stemming_noun_suffixes = 0;
+    }
+    return z;
+}
 
-extern void turkish_UTF_8_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void turkish_UTF_8_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

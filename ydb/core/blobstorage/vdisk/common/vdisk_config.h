@@ -282,6 +282,8 @@ namespace NKikimr {
         TControlWrapper PhantomFlagStorageLimit;
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
         TControlWrapper EnableFreshSyncDataThrottling;
+        TControlWrapper EnableChecksumReadValidationOnVDisk;
+        TControlWrapper EnableChecksumWriteValidationOnVDisk;
 
         ///////////// CHUNK Keeper //////////////////
         TControlWrapper EnableChunkKeeper;

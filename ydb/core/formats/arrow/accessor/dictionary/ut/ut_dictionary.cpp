@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         TChunkConstructionData infoWithMeta(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
             std::nullopt, blobAndMeta.Meta);
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         const auto* dictData = dynamic_cast<const TDictionaryAccessorData*>(blobAndMeta.Meta.get());
         AFL_VERIFY(dictData);
         TString dictionaryBlobOnly(blobAndMeta.Blob.data(), dictData->DictionaryBlobSize);
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         // Dictionary has 300 distinct values + null slot = 301 variants -> uint16 positions
         AFL_VERIFY(dict->GetPositions()->type()->id() == arrow::Type::UINT16);
 
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         const auto* dictData = dynamic_cast<const TDictionaryAccessorData*>(blobAndMeta.Meta.get());
         AFL_VERIFY(dictData);
         AFL_VERIFY(dictData->PositionsBlobSize > 0);
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             ("numDistinct", numDistinct)("withNulls", withNulls)("expected", static_cast<int>(expectedPositionsType))("actual", static_cast<int>(dict->GetPositions()->type()->id()));
         AFL_VERIFY(dict->GetDictionary()->length() == numDistinct + (withNulls ? 1 : 0));
 
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         TChunkConstructionData infoWithMeta(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
             std::nullopt, blobAndMeta.Meta);

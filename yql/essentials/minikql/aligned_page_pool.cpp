@@ -1,5 +1,6 @@
 #include "aligned_page_pool.h"
 
+#include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/string/cast.h>
@@ -75,8 +76,9 @@ class TGlobalPagePool {
     friend class TGlobalPools<T, SysAlign>;
 
 public:
-    explicit TGlobalPagePool(size_t pageSize)
-        : PageSize_(pageSize)
+    TGlobalPagePool(T& provider, size_t pageSize)
+        : Provider_(provider)
+        , PageSize_(pageSize)
     {
     }
 
@@ -124,11 +126,12 @@ private:
 
     void FreePage(void* addr) noexcept {
         NYql::NUdf::SanitizerMakeRegionInaccessible(addr, PageSize_);
-        auto res = T::Munmap(addr, PageSize_);
+        auto res = Provider_.Munmap(addr, PageSize_);
         Y_DEBUG_ABORT_UNLESS(0 == res, "Madvise failed: %s", LastSystemErrorText());
     }
 
 private:
+    T& Provider_;
     const size_t PageSize_;
     std::atomic<ui64> Count_ = 0;
     TLockFreeStack<void*> Pages_;
@@ -150,6 +153,7 @@ public:
     }
 
     TGlobalPools()
+        : Provider_(T::GetInstance())
     {
         Reset();
     }
@@ -157,7 +161,7 @@ public:
     void* DoMmap(size_t size) {
         Y_DEBUG_ABORT_UNLESS(!TAlignedPagePoolImpl<T>::IsDefaultAllocatorUsed(), "No memory maps allowed while using default allocator");
 
-        void* res = T::Mmap(size);
+        void* res = Provider_.Mmap(size);
         NYql::NUdf::SanitizerMakeRegionInaccessible(res, size);
         TotalMmappedBytes_ += size;
         return res;
@@ -192,7 +196,7 @@ public:
     }
 
     void DoMunmap(void* addr, size_t size) {
-        if (Y_UNLIKELY(0 != T::Munmap(addr, size))) {
+        if (Y_UNLIKELY(0 != Provider_.Munmap(addr, size))) {
             TStringStream mmaps;
             const auto lastError = LastSystemError();
             if (lastError == ENOMEM) {
@@ -226,11 +230,12 @@ public:
         Pools_.clear();
         Pools_.reserve(MidLevels + 1);
         for (ui32 i = 0; i <= MidLevels; ++i) {
-            Pools_.emplace_back(MakeHolder<TGlobalPagePool<T, SysAlign>>(TAlignedPagePool::POOL_PAGE_SIZE << i));
+            Pools_.emplace_back(MakeHolder<TGlobalPagePool<T, SysAlign>>(Provider_, TAlignedPagePool::POOL_PAGE_SIZE << i));
         }
     }
 
 private:
+    T& Provider_;
     TVector<THolder<TGlobalPagePool<T, SysAlign>>> Pools_;
     std::atomic<i64> TotalMmappedBytes_{0};
 };
@@ -307,8 +312,13 @@ inline int TSystemMmap::Munmap(void* addr, size_t size) noexcept {
 }
 #endif
 
-std::function<void*(size_t size)> TFakeMmap::OnMmap = {};
-std::function<void(void* addr, size_t size)> TFakeMmap::OnMunmap = {};
+TSystemMmap& TSystemMmap::GetInstance() {
+    return *Singleton<TSystemMmap>();
+}
+
+TFakeMmap& TFakeMmap::GetInstance() {
+    return *Singleton<TFakeMmap>();
+}
 
 void* TFakeMmap::Mmap(size_t size) {
     Y_DEBUG_ABORT_UNLESS(OnMmap, "mmap function must be provided");

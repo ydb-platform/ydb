@@ -61,7 +61,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsla.LICENSE
     Files with this license:
-        tif_lzw.c [1452:1462]
+        tif_lzw.c [1470:1480]
 
 KEEP     BSLA                 99516a4e1b8d6f6054da2439715a8bda
 BELONGS ya.make
@@ -144,7 +144,6 @@ BELONGS ya.make
         tif_version.c [5:22]
         tif_warning.c [5:22]
         tif_webp.c [5:22]
-        tif_win32.c [5:22]
         tif_write.c [5:22]
         tif_zip.c [5:22]
         tif_zstd.c [5:22]
@@ -164,3 +163,14 @@ BELONGS ya.make
     Files with this license:
         LICENSE.md [6:23]
         README.md [52:69]
+
+KEEP     libtiff              eb46110bca2ca592d93347fc2a74357a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: libtiff
+        Score           : 93.33
+        Match type      : TEXT
+        Links           : https://fedoraproject.org/wiki/Licensing/libtiff, https://spdx.org/licenses/libtiff
+    Files with this license:
+        tif_win32.c [5:23]

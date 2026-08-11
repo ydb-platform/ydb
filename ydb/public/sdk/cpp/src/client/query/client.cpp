@@ -260,7 +260,12 @@ public:
 
                         obs->End(commitTxStatus.GetStatus(), commitTxStatus.GetEndpoint());
 
-                        TCommitTransactionResult commitTxResult(std::move(commitTxStatus));
+                        std::optional<NScheme::TVirtualTimestamp> commitTimestamp;
+                        if (response->has_commit_timestamp()) {
+                            commitTimestamp = NScheme::TVirtualTimestamp(response->commit_timestamp());
+                        }
+
+                        TCommitTransactionResult commitTxResult(std::move(commitTxStatus), std::move(commitTimestamp));
                         promise.SetValue(std::move(commitTxResult));
                     } else {
                         obs->End(status.Status, status.Endpoint);
@@ -530,12 +535,10 @@ public:
     TAsyncCreateSessionResult GetSession(const TCreateSessionSettings& settings) {
         class TQueryClientGetSessionCtx : public NSessionPool::IGetSessionCtx {
         public:
-            TQueryClientGetSessionCtx(std::shared_ptr<TQueryClient::TImpl> client, const TCreateSessionSettings& settings,
-                std::shared_ptr<TQueryObservation> observation)
+            TQueryClientGetSessionCtx(std::shared_ptr<TQueryClient::TImpl> client, const TCreateSessionSettings& settings)
                 : Promise(NThreading::NewPromise<TCreateSessionResult>())
                 , Client(client)
                 , RpcSettings(TRpcRequestSettings::Make(settings))
-                , Observation(std::move(observation))
             {}
 
             TAsyncCreateSessionResult GetFuture() {
@@ -544,9 +547,6 @@ public:
 
             void ReplyError(TStatus status) override {
                 TSession session;
-                if (Observation) {
-                    Observation->End(status.GetStatus(), status.GetEndpoint());
-                }
                 ScheduleReply(TCreateSessionResult(std::move(status), std::move(session)));
             }
 
@@ -559,20 +559,18 @@ public:
                     )
                 );
 
-                if (Observation) {
-                    Observation->End(EStatus::SUCCESS, session->GetEndpoint());
-                }
                 ScheduleReply(std::move(val));
             }
 
             void ReplyNewSession() override {
+                auto obs = Client->MakeObservation("CreateSession");
                 TRpcRequestSettings deferredRpcSettings = RpcSettings;
                 deferredRpcSettings.Deadline = TDeadline::Max();
                 Client->CreateAttachedSession(
                     this->Client->Settings_.SessionPoolSettings_.UseDeferredSessionCreation_ ? 
                     deferredRpcSettings :
                     RpcSettings).Subscribe(
-                    [promise = Promise, obs = Observation](TAsyncCreateSessionResult future) mutable
+                    [promise = Promise, obs](TAsyncCreateSessionResult future) mutable
                 {
                     auto val = future.ExtractValue();
                     if (obs) {
@@ -582,7 +580,7 @@ public:
                 });
                 if (Client->Settings_.SessionPoolSettings_.UseDeferredSessionCreation_) {
                     Client->Connections_->ScheduleDelayedTask(
-                        [promise = Promise, obs = Observation, client = Client]() mutable {
+                        [promise = Promise, obs, client = Client]() mutable {
                             TSession session;
                             promise.TrySetValue(TCreateSessionResult(TStatus(TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED, "GetSession deadline exceeded")), std::move(session)));
                             if (obs) {
@@ -615,11 +613,9 @@ public:
             NThreading::TPromise<TCreateSessionResult> Promise;
             std::shared_ptr<TQueryClient::TImpl> Client;
             const TRpcRequestSettings RpcSettings;
-            std::shared_ptr<TQueryObservation> Observation;
         };
 
-        auto obs = MakeObservation("CreateSession");
-        auto ctx = std::make_unique<TQueryClientGetSessionCtx>(shared_from_this(), settings, obs);
+        auto ctx = std::make_unique<TQueryClientGetSessionCtx>(shared_from_this(), settings);
         auto future = ctx->GetFuture();
         SessionPool_.GetSession(std::move(ctx));
 

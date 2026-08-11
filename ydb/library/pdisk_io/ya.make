@@ -6,7 +6,7 @@ GENERATE_ENUM_SERIALIZATION(uring_router.h)
 IF (OS_LINUX)
     PEERDIR(
         contrib/libs/libaio
-        ydb/library/uring
+        contrib/libs/liburing
     )
     SRCS(
         aio_linux.cpp

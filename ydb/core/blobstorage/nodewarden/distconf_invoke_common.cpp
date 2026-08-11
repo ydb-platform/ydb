@@ -4,6 +4,8 @@
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/util/address_classifier.h>
 
+#include <ydb/library/aclib/aclib.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
@@ -94,10 +96,12 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvInterconnect::TEvNodeConnected::TPtr ev) {
-        const auto it = Subscriptions.find(ev->Get()->NodeId);
+        const ui32 nodeId = ev->Get()->NodeId;
+        const auto it = Subscriptions.find(nodeId);
         Y_ABORT_UNLESS(it != Subscriptions.end());
         Y_ABORT_UNLESS(!it->second || it->second == ev->Sender);
         it->second = ev->Sender;
+        SendPendingVStatusQueries(nodeId, ev->Sender);
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev) {
@@ -106,6 +110,7 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(it != Subscriptions.end());
         Y_ABORT_UNLESS(!it->second || it->second == ev->Sender);
         Subscriptions.erase(it);
+        VStatusQueriesAwaitingConnection.erase(nodeId);
         for (auto [begin, end] = NodeToVDisk.equal_range(nodeId); begin != end; ++begin) {
             OnVStatusError(begin->second);
         }
@@ -383,7 +388,11 @@ namespace NKikimr::NStorage {
         if (msg.ErrorReason) {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
         } else {
-            Finish(TResult::OK, std::nullopt);
+            Finish(TResult::OK, std::nullopt, [&](TResult *record) {
+                if (ReassignGroupDiskResult) {
+                    record->MutableReassignGroupDisk()->CopyFrom(*ReassignGroupDiskResult);
+                }
+            });
         }
     }
 

@@ -17,27 +17,44 @@ const TString TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX = TStringBuilder() << "/" <<
 
 } // namespace
 
-bool IsTabletDevUiSecurePath(TStringBuf pathInfo) {
+bool IsTabletDevUiSecurePath(const TStringBuf pathInfo) {
     if (pathInfo == TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX) {
         return true;
     }
     return pathInfo.StartsWith(TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX + "/");
 }
 
-bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type) {
+bool HasTabletDevUiSecureSubtree(const TAppData* appData, TTabletTypes::EType type) {
     if (!appData) {
         return false;
     }
-    // Tablets that use the `/app/secure` DevUI path.
+    // Tablets that expose an `/app/secure` DevUI subtree.
     constexpr std::array tabletTypes = {
         TTabletTypes::DataShard,
         TTabletTypes::Hive,
         TTabletTypes::GraphShard,
+        TTabletTypes::BSController,
+        TTabletTypes::PersQueue,
         TTabletTypes::SchemeShard,
     };
 
     return std::find(tabletTypes.begin(), tabletTypes.end(), type) != tabletTypes.end()
         && appData->FeatureFlags.GetEnableTabletDevUiSecurePath();
+}
+
+bool IsTabletDevUiAppPageAdminOnly(const TAppData* appData, TTabletTypes::EType type) {
+    if (!appData) {
+        return false;
+    }
+
+    constexpr std::array tabletTypes = {
+        TTabletTypes::DataShard,
+        TTabletTypes::BSController,
+        TTabletTypes::Hive,
+    };
+
+    return appData->FeatureFlags.GetEnableTabletDevUiSecurePath() &&
+           std::find(tabletTypes.begin(), tabletTypes.end(), type) != tabletTypes.end();
 }
 
 bool IsTabletDevUiAccessAllowed(

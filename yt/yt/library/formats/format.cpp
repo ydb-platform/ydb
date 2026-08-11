@@ -13,8 +13,6 @@
 #include "schemaless_writer_adapter.h"
 #include "skiff_parser.h"
 #include "skiff_writer.h"
-#include "yaml_parser.h"
-#include "yaml_writer.h"
 #include "yamred_dsv_parser.h"
 #include "yamred_dsv_writer.h"
 #include "yamr_parser.h"
@@ -41,12 +39,17 @@
 #include <yt/yt/core/json/json_parser.h>
 #include <yt/yt/core/json/json_writer.h>
 
+#include <yt/yt/core/yaml/config.h>
+#include <yt/yt/core/yaml/parser.h>
+#include <yt/yt/core/yaml/writer.h>
+
 namespace NYT::NFormats {
 
 using namespace NConcurrency;
 using namespace NYTree;
 using namespace NYson;
 using namespace NJson;
+using namespace NYaml;
 using namespace NTableClient;
 using namespace NSkiffExt;
 using namespace NComplexTypes;

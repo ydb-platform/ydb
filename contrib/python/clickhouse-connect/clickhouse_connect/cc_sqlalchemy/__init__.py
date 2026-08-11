@@ -6,7 +6,7 @@ from clickhouse_connect.cc_sqlalchemy import types
 from clickhouse_connect.cc_sqlalchemy.datatypes.base import schema_types
 from clickhouse_connect.cc_sqlalchemy.ddl import tableengine as engines
 from clickhouse_connect.cc_sqlalchemy.ddl.dictionary import Dictionary
-from clickhouse_connect.cc_sqlalchemy.sql import final, sample
+from clickhouse_connect.cc_sqlalchemy.sql import ClickHouseSelect, final, sample, select
 from clickhouse_connect.cc_sqlalchemy.sql.clauses import ArrayJoin, ClickHouseJoin, Lambda, array_join, ch_join
 from clickhouse_connect.dbapi.cursor import Cursor
 
@@ -30,6 +30,8 @@ __all__ = [
     "Lambda",
     "final",
     "sample",
+    "select",
+    "ClickHouseSelect",
     "Dictionary",
     "ClickhouseDictionary",
     "engines",

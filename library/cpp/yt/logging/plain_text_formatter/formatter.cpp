@@ -1,6 +1,7 @@
 #include "formatter.h"
 
 #include <library/cpp/yt/logging/structured_payload.h>
+#include <library/cpp/yt/logging/tag.h>
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 

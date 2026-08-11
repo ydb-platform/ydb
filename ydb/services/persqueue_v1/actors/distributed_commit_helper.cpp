@@ -1,5 +1,6 @@
 #include "distributed_commit_helper.h"
 #include "ydb/core/kqp/common/simple/services.h"
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -56,7 +57,7 @@ bool TDistributedCommitHelper::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TP
     }
 
     KqpSessionId = record.GetResponse().GetSessionId();
-    Y_ABORT_UNLESS(!KqpSessionId.empty());
+    AFL_ENSURE(!KqpSessionId.empty());
     BeginTransaction(ctx);
     return true;
 }
@@ -84,7 +85,7 @@ THolder<NKqp::TEvKqp::TEvCloseSessionRequest> TDistributedCommitHelper::MakeClos
 void TDistributedCommitHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     TxId = record.GetResponse().GetTxMeta().id();
-    Y_ABORT_UNLESS(!TxId.empty());
+    AFL_ENSURE(!TxId.empty());
 
     auto offsets = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
     offsets->Record.MutableRequest()->SetDatabase(DataBase);

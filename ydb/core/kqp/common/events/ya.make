@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     events.cpp
     query.cpp
-    workload_service.cpp
 )
 
 PEERDIR(

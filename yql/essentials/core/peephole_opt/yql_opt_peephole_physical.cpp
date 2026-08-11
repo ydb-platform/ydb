@@ -3233,41 +3233,24 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-bool IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(const TTypeAnnotationContext& types) {
-    static const char Flag[] = "ExpandLMapOrShuffleByKeysViaBlock";
-    return !IsOptimizerDisabled<Flag>(types);
-}
-
-TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
-    if (IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(types)) {
-        return ctx.Builder(node->Pos())
-            .Callable("Block")
-                .Lambda(0)
-                    .Param("parent")
-                    .Callable("Collect")
-                        .Apply(0, node->Tail())
-                            .With(0)
-                                .Callable("Iterator")
-                                    .Add(0, node->HeadPtr())
-                                    .Callable(1, "DependsOn")
-                                        .Arg(0, "parent")
-                                    .Seal()
+    return ctx.Builder(node->Pos())
+        .Callable("Block")
+            .Lambda(0)
+                .Param("parent")
+                .Callable("Collect")
+                    .Apply(0, node->Tail())
+                        .With(0)
+                            .Callable("Iterator")
+                                .Add(0, node->HeadPtr())
+                                .Callable(1, "DependsOn")
+                                    .Arg(0, "parent")
                                 .Seal()
-                            .Done()
-                        .Seal()
+                            .Seal()
+                        .Done()
                     .Seal()
                 .Seal()
-            .Seal().Build();
-    }
-    return ctx.Builder(node->Pos())
-        .Callable("Collect")
-            .Apply(0, node->Tail())
-                .With(0)
-                    .Callable("Iterator")
-                        .Add(0, node->HeadPtr())
-                    .Seal()
-                .Done()
             .Seal()
         .Seal().Build();
 }
@@ -3279,14 +3262,14 @@ bool IsExpandLMapOrShuffleByKeysPromoted(const TTypeAnnotationContext& types) {
 
 TExprNode::TPtr ExpandLMapOrShuffleByKeysAtCommonStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (IsExpandLMapOrShuffleByKeysPromoted(types)) {
-        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+        return ExpandLMapOrShuffleByKeys(node, ctx);
     }
     return node;
 }
 
 TExprNode::TPtr ExpandLMapOrShuffleByKeysAtFinalStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (!IsExpandLMapOrShuffleByKeysPromoted(types)) {
-        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+        return ExpandLMapOrShuffleByKeys(node, ctx);
     }
     return node;
 }
@@ -6429,6 +6412,68 @@ private:
         return nullptr;
     }
 
+    class TIsSuitableScalarRewriteHelper {
+        static constexpr ui32 MinVersion = NKikimr::NMiniKQL::TRuntimeVersion::MinSupportedRuntimeVersion;
+
+    public:
+        TIsSuitableScalarRewriteHelper()
+            : RewriteMap_({
+                  {"Guess", 79},
+                  {"Way", 80},
+                  {"Variant", 81},
+                  {"VariantItem", 82},
+                  {"DynamicVariant", 83},
+                  {"DecimalMul", MinVersion},
+                  {"DecimalDiv", MinVersion},
+                  {"DecimalMod", MinVersion},
+                  {"And", MinVersion},
+                  {"Or", MinVersion},
+                  {"Xor", MinVersion},
+                  {"Not", MinVersion},
+                  {"Coalesce", MinVersion},
+                  {"Exists", MinVersion},
+                  {"If", MinVersion},
+                  {"Just", MinVersion},
+                  {"AsStruct", MinVersion},
+                  {"Member", MinVersion},
+                  {"Nth", MinVersion},
+                  {"ToPg", MinVersion},
+                  {"FromPg", MinVersion},
+                  {"PgResolvedCall", MinVersion},
+                  {"PgResolvedOp", MinVersion},
+                  {"AssumeStrict", MinVersion},
+                  {"AssumeNonStrict", MinVersion},
+                  {"NoPush", MinVersion},
+                  {"Likely", MinVersion},
+              })
+        {
+        }
+
+        bool IsSuitable(const TExprNode::TPtr& node) const {
+            if (node->IsList()) {
+                return true;
+            }
+
+            if (!node->IsCallable()) {
+                return false;
+            }
+
+            auto it = RewriteMap_.find(node->Content());
+            if (it == RewriteMap_.end()) {
+                return false;
+            }
+
+            return NKikimr::NMiniKQL::RuntimeVersion >= it->second;
+        }
+
+    private:
+        THashMap<TStringBuf, ui32> RewriteMap_;
+    };
+
+    bool IsSuitableForBlockScalarRewrite(const TExprNode::TPtr& node) const {
+        return Singleton<TIsSuitableScalarRewriteHelper>()->IsSuitable(node);
+    }
+
     void FigureOutRewriteForEachNode(const TExprNode::TPtr& node, TRewritesMap& rewrites, const TNodeSet& nodesToSkip, const TNodeSet& nonStrictNodes) {
         YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Rewriting node";
         Y_DEFER {
@@ -6474,13 +6519,7 @@ private:
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "NoPush", "Likely"});
-        bool isSuitableGuess = NKikimr::NMiniKQL::RuntimeVersion >= 79 && node->IsCallable("Guess");
-        bool isSuitableWay = NKikimr::NMiniKQL::RuntimeVersion >= 80 && node->IsCallable("Way");
-        bool isSuitableVariant = NKikimr::NMiniKQL::RuntimeVersion >= 81 && node->IsCallable("Variant");
-        bool isSuitableVariantItem = NKikimr::NMiniKQL::RuntimeVersion >= 82 && node->IsCallable("VariantItem");
-        if (node->IsList() || rewriteAsIs || isSuitableGuess || isSuitableWay || isSuitableVariant || isSuitableVariantItem ||
-            node->IsCallable({"DecimalMul", "DecimalDiv", "DecimalMod", "And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"})) {
+        if (IsSuitableForBlockScalarRewrite(node)) {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), Ctx_, Types_, /*reportUnspported=*/true)) {
                 YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Type are not supported";
                 return;
@@ -6539,6 +6578,7 @@ private:
                 }
             }
 
+            const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "NoPush", "Likely"});
             const TString blockFuncName = rewriteAsIs ? ToString(node->Content()) : (TString("Block") + (node->IsList() ? "AsTuple" : node->Content()));
             if (node->IsCallable({"And", "Or", "Xor"}) && funcArgs.size() > 2) {
                 // Split original argument list by pairs (since the order is not important balanced tree is used)

@@ -115,7 +115,8 @@ bool IsEqual(
     TConstArrayRef<NScheme::TTypeInfo> types);
 
 std::vector<TConstArrayRef<TCell>> GetRows(
-    const NKikimr::NKqp::IDataBatchPtr& batch);
+    const NKikimr::NKqp::IDataBatchPtr& batch,
+    const size_t offset = 0);
 
 std::vector<TConstArrayRef<TCell>> CutColumns(
     const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);

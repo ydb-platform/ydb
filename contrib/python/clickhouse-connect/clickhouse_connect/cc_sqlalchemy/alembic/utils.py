@@ -8,6 +8,8 @@ from clickhouse_connect.cc_sqlalchemy.alembic.adapter import (
     include_object as base_include_object,
 )
 
+__all__ = ["make_include_name", "make_include_object", "prevent_empty_migrations"]
+
 
 def make_include_name(
     include_schemas: frozenset[str] | None = None, exclude_mv_pattern: str = "_mv", default_schema: str = "default"

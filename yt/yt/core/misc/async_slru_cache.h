@@ -14,6 +14,7 @@
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
 #include <atomic>
+#include <utility>
 
 namespace NYT {
 
@@ -87,6 +88,8 @@ public:
 
     TIntrusiveListWithAutoDelete<TItem, TDelete> TrimNoDelete();
 
+    bool IsOversized(i64 weight, i64 cookieWeight) const;
+
     bool TouchItem(TItem* item);
 
     //! Drains touch buffer. You MUST call this function before trying to remove anything from the
@@ -146,6 +149,9 @@ private:
 //! pointer to this value), it returns back to the cache. This behavior may be overloaded by
 //! overriding IsResurrectionSupported() function.
 //!
+//! When oversized-item rejection is enabled, a value that cannot survive cache trimming is not
+//! admitted or resurrected. It is still returned to the caller or delivered to concurrent waiters.
+//!
 //! This cache is quite complex and has many invariants. Read about them below and change the
 //! code carefully.
 template <class TKey, class TValue, class THash = THash<TKey>>
@@ -176,6 +182,7 @@ public:
         void UpdateWeight(i64 newWeight);
 
         void Cancel(const TError& error);
+
         void EndInsert(TValuePtr value);
 
     private:
@@ -272,9 +279,14 @@ protected:
         NProfiling::TCounter SyncHitCounter;
         NProfiling::TCounter AsyncHitCounter;
         NProfiling::TCounter MissedCounter;
+        NProfiling::TCounter RejectedOversizedCounter;
+        NProfiling::TCounter RejectedOversizedWeightCounter;
+        NProfiling::TCounter EvictedCounter;
+        NProfiling::TCounter EvictedWeightCounter;
     };
 
     //! For testing purposes only.
+    const TCounters& GetMainCounters() const;
     const TCounters& GetSmallGhostCounters() const;
     const TCounters& GetLargeGhostCounters() const;
 
@@ -367,7 +379,7 @@ private:
 
         using TAsyncSlruCacheListManager<TGhostItem, TGhostShard>::SetTouchBufferCapacity;
 
-        void Reconfigure(i64 capacity, double youngerSizeFraction);
+        void Reconfigure(i64 capacity, double youngerSizeFraction, bool rejectOversizedItems);
 
         DEFINE_BYVAL_RW_PROPERTY(TCounters*, Counters);
 
@@ -377,6 +389,7 @@ private:
         YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
 
         THashMap<TKey, TGhostItem*, THash> ItemMap_;
+        bool RejectOversizedItems_ = false;
 
         template <class THeterogenousKey>
         bool DoLookup(const THeterogenousKey& key, bool allowAsyncHits);
@@ -442,7 +455,7 @@ private:
     std::atomic<int> Size_ = 0;
     std::atomic<i64> Capacity_;
 
-    TCounters Counters_;
+    TCounters MainCounters_;
     TCounters SmallGhostCounters_;
     TCounters LargeGhostCounters_;
 
@@ -455,12 +468,15 @@ private:
     std::atomic<i64> CookieWeightCounter_ = 0;
 
     std::atomic<bool> GhostCachesEnabled_;
+    std::atomic<bool> RejectOversizedItems_;
 
     template <class THeterogenousKey>
     TShard* GetShardByKey(const THeterogenousKey& key) const;
 
+    //! Returns the value future and indicates whether the value was found in ValueMap
+    //! and needs to be resurrected in ghost caches.
     template <class THeterogenousKey>
-    TValueFuture DoLookup(TShard* shard, const THeterogenousKey& key);
+    std::pair<TValueFuture, bool> DoLookup(TShard* shard, const THeterogenousKey& key);
 
     void DoTryRemove(const TKey& key, const TValuePtr& value, bool forbidResurrection);
 

@@ -4,6 +4,7 @@
 #include "ic_storage_transport_events.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/public.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 
@@ -50,6 +51,9 @@ private:
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvListPBufferEntries>>
         ListPBufferEntriesRequests;
 
+    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvDeleteTabletChunks>>
+        DeleteTabletChunksRequests;
+
     struct TWriteToManyPBuffersReqInfo
     {
         std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers> Request;
@@ -62,7 +66,9 @@ private:
     THashMap<ui64, TVector<NThreading::TPromise<ui32>>> ICSubscribedNodes;
 
 public:
-    TICStorageTransportActor(const TString& diskId, ui32 dbgIndex);
+    TICStorageTransportActor(
+        const TDiskDescription& diskDescription,
+        ui32 dbgIndex);
 
     ~TICStorageTransportActor() override;
 
@@ -167,6 +173,16 @@ private:
         const NKikimr::NDDisk::TEvListPersistentBufferResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandleDeleteTabletChunks(
+        const TEvTransportPrivate::TEvDeleteTabletChunks::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleDeleteTabletChunksUndelivery(
+        const NKikimr::NDDisk::TEvDeleteTabletChunks::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleDeleteTabletChunksResult(
+        const NKikimr::NDDisk::TEvDeleteTabletChunksResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void PassAway() override;
     void RejectAllSessionRequestsForNode(
         ui32 nodeId,
@@ -179,7 +195,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NActors::TActorId CreateTransportActor(const TString& diskId, ui32 dbgIndex);
+NActors::TActorId CreateTransportActor(
+    const TDiskDescription& diskDescription,
+    ui32 dbgIndex);
 
 ////////////////////////////////////////////////////////////////////////////////
 

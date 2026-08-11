@@ -18,19 +18,20 @@ from io import IOBase
 from urllib3.exceptions import ProtocolError as URLLib3ProtocolError
 from urllib3.exceptions import ReadTimeoutError as URLLib3ReadTimeoutError
 
-from botocore import parsers
-from botocore.compat import set_socket_timeout
+from botocore import (
+    ScalarTypes,  # noqa: F401
+    parsers,
+)
+from botocore.compat import (
+    XMLParseError,  # noqa: F401
+    set_socket_timeout,
+)
 from botocore.exceptions import (
     IncompleteReadError,
     ReadTimeoutError,
     ResponseStreamingError,
 )
-
-# Keep these imported.  There's pre-existing code that uses them.
-from botocore import ScalarTypes  # noqa
-from botocore.compat import XMLParseError  # noqa
 from botocore.hooks import first_non_none_response  # noqa
-
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +77,9 @@ class StreamingBody(IOBase):
         try:
             set_socket_timeout(self._raw_stream, timeout)
         except AttributeError:
-            logger.error(
-                "Cannot access the socket object of "
-                "a streaming response.  It's possible "
-                "the interface has changed.",
-                exc_info=True,
+            logger.exception(
+                "Cannot access the socket object of a streaming response. "
+                "It's possible the interface has changed."
             )
             raise
 
@@ -109,6 +108,22 @@ class StreamingBody(IOBase):
             # we need to verify the content length.
             self._verify_content_length()
         return chunk
+
+    def readinto(self, b):
+        """Read bytes into a pre-allocated, writable bytes-like object b, and return the number of bytes read."""
+        try:
+            amount_read = self._raw_stream.readinto(b)
+        except URLLib3ReadTimeoutError as e:
+            # TODO: the url will be None as urllib3 isn't setting it yet
+            raise ReadTimeoutError(endpoint_url=e.url, error=e)
+        except URLLib3ProtocolError as e:
+            raise ResponseStreamingError(error=e)
+        self._amount_read += amount_read
+        if amount_read == 0 and len(b) > 0:
+            # If the server sends empty contents then we know we need to verify
+            # the content length.
+            self._verify_content_length()
+        return amount_read
 
     def readlines(self):
         return self._raw_stream.readlines()
@@ -178,7 +193,7 @@ class StreamingBody(IOBase):
 
 
 def get_response(operation_model, http_response):
-    protocol = operation_model.metadata['protocol']
+    protocol = operation_model.service_model.resolved_protocol
     response_dict = {
         'headers': http_response.headers,
         'status_code': http_response.status_code,

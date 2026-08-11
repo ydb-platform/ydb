@@ -12,9 +12,9 @@ else:
 path1: Path
 path2: str
 
-d1 = np.DataSource(path1)
-d2 = np.DataSource(path2)
-d3 = np.DataSource(None)
+d1 = np.lib.npyio.DataSource(path1)
+d2 = np.lib.npyio.DataSource(path2)
+d3 = np.lib.npyio.DataSource(None)
 
 assert_type(d1.abspath("..."), str)
 assert_type(d2.abspath("..."), str)

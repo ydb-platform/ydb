@@ -15,6 +15,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    library/python/port_manager
     ydb/tests/library
     ydb/tests/library/stress
     ydb/tests/stress/common

@@ -391,6 +391,7 @@ public:
         Whitespace,
         Standard,
         Keyword,
+        Alphanumeric,
     };
 
     struct TAnalyzers {

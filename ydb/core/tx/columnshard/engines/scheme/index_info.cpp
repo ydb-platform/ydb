@@ -231,6 +231,9 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
     if (optionsProto.HasScanReaderPolicyName()) {
         ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
     }
+    if (optionsProto.HasDeduplicationEnabled()) {
+        DeduplicationEnabled = optionsProto.GetDeduplicationEnabled();
+    }
     if (optionsProto.HasInsertOptions()) {
         const auto& options = optionsProto.GetInsertOptions();
         if (options.HasBuildIndexesEnabled()) {
@@ -616,6 +619,9 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
             SchemaColumnIdsWithSpecials.emplace_back(originalColId);
             if (!IIndexInfo::IsSpecialColumn(originalColId)) {
                 AFL_VERIFY(index < original.SchemaColumnIdsWithSpecials.size() - SpecialColumnsCount);
+                auto it = original.Columns.find(originalColId);
+                AFL_VERIFY(it != original.Columns.end())("column_id", originalColId);
+                Columns.emplace(originalColId, it->second);
                 fields.emplace_back(original.SchemaWithSpecials->field(index));
             }
         };
@@ -625,6 +631,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
             AFL_VERIFY(!IIndexInfo::IsSpecialColumn(colId));
             SchemaColumnIdsWithSpecials.emplace_back(colId);
             auto tableCol = BuildColumnFromProto(col, cache);
+            Columns.emplace(colId, TNameTypeInfo(tableCol.Name, tableCol.PType));
             fields.emplace_back(BuildArrowField(tableCol, cache));
         };
         diff.ApplyForColumns(original.SchemaColumnIdsWithSpecials, addFromOriginal, addFromDiff);

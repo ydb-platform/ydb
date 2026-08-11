@@ -5,8 +5,6 @@
 #include "yson_struct_public.h"
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/mpl.h>
-#include <yt/yt/core/misc/property.h>
 
 #include <yt/yt/core/yson/public.h>
 
@@ -15,7 +13,11 @@
 #include <yt/yt/library/syncmap/map.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/property.h>
 #include <library/cpp/yt/misc/tls.h>
+
+#include <library/cpp/yt/mpl/concepts.h>
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <util/generic/algorithm.h>
 
@@ -366,7 +368,7 @@ public:
 
     //! TODO(arkady-e1ppa): restore these constraints once clang-14 usage is completely abolished.
     //! For Pre-/Post- processors write
-    //! template <CInvocable<void(typename TStruct::TExternal*)> TExternalPreprocessor>
+    //! template <NMpl::CInvocable<void(typename TStruct::TExternal*)> TExternalPreprocessor>
     //! (and TExternalPostprocessor in case of ExternalPostprocessor) and remove
     //! these exposition-only "requires" statements
 
@@ -378,11 +380,11 @@ public:
     TYsonStructParameter<TValue>& ExternalBaseClassParameter(const std::string& key, TValue(TBase::*field));
 
     template <class TExternalPreprocessor>
-        // requires (CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
+        // requires (NMpl::CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
     void ExternalPreprocessor(TExternalPreprocessor preprocessor);
 
     template <class TExternalPostprocessor>
-        // requires (CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>)
+        // requires (NMpl::CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>)
     void ExternalPostprocessor(TExternalPostprocessor postprocessor);
 
     void UnrecognizedStrategy(EUnrecognizedStrategy strategy);

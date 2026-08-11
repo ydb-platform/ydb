@@ -170,19 +170,36 @@ public:
         AFL_VERIFY(false)("reason", "condition not reached");
     }
 
-    void WaitActualization(const TDuration d) const {
+    void WaitActualization(const TDuration d, const bool waitWrites = false) const {
+        const i64 ttlStartedBaseline = GetTTLStartedCounter().Val();
         TInstant start = TInstant::Now();
         const i64 startVal = NeedActualizationCount.Val();
-        i64 predVal = NeedActualizationCount.Val();
-        while (TInstant::Now() - start < d && (!startVal || NeedActualizationCount.Val())) {
-            Cerr << "waiting actualization: " << NeedActualizationCount.Val() << "/" << TInstant::Now() - start << Endl;
-            if (NeedActualizationCount.Val() != predVal) {
-                predVal = NeedActualizationCount.Val();
+        i64 predNeed = startVal;
+        i64 predStarted = ttlStartedBaseline;
+        i64 predFinished = GetTTLFinishedCounter().Val();
+        while (TInstant::Now() - start < d) {
+            const i64 need = NeedActualizationCount.Val();
+            const i64 started = GetTTLStartedCounter().Val();
+            const i64 finished = GetTTLFinishedCounter().Val();
+            if (need != predNeed || (waitWrites && (started != predStarted || finished != predFinished))) {
+                predNeed = need;
+                predStarted = started;
+                predFinished = finished;
                 start = TInstant::Now();
+            }
+            if (waitWrites) {
+                if (need == 0 && started == finished && started > ttlStartedBaseline) {
+                    return;
+                }
+            } else if (startVal && need == 0) {
+                return;
             }
             Sleep(TDuration::Seconds(1));
         }
         AFL_VERIFY(!NeedActualizationCount.Val());
+        if (waitWrites) {
+            AFL_VERIFY(GetTTLStartedCounter().Val() == GetTTLFinishedCounter().Val());
+        }
     }
 
     virtual void OnCleanupSchemasFinished() override {

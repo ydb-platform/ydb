@@ -100,6 +100,10 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
         .Default(100'000);
     registrar.Parameter("max_flush_data_size", &TThis::MaxFlushDataSize)
         .Default(100_MB);
+    registrar.Parameter("max_in_flight_flush_count", &TThis::MaxInFlightFlushCount)
+        .Default(1)
+        .GreaterThanOrEqual(1)
+        .DontSerializeDefault();
 
     registrar.Parameter("prefer_local_host", &TThis::PreferLocalHost)
         .Default(true);

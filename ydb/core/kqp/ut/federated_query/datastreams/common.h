@@ -143,6 +143,8 @@ public:
 
     void ExecSchemeQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
 
+    void WaitForClassifierPropagation();
+
     // Query client SDK
 
     std::vector<NYdb::TResultSet> ExecQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const std::string& expectedError = "", std::function<void(const std::string&)> astValidator = nullptr);
@@ -267,7 +269,7 @@ public:
         std::optional<std::string> Ast;
         std::optional<std::string> Text;
         bool Run = true;
-        std::string Pool = "default";
+        std::string Pool = "";
         ui64 RetryCount = 0;
         std::optional<TInstant> LastFailAt;
         std::optional<TInstant> SuspendedUntil;

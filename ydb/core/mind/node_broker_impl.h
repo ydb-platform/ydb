@@ -404,6 +404,7 @@ private:
         THashMap<ui32, TNodeInfo> Nodes;
         THashMap<ui32, TNodeInfo> ExpiredNodes;
         THashMap<ui32, TNodeInfo> RemovedNodes;
+        ui64 DeadNodesCount = 0;
         // Maps <Host/Addr:Port> to NodeID.
         THashMap<std::tuple<TString, TString, ui16>, ui32> Hosts;
         // Bitmap with free Node IDs (with no lower 5 bits).

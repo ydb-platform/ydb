@@ -1,0 +1,36 @@
+{
+    "_yql_row_spec" = {
+        "Type" = ["StructType"; [
+            ["key"; ["DataType"; "String"]];
+            ["dt"; ["OptionalType"; ["DataType"; "Date"]]];
+            ["ys_list"; ["OptionalType"; ["ListType"; ["OptionalType"; ["DataType"; "Yson"]]]]];
+            ["ys_opt"; ["OptionalType"; ["DataType"; "Yson"]]];
+        ]];
+        "NativeYtTypeFlags" = 3u;
+    };
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "key";
+            "type" = "string";
+            "required" = %true;
+        };
+        {
+            "name" = "dt";
+            "type" = "date";
+            "required" = %false;
+        };
+        {
+            "name" = "ys_list";
+            "type_v3" = {"type_name" = "optional"; "item" = {"type_name" = "list"; "item" = {"type_name" = "optional"; "item" = "yson"}}};
+            "required" = %false;
+        };
+        {
+            "name" = "ys_opt";
+            "type" = "any";
+            "required" = %false;
+        };
+    ];
+}

@@ -136,6 +136,10 @@ static void FillColumns(
                 Y_ABORT_UNLESS(colDescr->MutableDefaultFromLiteral()->ParseFromString(
                     cinfo.DefaultValue));
                 break;
+            case ETableColumnDefaultKind::FromExpression:
+                Y_ABORT_UNLESS(colDescr->MutableDefaultFromExpression()->ParseFromString(
+                    cinfo.DefaultValue));
+                break;
         }
     }
 }
@@ -603,6 +607,8 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
                 break;
             case ETableColumnDefaultKind::FromLiteral:
                 break;
+            case ETableColumnDefaultKind::FromExpression:
+                break;
         }
     }
 }
@@ -999,6 +1005,8 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
         entry->MutableAuditSettings()->CopyFrom(*auditSettings);
     }
+
+    entry->SetTablesMetricsLevel(subDomainInfo->GetTablesMetricsLevel());
 
     if (const auto& serverlessComputeResourcesMode = subDomainInfo->GetServerlessComputeResourcesMode()) {
         entry->SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);

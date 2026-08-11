@@ -24,21 +24,22 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
     : ActorSystem(actorSystem)
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
-          {{"t", "MultiRead"}, {"r", request->Headers.Range.Print()}}))
+          {{"t", "MultiRead"}, {"r", request->Headers.Range}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , CallContext(std::move(callContext))
     , Request(std::move(request))
     , TraceId(std::move(traceId))
+    , SgList(Request->Sglist.CreateDepender())
 {
     Y_ASSERT(Request->Headers.VolumeConfig);
     Y_ASSERT(Request->Headers.VolumeConfig->BlockSize != 0);
 
     const size_t blockSize = Request->Headers.VolumeConfig->BlockSize;
 
-    auto guard = Request->Sglist.Acquire();
+    auto guard = SgList.Acquire();
     if (!guard) {
-        Reply(MakeError(E_CANCELLED, "Failed to acquire sglist guard"), 0);
+        Reply(MakeCanNotAcquireDataError(), 0);
         return;
     }
 
@@ -53,7 +54,7 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
             Request->Headers.Clone(hint.VChunkRange));
 
         // Create subbuffer Sglist for current range
-        subRequest->Sglist = Request->Sglist.CreateDepender(
+        subRequest->Sglist = SgList.CreateDepender(
             CreateSgListSubRange(guard.Get(), offsetBytes, sizeBytes));
 
         auto executor = std::make_shared<TReadSingleLocationRequestExecutor>(
@@ -145,7 +146,7 @@ void TReadMultipleLocationRequestExecutor::Reply(
             "%s SubRequest: %zu, Error: %s",
             LogTitle.GetWithTime().c_str(),
             index,
-            FormatError(error).c_str());
+            FormatError(error).Quote().c_str());
     } else {
         LOG_DEBUG(
             *ActorSystem,
@@ -154,7 +155,7 @@ void TReadMultipleLocationRequestExecutor::Reply(
             LogTitle.GetWithTime().c_str());
     }
 
-    Request->Sglist.Close();
+    SgList.Close();
 
     Promise.TrySetValue(TResponse{.Error = std::move(error)});
 }

@@ -1,10 +1,13 @@
 #include "local_partition_actor.h"
 #include "local_proxy.h"
-#include "logging.h"
 
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/writer/common.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_YDB_PROXY
 
 namespace NKikimr::NReplication {
 
@@ -41,8 +44,13 @@ protected:
         PassAway();
     }
 
-    TString MakeLogPrefix() override {
-        return TStringBuilder() << "Committer[" << SelfId() << ":/" << Database << TopicPath <<" ] ";
+    NActors::NStructuredLog::TStructuredMessage MakeLogPrefix() override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "LocalTopicPartitionCommitActor"},
+            {"selfId", SelfId()},
+            {"database", Database},
+            {"topicPath", TopicPath},
+        );
     }
 
     static std::unique_ptr<TEvYdbProxy::TEvCommitOffsetResponse> MakeResponse(NYdb::EStatus status, const TString& error) {
@@ -60,14 +68,15 @@ protected:
 
 private:
     void DoCommitOffset() {
-        LOG_T("DoCommit");
+        YDB_LOG_TRACE("DoCommit");
 
         NTabletPipe::SendData(SelfId(), PartitionPipeClient, MakeCommitRequest().release());
         Become(&TLocalTopicPartitionCommitActor::StateCommitOffset);
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
 
@@ -94,6 +103,8 @@ private:
     }
 
     STATEFN(StateCommitOffset) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateCommitOffset"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPersQueue::TEvResponse, Handle);
 
@@ -112,7 +123,8 @@ private:
 }; // TLocalTopicPartitionCommitActor
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE("Handle",
+        {"ev", ev->Get()->ToString()});
 
     auto [topicName, partitionId, consumerName, offset, settings] = std::move(ev->Get()->GetArgs());
     RegisterWithSameMailbox(new TLocalTopicPartitionCommitActor(

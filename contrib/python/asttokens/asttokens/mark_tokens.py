@@ -22,9 +22,7 @@ from typing import Callable, List, Union, cast, Optional, Tuple, TYPE_CHECKING
 from . import util
 from .asttokens import ASTTokens
 from .astroid_compat import astroid_node_classes as nc, BaseContainer as AstroidBaseContainer
-
-if TYPE_CHECKING:
-  from .util import AstNode
+from .util import AstNode
 
 
 # Mapping of matching braces. To find a token here, look up token[:2].
@@ -46,19 +44,18 @@ class MarkTokens:
   Helper that visits all nodes in the AST tree and assigns .first_token and .last_token attributes
   to each of them. This is the heart of the token-marking logic.
   """
-  def __init__(self, code):
-    # type: (ASTTokens) -> None
+  def __init__(self, code: ASTTokens) -> None:
     self._code = code
     self._methods = util.NodeMethods()
-    self._iter_children = None # type: Optional[Callable]
+    self._iter_children: Optional[Callable] = None
 
-  def visit_tree(self, node):
-    # type: (Module) -> None
+  def visit_tree(self, node: Module) -> None:
     self._iter_children = util.iter_children_func(node)
     util.visit_tree(node, self._visit_before_children, self._visit_after_children)
 
-  def _visit_before_children(self, node, parent_token):
-    # type: (AstNode, Optional[util.Token]) -> Tuple[Optional[util.Token], Optional[util.Token]]
+  def _visit_before_children(
+    self, node: AstNode, parent_token: Optional[util.Token]
+  ) -> Tuple[Optional[util.Token], Optional[util.Token]]:
     col = getattr(node, 'col_offset', None)
     token = self._code.get_token_from_utf8(node.lineno, col) if col is not None else None
 
@@ -70,8 +67,9 @@ class MarkTokens:
     # parent_token argument. The second value becomes the token argument of _visit_after_children.
     return (token or parent_token, token)
 
-  def _visit_after_children(self, node, parent_token, token):
-    # type: (AstNode, Optional[util.Token], Optional[util.Token]) -> None
+  def _visit_after_children(
+    self, node: AstNode, parent_token: Optional[util.Token], token: Optional[util.Token]
+  ) -> None:
     # This processes the node generically first, after all children have been processed.
 
     # Get the first and last tokens that belong to children. Note how this doesn't assume that we
@@ -112,8 +110,7 @@ class MarkTokens:
     node.first_token = nfirst
     node.last_token = nlast
 
-  def _find_last_in_stmt(self, start_token):
-    # type: (util.Token) -> util.Token
+  def _find_last_in_stmt(self, start_token: util.Token) -> util.Token:
     t = start_token
     while (not util.match_token(t, token.NEWLINE) and
            not util.match_token(t, token.OP, ';') and
@@ -121,15 +118,16 @@ class MarkTokens:
       t = self._code.next_token(t, include_extra=True)
     return self._code.prev_token(t)
 
-  def _expand_to_matching_pairs(self, first_token, last_token, node):
-    # type: (util.Token, util.Token, AstNode) -> Tuple[util.Token, util.Token]
+  def _expand_to_matching_pairs(
+    self, first_token: util.Token, last_token: util.Token, node: AstNode
+  ) -> Tuple[util.Token, util.Token]:
     """
     Scan tokens in [first_token, last_token] range that are between node's children, and for any
     unmatched brackets, adjust first/last tokens to include the closing pair.
     """
     # We look for opening parens/braces among non-child tokens (i.e. tokens between our actual
     # child nodes). If we find any closing ones, we match them to the opens.
-    to_match_right = [] # type: List[Tuple[int, str]]
+    to_match_right: List[Tuple[int, str]] = []
     to_match_left = []
     for tok in self._code.token_range(first_token, last_token):
       tok_info = tok[:2]
@@ -162,39 +160,43 @@ class MarkTokens:
   # Node visitors. Each takes a preliminary first and last tokens, and returns the adjusted pair
   # that will actually be assigned.
 
-  def visit_default(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_default(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     # pylint: disable=no-self-use
     # By default, we don't need to adjust the token we computed earlier.
     return (first_token, last_token)
 
-  def handle_comp(self, open_brace, node, first_token, last_token):
-    # type: (str, AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def handle_comp(
+    self, open_brace: str, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     # For list/set/dict comprehensions, we only get the token of the first child, so adjust it to
     # include the opening brace (the closing brace will be matched automatically).
     before = self._code.prev_token(first_token)
     util.expect_token(before, token.OP, open_brace)
     return (before, last_token)
 
-  def visit_comprehension(self,
-                          node,  # type: AstNode
-                          first_token,  # type: util.Token
-                          last_token,  # type: util.Token
-                          ):
-    # type: (...) -> Tuple[util.Token, util.Token]
+  def visit_comprehension(
+    self,
+    node: AstNode,
+    first_token: util.Token,
+    last_token: util.Token,
+  ) -> Tuple[util.Token, util.Token]:
     # The 'comprehension' node starts with 'for' but we only get first child; we search backwards
     # to find the 'for' keyword.
     first = self._code.find_token(first_token, token.NAME, 'for', reverse=True)
     return (first, last_token)
 
-  def visit_if(self, node, first_token, last_token):
-    # type: (util.Token, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_if(
+    self, node: util.Token, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     while first_token.string not in ('if', 'elif'):
       first_token = self._code.prev_token(first_token)
     return first_token, last_token
 
-  def handle_attr(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def handle_attr(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     # Attribute node has ".attr" (2 tokens) after the last child.
     dot = self._code.find_token(last_token, token.OP, '.')
     name = self._code.next_token(dot)
@@ -205,8 +207,9 @@ class MarkTokens:
   visit_assignattr = handle_attr
   visit_delattr = handle_attr
 
-  def handle_def(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def handle_def(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     # With astroid, nodes that start with a doc-string can have an empty body, in which case we
     # need to adjust the last token to include the doc string.
     if not node.body and (getattr(node, 'doc_node', None) or getattr(node, 'doc', None)): # type: ignore[union-attr]
@@ -222,8 +225,9 @@ class MarkTokens:
   visit_classdef = handle_def
   visit_functiondef = handle_def
 
-  def handle_following_brackets(self, node, last_token, opening_bracket):
-    # type: (AstNode, util.Token, str) -> util.Token
+  def handle_following_brackets(
+    self, node: AstNode, last_token: util.Token, opening_bracket: str
+  ) -> util.Token:
     # This is for calls and subscripts, which have a pair of brackets
     # at the end which may contain no nodes, e.g. foo() or bar[:].
     # We look for the opening bracket and then let the matching pair be found automatically
@@ -235,8 +239,9 @@ class MarkTokens:
       last_token = call_start
     return last_token
 
-  def visit_call(self, node, first_token, last_token):
-    # type: (util.Token, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_call(
+    self, node: util.Token, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     last_token = self.handle_following_brackets(node, last_token, '(')
 
     # Handling a python bug with decorators with empty parens, e.g.
@@ -246,22 +251,24 @@ class MarkTokens:
       first_token = self._code.next_token(first_token)
     return (first_token, last_token)
 
-  def visit_matchclass(self, node, first_token, last_token):
-    # type: (util.Token, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_matchclass(
+    self, node: util.Token, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     last_token = self.handle_following_brackets(node, last_token, '(')
     return (first_token, last_token)
 
-  def visit_subscript(self,
-                      node,  # type: AstNode
-                      first_token,  # type: util.Token
-                      last_token,  # type: util.Token
-                      ):
-    # type: (...) -> Tuple[util.Token, util.Token]
+  def visit_subscript(
+    self,
+    node: AstNode,
+    first_token: util.Token,
+    last_token: util.Token,
+  ) -> Tuple[util.Token, util.Token]:
     last_token = self.handle_following_brackets(node, last_token, '[')
     return (first_token, last_token)
 
-  def visit_slice(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_slice(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     # consume `:` tokens to the left and right. In Python 3.9, Slice nodes are
     # given a col_offset, (and end_col_offset), so this will always start inside
     # the slice, even if it is the empty slice. However, in 3.8 and below, this
@@ -280,8 +287,9 @@ class MarkTokens:
       last_token = next_
     return (first_token, last_token)
 
-  def handle_bare_tuple(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def handle_bare_tuple(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     # A bare tuple doesn't include parens; if there is a trailing comma, make it part of the tuple.
     maybe_comma = self._code.next_token(last_token)
     if util.match_token(maybe_comma, token.OP, ','):
@@ -289,8 +297,9 @@ class MarkTokens:
     return (first_token, last_token)
 
   # In Python3.8 parsed tuples include parentheses when present.
-  def handle_tuple_nonempty(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def handle_tuple_nonempty(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     assert isinstance(node, ast.Tuple) or isinstance(node, AstroidBaseContainer)
     # It's a bare tuple if the first token belongs to the first child. The first child may
     # include extraneous parentheses (which don't create new nodes), so account for those too.
@@ -302,16 +311,18 @@ class MarkTokens:
       return self.handle_bare_tuple(node, first_token, last_token)
     return (first_token, last_token)
 
-  def visit_tuple(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_tuple(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     assert isinstance(node, ast.Tuple) or isinstance(node, AstroidBaseContainer)
     if not node.elts:
       # An empty tuple is just "()", and we need no further info.
       return (first_token, last_token)
     return self.handle_tuple_nonempty(node, first_token, last_token)
 
-  def _gobble_parens(self, first_token, last_token, include_all=False):
-    # type: (util.Token, util.Token, bool) -> Tuple[util.Token, util.Token]
+  def _gobble_parens(
+    self, first_token: util.Token, last_token: util.Token, include_all: bool = False
+  ) -> Tuple[util.Token, util.Token]:
     # Expands a range of tokens to include one or all pairs of surrounding parentheses, and
     # returns (first, last) tokens that include these parens.
     while first_token.index > 0:
@@ -324,16 +335,17 @@ class MarkTokens:
       break
     return (first_token, last_token)
 
-  def visit_str(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_str(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     return self.handle_str(first_token, last_token)
 
-  def visit_joinedstr(self,
-                      node,  # type: AstNode
-                      first_token,  # type: util.Token
-                      last_token,  # type: util.Token
-                      ):
-    # type: (...) -> Tuple[util.Token, util.Token]
+  def visit_joinedstr(
+    self,
+    node: AstNode,
+    first_token: util.Token,
+    last_token: util.Token,
+  ) -> Tuple[util.Token, util.Token]:
     if sys.version_info < (3, 12):
       # Older versions don't tokenize the contents of f-strings
       return self.handle_str(first_token, last_token)
@@ -363,12 +375,14 @@ class MarkTokens:
         break
     return (first_token, last_token)
 
-  def visit_bytes(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_bytes(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     return self.handle_str(first_token, last_token)
 
-  def handle_str(self, first_token, last_token):
-    # type: (util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def handle_str(
+    self, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     # Multiple adjacent STRING tokens form a single string.
     last = self._code.next_token(last_token)
     while util.match_token(last, token.STRING):
@@ -376,13 +390,13 @@ class MarkTokens:
       last = self._code.next_token(last_token)
     return (first_token, last_token)
 
-  def handle_num(self,
-                 node,  # type: AstNode
-                 value,  # type: Union[complex, int, numbers.Number]
-                 first_token,  # type: util.Token
-                 last_token,  # type: util.Token
-                 ):
-    # type: (...) -> Tuple[util.Token, util.Token]
+  def handle_num(
+    self,
+    node: AstNode,
+    value: Union[complex, int, numbers.Number],
+    first_token: util.Token,
+    last_token: util.Token,
+  ) -> Tuple[util.Token, util.Token]:
     # A constant like '-1' gets turned into two tokens; this will skip the '-'.
     while util.match_token(last_token, token.OP):
       last_token = self._code.next_token(last_token)
@@ -398,14 +412,16 @@ class MarkTokens:
         first_token = self._code.prev_token(first_token)
     return (first_token, last_token)
 
-  def visit_num(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_num(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     n = node.n  # type: ignore[union-attr] # ast.Num has been removed in python 3.14
     assert isinstance(n, (complex, int, numbers.Number))
     return self.handle_num(node, n, first_token, last_token)
 
-  def visit_const(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_const(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     assert isinstance(node, ast.Constant) or isinstance(node, nc.Const)
     if isinstance(node.value, numbers.Number):
       return self.handle_num(node, node.value, first_token, last_token)
@@ -415,8 +431,9 @@ class MarkTokens:
 
   visit_constant = visit_const
 
-  def visit_keyword(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_keyword(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     # Until python 3.9 (https://bugs.python.org/issue40141),
     # ast.keyword nodes didn't have line info. Astroid has lineno None.
     assert isinstance(node, ast.keyword) or isinstance(node, nc.Keyword)
@@ -427,8 +444,9 @@ class MarkTokens:
       first_token = name
     return (first_token, last_token)
 
-  def visit_starred(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_starred(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     # Astroid has 'Starred' nodes (for "foo(*bar)" type args), but they need to be adjusted.
     if not util.match_token(first_token, token.OP, '*'):
       star = self._code.prev_token(first_token)
@@ -436,8 +454,9 @@ class MarkTokens:
         first_token = star
     return (first_token, last_token)
 
-  def visit_assignname(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def visit_assignname(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     # Astroid may turn 'except' clause into AssignName, but we need to adjust it.
     if util.match_token(first_token, token.NAME, 'except'):
       colon = self._code.find_token(last_token, token.OP, ':')
@@ -448,8 +467,9 @@ class MarkTokens:
   # but Python < 3.7 doesn't put the col_offset there
   # AsyncFunctionDef is slightly different because it might have
   # decorators before that, which visit_functiondef handles
-  def handle_async(self, node, first_token, last_token):
-    # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
+  def handle_async(
+    self, node: AstNode, first_token: util.Token, last_token: util.Token
+  ) -> Tuple[util.Token, util.Token]:
     if not first_token.string == 'async':
       first_token = self._code.prev_token(first_token)
     return (first_token, last_token)
@@ -457,12 +477,12 @@ class MarkTokens:
   visit_asyncfor = handle_async
   visit_asyncwith = handle_async
 
-  def visit_asyncfunctiondef(self,
-                             node,  # type: AstNode
-                             first_token,  # type: util.Token
-                             last_token,  # type: util.Token
-                             ):
-    # type: (...) -> Tuple[util.Token, util.Token]
+  def visit_asyncfunctiondef(
+    self,
+    node: AstNode,
+    first_token: util.Token,
+    last_token: util.Token,
+  ) -> Tuple[util.Token, util.Token]:
     if util.match_token(first_token, token.NAME, 'def'):
       # Include the 'async' token
       first_token = self._code.prev_token(first_token)

@@ -22,6 +22,10 @@ TOKENS = [
 DATABASE = '/Root'
 TENANT_DATABASE = '/Root/Tenant'
 
+_NO_QUERY_PARAMS = [
+    {},
+]
+
 _DEFAULT_QUERIES = [
     {},
     {'database': DATABASE},
@@ -33,6 +37,19 @@ _COUNTER_ENDPOINT_QUERIES = [
     {'max_counter': '1', 'period': '1'},
     {'max_counter': '1', 'period': '1', 'database': DATABASE},
     {'max_counter': '1', 'period': '1', 'database': TENANT_DATABASE},
+]
+
+_PDISK_STORAGE_QUERY = {'node_id': '1', 'pdisk_id': '1'}
+_VDISK_STORAGE_QUERY = {'node_id': '1', 'pdisk_id': '1', 'vslot_id': '1000'}
+
+_PDISK_INFO_QUERIES = [
+    {},
+    _PDISK_STORAGE_QUERY,
+]
+
+_VDISK_READ_QUERIES = [
+    {},
+    _VDISK_STORAGE_QUERY,
 ]
 
 ENDPOINT_SPECS = [
@@ -104,9 +121,12 @@ ENDPOINT_SPECS = [
     {'path': '/operation/cancel'},
     {'path': '/operation/forget'},
     {'path': '/operation/get'},
+    # The legacy /X/json/Y alias must be protected exactly like the /X/Y path above.
+    {'path': '/operation/json/get'},
     {'path': '/operation/list'},
-    {'path': '/pdisk'},
-    {'path': '/pdisk/info'},
+    {'path': '/pdisk/info', 'queries': _PDISK_INFO_QUERIES},
+    # The legacy /X/json/Y alias must be protected exactly like the /X/Y path above.
+    {'path': '/pdisk/json/info', 'queries': _PDISK_INFO_QUERIES},
     {'path': '/pdisk/restart'},
     {'path': '/pdisk/status'},
     {'path': '/ping'},
@@ -128,11 +148,13 @@ ENDPOINT_SPECS = [
     {'path': '/tablet'},
     {'path': '/tablets'},
     {'path': '/trace'},
-    {'path': '/vdisk'},
-    {'path': '/vdisk/blobindexstat'},
+    # There is no handler for this path, so it must be not found for monitoring and admin levels
+    # and it must be unauthorized for database and viewer level (by default they don't have access to http handlers)
+    {'path': '/unexisted', 'queries': _NO_QUERY_PARAMS, 'methods': ('GET',)},
+    {'path': '/vdisk/blobindexstat', 'queries': _VDISK_READ_QUERIES},
     {'path': '/vdisk/evict'},
-    {'path': '/vdisk/getblob'},
-    {'path': '/vdisk/vdiskstat'},
+    {'path': '/vdisk/getblob', 'queries': _VDISK_READ_QUERIES},
+    {'path': '/vdisk/vdiskstat', 'queries': _VDISK_READ_QUERIES},
     {'path': '/ver'},
     {'path': '/viewer'},
     {'path': '/viewer/acl'},

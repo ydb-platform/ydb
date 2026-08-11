@@ -155,7 +155,8 @@ void SetKqpRequestLevel(TKikimrRunner& kikimr, NLog::EPriority prio) {
 void SendKqpQueryAsUser(TTestActorRuntime& runtime,
                        const TActorId& edge,
                        const TString& userSid,
-                       const TString& query) {
+                       const TString& query,
+                       bool isStreamingQuery = false) {
     auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
     ev->Record.SetUserToken(NACLib::TUserToken(userSid, {}).SerializeAsString());
     ActorIdToProto(edge, ev->Record.MutableRequestActorId());
@@ -167,6 +168,12 @@ void SendKqpQueryAsUser(TTestActorRuntime& runtime,
     auto* txControl = req.MutableTxControl();
     txControl->mutable_begin_tx()->mutable_serializable_read_write();
     txControl->set_commit_tx(true);
+
+    if (isStreamingQuery) {
+        auto userCtx = MakeIntrusive<TUserRequestContext>("", "/Root", "");
+        userCtx->IsStreamingQuery = true;
+        ev->SetUserRequestContext(std::move(userCtx));
+    }
 
     runtime.Send(new IEventHandle(MakeKqpProxyID(runtime.GetNodeId(0)), edge, ev.release()));
     auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(edge);
@@ -219,6 +226,133 @@ Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
     UNIT_ASSERT_C(req.Has("database"), "database field");
     UNIT_ASSERT_C(req.Has("trace_id"), "trace_id field");
     UNIT_ASSERT_C(req.Has("started_at_us"), "started_at_us field");
+    UNIT_ASSERT_C(req.Has("is_streaming"), "is_streaming field");
+    UNIT_ASSERT_VALUES_EQUAL(req["is_streaming"].GetBooleanSafe(true), false);
+}
+
+Y_UNIT_TEST(StreamingQueryIsMarked) {
+    TStringStream logStream;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_WARN);
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const auto edge = runtime.AllocateEdgeActor();
+        SendKqpQueryAsUser(runtime, edge, "streaming-user@domain", "SELECT FROM broken_stream", true);
+    }
+
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(fullLog);
+    DumpEntries("StreamingQueryIsMarked", entries, fullLog);
+
+    bool found = false;
+    for (const auto& e : entries) {
+        if (e.Event != "completed" || e.Part != 1 ||
+            e.Json["user"].GetStringSafe("") != "streaming-user@domain") {
+            continue;
+        }
+        const auto& req = e.Json["request"];
+        UNIT_ASSERT_C(req.Has("is_streaming"), e.RawLine);
+        UNIT_ASSERT_VALUES_EQUAL_C(req["is_streaming"].GetBooleanSafe(false), true, e.RawLine);
+        found = true;
+    }
+    UNIT_ASSERT_C(found, "expected completed streaming query log entry");
+}
+
+Y_UNIT_TEST(ExecutePreparedLogsOriginalQueryText) {
+    constexpr TStringBuf queryText = "SELECT 42 AS prepared_query_log_marker";
+
+    TStringStream logStream;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto prepareResult = session.PrepareDataQuery(TString(queryText)).GetValueSync();
+        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+
+        auto result = prepareResult.GetQuery()
+            .Execute(NYdb::NTable::TTxControl::BeginTx().CommitTx())
+            .GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(fullLog);
+    DumpEntries("ExecutePreparedLogsOriginalQueryText", entries, fullLog);
+
+    bool found = false;
+    for (const auto& e : entries) {
+        if (e.Event != "completed" || e.Part != 1) {
+            continue;
+        }
+        const auto& req = e.Json["request"];
+        if (req["action"].GetStringSafe("") != "QUERY_ACTION_EXECUTE_PREPARED") {
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(req["data"].GetStringSafe(""), queryText, e.RawLine);
+        UNIT_ASSERT_VALUES_EQUAL_C(req["query_len"].GetUIntegerSafe(0), queryText.size(), e.RawLine);
+        found = true;
+    }
+    UNIT_ASSERT_C(found, "expected completed EXECUTE_PREPARED log entry");
+}
+
+Y_UNIT_TEST(TransactionControlMarksQueryTextAsNotApplicable) {
+    TStringStream logStream;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto beginResult = session.BeginTransaction(NYdb::NTable::TTxSettings::SerializableRW())
+            .GetValueSync();
+        UNIT_ASSERT_C(beginResult.IsSuccess(), beginResult.GetIssues().ToString());
+        auto tx = beginResult.GetTransaction();
+        auto rollbackResult = tx.Rollback().GetValueSync();
+        UNIT_ASSERT_C(rollbackResult.IsSuccess(), rollbackResult.GetIssues().ToString());
+
+        auto secondBeginResult = session.BeginTransaction(NYdb::NTable::TTxSettings::SerializableRW())
+            .GetValueSync();
+        UNIT_ASSERT_C(secondBeginResult.IsSuccess(), secondBeginResult.GetIssues().ToString());
+        auto secondTx = secondBeginResult.GetTransaction();
+        auto commitResult = secondTx.Commit().GetValueSync();
+        UNIT_ASSERT_C(commitResult.IsSuccess(), commitResult.GetIssues().ToString());
+    }
+
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(fullLog);
+    DumpEntries("TransactionControlMarksQueryTextAsNotApplicable", entries, fullLog);
+
+    size_t beginFound = 0;
+    size_t rollbackFound = 0;
+    size_t commitFound = 0;
+    for (const auto& e : entries) {
+        if (e.Event != "completed" || e.Part != 1) {
+            continue;
+        }
+        const auto& req = e.Json["request"];
+        const auto action = req["action"].GetStringSafe("");
+        if (action != "QUERY_ACTION_BEGIN_TX" &&
+            action != "QUERY_ACTION_ROLLBACK_TX" &&
+            action != "QUERY_ACTION_COMMIT_TX") {
+            continue;
+        }
+        UNIT_ASSERT_C(!req.Has("data"), e.RawLine);
+        UNIT_ASSERT_C(req.Has("query_text_expected"), e.RawLine);
+        UNIT_ASSERT_VALUES_EQUAL_C(req["query_text_expected"].GetBooleanSafe(true), false, e.RawLine);
+        if (action == "QUERY_ACTION_BEGIN_TX") {
+            ++beginFound;
+        } else if (action == "QUERY_ACTION_ROLLBACK_TX") {
+            ++rollbackFound;
+        } else {
+            ++commitFound;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL_C(beginFound, 2, "expected two BEGIN_TX log entries");
+    UNIT_ASSERT_VALUES_EQUAL_C(rollbackFound, 1, "expected one ROLLBACK_TX log entry");
+    UNIT_ASSERT_VALUES_EQUAL_C(commitFound, 1, "expected one COMMIT_TX log entry");
 }
 
 // At KQP_REQUEST=WARN successful completed is silent but failures still

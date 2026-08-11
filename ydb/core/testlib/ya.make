@@ -53,10 +53,12 @@ PEERDIR(
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
+    ydb/core/blob_depot
     ydb/core/test_tablet
     ydb/core/kqp
     ydb/core/kqp/federated_query
     ydb/services/scheme_secret
+    ydb/services/workload_manager/service
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/proxy_service
     ydb/core/metering
@@ -111,7 +113,10 @@ PEERDIR(
     ydb/services/discovery
     ydb/services/ymq
     ydb/core/tx/conveyor/service
+    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/priorities/service
+    ydb/core/tx/priorities/usage
     ydb/core/tx/limiter/grouped_memory/usage
     ydb/services/fq
     ydb/services/kesus

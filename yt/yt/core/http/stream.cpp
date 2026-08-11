@@ -5,7 +5,7 @@
 
 #include <yt/yt/core/misc/finally.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 #include <util/generic/buffer.h>
 
@@ -24,17 +24,17 @@ constinit const auto Logger = HttpLogger;
 
 namespace {
 
-YT_DEFINE_GLOBAL(const THeaders::THeaderNames, FilteredHeaders, {
+YT_DEFINE_LEAKY_GLOBAL(const THeaders::THeaderNames, FilteredHeaders, {
     "transfer-encoding",
     "content-length",
     "connection",
     "host",
 });
 
-YT_DEFINE_GLOBAL(const TSharedRef, Http100ContinueBuffer, TSharedRef::FromString(std::string("HTTP/1.1 100 Continue\r\n\r\n")));
-YT_DEFINE_GLOBAL(const TSharedRef, CrLfBuffer, TSharedRef::FromString(std::string("\r\n")));
-YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfBuffer, TSharedRef::FromString(std::string("0\r\n")));
-YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfCrLfBuffer, TSharedRef::FromString(std::string("0\r\n\r\n")));
+YT_DEFINE_LEAKY_GLOBAL(const TSharedRef, Http100ContinueBuffer, TSharedRef::FromString(std::string("HTTP/1.1 100 Continue\r\n\r\n")));
+YT_DEFINE_LEAKY_GLOBAL(const TSharedRef, CrLfBuffer, TSharedRef::FromString(std::string("\r\n")));
+YT_DEFINE_LEAKY_GLOBAL(const TSharedRef, ZeroCrLfBuffer, TSharedRef::FromString(std::string("0\r\n")));
+YT_DEFINE_LEAKY_GLOBAL(const TSharedRef, ZeroCrLfCrLfBuffer, TSharedRef::FromString(std::string("0\r\n\r\n")));
 
 } // namespace
 
@@ -474,12 +474,12 @@ void THttpInput::FinishMessage()
 
     auto stats = Connection_->GetReadStatistics();
     if (MessageType_ == EMessageType::Request) {
-        YT_LOG_DEBUG("Finished reading HTTP request body (RequestId: %v, BytesIn: %v, IdleDuration: %v, BusyDuration: %v, Keep-Alive: %v)",
-            RequestId_,
-            GetReadByteCount(),
-            stats.IdleDuration - StartStatistics_.IdleDuration,
-            stats.BusyDuration - StartStatistics_.BusyDuration,
-            Parser_.ShouldKeepAlive());
+        YT_TLOG_DEBUG("Finished reading HTTP request body")
+            .With("RequestId", RequestId_)
+            .With("BytesIn", GetReadByteCount())
+            .With("IdleDuration", stats.IdleDuration - StartStatistics_.IdleDuration)
+            .With("BusyDuration", stats.BusyDuration - StartStatistics_.BusyDuration)
+            .With("KeepAlive", Parser_.ShouldKeepAlive());
     }
 }
 
@@ -560,9 +560,9 @@ void THttpInput::MaybeLogSlowProgress()
 {
     auto now = TInstant::Now();
     if (LastProgressLogTime_ + Config_->BodyReadIdleTimeout < now) {
-        YT_LOG_DEBUG("Reading HTTP message (RequestId: %v, BytesIn: %v)",
-            RequestId_,
-            GetReadByteCount());
+        YT_TLOG_DEBUG("Reading HTTP message")
+            .With("RequestId", RequestId_)
+            .With("BytesIn", GetReadByteCount());
         LastProgressLogTime_ = now;
     }
 }
@@ -887,26 +887,26 @@ void THttpOutput::OnWriteFinish()
     auto now = TInstant::Now();
     auto stats = Connection_->GetWriteStatistics();
     if (LastProgressLogTime_ + Config_->WriteIdleTimeout < now) {
-        YT_LOG_DEBUG("Writing HTTP message (RequestId: %v, BytesOut: %v, IdleDuration: %v, BusyDuration: %v)",
-            RequestId_,
-            GetWriteByteCount(),
-            stats.IdleDuration - StartStatistics_.IdleDuration,
-            stats.BusyDuration - StartStatistics_.BusyDuration);
+        YT_TLOG_DEBUG("Writing HTTP message")
+            .With("RequestId", RequestId_)
+            .With("BytesOut", GetWriteByteCount())
+            .With("IdleDuration", stats.IdleDuration - StartStatistics_.IdleDuration)
+            .With("BusyDuration", stats.BusyDuration - StartStatistics_.BusyDuration);
         LastProgressLogTime_ = now;
     }
 
     if (MessageType_ == EMessageType::Response) {
         if (HeadersFlushed_ && !HeadersLogged_) {
             HeadersLogged_ = true;
-            YT_LOG_DEBUG("Finished writing HTTP headers (RequestId: %v, StatusCode: %v)",
-                RequestId_,
-                Status_);
+            YT_TLOG_DEBUG("Finished writing HTTP headers")
+                .With("RequestId", RequestId_)
+                .With("StatusCode", Status_);
         }
 
         if (MessageFinished_) {
-            YT_LOG_DEBUG("Finished writing HTTP response (RequestId: %v, BytesOut: %v)",
-                RequestId_,
-                GetWriteByteCount());
+            YT_TLOG_DEBUG("Finished writing HTTP response")
+                .With("RequestId", RequestId_)
+                .With("BytesOut", GetWriteByteCount());
         }
     }
 }

@@ -31,11 +31,8 @@ Contents:
   - [Service discovery](service-discovery.md)
   - [Configuration publishing](config-publication.md)
   - [Leader election](leader-election.md)
-- [Problem diagnostics](debug.md)
 
-  - [Enable logging](debug-logs.md)
-  - [Connect metrics to Prometheus](debug-prometheus.md)
-  - [Tracing with OpenTelemetry](debug-otel.md)
+Connecting {{ ydb-short-name }} SDK diagnostics — logging, metrics, and distributed tracing — is described in [{#T}](../../reference/ydb-sdk/observability/index.md).
 
 See also:
 

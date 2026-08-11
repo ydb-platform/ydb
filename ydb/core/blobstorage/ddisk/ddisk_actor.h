@@ -24,6 +24,7 @@
 #endif
 
 #include <ydb/library/pdisk_io/uring_operation.h>
+#include <ydb/library/pdisk_io/device_io_sample.h>
 
 #include <ydb/core/util/spsc_circular_queue.h>
 
@@ -31,6 +32,7 @@
 #include <queue>
 
 #include <util/generic/hash_set.h>
+#include <util/system/mutex.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/absl/flat_hash_set.h>
@@ -241,6 +243,45 @@ namespace NKikimr::NDDisk {
         std::unique_ptr<NPDisk::TUringRouter> UringRouter;
 #endif
 
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // The io_uring completion poller thread (via UringRouter's sample sink)
+        // pushes raw TDeviceIoSample-s into DeviceOverestimationSamples under
+        // DeviceOverestimationSamplesMutex. Periodically (WakeupFlushDeviceOverestimationSamples)
+        // the actor thread drains the buffer and forwards a batch to the owning
+        // PDisk actor (BaseInfo.PDiskActorID), which merges it with samples from
+        // other sources (PDisk's own block device, other DDisk/PB slots on the
+        // same PDisk) sharing the same physical device.
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        static constexpr size_t MaxBufferedDeviceOverestimationSamples = 4096;
+        static constexpr TDuration DeviceOverestimationFlushPeriod = TDuration::Seconds(5);
+
+        TMutex DeviceOverestimationSamplesMutex;
+        std::vector<NPDisk::TDeviceIoSample> DeviceOverestimationSamples;
+
+        // Flat cost-estimation constants derived once from PDiskParams (seek
+        // time, read/write speed) in InitUring(). Deliberately reuses PDisk's
+        // measured constants for the first iteration; IO_URING may warrant
+        // its own calibrated constants later.
+        ui64 DeviceOverestimationReadSpeedBps = 0;
+        ui64 DeviceOverestimationWriteSpeedBps = 0;
+
+        static constexpr ui64 NanosecondsPerSecond = 1'000'000'000ull;
+
+        // Estimates the cost of an operation excluding any seek cost (the
+        // owning PDisk actor's aggregator applies seek cost itself based on
+        // the merged, cross-source stream).
+        ui64 EstimateDeviceIoBaseCostNs(bool isWrite, ui64 size) const {
+            const ui64 speedBps = isWrite ? DeviceOverestimationWriteSpeedBps : DeviceOverestimationReadSpeedBps;
+            if (speedBps == 0) {
+                return 0;
+            }
+            return size * NanosecondsPerSecond / speedBps;
+        }
+
+        void OnDeviceIoSample(const NPDisk::TDeviceIoSample& sample);
+        void FlushDeviceOverestimationSamples();
+
     public:
         struct TEvPrivate {
             enum {
@@ -254,6 +295,17 @@ namespace NKikimr::NDDisk {
                 EvIssuePersistentBufferChunkAllocation,
                 EvDeallocatePersistentBufferChunk,
                 EvDeallocatePersistentBufferChunkResult,
+                EvRetryListPersistentBuffer,
+            };
+
+           struct TEvRetryListPersistentBuffer : TEventLocal<TEvRetryListPersistentBuffer, EvRetryListPersistentBuffer> {
+                TAutoPtr<TEventHandle<TEvListPersistentBuffer>> Ev;
+                ui32 RetriesLeft;
+
+                TEvRetryListPersistentBuffer(TAutoPtr<TEventHandle<TEvListPersistentBuffer>> ev, ui32 retriesLeft)
+                    : Ev(ev)
+                    , RetriesLeft(retriesLeft)
+                {}
             };
 
             struct TEvIssuePersistentBufferChunkAllocation : TEventLocal<TEvIssuePersistentBufferChunkAllocation, EvIssuePersistentBufferChunkAllocation> {
@@ -363,6 +415,7 @@ namespace NKikimr::NDDisk {
             WakeupCollectPbStats = 3,
             WakeupProcessPersistentBufferBatchWrite = 4,
             WakeupProcessDeallocatePersistentBufferChunk = 5,
+            WakeupFlushDeviceOverestimationSamples = 6,
         };
 
         struct TPbOpSnapshot {
@@ -753,6 +806,9 @@ namespace NKikimr::NDDisk {
                 std::map<ui64, TRope> DataParts;
                 ui32 PartsCount;
                 std::vector<TPersistentBufferSectorInfo> Sectors;
+                // Sender-supplied per-MinSectorSize-block payload checksums for this record, in order.
+                // Empty when the write carried no checksums. See TPersistentBuffer::TRecord::PayloadChecksums.
+                std::vector<ui64> PayloadChecksums;
 
                 TRope JoinData(ui32 sectorSize);
             };
@@ -813,7 +869,7 @@ namespace NKikimr::NDDisk {
         void IssuePersistentBufferChunkAllocation();
         void ProcessDeallocatePersistentBufferChunk(bool forceToNextChunk = false);
         void ProcessPersistentBufferQueue();
-        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors);
+        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors, const std::vector<ui64>& payloadChecksums);
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBufferData(TRope& data, std::vector<TPersistentBufferSectorInfo>& sectors);
         void StartRestorePersistentBuffer();
         void RestorePersistentBufferChunk(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
@@ -822,7 +878,12 @@ namespace NKikimr::NDDisk {
 
         bool PreprocessPersistentBufferWrite(NActors::TEventHandle<TEvWritePersistentBuffer>& ev);
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
-        bool ProcessPersistentBufferBatchWriteData(TEvWritePersistentBuffer::TPtr ev);
+        // ev is taken by reference (not TPtr by value, unlike its sibling above): TPtr is a TAutoPtr
+        // with ownership-transferring copy semantics, so a by-value parameter here would null out the
+        // caller's ev as soon as this is invoked -- including on the "doesn't fit, fall back" (false)
+        // return path, where Handle(TEvWritePersistentBuffer) still needs a valid ev afterwards to retry
+        // via ProcessPersistentBufferWrite.
+        bool ProcessPersistentBufferBatchWriteData(TEvWritePersistentBuffer::TPtr& ev);
         void ProcessPersistentBufferBatchWrite();
         double GetPersistentBufferFreeSpace();
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases);
@@ -839,6 +900,13 @@ namespace NKikimr::NDDisk {
         void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
+        void Handle(TEvPrivate::TEvRetryListPersistentBuffer::TPtr ev);
+        // Returns true if the given tablet currently has at least one persistent-buffer disk
+        // operation (write/erase/read) in flight. TEvListPersistentBuffer must not be answered
+        // while this holds, otherwise it could observe a partially-applied write or erase.
+        bool HasPersistentBufferInflightForTablet(ui64 tabletId) const;
+        void ProcessListPersistentBuffer(TAutoPtr<TEventHandle<TEvListPersistentBuffer>> ev, ui32 retriesLeft);
+        void ReplyListPersistentBuffer(TEventHandle<TEvListPersistentBuffer>& ev);
         void Handle(TEvPrivate::TEvIssuePersistentBufferChunkAllocation::TPtr ev);
         void Handle(TEvPrivate::TEvDeallocatePersistentBufferChunk::TPtr ev);
         void Handle(TEvPrivate::TEvDeallocatePersistentBufferChunkResult::TPtr ev);

@@ -607,8 +607,7 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
         restricted_source = entity_name("restricted_source")
         self.create_source(kikimr, restricted_source)
 
-        test_client = YdbClient(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
-        test_client.wait_connection()
+        test_client = YdbClient.from_driver_config(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
         try:
             self._expect_error(
                 kikimr,

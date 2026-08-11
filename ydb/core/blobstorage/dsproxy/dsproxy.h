@@ -200,6 +200,7 @@ public:
 
         bool EnableStorageRetroTraceGeneration = false;
         bool EnableStorageRetroTraceCollectionSlowRequests = false;
+        bool EnableChecksumCalcAndValidationOnDsProxy = false;
 
         std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
     };
@@ -564,6 +565,8 @@ struct TBlobStorageProxyControlWrappers {
     TMemorizableControlWrapper EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGenerationDefaultControl;
     TMemorizableControlWrapper EnableStorageRetroTraceCollectionSlowRequests =
             EnableStorageRetroTraceCollectionSlowRequestsDefaultControl;
+    TMemorizableControlWrapper EnableChecksumCalcAndValidationOnDsProxy =
+            EnableChecksumCalcAndValidationOnDsProxyDefaultControl;
 
 #define DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(prefix)              \
     TMemorizableControlWrapper prefix = prefix##DefaultControl;         \

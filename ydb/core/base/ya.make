@@ -36,6 +36,8 @@ SRCS(
     group_stat.cpp
     group_stat.h
     hive.h
+    http_database_param.cpp
+    http_database_param.h
     interconnect_channels.h
     kmeans_clusters.cpp
     local_user_token.cpp
@@ -52,6 +54,7 @@ SRCS(
     path.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
+    request_types.h
     resource_profile.h
     row_version.cpp
     row_version.h
@@ -127,7 +130,6 @@ PEERDIR(
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql
-    yql/essentials/types/binary_json
     library/cpp/deprecated/atomic
     library/cpp/json
 )
@@ -142,6 +144,7 @@ ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(boot_type.h)
 GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
+GENERATE_ENUM_SERIALIZATION(auth.h)
 
 END()
 
@@ -155,6 +158,7 @@ RECURSE_FOR_TESTS(
     ut_auth
     ut_backtrace
     ut_board_subscriber
+    ut_http_database_param
 )
 ENDIF()
 

@@ -124,8 +124,8 @@ void LzmaCompress(int level, TSource* source, TBlob* output)
     });
 
     auto checkError = [] (SRes result) {
-        YT_LOG_FATAL_IF(result != SZ_OK, "Lzma compression failed (Error: %v)",
-            result);
+        YT_TLOG_FATAL_IF(result != SZ_OK, "Lzma compression failed")
+            .With("Error", result);
     };
 
     {

@@ -165,6 +165,7 @@ def create_execute_query_request(
     arrow_format_settings: Optional[ArrowFormatSettings],
     parameters: Optional[dict],
     concurrent_result_sets: Optional[bool],
+    pool_id: Optional[str],
 ) -> ydb_query.ExecuteQueryRequest:
     try:
         syntax = QuerySyntax.YQL_V1 if not syntax else syntax
@@ -207,6 +208,7 @@ def create_execute_query_request(
             schema_inclusion_mode=schema_inclusion_mode,
             result_set_format=result_set_format,
             arrow_format_settings=arrow_format_settings,
+            pool_id=pool_id,
         )
     except BaseException as e:
         raise issues.ClientInternalError("Unable to prepare execute request") from e

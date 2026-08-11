@@ -7,6 +7,8 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     create_topic_ut.cpp
     dlq_acl_ut.cpp
+    schema_ops_ut.cpp
+    validation_ut.cpp
 )
 
 PEERDIR(
@@ -15,6 +17,7 @@ PEERDIR(
     ydb/core/testlib/grpc_request
     ydb/library/aclib
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
     library/cpp/testing/unittest
 )

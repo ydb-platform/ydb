@@ -27,6 +27,7 @@ struct TRemoveConsumerStrategy: public IAlterTopicStrategy {
         auto* config = targetConfig.MutablePQTabletConfig();
         BumpTopicConfigVersion(*config);
         config->ClearConsumers();
+        NPQ::ClearReadQuotaExceptWithoutConsumer(*config);
 
         bool removed = false;
         for (auto& consumer : sourceConfig.GetPQTabletConfig().GetConsumers()) {
@@ -37,6 +38,11 @@ struct TRemoveConsumerStrategy: public IAlterTopicStrategy {
 
             auto* dst = config->AddConsumers();
             dst->CopyFrom(consumer);
+            auto* srcReadQuota = NPQ::GetReadQuota(sourceConfig.GetPQTabletConfig(), consumer.GetName());
+            if (srcReadQuota) {
+                auto* dstReadQuota = NPQ::GetOrAddReadQuota(*config, consumer.GetName());
+                dstReadQuota->CopyFrom(*srcReadQuota);
+            }
         }
 
         if (!removed) {

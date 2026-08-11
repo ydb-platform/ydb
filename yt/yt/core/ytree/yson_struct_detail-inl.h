@@ -14,7 +14,7 @@
 
 #include <library/cpp/yt/yson_string/string.h>
 
-#include <library/cpp/yt/misc/wrapper_traits.h>
+#include <library/cpp/yt/mpl/wrapper_traits.h>
 
 #include <google/protobuf/util/message_differencer.h>
 
@@ -92,7 +92,7 @@ concept CRecursivelyEqualityComparable = NDetail::TEqualityComparableHelper<T>::
 
 template <class T>
 concept CSupportsDontSerializeDefault =
-    CRecursivelyEqualityComparable<typename TWrapperTraits<T>::TRecursiveUnwrapped>;
+    CRecursivelyEqualityComparable<typename NMpl::TWrapperTraits<T>::TRecursiveUnwrapped>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -132,7 +132,7 @@ struct TYsonSourceTraits<TNodePtr>
         }
     }
 
-    template <CAnyMap TMap, class TFiller>
+    template <NMpl::CMapping TMap, class TFiller>
     static void FillMap(TNodePtr& source, TMap& map, TFiller filler)
     {
         auto mapNode = source->AsMap();
@@ -174,7 +174,7 @@ struct TYsonSourceTraits<NYson::TYsonPullParserCursor*>
         });
     }
 
-    template <CAnyMap TMap, class TFiller>
+    template <NMpl::CMapping TMap, class TFiller>
     static void FillMap(NYson::TYsonPullParserCursor*& source, TMap& map, TFiller filler)
     {
         source->ParseMap([&] (NYson::TYsonPullParserCursor* cursor) {
@@ -199,7 +199,7 @@ void LoadFromSource(
     std::optional<EUnrecognizedStrategy> unrecognizedStrategy);
 
 // std::vector
-template <CYsonStructSource TSource, CStdVector TVector>
+template <CYsonStructSource TSource, NMpl::CStdVector TVector>
 void LoadFromSource(
     TVector& parameter,
     TSource source,
@@ -207,7 +207,7 @@ void LoadFromSource(
     std::optional<EUnrecognizedStrategy> unrecognizedStrategy);
 
 // any map.
-template <CYsonStructSource TSource, CAnyMap TMap>
+template <CYsonStructSource TSource, NMpl::CMapping TMap>
 void LoadFromSource(
     TMap& parameter,
     TSource source,
@@ -397,7 +397,7 @@ void LoadFromSource(
 }
 
 // std::vector
-template <CYsonStructSource TSource, CStdVector TVector>
+template <CYsonStructSource TSource, NMpl::CStdVector TVector>
 void LoadFromSource(
     TVector& parameter,
     TSource source,
@@ -427,7 +427,7 @@ void LoadFromSource(
 }
 
 // any map.
-template <CYsonStructSource TSource, CAnyMap TMap>
+template <CYsonStructSource TSource, NMpl::CMapping TMap>
 void LoadFromSource(
     TMap& parameter,
     TSource source,
@@ -553,7 +553,7 @@ inline void PostprocessRecursive(
 }
 
 // std::vector
-template <CStdVector TVector>
+template <NMpl::CStdVector TVector>
 inline void PostprocessRecursive(
     TVector& parameter,
     const std::function<NYPath::TYPath()>& pathGetter)
@@ -568,7 +568,7 @@ inline void PostprocessRecursive(
 }
 
 // any map
-template <CAnyMap TMap>
+template <NMpl::CMapping TMap>
 inline void PostprocessRecursive(
     TMap& parameter,
     const std::function<NYPath::TYPath()>& pathGetter)
@@ -620,14 +620,14 @@ inline void ResetOnLoad(std::optional<T>& parameter)
 }
 
 // std::vector
-template <CStdVector TVector>
+template <NMpl::CStdVector TVector>
 inline void ResetOnLoad(TVector& parameter)
 {
     parameter.clear();
 }
 
 // any map
-template <CAnyMap TMap>
+template <NMpl::CMapping TMap>
 inline void ResetOnLoad(TMap& parameter)
 {
     parameter.clear();
@@ -648,11 +648,11 @@ template <class T>
 bool CompareValues(const std::optional<T>& lhs, const std::optional<T>& rhs);
 
 // std::vector.
-template <CStdVector T>
+template <NMpl::CStdVector T>
 bool CompareValues(const T& lhs, const T& rhs);
 
 // any map.
-template <CAnyMap T>
+template <NMpl::CMapping T>
 bool CompareValues(const T& lhs, const T& rhs);
 
 template <class T>
@@ -671,7 +671,7 @@ bool CompareValues(const T& lhs, const T& rhs);
 template <class T>
 bool CompareValues(const T& lhs, const T& rhs)
 {
-    if constexpr (CRecursivelyEqualityComparable<typename TWrapperTraits<T>::TRecursiveUnwrapped>) {
+    if constexpr (CRecursivelyEqualityComparable<typename NMpl::TWrapperTraits<T>::TRecursiveUnwrapped>) {
         return lhs == rhs;
     } else {
         return false;
@@ -682,7 +682,7 @@ bool CompareValues(const T& lhs, const T& rhs)
 template <class T>
 bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
 {
-    if constexpr (CRecursivelyEqualityComparable<typename TWrapperTraits<T>::TRecursiveUnwrapped>) {
+    if constexpr (CRecursivelyEqualityComparable<typename NMpl::TWrapperTraits<T>::TRecursiveUnwrapped>) {
         if (!lhs || !rhs) {
             return rhs == lhs;
         }
@@ -709,7 +709,7 @@ bool CompareValues(const std::optional<T>& lhs, const std::optional<T>& rhs)
 }
 
 // std::vector.
-template <CStdVector T>
+template <NMpl::CStdVector T>
 bool CompareValues(const T& lhs, const T& rhs)
 {
     if (std::ssize(lhs) != std::ssize(rhs)) {
@@ -726,7 +726,7 @@ bool CompareValues(const T& lhs, const T& rhs)
 }
 
 // any map.
-template <CAnyMap T>
+template <NMpl::CMapping T>
 bool CompareValues(const T& lhs, const T& rhs)
 {
     if (std::ssize(lhs) != std::ssize(rhs)) {

@@ -180,7 +180,7 @@ namespace NKikimr::NStorage {
                         return "bridge pile id is not set for a ring group";
                     } else if (const auto pileId = TBridgePileId::FromProto(group, &std::decay_t<decltype(*group)>::GetBridgePileId);
                             pileId.GetPileIndex() < clusterState.PerPileStateSize()) {
-                        using T = NKikimrConfig::TDomainsConfig::TStateStorage;
+                        using T = NKikimrConfig::TStateStorageConfig;
                         std::optional<T::EPileState> state;
                         if (pileId == TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPrimaryPile)) {
                             state = pileId == TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPromotedPile)

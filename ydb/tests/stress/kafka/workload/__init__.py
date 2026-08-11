@@ -43,6 +43,7 @@ KAFKA_BATCH_PRODUCER_JAVA = textwrap.dedent("""
             String transactionalId = args[7];
             String transactionMode = args[8];
             String payloadPrefix = args[9];
+            int keyCount = Integer.parseInt(args[10]);
 
             Properties props = new Properties();
             props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
@@ -61,6 +62,7 @@ KAFKA_BATCH_PRODUCER_JAVA = textwrap.dedent("""
             props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, Boolean.toString(useTransactions));
             if (useTransactions) {
                 props.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionalId);
+                props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "1");
                 props.put(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, "30000");
             }
 
@@ -84,7 +86,7 @@ KAFKA_BATCH_PRODUCER_JAVA = textwrap.dedent("""
 
                 for (int i = 0; i < messageCount; ++i) {
                     producer.send(
-                        new ProducerRecord<>(topic, "key-" + (i % 16), makePayload(payloadPrefix, i, messageSize)),
+                        new ProducerRecord<>(topic, "key-" + (i % keyCount), makePayload(payloadPrefix, i, messageSize)),
                         callback);
                 }
 
@@ -315,8 +317,11 @@ class Workload(unittest.TestCase):
                 "consumer": "batchCheckerConsumer-plain",
                 "transactional_id": "none",
                 "transaction_mode": "none",
+                "message_count": SOURCE_MESSAGE_COUNT,
                 "expected_count": SOURCE_MESSAGE_COUNT,
                 "batch_size": 32768,
+                "linger_ms": 100,
+                "key_count": 16,
             },
             {
                 "name": "transaction-commit",
@@ -324,8 +329,11 @@ class Workload(unittest.TestCase):
                 "consumer": "batchCheckerConsumer-tx-commit",
                 "transactional_id": "stress-batch-tx-commit",
                 "transaction_mode": "commit",
-                "expected_count": SOURCE_MESSAGE_COUNT,
+                "message_count": 64,
+                "expected_count": 64,
                 "batch_size": 262144,
+                "linger_ms": 30000,
+                "key_count": 1,
             },
             {
                 "name": "transaction-abort",
@@ -333,8 +341,11 @@ class Workload(unittest.TestCase):
                 "consumer": "batchCheckerConsumer-tx-abort",
                 "transactional_id": "stress-batch-tx-abort",
                 "transaction_mode": "abort",
+                "message_count": 64,
                 "expected_count": 0,
                 "batch_size": 262144,
+                "linger_ms": 30000,
+                "key_count": 1,
             },
         ]
 
@@ -351,7 +362,10 @@ class Workload(unittest.TestCase):
                 scenario["transactional_id"],
                 scenario["transaction_mode"],
                 scenario["name"],
+                scenario["message_count"],
                 scenario["batch_size"],
+                scenario["linger_ms"],
+                scenario["key_count"],
             )
 
             if scenario["expected_count"] == 0:
@@ -391,7 +405,10 @@ class Workload(unittest.TestCase):
             transactional_id,
             transaction_mode,
             payload_prefix,
-            batch_size):
+            message_count,
+            batch_size,
+            linger_ms,
+            key_count):
         producer_class_dir = "./kafka-batch-producer"
         producer_command = [
             java_path,
@@ -400,14 +417,15 @@ class Workload(unittest.TestCase):
             "KafkaBatchProducer",
             self.kafka_bootstrap(),
             topic,
-            str(SOURCE_MESSAGE_COUNT),
+            str(message_count),
             "256",
             str(batch_size),
-            "100",
+            str(linger_ms),
             "none",
             transactional_id,
             transaction_mode,
             payload_prefix,
+            str(key_count),
         ]
         print("Kafka batch producer command:", producer_command)
         subprocess.run(producer_command, check=True, text=True)

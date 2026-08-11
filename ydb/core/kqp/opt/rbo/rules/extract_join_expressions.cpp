@@ -17,7 +17,7 @@ bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
     }
 
     auto filter = CastOperator<TOpFilter>(input);
-    auto conjuncts = filter->FilterExpr.SplitConjunct();
+    auto conjuncts = filter->GetFilterExpression().SplitConjunct();
 
     TVector<TExpression> newConjuncts;
     TVector<TMapElement> mapElements;

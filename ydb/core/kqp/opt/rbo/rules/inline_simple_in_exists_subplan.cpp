@@ -14,14 +14,14 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
 
     // Check that the filter lambda is a conjunction of one or more elements
     auto filter = CastOperator<TOpFilter>(input);
-    auto lambdaBody = filter->FilterExpr.Node->ChildPtr(1);
+    auto lambdaBody = filter->GetFilterExpression().Node->ChildPtr(1);
 
     if (!TCoAnd::Match(lambdaBody.Get()) && !TCoNot::Match(lambdaBody.Get()) && !TCoMember::Match(lambdaBody.Get())) {
         return input;
     }
 
     // Decompose the conjunction into individual conjuncts
-    auto conjuncts = filter->FilterExpr.SplitConjunct();
+    auto conjuncts = filter->GetFilterExpression().SplitConjunct();
 
     // Find the first conjunct that is a simple in or exists subplan
     bool negated = false;
@@ -64,7 +64,7 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
         auto subplanFilter = CastOperator<TOpFilter>(subplanEntry.Plan);
         auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
         uncorrSubplan = addDeps->GetInput();
-        auto subplanConjuncts = subplanFilter->FilterExpr.SplitConjunct();
+        auto subplanConjuncts = subplanFilter->GetFilterExpression().SplitConjunct();
 
         for (const auto& conj : subplanConjuncts) {
             if (conj.MaybeEquiJoinCondition()) {

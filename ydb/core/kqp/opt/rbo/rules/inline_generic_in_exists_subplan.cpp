@@ -34,7 +34,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
 
     // Check that the filter lambda contains at least one in/exists subplan
     auto filter = CastOperator<TOpFilter>(input);
-    auto subplanIUs = filter->FilterExpr.GetInputIUs(true, false);
+    auto subplanIUs = filter->GetFilterExpression().GetInputIUs(true, false);
     TVector<TInfoUnit> inOrExistsSubplans;
 
     for (auto subplanIU : subplanIUs) {
@@ -68,7 +68,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         auto subplanFilter = CastOperator<TOpFilter>(subplanEntry.Plan);
         auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
         uncorrSubplan = addDeps->GetInput();
-        auto subplanConjuncts = subplanFilter->FilterExpr.SplitConjunct();
+        auto subplanConjuncts = subplanFilter->GetFilterExpression().SplitConjunct();
 
         for (const auto& conj : subplanConjuncts) {
             if (conj.MaybeEquiJoinCondition()) {
@@ -184,7 +184,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
     props.Subplans.Remove(subplanIU);
 
     // Otherwise, we need to pack the remaining conjuncts back into the filter
-    return MakeIntrusive<TOpFilter>(join, filter->Pos, TExpression(filter->FilterExpr.GetLambda(), &ctx.ExprCtx, &props));
+    return MakeIntrusive<TOpFilter>(join, filter->Pos, TExpression(filter->GetFilterExpression().GetLambda(), &ctx.ExprCtx, &props));
 }
 }
 }

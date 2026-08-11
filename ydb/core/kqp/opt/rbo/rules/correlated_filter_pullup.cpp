@@ -33,7 +33,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
 
     auto deps = CastOperator<TOpAddDependencies>(filter->GetInput());
 
-    auto conjuncts = filter->FilterExpr.SplitConjunct();
+    auto conjuncts = filter->GetFilterExpression().SplitConjunct();
 
     // Select a subset of conditions that cover all dependencies
     TVector<TExpression> dependentSubset;

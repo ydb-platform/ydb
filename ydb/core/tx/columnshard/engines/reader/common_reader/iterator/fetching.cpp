@@ -87,8 +87,6 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
         !LWPROBE_ENABLED(ProgramFilter) && !LWPROBE_ENABLED(ProgramAggregation) && !LWPROBE_ENABLED(ProgramFetchOriginalData) &&
         !LWPROBE_ENABLED(ProgramAssembleOriginalData) && !LWPROBE_ENABLED(ProgramCheckIndexData) && !LWPROBE_ENABLED(ProgramCheckHeaderData) &&
         !LWPROBE_ENABLED(ProgramStreamLogic) && !LWPROBE_ENABLED(ProgramReserveMemory)) {
-        source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
-        source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
         return;
     }
     const auto& step = source->GetExecutionContext().GetCursorStep();
@@ -243,8 +241,6 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
 #undef PROGRAM_PROBE_ARGS
 #undef PROGRAM_PROBE_RESERVED
 #undef PROGRAM_PROBE_TAIL
-    source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
-    source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
 }
 
 NO_SANITIZE_THREAD
@@ -291,6 +287,8 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         const TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
         ReportTracing(source, executionDurationMs, currentExecutionResult, tracingNodeId, tracingCategoryName, tracingProcessor,
             reservedMemoryBeforeExecute);
+        source->MutableExecutionContext().SetPrevNodeTracing(
+            tracingNodeId, conclusion.IsFail() ? TExecutionContext::EPrevNodeResult::Fail : TExecutionContext::ConvertResult(*conclusion));
         if (conclusion.IsFail()) {
             source->MutableExecutionContext().OnFailedProgramStepExecution();
             return conclusion;

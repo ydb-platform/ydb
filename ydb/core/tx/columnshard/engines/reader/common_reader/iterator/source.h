@@ -22,6 +22,8 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/string/join.h>
 
+#include <atomic>
+
 namespace NKikimr::NOlap {
 class IDataReader;
 }
@@ -40,10 +42,80 @@ private:
     std::optional<TMonotonic> CurrentNodeStart;
 
     std::optional<TFetchingScriptCursor> CursorStep;
-    YDB_ACCESSOR_DEF(TString, PrevCategoryName);
-    YDB_ACCESSOR_DEF(TString, PrevExecutionResult);
 
 public:
+    enum class EPrevNodeResult: ui8 {
+        Success,
+        Skipped,
+        InBackground,
+        Fail
+    };
+
+private:
+    struct TPrevNodeState {
+        ui32 NodeId = 0;
+        EPrevNodeResult Result = EPrevNodeResult::Success;
+        bool Defined = false;
+    };
+
+    static_assert(std::atomic<TPrevNodeState>::is_always_lock_free);
+
+    // Prev-node tracing state is written by every finished program-step frame; a continuation frame may
+    // still be unwinding concurrently (issue #49169), so mutable TStrings are not allowed here. The
+    // whole state fits into one lock-free atomic struct; the category name is resolved on read through
+    // the immutable compiled graph.
+    TString StartCategoryName;
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
+    std::atomic<TPrevNodeState> PrevNode;
+
+public:
+    static EPrevNodeResult ConvertResult(const NArrow::NSSA::IResourceProcessor::EExecutionResult result) {
+        switch (result) {
+            case NArrow::NSSA::IResourceProcessor::EExecutionResult::Success:
+                return EPrevNodeResult::Success;
+            case NArrow::NSSA::IResourceProcessor::EExecutionResult::Skipped:
+                return EPrevNodeResult::Skipped;
+            case NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground:
+                return EPrevNodeResult::InBackground;
+        }
+    }
+
+    void SetStartCategoryName(TString&& name) {
+        StartCategoryName = std::move(name);
+    }
+
+    void SetPrevNodeTracing(const ui32 nodeId, const EPrevNodeResult result) {
+        PrevNode.store(TPrevNodeState{ .NodeId = nodeId, .Result = result, .Defined = true }, std::memory_order_relaxed);
+    }
+
+    TString GetPrevCategoryName() const {
+        const TPrevNodeState state = PrevNode.load(std::memory_order_relaxed);
+        if (!state.Defined) {
+            return StartCategoryName;
+        }
+        AFL_VERIFY(Program);
+        auto it = Program->GetNodes().find(state.NodeId);
+        AFL_VERIFY(it != Program->GetNodes().end())("node_id", state.NodeId);
+        return it->second->GetProcessor()->GetSignalCategoryName();
+    }
+
+    TString GetPrevExecutionResult() const {
+        const TPrevNodeState state = PrevNode.load(std::memory_order_relaxed);
+        if (!state.Defined) {
+            return TString();
+        }
+        switch (state.Result) {
+            case EPrevNodeResult::Success:
+                return "Success";
+            case EPrevNodeResult::Skipped:
+                return "Skipped";
+            case EPrevNodeResult::InBackground:
+                return "InBackground";
+            case EPrevNodeResult::Fail:
+                return "Fail";
+        }
+    }
+
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
 
     void OnFinishProgramStepExecution();

@@ -88,7 +88,7 @@ class TExpression {
     TString ToExplainString() const;
 
     TExprNode::TPtr Node;
-    TExprContext* Ctx;
+    TExprContext* Ctx = nullptr;
     TPlanProps* PlanProps;
 
   private:

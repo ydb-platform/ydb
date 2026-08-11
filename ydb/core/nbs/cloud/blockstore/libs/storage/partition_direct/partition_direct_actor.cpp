@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/partition_actor_id.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
@@ -572,7 +573,7 @@ void TPartitionActor::HandleGetLoadActorAdapterActorId(
 {
     auto response =
         std::make_unique<TEvService::TEvGetLoadActorAdapterActorIdResponse>();
-    response->Record.SetActorId(ctx.SelfID.ToString());
+    response->Record.SetActorId(SerializePartitionActorId(ctx.SelfID));
     ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 

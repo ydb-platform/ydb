@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    partition_actor_id.cpp
     service.cpp
     ss_proxy.cpp
 )
@@ -12,3 +13,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

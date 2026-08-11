@@ -80,6 +80,7 @@ IF (OS_LINUX)
     PEERDIR(
         ydb/core/nbs/cloud/blockstore/libs/common
         ydb/core/nbs/cloud/blockstore/libs/service
+        ydb/core/nbs/cloud/blockstore/libs/storage/api
         ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib
         ydb/core/nbs/cloud/storage/core/libs/common
         ydb/core/nbs/cloud/storage/core/libs/diagnostics

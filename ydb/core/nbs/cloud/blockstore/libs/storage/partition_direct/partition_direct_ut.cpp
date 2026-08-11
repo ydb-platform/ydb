@@ -1,5 +1,6 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/partition_actor_id.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h>
@@ -214,9 +215,9 @@ TActorId GetLoadActorAdapterActorId(
     UNIT_ASSERT(res);
     UNIT_ASSERT(!res->Get()->Record.GetActorId().empty());
     NActors::TActorId loadActorAdapter;
-    loadActorAdapter.Parse(
-        res->Get()->Record.GetActorId().data(),
-        res->Get()->Record.GetActorId().size());
+    UNIT_ASSERT(TryDeserializePartitionActorId(
+        res->Get()->Record.GetActorId(),
+        loadActorAdapter));
     return loadActorAdapter;
 }
 

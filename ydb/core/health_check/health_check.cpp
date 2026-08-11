@@ -2872,7 +2872,7 @@ public:
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id();
         }
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(groupId));
-        if (groupInfo.HasBridgePileId() && NodeWardenStorageConfig && NodeWardenStorageConfig->Get()->BridgeInfo) {
+        if (groupInfo.HasBridgePileId() && NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk() && NodeWardenStorageConfig->Get()->BridgeInfo) {
             const auto& pileId = TBridgePileId::FromProto(&groupInfo, &NKikimrWhiteboard::TBSGroupStateInfo::GetBridgePileId);
             const auto& pile = NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(pileId)->Name;
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pile);
@@ -3576,7 +3576,7 @@ public:
         Ydb::Monitoring::SelfCheckResult& result = response->Result;
 
         FillNodeInfo(SelfId().NodeId(), result.mutable_location());
-        if (NodeWardenStorageConfig && NodeWardenStorageConfig->Get()->BridgeInfo) {
+        if (NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk() && NodeWardenStorageConfig->Get()->BridgeInfo) {
             const auto& selfPileName = NodeWardenStorageConfig->Get()->BridgeInfo->SelfNodePile->Name;
             result.mutable_location()->mutable_pile()->set_name(selfPileName);
         }

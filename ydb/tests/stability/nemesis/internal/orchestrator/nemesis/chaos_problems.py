@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 # Kinds are stable: the test report groups by them.
 KIND_STUCK_FAULT = "stuck_fault"
 KIND_INVENTORY_DEGRADED = "inventory_degraded"
+KIND_PROBE_BLIND = "recovery_probe_blind"
 
 DEFAULT_LIMIT = 200
 
@@ -114,8 +115,30 @@ class ChaosProblemStore:
                 "held_sec": round(float(fault.held_sec), 1),
                 "timeout_sec": round(float(fault.timeout_sec), 1),
                 "lease_id": fault.lease_id,
+                "phase": getattr(fault, "phase", ""),
             },
         )
+
+    def record_probe_blind(self, details: dict | None = None) -> None:
+        """``on_blind``: no fresh healthcheck data."""
+        self.record(
+            KIND_PROBE_BLIND,
+            (
+                "recovery probe has no fresh healthcheck data: budget releases and stuck "
+                "detection are paused, scheduled extracts still fire"
+            ),
+            details=details,
+        )
+
+    def resolve_kind(self, kind: str) -> int:
+        """Drop every entry of ``kind`` (e.g. clear probe-blind when sight returns)."""
+        with self._lock:
+            doomed = [key for key in self._problems if key[0] == kind]
+            for key in doomed:
+                del self._problems[key]
+        if doomed:
+            logger.info("chaos problem resolved [%s]: %d entr(ies)", kind, len(doomed))
+        return len(doomed)
 
     def record_inventory_degraded(self, reason: str, details: dict | None = None) -> None:
         self.record(
@@ -150,4 +173,5 @@ __all__ = [
     "ChaosProblemStore",
     "KIND_STUCK_FAULT",
     "KIND_INVENTORY_DEGRADED",
+    "KIND_PROBE_BLIND",
 ]

@@ -17,6 +17,11 @@ class WorkloadFulltextIndex(WorkloadBase):
         self.row_count = 50
         self.limit = 10
         self.query_count = 10
+        # Number of distinct prefix (user_id) values in the prefixed tables.
+        # Every prefixed query matches only one of these groups, so the number of
+        # groups is kept small to leave enough rows in each of them - otherwise
+        # random word queries return nothing too often.
+        self.user_count = 2
 
     def _create_table(self, table_path, utf8, with_prefix=False):
         logger.info(f"Create table {table_path}")
@@ -96,7 +101,7 @@ class WorkloadFulltextIndex(WorkloadBase):
         for key in range(min_key, max_key):
             text = fulltext.get_random_text()
             if with_prefix:
-                user_id = (key % 10) + 1  # Distribute across 10 users
+                user_id = (key % self.user_count) + 1
                 values.append(f'({key}, {user_id}, "{text}")')
             else:
                 values.append(f'({key}, "{text}")')
@@ -127,7 +132,7 @@ class WorkloadFulltextIndex(WorkloadBase):
     def _select_contains(self, index_name, table_path, with_prefix=False):
         query = ' '.join(fulltext.get_random_words(3))
         if with_prefix:
-            user_id = random.randint(1, 10)
+            user_id = random.randint(1, self.user_count)
             select_sql = f"""
                 SELECT `pk`, `text`
                 FROM `{table_path}`
@@ -153,7 +158,7 @@ class WorkloadFulltextIndex(WorkloadBase):
     def _select_relevance(self, index_name, table_path, with_prefix=False):
         query = ' '.join(fulltext.get_random_words(3))
         if with_prefix:
-            user_id = random.randint(1, 10)
+            user_id = random.randint(1, self.user_count)
             select_sql = f"""
                 SELECT `pk`, `text`, FulltextScore(`text`, "{query}") as `rel`
                 FROM `{table_path}`
@@ -184,7 +189,7 @@ class WorkloadFulltextIndex(WorkloadBase):
             prev = rel
         return n
 
-    def _wait_index_ready(self, index_name, table_path):
+    def _wait_index_ready(self, index_name, table_path, with_prefix=False):
         start_time = time.time()
         while time.time() - start_time < 60:
             time.sleep(5)
@@ -192,6 +197,7 @@ class WorkloadFulltextIndex(WorkloadBase):
                 res = self._select_contains(
                     index_name=index_name,
                     table_path=table_path,
+                    with_prefix=with_prefix,
                 )
                 if res == 0:
                     continue
@@ -220,6 +226,7 @@ class WorkloadFulltextIndex(WorkloadBase):
         self._wait_index_ready(
             table_path=table_path,
             index_name=index_name,
+            with_prefix=with_prefix,
         )
         n = 0
         for i in range(0, self.query_count):

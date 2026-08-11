@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     yt/yt/library/profiling
+    yt/yt/library/cgroup
 
     # TODO(prime@:) remove this, once dependency cycle with yt/core is resolved
     yt/yt_proto/yt/core

@@ -40,6 +40,9 @@ constinit const auto Logger = BacktraceIntrospectorLogger;
 
 namespace {
 
+const auto OverflowTraceLoggingTags = NLogging::TLoggingTagList()
+    .With("TraceLoggingTags", "Overflow");
+
 struct TStaticString
 {
     TStaticString() = default;
@@ -48,6 +51,11 @@ struct TStaticString
     {
         Length = std::min(std::ssize(str), std::ssize(Buffer));
         std::copy(str.data(), str.data() + Length, Buffer.data());
+    }
+
+    static TStaticString FromWholeBytesOrFallback(TStringBuf bytes, TStringBuf fallback)
+    {
+        return TStaticString(std::ssize(bytes) <= std::ssize(TStaticString{}.Buffer) ? bytes : fallback);
     }
 
     operator std::string() const
@@ -79,7 +87,7 @@ struct TSignalHandlerContext
 
     TFiberId FiberId = {};
     TTraceId TraceId = {};
-    TStaticString TraceLoggingTag;
+    TStaticString TraceLoggingTagsPayload;
     TStaticBacktrace Backtrace;
     TThreadName ThreadName = {};
 
@@ -124,7 +132,9 @@ void SignalHandler(int sig, siginfo_t* /*info*/, void* threadContext)
     SignalHandlerContext->ThreadName = GetCurrentThreadName();
     if (const auto* traceContext = TryGetCurrentTraceContext()) {
         SignalHandlerContext->TraceId = traceContext->GetTraceId();
-        SignalHandlerContext->TraceLoggingTag = TStaticString(traceContext->GetLoggingTag());
+        SignalHandlerContext->TraceLoggingTagsPayload = TStaticString::FromWholeBytesOrFallback(
+            traceContext->GetLoggingTags().GetPayload().Underlying(),
+            OverflowTraceLoggingTags.GetPayload().Underlying());
     }
 
     auto cursorContext = FramePointerCursorContextFromUcontext(*static_cast<const ucontext_t*>(threadContext));
@@ -200,7 +210,8 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
             .FiberId = signalHandlerContext.FiberId,
             .ThreadName = std::string(signalHandlerContext.ThreadName.Buffer.data(), static_cast<size_t>(signalHandlerContext.ThreadName.Length)),
             .TraceId = signalHandlerContext.TraceId,
-            .TraceLoggingTag = signalHandlerContext.TraceLoggingTag,
+            .TraceLoggingTags = NLogging::TLoggingTagListPayload(
+                std::string(signalHandlerContext.TraceLoggingTagsPayload)),
             .Backtrace = signalHandlerContext.Backtrace,
         });
     }

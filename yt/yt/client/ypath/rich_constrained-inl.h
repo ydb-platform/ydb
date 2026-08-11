@@ -8,8 +8,8 @@
 
 #include <yt/yt/client/chunk_client/read_limit.h>
 
-#include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/column_rename_descriptor.h>
+#include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/versioned_io_options.h>
 
@@ -193,7 +193,7 @@ TConstrainedRichYPath<TValidator...> TConstrainedRichYPath<TValidator...>::Norma
         attributes = NYTree::CreateEphemeralAttributes();
     }
     attributes->MergeFrom(Attributes());
-    return TConstrainedRichYPath<TValidator...>(std::move(path), *attributes);;
+    return TConstrainedRichYPath<TValidator...>(std::move(path), *attributes);
 }
 
 template <class... TValidator>
@@ -663,9 +663,9 @@ NTableClient::TVersionedWriteOptions TConstrainedRichYPath<TValidator...>::GetVe
 }
 
 template <class... TValidator>
-std::optional<std::string> TConstrainedRichYPath<TValidator...>::GetAccessMethod() const
+std::optional<ELayerAccessMethod> TConstrainedRichYPath<TValidator...>::GetAccessMethod() const
 {
-    return FindAttribute<std::string>(*this, "access_method");
+    return FindAttribute<ELayerAccessMethod>(*this, "access_method");
 }
 
 template <class... TValidator>

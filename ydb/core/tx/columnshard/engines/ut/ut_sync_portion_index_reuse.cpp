@@ -100,7 +100,7 @@ std::shared_ptr<NChunks::TChunkPreparation> BuildColumnChunkFromArray(
     auto arrToWrite = accessorConstructor->Construct(accessor, loadContext);
     UNIT_ASSERT(arrToWrite.IsSuccess());
     return std::make_shared<NChunks::TChunkPreparation>(
-        accessorConstructor->SerializeToString(*arrToWrite, loadContext), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures);
+        accessorConstructor->SerializeToBlobAndMeta(*arrToWrite, loadContext).Blob, *arrToWrite, TChunkAddress(columnId, 0), columnFeatures);
 }
 
 THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> BuildColumnChunks(

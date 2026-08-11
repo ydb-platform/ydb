@@ -15,6 +15,7 @@ SRCS(
     sha256_ut.cpp
     metering_ut.cpp
     source_address_ut.cpp
+    topic_sqs_action_metrics_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

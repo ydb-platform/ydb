@@ -307,6 +307,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]: ...
 
     @overload
@@ -323,6 +324,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]: ...
 
     def _execute_call(
@@ -338,6 +340,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> Union[
         Iterable[_apis.ydb_query.ExecuteQueryResponsePart],
         Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]],
@@ -361,6 +364,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
             result_set_format=result_set_format,
             arrow_format_settings=arrow_format_settings,
             concurrent_result_sets=concurrent_result_sets,
+            pool_id=pool_id,
         )
 
         return self._driver(
@@ -484,6 +488,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
         schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
         result_set_format: Optional[base.QueryResultSetFormat] = None,
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> base.SyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -505,6 +510,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
          1) QueryResultSetFormat.VALUE, which is default;
          2) QueryResultSetFormat.ARROW.
         :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
+        :param pool_id: Optional resource pool ID for routing the query to a specific compute pool.
 
         :return: Iterator with result sets
         """
@@ -530,6 +536,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
                 arrow_format_settings=arrow_format_settings,
                 concurrent_result_sets=concurrent_result_sets,
                 settings=settings,
+                pool_id=pool_id,
             )
         return base.SyncResponseContextIterator(
             stream_it,

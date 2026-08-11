@@ -29,6 +29,12 @@ namespace browser
 static constexpr const char *kBrowserBrands = "browser.brands";
 
 /**
+  Absolute URL of the current browser document according to <a
+  href="https://www.rfc-editor.org/rfc/rfc3986">RFC3986</a>.
+ */
+static constexpr const char *kBrowserDocumentUrlFull = "browser.document.url.full";
+
+/**
   Preferred language of the user using the browser
   <p>
   This value is intended to be taken from the Navigator API @code navigator.language @endcode.

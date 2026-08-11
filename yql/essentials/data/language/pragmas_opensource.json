@@ -267,6 +267,12 @@
     "name": "yt.JoinCommonAnySideFirst"
   },
   {
+    "name": "yt.JoinCommonFlatPayloadColumnLimit"
+  },
+  {
+    "name": "yt.JoinCommonUseFlatPayload"
+  },
+  {
     "name": "yt.JoinCommonUseMapMultiOut"
   },
   {
@@ -414,6 +420,9 @@
     "name": "yt.NightlyCompress"
   },
   {
+    "name": "yt.OmitInaccessibleRows"
+  },
+  {
     "name": "yt.OperationReaders"
   },
   {
@@ -475,6 +484,9 @@
   },
   {
     "name": "yt.QueryCacheMode"
+  },
+  {
+    "name": "yt.QueryCacheReportProgress"
   },
   {
     "name": "yt.QueryCacheSalt"
@@ -1002,6 +1014,9 @@
     "name": "DisableEmitUnionMerge"
   },
   {
+    "name": "DisableEvaluateExprCache"
+  },
+  {
     "name": "DisableExceptIntersectBefore202503"
   },
   {
@@ -1071,6 +1086,9 @@
     "name": "DisableWindowNewPipeline"
   },
   {
+    "name": "DisableYqlSelectAllowUnnamedGroupByExpr"
+  },
+  {
     "name": "DiscoveryMode"
   },
   {
@@ -1108,6 +1126,9 @@
   },
   {
     "name": "ErrorMsg"
+  },
+  {
+    "name": "EvaluateExprCache"
   },
   {
     "name": "ExceptIntersectBefore202503"
@@ -1258,6 +1279,9 @@
   },
   {
     "name": "YqlSelect"
+  },
+  {
+    "name": "YqlSelectAllowUnnamedGroupByExpr"
   },
   {
     "name": "yson.AutoConvert"

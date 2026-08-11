@@ -285,9 +285,12 @@ TActorId TPartition::ReplyTo(const ui64 destination, const TActorId& replyTo) co
 
 void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo) {
     auto replyToActor = ReplyTo(dst, replyTo);
+    // IsInternal means "compaction / internal consumer reply", not merely "destined to Self".
+    // Timestamp reads use dst==0 and empty replyTo; they must stay non-internal so Handle(TEvError)
+    // can clear ReadingTimestamp. Compaction reads set replyTo to SelfId().
     ReplyPersQueueError(
         replyToActor, ctx, TabletId, TopicName(), Partition,
-        TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, replyToActor == SelfId()
+        TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, !!replyTo
     );
 }
 
@@ -370,6 +373,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , BatchProcessorActor(batchProcessorActorId)
     , AvgWriteBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , AvgReadBytes(TDuration::Minutes(1), 1000)
+    , AvgReadMessages(TDuration::Minutes(1), 1000)
     , AvgQuotaBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , AvgQuotaMessages(TDuration::Minutes(1), 1000)
     , ReservedSize(0)
@@ -703,6 +707,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
         for (auto& avg : userInfo.second.AvgReadBytes) {
             avg.Update(now);
         }
+        userInfo.second.AvgReadMessages.Update(now);
     }
     WriteBufferIsFullCounter.UpdateWorkingTime(now);
 
@@ -715,7 +720,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
         avg.Update(now);
     }
     AvgQuotaMessages.Update(now);
-
+    AvgReadBytes.Update(now);
+    AvgReadMessages.Update(now);
     TryRunCompaction();
 
     AutopartitioningManager->CleanUp();
@@ -2197,7 +2203,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
 
     ctx.Send(ReplyTo(info.Destination, info.ReplyTo), answer.Event.Release());
 
-    OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
+    OnReadRequestFinished(info.Destination, answer.Size, answer.ConsumedMessages, info.User, ctx);
 }
 
 void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx) {
@@ -2220,7 +2226,8 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
     auto* userInfo = UsersInfoStorage->GetIfExists(info.User);
     if (!userInfo) {
         ReplyError(ctx, info.Destination,  NPersQueue::NErrorCode::BAD_REQUEST, GetConsumerDeletedMessage(info.User));
-        OnReadRequestFinished(info.Destination, 0, info.User, ctx);
+        OnReadRequestFinished(info.Destination, 0, 0, info.User, ctx);
+        return;
     }
 
     OnReadComplete(info, userInfo, ev->Get(), ctx);
@@ -2274,6 +2281,7 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
             // KeyCompactionReadCyclesTotal.Set(compacterCounters.ReadCyclesCount);
             // KeyCompactionWriteCyclesTotal.Set(compacterCounters.WriteCyclesCount);
         }
+        return;
     }
     ReadingTimestamp = false;
     auto userInfo = UsersInfoStorage->GetIfExists(ReadingForUser);
@@ -2445,18 +2453,45 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             id += 2;
         }
         PQ_ENSURE(id == METRIC_MAX_READ_SPEED_4 + 1);
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get()) {
-            ui64 quotaUsage = ui64(userInfo.AvgReadBytes[1].GetValue()) * 1000000 / userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get() / 60;
 
-            SET_METRIC(userInfo.LabeledCounters, METRIC_READ_QUOTA_PER_CONSUMER_USAGE, quotaUsage);
+        ui64 bytesThrottledMicroseconds = 0;
+        ui64 messagesThrottledMicroseconds = 0;
+        bool hasReadQuotaUsage = false;
+
+        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get()) {
+            const ui64 avgQuotaBytes = userInfo.AvgReadBytes[1].GetValue();
+            bytesThrottledMicroseconds = avgQuotaBytes * 1000000 / userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get() / 60;
+
+            SET_METRIC(userInfo.LabeledCounters, METRIC_READ_QUOTA_PER_CONSUMER_BYTES_USAGE, avgQuotaBytes);
+            hasReadQuotaUsage = true;
+        }
+        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_MESSAGES].Get()) {
+            const ui64 avgQuotaMessages = userInfo.AvgReadMessages.GetValue();
+            messagesThrottledMicroseconds = avgQuotaMessages * 1000000 / userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_MESSAGES].Get() / 60;
+
+            SET_METRIC(userInfo.LabeledCounters, METRIC_READ_QUOTA_PER_CONSUMER_MESSAGES_USAGE, avgQuotaMessages);
+            hasReadQuotaUsage = true;
+        }
+        if (hasReadQuotaUsage) {
+            SET_METRIC(userInfo.LabeledCounters, METRIC_READ_QUOTA_PER_CONSUMER_USAGE,
+                Max(bytesThrottledMicroseconds, messagesThrottledMicroseconds));
         }
 
         if (userInfoPair.first == CLIENTID_WITHOUT_CONSUMER ) {
             SET_METRIC_VALUE(PartitionCountersLabeled, METRIC_READ_QUOTA_NO_CONSUMER_BYTES,
                 userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get());
 
+            SET_METRIC_VALUE(PartitionCountersLabeled, METRIC_READ_QUOTA_NO_CONSUMER_MESSAGES,
+                    userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_MESSAGES].Get());
+
             SET_METRIC_VALUE(PartitionCountersLabeled, METRIC_READ_QUOTA_NO_CONSUMER_USAGE,
                 userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_USAGE].Get());
+
+            SET_METRIC_VALUE(PartitionCountersLabeled, METRIC_READ_QUOTA_NO_CONSUMER_BYTES_USAGE,
+                userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES_USAGE].Get());
+
+            SET_METRIC_VALUE(PartitionCountersLabeled, METRIC_READ_QUOTA_NO_CONSUMER_MESSAGES_USAGE,
+                userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_MESSAGES_USAGE].Get());
         }
 
         if (haveChanges) {
@@ -2562,15 +2597,29 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_TIME_LAG_MS, timeLag);
 
+    ui64 readBytesThrottledMicroseconds = 0;
+    ui64 readMessagesThrottledMicroseconds = 0;
+    bool hasReadQuotaUsage = false;
+
     if (PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Get()) {
-        ui64 quotaUsage = ui64(AvgReadBytes.GetValue()) * 1000000 / PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Get() / 60;
-        SET_METRIC(PartitionCountersLabeled, METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE, quotaUsage);
+        const ui64 avgQuotaBytes = AvgReadBytes.GetValue();
+        readBytesThrottledMicroseconds = avgQuotaBytes * 1000000 / PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Get() / 60;
+
+        SET_METRIC(PartitionCountersLabeled, METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES_USAGE, avgQuotaBytes);
+        hasReadQuotaUsage = true;
+    }
+    if (PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_MESSAGES].Get()) {
+        const ui64 avgQuotaMessages = AvgReadMessages.GetValue();
+        readMessagesThrottledMicroseconds = avgQuotaMessages * 1000000 / PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_MESSAGES].Get() / 60;
+
+        SET_METRIC(PartitionCountersLabeled, METRIC_READ_QUOTA_PARTITION_TOTAL_MESSAGES_USAGE, avgQuotaMessages);
+        hasReadQuotaUsage = true;
+    }
+    if (hasReadQuotaUsage) {
+        SET_METRIC(PartitionCountersLabeled, METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE,
+            Max(readBytesThrottledMicroseconds, readMessagesThrottledMicroseconds));
     }
 
-    if (PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_NO_CONSUMER_BYTES].Get()) {
-        ui64 quotaUsage = ui64(AvgReadBytes.GetValue()) * 1000000 / PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Get() / 60;
-        SET_METRIC(PartitionCountersLabeled, METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE, quotaUsage);
-    }
     if (PartitionKeyCompactionCounters) {
         PQ_ENSURE(Compacter)("topic", TopicName());
         auto counters = Compacter->GetCounters();
@@ -2619,8 +2668,16 @@ void TPartition::Handle(NQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorCo
             userInfo->LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Set(quota);
         }
     }
-    if (PartitionCountersLabeled)
+    for (auto& [consumerStr, quota] : ev->Get()->UpdatedConsumerMessagesQuotas) {
+        TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumerStr);
+        if (userInfo && userInfo->LabeledCounters) {
+            userInfo->LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_MESSAGES].Set(quota);
+        }
+    }
+    if (PartitionCountersLabeled) {
         PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Set(ev->Get()->UpdatedTotalPartitionReadQuota);
+        PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_MESSAGES].Set(ev->Get()->UpdatedTotalPartitionMessagesReadQuota);
+    }
 }
 
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -4021,7 +4078,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 if (info.User == user) {
                     readCookies.insert(cookie);
                     ReplyError(ctx, info.Destination,  NPersQueue::NErrorCode::BAD_REQUEST, GetConsumerDeletedMessage(user));
-                    OnReadRequestFinished(info.Destination, 0, user, ctx);
+                    OnReadRequestFinished(info.Destination, 0, 0, user, ctx);
                 }
             }
             for (ui64 cookie : readCookies) {
@@ -4660,7 +4717,8 @@ void TPartition::ScheduleReplyError(const ui64 dst, bool internal,
     Replies.emplace_back(internal ? SelfId() : TabletActorId,
                          MakeReplyError(dst,
                                         errorCode,
-                                        error).Release());
+                                        error,
+                                        internal).Release());
 }
 
 void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,

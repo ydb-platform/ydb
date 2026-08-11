@@ -2090,6 +2090,67 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
     }
 
+    Y_UNIT_TEST(UpdateWithOverlappingPortionsNoCompaction) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+            runtime.DispatchEvents(options);
+        }
+
+        const TestTableDescription table;
+        const ui64 tableId = 1;
+        auto ydbSchema = table.Schema;
+        auto planStep = SetupSchema(runtime, sender, tableId);
+
+        constexpr ui64 numRows = 1000;
+        std::vector<ui64> odds;
+        std::vector<ui64> evens;
+        odds.reserve(numRows / 2);
+        evens.reserve(numRows / 2);
+        for (ui64 i = 0; i < numRows; ++i) {
+            (i % 2 ? odds : evens).push_back(i);
+        }
+
+        ui64 writeId = 0;
+        ui64 txId = 100;
+        {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, MakeTestBlobValues(odds, ydbSchema), ydbSchema, true, &writeIds));
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, MakeTestBlobValues(evens, ydbSchema), ydbSchema, true, &writeIds));
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(csControllerGuard->GetCompactionStartedCounter().Val(), 0);
+
+        {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, MakeTestBlob({ 0, numRows }, ydbSchema), ydbSchema, true, &writeIds,
+                NEvWrite::EModificationType::Update));
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+        reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        UNIT_ASSERT(CheckOrdered(rb));
+        UNIT_ASSERT(DataHas({ rb }, { 0, numRows }, true));
+    }
+
     Y_UNIT_TEST(WriteRead) {
         TestTableDescription table;
         TestWriteRead(false, table);
@@ -3139,6 +3200,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         const auto dropTxBody = TTestSchema::DropTableTxBody(tableId, 100500);
         const auto dropPlanStep = ProposeSchemaTx(runtime, sender, dropTxBody, ++txId);
         PlanSchemaTx(runtime, sender, NOlap::TSnapshot(dropPlanStep, txId));
+
+        // Advance the plan step by committing empty plan steps so that
+        // minSnapshotForNewReads (based on GetOutdatedStep() - MaxReadStaleness) can exceed
+        // the dropSnapshot and allow cleanup of the dropped table's portions.
+        for (ui32 i = 0; i < 10; ++i) {
+            PlanCommit(runtime, sender, TPlanStep{ dropPlanStep + i + 1 }, TSet<ui64>{});
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
 
         for (ui32 i = 0; i < 120 && droppedPathCleanupBatches < 2; ++i) {
             runtime.SimulateSleep(TDuration::Seconds(1));

@@ -4,7 +4,7 @@
 #include "attribute_owner.h"
 #include "ypath_service.h"
 
-#include <yt/yt/core/misc/mpl.h>
+#include <library/cpp/yt/mpl/type_traits.h>
 #include <yt/yt/core/misc/serialize.h>
 
 #include <yt/yt/core/yson/public.h>

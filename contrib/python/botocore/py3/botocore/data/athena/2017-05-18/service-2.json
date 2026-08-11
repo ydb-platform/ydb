@@ -98,7 +98,7 @@
         {"shape":"InternalServerException"},
         {"shape":"InvalidRequestException"}
       ],
-      "documentation":"<p>Creates (registers) a data catalog with the specified name and properties. Catalogs created are visible to all users of the same Amazon Web Services account.</p> <p>This API operation creates the following resources.</p> <ul> <li> <p>CFN Stack Name with a maximum length of 128 characters and prefix <code>athenafederatedcatalog-CATALOG_NAME_SANITIZED</code> with length 23 characters.</p> </li> <li> <p>Lambda Function Name with a maximum length of 64 characters and prefix <code>athenafederatedcatalog_CATALOG_NAME_SANITIZED</code> with length 23 characters.</p> </li> <li> <p>Glue Connection Name with a maximum length of 255 characters and a prefix <code>athenafederatedcatalog_CATALOG_NAME_SANITIZED</code> with length 23 characters. </p> </li> </ul>"
+      "documentation":"<p>Creates (registers) a data catalog with the specified name and properties. Catalogs created are visible to all users of the same Amazon Web Services account.</p> <p>For a <code>FEDERATED</code> catalog, this API operation creates the following resources.</p> <ul> <li> <p>CFN Stack Name with a maximum length of 128 characters and prefix <code>athenafederatedcatalog-CATALOG_NAME_SANITIZED</code> with length 23 characters.</p> </li> <li> <p>Lambda Function Name with a maximum length of 64 characters and prefix <code>athenafederatedcatalog_CATALOG_NAME_SANITIZED</code> with length 23 characters.</p> </li> <li> <p>Glue Connection Name with a maximum length of 255 characters and a prefix <code>athenafederatedcatalog_CATALOG_NAME_SANITIZED</code> with length 23 characters. </p> </li> </ul>"
     },
     "CreateNamedQuery":{
       "name":"CreateNamedQuery",
@@ -464,7 +464,22 @@
         {"shape":"InternalServerException"},
         {"shape":"InvalidRequestException"}
       ],
-      "documentation":"<p>Returns query execution runtime statistics related to a single execution of a query if you have access to the workgroup in which the query ran. Statistics from the <code>Timeline</code> section of the response object are available as soon as <a>QueryExecutionStatus$State</a> is in a SUCCEEDED or FAILED state. The remaining non-timeline statistics in the response (like stage-level input and output row count and data size) are updated asynchronously and may not be available immediately after a query completes. The non-timeline statistics are also not included when a query has row-level filters defined in Lake Formation.</p>"
+      "documentation":"<p>Returns query execution runtime statistics related to a single execution of a query if you have access to the workgroup in which the query ran. Statistics from the <code>Timeline</code> section of the response object are available as soon as <a>QueryExecutionStatus$State</a> is in a SUCCEEDED or FAILED state. The remaining non-timeline statistics in the response (like stage-level input and output row count and data size) are updated asynchronously and may not be available immediately after a query completes or, in some cases, may not be returned. The non-timeline statistics are also not included when a query has row-level filters defined in Lake Formation.</p>"
+    },
+    "GetResourceDashboard":{
+      "name":"GetResourceDashboard",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetResourceDashboardRequest"},
+      "output":{"shape":"GetResourceDashboardResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"InvalidRequestException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Gets the Live UI/Persistence UI for a session.</p>"
     },
     "GetSession":{
       "name":"GetSession",
@@ -480,6 +495,21 @@
         {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Gets the full details of a previously created session, including the session status and configuration.</p>"
+    },
+    "GetSessionEndpoint":{
+      "name":"GetSessionEndpoint",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetSessionEndpointRequest"},
+      "output":{"shape":"GetSessionEndpointResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"InvalidRequestException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Gets a connection endpoint and authentication token for a given session Id.</p>"
     },
     "GetSessionStatus":{
       "name":"GetSessionStatus",
@@ -1307,8 +1337,7 @@
     },
     "CancelCapacityReservationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CapacityAllocation":{
       "type":"structure",
@@ -1437,11 +1466,52 @@
       "min":1,
       "pattern":"[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDC00-\\uDBFF\\uDFFF\\t]*"
     },
+    "Classification":{
+      "type":"structure",
+      "members":{
+        "Name":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the configuration classification.</p>"
+        },
+        "Properties":{
+          "shape":"ParametersMap",
+          "documentation":"<p>A set of properties specified within a configuration classification.</p>"
+        }
+      },
+      "documentation":"<p>A classification refers to a set of specific configurations.</p>"
+    },
+    "ClassificationList":{
+      "type":"list",
+      "member":{"shape":"Classification"}
+    },
     "ClientRequestToken":{
       "type":"string",
       "max":36,
       "min":1,
       "pattern":"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
+    },
+    "CloudWatchLoggingConfiguration":{
+      "type":"structure",
+      "required":["Enabled"],
+      "members":{
+        "Enabled":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>Enables CloudWatch logging.</p>"
+        },
+        "LogGroup":{
+          "shape":"LogGroupName",
+          "documentation":"<p>The name of the log group in Amazon CloudWatch Logs where you want to publish your logs.</p>"
+        },
+        "LogStreamNamePrefix":{
+          "shape":"LogStreamNamePrefix",
+          "documentation":"<p>Prefix for the CloudWatch log stream name.</p>"
+        },
+        "LogTypes":{
+          "shape":"LogTypesMap",
+          "documentation":"<p>The types of logs that you want to publish to CloudWatch.</p>"
+        }
+      },
+      "documentation":"<p>Configuration settings for delivering logs to Amazon CloudWatch log groups.</p>"
     },
     "CodeBlock":{
       "type":"string",
@@ -1592,8 +1662,7 @@
     },
     "CreateCapacityReservationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CreateDataCatalogInput":{
       "type":"structure",
@@ -1608,7 +1677,7 @@
         },
         "Type":{
           "shape":"DataCatalogType",
-          "documentation":"<p>The type of data catalog to create: <code>LAMBDA</code> for a federated catalog, <code>GLUE</code> for an Glue Data Catalog, and <code>HIVE</code> for an external Apache Hive metastore. <code>FEDERATED</code> is a federated catalog for which Athena creates the connection and the Lambda function for you based on the parameters that you pass.</p>"
+          "documentation":"<p>The type of data catalog to create: <code>LAMBDA</code> for a federated catalog, <code>GLUE</code> for an Glue Data Catalog, and <code>HIVE</code> for an external Apache Hive metastore. <code>FEDERATED</code> is a federated catalog for which Athena creates the connection and the Lambda function for you based on the parameters that you pass.</p> <p>For <code>FEDERATED</code> type, we do not support IAM identity center.</p>"
         },
         "Description":{
           "shape":"DescriptionString",
@@ -1732,8 +1801,7 @@
     },
     "CreatePreparedStatementOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CreatePresignedNotebookUrlRequest":{
       "type":"structure",
@@ -1791,8 +1859,7 @@
     },
     "CreateWorkGroupOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CustomerContentEncryptionConfiguration":{
       "type":"structure",
@@ -1953,8 +2020,7 @@
     },
     "DeleteCapacityReservationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteDataCatalogInput":{
       "type":"structure",
@@ -1989,8 +2055,7 @@
     },
     "DeleteNamedQueryOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteNotebookInput":{
       "type":"structure",
@@ -2004,8 +2069,7 @@
     },
     "DeleteNotebookOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeletePreparedStatementInput":{
       "type":"structure",
@@ -2026,8 +2090,7 @@
     },
     "DeletePreparedStatementOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWorkGroupInput":{
       "type":"structure",
@@ -2045,13 +2108,16 @@
     },
     "DeleteWorkGroupOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DescriptionString":{
       "type":"string",
       "max":1024,
       "min":1
+    },
+    "DpuCount":{
+      "type":"double",
+      "box":true
     },
     "EncryptionConfiguration":{
       "type":"structure",
@@ -2078,7 +2144,6 @@
     },
     "EngineConfiguration":{
       "type":"structure",
-      "required":["MaxConcurrentDpus"],
       "members":{
         "CoordinatorDpuSize":{
           "shape":"CoordinatorDpuSize",
@@ -2099,6 +2164,10 @@
         "SparkProperties":{
           "shape":"ParametersMap",
           "documentation":"<p>Specifies custom jar files and Spark properties for use cases like cluster encryption, table formats, and general Spark tuning.</p>"
+        },
+        "Classifications":{
+          "shape":"ClassificationList",
+          "documentation":"<p>The configuration classifications that can be specified for the engine.</p>"
         }
       },
       "documentation":"<p>Contains data processing unit (DPU) configuration settings and parameter mappings for a notebook engine.</p>"
@@ -2525,6 +2594,10 @@
         "MaxResults":{
           "shape":"MaxQueryResults",
           "documentation":"<p>The maximum number of results (rows) to return in this request.</p>"
+        },
+        "QueryResultType":{
+          "shape":"QueryResultType",
+          "documentation":"<p> When you set this to <code>DATA_ROWS</code> or empty, <code>GetQueryResults</code> returns the query results in rows. If set to <code>DATA_MANIFEST</code>, it returns the manifest file in rows. Only the query types <code>CREATE TABLE AS SELECT</code>, <code>UNLOAD</code>, and <code>INSERT</code> can generate a manifest file. If you use <code>DATA_MANIFEST</code> for other query types, the query will fail. </p>"
         }
       }
     },
@@ -2561,6 +2634,58 @@
         "QueryRuntimeStatistics":{
           "shape":"QueryRuntimeStatistics",
           "documentation":"<p>Runtime statistics about the query execution.</p>"
+        }
+      }
+    },
+    "GetResourceDashboardRequest":{
+      "type":"structure",
+      "required":["ResourceARN"],
+      "members":{
+        "ResourceARN":{
+          "shape":"AmazonResourceName",
+          "documentation":"<p>The The Amazon Resource Name (ARN) for a session.</p>"
+        }
+      }
+    },
+    "GetResourceDashboardResponse":{
+      "type":"structure",
+      "required":["Url"],
+      "members":{
+        "Url":{
+          "shape":"String",
+          "documentation":"<p>The Live UI/Persistence UI url for a session.</p>"
+        }
+      }
+    },
+    "GetSessionEndpointRequest":{
+      "type":"structure",
+      "required":["SessionId"],
+      "members":{
+        "SessionId":{
+          "shape":"SessionId",
+          "documentation":"<p>The session ID.</p>"
+        }
+      }
+    },
+    "GetSessionEndpointResponse":{
+      "type":"structure",
+      "required":[
+        "EndpointUrl",
+        "AuthToken",
+        "AuthTokenExpirationTime"
+      ],
+      "members":{
+        "EndpointUrl":{
+          "shape":"String",
+          "documentation":"<p>The endpoint for connecting to the session.</p>"
+        },
+        "AuthToken":{
+          "shape":"String",
+          "documentation":"<p>Authentication token for the connection</p>"
+        },
+        "AuthTokenExpirationTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>Expiration time of the auth token.</p>"
         }
       }
     },
@@ -2601,6 +2726,7 @@
           "shape":"NameString",
           "documentation":"<p>The notebook version.</p>"
         },
+        "MonitoringConfiguration":{"shape":"MonitoringConfiguration"},
         "SessionConfiguration":{
           "shape":"SessionConfiguration",
           "documentation":"<p>Contains the workgroup configuration information used by the session.</p>"
@@ -3312,7 +3438,89 @@
         }
       }
     },
+    "LogGroupName":{
+      "type":"string",
+      "max":512,
+      "min":1,
+      "pattern":"^[a-zA-Z0-9._/-]+$"
+    },
+    "LogStreamNamePrefix":{
+      "type":"string",
+      "max":512,
+      "min":1,
+      "pattern":"^[^:*]*$"
+    },
+    "LogTypeKey":{"type":"string"},
+    "LogTypeValue":{"type":"string"},
+    "LogTypeValuesList":{
+      "type":"list",
+      "member":{"shape":"LogTypeValue"}
+    },
+    "LogTypesMap":{
+      "type":"map",
+      "key":{"shape":"LogTypeKey"},
+      "value":{"shape":"LogTypeValuesList"}
+    },
     "Long":{"type":"long"},
+    "ManagedLoggingConfiguration":{
+      "type":"structure",
+      "required":["Enabled"],
+      "members":{
+        "Enabled":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>Enables mamanged log persistence.</p>"
+        },
+        "KmsKey":{
+          "shape":"KmsKey",
+          "documentation":"<p>The KMS key ARN to encrypt the logs stored in managed log persistence.</p>"
+        }
+      },
+      "documentation":"<p>Configuration settings for delivering logs to Amazon S3 buckets.</p>"
+    },
+    "ManagedQueryResultsConfiguration":{
+      "type":"structure",
+      "required":["Enabled"],
+      "members":{
+        "Enabled":{
+          "shape":"Boolean",
+          "documentation":"<p>If set to true, allows you to store query results in Athena owned storage. If set to false, workgroup member stores query results in location specified under <code>ResultConfiguration$OutputLocation</code>. The default is false. A workgroup cannot have the <code>ResultConfiguration$OutputLocation</code> parameter when you set this field to true. </p>"
+        },
+        "EncryptionConfiguration":{
+          "shape":"ManagedQueryResultsEncryptionConfiguration",
+          "documentation":"<p>If you encrypt query and calculation results in Athena owned storage, this field indicates the encryption option (for example, SSE_KMS or CSE_KMS) and key information.</p>"
+        }
+      },
+      "documentation":"<p> The configuration for storing results in Athena owned storage, which includes whether this feature is enabled; whether encryption configuration, if any, is used for encrypting query results. </p>"
+    },
+    "ManagedQueryResultsConfigurationUpdates":{
+      "type":"structure",
+      "members":{
+        "Enabled":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>If set to true, specifies that Athena manages query results in Athena owned storage.</p>"
+        },
+        "EncryptionConfiguration":{
+          "shape":"ManagedQueryResultsEncryptionConfiguration",
+          "documentation":"<p>If you encrypt query and calculation results in Athena owned storage, this field indicates the encryption option (for example, SSE_KMS or CSE_KMS) and key information.</p>"
+        },
+        "RemoveEncryptionConfiguration":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>If set to true, it removes workgroup from Athena owned storage. The existing query results are cleaned up after 24hrs. You must provide query results in location specified under <code>ResultConfiguration$OutputLocation</code>.</p>"
+        }
+      },
+      "documentation":"<p>Updates the configuration for managed query results.</p>"
+    },
+    "ManagedQueryResultsEncryptionConfiguration":{
+      "type":"structure",
+      "required":["KmsKey"],
+      "members":{
+        "KmsKey":{
+          "shape":"KmsKey",
+          "documentation":"<p>The ARN of an KMS key for encrypting managed query results.</p>"
+        }
+      },
+      "documentation":"<p>If you encrypt query and calculation results in Athena owned storage, this field indicates the encryption option (for example, SSE_KMS or CSE_KMS) and key information.</p>"
+    },
     "MaxApplicationDPUSizesCount":{
       "type":"integer",
       "max":100,
@@ -3332,6 +3540,7 @@
     },
     "MaxConcurrentDpus":{
       "type":"integer",
+      "box":true,
       "max":5000,
       "min":2
     },
@@ -3419,6 +3628,24 @@
       },
       "documentation":"<p>An exception that Athena received when it called a custom metastore. Occurs if the error is not caused by user input (<code>InvalidRequestException</code>) or from the Athena platform (<code>InternalServerException</code>). For example, if a user-created Lambda function is missing permissions, the Lambda <code>4XX</code> exception is returned in a <code>MetadataException</code>.</p>",
       "exception":true
+    },
+    "MonitoringConfiguration":{
+      "type":"structure",
+      "members":{
+        "CloudWatchLoggingConfiguration":{
+          "shape":"CloudWatchLoggingConfiguration",
+          "documentation":"<p>Configuration settings for delivering logs to Amazon CloudWatch log groups. </p>"
+        },
+        "ManagedLoggingConfiguration":{
+          "shape":"ManagedLoggingConfiguration",
+          "documentation":"<p>Configuration settings for managed log persistence. </p>"
+        },
+        "S3LoggingConfiguration":{
+          "shape":"S3LoggingConfiguration",
+          "documentation":"<p>Configuration settings for delivering logs to Amazon S3 buckets. </p>"
+        }
+      },
+      "documentation":"<p>Contains the configuration settings for managed log persistence, delivering logs to Amazon S3 buckets, Amazon CloudWatch log groups etc.</p>"
     },
     "NameString":{
       "type":"string",
@@ -3639,8 +3866,7 @@
     },
     "PutCapacityAssignmentConfigurationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "QueryExecution":{
       "type":"structure",
@@ -3655,7 +3881,11 @@
         },
         "StatementType":{
           "shape":"StatementType",
-          "documentation":"<p>The type of query statement that was run. <code>DDL</code> indicates DDL query statements. <code>DML</code> indicates DML (Data Manipulation Language) query statements, such as <code>CREATE TABLE AS SELECT</code>. <code>UTILITY</code> indicates query statements other than DDL and DML, such as <code>SHOW CREATE TABLE</code>, or <code>DESCRIBE TABLE</code>.</p>"
+          "documentation":"<p>The type of query statement that was run. <code>DDL</code> indicates DDL query statements. <code>DML</code> indicates DML (Data Manipulation Language) query statements, such as <code>CREATE TABLE AS SELECT</code>. <code>UTILITY</code> indicates query statements other than DDL and DML, such as <code>SHOW CREATE TABLE</code>, <code>EXPLAIN</code>, <code>DESCRIBE</code>, or <code>SHOW TABLES</code>.</p>"
+        },
+        "ManagedQueryResultsConfiguration":{
+          "shape":"ManagedQueryResultsConfiguration",
+          "documentation":"<p> The configuration for storing results in Athena owned storage, which includes whether this feature is enabled; whether encryption configuration, if any, is used for encrypting query results. </p>"
         },
         "ResultConfiguration":{
           "shape":"ResultConfiguration",
@@ -3778,6 +4008,10 @@
         "ResultReuseInformation":{
           "shape":"ResultReuseInformation",
           "documentation":"<p>Contains information about whether previous query results were reused for the query.</p>"
+        },
+        "DpuCount":{
+          "shape":"DpuCount",
+          "documentation":"<p>The number of Data Processing Units (DPUs) that Athena used to run the query.</p>"
         }
       },
       "documentation":"<p>The amount of data scanned during the query execution and the amount of time that it took to execute, and the type of statement that was run.</p>"
@@ -3787,7 +4021,7 @@
       "members":{
         "State":{
           "shape":"QueryExecutionState",
-          "documentation":"<p>The state of query execution. <code>QUEUED</code> indicates that the query has been submitted to the service, and Athena will execute the query as soon as resources are available. <code>RUNNING</code> indicates that the query is in execution phase. <code>SUCCEEDED</code> indicates that the query completed without errors. <code>FAILED</code> indicates that the query experienced an error and did not complete processing. <code>CANCELLED</code> indicates that a user input interrupted query execution.</p> <note> <p>Athena automatically retries your queries in cases of certain transient errors. As a result, you may see the query state transition from <code>RUNNING</code> or <code>FAILED</code> to <code>QUEUED</code>. </p> </note>"
+          "documentation":"<p>The state of query execution. <code>QUEUED</code> indicates that the query has been submitted to the service, and Athena will execute the query as soon as resources are available. <code>RUNNING</code> indicates that the query is in execution phase. <code>SUCCEEDED</code> indicates that the query completed without errors. <code>FAILED</code> indicates that the query experienced an error and did not complete processing. <code>CANCELLED</code> indicates that a user input interrupted query execution.</p> <note> <p>For queries that experience certain transient errors, the state transitions from <code>RUNNING</code> back to <code>QUEUED</code>. The <code>FAILED</code> state is always terminal with no automatic retry. </p> </note>"
         },
         "StateChangeReason":{
           "shape":"String",
@@ -3807,6 +4041,13 @@
         }
       },
       "documentation":"<p>The completion date, current state, submission time, and state change reason (if applicable) for the query execution.</p>"
+    },
+    "QueryResultType":{
+      "type":"string",
+      "enum":[
+        "DATA_MANIFEST",
+        "DATA_ROWS"
+      ]
     },
     "QueryResultsS3AccessGrantsConfiguration":{
       "type":"structure",
@@ -4128,6 +4369,30 @@
       "type":"string",
       "enum":["BUCKET_OWNER_FULL_CONTROL"]
     },
+    "S3LoggingConfiguration":{
+      "type":"structure",
+      "required":["Enabled"],
+      "members":{
+        "Enabled":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>Enables S3 log delivery.</p>"
+        },
+        "KmsKey":{
+          "shape":"KmsKey",
+          "documentation":"<p>The KMS key ARN to encrypt the logs published to the given Amazon S3 destination.</p>"
+        },
+        "LogLocation":{
+          "shape":"S3OutputLocation",
+          "documentation":"<p>The Amazon S3 destination URI for log publishing.</p>"
+        }
+      },
+      "documentation":"<p>Configuration settings for delivering logs to Amazon S3 buckets.</p>"
+    },
+    "S3OutputLocation":{
+      "type":"string",
+      "max":1024,
+      "pattern":"^s3://[a-z0-9][a-z0-9\\-]*[a-z0-9](/.*)?$"
+    },
     "S3Uri":{
       "type":"string",
       "max":1024,
@@ -4154,6 +4419,10 @@
         },
         "IdleTimeoutSeconds":{
           "shape":"Long",
+          "documentation":"<p>The idle timeout in seconds for the session.</p>"
+        },
+        "SessionIdleTimeoutInMinutes":{
+          "shape":"SessionIdleTimeoutInMinutes",
           "documentation":"<p>The idle timeout in seconds for the session.</p>"
         },
         "EncryptionConfiguration":{"shape":"EncryptionConfiguration"}
@@ -4276,7 +4545,7 @@
           "shape":"CalculationConfiguration",
           "documentation":"<p>Contains configuration information for the calculation.</p>",
           "deprecated":true,
-          "deprecatedMessage":"Kepler Post GA Tasks : https://sim.amazon.com/issues/ATHENA-39828"
+          "deprecatedMessage":"Structure is deprecated."
         },
         "CodeBlock":{
           "shape":"CodeBlock",
@@ -4333,7 +4602,8 @@
         "ResultReuseConfiguration":{
           "shape":"ResultReuseConfiguration",
           "documentation":"<p>Specifies the query result reuse behavior for the query.</p>"
-        }
+        },
+        "EngineConfiguration":{"shape":"EngineConfiguration"}
       }
     },
     "StartQueryExecutionOutput":{
@@ -4364,6 +4634,14 @@
           "shape":"EngineConfiguration",
           "documentation":"<p>Contains engine data processing unit (DPU) configuration settings and parameter mappings.</p>"
         },
+        "ExecutionRole":{
+          "shape":"RoleArn",
+          "documentation":"<p>The ARN of the execution role used to access user resources for Spark sessions and Identity Center enabled workgroups. This property applies only to Spark enabled workgroups and Identity Center enabled workgroups.</p>"
+        },
+        "MonitoringConfiguration":{
+          "shape":"MonitoringConfiguration",
+          "documentation":"<p>Contains the configuration settings for managed log persistence, delivering logs to Amazon S3 buckets, Amazon CloudWatch log groups etc.</p>"
+        },
         "NotebookVersion":{
           "shape":"NameString",
           "documentation":"<p>The notebook version. This value is supplied automatically for notebook sessions in the Athena console and is not required for programmatic session access. The only valid notebook version is <code>Athena notebook version 1</code>. If you specify a value for <code>NotebookVersion</code>, you must also specify a value for <code>NotebookId</code>. See <a>EngineConfiguration$AdditionalConfigs</a>.</p>"
@@ -4375,6 +4653,14 @@
         "ClientRequestToken":{
           "shape":"IdempotencyToken",
           "documentation":"<p>A unique case-sensitive string used to ensure the request to create the session is idempotent (executes only once). If another <code>StartSessionRequest</code> is received, the same response is returned and another session is not created. If a parameter has changed, an error is returned.</p> <important> <p>This token is listed as not required because Amazon Web Services SDKs (for example the Amazon Web Services SDK for Java) auto-generate the token for users. If you are not using the Amazon Web Services SDK or the Amazon Web Services CLI, you must provide this token or the action will fail.</p> </important>"
+        },
+        "Tags":{
+          "shape":"TagList",
+          "documentation":"<p>A list of comma separated tags to add to the session that is created.</p>"
+        },
+        "CopyWorkGroupTags":{
+          "shape":"BoxedBoolean",
+          "documentation":"<p>Copies the tags from the Workgroup to the Session when.</p>"
         }
       }
     },
@@ -4437,8 +4723,7 @@
     },
     "StopQueryExecutionOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "String":{"type":"string"},
     "StringList":{
@@ -4538,8 +4823,7 @@
     },
     "TagResourceOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -4681,8 +4965,7 @@
     },
     "UntagResourceOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateCapacityReservationInput":{
       "type":"structure",
@@ -4703,8 +4986,7 @@
     },
     "UpdateCapacityReservationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateDataCatalogInput":{
       "type":"structure",
@@ -4733,8 +5015,7 @@
     },
     "UpdateDataCatalogOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateNamedQueryInput":{
       "type":"structure",
@@ -4764,8 +5045,7 @@
     },
     "UpdateNamedQueryOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateNotebookInput":{
       "type":"structure",
@@ -4820,13 +5100,11 @@
     },
     "UpdateNotebookMetadataOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateNotebookOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdatePreparedStatementInput":{
       "type":"structure",
@@ -4856,8 +5134,7 @@
     },
     "UpdatePreparedStatementOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateWorkGroupInput":{
       "type":"structure",
@@ -4883,8 +5160,7 @@
     },
     "UpdateWorkGroupOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "WorkGroup":{
       "type":"structure",
@@ -4924,9 +5200,13 @@
           "shape":"ResultConfiguration",
           "documentation":"<p>The configuration for the workgroup, which includes the location in Amazon S3 where query and calculation results are stored and the encryption option, if any, used for query and calculation results. To run the query, you must specify the query results location using one of the ways: either in the workgroup using this setting, or for individual queries (client-side), using <a>ResultConfiguration$OutputLocation</a>. If none of them is set, Athena issues an error that no output location is provided.</p>"
         },
+        "ManagedQueryResultsConfiguration":{
+          "shape":"ManagedQueryResultsConfiguration",
+          "documentation":"<p> The configuration for storing results in Athena owned storage, which includes whether this feature is enabled; whether encryption configuration, if any, is used for encrypting query results. </p>"
+        },
         "EnforceWorkGroupConfiguration":{
           "shape":"BoxedBoolean",
-          "documentation":"<p>If set to \"true\", the settings for the workgroup override client-side settings. If set to \"false\", client-side settings are used. For more information, see <a href=\"https://docs.aws.amazon.com/athena/latest/ug/workgroups-settings-override.html\">Workgroup Settings Override Client-Side Settings</a>.</p>"
+          "documentation":"<p>If set to \"true\", the settings for the workgroup override client-side settings. If set to \"false\", client-side settings are used. This property is not required for Apache Spark enabled workgroups. For more information, see <a href=\"https://docs.aws.amazon.com/athena/latest/ug/workgroups-settings-override.html\">Workgroup Settings Override Client-Side Settings</a>.</p>"
         },
         "PublishCloudWatchMetricsEnabled":{
           "shape":"BoxedBoolean",
@@ -4952,6 +5232,11 @@
           "shape":"RoleArn",
           "documentation":"<p>The ARN of the execution role used to access user resources for Spark sessions and IAM Identity Center enabled workgroups. This property applies only to Spark enabled workgroups and IAM Identity Center enabled workgroups. The property is required for IAM Identity Center enabled workgroups.</p>"
         },
+        "MonitoringConfiguration":{
+          "shape":"MonitoringConfiguration",
+          "documentation":"<p>Contains the configuration settings for managed log persistence, delivering logs to Amazon S3 buckets, Amazon CloudWatch log groups etc.</p>"
+        },
+        "EngineConfiguration":{"shape":"EngineConfiguration"},
         "CustomerContentEncryptionConfiguration":{
           "shape":"CustomerContentEncryptionConfiguration",
           "documentation":"<p>Specifies the KMS key that is used to encrypt the user's data stores in Athena. This setting does not apply to Athena SQL workgroups.</p>"
@@ -4981,6 +5266,10 @@
         "ResultConfigurationUpdates":{
           "shape":"ResultConfigurationUpdates",
           "documentation":"<p>The result configuration information about the queries in this workgroup that will be updated. Includes the updated results location and an updated option for encrypting query results.</p>"
+        },
+        "ManagedQueryResultsConfigurationUpdates":{
+          "shape":"ManagedQueryResultsConfigurationUpdates",
+          "documentation":"<p>Updates configuration information for managed query results in the workgroup.</p>"
         },
         "PublishCloudWatchMetricsEnabled":{
           "shape":"BoxedBoolean",
@@ -5022,7 +5311,12 @@
         "QueryResultsS3AccessGrantsConfiguration":{
           "shape":"QueryResultsS3AccessGrantsConfiguration",
           "documentation":"<p>Specifies whether Amazon S3 access grants are enabled for query results.</p>"
-        }
+        },
+        "MonitoringConfiguration":{
+          "shape":"MonitoringConfiguration",
+          "documentation":"<p>Contains the configuration settings for managed log persistence, delivering logs to Amazon S3 buckets, Amazon CloudWatch log groups etc.</p>"
+        },
+        "EngineConfiguration":{"shape":"EngineConfiguration"}
       },
       "documentation":"<p>The configuration information that will be updated for this workgroup, which includes the location in Amazon S3 where query and calculation results are stored, the encryption option, if any, used for query results, whether the Amazon CloudWatch Metrics are enabled for the workgroup, whether the workgroup settings override the client-side settings, and the data usage limit for the amount of bytes scanned per query, if it is specified.</p>"
     },

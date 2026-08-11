@@ -1,6 +1,7 @@
 #pragma once
 #include "dq_hash_join_table.h"
 #include "dq_block_hash_join_settings.h"
+#include "dq_join_filters.h"
 #include <algorithm>
 #include <numeric>
 #include <vector>
@@ -516,42 +517,57 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     }
 
 
-    EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx, auto consume, auto isFull) {
+    EFetchResult MatchRows(TComputationContext& ctx, auto consume, auto isFull,
+                           TPackedTuplePairFilter* filter = nullptr) {
+        return filter ? MatchRowsImpl<true>(ctx, consume, isFull, filter)
+                      : MatchRowsImpl<false>(ctx, consume, isFull, nullptr);
+    }
+
+    template <bool HasFilter>
+    EFetchResult MatchRowsImpl([[maybe_unused]] TComputationContext& ctx, auto consume, auto isFull,
+                               [[maybe_unused]] TPackedTuplePairFilter* filter) {
         auto notEnoughMemory = [hasSpiller = !!Spiller_] {
             return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
         };
-        auto lookupToTable = [&](TTable& table, TSingleTuple tuple) {
+        auto lookupToTable = [&](TTable& table, TSingleTuple probeRow) {
+            if constexpr (HasFilter) {
+                filter->StartProbeRow(probeRow);
+            }
+            auto pairPasses = [&](TSingleTuple buildRow) {
+                if constexpr (HasFilter) {
+                    return filter->PairPasses(buildRow);
+                } else {
+                    return true;
+                }
+            };
             bool found = false;
             if constexpr (Kind == EJoinKind::Left) {
-                if (Settings_.LeftIsBuild()) {
-                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                table.Lookup(probeRow, [&](TSingleTuple tableMatch) {
+                    if (pairPasses(tableMatch)) {
                         found = true;
-                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
-                    });
-                } else {
-                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                        found = true;
-                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
-                    });
-                    if (!found) {
-                        consume(tuple);
+                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = probeRow});
                     }
+                });
+                if (!found && !Settings_.LeftIsBuild()) {
+                    consume(probeRow);
                 }
             } else {
-                table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                    found = true;
-                    if constexpr (Kind == EJoinKind::Inner) {
-                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                table.Lookup(probeRow, [&](TSingleTuple tableMatch) {
+                    if (pairPasses(tableMatch)) {
+                        found = true;
+                        if constexpr (Kind == EJoinKind::Inner) {
+                            consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = probeRow});
+                        }
                     }
                 });
                 if constexpr (Kind == EJoinKind::LeftOnly) {
                     if (!found) {
-                        consume(tuple);
+                        consume(probeRow);
                     }
                 }
                 if constexpr(Kind == EJoinKind::LeftSemi) {
                     if (found) {
-                        consume(tuple);
+                        consume(probeRow);
                     }
                 }
             }
@@ -873,15 +889,6 @@ inline TDqRenames<ESide> BuildImplRenames(const TDqUserRenames& userRenames) {
     return renames;
 }
 
-template <typename TKeyColumns>
-TVector<NPackedTuple::EColumnRole> MakeColumnRoles(size_t width, const TKeyColumns& keyColumns) {
-    TVector<NPackedTuple::EColumnRole> roles(width, NPackedTuple::EColumnRole::Payload);
-    for (auto column : keyColumns) {
-        roles[column] = NPackedTuple::EColumnRole::Key;
-    }
-    return roles;
-}
-
 template <template <EJoinKind> class Wrapper, typename TResult, typename... Args>
 TResult* DispatchHashJoinByKind(EJoinKind kind, TStringBuf unsupportedMessage, Args&&... args) {
     using enum EJoinKind;
@@ -1041,10 +1048,11 @@ protected:
 };
 
 template <i64 MaxOutputRows, typename JoinType, typename OutputType, typename FlushSink>
-EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, OutputType& output, FlushSink&& onFlush) {
+EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, OutputType& output, FlushSink&& onFlush,
+                                    TPackedTuplePairFilter* filter = nullptr) {
     auto outputIsFull = [&]() { return output.SizeTuples() >= MaxOutputRows; };
     while (!outputIsFull()) {
-        switch (join.MatchRows(ctx, output.MakeConsumeFn(), outputIsFull)) {
+        switch (join.MatchRows(ctx, output.MakeConsumeFn(), outputIsFull, filter)) {
         case EFetchResult::Finish:
             if (output.SizeTuples() == 0) {
                 return EFetchResult::Finish;

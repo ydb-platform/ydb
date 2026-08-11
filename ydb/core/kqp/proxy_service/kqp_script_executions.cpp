@@ -110,7 +110,7 @@ public:
         , ExecutionId(std::move(settings.ExecutionId))
         , LeaseGeneration(settings.LeaseGeneration.value_or(0))
     {
-        SetOperationInfo(operationName, CreateTraceId(settings));
+        SetOperationInfo(operationName, CreateTraceId(settings.SessionId));
     }
 
 private:
@@ -144,23 +144,23 @@ private:
     }
 
 protected:
-    static TString CreateTraceId(const TSettings& settings) {
+    TString CreateTraceId(const TString& sessionId = "") const {
         TStringBuilder result;
 
-        if (settings.ExecutionId) {
-            result << "ExecutionId: " << settings.ExecutionId;
+        if (ExecutionId) {
+            result << "ExecutionId: " << ExecutionId;
         }
 
-        if (settings.Database) {
-            result << ", RequestDatabase: " << settings.Database;
+        if (Database) {
+            result << ", RequestDatabase: " << Database;
         }
 
-        if (settings.SessionId) {
-            result << ", RequestSessionId: " << settings.SessionId;
+        if (sessionId) {
+            result << ", RequestSessionId: " << sessionId;
         }
 
-        if (settings.LeaseGeneration) {
-            result << ", LeaseGeneration: " << *settings.LeaseGeneration;
+        if (LeaseGeneration) {
+            result << ", LeaseGeneration: " << LeaseGeneration;
         }
 
         return result;
@@ -1357,7 +1357,9 @@ private:
             }
         }
 
-        Response->OperationIssues = ParseScriptExecutionIssues(executionsResult);
+        if (const auto& issuesSerialized = executionsResult.ColumnParser("issues").GetOptionalJsonDocument()) {
+            Response->OperationIssues = DeserializeIssues(*issuesSerialized);
+        }
 
         if (const auto& retryState = ParseRetryState(executionsResult)) {
             Response->HasRetryPolicy = retryState->RetryPolicyMappingSize() > 0;
@@ -1574,7 +1576,7 @@ private:
 
         auto issues = event.OperationIssues;
         if (!issues) {
-            issues.AddIssue(event.FinalizationStatus ? "Finalization is not complete" : "Lease expired");
+            issues.AddIssue(event.FinalizationStatus ? "Finalization is not complete" : "Lease expired for current query execution runner. Execution runner node was lost.");
         }
 
         // Script execution lease is expired but TRunScriptActor may be still running, so we should check it availability first
@@ -2211,7 +2213,7 @@ private:
 
         ExecutionId = std::move(*executionId);
         Metadata.set_execution_id(ExecutionId);
-        SetOperationInfo(OperationName, CreateTraceId({.Database = Database, .ExecutionId = ExecutionId}));
+        SetOperationInfo(OperationName, CreateTraceId());
 
         constexpr char sql[] = R"(
             -- TGetScriptExecutionOperationQueryActor::OnRunQuery
@@ -2773,7 +2775,7 @@ class TCancelScriptExecutionOperationActor final : public TActorBootstrapped<TCa
     using TBase = TActorBootstrapped<TCancelScriptExecutionOperationActor>;
     using TRetryPolicy = IRetryPolicy<>;
 
-    static constexpr ui64 MAX_CANCEL_RETRIES = 10;
+    static constexpr ui64 MAX_CANCEL_RETRIES = 30;
 
 public:
     TCancelScriptExecutionOperationActor(TEvCancelScriptExecutionOperation::TPtr&& ev, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
@@ -3013,8 +3015,7 @@ private:
         }
         RunScriptActor = {};
 
-        const bool immediateRetry = reason == TEvents::TEvUndelivered::ReasonActorUnknown; // The actor probably had finished before our cancel message arrived
-        ScheduleRetryOrReply(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to deliver cancel request to destination (delivery problem, reason: " << reason << ")", immediateRetry);
+        ScheduleRetryOrReply(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to deliver cancel request to destination (delivery problem, reason: " << reason << ")", /* immediate */ false);
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {

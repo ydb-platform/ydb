@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    generated_column.cpp
     read_attributes_utils.cpp
     rewrite_io_utils.cpp
     yql_kikimr_constraints.cpp

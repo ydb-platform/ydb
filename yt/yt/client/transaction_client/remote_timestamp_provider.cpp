@@ -204,8 +204,8 @@ TAlienRemoteTimestampProvidersMap CreateAlienTimestampProvidersMap(
         auto alienClockCellTag = foreignProviderConfig->ClockClusterTag;
 
         if (alienProvidersMap.contains(alienClockCellTag)) {
-            YT_LOG_ALERT("Duplicate entry for alien clock clusters (ClockClusterTag: %v)",
-                alienClockCellTag);
+            YT_TLOG_ALERT("Duplicate entry for alien clock clusters")
+                .With("ClockClusterTag", alienClockCellTag);
             continue;
         }
 

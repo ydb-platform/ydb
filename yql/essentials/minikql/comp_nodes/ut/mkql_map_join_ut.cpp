@@ -2,8 +2,7 @@
 #include "mkql_program_builder_test_utils.h"
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 using TKeyPayloadRow = NTest::TStructType<NTest::TStructMember<"Key", ui32>, NTest::TStructMember<"Payload", TStringBuf>>;
@@ -27,7 +26,7 @@ Y_UNIT_TEST_LLVM(TestInnerOnTuple) {
                                                                 {{{{ui64(3), {}}}, {"Y"}}},
                                                                 {{{{ui64(4), ui64(4)}}, {"Z"}}},
                                                             });
-    const auto dict2 = pb.ToSortedDict(list2, false,
+    const auto dict2 = pb.ToSortedDict(list2, /*all=*/false,
                                        [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                        [&](TRuntimeNode item) { return pb.AddMember(pb.NewEmptyStruct(), "Payload", pb.Member(item, "Payload")); });
 
@@ -57,7 +56,7 @@ Y_UNIT_TEST_LLVM(TestInner) {
                                                                     {{{ui32(4)}, {"Z"}}},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, false,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/false,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.AddMember(pb.NewEmptyStruct(), "Payload", pb.Member(item, "Payload")); });
 
@@ -88,7 +87,7 @@ Y_UNIT_TEST_LLVM(TestInnerMulti) {
                                                                     {{{ui32(3)}, {"Z"}}},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, true,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.AddMember(pb.NewEmptyStruct(), "Payload", pb.Member(item, "Payload")); });
 
@@ -121,7 +120,7 @@ Y_UNIT_TEST_LLVM(TestLeft) {
                                                                     {{{ui32(4)}, {"Z"}}},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, false,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/false,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.AddMember(pb.NewEmptyStruct(), "Payload", pb.Member(item, "Payload")); });
 
@@ -153,7 +152,7 @@ Y_UNIT_TEST_LLVM(TestLeftMulti) {
                                                                     {{{ui32(3)}, {"Z"}}},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, true,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.AddMember(pb.NewEmptyStruct(), "Payload", pb.Member(item, "Payload")); });
 
@@ -187,7 +186,7 @@ Y_UNIT_TEST_LLVM(TestLeftSemi) {
                                                                     {{{ui32(3)}, {"Z"}}},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, true,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.AddMember(pb.NewEmptyStruct(), "Payload", pb.Member(item, "Payload")); });
 
@@ -218,7 +217,7 @@ Y_UNIT_TEST_LLVM(TestLeftOnly) {
                                                                     {{{ui32(3)}, {"Z"}}},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, true,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.AddMember(pb.NewEmptyStruct(), "Payload", pb.Member(item, "Payload")); });
 
@@ -253,7 +252,7 @@ Y_UNIT_TEST_LLVM(TestLeftSemiWithNullKey) {
                                                                     {{{{ui32(3)}}, {"Z"}}},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, true,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.AddMember(pb.NewEmptyStruct(), "Payload", pb.Member(item, "Payload")); });
 
@@ -289,7 +288,7 @@ Y_UNIT_TEST_LLVM(TestLeftOnlyWithNullKey) {
                                                                     {{{{ui32(3)}}, {"Z"}}},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, true,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.AddMember(pb.NewEmptyStruct(), "Payload", pb.Member(item, "Payload")); });
 
@@ -323,7 +322,7 @@ Y_UNIT_TEST_LLVM(TestInner) {
                                                                     {ui32(4), "Z"},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, false,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/false,
                                            [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                            [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 1U)}); });
 
@@ -360,7 +359,7 @@ Y_UNIT_TEST_LLVM(TestInnerMulti) {
                                                                     {ui32(3), "Z"},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, true,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                            [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 1U)}); });
 
@@ -399,7 +398,7 @@ Y_UNIT_TEST_LLVM(TestLeft) {
                                                                     {ui32(4), "Z"},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, false,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/false,
                                            [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                            [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 1U)}); });
 
@@ -437,7 +436,7 @@ Y_UNIT_TEST_LLVM(TestLeftMulti) {
                                                                     {ui32(3), "Z"},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, true,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                            [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 1U)}); });
 
@@ -477,7 +476,7 @@ Y_UNIT_TEST_LLVM(TestLeftSemi) {
                                                                     {ui32(3), "Z"},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, true,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                            [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 1U)}); });
 
@@ -514,7 +513,7 @@ Y_UNIT_TEST_LLVM(TestLeftOnly) {
                                                                     {ui32(3), "Z"},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, true,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                            [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 1U)}); });
 
@@ -552,7 +551,7 @@ Y_UNIT_TEST_LLVM(TestLeftSemiWithNullKey) {
                                                                     {ui32(3), "Z"},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, true,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                            [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 1U)}); });
 
@@ -591,7 +590,7 @@ Y_UNIT_TEST_LLVM(TestLeftOnlyWithNullKey) {
                                                                     {ui32(3), "Z"},
                                                                 });
 
-        const auto dict2 = pb.ToHashedDict(list2, true,
+        const auto dict2 = pb.ToHashedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                            [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 1U)}); });
 
@@ -612,5 +611,4 @@ Y_UNIT_TEST_LLVM(TestLeftOnlyWithNullKey) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideMapJoinCoreTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

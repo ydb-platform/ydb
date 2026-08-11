@@ -4,6 +4,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
@@ -102,6 +103,24 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
             settings->set_max_partition_write_messages_burst(partConfig.GetBurstSizeInMessages());
         }
 
+        if (partConfig.HasReadSpeedInBytesPerSecond()) {
+            settings->set_partition_total_read_speed_bytes_per_second(partConfig.GetReadSpeedInBytesPerSecond());
+        }
+        if (partConfig.HasReadSpeedInMessagesPerSecond()) {
+            settings->set_partition_total_read_speed_messages_per_second(partConfig.GetReadSpeedInMessagesPerSecond());
+        }
+
+        // Read speed for reading a single partition without a consumer is stored in
+        // TPartitionConfig.ReadQuota keyed by CLIENTID_WITHOUT_CONSUMER.
+        if (const auto* readQuota = NPQ::GetReadQuota(config, NPQ::CLIENTID_WITHOUT_CONSUMER)) {
+            if (readQuota->HasSpeedInBytesPerSecond()) {
+                settings->set_partition_read_without_consumer_speed_bytes_per_second(readQuota->GetSpeedInBytesPerSecond());
+            }
+            if (readQuota->HasSpeedInMessagesPerSecond()) {
+                settings->set_partition_read_without_consumer_speed_messages_per_second(readQuota->GetSpeedInMessagesPerSecond());
+            }
+        }
+
         settings->set_supported_format(
                                        (Ydb::PersQueue::V1::TopicSettings::Format) (config.GetFormatVersion() + 1));
 
@@ -182,6 +201,16 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                         }
                     }
                     break;
+                }
+            }
+
+            // Per-consumer read quota for a single partition is stored in TPartitionConfig.ReadQuota keyed by consumer name.
+            if (const auto* readQuota = NPQ::GetReadQuota(config, consumer.GetName())) {
+                if (readQuota->HasSpeedInBytesPerSecond()) {
+                    rr->set_read_speed_bytes_per_second(readQuota->GetSpeedInBytesPerSecond());
+                }
+                if (readQuota->HasSpeedInMessagesPerSecond()) {
+                    rr->set_read_speed_messages_per_second(readQuota->GetSpeedInMessagesPerSecond());
                 }
             }
 

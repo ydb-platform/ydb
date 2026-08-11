@@ -120,7 +120,7 @@ std::variant<TCurrentRowTag, TInfTag, TPgFiniteBound> GetPgBound(const TRuntimeN
     auto procIdIndex = innerStruct->GetType()->FindMemberIndex(KeyProcId);
     MKQL_ENSURE(procIdIndex, "ProcId is required for PG bounds");
     ui32 procId = GetValue<ui32>(GetMember(innerStruct, KeyProcId));
-    return TPgFiniteBound{finiteValueNode, procId};
+    return TPgFiniteBound{.Node = finiteValueNode, .ProcId = procId};
 }
 
 template <bool IsRangeBound, typename TCallback>

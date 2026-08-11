@@ -18,6 +18,10 @@ from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDa
 import conftest
 import random
 
+# TODO:
+# Mostly identical to ydb streaming test ydb/tests/fq/streaming/generic/test_json.py
+# Keep in sync (until yqv1 will be decomissioned and this copy removed)
+
 MAX_WRITE_STREAM_SIZE = 500
 DEBUG = 0
 SEED = 0  # use fixed seed for regular tests
@@ -45,13 +49,14 @@ def ResequenceId(messages, field="id"):
     return res
 
 
-def freeze(json):
-    t = type(json)
+def freeze(obj):
+    # Designed for (deserialized) obj
+    t = type(obj)
     if t == dict:
-        return frozenset((k, freeze(v)) for k, v in json.items())
+        return frozenset((k, freeze(v)) for k, v in obj.items())
     if t == list:
-        return tuple(map(freeze, json))
-    return json
+        return tuple(map(freeze, obj))
+    return obj
 
 
 TESTCASES = [

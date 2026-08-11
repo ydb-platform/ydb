@@ -1,5 +1,10 @@
 #include "distconf.h"
 
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+
+#include <ydb/library/actors/interconnect/interconnect.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {

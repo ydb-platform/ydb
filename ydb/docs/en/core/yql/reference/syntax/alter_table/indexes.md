@@ -23,11 +23,11 @@ ALTER TABLE `<table_name>`
 
 Parameters for all index types:
 
-* - maximum number of `parallel` handlers based on [partitions](../../../../concepts/glossary.md#partition) involved in index building (an integer between `1` and `MaxBuildIndexShardsInFlight` from `SchemeShardConfig`).
+* maximum number of `parallel` handlers based on [partitions](../../../../concepts/glossary.md#partition) involved in index building (an integer between `1` and `MaxBuildIndexShardsInFlight` from `SchemeShardConfig`).
 
-- If the parameter is not specified, the default value `32` or `MaxBuildIndexShardsInFlight` is currently used, whichever is smaller. `MaxBuildIndexShardsInFlight` defaults to `1000`. In future versions, the default parallelism selection logic may change.
-- You can set a lower limit to reduce the impact of index building on database performance.
-- You can also set a higher limit to speed up index building if you have sufficient hardware resources.
+  - If the parameter is not specified, the default value `32` or `MaxBuildIndexShardsInFlight` is currently used, whichever is smaller. `MaxBuildIndexShardsInFlight` defaults to `1000`. In future versions, the default parallelism selection logic may change.
+  - You can set a lower limit to reduce the impact of index building on database performance.
+  - You can also set a higher limit to speed up index building if you have enough hardware resources.
 
 Parameters specific to vector indexes:
 
@@ -57,7 +57,7 @@ You can also add a secondary index using the [table index](../../../../reference
 
 The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), via `ADD INDEX`, [only local bloom indexes are supported](#local-bloom).
 
-Features of local bloom indexes:
+Features of local Bloom indexes:
 
 {% include [bloom_skip_index_features.md](../_includes/bloom_skip_index_features.md) %}
 
@@ -136,16 +136,19 @@ ALTER TABLE `/Root/Table`
     false_positive_probability = 0.01,
     case_sensitive = true
   );
+```
 
-# # Changing index parameters {#alter-index}
 
-Индексы имеют параметры, зависящие от типа, которые можно настраивать. Глобальные индексы, [синхронные](yfmvar-0-yfmvarend#sync) или [асинхронные](yfmvar-1-yfmvarend#async), реализованы в виде скрытых таблиц, и их параметры автоматического партиционирования и реплик можно регулировать так же, как и настройки обычных таблиц.
+## Changing index parameters {#alter-index}
+
+Indexes have type-dependent parameters that you can configure. Global indexes, [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and replica parameters can be adjusted in the same way as regular table settings.
 
 {% note info %}
 
-В настоящее время задание настроек партиционирования вторичных индексов при создании индекса не поддерживается ни в операторе [`ALTER TABLE ADD INDEX`](#add-index), ни в операторе [`CREATE TABLE INDEX`](../create_table/secondary_index.md).
+Currently, setting partitioning parameters for secondary indexes when creating an index is not supported either in the [`ALTER TABLE ADD INDEX`](#add-index) statement or in the [`CREATE TABLE INDEX`](../create_table/secondary_index.md) statement.
 
 {% endnote %}
+
 
 ```yql
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET <setting_name> <value>;
@@ -157,7 +160,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 * `<index_name>` - name of the index to change.
 * `<setting_name>` - name of the parameter to change. The set of allowed parameters depends on the index type:
 
-  * for global secondary indexes:
+  * For global secondary indexes:
 
     * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
     * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
@@ -199,7 +202,7 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 ```
 
 
-For local bloom indexes, you can also change their specific parameters, for example:
+For local Bloom indexes, you can also change parameters specific to them, for example:
 
 
 ```yql

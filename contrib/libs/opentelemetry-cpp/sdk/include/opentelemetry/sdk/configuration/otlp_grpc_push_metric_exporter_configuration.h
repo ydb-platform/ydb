@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -25,6 +26,12 @@ namespace configuration
 class OtlpGrpcPushMetricExporterConfiguration : public PushMetricExporterConfiguration
 {
 public:
+  static constexpr std::size_t kDefaultTimeoutMs = 10000;
+  static constexpr TemporalityPreference kDefaultTemporalityPreference =
+      TemporalityPreference::cumulative;
+  static constexpr DefaultHistogramAggregation kDefaultHistogramAggregation =
+      DefaultHistogramAggregation::explicit_bucket_histogram;
+
   void Accept(PushMetricExporterConfigurationVisitor *visitor) const override
   {
     visitor->VisitOtlpGrpc(this);
@@ -35,10 +42,9 @@ public:
   std::unique_ptr<HeadersConfiguration> headers;
   std::string headers_list;
   std::string compression;
-  std::size_t timeout{0};
-  TemporalityPreference temporality_preference{TemporalityPreference::cumulative};
-  DefaultHistogramAggregation default_histogram_aggregation{
-      DefaultHistogramAggregation::explicit_bucket_histogram};
+  std::size_t timeout{kDefaultTimeoutMs};
+  TemporalityPreference temporality_preference{kDefaultTemporalityPreference};
+  DefaultHistogramAggregation default_histogram_aggregation{kDefaultHistogramAggregation};
 };
 
 }  // namespace configuration

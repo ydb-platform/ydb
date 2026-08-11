@@ -3,6 +3,7 @@
 **SQS API on top of YDB Topics**.
 HTTP entry: [`http_proxy`](../../core/http_proxy/) (`sqs.cpp`) → this service.
 Core: [`ydb/core/persqueue/AGENTS.md`](../../core/persqueue/AGENTS.md).
+Shared rules: [`RULES.md`](../../core/persqueue/RULES.md).
 
 ## Layout
 
@@ -11,12 +12,5 @@ Core: [`ydb/core/persqueue/AGENTS.md`](../../core/persqueue/AGENTS.md).
 * `protos/` — SQS protos (e.g. receipt).
 * `ut/` — unit tests.
 
-Depends on `persqueue/public/`, not `pqtablet/` / `pqrb/` internals.
-
 Tests: `./ya make --build relwithdebinfo -tA ydb/services/sqs_topic`
 Functional: `ydb/tests/functional/sqs/`
-
-Style/workflow: [`agents/CODESTYLE.md`](../../agents/CODESTYLE.md) ·
-[`agents/GUIDE.md`](../../agents/GUIDE.md) ·
-[`agents/GTEST_PREFER.md`](../../agents/GTEST_PREFER.md) ·
-[`agents/NO_ABORT.md`](../../agents/NO_ABORT.md)

@@ -85,14 +85,14 @@ inline TTaggedPayloadWriter& TTaggedPayloadWriter::EndTag() &
     return *this;
 }
 
-inline TTaggedPayloadWriter& TTaggedPayloadWriter::AppendTags(TStringBuf tags) &
+inline TTaggedPayloadWriter& TTaggedPayloadWriter::AppendTags(TLoggingTagListPayloadView tags) &
 {
     YT_ASSERT(MessageEnded_ && !InTag_);
-    Builder_.AppendString(tags);
+    Builder_.AppendString(tags.Underlying());
     return *this;
 }
 
-inline void TTaggedPayloadWriter::AppendTag(std::string* payload, TStringBuf key, TStringBuf value)
+inline void TTaggedPayloadWriter::AppendTag(TLoggingTagListPayload* tags, TStringBuf key, TStringBuf value)
 {
     // High bit reserved for the well-known flag.
     YT_ASSERT(key.size() < WellKnownTagFlag);
@@ -101,10 +101,11 @@ inline void TTaggedPayloadWriter::AppendTag(std::string* payload, TStringBuf key
     auto valueSize = static_cast<ui32>(value.size());
 
     // Every appended byte is overwritten below, so skip zero-filling them.
-    auto offset = payload->size();
-    ResizeUninitialized(*payload, offset + 2 * sizeof(ui32) + key.size() + value.size());
+    auto& buffer = tags->Underlying();
+    auto offset = buffer.size();
+    ResizeUninitialized(buffer, offset + 2 * sizeof(ui32) + key.size() + value.size());
 
-    char* ptr = payload->data() + offset;
+    char* ptr = buffer.data() + offset;
     auto write = [&] (const void* data, size_t size) {
         ::memcpy(ptr, data, size);
         ptr += size;
@@ -131,6 +132,36 @@ inline void TTaggedPayloadWriter::ReserveLengthPrefix()
 inline void TTaggedPayloadWriter::BackpatchLengthPrefix()
 {
     Builder_.WritePodAt<ui32>(PrefixOffset_, Builder_.GetLength() - PrefixOffset_ - sizeof(ui32));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TBuilder>
+void FormatTaggedPayload(TBuilder* builder, const TTaggedLogEventPayload& payload)
+{
+    TTaggedPayloadReader reader(payload);
+    builder->AppendString(reader.ReadMessage());
+    // Well-known tags are last by construction (see #TWellKnownTaggedLoggingGuard), hence single-pass.
+    bool parenOpen = false;
+    while (auto tag = reader.TryReadTag()) {
+        if (tag->IsWellKnown) {
+            if (parenOpen) {
+                builder->AppendChar(')');
+                parenOpen = false;
+            }
+            builder->AppendChar('\n');
+            builder->AppendString(tag->Value);
+        } else {
+            builder->AppendString(parenOpen ? ", "_sb : " ("_sb);
+            parenOpen = true;
+            builder->AppendString(tag->Key);
+            builder->AppendString(": "_sb);
+            builder->AppendString(tag->Value);
+        }
+    }
+    if (parenOpen) {
+        builder->AppendChar(')');
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -930,7 +930,11 @@ private:
                     tableIndex)
                     << GetRowPositionErrorAttributes();
             }
-            YT_VERIFY(tableIndex < UnversionedValueToYsonConverter_.size());
+            if (tableIndex >= UnversionedValueToYsonConverter_.size()) {
+                THROW_ERROR_EXCEPTION("Table #%v is not described by any table schema",
+                    tableIndex)
+                    << GetRowPositionErrorAttributes();
+            }
             writeContext.UnversionedValueYsonConverter = &UnversionedValueToYsonConverter_[tableIndex];
 
             const auto& knownFields = TableDescriptionList_[tableIndex].KnownFields;

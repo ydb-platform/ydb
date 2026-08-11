@@ -60,7 +60,7 @@ public:
         : TAsyncExpiringCache(
             std::move(config),
             NRpc::TDispatcher::Get()->GetHeavyInvoker(),
-            DriverLogger().WithTag("Cache: ProxyDiscovery"))
+            DriverLogger().WithTag("Cache", "ProxyDiscovery"))
         , Client_(std::move(client))
     { }
 
@@ -102,7 +102,8 @@ private:
         try {
             path = GetProxyRegistryPath(request.Kind) + "/@";
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Failed to get proxy registry path");
+            YT_TLOG_ERROR("Failed to get proxy registry path")
+                .With(ex);
             return MakeFuture<std::optional<TProxyDiscoveryResponse>>(ex);
         }
         return Client_->GetNode(path, options).Apply(
@@ -136,7 +137,8 @@ private:
         try {
             path = GetProxyRegistryPath(request.Kind);
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Failed to get proxy registry path");
+            YT_TLOG_ERROR("Failed to get proxy registry path")
+                .With(ex);
             return MakeFuture<TProxyDiscoveryResponse>(ex);
         }
         return Client_->GetNode(path, options).Apply(BIND([=] (const TYsonString& yson) {

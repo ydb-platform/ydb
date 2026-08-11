@@ -41,7 +41,7 @@ public:
 
     IComputationNode* CreateEmptyNode() const;
 
-    IComputationNode* CreateArrayNode(TComputationNodePtrVector&& items) const;
+    IComputationNode* CreateArrayNode(TComputationNodePtrVector&& values) const;
 
     IComputationNode* CreateOptionalNode(IComputationNode* item) const;
 

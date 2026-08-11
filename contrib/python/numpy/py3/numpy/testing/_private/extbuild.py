@@ -50,11 +50,15 @@ def build_and_import_extension(
         Py_RETURN_TRUE;
     \"\"\")]
     >>> mod = build_and_import_extension("testme", functions)
-    >>> assert not mod.test_bytes(u'abc')
+    >>> assert not mod.test_bytes('abc')
     >>> assert mod.test_bytes(b'abc')
     """
     body = prologue + _make_methods(functions, modname)
-    init = """PyObject *mod = PyModule_Create(&moduledef);
+    init = """
+    PyObject *mod = PyModule_Create(&moduledef);
+    #ifdef Py_GIL_DISABLED
+    PyUnstable_Module_SetGIL(mod, Py_MOD_GIL_NOT_USED);
+    #endif
            """
     if not build_dir:
         build_dir = pathlib.Path('.')

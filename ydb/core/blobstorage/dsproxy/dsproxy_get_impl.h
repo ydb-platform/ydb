@@ -9,6 +9,13 @@
 
 namespace NKikimr {
 
+namespace NDsProxyGetImpl {
+
+bool ValidateVDiskGetResponseChecksum(NKikimrProto::EReplyStatus replyStatus, const NKikimrBlobStorage::TQueryResult& result,
+        const TRope& resultBuffer);
+
+} // namespace NDsProxyGetImpl
+
 class TStrategyBase;
 
 class TGetImpl {
@@ -22,6 +29,7 @@ class TGetImpl {
     const bool CollectDebugInfo;
     const bool MustRestoreFirst;
     const bool ReportDetailedPartMap;
+    const bool EnableChecksumCalcAndValidationOnDsProxy;
     std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
 
     ui64 ReplyBytes = 0;
@@ -60,7 +68,8 @@ class TGetImpl {
 public:
     TGetImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
             TEvBlobStorage::TEvGet *ev, TNodeLayoutInfoPtr&& nodeLayout,
-            const TAccelerationParams& accelerationParams, const TString& requestPrefix = {})
+            const TAccelerationParams& accelerationParams, bool enableChecksumCalcAndValidationOnDsProxy = false,
+            const TString& requestPrefix = {})
         : Deadline(ev->Deadline)
         , Info(info)
         , Queries(ev->Queries.Release())
@@ -71,6 +80,7 @@ public:
         , CollectDebugInfo(ev->CollectDebugInfo)
         , MustRestoreFirst(ev->MustRestoreFirst)
         , ReportDetailedPartMap(ev->ReportDetailedPartMap)
+        , EnableChecksumCalcAndValidationOnDsProxy(enableChecksumCalcAndValidationOnDsProxy)
         , ForceBlockTabletData(ev->ForceBlockTabletData)
         , Blackboard(info, groupQueues, NKikimrBlobStorage::AsyncBlob, ev->GetHandleClass)
         , RequestPrefix(requestPrefix)
@@ -197,17 +207,22 @@ public:
         for (ui32 i = 0, e = (ui32)record.ResultSize(); i != e; ++i) {
             const NKikimrBlobStorage::TQueryResult &result = record.GetResult(i);
             Y_ABORT_UNLESS(result.HasStatus());
-            const NKikimrProto::EReplyStatus replyStatus = result.GetStatus();
+            NKikimrProto::EReplyStatus replyStatus = result.GetStatus();
             Y_ABORT_UNLESS(result.HasBlobID());
             const TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(result.GetBlobID());
 
             TRope resultBuffer = ev.GetBlobData(result);
             ui32 resultShift = result.HasShift() ? result.GetShift() : 0;
+            TString errorReason = record.GetErrorReason();
 
-            vgetResult.AddSubrequestResult(blobId, replyStatus, resultShift, resultBuffer.size());
-
-            if (ReportDetailedPartMap) {
-                Blackboard.ReportPartMapStatus(blobId, result.GetCookie(), ResponseIndex, replyStatus);
+            if (EnableChecksumCalcAndValidationOnDsProxy && !NDsProxyGetImpl::ValidateVDiskGetResponseChecksum(replyStatus, result, resultBuffer)) {
+                DSP_LOG_ERROR_SX(logCtx, "BPG68", "Error in ValidateVDiskGetResponseChecksum on TEvVGetResult, blobId# " << blobId
+                        << " resultShift# " << resultShift << " resultBuffer.Size()# " << resultBuffer.size()
+                        << " checksumType# " << static_cast<ui32>(result.GetChecksumType()));
+                NKikimrBlobStorage::TQueryResult *mutableResult = ev.Record.MutableResult(i);
+                replyStatus = NKikimrProto::ERROR;
+                errorReason = "buffer checksum mismatch";
+                mutableResult->SetStatus(replyStatus);
             }
 
             // Currently CRC can be checked only if blob part is fully read
@@ -217,8 +232,15 @@ public:
                     DSP_LOG_ERROR_SX(logCtx, "BPG66", "Error in CheckCrcAtTheEnd on TEvVGetResult, blobId# " << blobId
                             << " resultShift# " << resultShift << " resultBuffer.Size()# " << resultBuffer.size());
                     NKikimrBlobStorage::TQueryResult *mutableResult = ev.Record.MutableResult(i);
-                    mutableResult->SetStatus(NKikimrProto::ERROR);
+                    replyStatus = NKikimrProto::ERROR;
+                    mutableResult->SetStatus(replyStatus);
                 }
+            }
+
+            vgetResult.AddSubrequestResult(blobId, replyStatus, resultShift, resultBuffer.size());
+
+            if (ReportDetailedPartMap) {
+                Blackboard.ReportPartMapStatus(blobId, result.GetCookie(), ResponseIndex, replyStatus);
             }
 
             if (result.HasKeep() || result.HasDoNotKeep()) {
@@ -243,7 +265,7 @@ public:
                     || replyStatus == NKikimrProto::CORRUPTED) {
                 DSP_LOG_DEBUG_SX(logCtx, "BPG60", "Got# " << NKikimrProto::EReplyStatus_Name(replyStatus).data()
                     << " orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
-                Blackboard.AddErrorResponse(blobId, orderNumber, record.GetErrorReason());
+                Blackboard.AddErrorResponse(blobId, orderNumber, errorReason);
             } else if (replyStatus == NKikimrProto::NOT_YET) {
                 DSP_LOG_DEBUG_SX(logCtx, "BPG67", "Got# NOT_YET orderNumber# " << orderNumber
                         << " vDiskId# " << vdisk.ToString());

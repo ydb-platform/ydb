@@ -1,5 +1,7 @@
 #include "mkql_match_recognize_list.h"
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 namespace {
@@ -8,21 +10,21 @@ class TIterator: public TTemporaryComputationValue<TIterator> {
 public:
     TIterator(TMemoryUsageInfo* memUsage, const TSparseList& parent)
         : TTemporaryComputationValue<TIterator>(memUsage)
-        , Parent(parent)
-        , Current(Parent.Begin())
+        , Parent_(parent)
+        , Current_(Parent_.Begin())
     {
     }
 
 private:
     bool Skip() final {
-        return ++Current != Parent.End();
+        return ++Current_ != Parent_.End();
     }
 
     bool Next(NUdf::TUnboxedValue& value) final {
         if (!Skip()) {
             return false;
         }
-        value = Current->second.Value;
+        value = Current_->second.Value;
         return true;
     }
 
@@ -30,45 +32,45 @@ private:
         if (!Next(payload)) {
             return false;
         }
-        key = NUdf::TUnboxedValuePod(Current->first);
+        key = NUdf::TUnboxedValuePod(Current_->first);
         return true;
     }
 
-    const TSparseList& Parent;
-    TSparseList::iterator Current;
+    const TSparseList& Parent_;
+    TSparseList::iterator Current_;
 };
 
 class TKeysIterator: public TTemporaryComputationValue<TKeysIterator> {
 public:
     TKeysIterator(TMemoryUsageInfo* memUsage, const TSparseList& parent)
         : TTemporaryComputationValue<TKeysIterator>(memUsage)
-        , Parent(parent)
-        , Current(Parent.Begin())
+        , Parent_(parent)
+        , Current_(Parent_.Begin())
     {
     }
 
 private:
     bool Skip() final {
-        return ++Current != Parent.End();
+        return ++Current_ != Parent_.End();
     }
 
     bool Next(NUdf::TUnboxedValue& key) final {
         if (!Skip()) {
             return false;
         }
-        key = NUdf::TUnboxedValuePod(Current->first);
+        key = NUdf::TUnboxedValuePod(Current_->first);
         return true;
     }
 
-    const TSparseList& Parent;
-    TSparseList::iterator Current;
+    const TSparseList& Parent_;
+    TSparseList::iterator Current_;
 };
 
 } // anonymous namespace
 
-TListValue::TListValue(TMemoryUsageInfo* memUsage, const TSparseList& list)
+TListValue::TListValue(TMemoryUsageInfo* memUsage, TSparseList list)
     : TComputationValue<TListValue>(memUsage)
-    , List(list)
+    , List_(std::move(list))
 {
 }
 
@@ -98,31 +100,31 @@ NUdf::IBoxedValuePtr TListValue::ToIndexDictImpl(const NUdf::IValueBuilder& buil
 }
 
 ui64 TListValue::GetDictLength() const {
-    return List.Size();
+    return List_.Size();
 }
 
 NUdf::TUnboxedValue TListValue::GetDictIterator() const {
-    return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), List));
+    return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), List_));
 }
 
 NUdf::TUnboxedValue TListValue::GetKeysIterator() const {
-    return NUdf::TUnboxedValuePod(new TKeysIterator(GetMemInfo(), List));
+    return NUdf::TUnboxedValuePod(new TKeysIterator(GetMemInfo(), List_));
 }
 
 NUdf::TUnboxedValue TListValue::GetPayloadsIterator() const {
-    return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), List));
+    return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), List_));
 }
 
 bool TListValue::Contains(const NUdf::TUnboxedValuePod& key) const {
-    return List.Contains(key.Get<ui64>());
+    return List_.Contains(key.Get<ui64>());
 }
 
 NUdf::TUnboxedValue TListValue::Lookup(const NUdf::TUnboxedValuePod& key) const {
-    return List.Get(key.Get<ui64>());
+    return List_.Get(key.Get<ui64>());
 }
 
 bool TListValue::HasDictItems() const {
-    return !List.Empty();
+    return !List_.Empty();
 }
 
 } // namespace NKikimr::NMiniKQL::NMatchRecognize

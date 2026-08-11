@@ -180,18 +180,6 @@ TEST(TTaggedApiTest, Tags)
     EXPECT_EQ(decoded.Tags[1], std::pair(std::string("Arg2"), std::string("test")));
 }
 
-TEST(TTaggedApiTest, CustomSpec)
-{
-    TMockLogManager manager;
-    TLogger Logger(&manager, "Test");
-    YT_TLOG_INFO("Message")
-        .With("Arg1", 256, "%x");
-
-    auto decoded = DecodeSingleEvent(manager);
-    ASSERT_EQ(decoded.Tags.size(), 1u);
-    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Arg1"), std::string("100")));
-}
-
 TEST(TTaggedApiTest, WithFormat)
 {
     TMockLogManager manager;
@@ -207,6 +195,37 @@ TEST(TTaggedApiTest, WithFormat)
     EXPECT_EQ(decoded.Tags[1], std::pair(std::string("Arg1"), std::string("123")));
 }
 
+TEST(TTaggedApiTest, WithIf)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+    YT_TLOG_INFO("Message")
+        .WithIf(true, "Kept", 1)
+        .WithIf(false, "Dropped", 2)
+        .With("After", 3);
+
+    auto decoded = DecodeSingleEvent(manager);
+    EXPECT_EQ(decoded.Message, "Message");
+    ASSERT_EQ(decoded.Tags.size(), 2u);
+    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Kept"), std::string("1")));
+    EXPECT_EQ(decoded.Tags[1], std::pair(std::string("After"), std::string("3")));
+}
+
+TEST(TTaggedApiTest, WithFormatIf)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+    YT_TLOG_INFO("Message")
+        .WithFormatIf(true, "Kept", "%v.%v", "MyService", "MyMethod")
+        .WithFormatIf(false, "Dropped", "%v.%v", "Other", "Method")
+        .With("After", 3);
+
+    auto decoded = DecodeSingleEvent(manager);
+    ASSERT_EQ(decoded.Tags.size(), 2u);
+    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Kept"), std::string("MyService.MyMethod")));
+    EXPECT_EQ(decoded.Tags[1], std::pair(std::string("After"), std::string("3")));
+}
+
 TEST(TTaggedApiTest, TagList)
 {
     TMockLogManager manager;
@@ -215,7 +234,7 @@ TEST(TTaggedApiTest, TagList)
     auto tags = TLoggingTagList()
         .With("Address", "localhost:1234")
         .With("ConnectionId", 42)
-        .With("Flags", 256, "%x")
+        .WithFormat("Flags", "%x", 256)
         .WithFormat("Method", "%v.%v", "MyService", "MyMethod");
 
     YT_TLOG_INFO("Message")
@@ -256,7 +275,7 @@ TEST(TTaggedApiTest, TagListReusedAcrossEvents)
     TLogger Logger(&manager, "Test");
 
     TLoggingTagList tags;
-    tags.With("Shared", "yes");
+    tags.Add("Shared", "yes");
     EXPECT_FALSE(tags.IsEmpty());
 
     YT_TLOG_INFO("First").With(tags);
@@ -276,7 +295,7 @@ TEST(TTaggedApiTest, TagListBeforeWellKnownTag)
     TLogger Logger(&manager, "Test");
 
     TLoggingTagList tags;
-    tags.With("Shared", "yes");
+    tags.Add("Shared", "yes");
     auto error = TError("boom");
 
     YT_TLOG_INFO("Message")
@@ -317,18 +336,19 @@ TEST(TTaggedApiTest, WithFormatDisabledDoesNotEvaluateArgs)
     EXPECT_TRUE(manager.GetEvents().empty());
 }
 
-TEST(TTaggedApiTest, LoggerTagFoldedIntoMessage)
+TEST(TTaggedApiTest, LoggerTagsStayStructured)
 {
     TMockLogManager manager;
     auto Logger = TLogger(&manager, "Test")
-        .WithTag("LoggingTag: %v", 555);
+        .WithTag("LoggingTag", 555);
     YT_TLOG_INFO("Message")
         .With("Arg1", 123);
 
     auto decoded = DecodeSingleEvent(manager);
-    EXPECT_EQ(decoded.Message, "Message (LoggingTag: 555)");
-    ASSERT_EQ(decoded.Tags.size(), 1u);
-    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Arg1"), std::string("123")));
+    EXPECT_EQ(decoded.Message, "Message");
+    ASSERT_EQ(decoded.Tags.size(), 2u);
+    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("LoggingTag"), std::string("555")));
+    EXPECT_EQ(decoded.Tags[1], std::pair(std::string("Arg1"), std::string("123")));
 }
 
 TEST(TTaggedApiTest, DisabledDoesNotEvaluateTags)
@@ -383,19 +403,23 @@ TEST(TTaggedApiTest, WellKnownErrorTag)
 // compile time.
 template <class TGuard>
 concept CAllowsKeyedTagAfterWellKnown = requires (TGuard guard, TError error) {
-    guard.With(error).With("Key", 1);
+    guard
+        .With(error)
+        .With("Key", 1);
 };
 
 // A further well-known tag after a well-known one stays allowed.
 template <class TGuard>
 concept CAllowsWellKnownTagAfterWellKnown = requires (TGuard guard, TError error) {
-    guard.With(error).With(error);
+    guard
+        .With(error)
+        .With(error);
 };
 
 static_assert(!CAllowsKeyedTagAfterWellKnown<TTaggedLoggingGuard>);
 static_assert(CAllowsWellKnownTagAfterWellKnown<TTaggedLoggingGuard>);
 
-TEST(TTaggedApiTest, AlertAndThrow)
+TEST(TTaggedApiTest, AlertAndThrowWithTags)
 {
     TMockLogManager manager;
     TLogger Logger(&manager, "Test");
@@ -409,7 +433,7 @@ TEST(TTaggedApiTest, AlertAndThrow)
         const auto& error = ex.Error();
         EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Fatal);
         EXPECT_EQ(error.GetMessage(), "Malformed request or incorrect state detected");
-        EXPECT_EQ(error.Attributes().Get<std::string>("message"), "Alert message");
+        EXPECT_EQ(error.Attributes().Get<std::string>("message"), "Alert message (Arg1: 1, Arg2: 2)");
     }
 
     // The alert is also logged, carrying the structured tags.
@@ -420,6 +444,19 @@ TEST(TTaggedApiTest, AlertAndThrow)
     EXPECT_EQ(decoded.Tags[1], std::pair(std::string("Arg2"), std::string("2")));
 }
 
+TEST(TTaggedApiTest, AlertAndThrowWithoutTags)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+
+    try {
+        YT_TLOG_ALERT_AND_THROW("Alert message");
+        EXPECT_TRUE(false);
+    } catch (const TErrorException& ex) {
+        EXPECT_EQ(ex.Error().Attributes().Get<std::string>("message"), "Alert message");
+    }
+}
+
 TEST(TTaggedApiTest, AlertAndThrowDisabledStillThrows)
 {
     TMockLogManager manager(/*minLevel*/ ELogLevel::Fatal);
@@ -427,11 +464,21 @@ TEST(TTaggedApiTest, AlertAndThrowDisabledStillThrows)
 
     // The level is disabled, so nothing is logged, but the exception (with its message)
     // is still raised.
-    EXPECT_THROW(
+    try {
         YT_TLOG_ALERT_AND_THROW("Alert message")
-            .With("Arg1", 1),
-        TErrorException);
+            .With("Arg1", 1);
+        EXPECT_TRUE(false);
+    } catch (const TErrorException& ex) {
+        EXPECT_EQ(ex.Error().Attributes().Get<std::string>("message"), "Alert message (Arg1: 1)");
+    }
     EXPECT_TRUE(manager.GetEvents().empty());
+}
+
+//! Compiles only if |YT_TLOG_FATAL| is noreturn: no |return| follows it.
+int LogFatal(const TLogger& Logger)
+{
+    YT_TLOG_FATAL("Fatal message")
+        .With("Arg1", 1);
 }
 
 TEST(TTaggedApiDeathTest, Fatal)
@@ -439,8 +486,7 @@ TEST(TTaggedApiDeathTest, Fatal)
     EXPECT_DEATH({
         TMockLogManager manager;
         TLogger Logger(&manager, "Test");
-        YT_TLOG_FATAL("Fatal message")
-            .With("Arg1", 1);
+        LogFatal(Logger);
     }, "Fatal message \\(Arg1: 1\\)");
 }
 
@@ -498,6 +544,38 @@ TEST(TStructuredApiTest, MultipleEvents)
     EXPECT_EQ(GetStructuredYson(manager.GetEvents()[0]), "\"i\"=0");
     EXPECT_EQ(manager.GetEvents()[1].Level, ELogLevel::Info);
     EXPECT_EQ(GetStructuredYson(manager.GetEvents()[1]), "\"i\"=1");
+}
+
+TEST(TTaggedApiTest, TraceTagsSpliced)
+{
+    auto logger = TLogger("Test").WithTag("LoggerTag", 1);
+
+    auto traceTags = TLoggingTagList().With("TraceContextTag", 1);
+    TLoggingContext loggingContext{};
+    loggingContext.TraceLoggingTags = AsView(traceTags.GetPayload());
+
+    TTaggedPayloadWriter writer;
+    writer.BeginMessage()->AppendString("Message"_sb);
+    writer.EndMessage();
+    NDetail::AppendContextualTags(&writer, loggingContext, logger);
+    auto payload = writer.Finish();
+
+    // Trace tags are ordinary keyed records, spliced after the logger's own.
+    TTaggedPayloadReader reader(payload);
+    EXPECT_EQ(reader.ReadMessage(), "Message");
+    auto loggerTag = reader.TryReadTag();
+    ASSERT_TRUE(loggerTag);
+    EXPECT_EQ(loggerTag->Key, "LoggerTag");
+    auto traceTag = reader.TryReadTag();
+    ASSERT_TRUE(traceTag);
+    EXPECT_EQ(traceTag->Key, "TraceContextTag");
+    EXPECT_EQ(traceTag->Value, "1");
+    EXPECT_FALSE(reader.TryReadTag());
+
+    EXPECT_EQ(
+        FormatTaggedPayload(payload),
+        std::string(GetMessageFromTaggedPayload(
+            NDetail::BuildLogMessage(loggingContext, logger, "Message").Payload)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1985,6 +1985,11 @@ public:
             actions = L(actions, Q(Y(Q("dropChangefeed"), name)));
         }
 
+        for (const auto& index : Params_.RebuildIndexes) {
+            const auto& desc = CreateAlterIndex(index, *this);
+            actions = L(actions, Q(Y(Q("rebuildIndex"), Q(desc))));
+        }
+
         if (Params_.Compact) {
             auto settings = Y();
             if (Params_.Compact->Cascade) {
@@ -3684,6 +3689,11 @@ public:
                     }
 
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, BuildQuotedAtom(Pos_, pragmaName))));
+                }
+
+                if (ctx.EvaluateExprCache) {
+                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                                                           BuildQuotedAtom(Pos_, "EnableEvaluateExprCache"))));
                 }
 
                 if (ctx.OrderedColumns) {

@@ -817,9 +817,15 @@ private:
 }; // TDataAccumulator
 
 class TDataWriter: public NPrivate::IDataWriter {
+    static constexpr TDuration COLUMN_TABLE_TIMEOUT = TDuration::Seconds(30);
+
     static auto MakeSettings(const TRestoreSettings& settings, const TTableDescription& desc) {
         auto importDataSettings = TImportYdbDumpDataSettings(settings)
             .RequestType(DOC_API_REQUEST_TYPE);
+
+        if (desc.GetStoreType() == EStoreType::Column) {
+            importDataSettings.ClientTimeout(COLUMN_TABLE_TIMEOUT);
+        }
 
         for (const auto& column : desc.GetColumns()) {
             importDataSettings.AppendColumns(column.Name);
@@ -849,6 +855,17 @@ class TDataWriter: public NPrivate::IDataWriter {
 
             if (importResult.IsSuccess()) {
                 return true;
+            }
+
+            if (IsColumnTable) {
+                NYdb::NIssue::TIssues issues = importResult.GetIssues();
+                issues.AddIssue("ImportData is likely not supported for column-oriented (OLAP) tables."
+                    " Consider using the --bulk-upsert option to restore column-oriented tables.");
+                LOG_E("Can't import data to " << Path.Quote()
+                      << " at location " << data.GetLocation()
+                      << ", result: " << importResult);
+                SetError(TStatus(importResult.GetStatus(), std::move(issues)));
+                return false;
             }
 
             if (retryNumber == MaxRetries) {
@@ -935,6 +952,7 @@ public:
             const std::shared_ptr<TLog>& log)
         : Path(path)
         , Settings(MakeSettings(settings, desc))
+        , IsColumnTable(desc.GetStoreType() == EStoreType::Column)
         , ImportClient(importClient)
         , TableClient(tableClient)
         , Accumulators(accumulators.size())
@@ -989,6 +1007,7 @@ public:
 private:
     const TString Path;
     const TImportYdbDumpDataSettings Settings;
+    const bool IsColumnTable;
     TImportClient& ImportClient;
     TTableClient& TableClient;
     TVector<TDataAccumulator*> Accumulators;

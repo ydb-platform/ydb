@@ -524,7 +524,6 @@ void TPartition::AbortBlobsCompaction(const TString& reason)
     // Do not retry immediately: a persistent KV/BS failure would loop.
     // Compaction will be attempted again from the next write/wakeup path.
     TryProcessGetWriteInfoRequest(ctx);
-    ProcessTxsAndUserActs(ctx);
 }
 
 void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs)

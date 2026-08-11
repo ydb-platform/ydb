@@ -23,12 +23,6 @@ public:
         , SnapshotLock(TBase::GetDeriviative("Snapshots/Lock"))
         , SnapshotUnlock(TBase::GetDeriviative("Snapshots/Unlock"))
     {
-
-
-
-
-
-
     }
 
     void OnMaxNewScanAgeSeconds(const ui64 age) const {

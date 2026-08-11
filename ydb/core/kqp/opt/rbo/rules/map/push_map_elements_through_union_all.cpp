@@ -305,7 +305,7 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
         return input;
     }
 
-    for (auto& child : unionAll->Children) {
+    for (auto& child : unionAll->GetInputs()) {
         child = MakeIntrusive<TOpMap>(child, topMap->Pos, pushedElements, topMap->Ordered);
     }
     unionAll->Columns = std::move(newColumns);

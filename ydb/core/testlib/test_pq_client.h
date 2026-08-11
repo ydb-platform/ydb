@@ -1063,9 +1063,9 @@ public:
         if (mirrorFrom.GetReadFromTimestampsMs()) {
             rule.StartingMessageTimestamp(TInstant::MilliSeconds(mirrorFrom.GetReadFromTimestampsMs()));
         }
-        if (mirrorFrom.HasDatabase()) {
-            rule.Database(std::string(mirrorFrom.GetDatabase()));
-        }
+        // Authenticated mirror reads require a database; msgbus often omitted both
+        // credentials and database. PQv1 forces credentials, so default database too.
+        rule.Database(std::string(mirrorFrom.HasDatabase() ? mirrorFrom.GetDatabase() : "/Root"));
         return rule;
     }
 

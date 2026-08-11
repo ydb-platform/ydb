@@ -443,7 +443,7 @@ namespace NYql::NDq {
                 auto sessionState = std::move(Sessions.back());
                 Sessions.pop_back();
                 if (!sessionState->SessionId.empty()) {
-                    state->SessionState = sessionState;
+                    state->SessionState = std::move(sessionState);
                 }
             }
 

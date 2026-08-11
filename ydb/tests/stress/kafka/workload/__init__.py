@@ -52,6 +52,7 @@ KAFKA_SOURCE_PRODUCER_JAVA = textwrap.dedent("""
             props.put(ProducerConfig.LINGER_MS_CONFIG, Integer.toString(lingerMs));
             props.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, compressionType);
             props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, "120000");
+            props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, "180000");
             props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, "30000");
 
             AtomicReference<Exception> error = new AtomicReference<>();
@@ -102,6 +103,62 @@ KAFKA_SOURCE_PRODUCER_JAVA = textwrap.dedent("""
                 builder.append("kafka-source-batch-message-");
             }
             return builder.substring(0, messageSize).getBytes(StandardCharsets.UTF_8);
+        }
+    }
+""").strip()
+
+
+KAFKA_TOPIC_METADATA_WAITER_JAVA = textwrap.dedent("""
+    import java.util.Arrays;
+    import java.util.Map;
+    import java.util.Properties;
+    import java.util.concurrent.TimeUnit;
+
+    import org.apache.kafka.clients.admin.AdminClient;
+    import org.apache.kafka.clients.admin.AdminClientConfig;
+    import org.apache.kafka.clients.admin.TopicDescription;
+
+    public class KafkaTopicMetadataWaiter {
+        public static void main(String[] args) throws Exception {
+            String bootstrap = args[0];
+            long timeoutMs = Long.parseLong(args[1]) * 1000L;
+            String[] topics = Arrays.copyOfRange(args, 2, args.length);
+
+            Properties props = new Properties();
+            props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
+            props.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, "5000");
+            props.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, "5000");
+
+            long deadline = System.currentTimeMillis() + timeoutMs;
+            Exception lastError = null;
+            try (AdminClient admin = AdminClient.create(props)) {
+                while (System.currentTimeMillis() < deadline) {
+                    try {
+                        Map<String, TopicDescription> descriptions =
+                            admin.describeTopics(Arrays.asList(topics)).all().get(5, TimeUnit.SECONDS);
+                        boolean allReady = true;
+                        for (String topic : topics) {
+                            TopicDescription description = descriptions.get(topic);
+                            if (description == null || description.partitions().isEmpty()) {
+                                allReady = false;
+                                break;
+                            }
+                        }
+                        if (allReady) {
+                            System.out.println("Kafka metadata is ready for " + Arrays.toString(topics));
+                            return;
+                        }
+                    } catch (Exception e) {
+                        lastError = e;
+                    }
+                    Thread.sleep(1000L);
+                }
+            }
+
+            throw new RuntimeException(
+                "Kafka metadata is not ready for " + Arrays.toString(topics) + " after " + timeoutMs + " ms",
+                lastError
+            );
         }
     }
 """).strip()
@@ -166,7 +223,13 @@ class Workload(unittest.TestCase):
         workloadConsumerName = self.workload_consumer_name
 
         print("Creating test topic")
-        testOptions = [("1", "1"), ("0", "1"), ("0", "0")]
+        testOptions = [
+            ("1", "1", True),
+            ("0", "1", False),
+            ("0", "0", False),
+        ]
+        if self.source_writer == "kafka":
+            testOptions = [("0", "0", False)]
         checkerConsumer = "targetCheckerConsumer"
         self.create_topic(
             self.test_topic_path,
@@ -178,11 +241,23 @@ class Workload(unittest.TestCase):
         processes = []
         print("NumWorkers: ", self.num_workers)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
+        self.clean_streams_state_dirs(len(testOptions) * self.num_workers)
 
+        target_topic_names = []
         for i, parameters in enumerate(testOptions):
-            use_transactions, use_idempotence = parameters
             targetTopicName = f"{self.target_topic_path}-{i}"
             self.create_topic(targetTopicName, [checkerConsumer, f"{checkerConsumer}-{i}"])
+            target_topic_names.append(targetTopicName)
+
+        self.wait_kafka_topic_metadata(
+            java_path,
+            jar_file_path,
+            [self.test_topic_path] + target_topic_names,
+        )
+
+        for i, parameters in enumerate(testOptions):
+            use_transactions, use_idempotence, _ = parameters
+            targetTopicName = target_topic_names[i]
             for j in range(self.num_workers):
                 processes.append(subprocess.Popen([
                     java_path,
@@ -200,63 +275,65 @@ class Workload(unittest.TestCase):
         print("Waiting for Kafka Streams startup")
         time.sleep(10)
 
-        source_process = self.start_source_writer(java_path, jar_file_path)
-        source_process.wait()
-        assert source_process.returncode == 0
+        try:
+            source_process = self.start_source_writer(java_path, jar_file_path)
+            source_process.wait()
+            assert source_process.returncode == 0
 
-        print("-----------------")
-        expected_source_count = SOURCE_MESSAGE_COUNT if self.source_writer == "kafka" else None
-        messages_info_test = self.read_messages(
-            self.test_topic_path,
-            checkerConsumer,
-            expected_count=expected_source_count,
-            timeout=60,
-        )
-        source_count = self.count_messages(messages_info_test)
-        print(f"Source topic has {source_count} readable messages")
-        print(f"Waiting up to {self.duration} sec for readable target topic messages")
-        deadline = time.time() + self.duration
-        messages_info_targets = []
-        for i in range(len(testOptions)):
-            remaining = max(1, deadline - time.time())
-            messages_info_targets.append(
-                self.read_messages(
-                    f"{self.target_topic_path}-{i}",
-                    f"{checkerConsumer}-{i}",
-                    expected_count=source_count,
-                    timeout=remaining,
-                )
+            print("-----------------")
+            expected_source_count = SOURCE_MESSAGE_COUNT if self.source_writer == "kafka" else None
+            messages_info_test = self.read_messages(
+                self.test_topic_path,
+                checkerConsumer,
+                expected_count=expected_source_count,
+                timeout=60,
             )
+            source_count = self.count_messages(messages_info_test)
+            print(f"Source topic has {source_count} readable messages")
+            print(f"Waiting up to {self.duration} sec for readable target topic messages")
+            deadline = time.time() + self.duration
+            messages_info_targets = []
+            for i in range(len(testOptions)):
+                remaining = max(1, deadline - time.time())
+                messages_info_targets.append(
+                    self.read_messages(
+                        f"{self.target_topic_path}-{i}",
+                        f"{checkerConsumer}-{i}",
+                        expected_count=source_count,
+                        timeout=remaining,
+                    )
+                )
+        finally:
+            print("Killing processes")
+            for process in processes:
+                self._kill_process_tree(process)
 
-        print("Killing processes")
-        for process in processes:
-            self._kill_process_tree(process)
-
-        for process in processes:
-            try:
-                process.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                print(f"Process {process.pid} did not terminate in time")
+            for process in processes:
+                try:
+                    process.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    print(f"Process {process.pid} did not terminate in time")
 
         topic_description = self.driver.topic_client.describe_topic(self.test_topic_path, include_stats=True)
         print(topic_description)
 
         for i in range(len(testOptions)):
+            _, _, expect_exact = testOptions[i]
             messages_info_target = messages_info_targets[i]
             totalMessCountTest = self.count_messages(messages_info_test)
             totalMessCountTarget = self.count_messages(messages_info_target)
 
             print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest}, "
                   f"totalMessCountTarget = {totalMessCountTarget}")
-            if i >= 1:
-                assert totalMessCountTest <= totalMessCountTarget, (
-                    f"Source message count is greater than the target {self.target_topic_path}-{i} topic's "
-                    f"message count: {totalMessCountTest} and {totalMessCountTarget} respectively."
-                )
-            else:
+            if expect_exact:
                 assert totalMessCountTest == totalMessCountTarget, (
                     f"Source and target {self.target_topic_path}-{i} topics total messages count are not "
                     f"equal: {totalMessCountTest} and {totalMessCountTarget} respectively."
+                )
+            else:
+                assert totalMessCountTest <= totalMessCountTarget, (
+                    f"Source message count is greater than the target {self.target_topic_path}-{i} topic's "
+                    f"message count: {totalMessCountTest} and {totalMessCountTarget} respectively."
                 )
             print(f"Total num of messages: {totalMessCountTest}")
         return
@@ -280,27 +357,22 @@ class Workload(unittest.TestCase):
         print("Write command:", write_command)
         return subprocess.Popen(write_command, start_new_session=True)
 
+    def clean_streams_state_dirs(self, count):
+        for i in range(count):
+            state_dir = f"streams-store-{i}"
+            if os.path.exists(state_dir):
+                shutil.rmtree(state_dir)
+
     def start_kafka_source_writer(self, java_path, jar_file_path):
         print("Running Kafka producer source writer")
         producer_class_dir = "./kafka-source-producer"
-        os.makedirs(producer_class_dir, exist_ok=True)
-        producer_source = os.path.join(producer_class_dir, "KafkaSourceProducer.java")
-        with open(producer_source, "w") as out:
-            out.write(KAFKA_SOURCE_PRODUCER_JAVA)
-
-        javac_path = os.path.join(os.path.dirname(java_path), "javac")
-        subprocess.run([
-            javac_path,
-            "-cp",
+        self.compile_java_source(
+            java_path,
             jar_file_path,
-            producer_source,
-        ], check=True, text=True)
-
-        bootstrap = self.bootstrap
-        for prefix in ("http://", "https://"):
-            if bootstrap.startswith(prefix):
-                bootstrap = bootstrap[len(prefix):]
-                break
+            producer_class_dir,
+            "KafkaSourceProducer",
+            KAFKA_SOURCE_PRODUCER_JAVA,
+        )
         target_batch_messages = 5
         linger_ms = max(1, 1000 * target_batch_messages // SOURCE_MESSAGE_RATE)
         producer_command = [
@@ -308,7 +380,7 @@ class Workload(unittest.TestCase):
             "-cp",
             f"{jar_file_path}:{producer_class_dir}",
             "KafkaSourceProducer",
-            bootstrap,
+            self.kafka_bootstrap(),
             self.test_topic_path,
             str(SOURCE_SECONDS),
             str(SOURCE_MESSAGE_RATE),
@@ -319,6 +391,46 @@ class Workload(unittest.TestCase):
         ]
         print("Kafka producer command:", producer_command)
         return subprocess.Popen(producer_command, start_new_session=True)
+
+    def wait_kafka_topic_metadata(self, java_path, jar_file_path, topics, timeout_seconds=180):
+        print("Waiting for Kafka topic metadata:", topics)
+        waiter_class_dir = "./kafka-topic-metadata-waiter"
+        self.compile_java_source(
+            java_path,
+            jar_file_path,
+            waiter_class_dir,
+            "KafkaTopicMetadataWaiter",
+            KAFKA_TOPIC_METADATA_WAITER_JAVA,
+        )
+        subprocess.run([
+            java_path,
+            "-cp",
+            f"{jar_file_path}:{waiter_class_dir}",
+            "KafkaTopicMetadataWaiter",
+            self.kafka_bootstrap(),
+            str(timeout_seconds),
+        ] + list(topics), check=True, text=True)
+
+    def compile_java_source(self, java_path, jar_file_path, class_dir, class_name, source):
+        os.makedirs(class_dir, exist_ok=True)
+        source_path = os.path.join(class_dir, f"{class_name}.java")
+        with open(source_path, "w") as out:
+            out.write(source)
+
+        javac_path = os.path.join(os.path.dirname(java_path), "javac")
+        subprocess.run([
+            javac_path,
+            "-cp",
+            jar_file_path,
+            source_path,
+        ], check=True, text=True)
+
+    def kafka_bootstrap(self):
+        bootstrap = self.bootstrap
+        for prefix in ("http://", "https://"):
+            if bootstrap.startswith(prefix):
+                return bootstrap[len(prefix):]
+        return bootstrap
 
     def _kill_process_tree(self, process):
         if process.poll() is not None:

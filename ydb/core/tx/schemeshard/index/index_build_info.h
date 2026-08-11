@@ -92,6 +92,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Unlocking = 60,
         AlterSequence = 61,
         PrepareValidation = 62,
+        AlterIndexTable = 63,
         Done = 200,
 
         Cancellation_Applying = 350,

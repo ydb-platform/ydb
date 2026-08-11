@@ -263,7 +263,7 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
             element.SetExpression(element.GetExpression().ApplyRenames(renameMap));
         }
     }
-    bottomMap->GetMapElements() = std::move(bottomElements);
+    bottomMap->SetMapElements(std::move(bottomElements));
     props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
 
     if (topElements.empty()) {

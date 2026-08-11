@@ -1352,6 +1352,58 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(last, op.Get());
     }
 
+    Y_UNIT_TEST(MapElementExpressionMutationPreservesRenameInvariant) {
+        NYql::TExprContext exprCtx;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit source("source");
+
+        TMapElement element(TInfoUnit("renamed"), source, pos, &exprCtx, &expressionProps);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            element.SetExpression(MakeConstant("Int32", "1", pos, &exprCtx)),
+            yexception,
+            "Rename map element must be a plain column access");
+        UNIT_ASSERT(element.GetRename() == source);
+    }
+
+    Y_UNIT_TEST(MapMutatorsInvalidateCachedOutputIUs) {
+        NYql::TExprContext exprCtx;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto input = MakeIntrusive<TOpMap>(
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            TVector<TMapElement>{
+                TMapElement(TInfoUnit("a"), MakeConstant("Int32", "1", pos, &exprCtx)),
+                TMapElement(TInfoUnit("b"), MakeConstant("Int32", "2", pos, &exprCtx)),
+            });
+        auto map = MakeIntrusive<TOpMap>(
+            input,
+            pos,
+            TVector<TMapElement>{
+                TMapElement(TInfoUnit("x"), TInfoUnit("a"), pos, &exprCtx, &expressionProps),
+            });
+
+        UNIT_ASSERT(map->GetOutputIUs() == (TVector<TInfoUnit>{TInfoUnit("b"), TInfoUnit("x")}));
+
+        map->SetMapElementExpression(0, MakeColumnAccess(TInfoUnit("b"), pos, &exprCtx, &expressionProps));
+        UNIT_ASSERT(map->GetOutputIUs() == (TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("x")}));
+
+        map->AddMapElement(TMapElement(TInfoUnit("y"), MakeConstant("Int32", "3", pos, &exprCtx)));
+        UNIT_ASSERT(map->GetOutputIUs() == (TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("x"), TInfoUnit("y")}));
+
+        map->RemoveMapElement(1);
+        UNIT_ASSERT(map->GetOutputIUs() == (TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("x")}));
+
+        map->RenameProducedIUs({{TInfoUnit("x"), TInfoUnit("z")}}, exprCtx);
+        UNIT_ASSERT(map->GetOutputIUs() == (TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("z")}));
+
+        map->SetMapElements({});
+        UNIT_ASSERT(map->GetOutputIUs() == (TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("b")}));
+    }
+
     Y_UNIT_TEST(ComputeParentsHandlesSharedDagAndIgnoresInactiveSubplans) {
         const auto pos = NYql::TPositionHandle();
         auto shared = MakeIntrusive<TOpEmptySource>(pos);

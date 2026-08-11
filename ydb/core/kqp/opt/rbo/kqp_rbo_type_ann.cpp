@@ -252,9 +252,11 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         }
     }
 
-    for (auto& mapElement : map->GetMapElements()) {
+    for (size_t index = 0; index < map->GetMapElements().size(); ++index) {
+        const auto& mapElement = map->GetMapElements()[index];
         // This is type annotation update inplace, which is different comparing to yql type annotation.
-        auto& lambda = mapElement.GetExpressionRef().Node;
+        auto expression = mapElement.GetExpression();
+        auto lambda = expression.Node;
         if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -274,6 +276,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         Y_ENSURE(lambdaType);
         auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
         resStructItemTypes.push_back(mapLambdaType);
+        map->SetMapElementExpression(index, TExpression(std::move(lambda), expression.Ctx, expression.PlanProps));
     }
 
     auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resStructItemTypes);

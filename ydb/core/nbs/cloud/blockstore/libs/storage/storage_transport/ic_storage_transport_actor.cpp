@@ -16,32 +16,6 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <typename T>
-void SetErrorStatus(
-    NKikimrBlobStorage::NDDisk::TReplyStatus_E status,
-    TStringBuf reason,
-    T& record)
-{
-    record.SetStatus(status);
-    record.SetErrorReason(TString(reason));
-}
-
-std::unique_ptr<NDDisk::TEvWritePersistentBuffersResult>
-MakeWritePersistentBuffersResult(
-    NKikimrBlobStorage::NDDisk::TReplyStatus_E status,
-    TStringBuf reason,
-    std::span<const NKikimrBlobStorage::NDDisk::TDDiskId> pbufferIds)
-{
-    auto errorResponse =
-        std::make_unique<NDDisk::TEvWritePersistentBuffersResult>();
-    for (const auto& pbufferId: pbufferIds) {
-        auto* res = errorResponse->Record.AddResult();
-        *res->MutablePersistentBufferId() = pbufferId;
-        SetErrorStatus(status, reason, *res->MutableResult());
-    }
-    return errorResponse;
-}
-
 template <typename TEvent, typename TMap>
 void RejectAllPending(TMap& map)
 {
@@ -129,10 +103,13 @@ void RejectRequestsForNode(
 
 TActorId CreateTransportActor(
     const TDiskDescription& diskDescription,
-    ui32 dbgIndex)
+    ui32 dbgIndex,
+    std::shared_ptr<TDirectSessionRegistry> directSessionRegistry)
 {
-    auto actor =
-        std::make_unique<TICStorageTransportActor>(diskDescription, dbgIndex);
+    auto actor = std::make_unique<TICStorageTransportActor>(
+        diskDescription,
+        dbgIndex,
+        std::move(directSessionRegistry));
 
     return TActivationContext::Register(
         actor.release(),
@@ -145,7 +122,8 @@ TActorId CreateTransportActor(
 
 TICStorageTransportActor::TICStorageTransportActor(
     const TDiskDescription& diskDescription,
-    ui32 dbgIndex)
+    ui32 dbgIndex,
+    std::shared_ptr<TDirectSessionRegistry> directSessionRegistry)
     : LogTitle(
           GetCycleCount(),
           TLogTitle::TInterconnectTransport{
@@ -153,6 +131,7 @@ TICStorageTransportActor::TICStorageTransportActor(
               .TabletId = diskDescription.TabletId,
               .Generation = diskDescription.Generation,
               .DBGIndex = dbgIndex})
+    , DirectSessionRegistry(std::move(directSessionRegistry))
 {}
 
 TICStorageTransportActor::~TICStorageTransportActor()
@@ -1267,6 +1246,9 @@ void TICStorageTransportActor::PassAway()
         }
     }
     ICSubscribedNodes.clear();
+    if (DirectSessionRegistry) {
+        DirectSessionRegistry->Clear();
+    }
     NActors::IActor::PassAway();
 }
 
@@ -1289,6 +1271,28 @@ void TICStorageTransportActor::RejectAllSessionRequestsForNode(
         nodeId);
 }
 
+void TICStorageTransportActor::HandleICNodeConnected(
+    const TEvInterconnect::TEvNodeConnected::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const ui32 nodeId = ev->Get()->NodeId;
+    auto directSession = ev->Get()->DirectSession;
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Node #%u connected, hasDirectSession# %s",
+        LogTitle.GetWithTime().c_str(),
+        nodeId,
+        directSession ? "true" : "false");
+
+    if (DirectSessionRegistry && directSession) {
+        DirectSessionRegistry->Set(
+            nodeId,
+            MakeSessionEntry(ctx.ActorSystem(), std::move(directSession)));
+    }
+}
+
 void TICStorageTransportActor::HandleICNodeDisconnected(
     const TEvInterconnect::TEvNodeDisconnected::TPtr& ev,
     const TActorContext& ctx)
@@ -1301,6 +1305,10 @@ void TICStorageTransportActor::HandleICNodeDisconnected(
         "%s Node #%u disconnected",
         LogTitle.GetWithTime().c_str(),
         nodeId);
+
+    if (DirectSessionRegistry) {
+        DirectSessionRegistry->Reset(nodeId);
+    }
 
     auto it = ICSubscribedNodes.find(nodeId);
     if (it != ICSubscribedNodes.end()) {
@@ -1409,7 +1417,7 @@ STFUNC(TICStorageTransportActor::StateWork)
             HandleListPersistentBufferResult);
 
         HFunc(TEvInterconnect::TEvNodeDisconnected, HandleICNodeDisconnected);
-        IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+        HFunc(TEvInterconnect::TEvNodeConnected, HandleICNodeConnected);
 
         default:
             LOG_ERROR(

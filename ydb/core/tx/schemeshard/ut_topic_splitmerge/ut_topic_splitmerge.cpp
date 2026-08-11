@@ -1,5 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <ydb/core/persqueue/writer/partition_chooser_impl.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <util/generic/size_literals.h>
@@ -173,6 +174,39 @@ auto DescribeTopic(TTestBasicRuntime& runtime, TString path = "/MyRoot/USER_1/To
     }
 
     return DescribePath(runtime, ss, path, true, true, true).GetPathDescription().GetPersQueueGroup();
+}
+
+// TBoundaryChooser requires at least one Active partition without ToBound (open-ended range).
+// Describe during in-flight split/merge alter can temporarily omit such partitions.
+void ValidateDescribeUsableByBoundaryChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& topic) {
+    ui32 activeCount = 0;
+    bool hasOpenEndedActive = false;
+    TStringBuilder activeDump;
+    for (const auto& p : topic.GetPartitions()) {
+        if (p.GetStatus() != NKikimrPQ::ETopicPartitionStatus::Active) {
+            continue;
+        }
+        ++activeCount;
+        const bool openEnded = !p.HasKeyRange() || !p.GetKeyRange().HasToBound();
+        hasOpenEndedActive = hasOpenEndedActive || openEnded;
+        activeDump << " p" << p.GetPartitionId()
+                   << "{status=Active"
+                   << " from=" << (p.HasKeyRange() && p.GetKeyRange().HasFromBound() ? ToHex(p.GetKeyRange().GetFromBound()) : "-")
+                   << " to=" << (p.HasKeyRange() && p.GetKeyRange().HasToBound() ? ToHex(p.GetKeyRange().GetToBound()) : "-")
+                   << "}";
+    }
+
+    UNIT_ASSERT_C(activeCount > 0,
+                  "Describe returned no Active partitions; BoundaryChooser would fail. Partitions="
+                      << topic.PartitionsSize() << activeDump);
+    UNIT_ASSERT_C(hasOpenEndedActive,
+                  "Describe Active set has no open-ended ToBound; BoundaryChooser AFL_ENSURE. Active="
+                      << activeCount << activeDump);
+
+    NKikimr::NPQ::NPartitionChooser::TBoundaryChooser<NKikimr::NPQ::NPartitionChooser::TAsIsConverter> chooser(topic);
+    // Key past any finite ToBound must still land in the open-ended partition.
+    const unsigned char maxKey[] = {0xFF, 0xFF, 0xFF, 0xFF};
+    UNIT_ASSERT(chooser.GetPartition(TString(reinterpret_cast<const char*>(maxKey), sizeof(maxKey))));
 }
 
 void ValidatePartition(const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition,
@@ -1680,4 +1714,93 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
             alter.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(7200);
         });
     } // Y_UNIT_TEST(AlterTopicConfigAfterMergeAlterInterruptedByReboot)
+
+    // Repro: after Propose/ReassignIds topic AlterVersion is still old, while split parents/children
+    // already have the new partition AlterVersion. Describe filters by
+    // partition->AlterVersion <= pqGroup->AlterVersion and can hide the open-ended Active partition.
+    // Writers then hit TBoundaryChooser AFL_ENSURE ("Partition not found. Maybe wrong partitions bounds").
+    Y_UNIT_TEST(DescribeDuringMinPartitionCountAlterKeepsOpenEndedActive) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 1);
+
+        ValidateDescribeUsableByBoundaryChooser(DescribeTopic(runtime));
+
+        ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+        scheme.SetName("Topic1");
+        scheme.MutablePQTabletConfig()->MutablePartitionConfig();
+        scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+        scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(5);
+        scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(
+            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+
+        TStringBuilder sb;
+        sb << scheme;
+        const TString schemeStr = sb.substr(1, sb.size() - 2);
+
+        AsyncAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", schemeStr);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        // In-flight window: publish after ReassignIds, before FinishAlter.
+        auto topicInFlight = DescribeTopic(runtime);
+        Cerr << "===== Describe during MinPartitionCount alter =====" << Endl
+             << topicInFlight.DebugString() << Endl << Flush;
+        ValidateDescribeUsableByBoundaryChooser(topicInFlight);
+
+        env.TestWaitNotification(runtime, txId);
+        ValidateDescribeUsableByBoundaryChooser(DescribeTopic(runtime));
+    } // Y_UNIT_TEST(DescribeDuringMinPartitionCountAlterKeepsOpenEndedActive)
+
+    Y_UNIT_TEST(DescribeDuringSplitOfOpenEndedPartitionKeepsCoverage) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        auto topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 3);
+        ValidateDescribeUsableByBoundaryChooser(topic);
+
+        ui32 openEndedId = Max<ui32>();
+        for (const auto& p : topic.GetPartitions()) {
+            if (p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active
+                    && (!p.HasKeyRange() || !p.GetKeyRange().HasToBound())) {
+                openEndedId = p.GetPartitionId();
+                break;
+            }
+        }
+        UNIT_ASSERT_C(openEndedId != Max<ui32>(), "expected open-ended active partition before split");
+
+        const unsigned char b[] = {0xC0};
+        TString boundary((char*)b, sizeof(b));
+
+        ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+        scheme.SetName("Topic1");
+        scheme.MutablePQTabletConfig()->MutablePartitionConfig();
+        auto* split = scheme.AddSplit();
+        split->SetPartition(openEndedId);
+        split->SetSplitBoundary(boundary);
+
+        TStringBuilder sb;
+        sb << scheme;
+        const TString schemeStr = sb.substr(1, sb.size() - 2);
+
+        AsyncAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", schemeStr);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        auto topicInFlight = DescribeTopic(runtime);
+        Cerr << "===== Describe during split of open-ended partition =====" << Endl
+             << topicInFlight.DebugString() << Endl << Flush;
+        ValidateDescribeUsableByBoundaryChooser(topicInFlight);
+
+        env.TestWaitNotification(runtime, txId);
+        ValidateDescribeUsableByBoundaryChooser(DescribeTopic(runtime));
+    } // Y_UNIT_TEST(DescribeDuringSplitOfOpenEndedPartitionKeepsCoverage)
 }

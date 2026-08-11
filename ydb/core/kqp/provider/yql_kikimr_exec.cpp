@@ -3280,26 +3280,6 @@ public:
                         return SyncError();
                     }
 
-                    // Changing the set of indexed columns on rebuild is forbidden:
-                    // the user may omit the ON (...) clause (inherit existing columns),
-                    // but if provided it must match the columns the index was built on.
-                    if (hasUserColumns) {
-                        const auto& providedColumns = add_index->index_columns();
-                        bool sameColumns = (size_t)providedColumns.size() == existingIndex->KeyColumns.size();
-                        for (int i = 0; sameColumns && i < providedColumns.size(); ++i) {
-                            if (providedColumns[i] != existingIndex->KeyColumns[i]) {
-                                sameColumns = false;
-                            }
-                        }
-                        if (!sameColumns) {
-                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
-                                TStringBuilder() << "Changing the set of indexed columns is not allowed on REBUILD INDEX '"
-                                    << rebuildIndexName << "': the index was built on ("
-                                    << JoinSeq(", ", existingIndex->KeyColumns) << ")"));
-                            return SyncError();
-                        }
-                    }
-
                     // Set the index type
                     add_index->mutable_global_vector_kmeans_tree_index();
 

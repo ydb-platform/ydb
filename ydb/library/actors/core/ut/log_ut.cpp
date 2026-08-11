@@ -743,3 +743,58 @@ Y_UNIT_TEST_SUITE(TWriteShortTextLogTest) {
         env.FetchMessage(R"(FAKE: Test message with data value="\\\"EscapedQuotedValue\\\"")");
     }
 }
+
+Y_UNIT_TEST_SUITE(TLogEscaping) {
+
+    Y_UNIT_TEST(Escape) {
+        std::vector<std::pair<TString, TString>> samples = {
+            {"text", "text"},
+            {"text with space", "\"text with space\""},
+            {"text with new line\n", "\"text with new line\\n\""},
+            {"text with slash\\", "\"text with slash\\\\\""},
+            {"text with double quote\"", "\"text with double quote\\\"\""}
+        };
+
+        for(const auto& sample: samples) {
+            auto escaped = TTextWriter::EscapeFieldValue(sample.first);
+            UNIT_ASSERT_STRINGS_EQUAL(sample.second, escaped);
+        }
+    }
+
+    Y_UNIT_TEST(Unescape) {
+        struct TSample {
+            TString Escaped;
+            std::string::size_type StartPos;
+            TMaybe<TString> Unescaped;
+            std::string::size_type FinishPos{0};
+        };
+        std::vector<TSample> samples = {
+            {"text", 0, "text", 4},
+            {"text next", 0, "text", 4},
+            {"\"text with space\"", 0, "text with space", 17},
+            {"\"text with space", 0, {}},
+            {"\"unknown escape char\\q", 0, {}},
+            {"\"text with new line\\n\"", 0, "text with new line\n", 22},
+            {"\"text with slash\\\\\"", 0, "text with slash\\", 19},
+            {"\"text with double quote\\\"\"", 0, "text with double quote\"", 26},
+            {"abcd text", 5, "text", 9},
+            {"abcd text next", 5, "text", 9},
+            {"abcd \"text with space\"", 5, "text with space", 22},
+            {"abcd \"text with space", 5, {}},
+            {"abcd \"unknown escape char\\q", 5, {}},
+            {"abcd \"text with new line\\n\"", 5, "text with new line\n", 27},
+            {"abcd \"text with slash\\\\\"", 5, "text with slash\\", 24},
+            {"abcd \"text with double quote\\\"\"", 5, "text with double quote\"", 31}
+        };
+
+        for(const auto& sample: samples) {
+            auto pos = sample.StartPos;
+            auto unescaped = TTextWriter::UnescapeFieldValue(sample.Escaped, pos);
+            UNIT_ASSERT_EQUAL(sample.Unescaped, unescaped);
+            if (unescaped.Defined()) {
+                UNIT_ASSERT_EQUAL(sample.FinishPos, pos);
+            }
+
+        }
+    }
+}

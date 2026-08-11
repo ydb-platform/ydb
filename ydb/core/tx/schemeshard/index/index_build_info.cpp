@@ -338,6 +338,7 @@ bool TIndexBuildInfo::IsValidState(EState value)
         case EState::Applying:
         case EState::Unlocking:
         case EState::AlterSequence:
+        case EState::AlterIndexTable:
         case EState::PrepareValidation:
         case EState::Done:
         case EState::Cancellation_Applying:

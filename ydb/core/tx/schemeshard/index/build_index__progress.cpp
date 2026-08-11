@@ -596,6 +596,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
         std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&buildInfo.SpecializedIndexDescription),
         buildInfo.IndexType, prefixColumns, true);
 
+    // Set a low SizeToSplit so the build table quickly ramps up shard count during data upload.
+    auto& policy = *op.MutablePartitionConfig()->MutablePartitioningPolicy();
+    policy.SetSizeToSplit(100*1024*1024);
+    const auto maxShardsInPath = path.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
+    ui32 fulltextShards = tableInfo->GetPartitionStore().size();
+    if (fulltextShards < buildInfo.MaxInProgressShards) {
+        fulltextShards = buildInfo.MaxInProgressShards;
+    }
+    if (fulltextShards > maxShardsInPath) {
+        fulltextShards = maxShardsInPath;
+    }
+    policy.SetMinPartitionsCount(fulltextShards);
+    policy.SetMaxPartitionsCount(fulltextShards);
+
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 
     InheritDetailedMetricsSettings(tableInfo, op);
@@ -632,6 +646,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
     op = CalcFulltextRowIdSrcImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
         dataColumns, buildInfo.IndexColumns, NKikimrSchemeOp::TTableDescription(),
         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo.SpecializedIndexDescription));
+    const auto maxShardsInPath = path.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
+    ui32 fulltextShards = tableInfo->GetPartitionStore().size();
+    if (fulltextShards < buildInfo.MaxInProgressShards) {
+        fulltextShards = buildInfo.MaxInProgressShards;
+    }
+    if (fulltextShards > maxShardsInPath) {
+        fulltextShards = maxShardsInPath;
+    }
+    // rowid is bitreverse-sequential, so it uses the whole uint64 range, so we can use uniform partitioning
+    op.SetUniformPartitionsCount(fulltextShards);
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
 
@@ -640,6 +664,55 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "CreateBuildFulltextRowIdSrcPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
+    return propose;
+}
+
+// Copy compact fulltext index table partition boundaries from the 0build table
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterIndexPartitioningPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildFulltextCompact(), "Unknown operation kind while building AlterIndexPartitioningPropose");
+
+    auto implPath = GetBuildPath(ss, buildInfo, NTableIndex::ImplTable);
+    TTableInfo::TPtr implTable = ss->Tables.at(implPath->PathId);
+    auto buildPath = GetBuildPath(ss, buildInfo, TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
+    TTableInfo::TPtr buildTable = ss->Tables.at(buildPath->PathId);
+
+    if (implTable->GetPartitions().size() > 1 ||
+        buildTable->GetPartitions().size() <= 1) {
+        return nullptr;
+    }
+
+    auto implShardIdx = implTable->GetPartitions()[0]->ShardIdx;
+    auto implTabletId = ss->ShardInfos.at(implShardIdx).TabletID;
+
+    if (!implTable->GetStats().PartitionStats.contains(implShardIdx) ||
+        implTable->GetStats().PartitionStats.at(implShardIdx).ShardState != NKikimrTxDataShard::Ready) {
+        // implTable shard is not Ready - the index is likely so small that
+        // the datashard didn't even have time to report its first PeriodicTableStats
+        // just skip pre-sharding in this case too
+        return nullptr;
+    }
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+
+    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+    modifyScheme.SetInternal(true);
+
+    auto& splitMerge = *modifyScheme.MutableSplitMergeTablePartitions();
+    splitMerge.SetTablePath(implPath.PathString());
+    splitMerge.AddSourceTabletId(ui64(implTabletId));
+
+    const auto& parts = buildTable->GetPartitions();
+    for (size_t i = 0; i < parts.size() - 1; i++) {
+        splitMerge.AddSplitBoundary()->SetSerializedKeyPrefix(parts[i]->EndOfRange);
+    }
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "AlterIndexPartitioningPropose " << buildInfo.Id << " " << propose->Record.ShortDebugString());
     return propose;
 }
 
@@ -2828,6 +2901,34 @@ public:
                 Progress(BuildId);
             }
             break;
+        case TIndexBuildInfo::EState::AlterIndexTable: {
+            Y_ENSURE(buildInfo.IsBuildFulltextCompact());
+            if (buildInfo.ApplyTxId == InvalidTxId) {
+                AllocateTxId(BuildId);
+                break;
+            } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
+                auto ev = AlterIndexPartitioningPropose(Self, buildInfo);
+                if (ev) {
+                    Send(Self->SelfId(), std::move(ev), 0, ui64(BuildId));
+                    break;
+                }
+            } else if (!buildInfo.ApplyTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                break;
+            }
+
+            buildInfo.ApplyTxId = {};
+            buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+            buildInfo.ApplyTxDone = false;
+
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistBuildIndexApplyTx(db, buildInfo);
+
+            // Next step is FulltextDictionary, previous was LockBuild
+            ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+            Progress(BuildId);
+            break;
+        }
         case TIndexBuildInfo::EState::ProvisioningRowIdColumn: {
             if (!buildInfo.RowIdColumnBuildId) {
                 // Mint the child build id (assigned + child created in the AllocateResult handler).
@@ -3050,7 +3151,11 @@ public:
                 NIceDb::TNiceDb db(txc.DB);
                 Self->PersistBuildIndexApplyTx(db, buildInfo);
 
-                ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                if (buildInfo.IsBuildFulltextCompact()) {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::AlterIndexTable);
+                } else {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                }
                 Progress(BuildId);
             }
             break;
@@ -4117,6 +4222,7 @@ public:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::AlterSequence:
+        case TIndexBuildInfo::EState::AlterIndexTable:
         case TIndexBuildInfo::EState::PrepareValidation:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
@@ -4330,13 +4436,21 @@ public:
             }
             break;
         }
+        case TIndexBuildInfo::EState::AlterIndexTable: {
+            // Failure to pre-shard the final index table is non-critical, we just proceed as is
+            Y_ENSURE(txId == buildInfo.ApplyTxId, state);
+
+            buildInfo.ApplyTxDone = true;
+            Self->PersistBuildIndexApplyTx(db, buildInfo);
+            break;
+        }
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::AlterSequence:
         case TIndexBuildInfo::EState::PrepareValidation:
         {
-            Y_ENSURE(txId == buildInfo.ApplyTxId);
+            Y_ENSURE(txId == buildInfo.ApplyTxId, state);
 
             if (shouldRetry()) {
                 buildInfo.ApplyTxId = InvalidTxId;
@@ -4596,6 +4710,7 @@ public:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::AlterSequence:
+        case TIndexBuildInfo::EState::AlterIndexTable:
         case TIndexBuildInfo::EState::PrepareValidation:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:

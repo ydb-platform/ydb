@@ -85,6 +85,8 @@ std::vector<std::string> TClusterDirectoryBase<TConnection>::GetClusterNames() c
 template <std::derived_from<NApi::IConnection> TConnection>
 void TClusterDirectoryBase<TConnection>::RemoveCluster(const std::string& name)
 {
+    TConnectionPtr removedConnection;
+
     {
         auto guard = Guard(Lock_);
         auto nameIt = NameToCluster_.find(name);
@@ -93,7 +95,7 @@ void TClusterDirectoryBase<TConnection>::RemoveCluster(const std::string& name)
         }
         const auto& cluster = nameIt->second;
         auto cellTags = GetCellTags(cluster);
-        cluster.Connection->Terminate();
+        removedConnection = std::move(cluster.Connection);
         if (auto tvmId = cluster.Connection->GetTvmId()) {
             auto tvmIdsIt = ClusterTvmIds_.find(*tvmId);
             YT_VERIFY(tvmIdsIt != ClusterTvmIds_.end());
@@ -109,7 +111,14 @@ void TClusterDirectoryBase<TConnection>::RemoveCluster(const std::string& name)
             .With("CellTags", cellTags);
     }
 
-    OnClusterUnregistered_.Fire(name);
+    {
+        NConcurrency::TForbidContextSwitchGuard guard;
+        OnClusterUnregistered_.Fire(name);
+    }
+
+    if (removedConnection) {
+        removedConnection->Terminate();
+    }
 }
 
 template <std::derived_from<NApi::IConnection> TConnection>
@@ -129,6 +138,8 @@ TError TClusterDirectoryBase<TConnection>::TryUpdateCluster(const std::string& n
 {
     try {
         auto Logger = HiveClientLogger;
+
+        TConnectionPtr connectionToTerminate;
 
         bool fire = false;
         auto addNewCluster = [&] (const TCluster& cluster) {
@@ -162,7 +173,7 @@ TError TClusterDirectoryBase<TConnection>::TryUpdateCluster(const std::string& n
                 auto cluster = CreateCluster(name, connectionConfig);
                 auto oldTvmId = nameIt->second.Connection->GetTvmId();
                 auto oldCellTags = GetCellTags(nameIt->second);
-                nameIt->second.Connection->Terminate();
+                connectionToTerminate = std::move(nameIt->second.Connection);
                 for (auto cellTag : oldCellTags) {
                     CellTagToCluster_.erase(cellTag);
                 }
@@ -181,7 +192,11 @@ TError TClusterDirectoryBase<TConnection>::TryUpdateCluster(const std::string& n
         }
 
         if (fire) {
+            NConcurrency::TForbidContextSwitchGuard guard;
             OnClusterUpdated_.Fire(name, connectionConfig);
+        }
+        if (connectionToTerminate) {
+            connectionToTerminate->Terminate();
         }
     } catch (const std::exception& ex) {
         return TError(ex);

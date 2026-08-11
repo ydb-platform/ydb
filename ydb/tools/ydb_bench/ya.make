@@ -20,10 +20,6 @@ PEERDIR(
     ydb/tools/ydb_bench/lib
 )
 
-RECURSE(
-    benchmarks
-)
-
 END()
 
 RECURSE_FOR_TESTS(

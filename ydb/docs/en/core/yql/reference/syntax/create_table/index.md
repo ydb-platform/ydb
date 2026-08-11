@@ -48,7 +48,7 @@ When choosing a name for the table, consider the common [schema object naming ru
 
 ### IF NOT EXISTS
 
-If the table with the specified name already exists, the execution of the operator is completely skipped — no checks or schema matching is performed, and no error occurs. Note that the existing table may differ in structure from the one you would like to create with this query — no comparison or equivalence check is performed.
+If a table with the specified name already exists, the statement execution is completely skipped — no checks or schema matching are performed, and no error occurs. Note that the existing table may differ in structure from the one you intended to create with this query — no comparison or equivalence check is performed.
 
 ### column_name
 
@@ -64,7 +64,14 @@ The data type of the column. The complete list of data types supported by {{ ydb
 
 ### INDEX
 
-Definition of an index on the table. [Secondary indexes](secondary_index.md), [vector indexes](vector_index.md), [fulltext indexes](fulltext_index.md), and [Bloom skip indexes](bloom_skip_index.md) are supported.
+Index definition on the table. Supported:
+
+* [secondary indexes](secondary_index.md),
+* [vector indexes](vector_index.md),
+* [full-text indexes](fulltext_index.md),
+* [Bloom indexes](bloom_skip_index.md),
+* [min-max index](min_max_index.md),
+* [JSON indexes](json_index.md).
 
 ### PRIMARY KEY
 
@@ -123,7 +130,7 @@ Creating and filling a table with data from a `SELECT` query. For more informati
 
 {% list tabs %}
 
-- Creating a row-oriented table
+- Creating a row table
 
   {% if feature_column_container_type %}
 
@@ -203,7 +210,8 @@ Creating and filling a table with data from a `SELECT` query. For more informati
 
   {% endif %}
 
-  Example of creating a row-oriented table using partitioning options:
+  Example of creating a row table using partitioning options:
+
 
   ```yql
   CREATE TABLE <table_name> (
@@ -319,7 +327,7 @@ When creating row-oriented tables, it is possible to specify:
 * [Additional parameters](with.md).
 * [Creating a table filled with query results](as_select.md).
 
-When creating column-oriented tables, it is possible to specify:
+When creating column tables, you can specify:
 
 * [A Bloom skip index](bloom_skip_index.md).
 * [Column groups](family.md).

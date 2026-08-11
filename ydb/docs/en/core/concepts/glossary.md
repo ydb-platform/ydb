@@ -4,7 +4,7 @@ This article is an overview of terms and definitions used in {{ ydb-short-name }
 
 ## Key terminology {#key-terminology}
 
-This section explains terms that are useful to any person working with {{ ydb-short-name }} regardless of their role and use case.
+This section describes terms that are useful to anyone working with {{ ydb-short-name }}, regardless of their role or usage scenario.
 
 ### Cluster {#cluster}
 
@@ -82,11 +82,11 @@ In {{ ydb-short-name }}, actors with the reliably persisted state are called [ta
 
 ### Tablet {#tablet}
 
-A **tablet** is one of {{ ydb-short-name }}'s primary building blocks and abstractions. It is an entity responsible for a relatively small segment of user or system data. Typically, a tablet manages up to single-digit gigabytes of data, but some kinds of tablets can handle more.
+A **tablet** is one of the core building blocks and abstractions of {{ ydb-short-name }}. It represents an entity responsible for a relatively small segment of user or system data. Typically, a tablet manages up to several gigabytes of data, but some types of tablets can handle larger volumes.
 
 For example, a [row-oriented user table](#row-oriented-table) is managed by one or more [DataShard](#data-shard) tablets, with each tablet responsible for a continuous range of [primary keys](#primary-key) and the corresponding data.
 
-End users sending queries to a {{ ydb-short-name }} cluster aren't expected to know much about tablets, their kinds, or how they work, but it might still be helpful, for example, for performance optimizations.
+End users sending queries to a {{ ydb-short-name }} cluster for execution do not need to know the details of tablets, their types, or how they work, but this knowledge can be useful, for example, for performance optimization.
 
 Technically, tablets are [actors](#actor) with a persistent state reliably saved in [Distributed Storage](#distributed-storage). This state allows the tablet to continue operating on a different [database node](#database-node) if the previous one is down or overloaded.
 
@@ -96,9 +96,9 @@ Technically, tablets are [actors](#actor) with a persistent state reliably saved
 
 {{ ydb-short-name }} implements **transactions** on two main levels:
 
-* [Local database](#local-database) and the rest of [tablet infrastructure](#tablet-implementation) allow [tablets](#tablet) to manipulate their state using **local transactions** with [serializable isolation level](https://en.wikipedia.org/wiki/Isolation_%28database_systems%29#Serializable). Technically, they aren't really local to a single node as such a state persists remotely in [Distributed Storage](#distributed-storage).
-* In the context of {{ ydb-short-name }}, the term **distributed transactions** usually refers to transactions involving multiple tablets. For example, cross-table or even cross-row transactions are often distributed.
-* **Single-shard** transactions span a single tablet and are faster to complete. For example, transactions between rows in the same table partition are often single-shard.
+* [Local database](#local-database) and the rest of the [tablet infrastructure](#tablet-implementation) allow [tablets](#tablet) to manipulate their state using **local transactions** with [serializable isolation level](https://en.wikipedia.org/wiki/Isolation_(database_systems)#Serializable). Technically, they are not local to a single node, since this state is stored remotely in [distributed storage](#distributed-storage).
+* In the context of {{ ydb-short-name }}, the term **distributed transactions** usually refers to transactions that span multiple tablets. For example, transactions between tables or even rows of a single table are often distributed.
+* **Single-shard** transactions cover a single tablet and execute faster. For example, transactions between rows of a single table partition are often single-shard.
 
 Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
@@ -114,7 +114,7 @@ Logical connections to the database that store the context needed to execute que
 
 ### Client-side timeout {#client-timeout}
 
-A **client-side timeout** or **client timeout** is a time limit on how long an application or the {{ ydb-short-name }} SDK waits for a database operation to complete (for example, query execution or receiving a response over gRPC). When this time expires, the client usually stops waiting: it closes the connection or data stream and receives a transport or SDK error — before the server has returned an explicit response (see {{ ydb-short-name }} server response [status codes](../reference/ydb-sdk/ydb-status-codes.md)).
+**Client-side timeout** is a time limit that an application or {{ ydb-short-name }} SDK waits for a database operation to complete (for example, executing a query or receiving a response to a gRPC call). When this time expires, the client usually aborts the wait: closes the connection or data stream, receives an error from the transport or SDK — before the server has had a chance to return an explicit response (see [codes](../reference/ydb-sdk/ydb-status-codes.md) of {{ ydb-short-name }} server responses).
 
 If the client-side timeout is shorter than the query execution time on the {{ ydb-short-name }} side, a query interrupted on the client may continue running on the server for some time due to how queries are processed in the cluster. If this happens at scale, the server becomes overloaded with queries whose responses the client no longer waits for. Therefore, frequently retrying the same query immediately after a timeout can worsen overload. For more information, see [{#T}](../troubleshooting/performance/queries/retry-cascade.md) and [{#T}](../troubleshooting/performance/queries/overloaded-errors.md); SDK retry policies are described in [{#T}](../reference/ydb-sdk/error_handling.md).
 
@@ -146,13 +146,13 @@ A monotonically increasing lower bound on event times in a [streaming query](#st
 
 #### Availability zones and regions {#regions-az}
 
-An **availability zone** is a data center or an isolated segment thereof with minimal physical distance between nodes and minimal risk of failure at the same time as other availability zones. Thus, availability zones are expected not to share any infrastructure like power, cooling, or external network connections.
+An **availability zone** is a data center or its isolated segment with minimal physical distance between nodes and minimal risk of failure simultaneously with other availability zones. Thus, availability zones should not share common infrastructure such as power, cooling, or external network connections.
 
-A **region** is a large geographic area containing multiple availability zones. The distance between availability zones in the same region is expected to be around 500 km or less. {{ ydb-short-name }} performs synchronous data writes to each availability zone in a region, ensuring reasonable latencies and uninterrupted performance if an availability zone fails.
+A **region** is a large geographic area containing multiple availability zones. The distance between availability zones in a region should be about 500 km or less. {{ ydb-short-name }} writes data to each availability zone in the region synchronously, ensuring reasonable latency and uninterrupted operation in the event of a failure of one of the availability zones.
 
 #### Rack {#rack}
 
-A **rack** or **server rack** is a piece of equipment used to mount multiple servers in an organized manner. Servers in the same rack are more likely to become unavailable simultaneously due to rack-wide issues related to electricity, cooling, etc. Thus, {{ ydb-short-name }} can consider information about which server is located in which rack when placing each piece of data in bare-metal environments.
+**Rack** or **server rack** is equipment used to organize the placement of multiple servers. Servers in the same rack are more likely to become unavailable simultaneously due to rack-level issues related to power, cooling, etc. {{ ydb-short-name }} can take into account information about which server is in which rack when placing each data fragment in environments based on physical servers.
 
 #### Pile {#pile}
 
@@ -201,7 +201,7 @@ The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate n
 
 #### Fulltext index {#fulltext-index}
 
-**Fulltext index** is an additional data structure used to speed up text search in a table column by words and phrases (and, with n-grams, by substrings).
+A **full-text index** is an additional data structure used to speed up text search across a table column (by words and phrases, and, when using N-grams, by substrings).
 
 The fulltext search capabilities and index parameters are described in [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 
@@ -217,25 +217,29 @@ A Bloom filter is a [probabilistic data structure](https://en.wikipedia.org/wiki
 
 A local Bloom skip index is a kind of [local index](#local-index): a probabilistic column-value filter based on a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) that speeds up selective queries by skipping data fragments that cannot contain the requested value. See [Bloom skip indexes](../dev/bloom-skip-indexes.md) and [local indexes](query_execution/local_indexes.md).
 
+#### Local min_max index {#local-min-max-index}
+
+A local min_max index is a special case of a [local index](#local-index): a range filter that stores the minimum and maximum value of one column for each data fragment and skips fragments whose range cannot satisfy the query predicate. For more details: [min_max index](../dev/min_max-skip-index.md), [local indexes](query_execution/local_indexes.md).
+
 #### Column family {#column-family}
 
 A **column family** or **column group** is a feature that allows storing a subset of [row-oriented table](#row-oriented-table) columns separately in a distinct family or group. The primary use case is to store some columns on different kinds of disk drives (offload less important columns to HDD) or with various compression settings. If the workload requires many column families, consider using [column-oriented tables](#column-oriented-table) instead.
 
 #### Column encoding {#column-encoding}
 
-**Column encoding** is a mechanism for optimizing data storage in table columns that reduces disk usage and can speed up some operations.
+**Column encoding** is a mechanism for optimizing data storage in table columns that reduces disk space usage and speeds up some operations.
 
 #### Time to Live {#ttl}
 
 **Time to live** or **TTL** is a mechanism for automatically removing old rows from a table asynchronously in the background. It is explained in a separate article [{#T}](ttl.md).
 
-### View {#view}
+### Representation {#view}
 
-A **view** is a way to save a query and access its results as if they were a real table. The view itself stores no data except the query text. The query stored in the view is executed on every SELECT from it, generating the returned result. Any changes in the tables referenced by the view are immediately reflected in read results from it.
+A **view** is a way to save a query and access its results as if they were a real table. The view itself does not store data, except for the query text. The query stored in the view is executed on each SELECT from it, generating the returned result. Any changes to the tables referenced by the view are immediately reflected in the results of reading from it.
 
 {% if feature_view %}
 
-There are user-defined and system-defined views.
+Views can be user-defined or system.
 
 #### User-defined view {#user-view}
 
@@ -249,13 +253,13 @@ There are user-defined and system-defined views.
 
 ### Topic {#topic}
 
-A **topic** is a persistent queue that can be used for reliable asynchronous communications between various systems via message passing. {{ ydb-short-name }} provides the infrastructure to ensure "exactly once" semantics in such communications, which ensures that there are both no lost messages and no accidental duplicates.
+A **message queue** is used for reliable asynchronous communication between different systems by passing messages. {{ ydb-short-name }} provides infrastructure that ensures "exactly once" semantics in such communications. Using it, you can guarantee that no messages are lost and no random duplicates occur.
 
 Several terms related to topics are listed below. How {{ ydb-short-name }} topics work is explained in more detail in a separate article [{#T}](datamodel/topic.md).
 
 #### Partition {#partition}
 
-For horizontal scaling purposes, topics are divided into separate elements called **partitions**. Thus, a partition is a unit of parallelism within a topic. Messages inside each partition are ordered.
+For horizontal scaling, topics are divided into separate elements called **partitions**. Thus, partitions are the unit of parallelism within a topic. Messages within each partition are ordered.
 
 However, subsets of data managed by a single [data shard](#data-shard) or [column shards](#column-shard) can also be called partitions.
 
@@ -289,8 +293,8 @@ For more information, see [{#T}](datamodel/backup-collection.md).
 
 A **backup** is a copy of data at a specific point in time that can be used to restore the data. In the context of [backup collections](#backup-collection), there are two types:
 
-- **Full backup**: A complete snapshot of all data in the collection. Serves as the foundation for [backup chains](#backup-chain) and can be restored independently.
-- **Incremental backup**: Captures only changes (inserts, updates, deletes) since the previous backup. Requires the entire backup chain for restoration.
+- **Full backup**: A complete snapshot of all data in the collection. Serves as the basis for [backup chains](#backup-chain) and can be restored independently.
+- **Incremental backup**: Captures only changes (inserts, updates, deletes) since the previous backup. Requires the entire chain of backups for recovery.
 
 #### Backup chain {#backup-chain}
 
@@ -308,7 +312,7 @@ A **replicated object** is an object (for example, a table) for which asynchrono
 
 #### Replica object {#replica-object}
 
-A **replica object** is a mirror copy of the replicated object, automatically created by an asynchronous replication instance. As a rule, it is read-only.
+A **replica object** is a "mirror copy" of the replicated object, automatically created by the asynchronous replication instance. Typically, it is read-only.
 
 {% endif %}
 
@@ -346,7 +350,7 @@ A **resource pool classifier** is an object used to control how queries are dist
 
 ### Federated queries {#federated-queries}
 
-**Federated queries** is a feature that allows querying data stored in systems external to the {{ ydb-short-name }} cluster.
+**Federated queries** are functionality that allows you to run queries against data stored in systems external to the {{ ydb-short-name }} cluster.
 
 A few terms related to federated queries are listed below. How {{ ydb-short-name }} federated queries work is explained in more detail in a separate article [Federated query](query_execution/federated_query/index.md).
 
@@ -374,11 +378,19 @@ A **{{ ydb-short-name }} cluster scheme** is a hierarchical namespace of a {{ yd
 
 ### Database scheme {#scheme-database}
 
-A **database scheme** is a subset of the hierarchical namespace of a {{ ydb-short-name }} cluster that belongs to a database.
+**Client certificate** — a [digital certificate](https://en.wikipedia.org/wiki/X.509) issued and used by a client — an application, user, or [node {{ ydb-short-name }}](#node) — for [device authentication](../security/authentication.md#device-auth) at the TLS connection stage and for [client certificate authentication](../security/authentication.md#client-certificate) at the request level.
+
+### Cluster schema {#scheme}
+
+The **{{ ydb-short-name }} cluster schema** is the hierarchical namespace of the {{ ydb-short-name }} cluster. The top-level element of this namespace is the [cluster schema root](#scheme-root). The child elements of the cluster schema root are [databases](#database). Inside each database, you can create an arbitrary hierarchy of [objects](#scheme-object) (tables, topics, etc.) using nested directories.
+
+### Database schema {#scheme-database}
+
+A **database schema** is a subset of the cluster's hierarchical namespace that belongs to the database.
 
 ### Database root {#scheme-database-root}
 
-A **database root** is a path to a database in a {{ ydb-short-name }} cluster scheme.
+A **database root** is the path to the database in the cluster schema.
 
 ### Scheme root {#scheme-root}
 
@@ -394,7 +406,7 @@ For organizational convenience, scheme objects form a hierarchy using [folders](
 
 As in file systems, a **folder** or **directory** is a container for [scheme objects](#scheme-object).
 
-Folders can contain subfolders, and this nesting can have arbitrary depth.
+Folders can contain subfolders, and such nesting can be of arbitrary depth.
 
 ### Access object {#access-object}
 
@@ -423,7 +435,10 @@ An **access control list** or **ACL** is a list of all [rights](#access-right) g
 
 An **access level** determines additional privileges of an [access subject](#access-subject) for [scheme objects](#scheme-object) as well as privileges that are not related to [scheme objects](#scheme-object).
 
-{{ ydb-short-name }} uses hierarchical access levels:
+- Database.
+- Viewer.
+- Monitoring.
+- Administration.
 
 - Database;
 - Viewer;
@@ -448,10 +463,10 @@ An **[owner](../security/authorization.md#owner)** is an [access subject](#acces
 
 A **[user](../security/authorization.md#user)** is an individual utilizing {{ ydb-short-name }} to perform a specific function.
 
-{{ ydb-short-name }} has the following types of users depending on their source:
+In {{ ydb-short-name }}, there are different types of users depending on the method of creation:
 
-- local users in {{ ydb-short-name }} databases
-- external users from third-party directory services
+- Local users in {{ ydb-short-name }} databases.
+- External users from third-party directories.
 
 {{ ydb-short-name }} users are identified by their [SIDs](#access-sid).
 
@@ -461,7 +476,7 @@ A **local user** is an individual whose {{ ydb-short-name }} account is created 
 
 #### External user {#external-user}
 
-An **external user** is an individual whose {{ ydb-short-name }} account is created in a third-party directory service, for example, in LDAP or IAM.
+A {{ ydb-short-name }} user whose account is created in a third-party directory, for example, an LDAP directory or IAM system.
 
 ### Group {#access-group}
 
@@ -529,19 +544,19 @@ The tablet solves the same problem as the [Paxos](https://en.wikipedia.org/wiki/
 
 During execution, the tablet state machine is managed by three components:
 
-1. The generic tabular part ensures the log's consistency and recovery in case of failures.
-2. **Executor** is an abstraction of a local database, namely data structures and code that arrange work with the data stored by the tablet.
-3. An [actor](#actor) with a custom code that implements the specific logic of a specific tablet type.
+1. The common tablet part ensures log consistency and recovery in case of failures.
+2. An **executor** is an abstraction of the local database, namely the data structures and code that organize work with data stored by the tablet.
+3. An actor with user code that implements the specific logic of a particular tablet type.
 
 In {{ ydb-short-name }}, there are multiple kinds of specialized tablets storing all kinds of data for all sorts of tasks. Many {{ ydb-short-name }} features like [tables](#table) and [topics](#topic) are implemented as specific tablets. Thus, reusing tablet infrastructure is one of the key means of {{ ydb-short-name }} extensibility as a platform.
 
-Usually, there are orders of magnitude more tablets running in a {{ ydb-short-name }} cluster compared to processes or threads that other systems would use for a similarly sized cluster. There can easily be hundreds of thousands to millions of tablets working simultaneously in a {{ ydb-short-name }} cluster.
+Typically, a {{ ydb-short-name }} cluster runs orders of magnitude more tablets than the processes or threads that other systems would use for a cluster of similar size. In a {{ ydb-short-name }} cluster, hundreds of thousands and millions of tablets can easily run simultaneously.
 
 Since the tablet stores its state in [Distributed storage](#distributed-storage), it can be (re)started on any node of the cluster. Tablets are identified using [TabletID](#tabletid), a 64-bit number assigned when creating a tablet.
 
 ### Tablet leader {#tablet-leader}
 
-A **tablet leader** is the current active leader of a given tablet. The tablet leader accepts commands, assigns them an order, and confirms them to the outside world. It is guaranteed that there is no more than one leader for a given tablet at any moment.
+**Tablet leader** is the current active leader of a given tablet. The tablet leader accepts commands, assigns them an order, and confirms them to the outside world. It is guaranteed that at any moment there is at most one leader for each tablet.
 
 ### Tablet candidate {#tablet-candidate}
 
@@ -551,16 +566,16 @@ A **tablet candidate** is one of the election participants who wants to become a
 
 A **tablet follower** or **hot standby** is a copy of a [tablet leader](#tablet-leader) that applies the log of commands accepted by the leader (with some lag). A tablet can have zero or more followers. Followers serve two primary purposes:
 
-* In case of the leader's termination or failure, followers are the preferred [candidates](#tablet-candidate) to become the new leader because they can become the leader much faster than other candidates since they have applied most of the log.
-* Followers can respond to read-only queries if a client explicitly chooses the optional relaxed transaction mode that allows for stale reads.
+* In case the leader terminates or fails, replicas are preferred [candidates](#tablet-candidate) for the new leader, as they can become the leader much faster than other candidates because they have applied most of the log.
+* Replicas can respond to read-only requests if the client explicitly opts into an optional relaxed transaction mode that allows stale reads.
 
 ### Tablet generation {#tablet-generation}
 
-A **tablet generation** is a number identifying the reincarnation of the tablet leader. It changes only when a new leader is chosen and always grows.
+**Tablet generation** is a number that identifies the reincarnation of the tablet leader. It changes only when a new leader is selected and always increases.
 
 ### Tablet local database {#local-database}
 
-A **tablet local database** or **local database** is a set of data structures and related code that manages the tablet's state and the data it stores. Logically, the local database state is represented by a set of tables very similar to relational tables. Modification of the state of the local database is performed by local tablet transactions generated by the tablet's user actor.
+**Tablet local database** or **local database** is a set of data structures and associated code that manage the state of a tablet and the data it stores. Logically, the state of the local database is represented by a set of tables, very similar to relational tables. Modifications to the state of the local database are performed by local tablet transactions created by the tablet's user actor.
 
 Each local database table is stored using the [LSM tree](#lsm-tree) data structure.
 
@@ -622,7 +637,7 @@ A **column shard** or **ColumnShard** is a tablet that stores a data segment of 
 
 #### KV Tablet {#kv-tablet}
 
-A **KV Tablet** or **key-value tablet** is a tablet that implements a simple key->value mapping, where keys and values are strings. It also has a number of specific features, like locks.
+**KeyValue** or **KV Tablet** is a tablet that implements a simple key → value mapping, where keys and values are strings. It also has several specific features, such as locks.
 
 #### PQ Tablet {#pq-tablet}
 
@@ -705,17 +720,23 @@ A **State storage** or **StateStorage** is a distributed service that stores inf
 
 State storage is used as a name service for resolving tablets, i.e., getting [ActorId](#actorid) by [TabletID](#tabletid). StateStorage is also used in the process of electing the [tablet leader](#tablet-leader).
 
-Information in state storage is volatile. Thus, it is lost when the power is turned off, or the process is restarted. Despite the name, this service is not persistent storage. It contains only information that is easily recoverable and does not have to be durable. However, state storage keeps information on several nodes to minimize the impact of node failures. Through this service, it is possible to gather a quorum, which is used to elect tablet leaders.
+The information in the state storage is volatile. Thus, it is lost on power failure or process restart. Despite the name, this service is not a permanent long-term storage. It contains only information that is easy to recover and that does not need to be durable. However, the state storage stores information on multiple nodes to minimize the impact of node failures. This service can also be used to gather a quorum, which is used for selecting tablet leaders.
 
-Due to its nature, the state storage service operates in a best-effort manner. For example, the absence of several tablet leaders is guaranteed through the leader election protocol on [distributed storage](#distributed-storage), not state storage.
+Due to its nature, the state storage service operates on a best-effort basis. For example, the absence of multiple tablet leaders is guaranteed through the leader election protocol on [distributed storage](#distributed-storage), not on state storage.
+
+For more details on the structure of StateStorage and related subsystems, see the section Metadata distribution services.
 
 ### Board {#board}
 
 **Board** is a distributed service for storing metadata as key-value pairs. It is used, among other things, to store information about [endpoints](connect.md#endpoint).
 
-### Scheme board {#scheme-board}
+For more details on the structure of Board and related subsystems, see the section Metadata distribution services.
 
-**SchemeBoard** is a distributed service for storing metadata as key-value pairs. It is used, among other things, to store information about [schemes](#global-schema).
+### SchemeBoard {#scheme-board}
+
+**SchemeBoard** is a distributed service designed to store metadata as key-value pairs. It is used, among other things, to store information about [schemas](#global-schema).
+
+For more details on the structure of SchemeBoard and related subsystems, see the section Metadata distribution services.
 
 #### Compaction {#compaction}
 
@@ -755,7 +776,7 @@ A **LogoBlobID** is the [LogoBlob](#logoblob) identifier in the [Distributed sto
 
 #### Replication {#replication}
 
-**Replication** is a process that ensures there are always enough copies (replicas) of data to maintain the desired availability characteristics of a {{ ydb-short-name }} cluster. Typically, it is used in geo-distributed {{ ydb-short-name }} clusters.
+**Replication** is a process that ensures there are enough copies (replicas) of data to maintain the desired availability characteristics of a {{ ydb-short-name }} cluster. It is typically used in geo-distributed clusters {{ ydb-short-name }}.
 
 #### Erasure Coding {#erasure-coding}
 
@@ -781,11 +802,7 @@ A **Skeleton** is an [actor](#actor) that provides an interface to a [VDisk](#vd
 
 #### SkeletonFront {#skeletonfront}
 
-**SkeletonFront** is a proxy actor for Skeleton that controls the flow of messages coming to Skeleton.
-
-#### Distributed storage controller {#ds-controller}
-
-The **distributed storage controller** or **DS controller** manages the dynamic configuration of distributed storage, including information about [PDisks](#pdisk), [VDisks](#vdisk), and [storage groups](#storage-group). It interacts with [node wardens](#node-warden) to launch various distributed storage components. It interacts with [Hive](#hive) to allocate [channels](#channel) to [tablets](#tablet).
+**SkeletonFront** is a proxy actor for Skeleton that controls the flow of messages coming into Skeleton.
 
 #### Proxy {#ds-proxy}
 
@@ -809,7 +826,7 @@ A **fail domain** is a set of hardware that may fail simultaneously. The correla
 
 For example, a fail domain includes disks on the same server, as all server disks may become unavailable if the server's PSU or network controller fails. A fail domain also typically includes servers located in the same server rack, as all the hardware in the rack may become unavailable if there is a power outage or an issue with the network hardware in the same rack. Thus, the typical fail domain corresponds to a server rack if the [cluster](#cluster) is configured to be rack-aware, or to a server otherwise.
 
-Domain failures are handled automatically by {{ ydb-short-name }} without shutting down the cluster.
+Failures at the failure domain level are automatically handled by {{ ydb-short-name }} without stopping the cluster.
 
 #### Distributed storage channel {#channel}
 
@@ -824,11 +841,11 @@ Terms related to the implementation of [distributed transactions](#transactions)
 
 #### Deterministic transactions {#deterministic-transactions}
 
-{{ ydb-short-name }} distributed transactions are inspired by the research paper [Building Deterministic Transaction Processing Systems without Deterministic Thread Scheduling](http://cs-www.cs.yale.edu/homes/dna/papers/transactions-wodet11.pdf) by Alexander Thomson and Daniel J. Abadi from Yale University. The paper introduced the concept of **deterministic transaction** processing, which allows for highly efficient distributed processing of transactions. The original paper imposed limitations on what kinds of operations can be executed in this manner. As these limitations interfered with real-world user scenarios, {{ ydb-short-name }} evolved its algorithms to overcome them by using deterministic transactions as stages of executing user transactions with additional orchestration and locking.
+Distributed transactions in {{ ydb-short-name }} are inspired by the research paper [Building Deterministic Transaction Processing Systems without Deterministic Thread Scheduling](http://cs-www.cs.yale.edu/homes/dna/papers/transactions-wodet11.pdf) by Alexander Thomson and Daniel J. Abadi from Yale University. The paper introduced the concept of **deterministic transaction processing**, which allows efficient processing of distributed transactions. The original paper imposed restrictions on the types of operations that could be performed in this way. Since these restrictions hindered real user scenarios, {{ ydb-short-name }} developed algorithms to overcome these restrictions, using deterministic transactions as stages of user transaction execution with additional orchestration and locking.
 
 #### Optimistic locking {#optimistic-locking}
 
-As in many other database management systems, {{ ydb-short-name }} queries can put locks on certain pieces of data, like table rows, to ensure that concurrent access does not modify them into an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the beginning of transactions but during commit attempts. The former is called **pessimistic locking** (used in PostgreSQL, for example), while the latter is called **optimistic locking** (used in {{ ydb-short-name }}).
+As in many other database management systems, {{ ydb-short-name }} queries can place locks on specific data fragments, such as table rows, to ensure that concurrent changes do not bring them into an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the beginning of transactions, but when attempting to commit them. The first approach is called **pessimistic locking** (for example, used in PostgreSQL), and the second is called **optimistic locking** (used in {{ ydb-short-name }}).
 
 #### Transaction lock invalidation {#tli}
 
@@ -840,13 +857,13 @@ The **prepare stage** is a phase of distributed transaction execution, during wh
 
 #### Execute stage {#execute-stage}
 
-The **execute stage** is a phase of distributed query execution in which the scheduled transaction is executed and the response is generated.
+**Execution phase** is a transaction phase during which the scheduled transaction is executed and a response is generated.
 
 In some cases, instead of [prepare](#prepare-stage) and execute, the transaction is immediately executed, and a response is generated.  For example, this happens for transactions involving only one shard or consistent reads from a snapshot.
 
 #### Dirty operations {#dirty-operations}
 
-In the case of read-only transactions, similar to "read uncommitted" in other database management systems, it might be necessary to read data that has not yet been committed to disk. This is called **dirty operations**.
+In the case of read-only transactions, similar to "read uncommitted" in other database management systems, it may be necessary to read data that has not yet been committed to disk. This is called **dirty operations**.
 
 #### Read-write set {#rw-set}
 
@@ -866,7 +883,7 @@ The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execu
 
 #### Transaction ID {#txid}
 
-**Transaction ID** or **TxID** is a unique identifier assigned to each transaction when it is accepted by {{ ydb-short-name }}.
+**TxID** is a unique identifier assigned to each transaction when it is accepted {{ ydb-short-name }}.
 
 #### Transaction order ID {#transaction-order-id}
 
@@ -874,11 +891,11 @@ A **transaction order ID** is a unique identifier assigned to each transaction d
 
 #### PlanStep {#planstep}
 
-**PlanStep** or **step** is the logical time for which a set of transactions is planned to be executed.
+**PlanStep** or **Step** is the logical time at which a set of transactions is scheduled to execute.
 
 #### Mediator time {#mediator-time}
 
-During the distributed query execution, **mediator time** is the logical time before which (inclusive) the shard participant must know the entire execution plan. It is used to advance the time in the absence of transactions on a particular shard, to determine whether it can read from a snapshot.
+During distributed transaction execution, **mediator time** is the logical time up to which (inclusive) a participant shard must know the entire execution plan. It is used to advance time when there are no transactions on a specific shard, to determine whether it can read from a snapshot.
 
 #### MiniKQL {#minikql}
 
@@ -888,7 +905,7 @@ MiniKQL is a low-level language. The system's end users only see queries in the 
 
 #### Query Processor {#kqp}
 
-**QP** or **Query Processor** (previously, **KQP**) is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
+**Query Processor** or **QP** (formerly **KQP**) is a component {{ ydb-short-name }} responsible for orchestrating the execution of user queries and generating the final response.
 
 ### Global schema {#global-schema}
 

@@ -1957,7 +1957,8 @@ THolder<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(
         case TRestoreSettings::EMode::Yql:
         case TRestoreSettings::EMode::BulkUpsert: {
             // Need only one accumulator to initialize query string
-            writer.Reset(CreateCompatWriter(dbPath, TableClient, accumulators[0].Get(), settings));
+            writer.Reset(CreateCompatWriter(dbPath, TableClient, QueryClient, accumulators[0].Get(), settings,
+                desc.GetStoreType() == EStoreType::Column));
             break;
         }
 

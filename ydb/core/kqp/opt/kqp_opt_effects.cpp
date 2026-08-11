@@ -252,16 +252,19 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
 
     if (enableCsWriteAffinity) {
         // Per-node write affinity: WriteActor (sink) is extracted into a separate
-        // TDqStage so it can be independently parallelized and assigned to the nodes
-        // hosting the target column shards.
+        // TDqStage so it can be independently parallelized (M tasks, one per node
+        // hosting column shards) and assigned via node affinity.
         //
-        //   Transform Stage (mapCn -> ToFlow)
-        //       | TDqCnMap
-        //   Sink Stage (ToFlow -> DqSink -> TKqpDirectWriteActor)
+        //   Transform Stage (mapCn -> ToFlow)         — 1 task (arbitrary node)
+        //       | TDqCnBroadcast                       — all rows sent to every Sink task
+        //   Sink Stage (ToFlow -> DqSink -> TKqpDirectWriteActor)  — M tasks, pinned to shard nodes
         //
-        // Transform stage: no explicit outputs list; the sink stage references its
-        // output via TDqOutput(Stage=transformStage, Index=0). This mirrors the
-        // stage-connection pattern used in the physical optimizer.
+        // Each Sink task receives all rows but only writes to its assigned shards
+        // (filtered by TargetShardIds in TShardedWriteController::FlushSerializer).
+        //
+        // Broadcast (not Map) is used so that the Sink Stage can have a different,
+        // independent task count (M) from the Transform Stage (1).  With Map the two
+        // stages would be forced into the same copy-group with equal task counts.
         auto transformStage = Build<TDqStage>(ctx, node.Pos())
             .Inputs()
                 .Add(mapCn)
@@ -275,7 +278,9 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
             .Settings().Build()
             .Done();
 
-        auto sinkInput = Build<TDqCnMap>(ctx, node.Pos())
+        // TDqCnBroadcast: sends all rows from the (single) Transform task to every
+        // Sink task.  This allows M Sink tasks while the Transform stage has 1 task.
+        auto sinkInput = Build<TDqCnBroadcast>(ctx, node.Pos())
             .Output<TDqOutput>()
                 .Stage(transformStage)
                 .Index().Build("0")

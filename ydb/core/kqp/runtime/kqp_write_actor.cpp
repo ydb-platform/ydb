@@ -2893,12 +2893,19 @@ public:
                 keyColumnTypes.push_back(typeInfoMod.TypeInfo);
             }
 
-            // Stage 7: Pass TargetShardIds from sink settings into the write controller.
+            // Pass TargetShardIds from sink settings into the write controller.
             // When non-empty, the controller will only write to the specified shards
-            // (rows destined for other shards are silently discarded).
+            // (rows destined for other shards are discarded — they belong to another task).
             THashSet<ui64> targetShardIds(
                 Settings.GetTargetShardIds().begin(),
                 Settings.GetTargetShardIds().end());
+
+            if (!targetShardIds.empty()) {
+                YDB_LOG_INFO("CsWriteAffinity: DirectWriteActor initialized with shard affinity",
+                    {"logPrefix", this->LogPrefix},
+                    {"targetShardCount", targetShardIds.size()},
+                    {"expectedNodeId", Settings.GetExpectedNodeId()});
+            }
 
             WriteTableActor = new TKqpTableWriteActor(
                 this,

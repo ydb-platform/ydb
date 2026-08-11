@@ -2406,9 +2406,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )";
 
         // Explain the CTAS query and inspect the physical plan. With the pragma
-        // enabled the WriteActor (sink) lives in its own TDqStage, so the plan
-        // contains exactly one more stage than without the pragma.
+        // enabled the WriteActor (sink) lives in its own TDqStage (connected via Broadcast),
+        // so the plan contains exactly one more stage than without the pragma.
         // Measured: 3 stages without the pragma, 4 stages with the pragma.
+        // With the pragma: the Sink stage is connected via "Broadcast" (not "Map"), allowing
+        // M independent tasks to be created on different nodes.
         {
             auto result = client.ExecuteQuery(
                 ctasQuery,
@@ -2431,6 +2433,16 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 "Expected " << expectedStages << " stages (EnableCsWriteAffinity="
                 << EnableCsWriteAffinity << "), got " << stages.size()
                 << ". Plan: " << *planStr);
+
+            if (EnableCsWriteAffinity) {
+                // With affinity, the sink stage must be connected via Broadcast (not Map),
+                // so it can be independently placed (M tasks, one per node with target shards).
+                // Verify by searching for "Broadcast" in the plan JSON.
+                const TString planText = TString(*planStr);
+                UNIT_ASSERT_C(planText.Contains("Broadcast"),
+                    "Expected 'Broadcast' connection in plan with EnableCsWriteAffinity=true."
+                    " Plan: " << planText);
+            }
         }
 
         // Execute CTAS query

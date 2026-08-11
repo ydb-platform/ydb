@@ -2,9 +2,12 @@
 
 **Цель**: Реализовать Per-Node shard affinity для CTAS (FillTable), где каждый WriteActor выполняется на ноде своих column shards.
 
-**Механизм включения**: `PRAGMA ydb.EnableCsWriteAffinity = "true";`
-- Без прагмы — текущее поведение (один WriteActor, произвольная нода)
-- С прагмой — множественные WriteActors с node affinity
+**Механизм включения**: `PRAGMA ydb.EnableCsWriteAffinity` (по умолчанию **включено**)
+- По умолчанию режим **включён** (`GetOrElse(true)` в обоих местах чтения).
+- Явно выключить: `PRAGMA ydb.EnableCsWriteAffinity = "false";`
+- ⚠️ На данный момент включён только **Этап 2** (разделение sink в отдельный stage).
+  Полноценный per-node affinity (несколько WriteActors на нодах своих шардов) появится
+  после Этапов 3–8; до этого «включённый» режим лишь добавляет отдельный sink-stage.
 
 **Принцип**: После каждого этапа:
 1. При **выключенной** прагме все существующие тесты проходят
@@ -12,52 +15,87 @@
 
 ---
 
-## Этап 1: PRAGMA + protobuf поле
+## Текущий статус
 
-**Цель**: Добавить PRAGMA `ydb.EnableCtasWriteAffinity` и передать значение в план запроса.
+| Этап | Название | Статус |
+|------|----------|--------|
+| 1 | PRAGMA + proto-поле `TKqpPhyTx.EnableCsWriteAffinity` | ✅ Выполнено |
+| 2 | Выделение WriteActor в отдельный stage (по прагме) | ✅ Выполнено |
+| 3 | Поля `TargetShardIds` / `ExpectedNodeId` в `TKqpTableSinkSettings` | ⬜ Не начато |
+| 4 | Пометка sink для affinity в `BuildFillTableEffect()` | ⬜ Не начато |
+| 5 | Множественные задачи sink stage в TasksGraph | ⬜ Не начато |
+| 6 | Планировщик (проверка, изменений не требуется) | ⬜ Не начато |
+| 7 | Фильтрация шардов в WriteActor | ⬜ Не начато |
+| 8 | Роутинг данных | ⬜ Не начато |
+| 9 | Комплексное тестирование | ⬜ Не начато |
 
-**Файлы**:
-- `ydb/core/kqp/pragma/kqp_pragma.h` — зарегистрировать новую прагму
-- `ydb/core/protos/kqp.proto` — добавить поле в `TKqpPhyTx`
-- `ydb/core/kqp/query_compiler/kqp_query_compiler.cpp` — передать прагму в proto
+**Реализовано на данный момент**:
+- Прагма `ydb.EnableCsWriteAffinity` (по умолчанию `false`), проброшена в `TKqpPhyTx`.
+- При включённой прагме sink с WriteActor выносится в отдельный `TDqStage`
+  (4 stage в плане против 3 без прагмы).
+- TWIN-тест `CTAS_WriteAffinity_Twin` проверяет обе ветки: число stage в плане и
+  идентичность данных.
+- Регрессия `*CreateAsSelect*`: 17/17 GOOD.
 
-**Изменения**:
+---
 
-### 1.1 Зарегистрировать PRAGMA
+## Этап 1: PRAGMA + protobuf поле ✅ ВЫПОЛНЕНО
 
-Аналогично `OptShuffleElimination`:
+**Цель**: Добавить PRAGMA `ydb.EnableCsWriteAffinity` и передать значение в план запроса.
+
+**Файлы (фактические)**:
+- [`ydb/core/kqp/provider/yql_kikimr_settings.h`](ydb/core/kqp/provider/yql_kikimr_settings.h:127) — объявление настройки
+- [`ydb/core/kqp/provider/yql_kikimr_settings.cpp`](ydb/core/kqp/provider/yql_kikimr_settings.cpp:173) — регистрация настройки
+- [`ydb/core/protos/kqp_physical.proto`](ydb/core/protos/kqp_physical.proto:740) — поле в `TKqpPhyTx`
+- [`ydb/core/kqp/query_compiler/kqp_query_compiler.cpp`](ydb/core/kqp/query_compiler/kqp_query_compiler.cpp:1211) — передача в proto
+
+> **Примечание об архитектуре.** Изначально план предполагал регистрацию через
+> `kqp_pragma.h`/`MakeBoolPrag`. Фактически используется механизм `TKikimrConfiguration`
+> (`NCommon::TConfSetting` + `REGISTER_SETTING`), поэтому прагма читается двумя способами:
+> - **на этапе оптимизации** — из `kqpCtx.Config->EnableCsWriteAffinity` (Этап 2);
+> - **в TasksGraph/runtime** — из proto-поля `TKqpPhyTx.EnableCsWriteAffinity` (Этапы 4–5).
+
+**Изменения (фактические)**:
+
+### 1.1 Объявить и зарегистрировать настройку
+
 ```cpp
-// kqp_pragma.h
-MakeBoolPrag("ydb.EnableCsWriteAffinity", &TKqpConfig::EnableCsWriteAffinity)
+// yql_kikimr_settings.h
+NCommon::TConfSetting<bool, Static> EnableCsWriteAffinity;
+
+// yql_kikimr_settings.cpp
+REGISTER_SETTING(*this, EnableCsWriteAffinity);
 ```
 
 ### 1.2 Добавить поле в TKqpPhyTx
 
 ```protobuf
-// kqp.proto
+// kqp_physical.proto
 message TKqpPhyTx {
     // ...
-    optional bool enable_cs_write_affinity = XXX;
+    bool EnableCsWriteAffinity = 12;
 }
 ```
 
 ### 1.3 Передать в план
 
-В [`kqp_query_compiler.cpp:1208`](ydb/core/kqp/query_compiler/kqp_query_compiler.cpp:1208):
+В [`kqp_query_compiler.cpp:1211`](ydb/core/kqp/query_compiler/kqp_query_compiler.cpp:1211):
 ```cpp
-txProto.SetEnableCsWriteAffinity(Config->EnableCsWriteAffinity.Get().GetOrElse(false));
+txProto.SetEnableCsWriteAffinity(Config->EnableCsWriteAffinity.Get().GetOrElse(true));
 ```
 
-**Гарантия при выключенной прагме**: По умолчанию `false`, поведение не меняется. Все тесты проходят.
+> **Дефолт режима — `true` (включено).** Значение по умолчанию читается в двух местах и
+> должно совпадать:
+> - [`kqp_opt_effects.cpp:238`](ydb/core/kqp/opt/kqp_opt_effects.cpp:238) — управляет разделением stage;
+> - [`kqp_query_compiler.cpp:1211`](ydb/core/kqp/query_compiler/kqp_query_compiler.cpp:1211) — проброс в `TKqpPhyTx`.
+>
+> Чтобы вернуть выключенное поведение, замените оба `GetOrElse(true)` на `GetOrElse(false)`.
 
-**Новые тесты при включенной прагме**:
-```cpp
-UNIT_TEST(CTAS_WriteAffinity_PragmaPropagates) {
-    // Проверить, что прагма попадает в TKqpPhyTx
-    // SELECT ... CREATE TABLE ... AS SELECT ...
-    // PRAGMA ydb.EnableCsWriteAffinity = "true";
-}
-```
+**Отключение**: `PRAGMA ydb.EnableCsWriteAffinity = "false";` — план возвращается к 3 stage.
+Все тесты проходят в обоих режимах.
+
+**Тесты**: покрыто TWIN-тестом `CTAS_WriteAffinity_Twin` (см. Этап 2) — он гоняет обе
+ветки прагмы и проверяет как план, так и данные.
 
 ---
 
@@ -77,7 +115,7 @@ UNIT_TEST(CTAS_WriteAffinity_PragmaPropagates) {
 
 **Цель**: Выделить sink с WriteActor в отдельный TDqStage, чтобы он мог быть независимо распараллелен и назначен на разные ноды.
 
-**Текущая ситуация**: В [`BuildFillTableEffect()`](ydb/core/kqp/opt/kqp_opt_effects.cpp:162) sink добавляется в тот же stage, что и программа трансформации:
+**Исходная ситуация**: В [`BuildFillTableEffect()`](ydb/core/kqp/opt/kqp_opt_effects.cpp:162) sink добавляется в тот же stage, что и программа трансформации (ветка `else`, сохранена как поведение по умолчанию):
 ```cpp
 auto stageInput = Build<TDqStage>(ctx, node.Pos())
     .Inputs().Add(mapCn).Build()
@@ -85,11 +123,11 @@ auto stageInput = Build<TDqStage>(ctx, node.Pos())
         .Args({rowArgument})
         .Body<TCoToFlow>().Input(rowArgument).Build()
         .Build()
-    .Outputs().Add(sink).Build()  // Sink в том же stage, что и transform
+    .Outputs<TDqStageOutputsList>().Add(sink).Build()
     .Done();
 ```
 
-**Целевая ситуация**: Sink вынесен в отдельный stage:
+**Целевая ситуация** (только при включённой прагме): Sink вынесен в отдельный stage:
 ```
 ComputeActor (Transform Stage)
     ↓ TDqCnMap
@@ -97,79 +135,103 @@ ComputeActor (Sink Stage) → TKqpDirectWriteActor
 ```
 
 **Файлы**:
-- `ydb/core/kqp/opt/kqp_opt_effects.cpp` — `BuildFillTableEffect()`
+- [`ydb/core/kqp/opt/kqp_opt_effects.cpp`](ydb/core/kqp/opt/kqp_opt_effects.cpp:240) — `BuildFillTableEffect()`
 
-**Изменения**:
+**Фактические изменения** (важные отличия от исходного черновика плана отмечены ⚠️):
 
 ```cpp
-bool BuildFillTableEffect(...) {
-    // ... существующий код до создания stage ...
+const bool enableCsWriteAffinity =
+    kqpCtx.Config->EnableCsWriteAffinity.Get().GetOrElse(false);
 
-    // Stage 1: Transform (без sink)
+if (enableCsWriteAffinity) {
+    // Transform stage: без явного .Outputs()
     auto transformStage = Build<TDqStage>(ctx, node.Pos())
         .Inputs().Add(mapCn).Build()
         .Program()
             .Args({rowArgument})
             .Body<TCoToFlow>().Input(rowArgument).Build()
             .Build()
-        .Outputs().Add<TDqOutput>().Build()  // Просто output
+        .Settings().Build()
         .Done();
 
-    // Stage 2: Sink (отдельный stage)
+    // Соединение ссылается на выход transform stage напрямую
     auto sinkInput = Build<TDqCnMap>(ctx, node.Pos())
-        .Output(transformStage.Output(0))
+        .Output<TDqOutput>()
+            .Stage(transformStage)
+            .Index().Build("0")
+            .Build()
         .Done();
+
+    // ⚠️ Отдельный аргумент для лямбды sink stage
+    const auto sinkRowArgument = Build<TCoArgument>(ctx, node.Pos())
+        .Name("sinkRow").Done();
+
     auto sinkStage = Build<TDqStage>(ctx, node.Pos())
         .Inputs().Add(sinkInput).Build()
         .Program()
-            .Args({rowArgument})
-            .Body<TCoToFlow>().Input(rowArgument).Build()
+            .Args({sinkRowArgument})
+            .Body<TCoToFlow>().Input(sinkRowArgument).Build()
             .Build()
-        .Outputs().Add(sink).Build()
+        .Outputs<TDqStageOutputsList>().Add(sink).Build()
+        .Settings().Build()
         .Done();
 
     effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-        .Stage(sinkStage.Ptr())  // Ссылка на sink stage
+        .Stage(sinkStage.Ptr())
         .SinkIndex().Build("0")
         .Done();
-
-    return true;
+} else {
+    // ... прежний одиночный stage (см. выше) ...
 }
 ```
 
-**Почему безопасно**:
-- Функциональность не меняется — данные идут через TDqCnMap channel
-- DQ framework поддерживает множественные stages
-- TKqpSinkEffect ссылается на правильный stage
-- Это изменение применяется **всегда** (не зависит от прагмы), но является подготовительным
+**⚠️ Уроки, не отражённые в исходном черновике плана**:
+1. **Разделение условное, не безусловное.** Черновик предлагал делить stage «всегда».
+   На практике разделение включается **только по прагме** — так проще гарантировать
+   неизменность плана по умолчанию и не трогать многочисленные canondata-эталоны планов.
+2. **Нет метода `transformStage.Output(0)`.** Соединение строится как
+   `TDqCnMap.Output<TDqOutput>().Stage(transformStage).Index("0")` — стандартный паттерн
+   соединения stage из физического оптимизатора. Transform stage при этом объявляется
+   **без** `.Outputs()`.
+3. **Нельзя переиспользовать один `TCoArgument` в двух лямбдах.** Это приводит к аборту
+   на проверке `CheckArguments()` (`Fatal: ... code: 1060`). Для sink stage создаётся
+   отдельный аргумент `sinkRow`.
+4. **`.Add<TDqOutput>()` в списке `.Outputs()` не работает** — билдер требует ссылку на
+   stage (`TDqOutput builder: Stage not defined`). Именно поэтому transform stage выхода
+   в списке не объявляет.
 
-**Гарантия при выключенной прагме**: Структура stages изменилась, но поведение то же. Все тесты проходят.
+**Гарантия при выключенной прагме**: Выполняется ветка `else` — план идентичен прежнему.
+Все существующие тесты проходят.
 
-**Новые тесты при включенной прагме**:
+**Реализованные тесты**:
 ```cpp
-UNIT_TEST(CTAS_WriteAffinity_SeparateSinkStage) {
-    // Проверить, что sink находится в отдельном stage
-    // Проверить, что TDqCnMap соединяет transform и sink stages
+Y_UNIT_TEST_TWIN(CTAS_WriteAffinity_Twin, EnableCsWriteAffinity) {
+    // Обе ветки прагмы:
+    //  - Explain-план: 3 stage без прагмы / 4 stage с прагмой (FindPlanStages)
+    //  - данные в целевой таблице идентичны в обоих режимах
 }
 ```
+Регрессия: `*CreateAsSelect*` в `ydb/core/kqp/ut/query` — 17/17 GOOD.
 
 ---
 
 ## Этап 3: Прототип — поля в TKqpTableSinkSettings
 
-**Цель**: Добавить опциональные поля `target_shard_ids` и `expected_node_id` в `TKqpTableSinkSettings`.
+**Цель**: Добавить опциональные поля `TargetShardIds` и `ExpectedNodeId` в `TKqpTableSinkSettings`.
 
 **Файлы**:
-- `ydb/core/protos/kqp.proto`
+- [`ydb/core/protos/kqp.proto`](ydb/core/protos/kqp.proto:889) — сообщение `TKqpTableSinkSettings`
+  (последнее занятое поле — `InputRowFormat = 29`, поэтому берём номера 30/31).
 
 **Изменения**:
 ```protobuf
 message TKqpTableSinkSettings {
-    // ...
-    repeated uint64 target_shard_ids = 30;
-    optional uint64 expected_node_id = 31;
+    // ... поля 3..29 ...
+    repeated uint64 TargetShardIds = 30;
+    optional uint64 ExpectedNodeId = 31;
 }
 ```
+> Именование в стиле `PascalCase` — под остальные поля этого сообщения.
 
 **Гарантия при выключенной прагме**: Поля не заполняются, существующий код их не читает. Все тесты проходят.
 
@@ -192,18 +254,30 @@ UNIT_TEST(CTAS_WriteAffinity_SinkSettingsFields) {
 
 **Изменения**:
 
-На этапе оптимизации информация о ShardIdToNodeId **недоступна**. Поэтому на этом этапе мы:
-1. Помечаем sink как "needs affinity" через заполнение `target_shard_ids` всеми шардами (или специальный маркер)
-2. Оставляем `expected_node_id` пустым — он будет установлен в TasksGraph
+На этапе оптимизации информация о ShardIdToNodeId **недоступна**. Поэтому на этом этапе мы
+лишь **помечаем** sink как требующий affinity; конкретные шарды и `ExpectedNodeId`
+проставляются позже, в TasksGraph (Этап 5).
+
+> **Уточнение по механизму передачи флага (учтено после Этапа 1–2).** Прагма уже доступна
+> в двух местах, поэтому явный «маркер» в `TargetShardIds` **не требуется**:
+> - в `BuildFillTableEffect()` — через `kqpCtx.Config->EnableCsWriteAffinity` (используется
+>   уже на Этапе 2 для разделения stage);
+> - в TasksGraph — через proto-поле `TKqpPhyTx.EnableCsWriteAffinity`.
+>
+> Рекомендуемый вариант: **не** класть спец-значение в `TargetShardIds`, а определять
+> «нужен ли affinity» по `EnableCsWriteAffinity` + признаку `fill_table`-режима sink.
+> Поле `TargetShardIds` заполняется реальными шардами только на Этапе 5.
 
 ```cpp
 bool BuildFillTableEffect(...) {
-    // ... существующий код ...
+    const bool enableCsWriteAffinity =
+        kqpCtx.Config->EnableCsWriteAffinity.Get().GetOrElse(false);
 
-    if (config->EnableCsWriteAffinity) {
-        // Пометить sink для дальнейшей обработки в TasksGraph
-        // На этом этапе мы не знаем ShardIdToNodeId
-        sinkSettings->AddTargetShardIds(SPECIAL_AFFINITY_MARKER);
+    if (enableCsWriteAffinity) {
+        // Разделение на два stage уже сделано на Этапе 2.
+        // Здесь на Этапе 4 при необходимости можно добавить маркерные
+        // sink settings, но предпочтительно опираться на EnableCsWriteAffinity
+        // из TKqpPhyTx в TasksGraph (Этап 5).
     }
 
     // ... существующий код ...
@@ -231,7 +305,7 @@ UNIT_TEST(CTAS_WriteAffinity_SinkMarkedForAffinity) {
 
 **Изменения**:
 
-### 4.1 Обнаружить sink с affinity
+### 5.1 Обнаружить sink с affinity
 
 В `FillStages()` или `BuildSinks()`:
 ```cpp
@@ -241,7 +315,7 @@ bool IsCtasWriteAffinityEnabled(const TStageInfo& stageInfo) {
 }
 ```
 
-### 4.2 Разрешить шарды и ноды
+### 5.2 Разрешить шарды и ноды
 
 Используем существующий `ResolveShards()` для получения ShardIdToNodeId:
 ```cpp
@@ -249,7 +323,7 @@ bool IsCtasWriteAffinityEnabled(const TStageInfo& stageInfo) {
 // GetMeta().ShardIdToNodeId — маппинг shard → node
 ```
 
-### 4.3 Сгруппировать шарды по нодам
+### 5.3 Сгруппировать шарды по нодам
 
 ```cpp
 THashMap<ui64, TVector<ui64>> NodeToShards;
@@ -258,7 +332,7 @@ for (const auto& [shardId, nodeId] : GetMeta().ShardIdToNodeId) {
 }
 ```
 
-### 4.4 Создать множественные задачи
+### 5.4 Создать множественные задачи
 
 В `CountComputeTasks()` / `BuildComputeTasks()` для sink stage:
 ```cpp
@@ -275,7 +349,7 @@ if (IsCtasWriteAffinityEnabled(stageInfo)) {
 }
 ```
 
-### 4.5 Установить ExpectedNodeId
+### 5.5 Установить ExpectedNodeId
 
 Через существующий механизм [`TMaxTasksGraph::PlaceTasks()`](ydb/core/kqp/executer_actor/max_tasks_graph.h:57), который stamp-ит `Meta.ExpectedNodeId`.
 
@@ -335,7 +409,7 @@ UNIT_TEST(CTAS_WriteAffinity_TasksAssignedToCorrectNodes) {
 
 **Изменения**:
 
-### 6.1 Прочитать target_shard_ids
+### 7.1 Прочитать target_shard_ids
 
 При инициализации WriteActor:
 ```cpp
@@ -350,7 +424,7 @@ if (!TargetShardIds.empty()) {
 }
 ```
 
-### 6.2 Валидация
+### 7.2 Валидация
 
 ```cpp
 for (const auto& shard : ResolvedShards) {
@@ -375,7 +449,7 @@ UNIT_TEST(CTAS_WriteAffinity_DataIntegrity) {
 
 ---
 
-## Этап 7: Роутинг данных — TDqCnPartition
+## Этап 8: Роутинг данных — TDqCnPartition
 
 **Цель**: Убедиться, что данные из предыдущего stage корректно маршрутизируются к правильным sink задачам.
 
@@ -478,17 +552,17 @@ UNIT_TEST(CTAS_WriteAffinity_Rebalance) {
 
 ## Гарантии после каждого этапа
 
-| Этап | Прагма выключена | Прагма включена |
-|------|-----------------|-----------------|
-| 1 | Все тесты проходят | PRAGMA попадает в план |
-| 2 | Все тесты проходят | Sink в отдельном stage |
-| 3 | Все тесты проходят | Поля доступны в proto |
-| 4 | Все тесты проходят | Sink помечен для affinity |
-| 5 | Все тесты проходят | M задач с ExpectedNodeId |
-| 6 | Все тесты проходят | Задачи на правильных нодах |
-| 7 | Все тесты проходят | WriteActor пишет в свои шарды |
-| 8 | Все тесты проходят | Данные маршрутизируются корректно |
-| 9 | Все тесты проходят | Полный цикл работает |
+| Этап | Статус | Прагма выключена | Прагма включена |
+|------|--------|-----------------|-----------------|
+| 1 | ✅ | Все тесты проходят | PRAGMA попадает в план |
+| 2 | ✅ | Все тесты проходят (17/17 CreateAsSelect) | Sink в отдельном stage (4 stage vs 3) |
+| 3 | ⬜ | Все тесты проходят | Поля доступны в proto |
+| 4 | ⬜ | Все тесты проходят | Sink помечен для affinity |
+| 5 | ⬜ | Все тесты проходят | M задач с ExpectedNodeId |
+| 6 | ⬜ | Все тесты проходят | Задачи на правильных нодах |
+| 7 | ⬜ | Все тесты проходят | WriteActor пишет в свои шарды |
+| 8 | ⬜ | Все тесты проходят | Данные маршрутизируются корректно |
+| 9 | ⬜ | Все тесты проходят | Полный цикл работает |
 
 ---
 

@@ -2386,11 +2386,14 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        // Build the CTAS query with or without the pragma
+        // Build the CTAS query with the pragma set explicitly in both branches.
+        // NOTE: the feature is enabled by default, so the "off" branch must set
+        // the pragma to "false" explicitly rather than relying on the default.
         const TString pragmaPrefix = EnableCsWriteAffinity
             ? R"(PRAGMA ydb.EnableCsWriteAffinity = "true";
 )"
-            : TString();
+            : R"(PRAGMA ydb.EnableCsWriteAffinity = "false";
+)";
         const TString ctasQuery = TStringBuilder()
             << pragmaPrefix
             << R"(

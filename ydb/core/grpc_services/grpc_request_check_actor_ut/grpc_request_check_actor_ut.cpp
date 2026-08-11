@@ -492,6 +492,16 @@ Y_UNIT_TEST(DedicatedNoConnectRightButSuccess) {
     UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
 }
 
+Y_UNIT_TEST(NoSecurityObject) {
+    TTestSetup setup("database-only", "/Root/db", {});
+    ConfigureSecurityConfig(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    const auto response = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, nullptr);
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoSecurityObject);
+}
+
 Y_UNIT_TEST(ServerlessOwnDbOk) {
     TTestSetup setup("database-only", "/Root/serverless", {});
     ConfigureSecurityConfig(setup.GetRuntime());

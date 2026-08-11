@@ -1444,9 +1444,88 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
                 );
                 break;
             }
-            case NKqpProto::TKqpPhyConnection::kBroadcast:
+            case NKqpProto::TKqpPhyConnection::kBroadcast: {
+                // CsWriteAffinity: If this is a CTAS affinity Sink Stage (CtasShardingColumns
+                // populated by the table resolver) AND we have M>1 tasks (one per node), replace
+                // the Broadcast connection with ColumnShardHashV1 HashShuffle.
+                //
+                // This eliminates the M× traffic overhead of Broadcast: each row is sent
+                // only to the one Sink task that owns the target shard for that row's PK.
+                //
+                // ColumnShardHashV1 params:
+                //   SourceShardCount = N (total shards of the target table)
+                //   TaskIndexByHash[i] = index of the Sink task that handles shard bucket i
+                //   SourceTableKeyColumnTypes = types of the sharding key columns
+                //
+                // The params are stored on the Transform Stage (inputStageInfo) so that
+                // FillOutputDesc serializes them into the Transform Stage's task output descriptor.
+                if (!stageInfo.Meta.CtasShardingColumns.empty()
+                        && stageInfo.Tasks.size() > 1
+                        && stageInfo.Meta.ShardKey
+                        && !stageInfo.Meta.ShardKey->GetPartitions().empty()
+                        && GetMeta().ShardsResolved) {
+
+                    const ui32 N = stageInfo.Meta.ShardKey->GetPartitions().size();
+
+                    // Build a map: nodeId → taskIdx within stageInfo.Tasks
+                    THashMap<ui64 /* nodeId */, ui32 /* taskIdx */> nodeToTaskIdx;
+                    for (ui32 ti = 0; ti < stageInfo.Tasks.size(); ++ti) {
+                        const auto& t = GetTask(stageInfo.Tasks[ti]);
+                        if (t.Meta.ExpectedNodeId) {
+                            nodeToTaskIdx[*t.Meta.ExpectedNodeId] = ti;
+                        }
+                    }
+
+                    // Build TaskIndexByHash[0..N-1]: bucket i → taskIdx
+                    // Bucket i corresponds to the shard at position i in GetPartitions().
+                    auto taskIndexByHash = std::make_shared<TVector<ui64>>(N, 0);
+                    bool allResolved = true;
+                    for (ui32 i = 0; i < N; ++i) {
+                        const ui64 shardId = stageInfo.Meta.ShardKey->GetPartitions()[i].ShardId;
+                        auto itNode = GetMeta().ShardIdToNodeId.find(shardId);
+                        if (itNode == GetMeta().ShardIdToNodeId.end()) {
+                            allResolved = false;
+                            break;
+                        }
+                        auto itTask = nodeToTaskIdx.find(itNode->second);
+                        if (itTask == nodeToTaskIdx.end()) {
+                            allResolved = false;
+                            break;
+                        }
+                        (*taskIndexByHash)[i] = itTask->second;
+                    }
+
+                    if (allResolved) {
+                        // Derive key column types from table schema (stored in CtasShardingColumns).
+                        auto keyTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
+                        if (stageInfo.Meta.ColumnTableInfoPtr) {
+                            const auto& tableConstInfo = stageInfo.Meta.TableConstInfo;
+                            for (const auto& colName : stageInfo.Meta.CtasShardingColumns) {
+                                if (tableConstInfo && tableConstInfo->Columns.contains(colName)) {
+                                    keyTypes->push_back(tableConstInfo->Columns.at(colName).Type);
+                                }
+                            }
+                        }
+
+                        if (keyTypes->size() == stageInfo.Meta.CtasShardingColumns.size()) {
+                            // Set ColumnShardHashV1Params on the upstream Transform Stage.
+                            auto& transformParams = inputStageInfo.Meta.ColumnShardHashV1Params;
+                            transformParams.SourceShardCount = N;
+                            transformParams.TaskIndexByHash = std::move(taskIndexByHash);
+                            transformParams.SourceTableKeyColumnTypes = std::move(keyTypes);
+
+                            // Use HashShuffle instead of Broadcast for correct per-shard routing.
+                            BuildHashShuffleChannels(*this, stageInfo, inputIdx, inputStageInfo, outputIdx,
+                                stageInfo.Meta.CtasShardingColumns, enableSpilling, log,
+                                EHashShuffleFuncType::ColumnShardHashV1);
+                            break;
+                        }
+                    }
+                    // Fall through to Broadcast if params couldn't be resolved.
+                }
                 BuildBroadcastChannels(*this, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
                 break;
+            }
             case NKqpProto::TKqpPhyConnection::kMap:
                 BuildMapChannels(*this, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
                 break;

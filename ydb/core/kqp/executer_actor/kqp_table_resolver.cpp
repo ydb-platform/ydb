@@ -261,7 +261,23 @@ private:
             TableRequestIds.erase(entry.TableId);
 
             for (auto stageId : stageIds) {
-                TasksGraph.GetStageInfo(stageId).Meta.ColumnTableInfoPtr = entry.ColumnTableInfo;
+                auto& stageMeta = TasksGraph.GetStageInfo(stageId).Meta;
+                stageMeta.ColumnTableInfoPtr = entry.ColumnTableInfo;
+
+                // For CTAS affinity (EnableCsWriteAffinity): extract hash sharding columns
+                // from the target column table so they can be used later in BuildKqpStageChannels
+                // to configure ColumnShardHashV1 shuffle on the upstream Transform Stage.
+                if (entry.ColumnTableInfo
+                        && stageMeta.ResolvedSinkSettings
+                        && stageMeta.ResolvedSinkSettings->GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL
+                        && stageMeta.Tx.Body->EnableCsWriteAffinity()) {
+                    const auto& desc = entry.ColumnTableInfo->Description;
+                    if (desc.HasSharding() && desc.GetSharding().HasHashSharding()) {
+                        for (const auto& col : desc.GetSharding().GetHashSharding().GetColumns()) {
+                            stageMeta.CtasShardingColumns.emplace_back(col);
+                        }
+                    }
+                }
             }
         }
 

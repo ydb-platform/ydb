@@ -102,6 +102,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationCompatibility
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationCompatibility_TablesFormat0_StdMessagingApis
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationFinished_DoesNotServePreFinishedTableMessages
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationFinished_TablesFormat0_PurgeAndApproximateAttributes
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationFinished_TablesFormat0_SendReceiveDelete
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMigrationFinished_TablesFormat1_MessagingApis
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMoveMessagesToDLQ
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestPurgeQueue_TableImplementation
@@ -145,6 +146,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithSec
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageChargesRequestUnits
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageIdempotence
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueueInvalid
@@ -185,10 +187,12 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageInva
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageInvalidSize
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageKafkaBatches
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageNonExistingQueue
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageNotUtf8
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageWithAttemptId
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageWithAttemptIdChangeVisibilityInvalidatesReplay
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageWithDifferentAttemptIds
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBadQueueUrl
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchLong
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageChargesRequestUnits
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageWithLeadingSlashInConsumerNameInFederation
@@ -219,6 +223,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWith
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithSameNameAndDifferentParams
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithSameNameAndSameParams
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueue
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueueInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueueMultiConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueueNonExisting
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDisableContentBasedDeduplicationMessageRateLimit
@@ -249,10 +254,12 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthWithEnfor
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthWithEnforceUserTokenGetQueueUrlEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthWithEnforceUserTokenGetQueueUrlOfNotExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthWithEnforceUserTokenSendMessage
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestPurgeQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestPurgeQueueInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestReceiveMessageEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestReceiveMessageGroup
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestReceiveMessageInvalidSize
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestReceiveMessageNonExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestReceiveMessageWithAttemptId
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestReceiveMessageZstdCompressed
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSendMessageBatch
@@ -320,6 +327,7 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithoutDatabase
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.ReceiveAttemptIdPartitionRouting
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteToAutopartitioningTopic
+ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteTwoMessage_Deduplicated
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteTwoMessage_TwoPartition
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
@@ -345,6 +353,7 @@ ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-0
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-1
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-1-0
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_ByKeyFilter
+ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Columns
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Families
 ydb/core/tx/datashard/ut_stats DataShardStats.SplitByLoadSuggestedKeyIsEmptyOnNotEnoughData-0-1
 ydb/core/tx/datashard/ut_stats DataShardStats.SplitByLoadSuggestedKeyIsEmptyOnNotEnoughData-1-0

@@ -1367,6 +1367,37 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(element.GetRename() == source);
     }
 
+    Y_UNIT_TEST(SubplanRegistryMutationInvariants) {
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit binding("subplan", true);
+        const TInfoUnit dependency("dependency");
+        const TInfoUnit missingBinding("missing_subplan", true);
+        TSubplans subplans;
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            subplans.Add(binding, TIntrusivePtr<ISimpleOperator>(), ESubplanType::EXPR),
+            yexception,
+            "null subplan");
+        subplans.Add(binding, MakeIntrusive<TOpEmptySource>(pos), ESubplanType::EXPR);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            subplans.Add(binding, MakeIntrusive<TOpEmptySource>(pos), ESubplanType::EXPR),
+            yexception,
+            "Duplicate subplan binding");
+
+        subplans.AddDependentIU(binding, dependency);
+        subplans.AddDependentIU(binding, dependency);
+        UNIT_ASSERT_VALUES_EQUAL(subplans.At(binding).DependentIUs.size(), 1);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            subplans.ReplacePlan(binding, TIntrusivePtr<ISimpleOperator>()),
+            yexception,
+            "null subplan");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            subplans.Remove(missingBinding),
+            yexception,
+            "Unknown subplan binding");
+    }
+
     Y_UNIT_TEST(ComputeParentsHandlesSharedDagAndIgnoresInactiveSubplans) {
         const auto pos = NYql::TPositionHandle();
         auto shared = MakeIntrusive<TOpEmptySource>(pos);

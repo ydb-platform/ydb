@@ -168,6 +168,10 @@ def _init_stress_utils():
             ],
             'local_path': 'ydb/tests/stress/tpcc/workload_tpcc'
         },
+        'RemoveStorageGroups': {
+            'args': ["--endpoint", "{node_host}:2135"],
+            'local_path': 'ydb/tests/stress/remove_storage_groups/remove_storage_groups'
+        },
     }
 
     for table_type in ['row', 'column']:

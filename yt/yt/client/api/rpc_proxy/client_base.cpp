@@ -232,7 +232,7 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
                 pingPeriod,
                 std::move(stickyParameters),
                 rsp->sequence_number_source_id(),
-                "Transaction started");
+                "Started");
         }));
 }
 

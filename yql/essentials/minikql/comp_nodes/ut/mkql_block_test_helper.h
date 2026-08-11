@@ -7,6 +7,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/stream_view.h>
 #include <yql/essentials/public/udf/udf_type_printer.h>
 
 #include <tuple>
@@ -48,11 +49,9 @@ public:
     constexpr static size_t ManyIterations = 1000;
 #endif
 
-    explicit TBlockHelper(NYql::EDatumValidationMode validationMode = NYql::EDatumValidationMode::Expensive,
-                          TFuzzOptions fuzzOptions = TFuzzOptions{})
+    explicit TBlockHelper(NYql::EDatumValidationMode validationMode = NYql::EDatumValidationMode::Expensive)
         : Setup_(GetNodeTestFactory())
         , Pb_(*Setup_.PgmBuilder)
-        , FuzzOptions_(fuzzOptions)
     {
         Setup_.RuntimeSettings->DatumValidation.Set(validationMode);
     }
@@ -72,15 +71,16 @@ public:
 
     template <typename T>
         requires(!TIsVectorV<T>)
-    TRuntimeNode ConvertNodeFuzzied(const T& node) {
+    TRuntimeNode ConvertNodeFuzzied(const T& node, bool) {
         return Pb_.AsScalar(NTest::ConvertValueToLiteralNode(Pb_, node));
     }
 
     template <typename T>
-    TRuntimeNode ConvertNodeFuzzied(const TVector<T>& nodes) {
+    TRuntimeNode ConvertNodeFuzzied(const TVector<T>& nodes, bool chunked) {
         ui64 fuzzId = FuzzerHolder_.ReserveFuzzer();
         auto convertedNode = ConvertNodeWithSpecificFuzzer(nodes, fuzzId);
-        FuzzerHolder_.CreateFuzzers(FuzzOptions_, fuzzId, convertedNode.GetStaticType(), Pb_.GetTypeEnvironment(), Setup_.RuntimeSettings->DatumValidation.Get());
+        FuzzerHolder_.CreateFuzzers(fuzzId, convertedNode.GetStaticType(), Pb_.GetTypeEnvironment(),
+                                    Setup_.RuntimeSettings->DatumValidation.Get(), chunked);
         return convertedNode;
     }
 
@@ -105,8 +105,8 @@ public:
         }
         for (size_t i = 0; i < iterationCount; i++) {
             NYql::TExprContext exprCtx;
-            auto leftNode = ConvertNodeFuzzied(left);
-            auto rightNode = ConvertNodeFuzzied(right);
+            auto leftNode = ConvertNodeFuzzied(left, /*chunked=*/false);
+            auto rightNode = ConvertNodeFuzzied(right, /*chunked=*/false);
             auto expectedNode = ConvertNodeUnfuzzied(expected);
 
             auto resultValue = Setup_.BuildGraph(binaryOp(Setup_, leftNode, rightNode))->GetValue();
@@ -120,7 +120,7 @@ public:
 
     template <typename T>
     std::tuple<THolder<IComputationGraph>, NUdf::TUnboxedValue, TType*, TType*> GetScalarBlock(const T& value) {
-        auto node = ConvertNodeFuzzied(value);
+        auto node = ConvertNodeFuzzied(value, /*chunked=*/false);
         auto blockType = node.GetStaticType();
         auto itemType = AS_TYPE(TBlockType, blockType)->GetItemType();
         auto graph = Setup_.BuildGraph(node);
@@ -132,7 +132,7 @@ public:
     std::pair<THolder<IComputationGraph>, NUdf::TUnboxedValue> BuildAndRunListFuzzied(
         const TVector<T>& data)
     {
-        auto blockNode = ConvertNodeFuzzied(data);
+        auto blockNode = ConvertNodeFuzzied(data, /*chunked=*/false);
         auto blockList = Pb_.NewList(blockNode.GetStaticType(), {blockNode});
         auto pgmReturn = Pb_.Collect(Pb_.ForwardList(Pb_.FromBlocks(Pb_.ToFlow(blockList, {}))));
         auto graph = Setup_.BuildGraph(pgmReturn);
@@ -148,7 +148,7 @@ public:
         auto resolved = ResolveBlockOpInputs(inputs...);
 
         RunFuzzedWideStreamOp(expected, resolved.VectorLists, [&](TRuntimeNode fuzzed) {
-            return Pb_.WideMap(fuzzed, [&](TRuntimeNode::TList columns) -> TRuntimeNode::TList {
+            return BlockWideMap(fuzzed, [&](TRuntimeNode::TList columns) -> TRuntimeNode::TList {
                 auto args = AssembleBlockOpArguments<N>(columns, resolved.ScalarNodes, resolved.ColumnIndex);
                 auto resultBlock = [&]<size_t... Is>(std::index_sequence<Is...>) {
                     return blockOp(Setup_, args[Is]...);
@@ -166,7 +166,7 @@ public:
 
         auto resolved = std::apply([this](const TInputs&... cols) { return ResolveBlockOpInputs(cols...); }, inputs);
         auto fuzzed = BuildFuzzedWideStream(resolved.VectorLists);
-        auto assembled = Pb_.WideMap(fuzzed, [&](TRuntimeNode::TList columns) -> TRuntimeNode::TList {
+        auto assembled = BlockWideMap(fuzzed, [&](TRuntimeNode::TList columns) -> TRuntimeNode::TList {
             auto args = AssembleBlockOpArguments<N>(columns, resolved.ScalarNodes, resolved.ColumnIndex);
             TRuntimeNode::TList result(args.begin(), args.end());
             result.push_back(columns.back());
@@ -175,24 +175,28 @@ public:
 
         auto applied = streamOp(Setup_, assembled);
         auto collected = ReadWideStreamColumnsAsTuples(applied);
-        auto value = Setup_.BuildGraph(collected)->GetValue();
+        auto graph = Setup_.BuildGraph(collected);
+        auto value = graph->GetValue();
 
-        auto expectedRows = std::apply([](const TVector<TExpected>&... cols) { return TupleZip(cols...); }, expected);
-        auto expectedType = NTest::ConvertToMinikqlType<TVector<std::tuple<TExpected...>>>(Pb_);
-        UNIT_ASSERT_C(expectedType->IsSameType(*collected.GetStaticType()),
+        const auto expectedRows = std::apply([](const TVector<TExpected>&... cols) { return TupleZip(cols...); }, expected);
+        const auto expectedType = NTest::ConvertToMinikqlType<std::tuple<TExpected...>>(Pb_);
+        const auto streamType = AS_TYPE(TStreamType, collected.GetStaticType());
+        UNIT_ASSERT_C(expectedType->IsSameType(*streamType->GetItemType()),
                       "Expected type mismatch " << TypeToString(expectedType)
                                                 << " != "
-                                                << TypeToString(collected.GetStaticType()));
+                                                << TypeToString(streamType->GetItemType()));
         if (unordered) {
-            NYql::NUdf::AssertUnboxedValueElementEqualUnordered(value, expectedRows);
+            NYql::NUdf::AssertUnboxedValueElementEqualUnordered(
+                value, NYql::NUdf::TUnboxedValueComparatorStreamView<std::tuple<TExpected...>>(expectedRows));
         } else {
-            NYql::NUdf::AssertUnboxedValueElementEqual(value, expectedRows);
+            NYql::NUdf::AssertUnboxedValueElementEqual(
+                value, NYql::NUdf::TUnboxedValueComparatorStreamView<std::tuple<TExpected...>>(expectedRows));
         }
     }
 
     template <typename T>
     std::tuple<THolder<IComputationGraph>, NUdf::TUnboxedValue, TType*, TType*> GetArrowBlock(const T& value) {
-        auto node = ConvertNodeFuzzied(value);
+        auto node = ConvertNodeFuzzied(value, /*chunked=*/false);
         auto blockType = node.GetStaticType();
         auto itemType = AS_TYPE(TBlockType, blockType)->GetItemType();
         auto graph = Setup_.BuildGraph(node);
@@ -208,7 +212,7 @@ public:
         }
         for (size_t i = 0; i < iterationCount; i++) {
             NYql::TExprContext exprCtx;
-            auto node = ConvertNodeFuzzied(operand);
+            auto node = ConvertNodeFuzzied(operand, /*chunked=*/false);
             auto expectedNode = ConvertNodeUnfuzzied(expected);
 
             auto resultValue = Setup_.BuildGraph(unaryOp(Setup_, node))->GetValue();
@@ -267,6 +271,8 @@ public:
     }
 
 private:
+    TRuntimeNode BlockWideMap(TRuntimeNode flowOrStream, const TProgramBuilder::TWideLambda& handler);
+
     template <size_t N>
     struct TResolvedBlockOpInputs {
         TVector<TRuntimeNode> VectorLists;
@@ -297,22 +303,27 @@ private:
         auto fuzzed = BuildFuzzedWideStream(vectorLists);
         auto applied = applyOp(fuzzed);
         auto singleColumn = ReadSingleWideStreamColumn(applied);
-        auto value = Setup_.BuildGraph(singleColumn)->GetValue();
+        auto graph = Setup_.BuildGraph(singleColumn);
+        auto value = graph->GetValue();
+        const auto streamType = AS_TYPE(TStreamType, singleColumn.GetStaticType());
 
         if constexpr (TIsVectorV<TExpected>) {
-            auto expectedType = NTest::ConvertToMinikqlType<TExpected>(Pb_);
-            UNIT_ASSERT_C(expectedType->IsSameType(*singleColumn.GetStaticType()),
+            const auto expectedType = NTest::ConvertToMinikqlType<typename TExpected::value_type>(Pb_);
+            UNIT_ASSERT_C(expectedType->IsSameType(*streamType->GetItemType()),
                           "Expected type mismatch " << TypeToString(expectedType)
                                                     << " != "
-                                                    << TypeToString(singleColumn.GetStaticType()));
-            NYql::NUdf::AssertUnboxedValueElementEqual(value, expected);
+                                                    << TypeToString(streamType->GetItemType()));
+            NYql::NUdf::AssertUnboxedValueElementEqual(
+                value, NYql::NUdf::TUnboxedValueComparatorStreamView<typename TExpected::value_type>(expected));
         } else {
-            auto expectedType = NTest::ConvertToMinikqlType<TVector<TExpected>>(Pb_);
-            UNIT_ASSERT_C(expectedType->IsSameType(*singleColumn.GetStaticType()),
+            const auto expectedType = NTest::ConvertToMinikqlType<TExpected>(Pb_);
+            UNIT_ASSERT_C(expectedType->IsSameType(*streamType->GetItemType()),
                           "Expected type mismatch " << TypeToString(expectedType)
                                                     << " != "
-                                                    << TypeToString(singleColumn.GetStaticType()));
-            NYql::NUdf::AssertUnboxedValueElementEqual(value, TVector<TExpected>{expected});
+                                                    << TypeToString(streamType->GetItemType()));
+            const TVector<TExpected> expectedValue = {expected};
+            NYql::NUdf::AssertUnboxedValueElementEqual(
+                value, NYql::NUdf::TUnboxedValueComparatorStreamView<TExpected>(expectedValue));
         }
     }
 
@@ -327,16 +338,21 @@ private:
         return args;
     }
 
-    TRuntimeNode ReadWideStreamColumnsAsTuples(TRuntimeNode wideBlocks) {
-        auto multiType = AS_TYPE(TMultiType, AS_TYPE(TStreamType, wideBlocks.GetStaticType())->GetItemType());
-        MKQL_ENSURE(multiType->GetElementsCount() >= 2,
-                    "Expected at least one data column plus the trailing block-length scalar");
-        auto expanded = Pb_.BlockExpandChunked(wideBlocks);
-        auto narrow = Pb_.NarrowMap(Pb_.ToFlow(Pb_.WideFromBlocks(expanded), {}),
-                                    [&](TRuntimeNode::TList items) -> TRuntimeNode {
-                                        return Pb_.NewTuple(items);
-                                    });
-        return Pb_.Collect(narrow);
+    TRuntimeNode ReadWideStreamColumnsAsTuples(TRuntimeNode wideStream) {
+        auto multiType = AS_TYPE(TMultiType, AS_TYPE(TStreamType, wideStream.GetStaticType())->GetItemType());
+        MKQL_ENSURE(multiType->GetElementsCount() >= 1, "Expected at least one column");
+        TRuntimeNode narrowFlow;
+        if (multiType->GetElementType(0)->IsBlock()) {
+            MKQL_ENSURE(multiType->GetElementsCount() >= 2,
+                        "Expected at least one data column plus the trailing block-length scalar");
+            narrowFlow = Pb_.ToFlow(Pb_.WideFromBlocks(wideStream), {});
+        } else {
+            narrowFlow = Pb_.ToFlow(wideStream, {});
+        }
+        auto narrow = Pb_.NarrowMap(narrowFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+            return Pb_.NewTuple(items);
+        });
+        return Pb_.FromFlow(narrow);
     }
 
     void ClearFuzzers() {
@@ -355,9 +371,9 @@ private:
 
     TString TypeToString(TType* type);
 
-    TRuntimeNode FuzzStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream, ui64 fuzzId);
+    TRuntimeNode FuzzStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream, ui64 fuzzId, const TStreamFuzzOptions& streamFuzzOptions);
 
-    TRuntimeNode WideFuzzStream(TProgramBuilder& pgmBuilder, TRuntimeNode wideStream, const TVector<ui64>& fuzzIds);
+    TRuntimeNode WideFuzzStream(TProgramBuilder& pgmBuilder, TRuntimeNode wideStream, const TVector<ui64>& fuzzIds, const TStreamFuzzOptions& streamFuzzOptions);
 
     TRuntimeNode MaterializeBlockStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream);
 
@@ -371,7 +387,6 @@ private:
 
     TSetup<false> Setup_;
     TProgramBuilder& Pb_;
-    TFuzzOptions FuzzOptions_;
     TFuzzerHolder FuzzerHolder_;
 };
 

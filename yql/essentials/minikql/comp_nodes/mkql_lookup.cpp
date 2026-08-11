@@ -22,7 +22,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
+    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const override {
         const auto dict = GetNodeValue(Dict_, ctx, block);
 
         GetNodeValue(pointer, Key_, ctx, block);

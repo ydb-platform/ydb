@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <yql/essentials/minikql/udf_value_test_support/dynumber.h>
+#include <yql/essentials/minikql/udf_value_test_support/singular_void.h>
 #include <yql/essentials/minikql/udf_value_test_support/stream_view.h>
 #include <yql/essentials/minikql/udf_value_test_support/struct_type.h>
 #include <yql/essentials/minikql/udf_value_test_support/test_types_equal_to.h>
@@ -84,6 +85,15 @@ struct TUnboxedValueConverter<NTest::TUtf8> {
     }
 };
 
+template <>
+struct TUnboxedValueConverter<NTest::TSingularVoid> {
+    template <CComparatorUtilsUdfValue THolder>
+    static NTest::TSingularVoid Convert(const THolder& value) {
+        Y_ENSURE(value, "Expected a defined Void value");
+        return NTest::TSingularVoid();
+    }
+};
+
 template <typename T>
 struct TUnboxedValueConverter<TMaybe<T>> {
     template <CComparatorUtilsUdfValue THolder>
@@ -135,7 +145,10 @@ struct TUnboxedValueConverter<TUnboxedValueComparatorStreamView<T>> {
             }
         }
         TUnboxedValue extra;
-        Y_ENSURE(value.Fetch(extra) == EFetchStatus::Finish, "Stream produced more items after reporting Finish");
+        for (EFetchStatus status = EFetchStatus::Yield; status != EFetchStatus::Finish;) {
+            status = value.Fetch(extra);
+            Y_ENSURE(status != EFetchStatus::Ok, "Stream produced more items after reporting Finish");
+        }
         return result;
     }
 };
@@ -214,16 +227,18 @@ TUnboxedValueComparatorResult MakeUnboxedValueMismatch(const TExpected& expected
 }
 
 template <typename TExpectedElem, typename TConvertedElem>
-TUnboxedValueComparatorResult CompareUnorderedVectors(const TVector<TExpectedElem>& expected, const TVector<TConvertedElem>& converted) {
+TUnboxedValueComparatorResult CompareUnorderedVectors(
+    TArrayRef<const TExpectedElem> expected,
+    TArrayRef<const TConvertedElem> converted) {
     if (expected.size() != converted.size()) {
-        return MakeUnboxedValueMismatch(expected, converted);
+        return std::unexpected("Unordered vectors have different sizes");
     }
 
     THashMultiSet<TExpectedElem, TTestTypeHash<TExpectedElem>, TTestTypeEqualTo<TExpectedElem>> remaining(expected.begin(), expected.end());
     for (const auto& actual : converted) {
         const auto it = remaining.find(actual);
         if (it == remaining.end()) {
-            return MakeUnboxedValueMismatch(expected, converted);
+            return std::unexpected("Unordered vectors have different elements");
         }
         remaining.erase(it);
     }
@@ -243,7 +258,21 @@ TUnboxedValueComparatorResult CompareValues(const THolder& value, const T& expec
 template <CComparatorUtilsUdfValue THolder, typename T>
 TUnboxedValueComparatorResult CompareValuesUnordered(const THolder& value, const TVector<T>& expected) {
     const auto converted = TUnboxedValueConverter<TVector<T>>::Convert(value);
-    return CompareUnorderedVectors(expected, converted);
+    const auto comparison = CompareUnorderedVectors(
+        MakeArrayRef(expected),
+        MakeArrayRef(converted));
+    return comparison ? comparison : MakeUnboxedValueMismatch(expected, converted);
+}
+
+template <CComparatorUtilsUdfValue THolder, typename T>
+TUnboxedValueComparatorResult CompareValuesUnordered(
+    const THolder& value,
+    const TUnboxedValueComparatorStreamView<T>& expected) {
+    const auto converted = TUnboxedValueConverter<TUnboxedValueComparatorStreamView<T>>::Convert(value);
+    const auto comparison = CompareUnorderedVectors(
+        expected.Data(),
+        MakeArrayRef(converted));
+    return comparison ? comparison : MakeUnboxedValueMismatch(expected, converted);
 }
 
 template <CComparatorUtilsUdfValue TValue, typename TExpected>
@@ -254,6 +283,14 @@ void AssertUnboxedValueElementEqual(const TValue& value, const TExpected& expect
 
 template <CComparatorUtilsUdfValue TValue, typename T>
 void AssertUnboxedValueElementEqualUnordered(const TValue& value, const TVector<T>& expected) {
+    const auto r = CompareValuesUnordered(value, expected);
+    UNIT_ASSERT_C(r, r.error());
+}
+
+template <CComparatorUtilsUdfValue TValue, typename T>
+void AssertUnboxedValueElementEqualUnordered(
+    const TValue& value,
+    const TUnboxedValueComparatorStreamView<T>& expected) {
     const auto r = CompareValuesUnordered(value, expected);
     UNIT_ASSERT_C(r, r.error());
 }

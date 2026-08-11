@@ -74,7 +74,7 @@ namespace NYT {
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Proc");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Proc");
 
 std::string LinuxErrorCodeFormatter(int code)
 {
@@ -340,7 +340,8 @@ std::vector<size_t> GetCurrentProcessThreadIds()
             }
         }
     } catch (const std::exception& ex) {
-        YT_LOG_ERROR(ex, "Error listing /proc/self/task");
+        YT_TLOG_ERROR("Error listing /proc/self/task")
+            .With(TError(ex));
         return {};
     }
     return result;
@@ -1231,7 +1232,8 @@ int GetFileDescriptorCount()
         // Don't count opened /proc/self/fd.
         --descriptorCount;
     } catch (const std::exception& ex) {
-        YT_LOG_ERROR(ex, "Error listing /proc/self/fd");
+        YT_TLOG_ERROR("Error listing /proc/self/fd")
+            .With(TError(ex));
     }
 #endif
     return descriptorCount;
@@ -1410,8 +1412,9 @@ std::vector<TMemoryMapping> ParseMemoryMappings(const std::string& rawSMaps)
             if (!condition) {
                 Cerr << "Failed to parse smaps: " << rawSMaps << Endl;
                 Cerr << "Failed line: " << line << Endl;
-                YT_LOG_ERROR("Failed to parse smaps (SMaps: %v)", rawSMaps);
-                YT_LOG_ERROR("Failed line (Line: %v)", line);
+                YT_TLOG_ERROR("Failed to parse smaps")
+                    .With("SMaps", rawSMaps)
+                    .With("Line", line);
                 YT_ABORT();
             }
         };
@@ -1738,7 +1741,8 @@ TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
         } catch (const TSystemError& ex) {
             if (ex.Status() == ENOENT) {
                 supported = false;
-                YT_LOG_WARNING(ex, "Task I/O accounting is not supported by kernel");
+                YT_TLOG_WARNING("Task I/O accounting is not supported by kernel")
+                    .With(TError(ex));
             } else {
                 throw;
             }

@@ -40,7 +40,7 @@ namespace NActors {
         }
     }
 
-    size_t TEventSerializer::ProduceOutputStream(TRcBuf& buffer, std::deque<TContiguousSpan> *out, size_t maxBytesToProduce) {
+    size_t TEventSerializer::ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out, size_t maxBytesToProduce) {
         size_t totalBytesProduced = 0;
         ui64 bufferProduced = 0;
 
@@ -48,6 +48,8 @@ namespace NActors {
 
         const ui64 bytesProducedOnEntry = CumulativeProduced;
         const size_t bufferSizeOnEntry = buffer.size();
+
+        TMutableContiguousSpan bufferSpan = buffer.UnsafeGetContiguousSpanMut();
 
         // we can't emit anything useful once the output buffer can't hold at least a chunk header along with a whole
         // some useful data, so we stop here to avoid spinning without making any progress
@@ -69,7 +71,7 @@ namespace NActors {
             TPerChannelQueue& queue = GetQueue(q.Channel);
             const bool isSystemChannel = q.Channel == TChunkHeader::SystemChannel;
             const size_t numBytesProduced = ProduceOutputStreamForQueue(q.Channel, queue,
-                Min<size_t>(maxBytesToProduce, q.Quota), buffer, out, &bufferProduced);
+                Min<size_t>(maxBytesToProduce, q.Quota), bufferSpan, out, &bufferProduced);
             if (!numBytesProduced) { // in case we did not make any progress (not enough space in buffer)
                 break;
             }
@@ -91,7 +93,7 @@ namespace NActors {
 
         Y_DEBUG_ABORT_UNLESS(bytesProducedOnEntry + totalBytesProduced == CumulativeProduced);
 
-        buffer.TrimFront(buffer.size() - buffer.size() % 64); // align buffer on 64-byte boundary
+        buffer.TrimFront(bufferSpan.size() - bufferSpan.size() % 64); // align buffer on 64-byte boundary
         const size_t bufferSizeOnExit = buffer.size();
         Y_DEBUG_ABORT_UNLESS(bufferSizeOnExit <= bufferSizeOnEntry);
 
@@ -135,8 +137,8 @@ namespace NActors {
     }
 
     size_t TEventSerializer::ProduceOutputStreamForQueue(ui16 channel, TPerChannelQueue& queue, size_t maxBytesToProduce,
-            TRcBuf& buffer, std::deque<TContiguousSpan> *out, ui64 *bufferProduced) {
-        const TContiguousSpan bufferSpan = buffer.GetContiguousSpan(); // remember original buffer span
+            TMutableContiguousSpan& buffer, std::vector<TContiguousSpan> *out, ui64 *bufferProduced) {
+        const TContiguousSpan bufferSpan = buffer; // remember original buffer span
         size_t numBytesProduced = 0;
         const char *lastSpanEnd = out->empty() ? nullptr : [s = out->back()]{ return s.data() + s.size(); }();
 
@@ -151,9 +153,9 @@ namespace NActors {
             if (!fromBuffer && (reinterpret_cast<uintptr_t>(span.data()) & 63) + span.size() <= 64 && buffer.size() >= span.size()) {
                 // we got span referenced outside original buffer; check if we can copy it into the buffer, if it is
                 // small enough and buffer has the space to do it
-                memcpy(buffer.UnsafeGetDataMut(), span.data(), span.size());
+                memcpy(buffer.data(), span.data(), span.size());
                 span = {buffer.data(), span.size()};
-                buffer.TrimFront(buffer.size() - span.size());
+                buffer = buffer.SubSpan(span.size(), Max<size_t>());
                 fromBuffer = true;
             }
 
@@ -183,8 +185,8 @@ namespace NActors {
         auto takeInBuffer = [&](size_t numBytes) -> void* {
             Y_ABORT_UNLESS(numBytes <= maxBytesToProduce);
             Y_ABORT_UNLESS(numBytes <= buffer.size());
-            TMutableContiguousSpan res(buffer.UnsafeGetDataMut(), numBytes);
-            buffer.TrimFront(buffer.size() - numBytes);
+            TMutableContiguousSpan res(buffer.data(), numBytes);
+            buffer = buffer.SubSpan(numBytes, Max<size_t>());
             produceOutputSpan(res, false);
             return res.data();
         };
@@ -291,15 +293,14 @@ namespace NActors {
                 case ESerializeStage::kChunkSerializer: {
                     UpdateTimestamp();
 
-                    // serialize as much as we can
-                    TMutableContiguousSpan span = buffer.UnsafeGetContiguousSpanMut().SubSpan(sizeof(TChunkHeader),
-                        Max<size_t>()); // reserve space for TChunkHeader which we write first thing if we have some data
+                    // reserve space for TChunkHeader which we write first thing if we have some data
+                    TMutableContiguousSpan span = buffer.SubSpan(sizeof(TChunkHeader), Max<size_t>());
                     auto chunks = queue.CoroutineChunkSerializer.FeedBuf(&span, maxBytesToProduce - sizeof(TChunkHeader));
                     Y_DEBUG_ABORT_UNLESS(buffer.data() + buffer.size() == span.data() + span.size());
                     Y_DEBUG_ABORT_UNLESS(span.size() <= buffer.size()); // ensure span did not reduce
                     if (!chunks.empty()) {
                         ensureHeader();
-                        buffer.TrimFront(span.size());
+                        buffer = buffer.SubSpan(buffer.size() - span.size(), Max<size_t>());
                     }
                     for (const auto& chunk : chunks) {
                         addEventChunkBytes(chunk.Buf, chunk.Size);

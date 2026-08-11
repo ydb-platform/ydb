@@ -27,27 +27,29 @@ class TWideTakeSkipBlocksStreamWrapper: public TMutableComputationNode<TWideTake
     using TBaseComputation = TMutableComputationNode<TWideTakeSkipBlocksStreamWrapper<Skip>>;
 
 public:
-    TWideTakeSkipBlocksStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, IComputationNode* count)
+    TWideTakeSkipBlocksStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, IComputationNode* count, size_t width)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , Stream_(stream)
         , Count_(count)
+        , Width_(width)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
                                                       std::move(Stream_->GetValue(ctx)),
+                                                      Width_,
                                                       Count_->GetValue(ctx).Get<ui64>(),
                                                       ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
-    class TStreamValue: public TComputationValue<TStreamValue> {
-        using TBase = TComputationValue<TStreamValue>;
+    class TStreamValue: public TBlockStreamValue<TStreamValue> {
+        using TBase = TBlockStreamValue<TStreamValue>;
 
     public:
-        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue stream, ui64 count, NYql::EDatumValidationMode validationMode)
-            : TBase(memInfo)
+        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue stream, size_t width, ui64 count, NYql::EDatumValidationMode validationMode)
+            : TBase(memInfo, holderFactory, width)
             , HolderFactory_(holderFactory)
             , Stream_(std::move(stream))
             , Count_(count)
@@ -55,7 +57,7 @@ private:
         {
         }
 
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
+        NUdf::EFetchStatus DoWideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             if constexpr (Skip) {
                 return WideFetchSkip(output, width);
             } else {
@@ -122,6 +124,7 @@ private:
 
     IComputationNode* const Stream_;
     IComputationNode* const Count_;
+    const size_t Width_;
 };
 
 IComputationNode* WrapSkipTake(bool skip, TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -129,6 +132,7 @@ IComputationNode* WrapSkipTake(bool skip, TCallable& callable, const TComputatio
 
     const auto streamType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(streamType->IsStream(), "Expected stream type.");
+    const auto wideComponents = GetWideComponents(streamType);
 
     const auto countType = AS_TYPE(TDataType, callable.GetInput(1).GetStaticType());
     MKQL_ENSURE(countType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
@@ -136,9 +140,9 @@ IComputationNode* WrapSkipTake(bool skip, TCallable& callable, const TComputatio
     const auto input = LocateNode(ctx.NodeLocator, callable, 0);
     const auto count = LocateNode(ctx.NodeLocator, callable, 1);
     if (skip) {
-        return new TWideTakeSkipBlocksStreamWrapper<true>(ctx.Mutables, input, count);
+        return new TWideTakeSkipBlocksStreamWrapper<true>(ctx.Mutables, input, count, wideComponents.size());
     } else {
-        return new TWideTakeSkipBlocksStreamWrapper<false>(ctx.Mutables, input, count);
+        return new TWideTakeSkipBlocksStreamWrapper<false>(ctx.Mutables, input, count, wideComponents.size());
     }
 }
 

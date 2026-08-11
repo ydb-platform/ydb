@@ -500,8 +500,8 @@ public:
     {
         // TODO(shakurov): replace with YT_VERIFY.
         if (!RequestRun_) {
-            YT_LOG_ALERT("A request not marked as run has been run (RequestId: %v)",
-                RequestId_);
+            YT_TLOG_ALERT("A request not marked as run has been run")
+                .With("RequestId", RequestId_);
             RequestRun_ = true;
         }
 
@@ -559,8 +559,8 @@ public:
             return;
         }
 
-        YT_LOG_DEBUG("Request canceled (RequestId: %v)",
-            RequestId_);
+        YT_TLOG_DEBUG("Request canceled")
+            .With("RequestId", RequestId_);
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
             AbortStreamsUnlessClosed(TError(NYT::EErrorCode::Canceled, "Request canceled"));
@@ -582,9 +582,9 @@ public:
             return;
         }
 
-        YT_LOG_DEBUG("Request timed out, canceling (RequestId: %v, Stage: %v)",
-            RequestId_,
-            stage);
+        YT_TLOG_DEBUG("Request timed out, canceling")
+            .With("RequestId", RequestId_)
+            .With("Stage", stage);
 
         auto error = TError(NYT::EErrorCode::Timeout, "Request timed out");
 
@@ -680,19 +680,18 @@ public:
     void HandleStreamingPayload(const TStreamingPayload& payload)
     {
         if (!RuntimeInfo_->Descriptor.StreamingEnabled) {
-            YT_LOG_DEBUG("Received streaming payload for a method that does not support streaming; ignored "
-                "(Method: %v.%v, RequestId: %v)",
-                Service_->ServiceId_.ServiceName,
-                RuntimeInfo_->Descriptor.Method,
-                RequestId_);
+            YT_TLOG_DEBUG("Received streaming payload for a method that does not support streaming; ignored")
+                .WithFormat("Method", "%v.%v", Service_->ServiceId_.ServiceName, RuntimeInfo_->Descriptor.Method)
+                .With("RequestId", RequestId_);
             return;
         }
         CreateRequestAttachmentsStream();
         try {
             RequestAttachmentsStream_->EnqueuePayload(payload);
         } catch (const std::exception& ex) {
-            YT_LOG_DEBUG(ex, "Error handling streaming payload (RequestId: %v)",
-                RequestId_);
+            YT_TLOG_DEBUG("Error handling streaming payload")
+                .With("RequestId", RequestId_)
+                .With(TError(ex));
             RequestAttachmentsStream_->Abort(ex);
         }
     }
@@ -706,19 +705,18 @@ public:
         }
 
         if (!stream) {
-            YT_LOG_DEBUG("Received streaming feedback for a method that does not support streaming; ignored "
-                "(Method: %v.%v, RequestId: %v)",
-                Service_->ServiceId_.ServiceName,
-                RuntimeInfo_->Descriptor.Method,
-                RequestId_);
+            YT_TLOG_DEBUG("Received streaming feedback for a method that does not support streaming; ignored")
+                .WithFormat("Method", "%v.%v", Service_->ServiceId_.ServiceName, RuntimeInfo_->Descriptor.Method)
+                .With("RequestId", RequestId_);
             return;
         }
 
         try {
             stream->HandleFeedback(feedback);
         } catch (const std::exception& ex) {
-            YT_LOG_DEBUG(ex, "Error handling streaming feedback (RequestId: %v)",
-                RequestId_);
+            YT_TLOG_DEBUG("Error handling streaming feedback")
+                .With("RequestId", RequestId_)
+                .With(TError(ex));
             stream->Abort(ex);
         }
     }
@@ -971,8 +969,8 @@ private:
                     fiberCanceler(error);
                 });
                 if (!CanceledList_.TrySubscribe(std::move(cancelationHandler))) {
-                    YT_LOG_DEBUG("Request was canceled before being run (RequestId: %v)",
-                        RequestId_);
+                    YT_TLOG_DEBUG("Request was canceled before being run")
+                        .With("RequestId", RequestId_);
                     return;
                 }
             }
@@ -1131,7 +1129,8 @@ private:
 
         {
             TNullTraceContextGuard nullGuard;
-            YT_LOG_DEBUG("Request logging suppressed (RequestId: %v)", RequestId_);
+            YT_TLOG_DEBUG("Request logging suppressed")
+                .With("RequestId", RequestId_);
         }
         NLogging::TLogManager::Get()->SuppressRequest(RequestId_);
     }
@@ -1290,13 +1289,13 @@ private:
             return;
         }
 
-        YT_LOG_DEBUG("Response streaming attachments pulled (RequestId: %v, SequenceNumber: %v, Sizes: %v, Closed: %v)",
-            RequestId_,
-            payload->SequenceNumber,
-            MakeFormattableView(payload->Attachments, [] (auto* builder, const auto& attachment) {
+        YT_TLOG_DEBUG("Response streaming attachments pulled")
+            .With("RequestId", RequestId_)
+            .With("SequenceNumber", payload->SequenceNumber)
+            .With("Sizes", MakeFormattableView(payload->Attachments, [] (auto* builder, const auto& attachment) {
                 builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
-            }),
-            !payload->Attachments.back());
+            }))
+            .With("Closed", !payload->Attachments.back());
 
         NProto::TStreamingPayloadHeader header;
         ToProto(header.mutable_request_id(), RequestId_);
@@ -1320,13 +1319,14 @@ private:
     {
         YT_VERIFY(ResponseAttachmentsStream_);
         if (error.IsOK()) {
-            YT_LOG_DEBUG("Response streaming payload delivery acknowledged (RequestId: %v, SequenceNumber: %v)",
-                RequestId_,
-                sequenceNumber);
+            YT_TLOG_DEBUG("Response streaming payload delivery acknowledged")
+                .With("RequestId", RequestId_)
+                .With("SequenceNumber", sequenceNumber);
         } else {
-            YT_LOG_DEBUG(error, "Response streaming payload delivery failed (RequestId: %v, SequenceNumber: %v)",
-                RequestId_,
-                sequenceNumber);
+            YT_TLOG_DEBUG("Response streaming payload delivery failed")
+                .With("RequestId", RequestId_)
+                .With("SequenceNumber", sequenceNumber)
+                .With(error);
             ResponseAttachmentsStream_->Abort(error);
         }
     }
@@ -1336,9 +1336,9 @@ private:
         YT_VERIFY(RequestAttachmentsStream_);
         auto feedback = RequestAttachmentsStream_->GetFeedback();
 
-        YT_LOG_DEBUG("Request streaming attachments read (RequestId: %v, ReadPosition: %v)",
-            RequestId_,
-            feedback.ReadPosition);
+        YT_TLOG_DEBUG("Request streaming attachments read")
+            .With("RequestId", RequestId_)
+            .With("ReadPosition", feedback.ReadPosition);
 
         NProto::TStreamingFeedbackHeader header;
         ToProto(header.mutable_request_id(), RequestId_);
@@ -1361,11 +1361,12 @@ private:
     {
         YT_VERIFY(RequestAttachmentsStream_);
         if (error.IsOK()) {
-            YT_LOG_DEBUG("Request streaming feedback delivery acknowledged (RequestId: %v)",
-                RequestId_);
+            YT_TLOG_DEBUG("Request streaming feedback delivery acknowledged")
+                .With("RequestId", RequestId_);
         } else {
-            YT_LOG_DEBUG(error, "Request streaming feedback delivery failed (RequestId: %v)",
-                RequestId_);
+            YT_TLOG_DEBUG("Request streaming feedback delivery failed")
+                .With("RequestId", RequestId_)
+                .With(error);
             RequestAttachmentsStream_->Abort(error);
         }
     }
@@ -2078,9 +2079,10 @@ void TServiceBase::OnRequestAuthenticated(
         .WithTag("Realm", authResult.Realm);
 
     if (authResult.Warning.IsOK()) {
-        YT_LOG_DEBUG("Request authenticated");
+        YT_TLOG_DEBUG("Request authenticated");
     } else {
-        YT_LOG_DEBUG(authResult.Warning, "Request authenticated with warning");
+        YT_TLOG_DEBUG("Request authenticated with warning")
+            .With(authResult.Warning);
     }
     const auto& authenticatedUser = authResult.User;
     if (incomingRequest.Header->has_user()) {
@@ -2145,9 +2147,9 @@ TRequestQueue* TServiceBase::GetRequestQueue(
 
     if (requestQueue->Register(this, runtimeInfo)) {
         const auto& method = runtimeInfo->Descriptor.Method;
-        YT_LOG_DEBUG("Request queue registered (Method: %v, Queue: %v)",
-            method,
-            requestQueue->GetName());
+        YT_TLOG_DEBUG("Request queue registered")
+            .With("Method", method)
+            .With("Queue", requestQueue->GetName());
 
         auto profiler = runtimeInfo->Profiler.WithSparse();
         if (runtimeInfo->Descriptor.RequestQueueProvider) {
@@ -2219,8 +2221,8 @@ void TServiceBase::HandleRequestCancellation(TRequestId requestId)
         return;
     }
 
-    YT_LOG_DEBUG("Received cancelation for an unknown request, ignored (RequestId: %v)",
-        requestId);
+    YT_TLOG_DEBUG("Received cancelation for an unknown request, ignored")
+        .With("RequestId", requestId);
 }
 
 void TServiceBase::HandleStreamingPayload(
@@ -2239,8 +2241,8 @@ void TServiceBase::HandleStreamingPayload(
         auto* entry = DoGetOrCreatePendingPayloadsEntry(bucket, requestId);
         entry->Payloads.emplace_back(payload);
         guard.Release();
-        YT_LOG_DEBUG("Received streaming payload for an unknown request, saving (RequestId: %v)",
-            requestId);
+        YT_TLOG_DEBUG("Received streaming payload for an unknown request, saving")
+            .With("RequestId", requestId);
     }
 }
 
@@ -2250,8 +2252,8 @@ void TServiceBase::HandleStreamingFeedback(
 {
     auto context = FindRequest(requestId);
     if (!context) {
-        YT_LOG_DEBUG("Received streaming feedback for an unknown request, ignored (RequestId: %v)",
-            requestId);
+        YT_TLOG_DEBUG("Received streaming feedback for an unknown request, ignored")
+            .With("RequestId", requestId);
         return;
     }
 
@@ -2368,8 +2370,9 @@ void TServiceBase::OnReplyBusTerminated(const TWeakPtr<NYT::NBus::IBus>& weakBus
     }
 
     for (auto context : contexts) {
-        YT_LOG_DEBUG(error, "Reply bus terminated, canceling request (RequestId: %v)",
-            context->GetRequestId());
+        YT_TLOG_DEBUG("Reply bus terminated, canceling request")
+            .With("RequestId", context->GetRequestId())
+            .With(error);
         context->Cancel();
     }
 }
@@ -2419,9 +2422,9 @@ void TServiceBase::RegisterRequest(TServiceContext* context)
 
     auto pendingPayloads = GetAndErasePendingPayloads(requestId);
     if (!pendingPayloads.empty()) {
-        YT_LOG_DEBUG("Pulling pending streaming payloads for a late request (RequestId: %v, PayloadCount: %v)",
-            requestId,
-            pendingPayloads.size());
+        YT_TLOG_DEBUG("Pulling pending streaming payloads for a late request")
+            .With("RequestId", requestId)
+            .With("PayloadCount", pendingPayloads.size());
         for (const auto& payload : pendingPayloads) {
             context->HandleStreamingPayload(payload);
         }
@@ -2540,9 +2543,9 @@ void TServiceBase::OnPendingPayloadsLeaseExpired(TRequestId requestId)
 {
     auto payloads = GetAndErasePendingPayloads(requestId);
     if (!payloads.empty()) {
-        YT_LOG_DEBUG("Pending payloads lease expired, erasing (RequestId: %v, PayloadCount: %v)",
-            requestId,
-            payloads.size());
+        YT_TLOG_DEBUG("Pending payloads lease expired, erasing")
+            .With("RequestId", requestId)
+            .With("PayloadCount", payloads.size());
     }
 }
 
@@ -2878,19 +2881,18 @@ void TServiceBase::DoConfigure(
     const TServiceConfigPtr& config)
 {
     try {
-        YT_LOG_DEBUG("Configuring RPC service (Service: %v)",
-            ServiceId_.ServiceName);
+        YT_TLOG_DEBUG("Configuring RPC service")
+            .With("Service", ServiceId_.ServiceName);
 
         // Validate configuration.
         for (const auto& [methodName, _] : config->Methods) {
             auto* method = FindMethodInfo(methodName);
             if (!method) {
                 // TODO(don-dron): Split service configs by realmid.
-                YT_LOG_WARNING(
-                    "Method is not registered (Service: %v, RealmId: %v, Method: %v)",
-                    ServiceId_.ServiceName,
-                    ServiceId_.RealmId,
-                    methodName);
+                YT_TLOG_WARNING("Method is not registered")
+                    .With("Service", ServiceId_.ServiceName)
+                    .With("RealmId", ServiceId_.RealmId)
+                    .With("Method", methodName);
             }
         }
 

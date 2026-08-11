@@ -128,7 +128,7 @@ private:
         MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node.");
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto funcType = FunctionType::get(valueType, {PointerType::getUnqual(GetCompContextType(context))}, false);
+        const auto funcType = FunctionType::get(valueType, {PointerType::getUnqual(GetCompContextType(context))}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -189,7 +189,7 @@ private:
     }
 
 public:
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(ItemArg_);
         const auto codegenKeyArg = dynamic_cast<ICodegeneratorExternalNode*>(KeyArg_);
         const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input_);
@@ -335,9 +335,9 @@ private:
     public:
         using TBase = TComputationValue<TSubStream>;
 
-        TSubStream(TMemoryUsageInfo* memInfo, const TStatePtr& state, NUdf::TUnboxedValue stream, IComputationExternalNode* itemArg, IComputationNode* chop, TComputationContext& ctx)
+        TSubStream(TMemoryUsageInfo* memInfo, TStatePtr state, NUdf::TUnboxedValue stream, IComputationExternalNode* itemArg, IComputationNode* chop, TComputationContext& ctx)
             : TBase(memInfo)
-            , State_(state)
+            , State_(std::move(state))
             , Stream_(std::move(stream))
             , ItemArg_(itemArg)
             , Chop_(chop)
@@ -468,12 +468,12 @@ private:
 
         using TFetchPtr = NUdf::EFetchStatus (*)(TComputationContext*, NUdf::TUnboxedValuePod, EState&, NUdf::TUnboxedValuePod&);
 
-        TCodegenInput(TMemoryUsageInfo* memInfo, TFetchPtr fetch, NUdf::TUnboxedValue stream, TComputationContext* ctx, const TStatePtr& init)
+        TCodegenInput(TMemoryUsageInfo* memInfo, TFetchPtr fetch, NUdf::TUnboxedValue stream, TComputationContext* ctx, TStatePtr init)
             : TBase(memInfo)
             , FetchFunc_(fetch)
             , Stream_(std::move(stream))
             , Ctx_(ctx)
-            , State_(init)
+            , State_(std::move(init))
         {
         }
 
@@ -596,7 +596,7 @@ private:
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto stateType = Type::getInt8Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(stateType), PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(stateType), PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -700,7 +700,7 @@ private:
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto stateType = Type::getInt8Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), PointerType::getUnqual(valueType), PointerType::getUnqual(stateType), containerType, PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), PointerType::getUnqual(valueType), PointerType::getUnqual(stateType), containerType, PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());

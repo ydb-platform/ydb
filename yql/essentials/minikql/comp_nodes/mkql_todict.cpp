@@ -19,7 +19,9 @@
 
 namespace NKikimr::NMiniKQL {
 
+#ifndef MKQL_DISABLE_CODEGEN
 using NYql::EnsureDynamicCast;
+#endif
 
 namespace {
 
@@ -63,7 +65,7 @@ public:
 
     std::unique_ptr<ISetAccumulator> Create(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
                                             const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx,
-                                            ui64 itemsCountHint) const {
+                                            ui64 itemsCountHint) const override {
         return std::make_unique<T>(keyType, keyTypes, isTuple, encoded, compare, equate, hash, ctx, itemsCountHint);
     }
 };
@@ -77,7 +79,7 @@ public:
 
     std::unique_ptr<IMapAccumulator> Create(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
                                             const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx,
-                                            ui64 itemsCountHint) const {
+                                            ui64 itemsCountHint) const override {
         return std::make_unique<T>(keyType, payloadType, keyTypes, isTuple, encoded, compare, equate, hash, ctx, itemsCountHint);
     }
 };
@@ -126,7 +128,7 @@ public:
         if (it == Map_.end()) {
             it = Map_.emplace(std::move(key), Ctx_.HolderFactory.NewVectorHolder()).first;
         }
-        it->second.Push(std::move(payload));
+        it->second.Push(payload);
     }
 
     NUdf::TUnboxedValue Build() final {
@@ -134,7 +136,7 @@ public:
             targetMap = std::move(Map_);
         };
 
-        return Ctx_.HolderFactory.CreateDirectHashedDictHolder(filler, KeyTypes_, IsTuple_, true, Packer_ ? KeyType_ : nullptr, Hash_, Equate_);
+        return Ctx_.HolderFactory.CreateDirectHashedDictHolder(filler, KeyTypes_, IsTuple_, /*eagerFill=*/true, Packer_ ? KeyType_ : nullptr, Hash_, Equate_);
     }
 };
 
@@ -186,7 +188,7 @@ public:
             targetMap = std::move(Map_);
         };
 
-        return Ctx_.HolderFactory.CreateDirectHashedDictHolder(filler, KeyTypes_, IsTuple_, true, Packer_ ? KeyType_ : nullptr, Hash_, Equate_);
+        return Ctx_.HolderFactory.CreateDirectHashedDictHolder(filler, KeyTypes_, IsTuple_, /*eagerFill=*/true, Packer_ ? KeyType_ : nullptr, Hash_, Equate_);
     }
 };
 
@@ -236,7 +238,7 @@ public:
 
     NUdf::TUnboxedValue Build() final {
         std::optional<NUdf::TUnboxedValue> nullPayload;
-        if (NullPayloads_.size()) {
+        if (!NullPayloads_.empty()) {
             nullPayload = Ctx_.HolderFactory.VectorAsVectorHolder(std::move(NullPayloads_));
         }
         return Ctx_.HolderFactory.CreateDirectHashedSingleFixedMapHolder<T, OptionalKey>(std::move(Map_), std::move(nullPayload));
@@ -332,7 +334,7 @@ public:
             targetSet = std::move(Set_);
         };
 
-        return Ctx_.HolderFactory.CreateDirectHashedSetHolder(filler, KeyTypes_, IsTuple_, true, Packer_ ? KeyType_ : nullptr, Hash_, Equate_);
+        return Ctx_.HolderFactory.CreateDirectHashedSetHolder(filler, KeyTypes_, IsTuple_, /*eagerFill=*/true, Packer_ ? KeyType_ : nullptr, Hash_, Equate_);
     }
 };
 
@@ -673,7 +675,7 @@ public:
 
     void Add(NUdf::TUnboxedValue&& key) final {
         if (Packer_) {
-            key = MakeString(Packer_->Encode(key, false));
+            key = MakeString(Packer_->Encode(key, /*desc=*/false));
         }
 
         Items_.emplace_back(std::move(key));
@@ -687,7 +689,7 @@ public:
         };
 
         return Ctx_.HolderFactory.CreateDirectSortedSetHolder(filler, KeyTypes_, IsTuple_,
-                                                              EDictSortMode::SortedUniqueAscending, true, Packer_ ? KeyType_ : nullptr, Compare_, Equate_);
+                                                              EDictSortMode::SortedUniqueAscending, /*eagerFill=*/true, Packer_ ? KeyType_ : nullptr, Compare_, Equate_);
     }
 };
 
@@ -729,7 +731,7 @@ public:
 
     void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final {
         if (Packer_) {
-            key = MakeString(Packer_->Encode(key, false));
+            key = MakeString(Packer_->Encode(key, /*desc=*/false));
         }
 
         Items_.emplace_back(std::move(key), std::move(payload));
@@ -741,7 +743,7 @@ public:
         };
 
         return Ctx_.HolderFactory.CreateDirectSortedDictHolder(filler, KeyTypes_, IsTuple_, EDictSortMode::RequiresSorting,
-                                                               true, Packer_ ? KeyType_ : nullptr, Compare_, Equate_);
+                                                               /*eagerFill=*/true, Packer_ ? KeyType_ : nullptr, Compare_, Equate_);
     }
 };
 
@@ -779,7 +781,7 @@ public:
 
     void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final {
         if (Packer_) {
-            key = MakeString(Packer_->Encode(key, false));
+            key = MakeString(Packer_->Encode(key, /*desc=*/false));
         }
 
         Items_.emplace_back(std::move(key), std::move(payload));
@@ -814,7 +816,7 @@ public:
         };
 
         return Ctx_.HolderFactory.CreateDirectSortedDictHolder(filler, KeyTypes_, IsTuple_,
-                                                               EDictSortMode::SortedUniqueAscending, true, Packer_ ? KeyType_ : nullptr, Compare_, Equate_);
+                                                               EDictSortMode::SortedUniqueAscending, /*eagerFill=*/true, Packer_ ? KeyType_ : nullptr, Compare_, Equate_);
     }
 };
 
@@ -948,7 +950,7 @@ private:
     llvm::PointerType* StructPtrType_;
 
 protected:
-    using TBase::Context;
+    using TBase::GetContext;
 
 public:
     std::vector<llvm::Type*> GetFieldsArray() {
@@ -958,7 +960,7 @@ public:
     }
 
     llvm::Constant* GetAccumulator() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 0);
     }
 
     explicit TLLVMFieldsStructureStateWithAccum(llvm::LLVMContext& context)
@@ -1035,7 +1037,7 @@ public:
         MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
@@ -1213,7 +1215,7 @@ public:
         MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1521,7 +1523,7 @@ public:
         MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
@@ -1705,7 +1707,7 @@ public:
         MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1844,13 +1846,13 @@ IComputationNode* WrapToSet(TCallable& callable, const TNodeLocator& nodeLocator
     const auto type = callable.GetInput(0U).GetStaticType();
 
     if (type->IsList()) {
-        return new TSetWrapper(mutables, keyType, flow, itemArg, keySelector, itemsCountHint, false, std::move(factory));
+        return new TSetWrapper(mutables, keyType, flow, itemArg, keySelector, itemsCountHint, /*isStream=*/false, std::move(factory));
     }
     if (type->IsFlow()) {
         return new TSqueezeSetFlowWrapper(mutables, keyType, flow, itemArg, keySelector, itemsCountHint, std::move(factory));
     }
     if (type->IsStream()) {
-        return new TSetWrapper(mutables, keyType, flow, itemArg, keySelector, itemsCountHint, true, std::move(factory));
+        return new TSetWrapper(mutables, keyType, flow, itemArg, keySelector, itemsCountHint, /*isStream=*/true, std::move(factory));
     }
 
     THROW yexception() << "Expected list, flow or stream.";
@@ -1881,13 +1883,13 @@ IComputationNode* WrapToMap(TCallable& callable, const TNodeLocator& nodeLocator
     const auto type = callable.GetInput(0U).GetStaticType();
 
     if (type->IsList()) {
-        return new TMapWrapper(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint, false, std::move(factory));
+        return new TMapWrapper(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint, /*isStream=*/false, std::move(factory));
     }
     if (type->IsFlow()) {
         return new TSqueezeMapFlowWrapper(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint, std::move(factory));
     }
     if (type->IsStream()) {
-        return new TMapWrapper(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint, true, std::move(factory));
+        return new TMapWrapper(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint, /*isStream=*/true, std::move(factory));
     }
 
     THROW yexception() << "Expected list, flow or stream.";
@@ -1937,7 +1939,7 @@ IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputati
         auto factory = std::make_unique<TSetAccumulatorFactory<TSortedSetAccumulator>>();
         if (type->IsList()) {
             return new TSetWrapper(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint,
-                                   false, std::move(factory));
+                                   /*isStream=*/false, std::move(factory));
         }
         if (type->IsFlow()) {
             return new TSqueezeSetFlowWrapper(ctx.Mutables, keyType, flow, itemArg, keySelector,
@@ -1945,13 +1947,13 @@ IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputati
         }
         if (type->IsStream()) {
             return new TSetWrapper(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint,
-                                   true, std::move(factory));
+                                   /*isStream=*/true, std::move(factory));
         }
     } else if (isMulti) {
         auto factory = std::make_unique<TMapAccumulatorFactory<TSortedMapAccumulator<true>>>();
         if (type->IsList()) {
             return new TMapWrapper(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint,
-                                   false, std::move(factory));
+                                   /*isStream=*/false, std::move(factory));
         }
         if (type->IsFlow()) {
             return new TSqueezeMapFlowWrapper(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector,
@@ -1959,13 +1961,13 @@ IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputati
         }
         if (type->IsStream()) {
             return new TMapWrapper(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint,
-                                   true, std::move(factory));
+                                   /*isStream=*/true, std::move(factory));
         }
     } else {
         auto factory = std::make_unique<TMapAccumulatorFactory<TSortedMapAccumulator<false>>>();
         if (type->IsList()) {
             return new TMapWrapper(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint,
-                                   false, std::move(factory));
+                                   /*isStream=*/false, std::move(factory));
         }
         if (type->IsFlow()) {
             return new TSqueezeMapFlowWrapper(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector,
@@ -1973,7 +1975,7 @@ IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputati
         }
         if (type->IsStream()) {
             return new TMapWrapper(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint,
-                                   true, std::move(factory));
+                                   /*isStream=*/true, std::move(factory));
         }
     }
 

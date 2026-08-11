@@ -7,12 +7,15 @@
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 #include <util/random/shuffle.h>
+#include <array>
 #include <map>
 #include <optional>
 
 namespace NKikimr::NMiniKQL {
 
-static const TStringBuf data[] = {
+namespace {
+
+const auto data = std::to_array<TStringBuf>({
     "13d49d4db08e57d645fe4d44bbed4738f386af6e9e742cf186961063feb9919b",
     "14d285e88582d87c41d3e6d2e9352686d0363ea74a297fe02f901f18c19978a3",
     "1795ad46329c4fc6b3355dc22d252c5fe390a971ddf009b54fdeceb93d3b8930",
@@ -65,7 +68,7 @@ static const TStringBuf data[] = {
     "11b4753fd9cc33656dbd59769b3202b7f68bd067bf7f64bd54676f6f60366ef1",
     "1932a0aecc4a569d7d3fbcdd329b92c0b4dbd870d6be48ec4f18285ab3183676",
     "2a2e6b62a4383cb48ffbb69b2f356ceb0410593f5b5500142498692dec7c125f",
-};
+});
 
 Y_UNIT_TEST_SUITE(TMiniKQLToDictTest) {
 Y_UNIT_TEST_LLVM(TestCompactUtf8Set) {
@@ -222,7 +225,7 @@ Y_UNIT_TEST_LLVM(TestNarrowSqueezeToDict) {
 }
 
 template <bool LLVM>
-static void TestDictWithDataKeyImpl(bool optionalKey, bool multi, bool compact, bool withNull, bool withData) {
+void TestDictWithDataKeyImpl(bool optionalKey, bool multi, bool compact, bool withNull, bool withData) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -408,7 +411,7 @@ Y_UNIT_TEST_LLVM(TestDictCompactMultiWithOptionalDataKey) {
 }
 
 template <bool LLVM>
-static void TestSetWithDataKeyImpl(bool optionalKey, bool compact, bool withNull, bool withData) {
+void TestSetWithDataKeyImpl(bool optionalKey, bool compact, bool withNull, bool withData) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -509,5 +512,7 @@ Y_UNIT_TEST_LLVM(TestSetCompactWithOptionalDataKey) {
     TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/ true, /*compact*/ true, /*withNull*/ false, /*withData*/ false); // empty set
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLToDictTest)
+
+} // namespace
 
 } // namespace NKikimr::NMiniKQL

@@ -1,10 +1,5 @@
 #include "ydb/core/testlib/basics/appdata.h"
 
-#include <ydb/core/fq/libs/ydb/util.h>
-#include <ydb/core/fq/libs/ydb/ydb.h>
-
-#include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
-
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -13,9 +8,6 @@
 #include <ydb/library/yql/utils/actors/http_sender.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/base/path.h>
-
-#include <util/system/env.h>
 
 namespace NYql {
 

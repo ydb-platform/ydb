@@ -3,7 +3,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/slide_limiter/service/service.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/slide_limiter/usage/events.h>
 
 namespace NKikimr::NLimiter {
@@ -13,6 +13,8 @@ class TServiceOperatorImpl {
 private:
     using TSelf = TServiceOperatorImpl<TLimiterPolicy>;
     std::atomic<bool> IsEnabledFlag = false;
+
+public:
     static void Register(const TConfig& serviceConfig) {
         Singleton<TSelf>()->IsEnabledFlag = serviceConfig.IsEnabled() && serviceConfig.GetLimit();
     }
@@ -20,8 +22,6 @@ private:
         Y_ABORT_UNLESS(TLimiterPolicy::Name.size() == 4);
         return TLimiterPolicy::Name;
     }
-
-public:
     static bool AskResource(const std::shared_ptr<IResourceRequest>& request) {
         AFL_VERIFY(!!request);
         auto& context = NActors::TActorContext::AsActorContext();
@@ -39,10 +39,6 @@ public:
     }
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcLimt" + GetLimiterName());
-    }
-    static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals) {
-        Register(config);
-        return new TLimiterActor(config, GetLimiterName(), baseSignals);
     }
 };
 

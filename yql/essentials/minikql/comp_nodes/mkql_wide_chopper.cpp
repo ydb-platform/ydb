@@ -213,7 +213,7 @@ private:
     }
 
 public:
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -375,8 +375,8 @@ IComputationNode* WrapWideChopper(TCallable& callable, const TComputationNodeFac
     index += keysSize;
 
     const auto switchResult = LocateNode(ctx.NodeLocator, callable, ++index);
-    const auto input = LocateNode(ctx.NodeLocator, callable, ++index, true);
-    const auto output = LocateNode(ctx.NodeLocator, callable, ++index, true);
+    const auto input = LocateNode(ctx.NodeLocator, callable, ++index, /*pop=*/true);
+    const auto output = LocateNode(ctx.NodeLocator, callable, ++index, /*pop=*/true);
 
     TComputationExternalNodePtrVector itemArgs;
     TComputationExternalNodePtrVector keyArgs;

@@ -3,6 +3,7 @@
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
+#include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -77,6 +78,46 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId}, "operationId", "/Root/Database");
 
         ValidateStatistics(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeUsesBatchPool, ColumnShard) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
+
+        size_t taskRequests = 0;
+        auto tasksObserver = runtime.AddObserver<NKqp::TEvKqpNode::TEvStartKqpTasksRequest>([&](auto& ev) {
+            UNIT_ASSERT(ev->Get()->Record.GetUseBatchPool());
+            ++taskRequests;
+        });
+        size_t scans = 0;
+        auto scansObserver = runtime.AddObserver<TEvDataShard::TEvKqpScan>([&](auto& ev) {
+            UNIT_ASSERT(ev->Get()->Record.GetUseBatchPool());
+            ++scans;
+        });
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        UNIT_ASSERT_GT(taskRequests, 0);
+        UNIT_ASSERT_GT(scans, 0);
+    }
+
+    Y_UNIT_TEST_TWIN(QueryDoesNotUseBatchPool, ColumnShard) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        PrepareTable(env, "Database", "Table", ColumnShard);
+
+        size_t scans = 0;
+        auto scansObserver = runtime.AddObserver<TEvDataShard::TEvKqpScan>([&](auto& ev) {
+            UNIT_ASSERT(!ev->Get()->Record.GetUseBatchPool());
+            ++scans;
+        });
+
+        ExecuteYqlScript(env, "SELECT COUNT(*) FROM `Root/Database/Table`;");
+
+        UNIT_ASSERT_GT(scans, 0);
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeSpecificColumns, ColumnShard) {

@@ -361,7 +361,8 @@ class EndpointResolver(BaseEndpointResolver):
 
         if endpoint_data.get('deprecated'):
             LOG.warning(
-                f'Client is configured with the deprecated endpoint: {endpoint_name}'
+                'Client is configured with the deprecated endpoint: %s',
+                endpoint_name,
             )
 
         service_defaults = service_data.get('defaults', {})
@@ -503,7 +504,7 @@ class EndpointRulesetResolver:
             operation_model, call_args, request_context
         )
         LOG.debug(
-            f'Calling endpoint provider with parameters: {provider_params}'
+            'Calling endpoint provider with parameters: %s', provider_params
         )
         try:
             provider_result = self._provider.resolve_endpoint(
@@ -517,10 +518,14 @@ class EndpointRulesetResolver:
                 raise
             else:
                 raise botocore_exception from ex
-        LOG.debug(f'Endpoint provider result: {provider_result.url}')
+        LOG.debug('Endpoint provider result: %s', provider_result.url)
 
         # The endpoint provider does not support non-secure transport.
-        if not self._use_ssl and provider_result.url.startswith('https://'):
+        if (
+            not self._use_ssl
+            and provider_result.url.startswith('https://')
+            and 'Endpoint' not in provider_params
+        ):
             provider_result = provider_result._replace(
                 url=f'http://{provider_result.url[8:]}'
             )

@@ -933,8 +933,8 @@ optimizer_trace::Node BuildPlanNode(
 }
 
 optimizer_trace::Node BuildPlanNodeFromRoot(TOpRoot& root, TExprContext& ctx, ui32 opts, TTraceBuildState* state) {
-    const auto& subplans = root.PlanProps.Subplans.PlanMap;
-    if (subplans.empty()) {
+    const auto& subplans = root.PlanProps.Subplans;
+    if (subplans.Empty()) {
         return BuildPlanNode(root.GetInput(), ctx, root.PlanProps, opts, "n-0", state);
     }
     optimizer_trace::Node container("n", "Plan", "Plan");

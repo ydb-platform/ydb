@@ -65,6 +65,10 @@ struct TSubplans {
         return PlanMap.at(binding);
     }
 
+    bool Empty() const {
+        return PlanMap.empty();
+    }
+
     auto begin() const {
         return PlanMap.begin();
     }

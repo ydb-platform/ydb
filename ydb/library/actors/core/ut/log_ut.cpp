@@ -575,7 +575,7 @@ Y_UNIT_TEST_SUITE(TWriteMetaLogTest) {
 
     Y_UNIT_TEST(MemLogAdapter) {
         TFixture env{NoBufferSettings()};
-        env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
+        env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_FULL_FORMAT);
 
         MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message");
         MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDB_LOG_CREATE_MESSAGE({"value1", 1}));
@@ -592,7 +592,7 @@ Y_UNIT_TEST_SUITE(TWriteMetaLogTest) {
 
     Y_UNIT_TEST(WriteSimple) {
         TFixture env{NoBufferSettings()};
-        env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
+        env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_FULL_FORMAT);
 
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(TWriteMetaLogTest) {
         using namespace NActors::NStructuredLog;
 
         TFixture env{NoBufferSettings()};
-        env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
+        env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_FULL_FORMAT);
 
         {
             TLogStack::TLogGuard g;

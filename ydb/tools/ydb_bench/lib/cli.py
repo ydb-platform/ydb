@@ -5,7 +5,8 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ydb.tools.ydb_bench.lib.actors_core import BENCHMARKS, run_actors_core
+from ydb.tools.ydb_bench.benchmarks import BENCHMARKS
+from ydb.tools.ydb_bench.lib.actors_core import run_actors_core
 from ydb.tools.ydb_bench.lib.common import (
     BenchmarkError,
     BenchmarkInterrupted,
@@ -13,7 +14,7 @@ from ydb.tools.ydb_bench.lib.common import (
     atomic_write_json,
     extract_executable,
 )
-from ydb.tools.ydb_bench.lib.config import CONFIG_SCHEMA, load_config
+from ydb.tools.ydb_bench.lib.config import config_schema, load_config
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
 
 
@@ -207,7 +208,7 @@ def main(argv=None, resource_loader=None, tool_revision=None):
             _describe(arguments.benchmark)
             return 0
         if arguments.command == "config-schema":
-            print(json.dumps(CONFIG_SCHEMA, indent=2, sort_keys=True))
+            print(json.dumps(config_schema(), indent=2, sort_keys=True))
             return 0
         return _run(arguments, resource_loader, tool_revision or {"commit_id": "unknown"})
     except BenchmarkInterrupted as error:

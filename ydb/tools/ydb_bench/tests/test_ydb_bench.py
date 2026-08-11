@@ -18,9 +18,10 @@ from ydb.tools.ydb_bench.lib.actors_core import (
     parse_metrics,
     run_actors_core,
 )
+from ydb.tools.ydb_bench.benchmarks.registry import BenchmarkDefinition, BenchmarkRegistry
 from ydb.tools.ydb_bench.lib.cli import main
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
-from ydb.tools.ydb_bench.lib.config import CONFIG_SCHEMA, load_config
+from ydb.tools.ydb_bench.lib.config import CONFIG_SCHEMA, config_schema, load_config
 from ydb.tools.ydb_bench.lib.runner import run_command
 from ydb.tools.ydb_bench.lib.topology import (
     AFFINITY_MODES,
@@ -113,6 +114,51 @@ class YdbBenchTest(unittest.TestCase):
             self.assertEqual(main(["config-schema"]), 0)
         self.assertEqual(json.loads(schema_output.getvalue()), CONFIG_SCHEMA)
         self.assertEqual(set(CONFIG_SCHEMA["properties"]), {"ping-bench", "star-ping-bench"})
+
+    def test_registry_accepts_a_fake_adapter_and_generates_its_schema(self):
+        """Adapters can be registered independently of the CLI, config loader, and executor."""
+        registry = BenchmarkRegistry()
+        fake = BenchmarkDefinition(
+            name="fake-bench",
+            description="test adapter",
+            test_filter="Fake::Run",
+            parameter_name="samples",
+            parameter_description="Sample counts",
+            parameter_environment="FAKE_SAMPLES",
+            parameter_column="samples",
+            parse_metrics=PING_BENCHMARK.parse_metrics,
+            render_metrics=PING_BENCHMARK.render_metrics,
+            validate_metrics=PING_BENCHMARK.validate_metrics,
+            summarize_metrics=PING_BENCHMARK.summarize_metrics,
+            render_summary=PING_BENCHMARK.render_summary,
+        )
+        self.assertIs(registry.register(fake), fake)
+        self.assertEqual(list(registry), ["fake-bench"])
+        schema = config_schema(registry)
+        self.assertEqual(set(schema["properties"]), {"fake-bench"})
+        self.assertIn("samples", schema["properties"]["fake-bench"]["additionalProperties"]["properties"])
+        script = self._script(
+            """
+            echo "threads,actorPairs,samples,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,1,1000,1.0,900,1100"
+            echo "2,32,1,2000,1.0,1800,2200"
+            """
+        )
+        output = self.root / "fake-output"
+        output.mkdir()
+        configuration = RunConfiguration(
+            benchmark=fake,
+            profile="fake",
+            threads=(1, 2),
+            actor_pairs=(32,),
+            parameter_values=(1,),
+            duration_seconds=1,
+            repetitions=1,
+            timeout_seconds=5,
+        )
+        manifest = run_actors_core(self._binary(script), configuration, output, {"commit_id": "test"})
+        self.assertEqual(manifest["benchmark"], "fake-bench")
+        self.assertIn("samples", (output / "summary.csv").read_text().splitlines()[0])
 
     def test_config_supports_multiple_benchmarks_and_profiles(self):
         """Load ping baseline, ping focused, then star sweep while preserving YAML order."""

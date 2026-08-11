@@ -1,7 +1,4 @@
-import csv
-import io
 import os
-import statistics
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,54 +13,8 @@ from ydb.tools.ydb_bench.lib.common import (
 from ydb.tools.ydb_bench.lib.runner import run_command
 from ydb.tools.ydb_bench.lib.system_info import collect_system_info
 from ydb.tools.ydb_bench.lib.topology import discover_topology, plan_affinity, topology_record
-
-
-@dataclass(frozen=True)
-class BenchmarkDefinition:
-    name: str
-    description: str
-    test_filter: str
-    parameter_name: str
-    parameter_environment: str
-    parameter_column: str
-
-    @property
-    def csv_columns(self):
-        return (
-            "threads",
-            "actorPairs",
-            self.parameter_column,
-            "msgs_per_sec",
-            "elapsed_seconds",
-            "min_pair_sent_msgs",
-            "max_pair_sent_msgs",
-        )
-
-    @property
-    def csv_header(self):
-        return ",".join(self.csv_columns)
-
-
-PING_BENCHMARK = BenchmarkDefinition(
-    name="ping-bench",
-    description="pairwise actor ping throughput",
-    test_filter="HeavyActorBenchmark::SendActivateReceiveCSVManual",
-    parameter_name="inflight",
-    parameter_environment="ACTORSYSTEM_INFLIGHTS",
-    parameter_column="in_flight",
-)
-STAR_PING_BENCHMARK = BenchmarkDefinition(
-    name="star-ping-bench",
-    description="star-topology actor ping throughput",
-    test_filter="HeavyActorBenchmark::StarSendActivateReceiveCSVManual",
-    parameter_name="stars",
-    parameter_environment="ACTORSYSTEM_STARS",
-    parameter_column="star_multiply",
-)
-BENCHMARKS = {
-    benchmark.name: benchmark
-    for benchmark in (PING_BENCHMARK, STAR_PING_BENCHMARK)
-}
+from ydb.tools.ydb_bench.benchmarks import BENCHMARKS, PING_BENCHMARK, STAR_PING_BENCHMARK
+from ydb.tools.ydb_bench.benchmarks.registry import BenchmarkDefinition
 
 
 @dataclass(frozen=True)
@@ -82,115 +33,8 @@ class RunConfiguration:
 
 
 def parse_metrics(stdout, benchmark=PING_BENCHMARK):
-    lines = stdout.splitlines()
-    try:
-        header_index = next(index for index, line in enumerate(lines) if line.strip() == benchmark.csv_header)
-    except StopIteration as error:
-        raise BenchmarkError(
-            "benchmark output does not contain the expected CSV header for {}".format(benchmark.name)
-        ) from error
-
-    rows = []
-    for line in lines[header_index + 1 :]:
-        try:
-            values = next(csv.reader([line]))
-        except csv.Error:
-            continue
-        if len(values) != len(benchmark.csv_columns):
-            continue
-        try:
-            row = {
-                "threads": int(values[0]),
-                "actorPairs": int(values[1]),
-                benchmark.parameter_column: int(values[2]),
-                "msgs_per_sec": float(values[3]),
-                "elapsed_seconds": float(values[4]),
-                "min_pair_sent_msgs": int(values[5]),
-                "max_pair_sent_msgs": int(values[6]),
-            }
-        except ValueError:
-            continue
-        rows.append(row)
-
-    if not rows:
-        raise BenchmarkError("benchmark produced the CSV header but no metric rows")
-    return rows
-
-
-def render_metrics(rows, benchmark=PING_BENCHMARK):
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=benchmark.csv_columns, lineterminator="\n")
-    writer.writeheader()
-    writer.writerows(rows)
-    return output.getvalue()
-
-
-def validate_metrics(rows, configuration):
-    parameter_column = configuration.benchmark.parameter_column
-    expected = {
-        (threads, actor_pairs, parameter_value)
-        for threads in configuration.threads
-        for actor_pairs in configuration.actor_pairs
-        for parameter_value in configuration.parameter_values
-    }
-    actual = {(row["threads"], row["actorPairs"], row[parameter_column]) for row in rows}
-    if len(actual) != len(rows):
-        raise BenchmarkError("benchmark produced duplicate metric rows")
-    if actual != expected:
-        missing = sorted(expected - actual)
-        unexpected = sorted(actual - expected)
-        raise BenchmarkError(
-            "benchmark metric parameters do not match the request; missing={}, unexpected={}".format(
-                missing, unexpected
-            )
-        )
-
-
-def summarize_metrics(repetition_rows, benchmark=PING_BENCHMARK):
-    grouped = {}
-    for affinity_mode, rows in repetition_rows:
-        for row in rows:
-            key = (affinity_mode, row["threads"], row["actorPairs"], row[benchmark.parameter_column])
-            grouped.setdefault(key, []).append(row)
-
-    summary = []
-    for key in sorted(grouped):
-        rows = grouped[key]
-        rates = [row["msgs_per_sec"] for row in rows]
-        elapsed = [row["elapsed_seconds"] for row in rows]
-        summary.append(
-            {
-                "affinity_mode": key[0],
-                "threads": key[1],
-                "actorPairs": key[2],
-                benchmark.parameter_column: key[3],
-                "repetitions": len(rows),
-                "median_msgs_per_sec": statistics.median(rates),
-                "min_msgs_per_sec": min(rates),
-                "max_msgs_per_sec": max(rates),
-                "median_elapsed_seconds": statistics.median(elapsed),
-            }
-        )
-    return summary
-
-
-def render_summary(rows, benchmark=PING_BENCHMARK):
-    columns = (
-        "affinity_mode",
-        "threads",
-        "actorPairs",
-        benchmark.parameter_column,
-        "repetitions",
-        "median_msgs_per_sec",
-        "min_msgs_per_sec",
-        "max_msgs_per_sec",
-        "median_elapsed_seconds",
-    )
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=columns, lineterminator="\n")
-    writer.writeheader()
-    writer.writerows(rows)
-    return output.getvalue()
+    """Compatibility wrapper; adapters own output parsing."""
+    return benchmark.parse_metrics(stdout, benchmark)
 
 
 def _utc_now():
@@ -458,14 +302,14 @@ def run_actors_core(
                 failure = "benchmark exited with code {}".format(result.exit_code)
             else:
                 try:
-                    metrics = parse_metrics(result.stdout, benchmark)
-                    validate_metrics(metrics, configuration)
+                    metrics = benchmark.parse_metrics(result.stdout, benchmark)
+                    benchmark.validate_metrics(metrics, configuration)
                 except BenchmarkError as error:
                     failure = str(error)
                 else:
                     atomic_write_text(
                         repetition_directory / "metrics.csv",
-                        render_metrics(metrics, benchmark),
+                        benchmark.render_metrics(metrics, benchmark),
                     )
                     run_record["metrics"] = str(relative_directory / "metrics.csv")
                     run_record["metric_rows"] = len(metrics)
@@ -503,8 +347,8 @@ def run_actors_core(
         affinity_record["status"] = "completed"
         atomic_write_json(manifest_path, manifest)
 
-    summary = summarize_metrics(repetition_rows, benchmark)
-    atomic_write_text(output_directory / "summary.csv", render_summary(summary, benchmark))
+    summary = benchmark.summarize_metrics(repetition_rows, benchmark)
+    atomic_write_text(output_directory / "summary.csv", benchmark.render_summary(summary, benchmark))
     manifest["status"] = "completed"
     manifest["finished_at"] = _utc_now()
     manifest["summary"] = "summary.csv"

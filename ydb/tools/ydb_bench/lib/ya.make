@@ -13,6 +13,7 @@ PY_SRCS(
 
 PEERDIR(
     contrib/python/PyYAML
+    ydb/tools/ydb_bench/benchmarks
 )
 
 END()

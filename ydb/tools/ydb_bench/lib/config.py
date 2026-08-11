@@ -7,7 +7,8 @@ from pathlib import Path
 import yaml
 from yaml.constructor import ConstructorError
 
-from ydb.tools.ydb_bench.lib.actors_core import BENCHMARKS, RunConfiguration
+from ydb.tools.ydb_bench.benchmarks import BENCHMARKS
+from ydb.tools.ydb_bench.lib.actors_core import RunConfiguration
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
 
@@ -107,21 +108,25 @@ def _profiles_schema(profile_schema):
     }
 
 
-CONFIG_SCHEMA = {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "ydb_bench configuration",
-    "type": "object",
-    "minProperties": 1,
-    "additionalProperties": False,
-    "properties": {
-        "ping-bench": _profiles_schema(
-            _profile_schema("inflight", "Maximum in-flight messages per actor pair")
-        ),
-        "star-ping-bench": _profiles_schema(
-            _profile_schema("stars", "Star multipliers used by the star-topology benchmark")
-        ),
-    },
-}
+def config_schema(registry=BENCHMARKS):
+    """Build the public schema from registered benchmark adapters."""
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ydb_bench configuration",
+        "type": "object",
+        "minProperties": 1,
+        "additionalProperties": False,
+        "properties": {
+            benchmark.name: _profiles_schema(
+                _profile_schema(benchmark.parameter_name, benchmark.parameter_description)
+            )
+            for benchmark in registry.values()
+        },
+    }
+
+
+# Compatibility value for consumers that import the schema directly.
+CONFIG_SCHEMA = config_schema()
 
 
 @dataclass(frozen=True)

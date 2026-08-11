@@ -110,7 +110,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         if (auto vmMetadataEmulatorHost = getenv("VM_METADATA_EMULATOR_HOST")) {
             auto& localMetadataService = *authConfig.MutableLocalMetadataService();
             localMetadataService.SetHost(vmMetadataEmulatorHost);
-            localMetadataService.SetPort(80);
+            localMetadataService.SetPort(FromString<ui16>(getenv("VM_METADATA_EMULATOR_PORT")));
         }
 
         if (auto iamEndpoint = getenv("IAM_EMULATOR_ENDPOINT")) {
@@ -318,6 +318,18 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
     bool sort,
     bool local,
     bool checkResult) {
+
+    return ReadTopicMessages(topicName, expectedMessages, *GetTopicClient(local), disposition, sort, checkResult);
+}
+
+std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMessages(
+    const std::string& topicName,
+    std::vector<std::string> expectedMessages,
+    NYdb::NTopic::TTopicClient& topicClient,
+    TInstant disposition,
+    bool sort,
+    bool checkResult) {
+
     NYdb::NTopic::TReadSessionSettings readSettings;
     readSettings
         .WithoutConsumer()
@@ -332,7 +344,7 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
         }
     );
 
-    auto readSession = GetTopicClient(local)->CreateReadSession(readSettings);
+    auto readSession = topicClient.CreateReadSession(readSettings);
     std::vector<std::pair<std::string, TInstant>> received;
 
     WaitFor(TEST_OPERATION_TIMEOUT, "topic output messages", [&](TString& error) {

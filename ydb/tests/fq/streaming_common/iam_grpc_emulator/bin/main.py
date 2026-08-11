@@ -91,6 +91,17 @@ class IamTokenServicer(iam_token_service_pb2_grpc.IamTokenServiceServicer):
         if target_sa == 'bad-token':
             return make_response("badtoken@builtin", expires_in)
 
+        if target_sa == 'unavailable-token':
+            context.set_code(grpc.StatusCode.UNAVAILABLE)
+            context.set_details("Too busy to respond forever")
+            return iam_token_service_pb2.CreateIamTokenResponse()
+
+        if target_sa == 'slow-unavailable-token':
+            time.sleep(30)
+            context.set_code(grpc.StatusCode.UNAVAILABLE)
+            context.set_details("Too busy and slow to respond forever")
+            return iam_token_service_pb2.CreateIamTokenResponse()
+
         if target_sa.startswith('bad-skip-'):
             skips = int(target_sa.split('-')[-1])
             self.calls += 1
@@ -147,6 +158,10 @@ class AccessServicer(access_service_pb2_grpc.AccessServiceServicer):
             if resource.type != 'iam.serviceAccount':
                 context.set_code(grpc.StatusCode.PERMISSION_DENIED)
                 context.set_details("Don't know about this type: " + resource.type)
+
+            if resource.id == 'unavailable':
+                context.set_code(grpc.StatusCode.UNAVAILABLE)
+                context.set_details("Too busy to respond forever")
                 return access_service_pb2.AuthorizeResponse()
 
             if resource.id == 'flaky':

@@ -202,6 +202,7 @@ public:
     TInstant CompileWallStart;
     TInstant CompileWallEnd;
     std::shared_ptr<const std::vector<TUserFacingCompileSpan>> UserFacingCompileSpans;
+    std::optional<TUserFacingCompileActorSpan> UserFacingCompileActorSpan;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx

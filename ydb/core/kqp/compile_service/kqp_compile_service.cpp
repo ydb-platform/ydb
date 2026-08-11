@@ -654,6 +654,7 @@ private:
         auto& compileResult = ev->Get()->CompileResult;
         auto& compileStats = ev->Get()->Stats;
         const auto userFacingCompileSpans = ev->Get()->UserFacingCompileSpans;
+        const auto userFacingCompileActorSpan = ev->Get()->UserFacingCompileActorSpan;
 
         Y_ABORT_UNLESS(compileResult->Query);
 
@@ -669,7 +670,7 @@ private:
         if (compileResult->NeedToSplit) {
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
                 compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan),
-                userFacingCompileSpans);
+                userFacingCompileSpans, userFacingCompileActorSpan);
             ProcessQueue(ctx);
             return;
         }
@@ -695,7 +696,7 @@ private:
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     Reply(request.Sender, compileResult, compileStats, ctx,
                         request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan),
-                        userFacingCompileSpans);
+                        userFacingCompileSpans, userFacingCompileActorSpan);
                 }
             } else {
                 if (!hasTempTablesNameClashes) {
@@ -708,7 +709,7 @@ private:
             LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileActorId.ToString());
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
                 compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan),
-                userFacingCompileSpans);
+                userFacingCompileSpans, userFacingCompileActorSpan);
         }
         catch (const std::exception& e) {
             LogException("TEvCompileResponse", ev->Sender, e, ctx);
@@ -950,7 +951,8 @@ private:
     void Reply(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
         const TKqpStatsCompile& compileStats, const TActorContext& ctx, ui64 cookie,
         NLWTrace::TOrbit orbit, NWilson::TSpan span,
-        std::shared_ptr<const std::vector<TUserFacingCompileSpan>> userFacingCompileSpans = {})
+        std::shared_ptr<const std::vector<TUserFacingCompileSpan>> userFacingCompileSpans = {},
+        std::optional<TUserFacingCompileActorSpan> userFacingCompileActorSpan = {})
     {
         const auto& query = compileResult->Query;
         LWTRACK(KqpCompileServiceReply,
@@ -966,6 +968,7 @@ private:
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit));
         responseEv->Stats = compileStats;
         responseEv->UserFacingCompileSpans = std::move(userFacingCompileSpans);
+        responseEv->UserFacingCompileActorSpan = userFacingCompileActorSpan;
 
         if (span) {
             span.End();

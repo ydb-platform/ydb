@@ -152,6 +152,7 @@ struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::Ev
     TKqpCompileResult::TConstPtr CompileResult;
     TKqpStatsCompile Stats;
     std::shared_ptr<const std::vector<TUserFacingCompileSpan>> UserFacingCompileSpans;
+    std::optional<TUserFacingCompileActorSpan> UserFacingCompileActorSpan;
     std::optional<TString> ReplayMessage;
 
     NLWTrace::TOrbit Orbit;

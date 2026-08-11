@@ -13,6 +13,11 @@ message TListNodes {
     }
 }
 
+enum ELiveness {
+    ALIVE = 0;
+    DEAD = 1;
+}
+
 message TNodeInfo {
     optional uint32 NodeId = 1;
     optional string Host = 2;
@@ -23,7 +28,7 @@ message TNodeInfo {
     optional uint64 Expire = 7;
     optional uint64 ExpireV2 = 9;
     optional string Name = 8;
-    optional uint32 Liveness = 10;
+    optional ELiveness Liveness = 10;
 }
 
 message TNodeInfoSchema {
@@ -39,7 +44,7 @@ message TNodeInfoSchema {
     optional bool AuthorizedByCertificate = 10;
     optional uint64 ExpireV2 = 11;
     optional uint64 AliveUntil = 12;
-    optional uint32 Liveness = 13;
+    optional ELiveness Liveness = 13;
 }
 
 message TVersionInfo {

@@ -2,6 +2,7 @@
 #include "node_broker.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
@@ -60,6 +61,9 @@ public:
         }
 
         EnableLongLease = AppData()->FeatureFlags.GetEnableNodeBrokerLongLease();
+
+        auto counters = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("component", "lease_holder");
+        PingErrorsCounter = counters->GetCounter("PingErrors", true);
 
         const ui32 featureFlagsItem = NKikimrConsole::TConfigItem::FeatureFlagsItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -139,6 +143,7 @@ private:
     {
         NTabletPipe::CloseClient(ctx, NodeBrokerPipe);
         NodeBrokerPipe = TActorId();
+        PingErrorsCounter->Inc();
 
         Ping(ctx);
     }
@@ -183,6 +188,7 @@ private:
         if (rec.GetStatus().GetCode() != NKikimrNodeBroker::TStatus::OK) {
             LOG_ERROR(ctx, NKikimrServices::NODE_BROKER, "Cannot extend lease: %s",
                       rec.GetStatus().GetReason().data());
+            PingErrorsCounter->Inc();
             return;
         }
 
@@ -232,7 +238,7 @@ private:
                     << "Epoch end: " << ToString(EpochEnd) << Endl
                     << "Next epoch end: " << ToString(NextEpochEnd) << Endl
                     << "Next ping at: " << ToString(NextPing) << Endl
-                    << "Enable long lease: " << EnableLongLease << Endl
+                    << "EnableNodeBrokerLongLease: " << (EnableLongLease ? "true" : "false") << Endl
                     << "Expire: " << ToString(Expire) << Endl
                     << "ExpireV2: " << ToString(ExpireV2) << Endl;
             }
@@ -287,6 +293,7 @@ private:
     TInstant Expire;
     TInstant ExpireV2;
     NActors::TSchedulerCookieHolder ExpireCookieHolder;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PingErrorsCounter;
 };
 
 IActor *CreateLeaseHolder(TInstant expire)

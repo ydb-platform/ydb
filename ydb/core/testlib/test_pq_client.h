@@ -1004,6 +1004,71 @@ public:
         }
     }
 
+    static Ydb::PersQueue::V1::AutoPartitioningStrategy ConvertPartitionStrategyTypePq(
+        NKikimrPQ::TPQTabletConfig::TPartitionStrategyType type)
+    {
+        using NKikimrPQ::TPQTabletConfig;
+        switch (type) {
+            case TPQTabletConfig::CAN_SPLIT:
+                return Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_SCALE_UP;
+            case TPQTabletConfig::CAN_SPLIT_AND_MERGE:
+                return Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN;
+            case TPQTabletConfig::PAUSED:
+                return Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_PAUSED;
+            default:
+                return Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_DISABLED;
+        }
+    }
+
+    static NYdb::NPersQueue::TCredentials MakeMirrorCredentials(
+        const NKikimrPQ::TMirrorPartitionConfig& mirrorFrom)
+    {
+        Ydb::PersQueue::V1::Credentials credentials;
+        if (mirrorFrom.HasCredentials()) {
+            const auto& src = mirrorFrom.GetCredentials();
+            if (src.HasOauthToken()) {
+                credentials.set_oauth_token(src.GetOauthToken());
+            } else if (src.HasJwtParams()) {
+                credentials.set_jwt_params(src.GetJwtParams());
+            } else if (src.HasIam()) {
+                credentials.mutable_iam()->set_endpoint(src.GetIam().GetEndpoint());
+                credentials.mutable_iam()->set_service_account_key(src.GetIam().GetServiceAccountKey());
+            } else {
+                credentials.set_oauth_token("test_token");
+            }
+        } else {
+            // PQv1 requires credentials; msgbus MirrorFrom often omitted them.
+            credentials.set_oauth_token("test_token");
+        }
+        return NYdb::NPersQueue::TCredentials(credentials);
+    }
+
+    template <typename TTopicSettings>
+    static typename TTopicSettings::TRemoteMirrorRuleSettings MakeRemoteMirrorRuleSettings(
+        const NKikimrPQ::TMirrorPartitionConfig& mirrorFrom)
+    {
+        TString endpoint = mirrorFrom.GetEndpoint();
+        if (mirrorFrom.GetEndpointPort()) {
+            endpoint = TStringBuilder() << endpoint << ":" << mirrorFrom.GetEndpointPort();
+        }
+        if (mirrorFrom.GetUseSecureConnection()) {
+            endpoint = TStringBuilder() << "grpcs://" << endpoint;
+        }
+
+        auto rule = typename TTopicSettings::TRemoteMirrorRuleSettings()
+            .Endpoint(std::string(endpoint))
+            .TopicPath(std::string(mirrorFrom.GetTopic()))
+            .ConsumerName(std::string(mirrorFrom.GetConsumer()))
+            .Credentials(MakeMirrorCredentials(mirrorFrom));
+        if (mirrorFrom.GetReadFromTimestampsMs()) {
+            rule.StartingMessageTimestamp(TInstant::MilliSeconds(mirrorFrom.GetReadFromTimestampsMs()));
+        }
+        if (mirrorFrom.HasDatabase()) {
+            rule.Database(std::string(mirrorFrom.GetDatabase()));
+        }
+        return rule;
+    }
+
     void CreateTopicViaTopicSdk(const TRequestCreatePQ& createRequest) {
         const TString path = ResolveTopicSdkPath(createRequest.Topic);
         auto topicClient = NYdb::NTopic::TTopicClient(*Driver);
@@ -1054,16 +1119,64 @@ public:
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
+    void CreateTopicViaPersQueueSdk(const TRequestCreatePQ& createRequest) {
+        Y_ABORT_UNLESS(createRequest.MirrorFrom);
+        const TString path = ResolveTopicSdkPath(createRequest.Topic);
+        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+
+        NYdb::NPersQueue::TCreateTopicSettings settings;
+        settings.PartitionsCount(createRequest.NumParts);
+        settings.RetentionPeriod(TDuration::Seconds(createRequest.LifetimeS));
+        settings.MaxPartitionWriteSpeed(createRequest.WriteSpeed);
+        settings.MaxPartitionWriteBurst(createRequest.WriteSpeed);
+        settings.SupportedCodecs({
+            NYdb::NPersQueue::ECodec::RAW,
+            NYdb::NPersQueue::ECodec::GZIP,
+            NYdb::NPersQueue::ECodec::LZOP,
+        });
+        settings.AllowUnauthenticatedRead(true);
+        settings.AllowUnauthenticatedWrite(true);
+        // LocalDC comes from remote_mirror_rule; do not set ClientWriteDisabled.
+        settings.RemoteMirrorRule(std::make_optional(
+            MakeRemoteMirrorRuleSettings<NYdb::NPersQueue::TCreateTopicSettings>(*createRequest.MirrorFrom)));
+
+        if (createRequest.PartitionStrategy) {
+            const auto& ps = *createRequest.PartitionStrategy;
+            settings.PartitionsCount(ps.GetMinPartitionCount() ? ps.GetMinPartitionCount() : createRequest.NumParts);
+            settings.MaxPartitionsCount(std::make_optional<uint64_t>(
+                ps.GetMaxPartitionCount() ? ps.GetMaxPartitionCount() : createRequest.NumParts));
+            settings.AutoPartitioningStrategy(std::make_optional(
+                ConvertPartitionStrategyTypePq(ps.GetPartitionStrategyType())));
+            settings.StabilizationWindow(std::make_optional(TDuration::Seconds(ps.GetScaleThresholdSeconds())));
+            settings.DownUtilizationPercent(std::make_optional<uint64_t>(
+                ps.GetScaleDownPartitionWriteSpeedThresholdPercent()));
+            settings.UpUtilizationPercent(std::make_optional<uint64_t>(
+                ps.GetScaleUpPartitionWriteSpeedThresholdPercent()));
+        }
+
+        THashSet<TString> important(createRequest.Important.begin(), createRequest.Important.end());
+        std::vector<NYdb::NPersQueue::TReadRuleSettings> readRules;
+        for (const auto& user : createRequest.ReadRules) {
+            readRules.push_back(
+                NYdb::NPersQueue::TReadRuleSettings()
+                    .ConsumerName(std::string(user))
+                    .Important(important.contains(user)));
+        }
+        settings.ReadRules(readRules);
+
+        Cerr << "PQ Client: create topic via PersQueue SDK (mirror): " << path << Endl;
+        auto res = pqClient.CreateTopic(path, settings).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
     void CreateTopic(const TRequestCreatePQ& createRequest, bool doWait = true) {
         const TInstant start = TInstant::Now();
 
         ui32 prevVersion = GetTopicVersionFromMetadata(createRequest.Topic);
 
-        // Topic API has no mirror rule. PersQueue SDK maps ClientWriteDisabled→non-local,
-        // which fails federation validation for rt3.* topics. Keep msgbus only for mirror
-        // creates/alters.
+        // Topic API has no mirror rule; use PersQueue SDK RemoteMirrorRule.
         if (createRequest.MirrorFrom) {
-            CallPersQueueGRPC(createRequest.GetRequest()->Record);
+            CreateTopicViaPersQueueSdk(createRequest);
         } else {
             CreateTopicViaTopicSdk(createRequest);
         }
@@ -1140,9 +1253,19 @@ public:
 
         const TString path = ResolveTopicSdkPath(name);
         if (mirrorFrom) {
-            // Mirror alter is not representable in Topic API; keep msgbus for this case.
-            TRequestAlterPQ requestDescr(name, nParts, cacheSize, lifetimeS, fillPartitionConfig, mirrorFrom);
-            CallPersQueueGRPC(requestDescr.GetRequest()->Record);
+            // Topic API has no mirror rule; use PersQueue SDK RemoteMirrorRule.
+            auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+            NYdb::NPersQueue::TAlterTopicSettings settings;
+            settings.PartitionsCount(nParts);
+            if (fillPartitionConfig) {
+                settings.RetentionPeriod(TDuration::Seconds(lifetimeS));
+            }
+            settings.RemoteMirrorRule(std::make_optional(
+                MakeRemoteMirrorRuleSettings<NYdb::NPersQueue::TAlterTopicSettings>(*mirrorFrom)));
+
+            Cerr << "PQ Client: alter topic via PersQueue SDK (mirror): " << path << Endl;
+            auto res = pqClient.AlterTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         } else {
             auto topicClient = NYdb::NTopic::TTopicClient(*Driver);
             NYdb::NTopic::TAlterTopicSettings settings;

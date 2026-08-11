@@ -1217,9 +1217,8 @@ void TPartition::Bootstrap(const TActorContext& ctx) {
 }
 
 void TPartition::Initialize(const TActorContext& ctx) {
-    // SyncWriteTime was removed. PQv1 sets it true for remote_mirror_rule with
-    // client_write_disabled (!LocalDC); that is the only supported mirror setup via API.
-    // Mirrored partitions therefore never manage a local write-timestamp estimate.
+    // SyncWriteTime was removed; mirrored partitions always use source write time
+    // and therefore never manage a local write-timestamp estimate.
     ManageWriteTimestampEstimate = MirroringEnabled(Config) ? false : IsLocalDC;
 
     CreationTime = ctx.Now();

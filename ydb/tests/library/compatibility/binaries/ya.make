@@ -6,11 +6,13 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/compatibility/versions.inc)
 
 IF(SANITIZER_TYPE == "address")
     SET(YDB_SAN_TYPE "-asan")
-ELSEIF(SANITIZER_TYPE == "memory")
-    SET(YDB_SAN_TYPE "-msan")
-ELSEIF(SANITIZER_TYPE == "thread")
-    SET(YDB_SAN_TYPE "-tsan")
 ENDIF()
+# Not supported yet
+# ELSEIF(SANITIZER_TYPE == "memory")
+#    SET(YDB_SAN_TYPE "-msan")
+#ELSEIF(SANITIZER_TYPE == "thread")
+#    SET(YDB_SAN_TYPE "-tsan")
+#ENDIF()
 
 IF(BUILD_TYPE == "RELEASE")
     SET(YDB_BUILD_TYPE "release")

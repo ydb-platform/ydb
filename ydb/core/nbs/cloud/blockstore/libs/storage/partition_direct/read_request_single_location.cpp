@@ -37,9 +37,9 @@ TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", "Read"},
-           {"lsn", ToString(readHint.Lsn)},
-           {"r", request->Headers.Range.Print()},
-           {"vr", readHint.VChunkRange.Print()}}))
+           {"lsn", readHint.Lsn},
+           {"r", request->Headers.Range},
+           {"vr", readHint.VChunkRange}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , CallContext(std::move(callContext))

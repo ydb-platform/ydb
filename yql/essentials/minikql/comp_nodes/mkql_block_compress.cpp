@@ -169,12 +169,12 @@ public:
     }
 
 private:
-    class TStreamValue: public TComputationValue<TStreamValue> {
-        using TBase = TComputationValue<TStreamValue>;
+    class TStreamValue: public TBlockStreamValue<TStreamValue> {
+        using TBase = TBlockStreamValue<TStreamValue>;
 
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue stream, NYql::NUdf::TUnboxedValue state, ui32 bitmapIndex, const TVector<TBlockType*>& types, ui32 inputWidth, NYql::EDatumValidationMode validationMode)
-            : TBase(memInfo)
+            : TBase(memInfo, holderFactory, inputWidth - 1U)
             , HolderFactory_(holderFactory)
             , Stream_(std::move(stream))
             , State_(std::move(state))
@@ -185,7 +185,7 @@ private:
         {
         }
 
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) final {
+        NUdf::EFetchStatus DoWideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             if constexpr (CompressType == ECompressType::BitmapIsScalar) {
                 return BitmapIsScalar(output, width);
             } else if constexpr (CompressType == ECompressType::AllScalars) {
@@ -256,9 +256,7 @@ private:
             if (!state.Count) {
                 do {
                     if (!state.InputSize) {
-                        state.ClearValues();
                         auto wideFetchResult = Stream_.WideFetch(Input_.data(), Input_.size());
-                        MoveAllExceptBitmap(state.Values.data());
 
                         switch (wideFetchResult) {
                             case NUdf::EFetchStatus::Yield:
@@ -267,6 +265,8 @@ private:
                                 state.IsFinished = true;
                                 break;
                             case NUdf::EFetchStatus::Ok:
+                                state.ClearValues();
+                                MoveAllExceptBitmap(state.Values.data());
                                 switch (state.Check(bitmap)) {
                                     case TCompressBlocksState::EStep::Copy:
                                         for (ui32 i = 0; i < state.Values.size(); ++i) {

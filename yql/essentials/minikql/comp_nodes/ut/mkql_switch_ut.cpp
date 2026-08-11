@@ -357,8 +357,9 @@ Y_UNIT_TEST_LLVM(TestStreamOfVariantsSwap) {
                                                  return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.ToString(item), 0U, varOutType); });
                                              case 1U:
                                                  return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.StrictFromString(item, intType), 1U, varOutType); });
+                                             default:
+                                                 MKQL_ENSURE(false, "Unexpected handler index: " << index);
                                          }
-                                         Y_ABORT("Wrong case!");
                                      },
                                      0ULL,
                                      pb.NewStreamType(varOutType));
@@ -401,8 +402,9 @@ Y_UNIT_TEST_LLVM(TestStreamOfVariantsTwoInOne) {
                                                  return pb.Map(stream, [&](TRuntimeNode item) { return item; });
                                              case 1U:
                                                  return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.StrictFromString(item, intType), 1U, varOutType); });
+                                             default:
+                                                 MKQL_ENSURE(false, "Unexpected handler index: " << index);
                                          }
-                                         Y_ABORT("Wrong case!");
                                      },
                                      0ULL,
                                      pb.NewStreamType(varOutType));
@@ -445,8 +447,9 @@ Y_UNIT_TEST_LLVM(TestFlowOfVariantsSwap) {
                                                              return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.ToString(item), 0U, varOutType); });
                                                          case 1U:
                                                              return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.StrictFromString(item, intType), 1U, varOutType); });
+                                                         default:
+                                                             MKQL_ENSURE(false, "Unexpected handler index: " << index);
                                                      }
-                                                     Y_ABORT("Wrong case!");
                                                  },
                                                  0ULL,
                                                  pb.NewFlowType(varOutType)));
@@ -489,8 +492,9 @@ Y_UNIT_TEST_LLVM(TestFlowOfVariantsTwoInOne) {
                                                              return pb.Map(stream, [&](TRuntimeNode item) { return item; });
                                                          case 1U:
                                                              return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.StrictFromString(item, intType), 1U, varOutType); });
+                                                         default:
+                                                             MKQL_ENSURE(false, "Unexpected handler index: " << index);
                                                      }
-                                                     Y_ABORT("Wrong case!");
                                                  },
                                                  0ULL,
                                                  pb.NewFlowType(varOutType)));
@@ -536,8 +540,9 @@ Y_UNIT_TEST_QUAD(TestSwitchDoesNotPropagateStaleYield, LLVM, StreamInput) {
                 return pb.Map(handlerStream, [&](TRuntimeNode item) { return item; });
             case 1U:
                 return pb.Map(handlerStream, [&](TRuntimeNode item) { return item; });
+            default:
+                MKQL_ENSURE(false, "Unexpected handler index: " << index);
         }
-        Y_ABORT("Wrong case!");
     };
 
     TRuntimeNode pgmReturn;
@@ -747,6 +752,8 @@ Y_UNIT_TEST_QUAD(TestSwitchDoesNotRereadBufferOnYield, LLVM, StreamInput) {
             case 1U:
                 type = strType;
                 break;
+            default:
+                MKQL_ENSURE(false, "Unexpected handler index: " << index);
         }
 
         TCallableBuilder cb(*setup.Env, "TestYieldSkipHandler", pb.NewStreamType(type));

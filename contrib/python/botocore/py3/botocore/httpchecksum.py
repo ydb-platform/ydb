@@ -516,8 +516,8 @@ def handle_checksum_body(http_response, response, context, operation_model):
         return
 
     logger.debug(
-        f'Skipping checksum validation. Response did not contain one of the '
-        f'following algorithms: {algorithms}.'
+        'Skipping checksum validation. Response did not contain one of the following algorithms: %s.',
+        algorithms,
     )
 
 

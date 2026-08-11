@@ -55,6 +55,8 @@ struct TCreatePartitionParams {
     TMaybe<ui64> PlanStep;
     TMaybe<ui64> TxId;
     TConfigParams Config;
+    // Consumers present in KV user-info but not necessarily in Config (stale leftovers).
+    TVector<TCreateConsumerParams> ExtraDiskConsumers;
     TInstant EndWriteTimestamp;
     bool FillHead = false;
 };
@@ -193,6 +195,7 @@ protected:
         TMaybe<ui64> Cookie;
         TMaybe<NPersQueue::NErrorCode::EErrorCode> ErrorCode;
         TMaybe<TString> Error;
+        TMaybe<bool> IsInternal;
     };
 
     struct TProposeTransactionResponseMatcher {
@@ -504,7 +507,13 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         SendMetaReadResponse(params.Begin, params.End, params.PlanStep, params.TxId, params.EndWriteTimestamp);
 
         WaitInfoRangeRequest();
-        SendInfoRangeResponse(params.Partition.InternalPartitionId, params.Config.Consumers);
+        {
+            auto infoConsumers = params.Config.Consumers;
+            infoConsumers.insert(infoConsumers.end(),
+                                 params.ExtraDiskConsumers.begin(),
+                                 params.ExtraDiskConsumers.end());
+            SendInfoRangeResponse(params.Partition.InternalPartitionId, infoConsumers);
+        }
 
         WaitDataRangeRequest();
         SendDataRangeResponse(params.Partition.InternalPartitionId, params.Begin, params.End, params.FillHead);
@@ -641,43 +650,52 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
             if (key[11] != TKeyPrefix::MarkUser) {
                 break;
             }
+            if (matcher.UserInfos.empty()) {
+                break;
+            }
 
             NKikimrPQ::TUserInfo ud;
             UNIT_ASSERT(ud.ParseFromString(event->Record.GetCmdWrite(i).GetValue()));
+            UNIT_ASSERT(key.size() > (1 + 10 + 1)); // type + partition + mark + consumer
+            const TString consumerFromKey = key.substr(12);
 
             bool match = false;
             for (auto& [_, userInfo] : matcher.UserInfos) {
-                if (userInfo.Session && ud.HasSession()) {
-                    if (*userInfo.Session != ud.GetSession()) {
+                if (!userInfo.Consumer && !userInfo.Session) {
+                    continue;
+                }
+                if (userInfo.Consumer && *userInfo.Consumer != consumerFromKey) {
+                    continue;
+                }
+                if (userInfo.Session) {
+                    if (!ud.HasSession() || *userInfo.Session != ud.GetSession()) {
                         continue;
                     }
-
-                    match = true;
-
-                    if (userInfo.Generation) {
-                        UNIT_ASSERT(ud.HasGeneration());
-                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
-                    }
-                    if (userInfo.Step) {
-                        UNIT_ASSERT(ud.HasStep());
-                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
-                    }
-                    if (userInfo.Offset) {
-                        UNIT_ASSERT(ud.HasOffset());
-                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
-                    }
-                    if (userInfo.ReadRuleGeneration) {
-                        UNIT_ASSERT(ud.HasReadRuleGeneration());
-                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
-                    }
                 }
 
-                if (match) {
-                    break;
+                match = true;
+
+                if (userInfo.Generation) {
+                    UNIT_ASSERT(ud.HasGeneration());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
                 }
+                if (userInfo.Step) {
+                    UNIT_ASSERT(ud.HasStep());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
+                }
+                if (userInfo.Offset) {
+                    UNIT_ASSERT(ud.HasOffset());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
+                }
+                if (userInfo.ReadRuleGeneration) {
+                    UNIT_ASSERT(ud.HasReadRuleGeneration());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
+                }
+
+                break;
             }
 
-            UNIT_ASSERT(match);
+            UNIT_ASSERT_C(match, "No UserInfos matcher for consumer '" << consumerFromKey << "'");
 
             break;
         }
@@ -833,6 +851,10 @@ void TPartitionFixture::WaitErrorResponse(const TErrorMatcher& matcher)
 
     if (matcher.Error) {
         UNIT_ASSERT_VALUES_EQUAL(*matcher.Error, event->Error);
+    }
+
+    if (matcher.IsInternal) {
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.IsInternal, event->IsInternal);
     }
 }
 
@@ -2246,6 +2268,210 @@ Y_UNIT_TEST_F(SetOffset, TPartitionFixture)
     WaitProxyResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
 }
 
+// Compactification replies with IsInternal=true. Those must not be treated as timestamp-read
+// completions: otherwise ReadingTimestamp/ReadScheduled get out of sync and the next
+// TEvProxyResponse hits PQ_ENSURE(userInfo->ReadScheduled) (issue #49357).
+Y_UNIT_TEST_F(InternalErrorDoesNotBreakTimestampRead, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+    const TString session = "session";
+
+    CreatePartition({
+        .Partition = partition,
+        .Begin = 0,
+        .End = 10,
+        .Config = {.Consumers = {{.Consumer = client, .Offset = 0, .Session = session}}},
+    });
+
+    auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT_C(blobRequest != nullptr, "expected timestamp-read blob request");
+
+    SendEvent(new TEvPQ::TEvError(
+        NPersQueue::NErrorCode::ERROR,
+        "compaction internal error",
+        /*cookie=*/0,
+        /*isInternal=*/true));
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(200));
+
+    auto restartedBlobRequest =
+        Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::MilliSeconds(200));
+    UNIT_ASSERT_C(
+        restartedBlobRequest == nullptr,
+        "IsInternal TEvError must not restart an in-flight timestamp read");
+
+    // Partition stays responsive with the original timestamp read still in flight.
+    SendGetOffset(1, client);
+    WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK, .Offset = 0});
+}
+
+namespace {
+
+THolder<TEvPQ::TEvRead> MakeTestRead(
+    ui64 cookie,
+    ui64 offset,
+    ui32 count,
+    const TString& client = "client",
+    const TActorId& replyTo = {})
+{
+    return MakeHolder<TEvPQ::TEvRead>(
+        cookie,
+        offset,
+        /*lastOffset=*/0,
+        /*partNo=*/0,
+        count,
+        /*sessionId=*/"",
+        client,
+        /*timeout=*/0,
+        /*size=*/100,
+        /*readToBlobEnd=*/false,
+        /*maxTimeLagMs=*/0,
+        /*readTimestampMs=*/0,
+        /*clientDC=*/"",
+        /*externalOperation=*/false,
+        /*pipeClient=*/TActorId{},
+        replyTo);
+}
+
+} // namespace
+
+// ReplyError uses !!replyTo as IsInternal (same as TEvRead::IsInternal). Call sites must pass the
+// original ReplyTo override, not ReplyTo(cookie, …): the resolved id is always non-empty and would
+// mark every external error as internal.
+Y_UNIT_TEST_F(ExternalReadErrorIsNotMarkedInternal, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+
+    CreatePartition({
+        .Partition = partition,
+        .Begin = 0,
+        .End = 10,
+        .Config = {.Consumers = {{.Consumer = client, .Offset = 0}}},
+    });
+    // Drain the timestamp-read blob request from CreatePartition.
+    Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+
+    // External read (empty ReplyTo), cookie != 0 → error must go to TabletActorId (Edge)
+    // with IsInternal=false. Passing a resolved ReplyTo() into ReplyError would set IsInternal.
+    SendEvent(MakeTestRead(/*cookie=*/42, /*offset=*/0, /*count=*/0, client).Release());
+    WaitErrorResponse({
+        .Cookie = 42,
+        .ErrorCode = NPersQueue::NErrorCode::BAD_REQUEST,
+        .IsInternal = false,
+    });
+
+    SendEvent(MakeTestRead(/*cookie=*/43, /*offset=*/11, /*count=*/1, client).Release());
+    WaitErrorResponse({
+        .Cookie = 43,
+        .ErrorCode = NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET,
+        .IsInternal = false,
+    });
+}
+
+Y_UNIT_TEST_F(InternalReadErrorIsMarkedInternal, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+
+    CreatePartition({
+        .Partition = partition,
+        .Begin = 0,
+        .End = 10,
+        .Config = {.Consumers = {{.Consumer = client, .Offset = 0}}},
+    });
+    Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+
+    TMaybe<bool> observedIsInternal;
+    auto prevObserver = Ctx->Runtime->SetObserverFunc(
+        [&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->Recipient == ActorId) {
+                if (auto* error = ev->CastAsLocal<TEvPQ::TEvError>()) {
+                    if (error->Cookie == 7) {
+                        observedIsInternal = error->IsInternal;
+                    }
+                }
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
+    // Compaction-style read: ReplyTo = SelfId ⇒ IsInternal must be true, reply stays on Self.
+    SendEvent(MakeTestRead(/*cookie=*/7, /*offset=*/0, /*count=*/0, client, ActorId).Release());
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return observedIsInternal.Defined();
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)));
+    Ctx->Runtime->SetObserverFunc(prevObserver);
+
+    UNIT_ASSERT(observedIsInternal.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*observedIsInternal, true);
+
+    auto leakedToTablet =
+        Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvError>(TDuration::MilliSeconds(200));
+    UNIT_ASSERT_C(
+        leakedToTablet == nullptr,
+        "internal read error must be sent to SelfId, not TabletActorId");
+}
+
+// cookie==0 + empty ReplyTo resolves to SelfId (same destination as timestamp reads). IsInternal
+// must still be false: otherwise Handle(TEvError) takes the compaction early-return and leaves
+// ReadingTimestamp stuck.
+Y_UNIT_TEST_F(ExternalCookieZeroReadErrorRestartsTimestampRead, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+    const TString session = "session";
+
+    CreatePartition({
+        .Partition = partition,
+        .Begin = 0,
+        .End = 10,
+        .Config = {.Consumers = {{.Consumer = client, .Offset = 0, .Session = session}}},
+    });
+
+    auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT_C(blobRequest != nullptr, "expected timestamp-read blob request");
+
+    TMaybe<bool> observedIsInternal;
+    auto prevObserver = Ctx->Runtime->SetObserverFunc(
+        [&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->Recipient == ActorId) {
+                if (auto* error = ev->CastAsLocal<TEvPQ::TEvError>()) {
+                    if (error->Cookie == 0 &&
+                        error->ErrorCode == NPersQueue::NErrorCode::BAD_REQUEST)
+                    {
+                        observedIsInternal = error->IsInternal;
+                    }
+                }
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
+    // External read with cookie 0 (empty ReplyTo): destination is SelfId, but not internal.
+    SendEvent(MakeTestRead(/*cookie=*/0, /*offset=*/0, /*count=*/0, client).Release());
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return observedIsInternal.Defined();
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)));
+    Ctx->Runtime->SetObserverFunc(prevObserver);
+
+    UNIT_ASSERT(observedIsInternal.Defined());
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        *observedIsInternal,
+        false,
+        "empty ReplyTo must not mark ReplyError as IsInternal even when cookie==0");
+
+    auto restartedBlobRequest =
+        Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT_C(
+        restartedBlobRequest != nullptr,
+        "non-internal cookie==0 TEvError must clear ReadingTimestamp and restart timestamp read");
+}
+
 Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionTxTestHelper)
 {
     const TPartitionId partition{0};
@@ -2831,6 +3057,95 @@ Y_UNIT_TEST_F(TabletConfig_Is_Newer_That_PartitionConfig, TPartitionFixture)
                  {0, {.Partition=3, .Consumer="client-1"}}
                  }});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+}
+
+//
+// #49435: on init, persisted Config is older than TabletConfig → ChangePartitionConfig is
+// PushFront'ed. FillReadFromTimestamps still compares UsersInfo against the *old* Config and
+// queues ESCI_DROP_READ_RULE for stale KV consumers. ChangingConfig blocks those acts until
+// the config write completes; the second write cycle then Remove()'s an already-deleted user.
+// Covers hypotheses: (1) double DROP on init+config upgrade, (2) non-idempotent Remove,
+// (3) FillReadFromTimestamps unaware of pending ChangePartitionConfig.
+//
+Y_UNIT_TEST_F(Init_StaleDiskConsumer_DoubleDrop_OnConfigUpgrade, TPartitionFixture)
+{
+    const TPartitionId partition{3};
+
+    CreatePartition({
+        .Partition = partition,
+        .Begin = 0,
+        .End = 10,
+        .Config = {
+            .Version = 1,
+            .Consumers = {{.Consumer = "client-keep", .Offset = 3}},
+        },
+        // Stale consumer still on disk, already absent from persisted Config.
+        .ExtraDiskConsumers = {{.Consumer = "stale-client", .Offset = 5}},
+    },
+    {
+        .Version = 2,
+        .Consumers = {{.Consumer = "client-keep"}},
+    });
+
+    // Write cycle 1: ChangePartitionConfig drops stale-client.
+    WaitCmdWrite({
+        .UserInfos = {{0, {.Consumer = "client-keep", .Session = "", .Offset = 3}}},
+        .DeleteRanges = {{0, {.Partition = 3, .Consumer = "stale-client"}}},
+    });
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    // Write cycle 2: FillReadFromTimestamps ESCI_DROP_READ_RULE for the same consumer.
+    // Must not VERIFY on the second Remove (#49435).
+    WaitCmdWrite({
+        .DeleteRanges = {{0, {.Partition = 3, .Consumer = "stale-client"}}},
+    });
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    Ctx->Runtime->SimulateSleep(TDuration::Seconds(1));
+}
+
+//
+// #49435 hypothesis (2): Remove is not idempotent across write cycles.
+// ChangePartitionConfig drops the consumer; a later ESCI_DROP_READ_RULE tries again.
+//
+Y_UNIT_TEST_F(DropReadRule_AfterConfigAlreadyRemovedConsumer, TPartitionFixture)
+{
+    const TPartitionId partition{3};
+
+    CreatePartition({
+        .Partition = partition,
+        .Begin = 0,
+        .End = 10,
+        .Config = {
+            .Version = 1,
+            .Consumers = {
+                {.Consumer = "client-1", .Offset = 0, .Session = "session-1"},
+                {.Consumer = "client-2", .Offset = 0, .Session = "session-2"},
+            },
+        },
+    });
+
+    SendChangePartitionConfig({
+        .Version = 2,
+        .Consumers = {{.Consumer = "client-1", .Generation = 0}},
+    });
+
+    WaitCmdWrite({
+        .UserInfos = {{0, {.Consumer = "client-1", .Session = "session-1", .Offset = 0}}},
+        .DeleteRanges = {{0, {.Partition = 3, .Consumer = "client-2"}}},
+    });
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged({.Partition = partition});
+
+    SendEvent(new TEvPQ::TEvSetClientInfo(
+        0, "client-2", 0, "", 0, 0, 0, TActorId{},
+        TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0));
+
+    WaitCmdWrite({
+        .DeleteRanges = {{0, {.Partition = 3, .Consumer = "client-2"}}},
+    });
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    // Must not VERIFY on Remove of an already-deleted consumer (#49435).
+    Ctx->Runtime->SimulateSleep(TDuration::Seconds(1));
 }
 
 void TPartitionFixture::CmdChangeOwner(ui64 cookie, const TString& sourceId, TDuration duration, TString& ownerCookie)

@@ -114,7 +114,10 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
-    TString RenderSendReadSetHtmlForms(const TDistributedTransaction& tx, const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter) const;
+    TString RenderSendReadSetHtmlForms(
+        const TDistributedTransaction& tx,
+        const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter,
+        const TStringBuf pathInfo) const;
 
     void HandleDie(const TActorContext& ctx) override;
 
@@ -333,7 +336,6 @@ private:
     TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
     THashSet<ui64> DeleteTxs;
-    bool DeleteTxsContainsKafkaTxs = false;
     TSet<std::pair<ui64, ui64>> ChangedTxs;
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
@@ -676,6 +678,19 @@ private:
     void MovePendingDeferredReadSetAcks();
     void AddPendingDeferredReadSetAck(TDeferredReadSetAck&& ack);
     void SendDeferredReadSetAcks(const TActorContext& ctx);
+
+    // All-unknown TEvPlanStep (no TxId in Txs): ack only after a successful WRITE_TX cycle,
+    // so a stale leader cannot confirm a plan step without winning the KV write.
+    struct TDeferredPlanStepAck {
+        TActorId Sender;
+        std::unique_ptr<TEvTxProcessing::TEvPlanStep> Event;
+    };
+    TDeque<TDeferredPlanStepAck> PendingDeferredPlanStepAcks;
+    TDeque<TDeferredPlanStepAck> DeferredPlanStepAcks;
+
+    void MovePendingDeferredPlanStepAcks();
+    void AddPendingDeferredPlanStepAck(TDeferredPlanStepAck&& ack);
+    void SendDeferredPlanStepAcks(const TActorContext& ctx);
 };
 
 }// NPQ

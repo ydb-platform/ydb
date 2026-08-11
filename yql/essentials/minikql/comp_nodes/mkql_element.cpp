@@ -68,7 +68,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto array = GetNodeValue(Array_, ctx, block);
@@ -192,7 +192,7 @@ public:
         }
     }
 
-    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
+    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const override {
         if (Cache_->GetDependentsCount() <= 1U) {
             return DoGenerateGetElement(ctx, pointer, block);
         }

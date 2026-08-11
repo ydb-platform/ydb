@@ -139,8 +139,26 @@ public:
     }
 
     void Handle(NActors::TEvPollerReady::TPtr& ev) {
-        auto res = ProcessIbvAsyncEvents(static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get()));
-        Y_ABORT_UNLESS(res, "unable to get async event while poller told us is's ready");
+        auto* desc = static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get());
+        for (;;) {
+            switch (ProcessIbvAsyncEvent(desc)) {
+                case EProcessAsyncEventResult::Processed:
+                    continue;
+
+                case EProcessAsyncEventResult::WouldBlock: {
+                    auto it = CqMap.find(desc->GetContext());
+                    Y_ABORT_UNLESS(it != CqMap.end());
+                    Y_ABORT_UNLESS(it->second.index() == 0);
+                    if (std::get<0>(it->second).AsyncEventToken->RequestReadNotificationAfterWouldBlock()) {
+                        continue;
+                    }
+                    return;
+                }
+
+                case EProcessAsyncEventResult::ContextRemoved:
+                    return;
+            }
+        }
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
@@ -216,12 +234,28 @@ private:
         c.Cq->NotifyErr();
     }
 
-    bool ProcessIbvAsyncEvents(const TAsyncEventDesctiptor* desc) {
+    enum class EProcessAsyncEventResult {
+        Processed,
+        WouldBlock,
+        ContextRemoved,
+    };
+
+    EProcessAsyncEventResult ProcessIbvAsyncEvent(const TAsyncEventDesctiptor* desc) {
         auto rdmaCtx = desc->GetContext();
         ibv_async_event async_event;
-        if (ibv_get_async_event(rdmaCtx->GetContext(), &async_event)) {
-            return false;
+        for (;;) {
+            if (!ibv_get_async_event(rdmaCtx->GetContext(), &async_event)) {
+                break;
+            }
+            const int error = errno;
+            if (error == EINTR) {
+                continue;
+            }
+            Y_ABORT_UNLESS(error == EAGAIN || error == EWOULDBLOCK,
+                "ibv_get_async_event failed with errno# %d", error);
+            return EProcessAsyncEventResult::WouldBlock;
         }
+
         auto it = CqMap.find(rdmaCtx);
         Y_ABORT_UNLESS(it != CqMap.end());
 
@@ -246,13 +280,12 @@ private:
                 ProcessCqErr(it);
                 ibv_ack_async_event(&async_event);
                 CqMap.erase(it);
-                return true;
+                return EProcessAsyncEventResult::ContextRemoved;
             default:
-                std::get<0>(it->second).AsyncEventToken->Request(true, false);
-            break;
+                break;
         }
         ibv_ack_async_event(&async_event);
-        return true;
+        return EProcessAsyncEventResult::Processed;
     }
 
     struct TCtxData {

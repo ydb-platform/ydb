@@ -50,6 +50,8 @@ TRuntimeNode StreamToString(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
                     NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("|"))); });
 }
 
+thread_local size_t echoCounter;
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
@@ -485,8 +487,6 @@ Y_UNIT_TEST_LLVM(TestFlowTopSortWithoutKey) {
 } // Y_UNIT_TEST_SUITE(TMiniKQLSortTest)
 
 Y_UNIT_TEST_SUITE(TMiniKQLStreamKeyExtractorCacheTest) {
-static thread_local size_t echoCounter;
-
 SIMPLE_UDF(TEchoU64, ui64(ui64)) {
     Y_UNUSED(valueBuilder);
     echoCounter++;

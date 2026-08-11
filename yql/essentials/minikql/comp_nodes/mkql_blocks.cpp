@@ -116,7 +116,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_, MaxLength_);
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
-                                                      std::move(state),
+                                                      state,
                                                       std::move(Stream_->GetValue(ctx)),
                                                       MaxLength_,
                                                       ctx.RuntimeSettings.DatumValidation.Get());
@@ -140,7 +140,7 @@ private:
         }
 
     private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
             auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
             auto* inputFields = blockState.Pointer;
             const size_t inputWidth = blockState.Values.size() - 1;
@@ -434,7 +434,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -571,8 +571,8 @@ struct TWideFromBlocksState: public TComputationValue<TWideFromBlocksState> {
         Pointer = Values.data();
 
         const auto& pgBuilder = ctx.Builder->GetPgBuilder();
-        for (size_t i = 0; i < types.size(); ++i) {
-            const TType* blockItemType = AS_TYPE(TBlockType, types[i])->GetItemType();
+        for (const auto type : types) {
+            const TType* blockItemType = AS_TYPE(TBlockType, type)->GetItemType();
             Readers.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
             Converters.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));
         }
@@ -613,7 +613,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_);
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
-                                                      std::move(state),
+                                                      state,
                                                       std::move(Stream_->GetValue(ctx)));
     }
 
@@ -632,7 +632,7 @@ private:
         }
 
     private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
             auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
             auto* inputFields = blockState.Pointer;
             const size_t inputWidth = blockState.Values.size();
@@ -921,7 +921,7 @@ public:
         return AsScalar(Arg_->GetValue(ctx).Release(), ctx);
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto value = GetNodeValue(Arg_, ctx, block);
@@ -973,7 +973,7 @@ public:
         return Replicate(value, count, ctx);
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto value = GetNodeValue(Value_, ctx, block);
@@ -1049,7 +1049,7 @@ public:
         return EFetchResult::One;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1180,42 +1180,22 @@ private:
 
 class TBlockExpandChunkedStreamWrapper: public TMutableComputationNode<TBlockExpandChunkedStreamWrapper> {
     using TBaseComputation = TMutableComputationNode<TBlockExpandChunkedStreamWrapper>;
-    class TExpanderState: public TComputationValue<TExpanderState> {
-        using TBase = TComputationValue<TExpanderState>;
+    class TExpanderState: public TBlockStreamValue<TExpanderState> {
+        using TBase = TBlockStreamValue<TExpanderState>;
 
     public:
-        TExpanderState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, NUdf::TUnboxedValue&& stream, size_t width)
-            : TBase(memInfo)
-            , HolderFactory_(ctx.HolderFactory)
-            , State_(ctx.HolderFactory.Create<TBlockState>(width))
+        TExpanderState(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NUdf::TUnboxedValue&& stream, size_t width)
+            : TBase(memInfo, holderFactory, width)
             , Stream_(stream)
-            , ValidationMode_(ctx.RuntimeSettings.DatumValidation.Get())
         {
         }
 
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
-            auto& s = *static_cast<TBlockState*>(State_.AsBoxed().Get());
-            if (!s.Count) {
-                s.ClearValues();
-                auto result = Stream_.WideFetch(s.Values.data(), width);
-                if (NUdf::EFetchStatus::Ok != result) {
-                    return result;
-                }
-                s.FillArrays();
-            }
-
-            const auto sliceSize = s.Slice();
-            for (size_t i = 0; i < width; ++i) {
-                output[i] = s.Get(sliceSize, HolderFactory_, i);
-            }
-            return NUdf::EFetchStatus::Ok;
+        NUdf::EFetchStatus DoWideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            return Stream_.WideFetch(output, width);
         }
 
     private:
-        const THolderFactory& HolderFactory_;
-        NUdf::TUnboxedValue State_;
         NUdf::TUnboxedValue Stream_;
-        const NYql::EDatumValidationMode ValidationMode_;
     };
 
 public:
@@ -1227,7 +1207,7 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TExpanderState>(ctx, std::move(Stream_->GetValue(ctx)), Width_);
+        return ctx.HolderFactory.Create<TExpanderState>(ctx.HolderFactory, std::move(Stream_->GetValue(ctx)), Width_);
     }
     void RegisterDependencies() const override {
         DependsOn(Stream_);
@@ -1339,8 +1319,7 @@ IComputationNode* WrapReplicateScalar(TCallable& callable, const TComputationNod
 IComputationNode* WrapBlockExpandChunked(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
     if (callable.GetInput(0).GetStaticType()->IsStream()) {
-        const auto streamType = AS_TYPE(TStreamType, callable.GetInput(0).GetStaticType());
-        const auto wideComponents = GetWideComponents(streamType);
+        const auto wideComponents = GetWideComponents(callable.GetInput(0).GetStaticType());
         const auto computation = dynamic_cast<IComputationNode*>(LocateNode(ctx.NodeLocator, callable, 0));
 
         MKQL_ENSURE(computation != nullptr, "Expected computation node");

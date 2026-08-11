@@ -62,7 +62,7 @@ private:
     llvm::IntegerType* const IndexType_;
 
 protected:
-    using TBase::Context;
+    using TBase::GetContext;
 
 public:
     std::vector<llvm::Type*> GetFieldsArray() {
@@ -72,12 +72,12 @@ public:
     }
 
     llvm::Constant* GetIndex() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount());
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount());
     }
 
     explicit TLLVMFieldsStructureState(llvm::LLVMContext& context)
         : TBase(context)
-        , IndexType_(Type::getInt64Ty(Context))
+        , IndexType_(Type::getInt64Ty(context))
     {
     }
 };
@@ -117,7 +117,7 @@ public:
         return EFetchResult::Finish;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -270,7 +270,7 @@ public:
         return NUdf::TUnboxedValuePod::MakeFinish();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -398,7 +398,7 @@ public:
         return EFetchResult::Finish;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -511,7 +511,7 @@ public:
         return NUdf::TUnboxedValuePod::MakeFinish();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -583,7 +583,7 @@ public:
         return IsStream ? ctx.HolderFactory.ExtendStream(values.data(), values.size()) : ctx.HolderFactory.ExtendList<false>(values.data(), values.size());
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);

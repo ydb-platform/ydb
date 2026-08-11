@@ -16,11 +16,14 @@ using SQLv1 = NALADefaultAntlr4::SQLv1Antlr4Parser;
 
 using NALADefaultAntlr4::SQLv1Antlr4BaseVisitor;
 
-struct TParseTree {
-    TStringBuf Text;
-    antlr4::CommonTokenStream* Tokens;
-    SQLv1* Parser;
-    SQLv1::Sql_queryContext* SqlQuery;
+class IParseTree: public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<IParseTree>;
+
+    virtual TStringBuf Text() const = 0;
+    virtual const antlr4::CommonTokenStream& Tokens() const = 0;
+    virtual const SQLv1& Parser() const = 0;
+    virtual SQLv1::Sql_queryContext* Root() = 0;
 };
 
 } // namespace NSQLPureAST

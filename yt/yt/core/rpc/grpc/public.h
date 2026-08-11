@@ -26,6 +26,7 @@ extern const char* const TracingTraceIdMetadataKey;
 extern const char* const TracingSpanIdMetadataKey;
 extern const char* const TracingSampledMetadataKey;
 extern const char* const TracingDebugMetadataKey;
+extern const char* const TracingTraceParentMetadataKey;
 
 extern const char* const RequestIdMetadataKey;
 extern const char* const UserMetadataKey;

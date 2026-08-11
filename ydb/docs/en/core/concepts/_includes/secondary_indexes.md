@@ -1,15 +1,15 @@
 # Secondary Indexes
 
-{{ ydb-short-name }} automatically creates a primary key index, which is why selection by primary key is always efficient, affecting only the rows needed. Selections by criteria applied to one or more non-key columns typically result in a full table scan. To make these selections efficient, use _secondary indexes_ — global structures backed by a separate index table.
+In {{ ydb-short-name }}, an index on the primary key is created automatically, so queries with a condition on the primary key always run efficiently, affecting only the required rows. A query with a condition on one or more non-key columns typically results in a full table scan. To make such queries efficient, you need to use _secondary indexes_ — global structures with a separate index table.
 
-[Local indexes](../glossary.md#local-index) are a separate kind of auxiliary structure: they are stored with table data and applied in the storage layer on read, without materializing a separate index table (see [Local indexes](#bloom-skip-index) below).
+Separately, there are [local indexes](../glossary.md#local-index): auxiliary structures that are stored together with the table data and are used when reading on the storage side, without materializing a separate index table (see the [Local indexes](#local-skip-index) section below).
 
 The current version of {{ ydb-short-name }} implements _synchronous_ and _asynchronous_ global secondary indexes. Each index is a hidden table that is updated:
 
-* For synchronous indexes: Transactionally when the main table changes.
-* For asynchronous indexes: In the background while getting the necessary changes from the main table.
+* For synchronous indexes, transactionally when the main table is modified.
+* For asynchronous indexes, in the background, receiving the necessary changes from the main table.
 
-When a user sends an SQL query to insert, modify, or delete data, the database transparently generates commands to modify the index table. A table may have multiple secondary indexes. An index may include multiple columns, and the sequence of columns in an index matters. A single column may be included in multiple indexes. In addition to the specified columns, every index implicitly stores the table primary key columns to enable navigation from an index record to the table row.
+When a user sends an SQL query to insert, modify, or delete data, the database transparently generates commands to modify the index table. A table can have multiple secondary indexes. An index can include multiple columns, and the order of columns in the index matters. A single column can be included in multiple indexes. In addition to the specified columns, the index always implicitly stores the values of the table's primary key columns, so that you can move from a found record in the index to a record in the table.
 
 ## Synchronous Secondary Index {#sync}
 
@@ -21,7 +21,7 @@ Unlike a synchronous index, an asynchronous index doesn't use distributed transa
 
 ## Covering Secondary Index {#covering}
 
-You can copy the contents of columns into a covering index. This eliminates the need to read data from the main table when performing reads by index and significantly reduces delays. At the same time, such denormalization leads to increased usage of disk space and may slow down inserts and updates due to the need for additional data copying.
+You can copy the contents of columns into the index (covering index), which eliminates the need to read from the main table in index read operations, significantly reducing latency. At the same time, such denormalization leads to increased disk space consumption and may slow down insert and update operations due to the need for additional data copying.
 
 ## Vector Index
 
@@ -35,27 +35,25 @@ Unlike traditional secondary indexes, which optimize equality or range searches,
 
 Unlike traditional secondary indexes, which optimize equality or range searches, fulltext indexes allow scalable text search by words and phrases (and, with n-grams, by substrings). See also: [Fulltext search](../query_execution/fulltext_search.md).
 
-## Local indexes {#bloom-skip-index}
+## Local indexes {#local-skip-index}
 
-[Local indexes](../query_execution/local_indexes.md) are auxiliary structures stored together with table data and applied while reading in the storage layer. They do not materialize a separate index table. Currently, [Bloom skip indexes](../../dev/bloom-skip-indexes.md) are implemented; other kinds are planned.
+[Local indexes](../query_execution/local_indexes.md) are auxiliary structures stored together with the table data and used when reading on the storage side. They do not materialize a separate index table. Currently, [Bloom indexes](../../dev/bloom-skip-indexes.md) and [min_max index](../../dev/min_max-skip-index.md) are implemented.
 
 ## Creating a Secondary Index Online {#index-add}
 
-{{ ydb-short-name }} lets you create new and delete existing secondary indexes without stopping the service. For a single table, you can only create one index at a time.
+In {{ ydb-short-name }}, you can create a secondary index and delete an existing secondary index without stopping service. You can create only one index at a time for a single table.
 
 Online index creation consists of the following steps:
 
-1. Taking a snapshot of a data table and creating an index table marked that writes are available.
+1. Taking a snapshot of the table with data, creating the index table marked as available for writing.
 
-   After this step, write transactions are distributed, writing to the main table and the index, respectively. The index is not yet available to the user.
+   After this step, write transactions become distributed, and writes occur to both the main table and the index. The index is not yet available to the user.
+2. Reading the snapshot of the main table and writing to the index.
 
-1. Reading the snapshot of the main table and writing data to the index.
+   A 'write to the past' is implemented: situations are resolved where data updates in step 1 change data written in step 2.
+3. Publishing the result, deleting the snapshot.
 
-   "Writes to the past" are implemented: situations where data updates in step 1 change the data written in step 2 are resolved.
-
-1. Publishing the results and deleting the snapshot.
-
-   The index is ready to use.
+   The index is ready for use.
 
 Possible impact on user transactions:
 
@@ -68,7 +66,7 @@ The data write rate is chosen to minimize the impact of the write process on use
 
 {% endnote %}
 
-Creating an index is an asynchronous operation. If the client-server connection is interrupted after the operation has started, index building continues. You can manage asynchronous operations using the {{ ydb-short-name }} CLI.
+Index creation is an asynchronous operation. If a client-server connection breaks after the operation starts, index building will continue. You can manage the asynchronous operation via the {{ ydb-short-name }} CLI.
 
 ## Creating and Deleting Secondary Indexes {#ddl}
 

@@ -69,7 +69,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
     else:
         disabled_feature_flags.append("enable_shared_reading_in_streaming_queries")
-    
+
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
     else:

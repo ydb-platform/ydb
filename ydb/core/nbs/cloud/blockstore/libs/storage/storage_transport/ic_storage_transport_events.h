@@ -280,6 +280,25 @@ struct TEvTransportPrivate
         ~TListPBufferEntries();
     };
 
+    struct TDeleteTabletChunks: TDisableCopyMove
+    {
+        using TResult = NKikimrBlobStorage::NDDisk::TEvDeleteTabletChunksResult;
+
+        const NActors::TActorId ServiceId;
+        const NKikimr::NDDisk::TQueryCredentials Credentials;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
+
+        TDeleteTabletChunks(
+            const NActors::TActorId serviceId,
+            const NKikimr::NDDisk::TQueryCredentials& credentials)
+            : ServiceId(serviceId)
+            , Credentials(credentials)
+        {}
+
+        ~TDeleteTabletChunks();
+    };
+
     // TODO delete this 'using' after name's fix on the YDB's side.
     using TProtoEvWriteToManyPersistentBuffersResult =
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
@@ -347,6 +366,7 @@ struct TEvTransportPrivate
         EvSyncWithPBuffer,
         EvListPBufferEntries,
         EvWriteToManyPBuffers,
+        EvDeleteTabletChunks,
     };
 
     using TEvConnect = TRequestEvent<TConnect, EEvents::EvConnect>;
@@ -378,6 +398,9 @@ struct TEvTransportPrivate
 
     using TEvWriteToManyPBuffers =
         TRequestEvent<TWriteToManyPBuffers, EEvents::EvWriteToManyPBuffers>;
+
+    using TEvDeleteTabletChunks =
+        TRequestEvent<TDeleteTabletChunks, EEvents::EvDeleteTabletChunks>;
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

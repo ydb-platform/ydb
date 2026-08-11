@@ -49,6 +49,8 @@ public:
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
     using TEvListPersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult;
+    using TEvDeleteTabletChunksResult =
+        NKikimrBlobStorage::NDDisk::TEvDeleteTabletChunksResult;
 
     // Callback type for WriteToManyPBuffers: called once per response received.
     // May be called multiple times if the underlying transport delivers more
@@ -135,6 +137,9 @@ public:
 
     virtual NThreading::TFuture<TEvListPersistentBufferResult>
     ListPBufferEntries(const THostConnection& connection) = 0;
+
+    virtual NThreading::TFuture<TEvDeleteTabletChunksResult> DeleteTabletChunks(
+        const THostConnection& connection) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

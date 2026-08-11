@@ -34,10 +34,9 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
 
     // Check that the filter lambda contains at least one in/exists subplan
     auto filter = CastOperator<TOpFilter>(input);
-    auto subplanIUs = filter->GetFilterExpression().GetInputIUs(true, false);
     TVector<TInfoUnit> inOrExistsSubplans;
 
-    for (const auto& subplanIU : subplanIUs) {
+    for (const auto& subplanIU : filter->GetSubplanCandidates()) {
         if (const auto* subplanEntry = props.Subplans.Find(subplanIU)) {
             if (subplanEntry->Type == ESubplanType::IN_SUBPLAN || subplanEntry->Type == ESubplanType::EXISTS) {
                 inOrExistsSubplans.push_back(subplanIU);

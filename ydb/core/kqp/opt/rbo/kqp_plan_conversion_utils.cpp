@@ -98,7 +98,7 @@ TVector<DependencyPairType> ComputeDependentVariables(TIntrusivePtr<IOperator> o
     const TOpTraversal traversal(IterateSubtree(op).begin());
     for (const auto& item : traversal) {
         auto currOp = item.Current;
-        auto subplanIUs = currOp->GetSubplanIUs(*props);
+        const auto& subplanCandidates = currOp->GetSubplanCandidates();
 
         // If the current operator contains references to subplans:
         // - Compute dependent variables of the subplan
@@ -107,15 +107,18 @@ TVector<DependencyPairType> ComputeDependentVariables(TIntrusivePtr<IOperator> o
         // - Add new dependencies to the AddDepencies operator below the current, or create one if it doesn't exit
         // - Return the full list of dependecies
 
-        if (subplanIUs.size()) {
-            auto unaryOp = CastOperator<IUnaryOperator>(currOp);
-
+        if (!subplanCandidates.empty()) {
             TVector<DependencyPairType> allOpDependencies;
 
-            for (const auto & subplanVar : subplanIUs) {
-                const auto& subplanEntry = props->Subplans.At(subplanVar);
-                auto opDependencies = ComputeDependentVariables(CastOperator<IOperator>(subplanEntry.Plan), props);
-                if (opDependencies.size()) {
+            for (const auto& subplanVar : subplanCandidates) {
+                const auto* subplanEntry = props->Subplans.Find(subplanVar);
+                if (!subplanEntry) {
+                    continue;
+                }
+
+                auto subplan = subplanEntry->Plan;
+                auto opDependencies = ComputeDependentVariables(CastOperator<IOperator>(subplan), props);
+                if (!opDependencies.empty()) {
                     for (const auto& dependency : opDependencies) {
                         props->Subplans.AddDependentIU(subplanVar, dependency.first);
                     }
@@ -123,27 +126,30 @@ TVector<DependencyPairType> ComputeDependentVariables(TIntrusivePtr<IOperator> o
                 }
             }
 
-            auto outputIUs = unaryOp->GetInput()->GetOutputIUs();
-            TVector<DependencyPairType> filteredOpDependencies;
-            for (const auto & d : allOpDependencies) {
-                if (std::find(outputIUs.begin(), outputIUs.end(), d.first) == outputIUs.end()) {
-                    filteredOpDependencies.push_back(d);
+            if (!allOpDependencies.empty()) {
+                auto unaryOp = CastOperator<IUnaryOperator>(currOp);
+                auto outputIUs = unaryOp->GetInput()->GetOutputIUs();
+                TVector<DependencyPairType> filteredOpDependencies;
+                for (const auto & d : allOpDependencies) {
+                    if (std::find(outputIUs.begin(), outputIUs.end(), d.first) == outputIUs.end()) {
+                        filteredOpDependencies.push_back(d);
+                    }
                 }
-            }
 
-            if (filteredOpDependencies.size()) {
-                if (unaryOp->GetInput()->Kind != EOperator::AddDependencies) {
-                    auto addDeps = MakeIntrusive<TOpAddDependencies>(unaryOp->GetInput(), unaryOp->Pos, filteredOpDependencies);
-                    unaryOp->SetInput(addDeps);
-                } else {
-                    auto addDeps = CastOperator<TOpAddDependencies>(unaryOp->GetInput());
-                    auto depPairs = addDeps->GetDependencyPairs();
-                    AddUnique<DependencyPairType>(filteredOpDependencies, depPairs);
-                    addDeps->SetDependencyPairs(depPairs);
+                if (filteredOpDependencies.size()) {
+                    if (unaryOp->GetInput()->Kind != EOperator::AddDependencies) {
+                        auto addDeps = MakeIntrusive<TOpAddDependencies>(unaryOp->GetInput(), unaryOp->Pos, filteredOpDependencies);
+                        unaryOp->SetInput(addDeps);
+                    } else {
+                        auto addDeps = CastOperator<TOpAddDependencies>(unaryOp->GetInput());
+                        auto depPairs = addDeps->GetDependencyPairs();
+                        AddUnique<DependencyPairType>(filteredOpDependencies, depPairs);
+                        addDeps->SetDependencyPairs(depPairs);
+                    }
                 }
-            }
 
-            AddUnique<DependencyPairType>(filteredOpDependencies, subplanDependencies);
+                AddUnique<DependencyPairType>(filteredOpDependencies, subplanDependencies);
+            }
         }
 
         if (currOp->Kind == EOperator::AddDependencies) {

@@ -31,6 +31,14 @@ TString FormatSortElements(const TVector<TSortElement>& sortElements) {
     return result;
 }
 
+void AddExpressionMembers(const TExpression& expression, TVector<TInfoUnit>& members, TInfoUnitSet& seen) {
+    for (const auto& iu : expression.GetRawInputIUs()) {
+        if (seen.insert(iu).second) {
+            members.push_back(iu);
+        }
+    }
+}
+
 } // namespace
 
 /**
@@ -379,6 +387,7 @@ void TOpMap::SetMapElementExpression(size_t index, TExpression expression) {
 
 void TOpMap::InvalidateCachedIUs() {
     Props.OutputIUs.reset();
+    SubplanCandidatesDirty = true;
 }
 
 bool TOpMap::HasOutputElement(const TInfoUnit& output) const {
@@ -442,22 +451,16 @@ TVector<std::reference_wrapper<const TExpression>> TOpMap::GetExpressions() cons
     return result;
 }
 
-TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
-    TVector<TInfoUnit> subplanIUs;
-    TVector<TInfoUnit> res;
-
-    for (const auto& mapElement : MapElements) {
-        auto expression = mapElement.GetExpression();
-        auto vars = TExpression(expression.Node, expression.Ctx, &props).GetInputIUs(true, false);
-        for (const auto& iu : vars) {
-            if (iu.IsSubplanContext()) {
-                subplanIUs.push_back(iu);
-            }
+const TVector<TInfoUnit>& TOpMap::GetSubplanCandidates() const {
+    if (SubplanCandidatesDirty) {
+        SubplanCandidates.clear();
+        TInfoUnitSet seen;
+        for (const auto& mapElement : MapElements) {
+            AddExpressionMembers(mapElement.GetExpression(), SubplanCandidates, seen);
         }
+        SubplanCandidatesDirty = false;
     }
-
-    AddUnique<TInfoUnit>(res, subplanIUs);
-    return res;
+    return SubplanCandidates;
 }
 
 // Returns explicit renames as pairs of <to, from>
@@ -642,6 +645,7 @@ TVector<std::reference_wrapper<const TExpression>> TOpFilter::GetExpressions() c
 
 void TOpFilter::SetFilterExpression(TExpression filterExpr) {
     FilterExpr = std::move(filterExpr);
+    SubplanCandidatesDirty = true;
 }
 
 void TOpFilter::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ctx) {
@@ -657,14 +661,14 @@ TVector<TInfoUnit> TOpFilter::GetUsedIUs(TPlanProps& props) {
     return FilterExpr.GetInputIUs(false, true);
 }
 
-TVector<TInfoUnit> TOpFilter::GetSubplanIUs(TPlanProps& props) {
-    TVector<TInfoUnit> res;
-    for (const auto& iu : GetFilterIUs(props)) {
-        if (iu.IsSubplanContext()) {
-            res.push_back(iu);
-        }
+const TVector<TInfoUnit>& TOpFilter::GetSubplanCandidates() const {
+    if (SubplanCandidatesDirty) {
+        SubplanCandidates.clear();
+        TInfoUnitSet seen;
+        AddExpressionMembers(FilterExpr, SubplanCandidates, seen);
+        SubplanCandidatesDirty = false;
     }
-    return res;
+    return SubplanCandidates;
 }
 
 TString TOpFilter::ToString(TExprContext& ctx) {
@@ -1590,17 +1594,25 @@ void TOpIterator::Advance() {
             return;
         }
 
-        if (RecurseIntoSubplans && !frame.SubplansLoaded) {
-            Y_ENSURE(PlanProps);
-            frame.SubplanIUs = frame.Current->GetSubplanIUs(*PlanProps);
-            frame.SubplansLoaded = true;
-        }
-
-        if (RecurseIntoSubplans && frame.NextSubplanIdx < frame.SubplanIUs.size()) {
-            const auto& iu = frame.SubplanIUs[frame.NextSubplanIdx++];
-            const auto& subplan = PlanProps->Subplans.At(iu);
-            PushFrame(CastOperator<IOperator>(subplan.Plan), nullptr, size_t(0), std::make_shared<TInfoUnit>(iu));
-            continue;
+        if (RecurseIntoSubplans) {
+            if (!frame.SubplanCandidates) {
+                frame.SubplanCandidates = &frame.Current->GetSubplanCandidates();
+            }
+            bool pushedSubplan = false;
+            while (frame.NextSubplanCandidateIdx < frame.SubplanCandidates->size()) {
+                const auto& iu = (*frame.SubplanCandidates)[frame.NextSubplanCandidateIdx++];
+                const auto* subplan = PlanProps->Subplans.Find(iu);
+                if (!subplan) {
+                    continue;
+                }
+                if (PushFrame(CastOperator<IOperator>(subplan->Plan), nullptr, size_t(0), std::make_shared<TInfoUnit>(iu))) {
+                    pushedSubplan = true;
+                    break;
+                }
+            }
+            if (pushedSubplan) {
+                continue;
+            }
         }
 
         const auto& children = frame.Current->GetChildren();

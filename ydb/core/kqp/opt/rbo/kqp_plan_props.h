@@ -84,6 +84,10 @@ public:
         return Entries.at(binding);
     }
 
+    bool Contains(const TInfoUnit& binding) const {
+        return Entries.contains(binding);
+    }
+
     bool Empty() const {
         return Entries.empty();
     }

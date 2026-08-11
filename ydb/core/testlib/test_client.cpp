@@ -1285,17 +1285,16 @@ namespace Tests {
             Runtime->RegisterService(NConveyor::TScanServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            const auto registerService = [&](const bool useBatchPool) {
-                const ui32 poolId = useBatchPool ? appData.BatchPoolId : appData.UserPoolId;
+            const auto registerService = [&](const ui32 poolId) {
                 auto counters = appData.Counters->GetSubgroup("actor_system_pool_id", ::ToString(poolId));
                 auto* actor = NConveyorComposite::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), counters);
                 const auto aid = Runtime->Register(actor, nodeIdx, poolId, TMailboxType::Revolving, 0);
                 Runtime->RegisterService(
-                    NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx), useBatchPool), aid, nodeIdx);
+                    NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx), poolId == appData.BatchPoolId), aid, nodeIdx);
             };
 
-            registerService(false);
-            registerService(true);
+            registerService(appData.UserPoolId);
+            registerService(appData.BatchPoolId);
         }
         {
             auto actor = NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(appData.Counters);

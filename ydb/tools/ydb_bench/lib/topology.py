@@ -17,6 +17,10 @@ class CpuTopology:
     allowed_cpus: tuple
     numa_nodes: tuple
     chiplets: tuple
+    version: int = 2
+    physical_cores: tuple = ()
+    smt_siblings: tuple = ()
+    hierarchy_reasons: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -51,6 +55,13 @@ def _read_cpu_list(path):
         return ()
 
 
+def _read_int(path):
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
 def _allowed_cpus():
     if hasattr(os, "sched_getaffinity"):
         return tuple(sorted(os.sched_getaffinity(0)))
@@ -62,6 +73,7 @@ def discover_topology(sys_root=Path("/sys/devices/system"), allowed_cpus=None):
     allowed = tuple(sorted(set(_allowed_cpus() if allowed_cpus is None else allowed_cpus)))
     allowed_set = set(allowed)
 
+    reasons = []
     nodes = []
     for node_path in sorted((sys_root / "node").glob("node[0-9]*")):
         cpus = tuple(cpu for cpu in _read_cpu_list(node_path / "cpulist") if cpu in allowed_set)
@@ -69,8 +81,10 @@ def discover_topology(sys_root=Path("/sys/devices/system"), allowed_cpus=None):
             nodes.append((int(node_path.name[4:]), cpus))
     if not nodes:
         nodes = [(0, allowed)]
+        reasons.append(("numa", "NUMA node cpulists are unavailable; using synthetic node 0"))
 
     chiplet_sets = set()
+    l3_cpus = set()
     for cpu in allowed:
         cache_root = sys_root / "cpu" / "cpu{}".format(cpu) / "cache"
         for cache_path in sorted(cache_root.glob("index[0-9]*")):
@@ -86,21 +100,34 @@ def discover_topology(sys_root=Path("/sys/devices/system"), allowed_cpus=None):
                 )
                 if shared:
                     chiplet_sets.add(shared)
+                    l3_cpus.update(shared)
 
-    if not chiplet_sets:
+    # A partially described cache hierarchy is no more useful for the CPUs it
+    # omits than a missing one.  Fill those CPUs from die topology too, so
+    # every allowed CPU has a deterministic place in the hierarchy.
+    missing_l3 = allowed_set - l3_cpus
+    if missing_l3:
+        reasons.append(("chiplet", "L3 cache groups are unavailable for some allowed CPUs; using die groups"))
         die_groups = {}
+        missing_die_id = False
         for node_id, node_cpus in nodes:
             for cpu in node_cpus:
-                try:
-                    die_id = int(
-                        (sys_root / "cpu" / "cpu{}".format(cpu) / "topology" / "die_id")
-                        .read_text(encoding="utf-8")
-                        .strip()
-                    )
-                except (OSError, ValueError):
-                    die_id = 0
-                die_groups.setdefault((node_id, die_id), []).append(cpu)
+                if cpu not in missing_l3:
+                    continue
+                topology_root = sys_root / "cpu" / "cpu{}".format(cpu) / "topology"
+                die_id = _read_int(topology_root / "die_id")
+                # package_id prevents the synthetic die 0 from combining CPUs
+                # from separate sockets when die_id is absent.
+                package_id = _read_int(topology_root / "physical_package_id")
+                if die_id is None:
+                    # An unknown die must not be presented as a shared die.
+                    # A CPU-sized fallback is deterministic and conservative.
+                    missing_die_id = True
+                    die_id = ("cpu", cpu)
+                die_groups.setdefault((node_id, package_id, die_id), []).append(cpu)
         chiplet_sets.update(tuple(cpus) for cpus in die_groups.values())
+        if missing_die_id:
+            reasons.append(("chiplet", "die_id is unavailable; affected CPUs are singleton chiplet groups"))
 
     chiplets = []
     for cpus in sorted(chiplet_sets):
@@ -109,7 +136,54 @@ def discover_topology(sys_root=Path("/sys/devices/system"), allowed_cpus=None):
             next((node_id for node_id, node_cpus in nodes if cpus[0] in node_cpus), -1),
         )
         chiplets.append((node_id, cpus))
-    return CpuTopology(allowed_cpus=allowed, numa_nodes=tuple(nodes), chiplets=tuple(chiplets))
+    core_data = {}
+    sibling_sets = set()
+    incomplete_core_data = False
+    incomplete_smt_data = False
+    for cpu in allowed:
+        topology_root = sys_root / "cpu" / "cpu{}".format(cpu) / "topology"
+        package_id = _read_int(topology_root / "physical_package_id")
+        core_id = _read_int(topology_root / "core_id")
+        siblings = tuple(candidate for candidate in _read_cpu_list(topology_root / "thread_siblings_list")
+                         if candidate in allowed_set)
+        if not siblings or cpu not in siblings:
+            incomplete_smt_data = True
+            siblings = (cpu,)
+            sibling_sets.add(siblings)
+        else:
+            sibling_sets.add(siblings)
+        if package_id is None or core_id is None:
+            incomplete_core_data = True
+            core_data[cpu] = None
+        elif siblings == (cpu,) and (topology_root / "thread_siblings_list").exists():
+            core_data[cpu] = (package_id, core_id)
+        elif siblings != (cpu,):
+            core_data[cpu] = (package_id, core_id)
+        else:
+            # Missing SMT data must not cause CPUs with matching partial IDs
+            # to be merged into a guessed physical core.
+            incomplete_smt_data = True
+            core_data[cpu] = None
+
+    core_groups = {}
+    for cpu in allowed:
+        key = core_data[cpu]
+        # Unknown topology gets a CPU-specific key: this is deliberately
+        # conservative and can never merge two distinct physical cores.
+        core_groups.setdefault(key if key is not None else ("cpu", cpu), []).append(cpu)
+    if incomplete_core_data:
+        reasons.append(("physical_core", "physical_package_id or core_id is unavailable; affected CPUs are singleton cores"))
+    if incomplete_smt_data:
+        reasons.append(("smt", "thread_siblings_list is incomplete; affected CPUs are singleton SMT groups"))
+
+    return CpuTopology(
+        allowed_cpus=allowed,
+        numa_nodes=tuple(nodes),
+        chiplets=tuple(chiplets),
+        physical_cores=tuple(sorted(tuple(cpus) for cpus in core_groups.values())),
+        smt_siblings=tuple(sorted(sibling_sets)),
+        hierarchy_reasons=tuple(reasons),
+    )
 
 
 def _spread(groups, count):
@@ -175,11 +249,17 @@ def plan_affinity(mode, topology, required_cpus):
 
 def topology_record(topology):
     return {
+        "version": topology.version,
         "allowed_cpus": list(topology.allowed_cpus),
         "numa_nodes": [
             {"id": node_id, "cpus": list(cpus)} for node_id, cpus in topology.numa_nodes
         ],
         "chiplets": [
             {"numa_node": node_id, "cpus": list(cpus)} for node_id, cpus in topology.chiplets
+        ],
+        "physical_cores": [list(cpus) for cpus in topology.physical_cores],
+        "smt_siblings": [list(cpus) for cpus in topology.smt_siblings],
+        "hierarchy_reasons": [
+            {"level": level, "reason": reason} for level, reason in topology.hierarchy_reasons
         ],
     }

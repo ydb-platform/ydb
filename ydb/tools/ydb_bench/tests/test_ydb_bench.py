@@ -29,6 +29,7 @@ from ydb.tools.ydb_bench.lib.topology import (
     discover_topology,
     parse_cpu_list,
     plan_affinity,
+    topology_record,
 )
 
 
@@ -674,6 +675,80 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(topology.allowed_cpus, (1, 2, 3, 4))
         self.assertEqual(topology.numa_nodes, ((0, (1, 2, 3)), (1, (4,))))
         self.assertEqual(topology.chiplets, ((0, (1,)), (0, (2, 3))))
+        record = topology_record(topology)
+        self.assertEqual(record["version"], 2)
+        self.assertEqual(record["numa_nodes"], [
+            {"id": 0, "cpus": [1, 2, 3]}, {"id": 1, "cpus": [4]},
+        ])
+        self.assertEqual(record["chiplets"], [
+            {"numa_node": 0, "cpus": [1]}, {"numa_node": 0, "cpus": [2, 3]},
+        ])
+
+    def test_topology_hierarchy_from_synthetic_sysfs(self):
+        cases = (
+            {
+                "name": "single_numa_smt",
+                "nodes": ((0, "0-3"),),
+                "l3": ((0, "0-3"),),
+                "cpu_data": ((0, 0, 0, "0-1"), (1, 0, 0, "0-1"),
+                             (2, 0, 1, "2-3"), (3, 0, 1, "2-3")),
+                "allowed": (0, 1, 2, 3),
+                "cores": ((0, 1), (2, 3)), "siblings": ((0, 1), (2, 3)), "reasons": (),
+            },
+            {
+                "name": "multi_numa_multiple_chiplets_smt_off",
+                "nodes": ((0, "0-1"), (1, "2-3")),
+                "l3": ((0, "0-1"), (1, "2-3")),
+                "cpu_data": ((0, 0, 0, "0"), (1, 0, 1, "1"),
+                             (2, 1, 0, "2"), (3, 1, 1, "3")),
+                "allowed": (0, 1, 2, 3),
+                "cores": ((0,), (1,), (2,), (3,)), "siblings": ((0,), (1,), (2,), (3,)), "reasons": (),
+            },
+            {
+                "name": "asymmetric_cpuset",
+                "nodes": ((0, "0-3"),), "l3": ((0, "0-1"), (2, "2-3")),
+                "cpu_data": ((0, 0, 0, "0-1"), (1, 0, 0, "0-1"),
+                             (2, 0, 1, "2-3"), (3, 0, 1, "2-3")),
+                "allowed": (1, 2), "cores": ((1,), (2,)), "siblings": ((1,), (2,)), "reasons": (),
+            },
+            {
+                "name": "missing_numa_l3_and_incomplete_topology",
+                "nodes": (), "l3": (),
+                "cpu_data": ((0, None, None, None), (1, 0, 1, None)),
+                "allowed": (0, 1), "cores": ((0,), (1,)), "siblings": ((0,), (1,)),
+                "reasons": ("numa", "chiplet", "chiplet", "physical_core", "smt"),
+            },
+        )
+        for case in cases:
+            with self.subTest(case["name"]):
+                sys_root = self.root / case["name"] / "sys" / "devices" / "system"
+                for node_id, cpus in case["nodes"]:
+                    node = sys_root / "node" / "node{}".format(node_id)
+                    node.mkdir(parents=True)
+                    node.joinpath("cpulist").write_text(cpus, encoding="utf-8")
+                for cpu, cpus in case["l3"]:
+                    cache = sys_root / "cpu" / "cpu{}".format(cpu) / "cache" / "index3"
+                    cache.mkdir(parents=True)
+                    cache.joinpath("level").write_text("3", encoding="utf-8")
+                    cache.joinpath("shared_cpu_list").write_text(cpus, encoding="utf-8")
+                for cpu, package, core, siblings in case["cpu_data"]:
+                    topology = sys_root / "cpu" / "cpu{}".format(cpu) / "topology"
+                    topology.mkdir(parents=True, exist_ok=True)
+                    if package is not None:
+                        topology.joinpath("physical_package_id").write_text(str(package), encoding="utf-8")
+                    if core is not None:
+                        topology.joinpath("core_id").write_text(str(core), encoding="utf-8")
+                    if siblings is not None:
+                        topology.joinpath("thread_siblings_list").write_text(siblings, encoding="utf-8")
+
+                topology = discover_topology(sys_root, allowed_cpus=case["allowed"])
+                self.assertEqual(topology.version, 2)
+                self.assertEqual(topology.physical_cores, case["cores"])
+                self.assertEqual(topology.smt_siblings, case["siblings"])
+                self.assertEqual(tuple(level for level, _ in topology.hierarchy_reasons), case["reasons"])
+                record = topology_record(topology)
+                self.assertEqual(record["version"], 2)
+                self.assertEqual(record["allowed_cpus"], list(case["allowed"]))
 
     def test_affinity_modes_select_deterministic_masks(self):
         topology = CpuTopology(

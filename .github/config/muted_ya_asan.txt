@@ -21,6 +21,7 @@ ydb/core/http_proxy/ut TestMalformedRequest.CompressedDeflateContentLengthHigher
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedDeflateContentLengthLower
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthHigher
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthLower
+ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthNone
 ydb/core/http_proxy/ut TestMalformedRequest.ContentLengthCorrect
 ydb/core/http_proxy/ut TestMalformedRequest.ContentLengthHigher
 ydb/core/http_proxy/ut TestMalformedRequest.ContentLengthNone

@@ -357,9 +357,7 @@ void TPCCRunner::RunSync() {
 
     uint32_t warmupSeconds = minWarmupSeconds;
     if (Config.WarmupDuration == TDuration()) {
-        // Adaptive floors by scale. minWarmupSeconds is the per-terminal ramp lower
-        // bound (≈ terminals * 1ms); above 1000 warehouses that bound is still only
-        // a few minutes, so we raise the floor to 30m for large scales.
+        // adaptive, a very simple heuristic
         if (Config.WarehouseCount <= 10) {
             warmupSeconds = 30;
         } else if (Config.WarehouseCount <= 100) {

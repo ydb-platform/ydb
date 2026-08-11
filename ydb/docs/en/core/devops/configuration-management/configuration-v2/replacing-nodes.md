@@ -31,13 +31,20 @@ Create a DNS record for the new FQDN that points to the same server. The new FQD
 
 1. Wait until the new FQDN appears in the local copy of `config.yaml` on the target node.
 
-1. Make sure that the process can be [stopped safely](../../../maintenance/manual/node_restarting.md#restart_process). If the cluster uses TLS, install the prepared certificate. Then change the operating system hostname on the server and restart the static node process. For example, when using `systemd`:
+1. Make sure that the process can be [stopped safely](../../../maintenance/manual/node_restarting.md#restart_process). If the cluster uses TLS, install the prepared certificate.
+
+    If the node starts with `--node static`, make sure that the new `host` value matches the output of either `hostname` or `hostname -f`. If neither command returns the new value, change the hostname:
 
     ```bash
     sudo hostnamectl set-hostname node-1-new.example.com
+    ```
+
+    Restart the static node process. For example, when using `systemd`:
+
+    ```bash
     sudo systemctl restart ydbd-storage
     ```
 
-    If the node starts with `--node static`, the operating system hostname must match the new `host` value. The service name may differ depending on the deployment method.
+    The service name may differ depending on the deployment method.
 
 1. On the **Nodes** tab of the [cluster monitoring page](../../../reference/embedded-ui/ydb-monitoring.md#node_list_page), make sure the node has reconnected with its original ID and the new FQDN. You can then remove the old DNS record.

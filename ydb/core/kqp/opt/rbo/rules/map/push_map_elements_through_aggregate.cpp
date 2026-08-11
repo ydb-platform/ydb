@@ -246,7 +246,7 @@ TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IO
     }
     aggregate->RenameProducedIUs(renames, ctx.ExprCtx);
     aggregate->RenameUsedIUs(keyRenames, ctx.ExprCtx);
-    props.Subplans.RenameReferences(renames, ctx.ExprCtx);
+    props.Subplans.RenameExternalReferences(renames, ctx.ExprCtx);
 
     // Consume the renames from every consumer map and rebind what stays above
     // to the new output names.

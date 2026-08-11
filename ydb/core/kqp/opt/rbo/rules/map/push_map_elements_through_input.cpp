@@ -210,7 +210,7 @@ TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOpera
 
     if (!renameMap.empty()) {
         op->RenameUsedIUs(renameMap, ctx.ExprCtx);
-        props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
+        props.Subplans.RenameExternalReferences(renameMap, ctx.ExprCtx);
     }
 
     if (topElements.empty()) {

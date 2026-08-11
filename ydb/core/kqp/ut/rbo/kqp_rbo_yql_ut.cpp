@@ -1398,6 +1398,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "Unknown subplan binding");
     }
 
+    Y_UNIT_TEST(SubplanBindingsCannotBeRenamed) {
+        NYql::TExprContext exprCtx;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit binding("subplan", true);
+        const TInfoUnit replacement("replacement", true);
+        TSubplans subplans;
+
+        subplans.Add(binding, MakeIntrusive<TOpEmptySource>(pos), ESubplanType::EXPR);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            subplans.RenameExternalReferences({{binding, replacement}}, exprCtx),
+            yexception,
+            "Subplan bindings are immutable");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            subplans.RenameExternalReferences({{replacement, binding}}, exprCtx),
+            yexception,
+            "Subplan bindings are immutable");
+    }
+
     Y_UNIT_TEST(ComputeParentsHandlesSharedDagAndIgnoresInactiveSubplans) {
         const auto pos = NYql::TPositionHandle();
         auto shared = MakeIntrusive<TOpEmptySource>(pos);

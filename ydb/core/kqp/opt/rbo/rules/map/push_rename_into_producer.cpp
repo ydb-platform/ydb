@@ -165,7 +165,7 @@ bool TPushRenameIntoProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& input,
         }
 
         topMap->SetMapElements(BuildResidualTopMapElements(topMap, idx, from, to));
-        props.Subplans.RenameReferences({{from, to}}, ctx.ExprCtx);
+        props.Subplans.RenameExternalReferences({{from, to}}, ctx.ExprCtx);
         if (topMap->GetMapElements().empty()) {
             input = topMap->GetInput();
         }

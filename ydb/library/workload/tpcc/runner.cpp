@@ -35,7 +35,8 @@ namespace {
 //-----------------------------------------------------------------------------
 
 constexpr auto GracefulShutdownTimeout = std::chrono::seconds(20);
-constexpr auto MinWarmupPerTerminalMs = std::chrono::milliseconds(1);
+constexpr auto MinWarmupPerTerminalMs = std::chrono::milliseconds(10);
+constexpr uint32_t MaxAdaptiveWarmupSeconds = 60 * 60;
 
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
 
@@ -364,10 +365,13 @@ void TPCCRunner::RunSync() {
             warmupSeconds = 5 * 60;
         } else if (Config.WarehouseCount <= 1000) {
             warmupSeconds = 10 * 60;
+        } else if (Config.WarehouseCount <= 10000) {
+            warmupSeconds = 20 * 60;
         } else {
             warmupSeconds = 30 * 60;
         }
         warmupSeconds = std::max(warmupSeconds, minWarmupSeconds);
+        warmupSeconds = std::min(warmupSeconds, std::max(MaxAdaptiveWarmupSeconds, minWarmupSeconds));
     } else {
         // user specified
         warmupSeconds = Config.WarmupDuration.Seconds();

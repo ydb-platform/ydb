@@ -344,6 +344,70 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildBlockHashJoin(const TString& joinType
         // clang-format on
     }
 
+    // Process join filters:
+    // 1. split them into 3 groups - left, right, common
+    // 2. create a conjunct out of each group
+    // 3. create a common type for these lambdas to be used in type annotation
+
+    TExprNode::TPtr leftLambda = Build<TCoLambda>(Ctx, Pos)
+        .Args({"arg"})
+        .Body<TCoBool>()
+            .Literal().Build("true")
+        .Build()
+        .Done().Ptr();
+
+    TExprNode::TPtr rightLambda = Build<TCoLambda>(Ctx, Pos)
+        .Args({"arg"})
+        .Body<TCoBool>()
+            .Literal().Build("true")
+        .Build()
+        .Done().Ptr();
+        
+    TExprNode::TPtr joinLambda = Build<TCoLambda>(Ctx, Pos)
+        .Args({"arg"})
+        .Body<TCoBool>()
+            .Literal().Build("true")
+        .Build()
+        .Done().Ptr();
+    
+    if (Join->JoinFilters.size()) {
+        TVector<TExpression> leftFilters;
+        TVector<TExpression> rightFilters;
+        TVector<TExpression> joinFilters;
+
+        for (const auto& filterExpr : Join->JoinFilters) {
+            if (IUIsSubset(filterExpr.GetInputIUs(), Join->GetLeftInput()->GetOutputIUs())) {
+                leftFilters.push_back(filterExpr);
+            } else if (IUIsSubset(filterExpr.GetInputIUs(), Join->GetLeftInput()->GetOutputIUs())) {
+                rightFilters.push_back(filterExpr);
+            } else {
+                joinFilters.push_back(filterExpr);
+            }
+        }
+
+        if (leftFilters.size()) {
+            leftLambda = MakeConjunction(leftFilters).Node;
+        }
+        if (rightFilters.size()) {
+            rightLambda = MakeConjunction(rightFilters).Node;
+        }
+        if (joinFilters.size()) {
+            joinLambda = MakeConjunction(joinFilters).Node;
+        }
+    }
+
+    auto leftInputType = Join->GetLeftInput()->Type;
+    auto rightInputType = Join->GetRightInput()->Type;
+    auto leftItemType = leftInputType->Cast<TListExprType>()->GetItemType();
+    auto rightItemType = rightInputType->Cast<TListExprType>()->GetItemType();
+    TVector<const TItemExprType*> leftItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
+    TVector<const TItemExprType*> rightItemTypes = rightItemType->Cast<TStructExprType>()->GetItems();
+
+    TVector<const TItemExprType*> crossProductTypes;
+    crossProductTypes.insert(crossProductTypes.end(), leftItemTypes.begin(), leftItemTypes.end());
+    crossProductTypes.insert(crossProductTypes.end(), rightItemTypes.begin(), rightItemTypes.end());
+    auto crossProductType = Ctx.MakeType<TStructExprType>(crossProductTypes);
+
     // clang-format off
     return Build<TDqBlockHashJoinCore>(Ctx, Pos)
         .LeftInput(leftInput)
@@ -366,6 +430,10 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildBlockHashJoin(const TString& joinType
         .Settings()
             .Add(joinSettings)
         .Build()
+        .LeftSideLambda(leftLambda)
+        .RightSideLambda(rightLambda)
+        .JoinLambda(joinLambda)
+        .LambdaInputType(ExpandType(Pos, *crossProductType, Ctx))
     .Done().Ptr();
     // clang-format on
 }
@@ -540,11 +608,11 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 
     TExprNode::TPtr phyJoin;
     switch (joinAlgo) {
-        case NKikimr::NKqp::EJoinAlgoType::MapJoin: {
-            phyJoin = BuildMapJoin(joinType, leftInput, SqueezeJoinInputToDict(rightInput, rightInputColumns.size(), rightJoinKeyIdxs, !rightSideEmpty),
-                                   leftColumnIdxs, rightColumnIdxs, leftRenames, rightRenames, leftKeyColumnNames, rightKeyColumnNames);
-            break;
-        }
+        case NKikimr::NKqp::EJoinAlgoType::MapJoin: //{
+        //    phyJoin = BuildMapJoin(joinType, leftInput, SqueezeJoinInputToDict(rightInput, rightInputColumns.size(), rightJoinKeyIdxs, !rightSideEmpty),
+        //                           leftColumnIdxs, rightColumnIdxs, leftRenames, rightRenames, leftKeyColumnNames, rightKeyColumnNames);
+        //    break;
+        //}
         case NKikimr::NKqp::EJoinAlgoType::GraceJoin:
         case NKikimr::NKqp::EJoinAlgoType::ReverseBlockJoin: {
             phyJoin = useBlockHashJoin ? BuildBlockHashJoin(joinType, leftInput, rightInput, leftColumnIdxs, rightColumnIdxs, leftKeyColumnNames,

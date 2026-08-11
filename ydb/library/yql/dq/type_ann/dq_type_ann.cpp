@@ -590,7 +590,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
 
 TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
     // BlockHashJoin expects 8 args: leftStream, rightStream, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames, settings
-    if (!EnsureArgsCount(*node, 8, ctx)) {
+    if (!EnsureMinMaxArgsCount(*node, 8, 12, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
@@ -658,7 +658,41 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     // Add scalar length column at the end
     resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
 
+    if (node->ChildrenSize() > TDqBlockHashJoinCore::idx_LeftSideLambda) {
+        auto lambdaType = node->ChildRef(TDqBlockHashJoinCore::idx_LambdaInputType)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        YQL_CLOG(TRACE, CoreDq) << "Input lambda type: " << *lambdaType;
+
+        auto& leftLambda = node->ChildRef(TDqBlockHashJoinCore::idx_LeftSideLambda);
+        if (!UpdateLambdaAllArgumentsTypes(leftLambda, {lambdaType}, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!leftLambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        auto& rightLambda = node->ChildRef(TDqBlockHashJoinCore::idx_RightSideLambda);
+        if (!UpdateLambdaAllArgumentsTypes(rightLambda, {lambdaType}, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!rightLambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        auto & joinLambda = node->ChildRef(TDqBlockHashJoinCore::idx_JoinLambda);
+        if (!UpdateLambdaAllArgumentsTypes(joinLambda, {lambdaType}, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!joinLambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+    }
+
     node->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
+
     return IGraphTransformer::TStatus(TStatus::Ok);
 }
 

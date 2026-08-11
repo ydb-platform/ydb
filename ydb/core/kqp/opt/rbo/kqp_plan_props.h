@@ -22,6 +22,13 @@ enum ESubplanType : ui32 { EXPR, IN_SUBPLAN, EXISTS };
 struct TPlanProps;
 
 struct TSubplanEntry {
+    TSubplanEntry(TIntrusivePtr<ISimpleOperator> plan, ESubplanType type, TVector<TInfoUnit> tuple, TInfoUnit iu)
+        : Plan(std::move(plan))
+        , Tuple(std::move(tuple))
+        , Type(type)
+        , IU(std::move(iu)) {
+    }
+
     TIntrusivePtr<ISimpleOperator> Plan;
     TVector<TInfoUnit> Tuple;
     ESubplanType Type;
@@ -30,17 +37,20 @@ struct TSubplanEntry {
 };
 
 struct TSubplans {
-
-    void Add(const TInfoUnit& iu, const TSubplanEntry& entry) {
-        OrderedList.push_back(iu);
-        PlanMap.insert({iu, entry});
+    void Add(const TInfoUnit& binding, TIntrusivePtr<ISimpleOperator> plan, ESubplanType type, TVector<TInfoUnit> tuple = {}) {
+        OrderedList.push_back(binding);
+        PlanMap.insert({binding, TSubplanEntry(std::move(plan), type, std::move(tuple), binding)});
     }
 
-    void Replace(const TInfoUnit& iu, TIntrusivePtr<ISimpleOperator> op) {
-        auto entry = PlanMap.at(iu);
-        entry.Plan = op;
-        PlanMap.erase(iu);
-        PlanMap.insert({iu, entry});
+    void ReplacePlan(const TInfoUnit& binding, TIntrusivePtr<ISimpleOperator> plan) {
+        auto entry = PlanMap.at(binding);
+        entry.Plan = std::move(plan);
+        PlanMap.erase(binding);
+        PlanMap.insert({binding, std::move(entry)});
+    }
+
+    void AddDependentIU(const TInfoUnit& binding, const TInfoUnit& iu) {
+        PlanMap.at(binding).DependentIUs.push_back(iu);
     }
 
     TVector<TSubplanEntry> Get() {
@@ -51,9 +61,9 @@ struct TSubplans {
         return result;
     }
 
-    void Remove(const TInfoUnit& iu) {
-        std::erase(OrderedList, iu);
-        PlanMap.erase(iu);
+    void Remove(const TInfoUnit& binding) {
+        std::erase(OrderedList, binding);
+        PlanMap.erase(binding);
     }
 
     const TSubplanEntry* Find(const TInfoUnit& binding) const {

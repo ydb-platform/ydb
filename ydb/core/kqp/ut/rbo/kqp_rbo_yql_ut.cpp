@@ -1423,7 +1423,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "Cross",
             TVector<std::pair<TInfoUnit, TInfoUnit>>{});
         const TInfoUnit inactiveIU("inactive_subplan", true);
-        root.PlanProps.Subplans.Add(inactiveIU, TSubplanEntry{inactiveSubplan, {}, ESubplanType::EXPR, inactiveIU, {}});
+        root.PlanProps.Subplans.Add(inactiveIU, inactiveSubplan, ESubplanType::EXPR);
 
         root.ComputeParents();
 
@@ -6274,12 +6274,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(renameMap, pos, {"l_a"});
 
         auto subplanRead = MakeTestRead({TInfoUnit("rhs")}, pos);
-        TSubplanEntry subplanEntry;
-        subplanEntry.Plan = subplanRead;
-        subplanEntry.Tuple = {TInfoUnit("a")};
-        subplanEntry.Type = ESubplanType::IN_SUBPLAN;
-        subplanEntry.IU = subplanIU;
-        root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
+        root.PlanProps.Subplans.Add(subplanIU, subplanRead, ESubplanType::IN_SUBPLAN, {TInfoUnit("a")});
         filter->BindExpressionPlanProps(&root.PlanProps);
 
         TVector<std::unique_ptr<IRule>> rules;
@@ -6328,12 +6323,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
         );
 
-        TSubplanEntry subplanEntry;
-        subplanEntry.Plan = subplanFilter;
-        subplanEntry.Type = ESubplanType::EXISTS;
-        subplanEntry.IU = subplanIU;
-        subplanEntry.DependentIUs = {TInfoUnit("a")};
-        root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
+        root.PlanProps.Subplans.Add(subplanIU, subplanFilter, ESubplanType::EXISTS);
+        root.PlanProps.Subplans.AddDependentIU(subplanIU, TInfoUnit("a"));
         outerFilter->BindExpressionPlanProps(&root.PlanProps);
         subplanFilter->BindExpressionPlanProps(&root.PlanProps);
 
@@ -6372,12 +6363,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(filter, pos, {"payload"});
 
         auto subplanRead = MakeTestRead({TInfoUnit("rhs")}, pos);
-        TSubplanEntry subplanEntry;
-        subplanEntry.Plan = subplanRead;
-        subplanEntry.Tuple = {TInfoUnit("a")};
-        subplanEntry.Type = ESubplanType::IN_SUBPLAN;
-        subplanEntry.IU = subplanIU;
-        root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
+        root.PlanProps.Subplans.Add(subplanIU, subplanRead, ESubplanType::IN_SUBPLAN, {TInfoUnit("a")});
         filter->BindExpressionPlanProps(&root.PlanProps);
 
         TVector<std::unique_ptr<IRule>> rules;

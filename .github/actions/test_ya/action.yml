@@ -350,7 +350,6 @@ runs:
             echo "graph_compare.py returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
-            echo failure > statusrep.txt
             echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
             exit $RC
           fi
@@ -520,8 +519,6 @@ runs:
             echo "ya make returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
-            # generate-summary was not reached; keep downstream steps from crashing.
-            echo failure > statusrep.txt
             # sed is to remove richness (tags like '[[rst]]')
             (( \
               cat $CURRENT_REPORT \
@@ -650,8 +647,6 @@ runs:
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
-        elif [ ! -f statusrep.txt ]; then
-          echo failure > statusrep.txt
         fi
 
     - name: resolve-status-sha
@@ -688,12 +683,7 @@ runs:
       run: |
         set -x
         if [ true = ${{ inputs.run_tests }} ]; then
-          if [ -f statusrep.txt ]; then
-            teststatus=$(cat statusrep.txt)
-          else
-            echo "statusrep.txt is missing; treating test check as failure"
-            teststatus=failure
-          fi
+          teststatus=$(cat statusrep.txt)
           if [[ $teststatus == "success" ]]; then
             testmessage="The check has been completed successfully"
           else

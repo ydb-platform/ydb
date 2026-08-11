@@ -40,6 +40,17 @@ namespace NKikimr::NPQ {
             return Batches;
         }
 
+        // Defense-in-depth for #49436: never construct TBlobIterator on an empty body
+        // (partial KV OVERRUN leaves Empty() blobs). Callers must stop on Empty() first.
+        AFL_ENSURE(!Empty())
+            ("Key", Key.ToString())
+            ("Offset", Offset)
+            ("PartNo", PartNo)
+            ("Count", Count)
+            ("Size", Size)
+            ("RawValue.size", RawValue.size())
+            ("Cached", Cached);
+
         Batches = std::make_shared<TVector<TBatch>>(GetUnpackedBatches(Key, RawValue));
         RawValue.clear();
         return Batches;

@@ -496,6 +496,18 @@ bool TPartition::InitNewHeadForCompaction()
     return true;
 }
 
+void TPartition::CancelBlobsCompaction()
+{
+    YDB_LOG_WARN_COMP(Service, "Cancel blobs compaction",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"keysForCompactionSize", KeysForCompaction.size()},
+        {"compactionBlobsCount", CompactionBlobsCount});
+
+    CompactionInProgress = false;
+    KeysForCompaction.clear();
+    CompactionBlobsCount = 0;
+}
+
 void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs)
 {
     const auto& ctx = ActorContext();
@@ -579,6 +591,19 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                 {"needToCompactHead", needToCompactHead});
 
             const TRequestedBlob& requestedBlob = blobs[pos];
+            // Partial KV answer (OVERRUN / retention race): same as read path — stop and
+            // compact only the prefix already processed. Do not call GetBatches() on Empty().
+            if (requestedBlob.Empty()) {
+                YDB_LOG_WARN_COMP(Service, "Incomplete blobs compaction read, truncate keys",
+                    {"logPrefix", NPQ_LOG_PREFIX},
+                    {"key", k.Key},
+                    {"processedKeys", i},
+                    {"keysForCompactionSize", KeysForCompaction.size()},
+                    {"blobIndex", pos});
+                KeysForCompaction.resize(i);
+                break;
+            }
+
             if (!CompactRequestedBlob(requestedBlob, parameters, needToCompactHead, compactionRequest.Get(), blobCreationUnixTime, WasTheLastBlobBig, newHeadIsInitialized)) {
                 YDB_LOG_DEBUG_COMP(Service, "Can't append blob for key",
                     {"logPrefix", NPQ_LOG_PREFIX},
@@ -589,6 +614,13 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
             WasTheLastBlobBig = false;
         }
+    }
+
+    if (KeysForCompaction.empty()) {
+        // Nothing was compacted (first requested blob already empty). Avoid an empty KV
+        // write and an immediate retry of the same oversized read batch.
+        CancelBlobsCompaction();
+        return;
     }
 
     if (!CompactionBlobEncoder.IsLastBatchPacked()) {

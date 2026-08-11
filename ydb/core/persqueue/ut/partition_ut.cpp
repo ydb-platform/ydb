@@ -103,6 +103,24 @@ public:
         return partition.CleanUpBlobs(nullptr, ctx);
     }
 
+    static void PrepareBlobsCompactionRead(
+        TPartition& partition,
+        TVector<std::pair<TDataKey, size_t>> keysForCompaction,
+        size_t compactionBlobsCount)
+    {
+        partition.CompactionInProgress = true;
+        partition.KeysForCompaction = std::move(keysForCompaction);
+        partition.CompactionBlobsCount = compactionBlobsCount;
+    }
+
+    static bool CompactionInProgress(const TPartition& partition) {
+        return partition.CompactionInProgress;
+    }
+
+    static size_t KeysForCompactionSize(const TPartition& partition) {
+        return partition.KeysForCompaction.size();
+    }
+
 private:
     TInitMetaStep* MetaStep;
 };
@@ -6499,6 +6517,37 @@ Y_UNIT_TEST_F(CommitWriteOperationsRenamesHeadKeysFoldedIntoBodyKeys, TPartition
     WaitCommitDone(tx);
 }
 
+// GetBatches on Empty() fails with an explicit ensure (before TBlobIterator).
+// Compaction must not call it — see BlobsForCompactionWereReadStopsOnEmptyBlob (#49436).
+Y_UNIT_TEST(RequestedBlobGetBatchesEmptyFastWriteThrows) {
+    constexpr ui64 offset = 548'852;
+    constexpr ui32 count = 4'911;
+    constexpr ui32 expectedSize = 100;
+
+    const TPartitionId partitionId(0);
+    const TKey key = TKey::ForFastWrite(
+        TKeyPrefix::TypeData, partitionId, offset, 0, count, 0);
+
+    UNIT_ASSERT(key.IsFastWrite());
+    UNIT_ASSERT_VALUES_EQUAL(key.ToString().back(), '?');
+
+    // Size from key metadata is known; RawValue left empty as after OVERRUN.
+    TRequestedBlob blob(offset, 0, count, 0, expectedSize, TString(), key, 0);
+    UNIT_ASSERT(blob.Empty());
+
+    try {
+        blob.GetBatches();
+        UNIT_FAIL("expected yexception from GetBatches on empty FastWrite blob");
+    } catch (const yexception& e) {
+        const TString msg(e.what());
+        UNIT_ASSERT_C(msg.Contains("!Empty()"), msg);
+        UNIT_ASSERT_C(msg.Contains(key.ToString()), msg);
+        UNIT_ASSERT_C(msg.Contains("RawValue.size"), msg);
+        // Must fail before TBlobIterator's opaque Data != End.
+        UNIT_ASSERT_C(!msg.Contains("Data != End"), msg);
+    }
+}
+
 // Empty TRequestedBlob body (retention / requested range past data): AddBlobsFromBody logs
 // "Not full answer here!", fills read result metadata and returns TReadAnswer early.
 Y_UNIT_TEST_F(AddBlobsFromBodyStopsOnEmptyBlob, TPartitionFixture) {
@@ -6912,6 +6961,49 @@ TBlobKeyTokenPtr MakeTestBlobKeyToken() {
     auto token = std::make_shared<TBlobKeyToken>();
     token->NeedDelete = false;
     return token;
+}
+
+// #49436: partial OVERRUN-style empty FastWrite blob must cancel compaction, not crash.
+Y_UNIT_TEST_F(BlobsForCompactionWereReadStopsOnEmptyBlob, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    constexpr ui64 offset = 548'852;
+    constexpr ui32 count = 4'911;
+    constexpr ui32 expectedSize = 100;
+
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+    UNIT_ASSERT(partition != nullptr);
+
+    const TKey fwKey = TKey::ForFastWrite(
+        TKeyPrefix::TypeData, partitionId, offset, 0, count, 0);
+    UNIT_ASSERT(fwKey.IsFastWrite());
+
+    TDataKey dataKey{fwKey, expectedSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()};
+    TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.push_back(dataKey);
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition,
+        /*keysForCompaction=*/{{dataKey, /*blobIndex=*/0}},
+        /*compactionBlobsCount=*/1);
+    UNIT_ASSERT(TPartitionTestWrapper::CompactionInProgress(*partition));
+
+    TRequestedBlob emptyBlob(offset, 0, count, 0, expectedSize, TString(), fwKey, 0);
+    UNIT_ASSERT(emptyBlob.Empty());
+
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(std::move(emptyBlob));
+
+    SendEvent(new TEvPQ::TEvBlobResponse(
+        TPartition::ERequestCookie::ReadBlobsForCompaction,
+        std::move(blobs)));
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return !TPartitionTestWrapper::CompactionInProgress(*partition);
+    };
+    Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5));
+
+    UNIT_ASSERT(!TPartitionTestWrapper::CompactionInProgress(*partition));
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::KeysForCompactionSize(*partition), 0u);
 }
 
 void AddHeadKeyWithBatch(

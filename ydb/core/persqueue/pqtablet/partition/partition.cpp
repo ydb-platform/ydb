@@ -2209,6 +2209,14 @@ void TPartition::OnReadComplete(TReadInfo& info,
 void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx) {
     const ui64 cookie = ev->Get()->GetCookie();
     if (cookie == ERequestCookie::ReadBlobsForCompaction) {
+        if (HasError(*ev->Get())) {
+            YDB_LOG_ERROR_COMP(Service, "Blobs compaction read failed",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"errorCode", static_cast<int>(ev->Get()->Error.ErrorCode)},
+                {"error", ev->Get()->Error.ErrorStr});
+            CancelBlobsCompaction();
+            return;
+        }
         BlobsForCompactionWereRead(ev->Get()->GetBlobs());
         return;
     }

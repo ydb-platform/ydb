@@ -1123,6 +1123,27 @@ Y_UNIT_TEST_SUITE(BlobIterator) {
         UNIT_ASSERT_VALUES_EQUAL(batches[0].GetCount(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(batches[0].GetInternalPartsCount(), 1u);
     }
+
+    // TBlobIterator rejects empty blobs (#49436 crash site). Compaction must not unpack Empty().
+    Y_UNIT_TEST(EmptyFastWriteBlobThrowsDataNotEqualEnd) {
+        constexpr ui64 offset = 548'852;
+        constexpr ui32 count = 4'911;
+        const TKey key = TKey::ForFastWrite(
+            TKeyPrefix::TypeData, TPartitionId(0), offset, 0, count, 0);
+
+        UNIT_ASSERT(key.IsFastWrite());
+        UNIT_ASSERT_VALUES_EQUAL(key.ToString().back(), '?');
+
+        try {
+            GetUnpackedBatches(key, TString());
+            UNIT_FAIL("expected yexception from TBlobIterator on empty FastWrite blob");
+        } catch (const yexception& e) {
+            const TString msg(e.what());
+            UNIT_ASSERT_C(msg.Contains("Data != End"), msg);
+            UNIT_ASSERT_C(msg.Contains("blob.size=0"), msg);
+            UNIT_ASSERT_C(msg.Contains(key.ToString()), msg);
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(Head) {

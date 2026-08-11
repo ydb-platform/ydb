@@ -1242,6 +1242,7 @@ private:
     void TryRunCompaction(bool force = false);
     void BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs);
     void BlobsForCompactionWereWrite();
+    void CancelBlobsCompaction();
     ui64 NextReadCookie();
     bool ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, TInstant blobCreationUnixTime);
 

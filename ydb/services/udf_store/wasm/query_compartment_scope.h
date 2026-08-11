@@ -26,15 +26,27 @@ inline TVector<TString> FilterLoadedWasmUdfModules(
     return result;
 }
 
+//! Collect WASM modules for a stage compartment.
+//!
+//! Temporary: TProgram::TSettings has no WasmUdfModules yet (proto change deferred).
+//! When HasUdf is set, acquire all modules from the process catalog.
+//!
+//! Restore the per-stage list when proto field returns:
+//!   // modules.reserve(settings.WasmUdfModulesSize());
+//!   // for (const auto& module : settings.GetWasmUdfModules()) {
+//!   //     modules.push_back(module);
+//!   // }
+//!   // return FilterLoadedWasmUdfModules(modules, catalog);
 inline TVector<TString> CollectWasmUdfModules(
-    const NYql::NDqProto::TProgram::TSettings& settings)
+    const NYql::NDqProto::TProgram::TSettings& settings,
+    const TWasmModuleCatalog& catalog = GetWasmModuleCatalog())
 {
-    TVector<TString> modules;
-    modules.reserve(settings.WasmUdfModulesSize());
-    for (const auto& module : settings.GetWasmUdfModules()) {
-        modules.push_back(module);
+    if (!settings.GetHasUdf()) {
+        return {};
     }
-    return FilterLoadedWasmUdfModules(modules);
+    // TODO: replace with FilterLoadedWasmUdfModules(settings.GetWasmUdfModules()) once
+    // TProgram::TSettings.WasmUdfModules (=19) is restored in dq_tasks.proto.
+    return catalog.ListModuleNames();
 }
 
 // Owns a per-query compartment. Install it as the current TLS compartment only

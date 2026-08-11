@@ -48,6 +48,17 @@ TWasmModuleArtifactPtr TWasmModuleCatalog::FindByModuleName(const TString& modul
     return {};
 }
 
+TVector<TString> TWasmModuleCatalog::ListModuleNames() const {
+    TVector<TString> result;
+    with_lock (Mutex_) {
+        result.reserve(ByModuleName_.size());
+        for (const auto& [name, _] : ByModuleName_) {
+            result.push_back(name);
+        }
+    }
+    return result;
+}
+
 TVector<TWasmModuleArtifactPtr> TWasmModuleCatalog::ResolveModules(
     const TVector<TString>& moduleNames) const
 {

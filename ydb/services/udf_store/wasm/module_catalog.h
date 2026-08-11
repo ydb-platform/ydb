@@ -32,6 +32,9 @@ public:
     TWasmModuleArtifactPtr FindByMd5(const TString& md5) const;
     TWasmModuleArtifactPtr FindByModuleName(const TString& moduleName) const;
 
+    //! Names of all modules currently registered in the catalog.
+    TVector<TString> ListModuleNames() const;
+
     TVector<TWasmModuleArtifactPtr> ResolveModules(const TVector<TString>& moduleNames) const;
 
 private:

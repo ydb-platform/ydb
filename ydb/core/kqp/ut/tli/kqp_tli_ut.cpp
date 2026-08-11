@@ -83,11 +83,12 @@ namespace {
         if (messagePos == TString::npos) {
             return false;
         }
-        const size_t messageStart = messagePos + 9 /* skip message=" */;
-        const size_t messageEnd = record.find('"', messageStart);
-        const TString message = record.substr(messageStart, messageEnd == TString::npos ? record.size() : messageEnd - messageStart);
-        Cerr << "    extracted message:" << message << Endl;
-
+        size_t messageStart = messagePos + 8 /* skip message= */;
+        auto messageText = NStructuredLog::TTextWriter::UnescapeFieldValue(record, messageStart);
+        if (messageText.Empty()) {
+            return false;
+        }
+        const TString message = messageText.GetRef();
         std::regex messageRegex(messagePattern.c_str());
         std::smatch match;
         return std::regex_search(message.cbegin(), message.cend(), match, messageRegex);
@@ -95,14 +96,29 @@ namespace {
 
     // Extract BreakerQueryText from a single TLI record
     std::optional<TString> ExtractBreakerQueryTextFromRecord(const TString& record) {
-        const size_t allPos = record.find("BreakerQueryText: ");
+        std::cerr << "      ExtractBreakerQueryTextFromRecord 1" << std::endl;
+        size_t allPos = record.find("breakerQueryText=");
         if (allPos == TString::npos) {
             return std::nullopt;
         }
-        TString result = record.substr(allPos + 18);
-        size_t nextFieldPos = result.find(", BreakerQueryTexts:");
+        std::cerr << "      ExtractBreakerQueryTextFromRecord 2" << std::endl;
+        allPos +=17;
+        auto resultOpt = NStructuredLog::TTextWriter::UnescapeFieldValue(record, allPos);
+        if (resultOpt.Empty()) {
+            return std::nullopt;
+        }
+        TString result = resultOpt.GetRef();
+        std::cerr << "      ExtractBreakerQueryTextFromRecord 3 result=" << result << std::endl;
+
+        size_t nextFieldPos = record.find("breakerQueryTexts=");
         if (nextFieldPos != TString::npos) {
-            result = result.substr(0, nextFieldPos);
+            std::cerr << "      ExtractBreakerQueryTextFromRecord 4" << std::endl;
+            nextFieldPos += 18;
+            resultOpt = NStructuredLog::TTextWriter::UnescapeFieldValue(record, nextFieldPos);
+            if (resultOpt.Defined()) {
+                result = resultOpt.GetRef();
+                std::cerr << "      ExtractBreakerQueryTextFromRecord 5 result=" << result << std::endl;
+            }
         }
         return UnescapeC(result);
     }
@@ -164,12 +180,8 @@ namespace {
     std::optional<TString> ExtractQueryTextsField(const TString& logs, const TString& messagePattern,
         const TString& fieldName, const std::optional<TString>& expectedContainedText = std::nullopt)
     {
-        Cerr << Endl;
-        Cerr << "Extract" << " messagePattern=" << messagePattern << " fieldName="<< fieldName << Endl;
-
         for (const auto& record : ExtractTliRecords(logs)) {
-            Cerr << " Check " << record << Endl;
-            if (!record.Contains("сomponent=SessionActor") || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             const TString prefix = fieldName + "=";
@@ -178,7 +190,6 @@ namespace {
                 continue;
             }
             TString result = record.substr(allPos + prefix.size());
-            Cerr << "  pre_result=" << result << Endl;
 
             TStringStream unescapedResult;
             for(unsigned pos = 1;pos < result.size() && result[pos] != '"';) {
@@ -191,17 +202,13 @@ namespace {
                 }
             }
             result = unescapedResult.Str();
-            Cerr << "  result=" << result << Endl;
 
             TString unescaped = UnescapeC(result);
             if (expectedContainedText && !unescaped.Contains(*expectedContainedText)) {
-                Cerr << "  skip because of expectedContainedText=" << expectedContainedText->c_str() << Endl;
                 continue;
             }
-            Cerr << "Extract" << " messagePattern=" << messagePattern << " fieldName="<< fieldName << " RETURN " << unescaped << Endl;
             return unescaped;
         }
-        Cerr << "Extract" << " messagePattern=" << messagePattern << " fieldName="<< fieldName <<  " RETURN std::nullopt" << Endl;
         return std::nullopt;
     }
 
@@ -234,7 +241,7 @@ namespace {
 
     std::optional<ui64> ExtractCurrentQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern) {
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             return ExtractNumericField(record, "CurrentQuerySpanId");
@@ -245,17 +252,34 @@ namespace {
     std::optional<ui64> ExtractBreakerQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern,
         const std::optional<TString>& expectedBreakerQueryText = std::nullopt)
     {
+        std::cerr << std::endl;
+        std::cerr << "Enter ExtractBreakerQuerySpanId component=" << component
+            << " message=" << messagePattern
+            << std::endl;
+
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
+            std::cerr << std::endl;
+
+            bool bComponent = record.Contains("component=" + component);
+            bool bMessage = MatchesMessage(record, messagePattern);
+
+            std::cerr << "  Scan " << record
+                << " component=" << bComponent
+                << " macthesMessage=" << bMessage
+                << std::endl;
+            if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             if (expectedBreakerQueryText && component == "SessionActor") {
                 auto text = ExtractBreakerQueryTextFromRecord(record);
+                if (!text) {
+                    std::cerr << "  Scan text=" << *text << std::endl;
+                }
                 if (!text || *text != *expectedBreakerQueryText) {
                     continue;
                 }
             }
-            return ExtractNumericField(record, "BreakerQuerySpanId");
+            return ExtractNumericField(record, "breakerQuerySpanId");
         }
         return std::nullopt;
     }
@@ -282,7 +306,7 @@ namespace {
         std::vector<ui64> result;
         bool foundField = false;
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             static constexpr TStringBuf victimIdsPrefix = "VictimQuerySpanIds: [";
@@ -433,13 +457,13 @@ namespace {
         data.VictimQueryTexts = ExtractVictimQueryTexts(logs, patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
         data.BreakerQueryText = ExtractQueryText(logs, patterns.BreakerSessionActorMessagePattern, expectedBreakerQueryText);
         data.VictimQueryText = ExtractVictimQueryText(logs, patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
-        data.BreakerSessionBreakerQuerySpanId = ExtractBreakerQuerySpanId(logs, "sessionActor", patterns.BreakerSessionActorMessagePattern, expectedBreakerQueryText);
-        data.BreakerShardBreakerQuerySpanId = ExtractBreakerQuerySpanId(logs, "dataShard", patterns.BreakerDatashardMessage);
-        data.BreakerShardVictimQuerySpanIds = ExtractVictimQuerySpanIds(logs, "dataShard", patterns.BreakerDatashardMessage);
-        data.VictimSessionCurrentQuerySpanId = ExtractCurrentQuerySpanId(logs, "sessionActor", patterns.VictimSessionActorMessagePattern);
-        data.VictimShardCurrentQuerySpanId = ExtractCurrentQuerySpanId(logs, "dataShard", patterns.VictimDatashardMessage);
-        data.VictimSessionVictimQuerySpanId = ExtractVictimQuerySpanId(logs, "sessionActor", patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
-        data.VictimShardVictimQuerySpanId = ExtractVictimQuerySpanId(logs, "dataShard", patterns.VictimDatashardMessage);
+        data.BreakerSessionBreakerQuerySpanId = ExtractBreakerQuerySpanId(logs, "SessionActor", patterns.BreakerSessionActorMessagePattern, expectedBreakerQueryText);
+        data.BreakerShardBreakerQuerySpanId = ExtractBreakerQuerySpanId(logs, "DataShard", patterns.BreakerDatashardMessage);
+        data.BreakerShardVictimQuerySpanIds = ExtractVictimQuerySpanIds(logs, "DataShard", patterns.BreakerDatashardMessage);
+        data.VictimSessionCurrentQuerySpanId = ExtractCurrentQuerySpanId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
+        data.VictimShardCurrentQuerySpanId = ExtractCurrentQuerySpanId(logs, "DataShard", patterns.VictimDatashardMessage);
+        data.VictimSessionVictimQuerySpanId = ExtractVictimQuerySpanId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
+        data.VictimShardVictimQuerySpanId = ExtractVictimQuerySpanId(logs, "DataShard", patterns.VictimDatashardMessage);
         data.VictimSessionVictimQuerySpanIdOccurrences = ExtractVictimQuerySpanIdOccurrences(
             logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
 

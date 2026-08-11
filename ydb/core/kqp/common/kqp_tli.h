@@ -180,7 +180,7 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
     }
 
     auto message = YDB_LOG_CREATE_MESSAGE(
-        {"сomponent", params.Component},
+        {"component", params.Component},
         {"message", params.Message},
     );
 

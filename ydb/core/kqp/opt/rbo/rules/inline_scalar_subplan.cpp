@@ -13,8 +13,8 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     auto subplanIUs = input->GetSubplanIUs(props);
     TVector<TInfoUnit> scalarIUs;
     for (const auto& iu : subplanIUs) {
-        auto subplanEntry = props.Subplans.PlanMap.at(iu);
-        if (subplanEntry.Type == ESubplanType::EXPR) {
+        const auto* subplanEntry = props.Subplans.Find(iu);
+        if (subplanEntry && subplanEntry->Type == ESubplanType::EXPR) {
             scalarIUs.push_back(iu);
             break;
         }

@@ -37,10 +37,9 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
     auto subplanIUs = filter->GetFilterExpression().GetInputIUs(true, false);
     TVector<TInfoUnit> inOrExistsSubplans;
 
-    for (auto subplanIU : subplanIUs) {
-        if(props.Subplans.PlanMap.contains(subplanIU)) {
-            auto subplanEntry = props.Subplans.PlanMap.at(subplanIU);
-            if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || subplanEntry.Type == ESubplanType::EXISTS) {
+    for (const auto& subplanIU : subplanIUs) {
+        if (const auto* subplanEntry = props.Subplans.Find(subplanIU)) {
+            if (subplanEntry->Type == ESubplanType::IN_SUBPLAN || subplanEntry->Type == ESubplanType::EXISTS) {
                 inOrExistsSubplans.push_back(subplanIU);
             }
         } 

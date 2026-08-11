@@ -26,7 +26,7 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
     // Find the first conjunct that is a simple in or exists subplan
     bool negated = false;
     TInfoUnit iu;
-    TSubplanEntry subplanEntry;
+    const TSubplanEntry* subplanEntry = nullptr;
     size_t conjunctIdx;
 
     for (conjunctIdx = 0; conjunctIdx < conjuncts.size(); conjunctIdx++) {
@@ -39,9 +39,9 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
         if (TCoMember::Match(maybeSubplan.Get())) {
             auto name = TString(maybeSubplan->ChildPtr(1)->Content());
             iu = TInfoUnit(name);
-            if (props.Subplans.PlanMap.contains(iu)) {
-                subplanEntry = props.Subplans.PlanMap.at(iu);
-                if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || subplanEntry.Type == ESubplanType::EXISTS) {
+            if (const auto* entry = props.Subplans.Find(iu)) {
+                if (entry->Type == ESubplanType::IN_SUBPLAN || entry->Type == ESubplanType::EXISTS) {
+                    subplanEntry = entry;
                     break;
                 }
             }
@@ -54,14 +54,15 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
 
     TIntrusivePtr<IOperator> join;
     TVector<std::pair<TInfoUnit, TInfoUnit>> extraJoinKeys;
-    auto uncorrSubplan = CastOperator<IOperator>(subplanEntry.Plan);
+    Y_ENSURE(subplanEntry);
+    auto uncorrSubplan = CastOperator<IOperator>(subplanEntry->Plan);
     const auto subPlanKind = uncorrSubplan->Kind;
     TVector<TExpression> joinFilters;
 
 
     // If its a correlated subplan with filters pulled up, build join conditions from the pulled up filter
     if (subPlanKind == EOperator::Filter && CastOperator<TOpFilter>(uncorrSubplan)->GetInput()->Kind == EOperator::AddDependencies) {
-        auto subplanFilter = CastOperator<TOpFilter>(subplanEntry.Plan);
+        auto subplanFilter = CastOperator<TOpFilter>(subplanEntry->Plan);
         auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
         uncorrSubplan = addDeps->GetInput();
         auto subplanConjuncts = subplanFilter->GetFilterExpression().SplitConjunct();
@@ -85,12 +86,12 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
     }
 
     // If we have a correlated subplan where pull up didn't succeed, throw an exception
-    else if (subPlanKind == EOperator::Filter && subplanEntry.DependentIUs.size()) {
+    else if (subPlanKind == EOperator::Filter && !subplanEntry->DependentIUs.empty()) {
         Y_ENSURE(false, "Decorrelation via filter pull up didn't succeed");
     }
 
     // We build a semi-join or a left-only join when processing IN subplan
-    if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || !extraJoinKeys.empty()) {
+    if (subplanEntry->Type == ESubplanType::IN_SUBPLAN || !extraJoinKeys.empty()) {
         auto leftJoinInput = filter->GetInput();
         auto joinKind = negated ? "LeftOnly" : "LeftSemi";
 
@@ -98,8 +99,8 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
 
         auto planIUs = GetSubplanResultIUs(uncorrSubplan);
 
-        for (size_t i = 0; i < subplanEntry.Tuple.size(); i++) {
-            joinKeys.push_back(std::make_pair(subplanEntry.Tuple[i], planIUs[i]));
+        for (size_t i = 0; i < subplanEntry->Tuple.size(); i++) {
+            joinKeys.push_back(std::make_pair(subplanEntry->Tuple[i], planIUs[i]));
         }
 
         joinKeys.insert(joinKeys.begin(), extraJoinKeys.begin(), extraJoinKeys.end());

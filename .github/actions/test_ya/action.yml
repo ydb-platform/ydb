@@ -167,7 +167,7 @@ runs:
       id: build
       shell: bash
       env:
-        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
+        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != false }}
         PR_NUMBER: ${{ inputs.pull_number }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
@@ -175,7 +175,7 @@ runs:
       run: |
         set -ex
         
-        if [ "$COLLECT_COREDUMPS" = "true" ]; then
+        if [ "${COLLECT_COREDUMPS}" = "true" ]; then
           # Bounded loop volume so a flaky suite cannot fill the runner root FS.
           # File pattern (not a pipe): ya recovers via core_pattern and /coredumps/%e.%p.%s.
           COREDUMP_SIZE_GB=100
@@ -350,6 +350,7 @@ runs:
             echo "graph_compare.py returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
+            echo failure > statusrep.txt
             echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
             exit $RC
           fi
@@ -519,6 +520,8 @@ runs:
             echo "ya make returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
+            # generate-summary was not reached; keep downstream steps from crashing.
+            echo failure > statusrep.txt
             # sed is to remove richness (tags like '[[rst]]')
             (( \
               cat $CURRENT_REPORT \
@@ -626,7 +629,7 @@ runs:
           fi
 
           # Free the bounded coredump volume for the next try (ya already postprocessed dumps).
-          if [ "$COLLECT_COREDUMPS" = "true" ]; then
+          if [ "${COLLECT_COREDUMPS}" = "true" ]; then
             echo "Cleaning /coredumps before retry $((RETRY + 1))"
             sudo find /coredumps -mindepth 1 -delete || true
             df -h /coredumps || true
@@ -639,7 +642,7 @@ runs:
         done;
 
         # Drop dump files after the last try; volume teardown is in a dedicated always() step.
-        if [ "$COLLECT_COREDUMPS" = "true" ]; then
+        if [ "${COLLECT_COREDUMPS}" = "true" ]; then
           echo "Cleaning /coredumps after all test tries"
           sudo find /coredumps -mindepth 1 -delete || true
         fi
@@ -647,6 +650,8 @@ runs:
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
+        elif [ ! -f statusrep.txt ]; then
+          echo failure > statusrep.txt
         fi
 
     - name: resolve-status-sha
@@ -683,7 +688,12 @@ runs:
       run: |
         set -x
         if [ true = ${{ inputs.run_tests }} ]; then
-          teststatus=$(cat statusrep.txt)
+          if [ -f statusrep.txt ]; then
+            teststatus=$(cat statusrep.txt)
+          else
+            echo "statusrep.txt is missing; treating test check as failure"
+            teststatus=failure
+          fi
           if [[ $teststatus == "success" ]]; then
             testmessage="The check has been completed successfully"
           else
@@ -727,19 +737,18 @@ runs:
       if: always()
       shell: bash
       env:
-        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
+        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != false }}
       run: |
-        if [ "$COLLECT_COREDUMPS" != "true" ]; then
+        if [ "${COLLECT_COREDUMPS}" != "true" ]; then
           exit 0
         fi
         set -x
         COREDUMP_MNT="${COREDUMP_MNT:-/coredumps}"
         COREDUMP_IMG="${COREDUMP_IMG:-/var/lib/ydb-ci-coredumps.img}"
 
-        if [ -d "$COREDUMP_MNT" ]; then
-          sudo find "$COREDUMP_MNT" -mindepth 1 -delete || true
-        fi
+        # No-op if volume was never created (collect disabled or setup failed early).
         if mountpoint -q "$COREDUMP_MNT"; then
+          sudo find "$COREDUMP_MNT" -mindepth 1 -delete || true
           sudo umount "$COREDUMP_MNT" || true
         fi
         sudo rm -f "$COREDUMP_IMG" || true

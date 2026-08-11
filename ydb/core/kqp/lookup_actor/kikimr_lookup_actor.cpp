@@ -112,7 +112,6 @@ namespace {
 
         struct TSessionState {
             using TPtr = std::shared_ptr<TSessionState>;
-            TBackoff Backoff;
             TString SessionId;
             NRpcService::TStreamReadProcessorPtr<Ydb::Query::SessionState> StreamProcessor;
             TLookupState::TPtr PendingLookup; // avoid circular ownership, either PendingLookup or PendingLookup->SessionState must be nullptr

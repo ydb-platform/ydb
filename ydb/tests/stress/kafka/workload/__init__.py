@@ -108,62 +108,6 @@ KAFKA_SOURCE_PRODUCER_JAVA = textwrap.dedent("""
 """).strip()
 
 
-KAFKA_TOPIC_METADATA_WAITER_JAVA = textwrap.dedent("""
-    import java.util.Arrays;
-    import java.util.Map;
-    import java.util.Properties;
-    import java.util.concurrent.TimeUnit;
-
-    import org.apache.kafka.clients.admin.AdminClient;
-    import org.apache.kafka.clients.admin.AdminClientConfig;
-    import org.apache.kafka.clients.admin.TopicDescription;
-
-    public class KafkaTopicMetadataWaiter {
-        public static void main(String[] args) throws Exception {
-            String bootstrap = args[0];
-            long timeoutMs = Long.parseLong(args[1]) * 1000L;
-            String[] topics = Arrays.copyOfRange(args, 2, args.length);
-
-            Properties props = new Properties();
-            props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
-            props.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, "5000");
-            props.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, "5000");
-
-            long deadline = System.currentTimeMillis() + timeoutMs;
-            Exception lastError = null;
-            try (AdminClient admin = AdminClient.create(props)) {
-                while (System.currentTimeMillis() < deadline) {
-                    try {
-                        Map<String, TopicDescription> descriptions =
-                            admin.describeTopics(Arrays.asList(topics)).all().get(5, TimeUnit.SECONDS);
-                        boolean allReady = true;
-                        for (String topic : topics) {
-                            TopicDescription description = descriptions.get(topic);
-                            if (description == null || description.partitions().isEmpty()) {
-                                allReady = false;
-                                break;
-                            }
-                        }
-                        if (allReady) {
-                            System.out.println("Kafka metadata is ready for " + Arrays.toString(topics));
-                            return;
-                        }
-                    } catch (Exception e) {
-                        lastError = e;
-                    }
-                    Thread.sleep(1000L);
-                }
-            }
-
-            throw new RuntimeException(
-                "Kafka metadata is not ready for " + Arrays.toString(topics) + " after " + timeoutMs + " ms",
-                lastError
-            );
-        }
-    }
-""").strip()
-
-
 class Workload(unittest.TestCase):
     def __init__(self, endpoint, database, bootstrap, test_topic_path,
                  target_topic_path, workload_consumer_name, num_workers,
@@ -248,12 +192,6 @@ class Workload(unittest.TestCase):
             targetTopicName = f"{self.target_topic_path}-{i}"
             self.create_topic(targetTopicName, [checkerConsumer, f"{checkerConsumer}-{i}"])
             target_topic_names.append(targetTopicName)
-
-        self.wait_kafka_topic_metadata(
-            java_path,
-            jar_file_path,
-            [self.test_topic_path] + target_topic_names,
-        )
 
         for i, parameters in enumerate(testOptions):
             use_transactions, use_idempotence, _ = parameters
@@ -391,25 +329,6 @@ class Workload(unittest.TestCase):
         ]
         print("Kafka producer command:", producer_command)
         return subprocess.Popen(producer_command, start_new_session=True)
-
-    def wait_kafka_topic_metadata(self, java_path, jar_file_path, topics, timeout_seconds=180):
-        print("Waiting for Kafka topic metadata:", topics)
-        waiter_class_dir = "./kafka-topic-metadata-waiter"
-        self.compile_java_source(
-            java_path,
-            jar_file_path,
-            waiter_class_dir,
-            "KafkaTopicMetadataWaiter",
-            KAFKA_TOPIC_METADATA_WAITER_JAVA,
-        )
-        subprocess.run([
-            java_path,
-            "-cp",
-            f"{jar_file_path}:{waiter_class_dir}",
-            "KafkaTopicMetadataWaiter",
-            self.kafka_bootstrap(),
-            str(timeout_seconds),
-        ] + list(topics), check=True, text=True)
 
     def compile_java_source(self, java_path, jar_file_path, class_dir, class_name, source):
         os.makedirs(class_dir, exist_ok=True)

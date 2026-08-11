@@ -135,8 +135,8 @@ TError TClusterDirectoryBase<TConnection>::TryUpdateCluster(const std::string& n
             for (auto cellTag : GetCellTags(cluster)) {
                 if (CellTagToCluster_.contains(cellTag)) {
                     THROW_ERROR_EXCEPTION("Duplicate cell tag %Qv", cellTag)
-                        << TErrorAttribute("first_cluster_name", CellTagToCluster_[cellTag].Name)
-                        << TErrorAttribute("second_cluster_name", name);
+                        .With("first_cluster_name", CellTagToCluster_[cellTag].Name)
+                        .With("second_cluster_name", name);
                 }
                 CellTagToCluster_[cellTag] = cluster;
             }
@@ -278,7 +278,7 @@ TClusterDirectoryBase<TConnection>::TCluster TClusterDirectoryBase<TConnection>:
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error creating connection to cluster %Qv",
             name)
-            << ex;
+            .With(ex);
     }
     return cluster;
 }

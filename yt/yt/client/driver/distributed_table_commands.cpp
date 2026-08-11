@@ -143,8 +143,8 @@ ITableFragmentWriterPtr TWriteTableFragmentCommand::CreateTableWriter(
 
         THROW_ERROR_EXCEPTION(
             "Signature validation failed for write table fragment")
-                << TErrorAttribute("session_id", concreteCookie.SessionId)
-                << TErrorAttribute("cookie_id", concreteCookie.CookieId);
+                .With("session_id", concreteCookie.SessionId)
+                .With("cookie_id", concreteCookie.CookieId);
     }
 
     Options.Config = UpdateYsonStruct(

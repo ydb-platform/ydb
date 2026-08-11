@@ -42,8 +42,8 @@ TCompatibilityPair CreateResultPair(
         TError(
             "Type of %Qv field is modified in non backward compatible manner",
             oldDescriptor.GetDescription())
-            << TErrorAttribute("old_type", ToString(*oldDescriptor.GetType()))
-            << TErrorAttribute("new_type", ToString(*newDescriptor.GetType()))
+            .With("old_type", ToString(*oldDescriptor.GetType()))
+            .With("new_type", ToString(*newDescriptor.GetType()))
     };
 }
 
@@ -325,7 +325,7 @@ TCompatibilityPair CheckFieldsCompatibility(
                 "Newly added name at \"removed_fields\" of %Qv does not refer to "
                 "any previously existing field",
                 oldDescriptor.GetDescription())
-                << TErrorAttribute("added_name", stableName)
+                .With("added_name", stableName)
         };
     };
 
@@ -342,7 +342,7 @@ TCompatibilityPair CheckFieldsCompatibility(
             TError(
                 "Newly added member %Qv is not optional",
                 newFieldDescriptor.GetDescription())
-                << TErrorAttribute("new_type", ToString(*newFieldDescriptor.GetType()))
+                .With("new_type", ToString(*newFieldDescriptor.GetType()))
         };
     };
 
@@ -353,7 +353,7 @@ TCompatibilityPair CheckFieldsCompatibility(
                 TError(
                     "Field of %Qv cannot be removed since field removal is disabled",
                     oldDescriptor.GetDescription())
-                    << TErrorAttribute("field_name", oldFields[oldIndex].Name),
+                    .With("field_name", oldFields[oldIndex].Name),
             };
             return;
         }
@@ -367,7 +367,7 @@ TCompatibilityPair CheckFieldsCompatibility(
                 TError(
                     "Field of variant struct %Qv was removed",
                     oldDescriptor.GetDescription())
-                    << TErrorAttribute("field_name", oldFields[oldIndex].Name),
+                    .With("field_name", oldFields[oldIndex].Name),
             });
     };
 
@@ -381,8 +381,8 @@ TCompatibilityPair CheckFieldsCompatibility(
                 "Field of %Qv cannot be simply dropped; instead, its stable name "
                 "must be added to \"removed_fields\" list",
                 oldDescriptor.GetDescription())
-                << TErrorAttribute("field_name", oldFields[oldIndex].Name)
-                << TErrorAttribute("field_stable_name", stableName),
+                .With("field_name", oldFields[oldIndex].Name)
+                .With("field_stable_name", stableName),
         };
     };
 
@@ -392,7 +392,7 @@ TCompatibilityPair CheckFieldsCompatibility(
             TError(
                 "Removing items from \"removed_fields\" of %Qv is not allowed",
                 oldDescriptor.GetDescription())
-                << TErrorAttribute("removed_name", stableName)
+                .With("removed_name", stableName)
         };
     };
 
@@ -403,7 +403,7 @@ TCompatibilityPair CheckFieldsCompatibility(
                 "Removed field name of %Qv cannot be reused as a stable name of an "
                 "existing field",
                 oldDescriptor.GetDescription())
-                << TErrorAttribute("removed_field_name", stableName),
+                .With("removed_field_name", stableName),
         };
     };
 
@@ -416,9 +416,9 @@ TCompatibilityPair CheckFieldsCompatibility(
             TError(
                 "Field of %Qv cannot be renamed since field renaming is disabled",
                 oldDescriptor.GetDescription())
-                << TErrorAttribute("field_old_name", oldFields[oldIndex].Name)
-                << TErrorAttribute("field_new_name", newFields[newIndex].Name)
-                << TErrorAttribute("field_stable_name", stableName),
+                .With("field_old_name", oldFields[oldIndex].Name)
+                .With("field_new_name", newFields[newIndex].Name)
+                .With("field_stable_name", stableName),
         };
     };
 
@@ -530,8 +530,8 @@ TCompatibilityPair CheckFieldsCompatibility(
                     "Newly added field of %Qv cannot precede already existing field "
                     "unless both field renaming and removal are enabled",
                     oldDescriptor.GetDescription())
-                    << TErrorAttribute("new_field_name", lastNewField->Name)
-                    << TErrorAttribute("existing_field_name", field.Name),
+                    .With("new_field_name", lastNewField->Name)
+                    .With("existing_field_name", field.Name),
             };
         }
 
@@ -542,8 +542,8 @@ TCompatibilityPair CheckFieldsCompatibility(
                     "Fields of %Qv cannot be reordered unless both "
                     "field renaming and removal are enabled",
                     oldDescriptor.GetDescription())
-                    << TErrorAttribute("first_field_name", field.Name)
-                    << TErrorAttribute("second_field_name", oldFields[*lastOldIndex].Name),
+                    .With("first_field_name", field.Name)
+                    .With("second_field_name", oldFields[*lastOldIndex].Name),
             };
         }
         lastOldIndex = oldIndex;

@@ -54,8 +54,8 @@ THashMap<std::string, i64> ReadAndParseStatFile(const TString& fileName)
         auto [_, emplaced] = statistics.emplace(fields[0], FromString<i64>(fields[1]));
         if (!emplaced) {
             THROW_ERROR_EXCEPTION("Failed to collect CGroup statistics: key already exists")
-                << TErrorAttribute("filename", fileName)
-                << TErrorAttribute("key", fields[0]);
+                .With("filename", fileName)
+                .With("key", fields[0]);
         }
     }
 

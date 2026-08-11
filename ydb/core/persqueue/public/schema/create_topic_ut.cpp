@@ -137,6 +137,36 @@ Y_UNIT_TEST(CreateMessagesPerSecond) {
     }
 }
 
+Y_UNIT_TEST(CreateTopicWithIdAttribute) {
+    auto setup = CreateSetup("CoreCreateIdAttr");
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+
+    // FirstClass: the _id attribute is silently ignored, the Id (if any) is generated
+    // by schemeshard, never taken from the request.
+    {
+        const TString path = "/Root/topic_id_attr_first_class";
+        auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_id"] = "external-topic-id";
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
+
+        auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_UNEQUAL(config.GetId(), "external-topic-id");
+    }
+
+    // Flag off: the attribute is ignored as well.
+    {
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(false);
+        const TString path = "/Root/topic_id_attr_flag_off";
+        auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_id"] = "external-topic-id";
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
+
+        auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT(!config.HasId());
+    }
+}
+
 } // Y_UNIT_TEST_SUITE(CreateTopic)
 
 } // namespace NKikimr::NPQ::NSchema

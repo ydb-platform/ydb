@@ -1,5 +1,7 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
+
+#include <util/generic/guid.h>
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
@@ -163,6 +165,17 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     NKikimrPQ::TPQTabletConfig tabletConfig = op.GetPQTabletConfig();
     tabletConfig.ClearPartitionIds();
     tabletConfig.ClearPartitions();
+
+    if (AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()) {
+        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && !tabletConfig.HasId()) {
+            tabletConfig.SetId(CreateGuidAsString());
+        }
+        if (tabletConfig.HasId()) {
+            // Sentinel: the id is filled at create, so writers must not use the
+            // name-keyed fallback (a brand-new topic has no legacy rows).
+            tabletConfig.SetIdTxStep(0);
+        }
+    }
 
     if (!CheckPersQueueConfig(tabletConfig, false, &errStr)) {
         status = NKikimrScheme::StatusSchemeError;

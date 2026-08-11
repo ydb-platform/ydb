@@ -8031,6 +8031,125 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         );
     }
 
+    Y_UNIT_TEST(TopicSourceIdMappingById) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+        ui64 txId = 100;
+
+        // On create the topic gets a server-generated unique Id with the sentinel
+        // IdTxStep == 0 ("filled at create": no name-keyed fallback for writers).
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString topicId;
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Topic1"), {
+                NLs::PathExist,
+                NLs::Finished, [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+                    UNIT_ASSERT(config.HasId());
+                    UNIT_ASSERT(!config.GetId().empty());
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetIdTxStep(), 0);
+                    topicId = config.GetId();
+                }
+            }
+        );
+
+        // Alter must preserve the existing Id and its IdTxStep.
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 20 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Topic1"), {
+                NLs::PathExist,
+                NLs::Finished, [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId(), topicId);
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetIdTxStep(), 0);
+                }
+            }
+        );
+
+        // With the feature flag off no Id is generated.
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(false);
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic2"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Topic2"), {
+                NLs::PathExist,
+                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+                    UNIT_ASSERT(!config.HasId());
+                }
+            }
+        );
+
+        // Back-fill: an alter that fills an empty Id captures the alter's plan step
+        // (non-zero) so writers keep the name-keyed fallback during the window.
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic2"
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+                Id: "backfilled-topic-id"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Topic2"), {
+                NLs::PathExist,
+                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId(), "backfilled-topic-id");
+                    UNIT_ASSERT(config.HasIdTxStep());
+                    UNIT_ASSERT(config.GetIdTxStep() > 0);
+                }
+            }
+        );
+
+        // A subsequent alter must not change the back-filled Id or its step.
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic2"
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 30 }
+                Id: "another-id"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Topic2"), {
+                NLs::PathExist,
+                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId(), "backfilled-topic-id");
+                }
+            }
+        );
+    }
+
     Y_UNIT_TEST(DropTable) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

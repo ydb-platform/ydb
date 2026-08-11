@@ -29,7 +29,9 @@ public:
                            const TString& sourceId,
                            std::optional<ui32> preferedPartition,
                            NWilson::TTraceId traceId)
-        : TAbstractPartitionChooserActor<TPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId))
+        : TAbstractPartitionChooserActor<TPartitionChooserActor<TPipeCreator>, TPipeCreator>(
+                parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId),
+                config.GetPQTabletConfig().GetId(), config.GetPQTabletConfig().GetIdTxStep())
         , PQRBHelper(config.GetBalancerTabletID()) {
     }
 

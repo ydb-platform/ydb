@@ -18,11 +18,16 @@
 
 namespace NKikimr::NPQ::NPartitionChooser {
 
+constexpr TDuration SourceIdLegacyKeyPeriod = TDuration::Days(15);
+
 class TTableHelper {
 public:
-    TTableHelper(const TString& topicName, const TString& topicHashName)
+    TTableHelper(const TString& topicName, const TString& topicHashName,
+                 const TString& topicId = {}, ui64 idTxStep = 0)
         : TopicName(topicName)
-        , TopicHashName(topicHashName) {
+        , TopicHashName(topicHashName)
+        , TopicId(topicId)
+        , IdTxStep(idTxStep) {
     };
 
     std::optional<ui32> PartitionId() const {
@@ -38,10 +43,25 @@ public:
 
         TableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
                                                                    : ESourceIdTableGeneration::SrcIdMeta2;
+
+        const bool mappingByIdEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicSourceIdMappingById();
+
+        TopicKey = (mappingByIdEnabled && TopicId) ? TopicId : TopicName;
+        // The fallback to the legacy name-based key is required only when the Id was
+        // back-filled by an alter on a pre-existing topic (IdTxStep != 0, the sentinel 0
+        // means the Id was set at create) and only during the transition window.
+        LegacyKeySelectEnabled = mappingByIdEnabled && TopicId && IdTxStep != 0
+            && TAppData::TimeProvider->Now() - TInstant::MilliSeconds(IdTxStep) < SourceIdLegacyKeyPeriod;
+
         try {
             EncodedSourceId = NSourceIdEncoding::EncodeSrcId(
-                        TopicHashName, sourceId, TableGeneration
+                        (mappingByIdEnabled && TopicId) ? TopicId : TopicHashName, sourceId, TableGeneration
                 );
+            if (LegacyKeySelectEnabled) {
+                FallbackEncodedSourceId = NSourceIdEncoding::EncodeSrcId(
+                            TopicHashName, sourceId, TableGeneration
+                    );
+            }
         } catch (yexception& e) {
             return false;
         }
@@ -122,38 +142,24 @@ public:
     }
 
     THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSelectQueryRequest(const NActors::TActorContext& ctx) {
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        SelectPhase = ESelectPhase::Primary;
+        return MakeSelectQueryRequestImpl(TopicKey, EncodedSourceId, ctx);
+    }
 
-        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-        ev->Record.MutableRequest()->SetQuery(SelectQuery);
+    // The id-keyed row was not found: within the transition window retry the select with
+    // the legacy name-based key, continuing the same open transaction.
+    bool NeedLegacyKeySelect() const {
+        return SelectPhase == ESelectPhase::Primary && LegacyKeySelectEnabled && !PartitionId_;
+    }
 
-        ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
-        // fill tx settings: set commit tx flag&  begin new serializable tx.
-        ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
-        ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(false);
-        ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-        ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
-        // keep compiled query in cache.
-        ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
+    void SendLegacyKeySelectRequest(const TActorContext& ctx) {
+        auto ev = MakeLegacyKeySelectQueryRequest(ctx);
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+    }
 
-        NYdb::TParamsBuilder paramsBuilder = NYdb::TParamsBuilder();
-
-        SetHashToTParamsBuilder(paramsBuilder, EncodedSourceId);
-
-        paramsBuilder
-            .AddParam("$Topic")
-                .Utf8(TopicName)
-                .Build()
-            .AddParam("$SourceId")
-                .Utf8(EncodedSourceId.EscapedSourceId)
-                .Build();
-
-        NYdb::TParams params = paramsBuilder.Build();
-
-        ev->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(params)));
-
-        return ev;
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeLegacyKeySelectQueryRequest(const NActors::TActorContext& ctx) {
+        SelectPhase = ESelectPhase::LegacyKey;
+        return MakeSelectQueryRequestImpl(TopicName, FallbackEncodedSourceId, ctx);
     }
 
     bool HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& /*ctx*/) {
@@ -179,6 +185,11 @@ public:
                     SeqNo_ = parser.ColumnParser(3).GetOptionalUint64().value_or(0);
                 }
             }
+        }
+
+        if (NeedLegacyKeySelect()) {
+            // The final CreateTime is defined after the fallback select.
+            return true;
         }
 
         if (CreateTime == 0) {
@@ -218,11 +229,13 @@ public:
 
         NYdb::TParamsBuilder paramsBuilder = NYdb::TParamsBuilder();
 
+        // Writes always target the primary key: the topic Id when present, the legacy
+        // name otherwise. A row read via the name fallback is thus migrated to the id key.
         SetHashToTParamsBuilder(paramsBuilder, EncodedSourceId);
 
         paramsBuilder
             .AddParam("$Topic")
-                .Utf8(TopicName)
+                .Utf8(TopicKey)
                 .Build()
             .AddParam("$SourceId")
                 .Utf8(EncodedSourceId.EscapedSourceId)
@@ -248,10 +261,67 @@ public:
     }
 
 private:
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSelectQueryRequestImpl(const TString& topicKey,
+                                                                      const NPQ::NSourceIdEncoding::TEncodedSourceId& encodedSourceId,
+                                                                      const NActors::TActorContext& ctx) {
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+
+        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        ev->Record.MutableRequest()->SetQuery(SelectQuery);
+
+        ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
+        ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
+        ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(false);
+        if (TxId) {
+            // The name-fallback select continues the transaction opened by the primary
+            // select so the whole read-modify-write stays atomic and serializable.
+            ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
+        } else {
+            // Begin a new serializable tx; it is committed later by the update query.
+            ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        }
+        ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+        // keep compiled query in cache.
+        ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
+
+        NYdb::TParamsBuilder paramsBuilder = NYdb::TParamsBuilder();
+
+        SetHashToTParamsBuilder(paramsBuilder, encodedSourceId);
+
+        paramsBuilder
+            .AddParam("$Topic")
+                .Utf8(topicKey)
+                .Build()
+            .AddParam("$SourceId")
+                .Utf8(encodedSourceId.EscapedSourceId)
+                .Build();
+
+        NYdb::TParams params = paramsBuilder.Build();
+
+        ev->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(params)));
+
+        return ev;
+    }
+
+private:
+    enum class ESelectPhase {
+        Primary,
+        LegacyKey,
+    };
+
     const TString TopicName;
     const TString TopicHashName;
+    const TString TopicId;
+    const ui64 IdTxStep;
+
+    // The key the mapping rows are written with: TopicId when set, TopicName otherwise.
+    TString TopicKey;
+    bool LegacyKeySelectEnabled = false;
+    ESelectPhase SelectPhase = ESelectPhase::Primary;
 
     NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
+    NPQ::NSourceIdEncoding::TEncodedSourceId FallbackEncodedSourceId;
 
     NPQ::ESourceIdTableGeneration TableGeneration;
     TString SelectQuery;

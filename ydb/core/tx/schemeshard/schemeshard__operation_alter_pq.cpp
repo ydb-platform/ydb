@@ -328,6 +328,21 @@ public:
                 TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId.ToProto(pathId);
             }
 
+            if (tabletConfig->HasId()) {
+                // Never change an existing topic Id; preserve it together with its fill step.
+                alterConfig.SetId(tabletConfig->GetId());
+                if (tabletConfig->HasIdTxStep()) {
+                    alterConfig.SetIdTxStep(tabletConfig->GetIdTxStep());
+                }
+            } else if (alterConfig.HasId() && AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()) {
+                // Federation back-fill: the Id is filled by this alter. Leave IdTxStep unset,
+                // it is stamped with the exact plan step at NPQState::TPropose::PersistState.
+                alterConfig.ClearIdTxStep();
+            } else {
+                alterConfig.ClearId();
+                alterConfig.ClearIdTxStep();
+            }
+
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
             Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
             alterConfig.Swap(tabletConfig);

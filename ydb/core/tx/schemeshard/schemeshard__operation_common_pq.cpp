@@ -680,6 +680,9 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
         context.SS->PersistCreateStep(db, pathId, step);
     }
 
+    txState->PlanStep = step;
+    context.SS->PersistTxPlanStep(db, OperationId, step);
+
     return TryPersistState(context);
 }
 
@@ -793,6 +796,18 @@ void TPropose::PersistState(const TTxState& txState,
 
     NKikimrPQ::TPQTabletConfig tabletConfig = pqGroup->GetTabletConfig();
     NKikimrPQ::TPQTabletConfig newTabletConfig = pqGroup->AlterData->GetTabletConfig();
+
+    // Only an alter can back-fill an Id on a pre-existing topic. A create always stamps the
+    // sentinel IdTxStep = 0 in CreatePersQueueGroup, so never touch it here: stamping a
+    // non-zero step on a create would wrongly enable the name-keyed fallback for writers.
+    if (txState.TxType == TTxState::TxAlterPQGroup
+            && newTabletConfig.HasId() && !newTabletConfig.HasIdTxStep()
+            && txState.PlanStep != InvalidStepId) {
+        // The Id is filled by this alter transaction: remember the exact plan step so
+        // writers keep the name-keyed fallback during the transition window.
+        newTabletConfig.SetIdTxStep(ui64(txState.PlanStep));
+        Y_PROTOBUF_SUPPRESS_NODISCARD newTabletConfig.SerializeToString(&pqGroup->AlterData->TabletConfig);
+    }
 
     pqGroup->FinishAlter();
 

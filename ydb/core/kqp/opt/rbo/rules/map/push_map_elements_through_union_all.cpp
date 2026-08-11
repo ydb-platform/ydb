@@ -219,7 +219,7 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    if (topMap->MapElements.empty()) {
+    if (topMap->GetMapElements().empty()) {
         return input;
     }
 
@@ -238,7 +238,7 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
     // A column-access append whose source is dead above the map is a semantic
     // rename in disguise: hiding the source changes nothing for consumers.
     // Normalize such appends to renames so one push covers both spellings.
-    auto mapElements = topMap->MapElements;
+    auto mapElements = topMap->GetMapElements();
     for (auto& mapElement : mapElements) {
         if (!mapElement.IsRename() &&
             mapElement.IsColumnAccess() &&

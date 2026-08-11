@@ -516,6 +516,7 @@ public:
     }
 
     TVector<TMapElement>& GetMapElements() { return MapElements; }
+    const TVector<TMapElement>& GetMapElements() const { return MapElements; }
     TMapElement* FindOutputElement(const TInfoUnit& output);
     const TMapElement* FindOutputElement(const TInfoUnit& output) const;
     bool HasOutputElement(const TInfoUnit& output) const;

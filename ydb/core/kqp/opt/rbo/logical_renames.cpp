@@ -30,7 +30,7 @@ bool RenameInfoUnits(TVector<TInfoUnit>& ius, const THashMap<TInfoUnit, TInfoUni
 }
 
 void RenameMapRenameSources(TOpMap& map, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-    for (auto& el : map.MapElements) {
+    for (auto& el : map.GetMapElements()) {
         if (!el.IsRename()) {
             continue;
         }

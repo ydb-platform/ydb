@@ -64,7 +64,7 @@ TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op) {
 
     if (op->Kind == EOperator::Map) {
         TVector<TInfoUnit> result;
-        for (const auto& mapElement : CastOperator<TOpMap>(op)->MapElements) {
+        for (const auto& mapElement : CastOperator<TOpMap>(op)->GetMapElements()) {
             const auto element = mapElement.GetElementName();
             if (!IsGeneratedIgnoreIU(element)) {
                 result.push_back(element);

@@ -119,7 +119,7 @@ bool AllParentsCarryRename(const TVector<TOpMap*>& parents, const TInfoUnit& fro
 // once the first one crosses; such splits keep everything in place.
 bool SomeParentSplitsRename(const TVector<TOpMap*>& parents, const TInfoUnit& from, const TInfoUnit& to) {
     return AnyOf(parents, [&](TOpMap* parent) {
-        return AnyOf(parent->MapElements, [&](const TMapElement& element) {
+        return AnyOf(parent->GetMapElements(), [&](const TMapElement& element) {
             return element.IsRename() && element.GetRename() == from && element.GetElementName() != to;
         });
     });
@@ -191,7 +191,7 @@ TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IO
 
     TVector<TCandidate> candidates;
     TInfoUnitSet claimedSources;
-    for (const auto& element : topMap->MapElements) {
+    for (const auto& element : topMap->GetMapElements()) {
         if (!IsRenameEquivalent(element, topMap.get())) {
             continue;
         }
@@ -251,20 +251,20 @@ TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IO
     // Consume the renames from every consumer map and rebind what stays above
     // to the new output names.
     for (TOpMap* parent : parents) {
-        EraseIf(parent->MapElements, [&](const TMapElement& element) {
+        EraseIf(parent->GetMapElements(), [&](const TMapElement& element) {
             return consumedTargets.contains(element.GetElementName());
         });
-        for (auto& element : parent->MapElements) {
+        for (auto& element : parent->GetMapElements()) {
             if (!element.IsRename()) {
                 element.SetExpression(element.GetExpression().ApplyRenames(renames));
             }
         }
     }
 
-    if (topMap->MapElements.empty()) {
+    if (topMap->GetMapElements().empty()) {
         return aggregate;
     }
-    return MakeIntrusive<TOpMap>(aggregate, topMap->Pos, topMap->MapElements, topMap->Ordered);
+    return MakeIntrusive<TOpMap>(aggregate, topMap->Pos, topMap->GetMapElements(), topMap->Ordered);
 }
 
 } // namespace NKqp

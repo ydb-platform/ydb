@@ -539,6 +539,110 @@ Y_UNIT_TEST(WriteBlockedDuringRestore) {
     UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), ExpectedUint32TableState(1));
 }
 
+Y_UNIT_TEST(CompactionAfterRestore) {
+    TTestEnv env;
+    auto [shards, tableId] = env.CreateUint32Table();
+    const ui64 shardId = shards[0];
+    const auto desc = env.TableDescription(shardId, tableId);
+
+    env.StartS3(MakeCsv(10, ""));
+
+    const auto result = env.ProposeAndPlanRestore(shardId, tableId, desc);
+    UNIT_ASSERT(result.GetSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetRowsProcessed(), 10u);
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), ExpectedUint32TableState(10));
+
+    // Restored data is a single SST part; force compaction of single-parted shards.
+    {
+        auto sender = env.Runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+        request->Record.SetCompactSinglePartedShards(true);
+        env.Runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+        auto ev = env.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(
+            ev->Get()->Record.GetStatus(),
+            NKikimrTxDataShard::TEvCompactTableResult::OK);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), ExpectedUint32TableState(10));
+}
+
+Y_UNIT_TEST(WriteAfterRestore) {
+    TTestEnv env;
+    auto [shards, tableId] = env.CreateUint32Table();
+    const ui64 shardId = shards[0];
+    const auto desc = env.TableDescription(shardId, tableId);
+
+    env.StartS3(MakeCsv(3, ""));
+
+    const auto result = env.ProposeAndPlanRestore(shardId, tableId, desc);
+    UNIT_ASSERT(result.GetSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetRowsProcessed(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), ExpectedUint32TableState(3));
+
+    const TString updatedValue = "updated";
+    const ui32 newKey = 4;
+    const TString newValue = "value4";
+    {
+        const ui32 existingKey = 2;
+        const std::vector<TCell> cells = {
+            TCell::Make(existingKey),
+            TCell(updatedValue.data(), updatedValue.size()),
+            TCell::Make(newKey),
+            TCell(newValue.data(), newValue.size()),
+        };
+        Upsert(
+            env.Runtime,
+            env.Sender,
+            shardId,
+            tableId,
+            env.AllocateTxId(),
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            {1, 2},
+            cells);
+    }
+
+    const TString expectedAfterWrite =
+        "key = 1, value = value1\n"
+        "key = 2, value = updated\n"
+        "key = 3, value = value3\n"
+        "key = 4, value = value4\n";
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), expectedAfterWrite);
+
+    // Memtable + restored part: ordinary compaction is enough.
+    {
+        const auto compactionResult = CompactTable(env.Runtime, shardId, tableId, false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            compactionResult.GetStatus(),
+            NKikimrTxDataShard::TEvCompactTableResult::OK);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), expectedAfterWrite);
+}
+
+Y_UNIT_TEST(SplitAfterRestore) {
+    TTestEnv env;
+    auto [shards, tableId] = env.CreateUint32Table();
+    UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+    const ui64 shardId = shards[0];
+    const auto desc = env.TableDescription(shardId, tableId);
+
+    env.StartS3(MakeCsv(10, ""));
+
+    const auto result = env.ProposeAndPlanRestore(shardId, tableId, desc);
+    UNIT_ASSERT(result.GetSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetRowsProcessed(), 10u);
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), ExpectedUint32TableState(10));
+
+    SetSplitMergePartCountLimit(&env.Runtime, -1);
+    const ui64 splitTxId = AsyncSplitTable(env.Server, env.Sender, "/Root/Table", shardId, /*splitKey=*/5);
+    WaitTxNotification(env.Server, env.Sender, splitTxId);
+
+    const auto splitShards = GetTableShards(env.Server, env.Sender, "/Root/Table");
+    UNIT_ASSERT_VALUES_EQUAL(splitShards.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, splitShards, tableId), ExpectedUint32TableState(10));
+}
+
 } // Y_UNIT_TEST_SUITE(DataShardDirectRestore)
 
 #endif // KIKIMR_DISABLE_S3_OPS

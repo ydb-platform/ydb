@@ -22,41 +22,6 @@ struct TReqJsonEntry {
     TString Priority;  // "DEBUG" | "WARN" | ...
 };
 
-// The test backend writes records into one continuous blob without `\n`
-// separators, so we extract each [REQ_JSON] object by tracking brace balance
-// with proper string-escape handling.
-size_t FindJsonObjectEnd(TStringBuf data, size_t start) {
-    int depth = 0;
-    bool inStr = false;
-    bool esc = false;
-    for (size_t i = start; i < data.size(); ++i) {
-        const char c = data[i];
-        if (esc) {
-            esc = false;
-            continue;
-        }
-        if (inStr) {
-            if (c == '\\') {
-                esc = true;
-            } else if (c == '"') {
-                inStr = false;
-            }
-            continue;
-        }
-        if (c == '"') {
-            inStr = true;
-        } else if (c == '{') {
-            ++depth;
-        } else if (c == '}') {
-            --depth;
-            if (depth == 0) {
-                return i + 1;
-            }
-        }
-    }
-    return TStringBuf::npos;
-}
-
 // Scan back from `markerPos` to the preceding ":KQP_REQUEST <PRIO>:" token.
 TString ExtractPriority(TStringBuf blob, size_t markerPos) {
     constexpr size_t WINDOW = 256;
@@ -83,20 +48,20 @@ TVector<TReqJsonEntry> CollectReqJson(TStringBuf blob) {
         if (markerPos == TStringBuf::npos) {
             break;
         }
-        const size_t jsonStart = blob.find('{', markerPos + REQ_JSON_MARKER.size());
+        size_t jsonStart = blob.find("=\"{", markerPos + REQ_JSON_MARKER.size());
         if (jsonStart == TStringBuf::npos) {
             break;
         }
-        const size_t jsonEnd = FindJsonObjectEnd(blob, jsonStart);
-        if (jsonEnd == TStringBuf::npos) {
+        jsonStart++;
+        auto extractedJsonStr = NActors::NStructuredLog::TTextWriter::UnescapeFieldValue(TString(blob), jsonStart);
+        if (extractedJsonStr.Empty()) {
             break;
         }
+        pos = jsonStart + 1;
 
         TReqJsonEntry entry;
-        const TStringBuf jsonView = blob.SubStr(jsonStart, jsonEnd - jsonStart);
-        const TString jsonStr(jsonView);
-        if (NJson::ReadJsonTree(jsonStr, &entry.Json, /*throwOnError=*/false)) {
-            entry.RawLine = TString(blob.SubStr(markerPos, jsonEnd - markerPos));
+        if (NJson::ReadJsonTree(extractedJsonStr.GetRef(), &entry.Json, /*throwOnError=*/false)) {
+            entry.RawLine = TString(blob.SubStr(markerPos, jsonStart - markerPos));
             entry.Priority = ExtractPriority(blob, markerPos);
             const auto& req = entry.Json["request"];
             entry.Event = req["event"].GetStringSafe("");
@@ -105,7 +70,6 @@ TVector<TReqJsonEntry> CollectReqJson(TStringBuf blob) {
             entry.Total = entry.Json["total"].GetIntegerSafe(0);
             entries.push_back(std::move(entry));
         }
-        pos = jsonEnd;
     }
     return entries;
 }

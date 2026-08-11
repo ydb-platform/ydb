@@ -186,7 +186,6 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             << ". It might affect benchmark results");
     }
 
-    // Persist resolved value (may differ from user-provided/auto default) for JSON/status output.
     Config.ThreadCount = threadCount;
 
     // The number of terminals might be hundreds of thousands.
@@ -358,16 +357,20 @@ void TPCCRunner::RunSync() {
 
     uint32_t warmupSeconds = minWarmupSeconds;
     if (Config.WarmupDuration == TDuration()) {
-        // adaptive, a very simple heuristic
+        // Adaptive floors by scale. minWarmupSeconds is the per-terminal ramp lower
+        // bound (≈ terminals * 1ms); on large OLTP scales (10k/16k+) that bound is
+        // still only a few minutes, so we raise the floor further — otherwise measure
+        // starts while the workload is still ramping.
         if (Config.WarehouseCount <= 10) {
             warmupSeconds = 30;
         } else if (Config.WarehouseCount <= 100) {
             warmupSeconds = 5 * 60;
         } else if (Config.WarehouseCount <= 1000) {
             warmupSeconds = 10 * 60;
-        } else {
-            // Large scales need a long warmup so terminals finish ramping before measure.
+        } else if (Config.WarehouseCount <= 10000) {
             warmupSeconds = 30 * 60;
+        } else {
+            warmupSeconds = 45 * 60;
         }
         warmupSeconds = std::max(warmupSeconds, minWarmupSeconds);
     } else {
@@ -379,7 +382,6 @@ void TPCCRunner::RunSync() {
         }
     }
 
-    // Persist resolved warmup for JSON/status output (includes auto/min-floor adjustments).
     Config.WarmupDuration = TDuration::Seconds(warmupSeconds);
 
     WarmupStartTs = Clock::now();
@@ -847,8 +849,8 @@ void TPCCRunner::PrintFinalResultJson() {
         txData.InsertValue("ok_count", static_cast<long long>(ok));
         txData.InsertValue("failed_count", static_cast<long long>(failed));
 
-        // percentiles: Full (= +inflight queue wait). Kept for backward compatibility.
-        // percentiles_ms: no queue wait (closer to BenchBase).
+        // percentiles: full latency including inflight queue wait (TPC-C wall time).
+        // percentiles_ms: excluding queue wait.
         // percentiles_pure: in-transaction query time only.
         txData.InsertValue("percentiles", fillPercentiles(stats.LatencyHistogramFullMs));
         txData.InsertValue("percentiles_ms", fillPercentiles(stats.LatencyHistogramMs));

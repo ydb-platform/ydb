@@ -293,7 +293,7 @@ class ResultsProcessor:
                 'test_tools_version': get_test_tools_version(),
                 'test_tools_git': get_test_tools_git_info() or None,
                 'test_version': os.getenv('CI_TEST_VERSION') or None,
-                # Full stays in column newOrderLatency90; Ms/Pure for BenchBase-like compare.
+                # Full stays in column newOrderLatency90; Ms/Pure are alternate views.
                 'newOrderLatency90_ms': new_order.get('percentiles_ms', {}).get('90'),
                 'newOrderLatency90_pure': new_order.get('percentiles_pure', {}).get('90'),
             }

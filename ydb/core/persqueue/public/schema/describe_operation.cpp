@@ -36,8 +36,9 @@ class TDescribeOperationActor: public NActors::TActorBootstrapped<TDescribeOpera
     static constexpr size_t StatsMaxRetries = 15;
     static constexpr TDuration StatsRetryInitialDelay = TDuration::MilliSeconds(25);
     static constexpr TDuration StatsRetryMaxDelay = TDuration::MilliSeconds(250);
-    static constexpr ui64 BalancerRetryWakeupTag = 100;
-    static constexpr ui64 RequestTimeoutWakeupTag = 101;
+    // Sentinel tags must not collide with tablet ids used for stats-retry wakeups.
+    static constexpr ui64 BalancerRetryWakeupTag = Max<ui64>();
+    static constexpr ui64 RequestTimeoutWakeupTag = Max<ui64>() - 1;
 
 public:
     TDescribeOperationActor(

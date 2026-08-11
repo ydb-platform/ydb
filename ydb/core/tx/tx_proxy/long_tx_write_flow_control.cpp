@@ -1,0 +1,276 @@
+#include "long_tx_write_flow_control.h"
+#include "upload_rows_common_impl.h"
+
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_counters.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_events.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
+#include <ydb/core/tx/data_events/shards_splitter.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
+namespace NKikimr::NTxProxy {
+
+using namespace NColumnShard;
+using namespace NColumnShard::NFlowControl;
+
+namespace {
+
+class TParsedBatchData: public NEvWrite::IShardsSplitter::IEvWriteDataAccessor {
+private:
+    using TBase = NEvWrite::IShardsSplitter::IEvWriteDataAccessor;
+    std::shared_ptr<arrow::RecordBatch> Batch;
+
+public:
+    explicit TParsedBatchData(std::shared_ptr<arrow::RecordBatch> batch)
+        : TBase(NArrow::GetBatchMemorySize(batch))
+        , Batch(std::move(batch))
+    {
+    }
+
+    std::shared_ptr<arrow::RecordBatch> GetDeserializedBatch() const override {
+        return Batch;
+    }
+
+    TString GetSerializedData() const override {
+        return NArrow::SerializeBatchNoCompression(Batch);
+    }
+};
+
+// Admission needs the target tablet ids and the batch size, and the only thing that knows the
+// sharding is the splitter — so the batch is partitioned here and then a second time in the write
+// actor after admission. The duplicate pass is deliberate for now: threading a split result through
+// TLongTxWrite would tie the flow control API to the shards-splitter output, and a delayed-reject
+// or timed-out request throws that work away anyway. Revisit if this shows up in write-path CPU.
+bool TryCollectTargetTablets(const TLongTxWrite& tx, TVector<ui64>& tabletIds, ui64& batchSize) {
+    tabletIds.clear();
+    batchSize = 0;
+
+    const auto& navigate = tx.GetNavigateResult();
+    if (!navigate || navigate->ErrorCount > 0 || navigate->ResultSet.empty()) {
+        return false;
+    }
+
+    const auto& entry = navigate->ResultSet[0];
+    auto shardsSplitter = NEvWrite::IShardsSplitter::BuildSplitter(entry);
+    if (!shardsSplitter) {
+        return false;
+    }
+
+    TParsedBatchData accessor(tx.GetBatch());
+    const auto initStatus = shardsSplitter->SplitData(entry, accessor);
+    if (!initStatus.Ok()) {
+        return false;
+    }
+
+    // Deserialized batch memory size, already computed by TParsedBatchData's base ctor.
+    batchSize = accessor.GetSize();
+
+    for (const auto& [tabletId, _] : shardsSplitter->GetSplitData().GetShardsInfo()) {
+        tabletIds.push_back(tabletId);
+    }
+    return true;
+}
+
+// Helper actors run on the caller's mailbox and have no handle on the FCM instance, so they
+// resolve the counters group from AppData instead of from a process-global TIntrusivePtr whose
+// refcount several TFlowControlManager constructors would race on in multi-node tests.
+TIntrusivePtr<::NMonitoring::TDynamicCounters> CountersGroupOrNull() {
+    if (!HasAppData()) {
+        return nullptr;
+    }
+    return TFlowControlManagerServiceOperator::BuildCountersGroup(AppData()->Counters);
+}
+
+// The FCM fires a delayed reject after OperationTimeout * DelayedRejectTimeoutPercent / 100,
+// i.e. never later than OperationTimeout. If that TEvCompleted is lost (FCM restart, mailbox
+// drop) the helper would hold the client forever, so it arms its own fallback this much later.
+constexpr TDuration DelayedRejectFallbackMargin = TDuration::Seconds(1);
+
+constexpr TStringBuf OverloadedMessage = "destination node is overloaded";
+constexpr TStringBuf QueueFullMessage = "destination node is overloaded; wait queue full";
+
+// Runs on the caller's mailbox (BulkUpsert / DoLongTxWriteSameMailbox). Does data split + FCM admit
+// RPC here, then starts TLongTxWriteInternal on the same mailbox (forceNoFlowControl).
+// On Wait: hold until Allow (READY drain) or wait-deadline / RejectNow → OVERLOADED.
+class TLongTxWriteFlowControlled: public NActors::TActorBootstrapped<TLongTxWriteFlowControlled> {
+    TLongTxWrite Tx;
+    TCSFlowControlManagerCounters Counters;
+    TInstant StartedAt;
+    TInstant WaitAdmitStartedAt;
+    ui64 WaiterId = 0;
+    bool Queued = false;
+
+public:
+    explicit TLongTxWriteFlowControlled(TLongTxWrite&& tx)
+        : Tx(std::move(tx))
+        , Counters(CountersGroupOrNull())
+    {
+    }
+
+    void Bootstrap(const TActorContext& ctx) {
+        Counters.OnRequestStart();
+
+        StartedAt = TActivationContext::Now();
+        TVector<ui64> tabletIds;
+        ui64 batchSize = 0;
+        const bool splitOk = TryCollectTargetTablets(Tx, tabletIds, batchSize);
+        Counters.OnSplitFinished(TActivationContext::Now() - StartedAt);
+
+        if (!splitOk) {
+            // Fail open: without target tablets there is nothing to admit against, so hand the
+            // request to the normal write actor, which produces the real navigate/split error.
+            Counters.OnAdmitSkippedNoSplit();
+            StartWrite(ctx);
+            return Finish(ctx);
+        }
+
+        WaitAdmitStartedAt = TActivationContext::Now();
+        Counters.OnWaitingAdmitStart();
+        // Deadline is the client's absolute cut-off, OperationTimeout its relative budget: the FCM
+        // needs both, one for the wait-queue cut-off and one for the percentage-based windows.
+        ctx.Send(TFlowControlManagerServiceOperator::MakeServiceId(ctx.SelfID.NodeId()),
+            std::make_unique<TEvTryAdmit>(std::move(tabletIds), Tx.GetDeadline(), Tx.GetOperationTimeout(), batchSize));
+        Become(&TThis::StateWaitAdmit);
+    }
+
+private:
+    // clang-format off
+    STRICT_STFUNC(StateWaitAdmit,
+                  HFunc(TEvTryAdmitResult, HandleAdmitResult)
+    )
+    STRICT_STFUNC(StateQueued,
+                  HFunc(TEvTryAdmitResult, HandleQueuedResult)
+                  HFunc(NActors::TEvents::TEvWakeup, HandleWaitDeadlineWakeup)
+    )
+    // Waiting for the FCM to fire the delayed reject; TEvWakeup is the lost-event fallback.
+    STRICT_STFUNC(StateDelayedReject,
+                  HFunc(NActors::TEvents::TEvCompleted, HandleDelayedRejectCompleted)
+                  HFunc(NActors::TEvents::TEvWakeup, HandleDelayedRejectFallback)
+    )
+    // clang-format on
+
+    void HandleAdmitResult(TEvTryAdmitResult::TPtr& ev, const TActorContext& ctx) {
+        Counters.OnWaitingAdmitFinish(TActivationContext::Now() - WaitAdmitStartedAt);
+
+        switch (ev->Get()->GetDecision()) {
+            case EAdmitDecision::Allow:
+                StartWrite(ctx);
+                Finish(ctx);
+                break;
+            case EAdmitDecision::RejectNow:
+                ReplyOverloaded(ctx, OverloadedMessage);
+                Finish(ctx);
+                break;
+            case EAdmitDecision::Wait:
+                EnterQueued(ctx, ev->Get()->GetWaiterId(), ev->Get()->GetWaitDeadline());
+                break;
+            case EAdmitDecision::DelayedReject:
+                // FCM will send TEvCompleted(OVERLOADED) after a delay.
+                // Drop Arrow batch now to free memory, but stay alive to forward the response.
+                Tx.DetachBatch();
+                EnterDelayedReject(ctx);
+                break;
+        }
+    }
+
+    void EnterDelayedReject(const TActorContext& ctx) {
+        Become(&TThis::StateDelayedReject);
+        ctx.Schedule(Tx.GetOperationTimeout() + DelayedRejectFallbackMargin, new NActors::TEvents::TEvWakeup());
+    }
+
+    void HandleDelayedRejectCompleted(NActors::TEvents::TEvCompleted::TPtr& ev, const TActorContext& ctx) {
+        // The FCM only knows this actor's id, not the client's TIssues, so the reason for the
+        // delayed OVERLOADED has to be attached here — otherwise this one reject path would give
+        // the client a bare status with no explanation.
+        AddIssue(QueueFullMessage);
+        ctx.Send(Tx.GetReplyTo(), ev->Release().Release());
+        Finish(ctx);
+    }
+
+    void HandleDelayedRejectFallback(NActors::TEvents::TEvWakeup::TPtr& /*ev*/, const TActorContext& ctx) {
+        ReplyOverloaded(ctx, QueueFullMessage);
+        Finish(ctx);
+    }
+
+    void EnterQueued(const TActorContext& ctx, ui64 waiterId, TInstant waitDeadline) {
+        WaiterId = waiterId;
+        Queued = true;
+        Become(&TThis::StateQueued);
+
+        const TInstant now = TActivationContext::Now();
+        if (waitDeadline <= now) {
+            CancelAndReject(ctx);
+            return;
+        }
+        ctx.Schedule(waitDeadline - now, new NActors::TEvents::TEvWakeup());
+    }
+
+    void HandleQueuedResult(TEvTryAdmitResult::TPtr& ev, const TActorContext& ctx) {
+        // A queued waiter leaves the wait queue only through the drain path, which always answers
+        // Allow; every other decision is taken before the waiter is enqueued.
+        AFL_VERIFY(ev->Get()->GetDecision() == EAdmitDecision::Allow)("decision", (ui64)ev->Get()->GetDecision());
+        Queued = false;
+        StartWrite(ctx);
+        Finish(ctx);
+    }
+
+    void HandleWaitDeadlineWakeup(NActors::TEvents::TEvWakeup::TPtr& /*ev*/, const TActorContext& ctx) {
+        // StateQueued is entered only from EnterQueued, which sets Queued and arms this wakeup, and
+        // every path that clears Queued also passes away.
+        AFL_VERIFY(Queued);
+        CancelAndReject(ctx);
+    }
+
+    void CancelAndReject(const TActorContext& ctx) {
+        if (Queued && WaiterId) {
+            ctx.Send(TFlowControlManagerServiceOperator::MakeServiceId(ctx.SelfID.NodeId()),
+                std::make_unique<TEvCancelWait>(WaiterId, /*deadlineExpired=*/true));
+        }
+        Queued = false;
+        ReplyOverloaded(ctx, OverloadedMessage);
+        Finish(ctx);
+    }
+
+    void StartWrite(const TActorContext& ctx) {
+        // Time already burned in the admit RPC and the wait queue belongs to the client's budget,
+        // so the write gets what is left of it rather than a fresh full timeout.
+        const TDuration elapsed = TActivationContext::Now() - StartedAt;
+        const TDuration remainingTimeout = Tx.GetOperationTimeout() > elapsed ? Tx.GetOperationTimeout() - elapsed : TDuration::Zero();
+        // forceNoFlowControl stops the write from re-entering flow control here.
+        DoLongTxWriteSameMailbox(ctx, Tx.GetReplyTo(), Tx.GetLongTxId(), Tx.GetDedupId(), Tx.GetDatabaseName(), Tx.GetPath(),
+            Tx.GetNavigateResult(), Tx.GetBatch(), Tx.GetIssues(), Tx.GetUserCtx(), /*forceNoFlowControl=*/true, Tx.GetDeadline(),
+            remainingTimeout);
+    }
+
+    void AddIssue(TStringBuf message) {
+        // Every entry point into the write path owns an issues container; without one the client
+        // would silently lose the reject reason.
+        AFL_VERIFY(Tx.GetIssues());
+        Tx.GetIssues()->AddIssue(NYql::TIssue(TString(message)));
+    }
+
+    void ReplyOverloaded(const TActorContext& ctx, TStringBuf message) {
+        AddIssue(message);
+        ctx.Send(Tx.GetReplyTo(), new NActors::TEvents::TEvCompleted(0, Ydb::StatusIds::OVERLOADED));
+    }
+
+    void Finish(const TActorContext& /*ctx*/) {
+        Counters.OnRequestFinish();
+        PassAway();
+    }
+};
+
+}   // namespace
+
+void StartLongTxWriteFlowControlled(const TActorContext& ctx, TLongTxWrite&& longTxWrite) {
+    // Keep split + LongTx write on the caller's mailbox (BulkUpsert upload actor).
+    ctx.RegisterWithSameMailbox(new TLongTxWriteFlowControlled(std::move(longTxWrite)));
+}
+
+}   // namespace NKikimr::NTxProxy

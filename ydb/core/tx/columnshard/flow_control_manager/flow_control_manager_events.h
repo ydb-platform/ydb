@@ -17,8 +17,7 @@
 namespace NKikimr::NColumnShard::NFlowControl {
 
 enum EEvFlowControl {
-    EvLongTxWrite = EventSpaceBegin(TKikimrEvents::ES_FLOW_CONTROL_MANAGER),
-    EvTryAdmit,
+    EvTryAdmit = EventSpaceBegin(TKikimrEvents::ES_FLOW_CONTROL_MANAGER),
     EvTryAdmitResult,
     EvCancelWait,
     EvDrainWaiter,
@@ -33,24 +32,6 @@ enum EEvFlowControl {
 };
 
 static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLOW_CONTROL_MANAGER), "expect EvEnd < EventSpaceEnd(ES_FLOW_CONTROL_MANAGER)");
-
-class TEvLongTxWrite: public NActors::TEventLocal<TEvLongTxWrite, EvLongTxWrite> {
-private:
-    std::optional<TLongTxWrite> LongTxWrite;
-
-public:
-    explicit TEvLongTxWrite(TLongTxWrite&& longTxWrite)
-        : LongTxWrite(std::move(longTxWrite))
-    {
-    }
-
-    TLongTxWrite DetachLongTxWrite() {
-        Y_ABORT_UNLESS(LongTxWrite.has_value(), "LongTxWrite already detached");
-        TLongTxWrite result = std::move(*LongTxWrite);
-        LongTxWrite.reset();
-        return result;
-    }
-};
 
 class TEvTryAdmit: public NActors::TEventLocal<TEvTryAdmit, EvTryAdmit> {
     YDB_READONLY_DEF(TVector<ui64>, TabletIds);

@@ -1,11 +1,12 @@
+#include "long_tx_write_flow_control.h"
+
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/data_events/shard_writer.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/prof/tag.h>
@@ -19,7 +20,7 @@ namespace NKikimr {
 namespace {
 
 ui64 GetMemoryInFlightLimit() {
-    static std::atomic_uint64_t DEFAULT_MEMORY_IN_FLIGHT_LIMIT{ 0 };
+    static std::atomic_uint64_t DEFAULT_MEMORY_IN_FLIGHT_LIMIT{0};
 
     if (HasAppData() && AppDataVerified().ColumnShardConfig.GetProxyMemoryInFlightLimit()) {
         return AppDataVerified().ColumnShardConfig.GetProxyMemoryInFlightLimit();
@@ -33,7 +34,7 @@ ui64 GetMemoryInFlightLimit() {
     return DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load();
 }
 
-}   // namespace
+}
 
 namespace NTxProxy {
 using namespace NActors;
@@ -51,7 +52,12 @@ protected:
     using TThis = typename TBase::TThis;
 
 public:
-    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, const TLongTxId& longTxId, const TString& dedupId,
+    TLongTxWriteBase(
+        const TString& databaseName,
+        const TString& path,
+        const TString& token,
+        const TLongTxId& longTxId,
+        const TString& dedupId,
         TIntrusivePtr<NACLib::TUserContext> userCtx)
         : DatabaseName(databaseName)
         , Path(path)
@@ -59,7 +65,7 @@ public:
         , LongTxId(longTxId)
         , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase")
         , UserCtx(userCtx)
-        , Counters(std::make_shared<NEvWrite::TCSUploadCounters>()) {
+        , Counters(std::make_shared<NEvWrite::TCSUploadCounters>())  {
         if (token) {
             UserToken.emplace(token);
         }
@@ -277,7 +283,7 @@ void DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
     TInstant deadline, TDuration operationTimeout) {
 
     if (!forceNoFlowControl && HasAppData() && AppData()->FeatureFlags.GetEnableCsFlowControl()) {
-        NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::StartLongTxWrite(ctx,
+        StartLongTxWriteFlowControlled(ctx,
             NColumnShard::NFlowControl::TLongTxWrite(replyTo, longTxId, dedupId, databaseName, path, std::move(navigateResult),
                 std::move(batch), std::move(issues), std::move(userCtx), deadline, operationTimeout));
     } else {
@@ -285,6 +291,8 @@ void DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
             replyTo, longTxId, dedupId, databaseName, path, std::move(navigateResult), std::move(batch), std::move(issues), std::move(userCtx)));
     }
 }
+
+//
 
 }   // namespace NTxProxy
 }   // namespace NKikimr

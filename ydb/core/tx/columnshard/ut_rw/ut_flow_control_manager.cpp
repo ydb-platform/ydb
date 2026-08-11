@@ -13,6 +13,7 @@
 #include <ydb/core/tx/long_tx_service/public/types.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx.h>
+#include <ydb/core/tx/tx_proxy/long_tx_write_flow_control.h>
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 
 #include <ydb/library/aclib/user_context.h>
@@ -58,24 +59,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        TFlowControlManagerServiceOperator::StartLongTxWrite(ctx, std::move(LongTxWrite));
-        PassAway();
-    }
-
-private:
-    TLongTxWrite LongTxWrite;
-};
-
-class TSendLongTxWriteEventActor: public TActorBootstrapped<TSendLongTxWriteEventActor> {
-public:
-    explicit TSendLongTxWriteEventActor(TLongTxWrite longTxWrite)
-        : LongTxWrite(std::move(longTxWrite))
-    {
-    }
-
-    void Bootstrap(const TActorContext& ctx) {
-        ctx.Send(
-            TFlowControlManagerServiceOperator::MakeServiceId(ctx.SelfID.NodeId()), std::make_unique<TEvLongTxWrite>(std::move(LongTxWrite)));
+        NTxProxy::StartLongTxWriteFlowControlled(ctx, std::move(LongTxWrite));
         PassAway();
     }
 
@@ -164,7 +148,7 @@ public:
         TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::MilliSeconds(50), TDuration::MilliSeconds(250), 1024);
         TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(50);
         TFlowControlManagerServiceOperator::SetDelayedRejectTimeoutPercent(10);
-        TFlowControlManagerServiceOperator::ResetDrainRateParamsToDefaults();
+        TFlowControlManagerServiceOperator::ResetUtOverrides();
     }
 
     TActorId GetReplyTo() const {
@@ -189,10 +173,6 @@ public:
 
     void StartLongTxWrite(TLongTxWrite longTxWrite) {
         Runtime.Register(new TStartLongTxWriteActor(std::move(longTxWrite)), 0, Runtime.GetAppData(0).UserPoolId);
-    }
-
-    void SendLongTxWriteEvent(TLongTxWrite longTxWrite) {
-        Runtime.Register(new TSendLongTxWriteEventActor(std::move(longTxWrite)), 0, Runtime.GetAppData(0).UserPoolId);
     }
 
     void DoLongTxWriteSameMailbox(TLongTxWrite longTxWrite) {
@@ -420,16 +400,6 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed->Get()->Status, Ydb::StatusIds::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(ServiceReceivesLongTxWriteEvent) {
-        TTestBasicRuntime runtime;
-        TFlowControlManagerTestEnv env(runtime);
-
-        env.SendLongTxWriteEvent(env.BuildLongTxWrite(MakeNavigateWithSchemeError()));
-
-        const auto completed = env.WaitCompleted();
-        UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed->Get()->Status, Ydb::StatusIds::SCHEME_ERROR);
-    }
-
     Y_UNIT_TEST(StartLongTxWriteRepliesSuccess) {
         TTestBasicRuntime runtime;
         const ui64 shardTabletId = TTestTxConfig::TxTablet0;
@@ -642,7 +612,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
     Y_UNIT_TEST(ZeroConfigStartRatesFallBackToDefaults) {
         TTestBasicRuntime runtime;
         TFlowControlManagerTestEnv env(runtime);
-        TFlowControlManagerServiceOperator::ResetDrainRateParamsToDefaults();
+        TFlowControlManagerServiceOperator::ResetUtOverrides();
 
         auto* fc = runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl();
         fc->SetDrainRateStart(0);

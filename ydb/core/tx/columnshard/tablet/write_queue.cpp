@@ -35,6 +35,26 @@ TString OverloadReason(const EOverloadStatus status) {
             return {};
     }
 }
+
+// Statuses that mean "this shard cannot accept writes until compaction frees something up".
+// They are what the OverloadManager republishes as node-level overload to the flow control
+// managers, so a shard blocked on the small-blobs quota or on the metadata limit has to mark
+// its node hot exactly like a shard blocked on the compaction queue.
+bool IsCompactionWaitStatus(const EOverloadStatus status) {
+    switch (status) {
+        case EOverloadStatus::OverloadCompaction:
+        case EOverloadStatus::SmallBlobsQuota:
+        case EOverloadStatus::OverloadMetadata:
+            return true;
+        case EOverloadStatus::Disk:
+        case EOverloadStatus::ShardTxInFly:
+        case EOverloadStatus::ShardWritesInFly:
+        case EOverloadStatus::ShardWritesSizeInFly:
+        case EOverloadStatus::RejectProbability:
+        case EOverloadStatus::None:
+            return false;
+    }
+}
 }   // namespace
 
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
@@ -136,9 +156,7 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
             if (overloadStatus != EOverloadStatus::None) {
                 overloaded.emplace(it->GetInternalPathId());
                 Owner->Counters.GetCSCounters().OnWaitingOverload(overloadStatus);
-                if (overloadStatus == TColumnShard::EOverloadStatus::OverloadCompaction) {
-                    compactionWait = true;
-                }
+                compactionWait |= IsCompactionWaitStatus(overloadStatus);
                 ++countTasks;
                 YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
                     {"event", "wait_overload"},

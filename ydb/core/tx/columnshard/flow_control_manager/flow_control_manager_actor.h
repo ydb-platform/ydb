@@ -19,13 +19,13 @@
 namespace NKikimr::NColumnShard::NFlowControl {
 
 class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
-    static constexpr TDuration LocationRecheckPeriod = TDuration::Seconds(5);
+    static constexpr TDuration NodeRecheckPeriod = TDuration::Seconds(5);
 
     struct TWaiter {
         ui64 WaiterId = 0;
         TActorId Helper;
         TVector<ui64> TabletIds;
-        TVector<ui32> DestinationNodes;   // distinct known nodes at enqueue (for WaiterCountByNode)
+        TVector<ui32> TargetNodes;   // distinct known nodes at enqueue (for WaiterCountByNode)
         TInstant WaitDeadline;
         TInstant EnqueuedAt;
         ui64 BatchSize = 0;   // deserialized batch bytes; charged against the bytes-rate bucket
@@ -34,11 +34,11 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     };
 
     // Delayed-reject entry: holds only minimal data needed to send OVERLOADED after a delay.
-    // Arrow batch is dropped immediately to save memory.
+    // Arrow batch is dropped immediately to save memory. The reject reason is attached by the
+    // helper actor, which owns the client's TIssues.
     struct TDelayedReject {
         ui64 RejectId = 0;
         TActorId ReplyTo;
-        std::shared_ptr<NYql::TIssues> Issues;
         TInstant RejectAt;
     };
 
@@ -48,8 +48,8 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     THashMap<ui32, ui64> HotNodes;
     // tabletId -> nodeId
     THashMap<ui64, ui32> TabletToNode;
-    THashMap<ui64, TInstant> LastLocationRecheck;
-    THashSet<ui64> LocationRecheckInFlight;
+    THashMap<ui64, TInstant> LastNodeRecheck;
+    THashSet<ui64> NodeRecheckInFlight;
 
     THashMap<ui64, TWaiter> Waiters;
     TDeque<ui64> WaitQueueOrder;
@@ -176,7 +176,6 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
 
     // clang-format off
     STRICT_STFUNC(StateMain,
-                  HFunc(NFlowControl::TEvLongTxWrite, Handle)
                   HFunc(NFlowControl::TEvTryAdmit, Handle)
                   HFunc(NFlowControl::TEvCancelWait, Handle)
                   HFunc(NFlowControl::TEvDrainWaiter, Handle)
@@ -190,7 +189,6 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     )
     // clang-format on
 
-    void Handle(const NFlowControl::TEvLongTxWrite::TPtr& ev, const TActorContext& ctx);
     void Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, const TActorContext& ctx);
     void Handle(const NFlowControl::TEvCancelWait::TPtr& ev, const TActorContext& ctx);
     void Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, const TActorContext& ctx);
@@ -203,13 +201,13 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     void Handle(const NFlowControl::TEvWriteOutcome::TPtr& ev, const TActorContext& ctx);
 
     bool IsAdmitAllowed(const TVector<ui64>& tabletIds) const;
-    bool HasWaitersOnDestinations(const TVector<ui64>& tabletIds) const;
-    TVector<ui32> CollectDestinationNodes(const TVector<ui64>& tabletIds) const;
+    bool HasWaitersOnNodes(const TVector<ui64>& tabletIds) const;
+    TVector<ui32> CollectTargetNodes(const TVector<ui64>& tabletIds) const;
     void IncWaiterCounts(const TVector<ui32>& nodes);
     void DecWaiterCounts(const TVector<ui32>& nodes);
-    void MaybeStartLocationRechecks(const TVector<ui64>& tabletIds);
+    void MaybeStartNodeRechecks(const TVector<ui64>& tabletIds);
     void PublishMapSizes() const;
-    void PublishDrainGauges() const;
+    void PublishDrainCounters() const;
     void RefillTokens(TInstant now);
     // Re-read the static CUBIC/bounds knobs (RMin/RMax/AimdBeta/KTarget/Probe) from live
     // config and clamp RefillRateR into them. Called each drain cycle so that FlowControl
@@ -219,21 +217,10 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
 
     // RMin* of 0 (UT-only) keeps a tiny floor so cuts cannot freeze the wait queue.
     // RMax* of 0 means no limit (+inf), matching DrainRateMax / DrainRateMaxBytes in config.
-    double EffectiveRMin() const {
-        return RMin > 0.0 ? RMin : 1.0;
-    }
-
-    double EffectiveRMax() const {
-        return RMax > 0.0 ? RMax : std::numeric_limits<double>::infinity();
-    }
-
-    double EffectiveRMinBytes() const {
-        return RMinBytes > 0.0 ? RMinBytes : 1'000'000.0;
-    }
-
-    double EffectiveRMaxBytes() const {
-        return RMaxBytes > 0.0 ? RMaxBytes : std::numeric_limits<double>::infinity();
-    }
+    double EffectiveRMin() const;
+    double EffectiveRMax() const;
+    double EffectiveRMinBytes() const;
+    double EffectiveRMaxBytes() const;
 
     // Soft cap for the bytes bucket: one second of traffic, but never below the FIFO head's
     // BatchSize — otherwise a single request larger than RefillRateBytesR permanently stalls

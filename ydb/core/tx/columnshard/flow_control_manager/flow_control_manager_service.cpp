@@ -1,6 +1,7 @@
 #include "flow_control_manager_service.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_actor.h>
 
@@ -120,13 +121,17 @@ TFlowControlManagerServiceOperator::TDrainRateParams TFlowControlManagerServiceO
     return ParamsFromConfig(DefaultFlowControlConfig());
 }
 
-NActors::TActorId TFlowControlManagerServiceOperator::MakeServiceId(ui32 nodeId) {
-    return NActors::TActorId(nodeId, "FlowCtrlMng");
-}
-
 std::unique_ptr<NActors::IActor> TFlowControlManagerServiceOperator::CreateService(
     TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup) {
     return std::make_unique<TFlowControlManager>(countersGroup);
+}
+
+TIntrusivePtr<::NMonitoring::TDynamicCounters> TFlowControlManagerServiceOperator::BuildCountersGroup(
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> root) {
+    if (!root) {
+        return nullptr;
+    }
+    return GetServiceCounters(root, "tablets")->GetSubgroup("type", "CS_FLOW_CONTROL_MANAGER");
 }
 
 ui64 TFlowControlManagerServiceOperator::GetMaxWaitQueueSize() {
@@ -227,6 +232,10 @@ void TFlowControlManagerServiceOperator::SetWaitQueueParams(
     UtWaitQueueOverrides.store(true);
 }
 
+void TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration drainJitterMin, TDuration drainJitterMax, ui64 maxWaitQueueSize) {
+    SetWaitQueueParams(drainJitterMin, drainJitterMax, maxWaitQueueSize, DefaultFlowControlConfig().GetMaxDelayedRejectQueueSize());
+}
+
 void TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(ui32 percent) {
     WaitTimeoutPercent.store(ClampPercent(percent));
     UtWaitTimeoutOverrides.store(true);
@@ -269,7 +278,7 @@ void TFlowControlManagerServiceOperator::SetDrainRateParams(const TDrainRatePara
     UtDrainOverrides.store(true);
 }
 
-void TFlowControlManagerServiceOperator::ResetDrainRateParamsToDefaults() {
+void TFlowControlManagerServiceOperator::ResetUtOverrides() {
     UtDrainOverrides.store(false);
     UtWaitQueueOverrides.store(false);
     UtWaitTimeoutOverrides.store(false);

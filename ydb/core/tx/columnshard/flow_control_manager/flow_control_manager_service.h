@@ -40,11 +40,19 @@ public:
         static TDrainRateParams Defaults();
     };
 
-    static NActors::TActorId MakeServiceId(ui32 nodeId);
+    // Header-only: libraries that only need to address the FCM (tx/data_events) must not take a
+    // link dependency on this library — it already PEERDIRs data_events, so the reverse edge
+    // would be a cycle.
+    static NActors::TActorId MakeServiceId(ui32 nodeId) {
+        return NActors::TActorId(nodeId, "FlowCtrlMng");
+    }
 
     static std::unique_ptr<NActors::IActor> CreateService(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup);
 
-    static void StartLongTxWrite(const TActorContext& ctx, TLongTxWrite&& longTxWrite);
+    // The one place that decides where FCM counters live, so the service initializer and the
+    // per-request helper actors (which only have AppData to go on) agree without a mutable
+    // process-global holding the group.
+    static TIntrusivePtr<::NMonitoring::TDynamicCounters> BuildCountersGroup(TIntrusivePtr<::NMonitoring::TDynamicCounters> root);
 
     // All knobs are read from ColumnShardConfig.FlowControl via Get* (protobuf defaults
     // apply for unset fields). When FlowControl is absent, a default-constructed
@@ -68,12 +76,16 @@ public:
     // Test / tuning hooks (used when ColumnShardConfig.FlowControl is unset).
     // MaxWaitQueueSize == 0 disables waiting (immediate OVERLOADED when gated).
     // DrainJitterMax == 0 drains immediately (no Schedule delay) aside from token-bucket pacing.
-    static void SetWaitQueueParams(
-        TDuration drainJitterMin, TDuration drainJitterMax, ui64 maxWaitQueueSize, ui64 maxDelayedRejectQueueSize = 512);
+    static void SetWaitQueueParams(TDuration drainJitterMin, TDuration drainJitterMax, ui64 maxWaitQueueSize, ui64 maxDelayedRejectQueueSize);
+    // Tunes only jitter and the wait queue; the delayed-reject queue keeps the proto default
+    // rather than a hardcoded literal that would silently shrink it.
+    static void SetWaitQueueParams(TDuration drainJitterMin, TDuration drainJitterMax, ui64 maxWaitQueueSize);
     static void SetWaitTimeoutPercent(ui32 percent);
     static void SetDelayedRejectTimeoutPercent(ui32 percent);
     static void SetDrainRateParams(const TDrainRateParams& params);
-    static void ResetDrainRateParamsToDefaults();
+    // Clears every Ut* override (drain rates, wait queue, timeout percentages) so one test
+    // cannot leak tuning into the next one.
+    static void ResetUtOverrides();
 };
 
 }   // namespace NKikimr::NColumnShard::NFlowControl

@@ -1,13 +1,6 @@
 #include "flow_control_manager_actor.h"
 #include "flow_control_manager_service.h"
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/tx/data_events/shards_splitter.h>
-#include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
-
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -17,239 +10,10 @@
 
 namespace NKikimr::NColumnShard::NFlowControl {
 
-namespace {
-
-TIntrusivePtr<::NMonitoring::TDynamicCounters> FlowControlCountersGroup;
-
-class TParsedBatchData: public NEvWrite::IShardsSplitter::IEvWriteDataAccessor {
-private:
-    using TBase = NEvWrite::IShardsSplitter::IEvWriteDataAccessor;
-    std::shared_ptr<arrow::RecordBatch> Batch;
-
-public:
-    explicit TParsedBatchData(std::shared_ptr<arrow::RecordBatch> batch)
-        : TBase(NArrow::GetBatchMemorySize(batch))
-        , Batch(std::move(batch))
-    {
-    }
-
-    std::shared_ptr<arrow::RecordBatch> GetDeserializedBatch() const override {
-        return Batch;
-    }
-
-    TString GetSerializedData() const override {
-        return NArrow::SerializeBatchNoCompression(Batch);
-    }
-};
-
-bool TryCollectTargetTablets(const TLongTxWrite& tx, TVector<ui64>* tabletIds, ui64* batchSize = nullptr) {
-    Y_ABORT_UNLESS(tabletIds);
-    tabletIds->clear();
-    if (batchSize) {
-        *batchSize = 0;
-    }
-
-    const auto& navigate = tx.GetNavigateResult();
-    if (!navigate || navigate->ErrorCount > 0 || navigate->ResultSet.empty()) {
-        return false;
-    }
-
-    const auto& entry = navigate->ResultSet[0];
-    auto shardsSplitter = NEvWrite::IShardsSplitter::BuildSplitter(entry);
-    if (!shardsSplitter) {
-        return false;
-    }
-
-    TParsedBatchData accessor(tx.GetBatch());
-    const auto initStatus = shardsSplitter->SplitData(entry, accessor);
-    if (!initStatus.Ok()) {
-        return false;
-    }
-
-    if (batchSize) {
-        // Deserialized batch memory size, already computed by TParsedBatchData's base ctor.
-        *batchSize = accessor.GetSize();
-    }
-
-    for (const auto& [tabletId, _] : shardsSplitter->GetSplitData().GetShardsInfo()) {
-        tabletIds->push_back(tabletId);
-    }
-    return true;
-}
-
-TIntrusivePtr<::NMonitoring::TDynamicCounters> CountersGroupOrNull() {
-    if (FlowControlCountersGroup) {
-        return FlowControlCountersGroup;
-    }
-    if (HasAppData() && AppData()->Counters) {
-        return AppData()->Counters;
-    }
-    return nullptr;
-}
-
-enum class EHelperWakeup: ui64 {
-    WaitDeadline = 1,
-};
-
-// Runs on the caller's mailbox (BulkUpsert / DoLongTxWriteSameMailbox). Does data split + FCM admit
-// RPC here, then starts TLongTxWriteInternal on the same mailbox (forceNoFlowControl).
-// On Wait: hold until Allow (READY drain) or wait-deadline / RejectNow → OVERLOADED.
-class TLongTxWriteFlowControlled: public NActors::TActorBootstrapped<TLongTxWriteFlowControlled> {
-    TLongTxWrite Tx;
-    TCSFlowControlManagerCounters Counters;
-    TInstant WaitAdmitStartedAt;
-    ui64 WaiterId = 0;
-    bool Queued = false;
-
-public:
-    explicit TLongTxWriteFlowControlled(TLongTxWrite&& tx)
-        : Tx(std::move(tx))
-        , Counters(CountersGroupOrNull())
-    {
-    }
-
-    void Bootstrap(const TActorContext& ctx) {
-        Counters.OnRequestStart();
-
-        const TInstant splitStartedAt = TActivationContext::Now();
-        TVector<ui64> tabletIds;
-        ui64 batchSize = 0;
-        const bool splitOk = TryCollectTargetTablets(Tx, &tabletIds, &batchSize);
-        Counters.OnSplitFinished(TActivationContext::Now() - splitStartedAt);
-
-        if (!splitOk) {
-            // Same as legacy FCM path: cannot admit without targets → fail-open into write actor
-            // (it will reply with the real navigate/split error).
-            Counters.OnAdmitSkippedNoSplit();
-            StartWrite(ctx);
-            return Finish(ctx);
-        }
-
-        WaitAdmitStartedAt = TActivationContext::Now();
-        Counters.OnWaitingAdmitStart();
-        ctx.Send(TFlowControlManagerServiceOperator::MakeServiceId(ctx.SelfID.NodeId()),
-            std::make_unique<TEvTryAdmit>(std::move(tabletIds), Tx.GetDeadline(), Tx.GetOperationTimeout(), batchSize));
-        Become(&TThis::StateWaitAdmit);
-    }
-
-private:
-    STRICT_STFUNC(
-        StateWaitAdmit, HFunc(TEvTryAdmitResult, HandleAdmitResult) HFunc(NActors::TEvents::TEvCompleted, HandleDelayedRejectCompleted))
-    STRICT_STFUNC(StateQueued, HFunc(TEvTryAdmitResult, HandleQueuedResult) HFunc(NActors::TEvents::TEvWakeup, HandleWaitDeadlineWakeup))
-
-    void HandleDelayedRejectCompleted(NActors::TEvents::TEvCompleted::TPtr& ev, const TActorContext& ctx) {
-        // Forward the OVERLOADED response to the original client
-        ctx.Send(Tx.GetReplyTo(), ev->Release().Release());
-        Finish(ctx);
-    }
-
-    void HandleAdmitResult(TEvTryAdmitResult::TPtr& ev, const TActorContext& ctx) {
-        Counters.OnWaitingAdmitFinish(TActivationContext::Now() - WaitAdmitStartedAt);
-
-        switch (ev->Get()->GetDecision()) {
-            case EAdmitDecision::Allow:
-                StartWrite(ctx);
-                Finish(ctx);
-                break;
-            case EAdmitDecision::RejectNow:
-                ReplyOverloaded(ctx, "destination node is overloaded");
-                Finish(ctx);
-                break;
-            case EAdmitDecision::Wait:
-                EnterQueued(ctx, ev->Get()->GetWaiterId(), ev->Get()->GetWaitDeadline());
-                break;
-            case EAdmitDecision::DelayedReject:
-                // FCM will send TEvCompleted(OVERLOADED) after a delay.
-                // Drop Arrow batch now to free memory, but stay alive to forward the response.
-                Tx.DetachBatch();
-                // Stay in current state and wait for TEvCompleted from FCM
-                break;
-        }
-    }
-
-    void EnterQueued(const TActorContext& ctx, ui64 waiterId, TInstant waitDeadline) {
-        WaiterId = waiterId;
-        Queued = true;
-        Become(&TThis::StateQueued);
-
-        const TInstant now = TActivationContext::Now();
-        if (waitDeadline <= now) {
-            CancelAndReject(ctx, "destination node is overloaded", /*deadlineExpired=*/true);
-            return;
-        }
-        ctx.Schedule(waitDeadline - now, new NActors::TEvents::TEvWakeup(static_cast<ui64>(EHelperWakeup::WaitDeadline)));
-    }
-
-    void HandleQueuedResult(TEvTryAdmitResult::TPtr& ev, const TActorContext& ctx) {
-        switch (ev->Get()->GetDecision()) {
-            case EAdmitDecision::Allow:
-                Queued = false;
-                StartWrite(ctx);
-                Finish(ctx);
-                break;
-            case EAdmitDecision::RejectNow:
-                Queued = false;
-                ReplyOverloaded(ctx, "destination node is overloaded");
-                Finish(ctx);
-                break;
-            case EAdmitDecision::DelayedReject:
-                // FCM will send OVERLOADED after a delay. Drop Arrow batch now to free memory.
-                // We don't need to wait for anything - FCM handles the delayed response.
-                // Just finish this helper actor; FCM has all the info it needs to send OVERLOADED.
-                Queued = false;
-                Finish(ctx);
-                break;
-            case EAdmitDecision::Wait:
-                // Should not be re-issued while already queued.
-                break;
-        }
-    }
-
-    void HandleWaitDeadlineWakeup(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
-        if (ev->Get()->Tag != static_cast<ui64>(EHelperWakeup::WaitDeadline)) {
-            return;
-        }
-        if (!Queued) {
-            return;
-        }
-        CancelAndReject(ctx, "destination node is overloaded", /*deadlineExpired=*/true);
-    }
-
-    void CancelAndReject(const TActorContext& ctx, const TString& message, bool deadlineExpired) {
-        if (Queued && WaiterId) {
-            ctx.Send(TFlowControlManagerServiceOperator::MakeServiceId(ctx.SelfID.NodeId()),
-                std::make_unique<TEvCancelWait>(WaiterId, deadlineExpired));
-        }
-        Queued = false;
-        ReplyOverloaded(ctx, message);
-        Finish(ctx);
-    }
-
-    void StartWrite(const TActorContext& ctx) {
-        NTxProxy::DoLongTxWriteSameMailbox(ctx, Tx.GetReplyTo(), Tx.GetLongTxId(), Tx.GetDedupId(), Tx.GetDatabaseName(), Tx.GetPath(),
-            Tx.GetNavigateResult(), Tx.GetBatch(), Tx.GetIssues(), Tx.GetUserCtx(), /*forceNoFlowControl=*/true);
-    }
-
-    void ReplyOverloaded(const TActorContext& ctx, const TString& message) {
-        if (!message.empty() && Tx.GetIssues()) {
-            Tx.GetIssues()->AddIssue(NYql::TIssue(message));
-        }
-        ctx.Send(Tx.GetReplyTo(), new NActors::TEvents::TEvCompleted(0, Ydb::StatusIds::OVERLOADED));
-    }
-
-    void Finish(const TActorContext& /*ctx*/) {
-        Counters.OnRequestFinish();
-        PassAway();
-    }
-};
-
-}   // namespace
-
 TFlowControlManager::TFlowControlManager(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup)
     : TActor(&TThis::StateMain)
     , Counters(countersGroup)
 {
-    FlowControlCountersGroup = countersGroup;
     const auto params = TFlowControlManagerServiceOperator::GetDrainRateParams();
     RMin = params.RMin;
     RMax = params.RMax;
@@ -284,7 +48,23 @@ TFlowControlManager::TFlowControlManager(TIntrusivePtr<::NMonitoring::TDynamicCo
     ObservedRateBytes = 0.0;
     // The bounds above are only a seed: if FlowControl config is merged after
     // construction, SyncDrainBounds() (called each drain cycle) will pick it up.
-    PublishDrainGauges();
+    PublishDrainCounters();
+}
+
+double TFlowControlManager::EffectiveRMin() const {
+    return RMin > 0.0 ? RMin : 1.0;
+}
+
+double TFlowControlManager::EffectiveRMax() const {
+    return RMax > 0.0 ? RMax : std::numeric_limits<double>::infinity();
+}
+
+double TFlowControlManager::EffectiveRMinBytes() const {
+    return RMinBytes > 0.0 ? RMinBytes : 1'000'000.0;
+}
+
+double TFlowControlManager::EffectiveRMaxBytes() const {
+    return RMaxBytes > 0.0 ? RMaxBytes : std::numeric_limits<double>::infinity();
 }
 
 void TFlowControlManager::SyncDrainBounds() {
@@ -311,7 +91,7 @@ void TFlowControlManager::PublishMapSizes() const {
     Counters.SetDelayedRejectQueueCount(DelayedRejects.size());
 }
 
-void TFlowControlManager::PublishDrainGauges() const {
+void TFlowControlManager::PublishDrainCounters() const {
     Counters.SetDrainRefillRate(static_cast<ui64>(std::llround(RefillRateR)));
     Counters.SetDrainTokens(static_cast<ui64>(std::llround(Tokens)));
     Counters.SetDrainRefillRateBytes(static_cast<ui64>(std::llround(RefillRateBytesR)));
@@ -322,7 +102,7 @@ void TFlowControlManager::PublishDrainGauges() const {
     Counters.SetServedRateBytes(static_cast<ui64>(std::llround(ServedRateBytes)));
 }
 
-TVector<ui32> TFlowControlManager::CollectDestinationNodes(const TVector<ui64>& tabletIds) const {
+TVector<ui32> TFlowControlManager::CollectTargetNodes(const TVector<ui64>& tabletIds) const {
     THashSet<ui32> nodes;
     TVector<ui32> result;
     for (const ui64 tabletId : tabletIds) {
@@ -350,7 +130,7 @@ bool TFlowControlManager::IsAdmitAllowed(const TVector<ui64>& tabletIds) const {
     return true;
 }
 
-bool TFlowControlManager::HasWaitersOnDestinations(const TVector<ui64>& tabletIds) const {
+bool TFlowControlManager::HasWaitersOnNodes(const TVector<ui64>& tabletIds) const {
     for (const ui64 tabletId : tabletIds) {
         const auto* nodeId = TabletToNode.FindPtr(tabletId);
         if (!nodeId) {
@@ -385,25 +165,25 @@ void TFlowControlManager::DecWaiterCounts(const TVector<ui32>& nodes) {
     }
 }
 
-void TFlowControlManager::MaybeStartLocationRechecks(const TVector<ui64>& tabletIds) {
+void TFlowControlManager::MaybeStartNodeRechecks(const TVector<ui64>& tabletIds) {
     const TInstant now = TActivationContext::Now();
     for (const ui64 tabletId : tabletIds) {
         const auto* nodeId = TabletToNode.FindPtr(tabletId);
         if (!nodeId || !HotNodes.contains(*nodeId)) {
             continue;
         }
-        if (LocationRecheckInFlight.contains(tabletId)) {
+        if (NodeRecheckInFlight.contains(tabletId)) {
             continue;
         }
-        if (const auto* last = LastLocationRecheck.FindPtr(tabletId)) {
-            if (now - *last < LocationRecheckPeriod) {
+        if (const auto* last = LastNodeRecheck.FindPtr(tabletId)) {
+            if (now - *last < NodeRecheckPeriod) {
                 continue;
             }
         }
 
-        LastLocationRecheck[tabletId] = now;
-        LocationRecheckInFlight.insert(tabletId);
-        Counters.OnLocationRecheck();
+        LastNodeRecheck[tabletId] = now;
+        NodeRecheckInFlight.insert(tabletId);
+        Counters.OnNodeRecheck();
 
         TEvTabletResolver::TEvForward::TResolveFlags flags;
         flags.SetAllowFollower(false);
@@ -426,7 +206,7 @@ void TFlowControlManager::EraseWaiter(ui64 waiterId) {
         return;
     }
     RefundDrainToken(it->second);
-    DecWaiterCounts(it->second.DestinationNodes);
+    DecWaiterCounts(it->second.TargetNodes);
     Waiters.erase(it);
     for (auto qIt = WaitQueueOrder.begin(); qIt != WaitQueueOrder.end(); ++qIt) {
         if (*qIt == waiterId) {
@@ -438,7 +218,7 @@ void TFlowControlManager::EraseWaiter(ui64 waiterId) {
     // so this is where we notice the queue draining back to empty and reopen observation.
     MaybeMarkQueueEmpty();
     PublishMapSizes();
-    PublishDrainGauges();
+    PublishDrainCounters();
 }
 
 void TFlowControlManager::RefillTokens(TInstant now) {
@@ -604,7 +384,7 @@ void TFlowControlManager::ApplyHotDecay(TInstant now) {
         WmaxBytes = Min(WmaxBytes, RefillRateBytesR);
         Counters.OnDrainRateDecay();
         ClampTokensToSoftCap();
-        PublishDrainGauges();
+        PublishDrainCounters();
     }
 }
 
@@ -633,7 +413,7 @@ void TFlowControlManager::MaybeApplyAnchor(TInstant now) {
         WmaxBytes = Min(WmaxBytes, RefillRateBytesR);
         Counters.OnDrainAnchorGiveBack();
         ClampTokensToSoftCap();
-        PublishDrainGauges();
+        PublishDrainCounters();
     }
 }
 
@@ -668,7 +448,7 @@ void TFlowControlManager::ClampTokensAfterReady() {
     const TInstant now = TActivationContext::Now();
     LastRefillAt = now;
     LastRefillBytesAt = now;
-    PublishDrainGauges();
+    PublishDrainCounters();
 }
 
 void TFlowControlManager::UpdateObservedThroughput(TInstant now, ui64 batchSize) {
@@ -737,7 +517,7 @@ void TFlowControlManager::InitializeRatesFromObservation(ui64 firstBatchSize) {
     }
     ObservedOverload = false;
     Counters.OnObservationTransition();
-    PublishDrainGauges();
+    PublishDrainCounters();
 }
 
 void TFlowControlManager::MaybeMarkQueueEmpty() {
@@ -848,7 +628,7 @@ void TFlowControlManager::CloseCohort() {
         const TInstant now = TActivationContext::Now();
         if (!CanGrowNow(now)) {
             Counters.OnDrainGrowthBlocked();
-            PublishDrainGauges();
+            PublishDrainCounters();
             return;
         }
         LastGrowthAt = now;
@@ -898,7 +678,7 @@ void TFlowControlManager::CloseCohort() {
         if (grew) {
             Counters.OnDrainRateGrow();
         }
-        PublishDrainGauges();
+        PublishDrainCounters();
         return;
     }
 
@@ -933,7 +713,7 @@ void TFlowControlManager::CutRateByOverloadFraction(double overloadFraction) {
         Counters.OnDrainRateCut();
     }
     ClampTokensToSoftCap();
-    PublishDrainGauges();
+    PublishDrainCounters();
 }
 
 void TFlowControlManager::ClampTokensToSoftCap() {
@@ -1045,23 +825,15 @@ void TFlowControlManager::ScheduleDrainEligible(const TActorContext& ctx) {
         ctx.Schedule(TDuration::MilliSeconds(delayMs), new TEvContinueDrain());
     }
 
-    PublishDrainGauges();
-}
-
-void TFlowControlManager::Handle(const NFlowControl::TEvLongTxWrite::TPtr& ev, const TActorContext& ctx) {
-    // Compatibility path: do not run split/write on FCM mailbox. Schedule helper on a separate mailbox.
-    auto tx = ev->Get()->DetachLongTxWrite();
-    ctx.Register(new TLongTxWriteFlowControlled(std::move(tx)));
+    PublishDrainCounters();
 }
 
 void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, const TActorContext& ctx) {
-    const TInstant startedAt = TActivationContext::Now();
     const auto& tabletIds = ev->Get()->GetTabletIds();
     const ui64 batchSize = ev->Get()->GetBatchSize();
-    const TDuration duration = TActivationContext::Now() - startedAt;
 
-    if (IsAdmitAllowed(tabletIds) && !HasWaitersOnDestinations(tabletIds)) {
-        Counters.OnAdmitAllowed(duration);
+    if (IsAdmitAllowed(tabletIds) && !HasWaitersOnNodes(tabletIds)) {
+        Counters.OnAdmitAllowed();
         // Fast path: the queue is empty, so this is the "observation window". Fold this
         // admit's spacing and size into the EWMA that will seed the drain rates when the
         // queue first fills.
@@ -1071,12 +843,12 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, cons
         return;
     }
 
-    MaybeStartLocationRechecks(tabletIds);
+    MaybeStartNodeRechecks(tabletIds);
 
     const TInstant waitDeadline = ev->Get()->GetWaitDeadline();
     const TInstant now = TActivationContext::Now();
     if (now >= waitDeadline) {
-        Counters.OnAdmitRejected(duration);
+        Counters.OnAdmitRejected();
         Counters.OnWaitQueueRejectDeadlineAtAdmit();
         ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::RejectNow));
         return;
@@ -1088,7 +860,7 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, cons
         // after FCM construction take effect.
         if (DelayedRejects.size() >= TFlowControlManagerServiceOperator::GetMaxDelayedRejectQueueSize()) {
             // Both queues full → immediate reject
-            Counters.OnAdmitRejected(duration);
+            Counters.OnAdmitRejected();
             Counters.OnWaitQueueRejectFull();
             Counters.OnDelayedRejectQueueFull();
             ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::RejectNow));
@@ -1103,8 +875,6 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, cons
         TDelayedReject reject;
         reject.RejectId = rejectId;
         reject.ReplyTo = ev->Sender;
-        reject.Issues = std::make_shared<NYql::TIssues>();
-        reject.Issues->AddIssue(NYql::TIssue("destination node is overloaded; wait queue full"));
         reject.RejectAt = rejectAt;
 
         DelayedRejects.emplace(rejectId, std::move(reject));
@@ -1113,7 +883,7 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, cons
         const TDuration delay = rejectAt > now ? rejectAt - now : TDuration::Zero();
         ctx.Schedule(delay, new TEvFireDelayedReject(rejectId));
 
-        Counters.OnAdmitRejected(duration);
+        Counters.OnAdmitRejected();
         Counters.OnDelayedRejectEnqueue();
         PublishMapSizes();
         ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::DelayedReject, 0, TInstant::Zero(), rejectId));
@@ -1132,11 +902,11 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, cons
     waiter.WaiterId = waiterId;
     waiter.Helper = ev->Sender;
     waiter.TabletIds = tabletIds;
-    waiter.DestinationNodes = CollectDestinationNodes(tabletIds);
+    waiter.TargetNodes = CollectTargetNodes(tabletIds);
     waiter.WaitDeadline = waitDeadline;
     waiter.EnqueuedAt = now;
     waiter.BatchSize = batchSize;
-    IncWaiterCounts(waiter.DestinationNodes);
+    IncWaiterCounts(waiter.TargetNodes);
     Waiters.emplace(waiterId, std::move(waiter));
     WaitQueueOrder.push_back(waiterId);
     Counters.OnWaitQueueEnqueue();
@@ -1188,7 +958,7 @@ void TFlowControlManager::Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, c
         // Leave for helper deadline / cancel; clear drain flag so we don't loop.
         RefundDrainToken(*waiter);
         waiter->DrainScheduled = false;
-        PublishDrainGauges();
+        PublishDrainCounters();
         ScheduleDrainEligible(ctx);
         return;
     }
@@ -1196,7 +966,7 @@ void TFlowControlManager::Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, c
     if (!IsAdmitAllowed(waiter->TabletIds)) {
         RefundDrainToken(*waiter);
         waiter->DrainScheduled = false;
-        PublishDrainGauges();
+        PublishDrainCounters();
         // Destination went hot after we reserved the token: try the next eligible waiter.
         ScheduleDrainEligible(ctx);
         return;
@@ -1211,7 +981,7 @@ void TFlowControlManager::Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, c
     NoteAdmitted(now, batchSize);
     NoteCohortRelease();
     Counters.OnWaitQueueDrain(waited);
-    Counters.OnAdmitAllowed(TDuration::Zero());
+    Counters.OnAdmitAllowed();
     Counters.OnDrainAllowed();
     ctx.Send(helper, new TEvTryAdmitResult(EAdmitDecision::Allow));
     ScheduleDrainEligible(ctx);
@@ -1331,27 +1101,19 @@ void TFlowControlManager::Handle(const NFlowControl::TEvFireDelayedReject::TPtr&
     Counters.OnDelayedRejectFired();
     PublishMapSizes();
 
-    // Send OVERLOADED to the client
-    if (reject.Issues && !reject.Issues->Empty()) {
-        // Issues already set during enqueue
-    }
+    // The helper actor owns the client's TIssues and attaches the reason before forwarding.
     ctx.Send(reject.ReplyTo, new NActors::TEvents::TEvCompleted(0, Ydb::StatusIds::OVERLOADED));
 }
 
 void TFlowControlManager::Handle(const TEvTabletResolver::TEvForwardResult::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
-    LocationRecheckInFlight.erase(msg->TabletID);
+    NodeRecheckInFlight.erase(msg->TabletID);
     if (msg->Status != NKikimrProto::OK || !msg->TabletActor) {
         return;
     }
     TabletToNode[msg->TabletID] = msg->TabletActor.NodeId();
     PublishMapSizes();
     ScheduleDrainEligible(ctx);
-}
-
-void TFlowControlManagerServiceOperator::StartLongTxWrite(const TActorContext& ctx, TLongTxWrite&& longTxWrite) {
-    // Keep split + LongTx write on the caller's mailbox (BulkUpsert upload actor).
-    ctx.RegisterWithSameMailbox(new TLongTxWriteFlowControlled(std::move(longTxWrite)));
 }
 
 }   // namespace NKikimr::NColumnShard::NFlowControl

@@ -49,14 +49,12 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr DelayedRejectEnqueuedCount;
     NMonitoring::TDynamicCounters::TCounterPtr DelayedRejectFiredCount;
     NMonitoring::TDynamicCounters::TCounterPtr DelayedRejectQueueFullCount;
-    NMonitoring::TDynamicCounters::TCounterPtr LocationRecheckCount;
+    NMonitoring::TDynamicCounters::TCounterPtr NodeRecheckCount;
     NMonitoring::TDynamicCounters::TCounterPtr StatusOverloadCount;
     NMonitoring::TDynamicCounters::TCounterPtr StatusReadyCount;
 
     NMonitoring::TDynamicCounters::TCounterPtr SplitDurationUs;
-    NMonitoring::TDynamicCounters::TCounterPtr AdmitDurationUs;
     NMonitoring::THistogramPtr SplitDurationMsHistogram;
-    NMonitoring::THistogramPtr AdmitDurationMsHistogram;
     NMonitoring::THistogramPtr WaitAdmitDurationMsHistogram;
     NMonitoring::THistogramPtr WaitQueueWaitDurationMsHistogram;
 
@@ -100,13 +98,11 @@ public:
         , DelayedRejectEnqueuedCount(TBase::GetDeriviative("FlowControl/DelayedRejectQueue/Enqueued/Count"))
         , DelayedRejectFiredCount(TBase::GetDeriviative("FlowControl/DelayedRejectQueue/Fired/Count"))
         , DelayedRejectQueueFullCount(TBase::GetDeriviative("FlowControl/DelayedRejectQueue/Full/Count"))
-        , LocationRecheckCount(TBase::GetDeriviative("FlowControl/LocationRecheck/Count"))
+        , NodeRecheckCount(TBase::GetDeriviative("FlowControl/NodeRecheck/Count"))
         , StatusOverloadCount(TBase::GetDeriviative("FlowControl/Status/Overloaded/Count"))
         , StatusReadyCount(TBase::GetDeriviative("FlowControl/Status/Ready/Count"))
         , SplitDurationUs(TBase::GetDeriviative("FlowControl/Split/Duration/Us"))
-        , AdmitDurationUs(TBase::GetDeriviative("FlowControl/Admit/Duration/Us"))
         , SplitDurationMsHistogram(TBase::GetHistogram("FlowControl/Split/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1)))
-        , AdmitDurationMsHistogram(TBase::GetHistogram("FlowControl/Admit/DurationMs/Histogram", NMonitoring::ExponentialHistogram(18, 2, 1)))
         , WaitAdmitDurationMsHistogram(
               TBase::GetHistogram("FlowControl/Admit/WaitDurationMs/Histogram", NMonitoring::ExponentialHistogram(18, 2, 1)))
         , WaitQueueWaitDurationMsHistogram(
@@ -137,30 +133,27 @@ public:
         SplitDurationMsHistogram->Collect(duration.MilliSeconds());
     }
 
-    void OnAdmitAllowed(const TDuration duration) const {
+    void OnAdmitAllowed() const {
         AdmitAllowedCount->Inc();
-        AdmitDurationUs->Add(duration.MicroSeconds());
-        AdmitDurationMsHistogram->Collect(duration.MilliSeconds());
     }
 
-    void OnAdmitRejected(const TDuration duration) const {
+    void OnAdmitRejected() const {
         AdmitRejectedCount->Inc();
-        AdmitDurationUs->Add(duration.MicroSeconds());
-        AdmitDurationMsHistogram->Collect(duration.MilliSeconds());
     }
 
     void OnAdmitSkippedNoSplit() const {
         AdmitSkippedNoSplitCount->Inc();
     }
 
+    // WaitQueue/Count is a gauge owned solely by SetWaitQueueCount (called from
+    // PublishMapSizes on every waiter map mutation). The On* events below must not also
+    // Inc/Dec it: a drain does both, which used to drift the gauge down by one per drain.
     void OnWaitQueueEnqueue() const {
         WaitQueueEnqueuedCount->Inc();
-        WaitQueueCount->Inc();
     }
 
     void OnWaitQueueDrain(const TDuration waited) const {
         WaitQueueDrainedCount->Inc();
-        WaitQueueCount->Dec();
         WaitQueueWaitDurationMsHistogram->Collect(waited.MilliSeconds());
     }
 
@@ -168,28 +161,19 @@ public:
         WaitQueueRejectedDeadlineCount->Inc();
     }
 
-    void OnWaitQueueRejectDeadline(const TDuration waited) const {
-        WaitQueueRejectedDeadlineCount->Inc();
-        WaitQueueCount->Dec();
-        WaitQueueWaitDurationMsHistogram->Collect(waited.MilliSeconds());
-    }
-
     void OnWaitQueueRejectFull() const {
         WaitQueueRejectedFullCount->Inc();
     }
 
     // A queued waiter hit its WaitDeadline while still waiting: distinct from a
-    // client-initiated cancel. Also drops the WaitQueue/Count gauge.
+    // client-initiated cancel.
     void OnWaitQueueTimedOut() const {
         WaitQueueTimedOutCount->Inc();
-        WaitQueueCount->Dec();
     }
 
     // A queued waiter was cancelled by the client (not a deadline timeout).
-    // Also drops the WaitQueue/Count gauge.
     void OnWaitQueueCancelled() const {
         WaitQueueCancelledCount->Inc();
-        WaitQueueCount->Dec();
     }
 
     void SetWaitQueueCount(ui64 count) const {
@@ -279,8 +263,8 @@ public:
         }
     }
 
-    void OnLocationRecheck() const {
-        LocationRecheckCount->Inc();
+    void OnNodeRecheck() const {
+        NodeRecheckCount->Inc();
     }
 
     void OnStatusOverloaded() const {

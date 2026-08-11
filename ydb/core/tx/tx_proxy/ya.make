@@ -10,6 +10,7 @@ SRCS(
     schemereq.cpp
     datareq.cpp
     describe.cpp
+    long_tx_write_flow_control.cpp
     proxy.cpp
     read_table_impl.cpp
     resolvereq.cpp
@@ -46,6 +47,8 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx
     ydb/core/tx/balance_coverage
+    ydb/core/tx/columnshard/flow_control_manager
+    ydb/core/tx/data_events
     ydb/core/tx/datashard
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard

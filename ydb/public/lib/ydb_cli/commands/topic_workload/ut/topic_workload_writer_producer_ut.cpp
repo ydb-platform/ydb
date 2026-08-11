@@ -171,8 +171,8 @@ namespace NTests {
             auto createTime = TInstant::MilliSeconds(1730111050000);
             producer->Send(createTime, {});
             UNIT_ASSERT_EQUAL(0, StatsCollector->GetTotalWriteMessages());
-            // Prepare() initializes WarmupTime; without it no events are accepted.
-            StatsCollector->Prepare();
+            // Init() sets WarmupTime; until then no events are accepted.
+            StatsCollector->Init();
 
             auto ackEvent = CreateAckEvent(1);
             producer->HandleAckEvent(ackEvent);

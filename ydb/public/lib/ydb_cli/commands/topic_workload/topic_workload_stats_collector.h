@@ -19,7 +19,7 @@ namespace NYdb {
                 bool transferMode);
 
             // Must be called before worker threads that call Add*Event start.
-            void Prepare();
+            void Init();
 
             void PrintWindowStatsLoop();
 
@@ -84,9 +84,8 @@ namespace NYdb {
             THolder<TTopicWorkloadStats> WindowStats;
             TTopicWorkloadStats TotalStats;
 
-            // Set in Prepare() before workers start; read-only afterwards.
+            // Set in Init() before workers start; read-only afterwards.
             TInstant WarmupTime;
-            TInstant StartTime;
         };
     }
 }

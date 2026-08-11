@@ -5393,106 +5393,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(RebuildVectorIndexChangedColumnsIsForbidden) {
-        // Changing the set of indexed columns on REBUILD INDEX must be rejected:
-        // the index was built on (Embedding), rebuilding ON (Data, Embedding) is forbidden.
-        NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
-        TKikimrRunner kikimr(settings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        {
-            auto status = session.ExecuteSchemeQuery(R"(
-                --!syntax_v1
-                CREATE TABLE `/Root/TestTable` (
-                    Key Uint64,
-                    Data String,
-                    Embedding String,
-                    PRIMARY KEY (Key),
-                    INDEX vector_idx
-                        GLOBAL USING vector_kmeans_tree
-                        ON (Embedding)
-                        WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=2, clusters=2)
-                );
-            )").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-        }
-        {
-            auto status = session.ExecuteSchemeQuery(R"(
-                --!syntax_v1
-                ALTER TABLE `/Root/TestTable`
-                    REBUILD INDEX vector_idx
-                        ON (Data, Embedding)
-                    WITH (levels = 2, clusters = 3);
-            )").ExtractValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
-                "Changing the set of indexed columns is not allowed");
-        }
-        {
-            // The index must be left untouched: still built on (Embedding), no prefix table.
-            TDescribeTableResult describe = session.DescribeTable("/Root/TestTable").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns()[0], "Embedding");
-
-            auto describePrefix = session.DescribeTable("/Root/TestTable/vector_idx/indexImplPrefixTable").GetValueSync();
-            UNIT_ASSERT_C(!describePrefix.IsSuccess(), "no prefix impl table must be created by a rejected rebuild");
-        }
-    }
-
-    Y_UNIT_TEST(RebuildVectorIndexDropColumnIsForbidden) {
-        // The mirror case: index built on (Data, Embedding), rebuilding ON (Embedding) is forbidden.
-        NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
-        TKikimrRunner kikimr(settings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        {
-            auto status = session.ExecuteSchemeQuery(R"(
-                --!syntax_v1
-                CREATE TABLE `/Root/TestTable` (
-                    Key Uint64,
-                    Data String,
-                    Embedding String,
-                    PRIMARY KEY (Key),
-                    INDEX vector_idx
-                        GLOBAL USING vector_kmeans_tree
-                        ON (Data, Embedding)
-                        WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=2, clusters=2)
-                );
-            )").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-        }
-        {
-            auto status = session.ExecuteSchemeQuery(R"(
-                --!syntax_v1
-                ALTER TABLE `/Root/TestTable`
-                    REBUILD INDEX vector_idx
-                        ON (Embedding)
-                    WITH (levels = 2, clusters = 3);
-            )").ExtractValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
-                "Changing the set of indexed columns is not allowed");
-        }
-        {
-            // The index must be left untouched: still built on (Data, Embedding), prefix table intact.
-            TDescribeTableResult describe = session.DescribeTable("/Root/TestTable").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns()[0], "Data");
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns()[1], "Embedding");
-
-            auto describePrefix = session.DescribeTable("/Root/TestTable/vector_idx/indexImplPrefixTable").GetValueSync();
-            UNIT_ASSERT_C(describePrefix.IsSuccess(), describePrefix.GetIssues().ToString());
-        }
-    }
-
     Y_UNIT_TEST(RebuildVectorIndexSameColumnsSql) {
         // Rebuild without changing the column set (columns omitted entirely) must still work.
         NKikimrConfig::TFeatureFlags featureFlags;
@@ -5517,12 +5417,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
         }
         {
-            // Explicitly repeating the same ON (...) column list is allowed.
             auto status = session.ExecuteSchemeQuery(R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable`
                     REBUILD INDEX vector_idx
-                        ON (Embedding)
                     WITH (levels = 2, clusters = 3);
             )").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
@@ -5615,7 +5513,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable`
                     REBUILD INDEX vector_idx
-                        ON (Embedding)
                     WITH ()" << forbidden << R"(, levels = 2, clusters = 3);
             )").ExtractValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS,
@@ -5685,8 +5582,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto status = session.ExecuteSchemeQuery(R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable`
-                    REBUILD INDEX secondary_idx
-                        ON (Data);
+                    REBUILD INDEX secondary_idx;
             )").ExtractValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),

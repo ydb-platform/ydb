@@ -10,6 +10,7 @@ PY_SRCS(
     results.py
     system_info.py
     topology.py
+    web.py
 )
 
 PEERDIR(

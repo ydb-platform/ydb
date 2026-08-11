@@ -6,7 +6,9 @@ import signal
 import stat
 import tempfile
 import textwrap
+import threading
 import unittest
+import urllib.request
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -32,6 +34,7 @@ from ydb.tools.ydb_bench.lib.topology import (
     plan_affinity,
     topology_record,
 )
+from ydb.tools.ydb_bench.lib.web import make_server, read_model
 
 
 class YdbBenchTest(unittest.TestCase):
@@ -1010,6 +1013,60 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(manifest["runs"], [])
         self.assertEqual(manifest["affinity"][0]["status"], "unsupported")
         self.assertFalse((output / "summary.csv").exists())
+
+
+class WebTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory(prefix="ydb-bench-web-test-")
+        self.root = Path(self.temporary_directory.name)
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+
+    def _manifest(self, directory, status="completed", imported=False):
+        directory.mkdir(parents=True, exist_ok=True)
+        value = {"schema_version": SCHEMA_VERSION, "status": status, "state": "running" if status == "running" else "passed",
+                 "started_at": "2025-01-01T00:00:00+00:00", "runs": [{"benchmark": "ping-bench", "profile": "baseline", "status": status}],
+                 "steps": [{"id": "step-1", "state": "running" if status == "running" else "passed", "artifacts": []}],
+                 "topology": {"version": 2, "allowed_cpus": [0], "numa_nodes": [{"id": 0, "cpus": [0]}]}}
+        if imported:
+            value["imported"] = True
+        (directory / "run.json").write_text(json.dumps(value), encoding="utf-8")
+
+    def test_web_read_model_covers_active_completed_and_imported_runs(self):
+        self._manifest(self.root / "active", "running")
+        self._manifest(self.root / "complete")
+        self._manifest(self.root / "imported", imported=True)
+        model = read_model(self.root)
+        self.assertEqual(model["active"]["status"], "running")
+        self.assertEqual(model["complete"]["status"], "completed")
+        self.assertEqual(model["imported"]["source"], "imported")
+
+    def test_web_static_api_is_csp_protected_and_read_only(self):
+        self._manifest(self.root / "complete")
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever)
+        worker.start()
+        try:
+            base = "http://127.0.0.1:{}".format(server.server_port)
+            with urllib.request.urlopen(base + "/") as response:
+                self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
+                self.assertIn(b"app.js", response.read())
+            with urllib.request.urlopen(base + "/api/runs") as response:
+                self.assertEqual(json.loads(response.read())[0]["id"], "complete")
+            with self.assertRaisesRegex(Exception, "HTTP Error 405"):
+                urllib.request.urlopen(urllib.request.Request(base + "/api/runs", method="POST"))
+        finally:
+            server.shutdown(); worker.join(); server.server_close()
+
+    def test_web_rejects_remote_listener_without_opt_in(self):
+        self._manifest(self.root / "complete")
+        with self.assertRaisesRegex(BenchmarkError, "allow-remote"):
+            make_server("0.0.0.0", 0, self.root)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            self.assertEqual(main(["web", "--listen", "0.0.0.0", "--output", str(self.root), "--no-open"]), 1)
+        self.assertIn("allow-remote", stderr.getvalue())
 
 
 if __name__ == "__main__":

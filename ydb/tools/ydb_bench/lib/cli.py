@@ -17,6 +17,7 @@ from ydb.tools.ydb_bench.lib.common import (
 from ydb.tools.ydb_bench.lib.config import build_run_plan, config_schema, load_config
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, ResultStore
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, topology_record
+from ydb.tools.ydb_bench.lib.web import serve
 
 
 RESOURCE_NAME = "actors_core_ut_fat"
@@ -67,6 +68,12 @@ def _create_parser():
     )
     run.add_argument("--report-json", type=str, help="write the top-level run report to a path or - for stdout")
     run.add_argument("--continue-on-error", action="store_true", help="continue with later profiles after a failure")
+    web = subparsers.add_parser("web", help="serve offline read-only result views")
+    web.add_argument("--listen", default="127.0.0.1")
+    web.add_argument("--port", type=lambda value: int(value), default=0)
+    web.add_argument("--output", default=Path("ydb-bench-results"), type=Path)
+    web.add_argument("--no-open", action="store_true")
+    web.add_argument("--allow-remote", action="store_true")
     return parser
 
 
@@ -331,6 +338,11 @@ def main(argv=None, resource_loader=None, tool_revision=None):
                 print(json.dumps(result, sort_keys=True))
             else:
                 print("valid: {} ({} planned steps)".format(loaded.path, result["steps"]))
+            return 0
+        if arguments.command == "web":
+            if not 0 <= arguments.port <= 65535:
+                raise BenchmarkError("--port must be between 0 and 65535")
+            serve(arguments.listen, arguments.port, arguments.output, arguments.no_open, arguments.allow_remote)
             return 0
         return _run(arguments, resource_loader, tool_revision or {"commit_id": "unknown"})
     except BenchmarkInterrupted as error:

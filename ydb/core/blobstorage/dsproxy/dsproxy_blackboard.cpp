@@ -16,6 +16,10 @@ void TBlobState::TState::AddResponseData(ui32 fullSize, ui32 shift, TRope&& data
 
 void TBlobState::TState::AddPartToPut(TRope&& partData) {
     Y_ABORT_UNLESS(partData);
+    //  [WDS:8] И тут отдельный парт лежит отдельным монолитом
+    //      если бы нвый парт сюда пришел, он бы просто переписал старый
+    //      но это исключается через различия в LogoBlobId между разными блобьами
+    //      и через различие PartId между партами в рамках одного блоба
     Data.SetMonolith(std::move(partData));
 }
 
@@ -44,7 +48,7 @@ void TBlobState::AddNeeded(ui64 begin, ui64 size) {
 void TBlobState::AddPartToPut(ui32 partIdx, TRope&& partData) {
     Y_ABORT_UNLESS(bool(Id));
     Y_ABORT_UNLESS(partIdx < Parts.size());
-    Parts[partIdx].AddPartToPut(std::move(partData));
+    Parts[partIdx].AddPartToPut(std::move(partData));   //  тут парты тоже различимы
     IsChanged = true;
 }
 
@@ -393,8 +397,8 @@ void TBlackboard::AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TRope&& part
     Y_ABORT_UNLESS(id.PartId() == 0);
     Y_ABORT_UNLESS(id.BlobSize() != 0);
     Y_ABORT_UNLESS(partData.size() == Info->Type.PartSize(TLogoBlobID(id, partIdx + 1)),
-        "partData# %zu partSize# %" PRIu64, partData.size(), Info->Type.PartSize(TLogoBlobID(id, partIdx + 1)));
-    (*this)[id].AddPartToPut(partIdx, std::move(partData));
+        "partData# %zu partSize# %" PRIu64, partData.size(), Info->Type.PartSize(TLogoBlobID(id, partIdx + 1)));    //  [WDS:CHECK_TOGATHER]зачем в партах везде индексация от 1, а не от 0?
+    (*this)[id].AddPartToPut(partIdx, std::move(partData));     //  [WDS:7] парт все еще различим
 }
 
 void TBlackboard::AddPutOkResponse(const TLogoBlobID &id, ui32 orderNumber) {

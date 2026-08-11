@@ -829,6 +829,10 @@ namespace NKikimr {
             LOG_DEBUG_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix <<"TEvVPut: " << " result# " << ev->Get()->ToString()
                     << " Marker# BSVS12");
 
+            /* 
+                Это условие сильно влияет на логику, тут появляется разница в записи
+                больших и маленьких блобов
+            */
             if (!info.IsHugeBlob) {
 
 #ifdef OPTIMIZE_SYNC

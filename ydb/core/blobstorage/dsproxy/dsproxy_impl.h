@@ -372,6 +372,7 @@ public:
         hFunc(TEvGetQueuesInfo, Handle);
     )
 
+    //  этот макрос просто популейтит последующие куски, из них нам нужен HandleNormal
 #define HANDLE_EVENTS(HANDLER) \
     hFunc(TEvBlobStorage::TEvPut, HANDLER); \
     hFunc(TEvBlobStorage::TEvGet, HANDLER); \
@@ -419,6 +420,24 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HANDLE_EVENTS(HandleNormal);
+            /*
+            Если макросы все применить, то тут будет:
+            ...
+            case TEvBlobStorage::TEvPut: {
+                typeame TEvBlobStorage::TEvPut::TPtr* x = reinterpret_cast<typename TEvBlobStorage::TEvPut::TPtr*>(&ev);
+                HandleNormal(*x);
+                break;
+            }
+            case TEvBlobStorage::TEvGet: {
+                typeame TEvBlobStorage::TEvGet::TPtr* x = reinterpret_cast<typename TEvBlobStorage::TEvGet::TPtr*>(&ev);
+                HandleNormal(*x);
+                break
+            }
+            ...
+            В итоге вызывается (подозреваю, что событие передается по ссылке):
+                HandleNormal(TEvBlobStorage::TEvPut::TPtr)
+                HandleNormal(TEvBlobStorage::TEvPut::TPtr)
+            */
             default: return StateCommon(ev);
         }
     }

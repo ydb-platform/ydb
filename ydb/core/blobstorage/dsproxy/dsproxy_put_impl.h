@@ -189,8 +189,11 @@ public:
         for (size_t blobIdx = 0; blobIdx < Blobs.size(); ++blobIdx) {
             TBlobInfo& blob = Blobs[blobIdx];
             Blackboard.RegisterBlobForPut(blob.BlobId, blobIdx);
+            //  [WDS:CHECK_TOGATHER]    Вот тут парты пинают на запись, делают это по-отдельности
+            //      И чексумм для партов все еще не видно. Но видно, что парты каждый по-отдельности отправляется
             for (ui32 i = 0; i < totalParts; ++i) {
                 if (Info->Type.PartSize(TLogoBlobID(blob.BlobId, i + 1))) {
+                    //  [WDS:6] наконец парты блоба попадают в blackboard для записи
                     Blackboard.AddPartToPut(blob.BlobId, i, TRope(partSets[blobIdx][i]));
                 }
             }
@@ -238,6 +241,7 @@ public:
             Y_ABORT_UNLESS(it == begin);
 
             const TVDiskID vdiskId = Info->GetVDiskId(it->first);
+            //  [WDS:IMPORTANT] Логика проставления чексумм тут есть
             const bool checksumming = EnableChecksumCalcAndValidation && Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
                 TGroupQueues::TVDisk::TQueues::VDiskQueueId(Blackboard.PutHandleClass));
 
@@ -273,6 +277,8 @@ public:
 
                 ui8 orderNumber = it->first;
                 auto vput = History.CreateVPut(itemsCount, orderNumber);
+                //  [WDS:IMPORTANT] Вот тут мы точно итерируемся по каждому отдельному парту,
+                //      и в AddVPut чексумма считается именно для отдельного парат
                 while (it != end) {
                     auto [orderNumber, ptr] = *it++;
                     TBlobInfo& blob = Blobs[ptr->BlobIdx];

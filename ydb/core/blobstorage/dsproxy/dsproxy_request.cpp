@@ -6,6 +6,25 @@
 namespace NKikimr {
 
     void TBlobStorageGroupProxy::PushRequest(IActor *actor, TInstant deadline) {
+        /*
+            [WDS:3] в итоге мы просто регистрируем актора
+                указатель на TBlobStorageGroupPutRequest.
+        
+        вот референс:
+        IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupPutParameters params) {
+            return new TBlobStorageGroupPutRequest(params);
+        }
+        IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters params) {
+           return new TBlobStorageGroupPutRequest(params);
+        }
+
+        и вот тут уже важно, что появляется Put/MultiPut различия
+        TBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters& params)
+        TBlobStorageGroupPutRequest(TBlobStorageGroupPutParameters& params)
+        
+        короче, следующий шаг - это триггер в Register(actor),
+        надо держать в голове, что на руках 2 возможных актора
+        */
         const TActorId actorId = Register(actor);
         if (deadline != TInstant::Max()) {
             ActiveRequests.try_emplace(actorId, DeadlineMap.emplace(deadline, actorId));
@@ -26,7 +45,7 @@ namespace NKikimr {
         DeadlineMap.erase(DeadlineMap.begin(), it);
         TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(EvCheckDeadlines, 0, SelfId(), {}, nullptr, 0));
     }
-
+ 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvGet::TPtr &ev) {
         if (IsLimitedKeyless && !ev->Get()->PhantomCheck) {
             ErrorDescription = "Created as LIMITED without keys. It happens when tenant keys are missing on the node.";
@@ -143,6 +162,8 @@ namespace NKikimr {
         }
     }
 
+    //  [WDS:1]  вот этот хендл и будет писать
+    //      большая часть кода - это просто валидации перед самой записью
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvPut::TPtr &ev) {
         if (IsLimitedKeyless) {
             ErrorDescription = "Created as LIMITED without keys. It happens when tenant keys are missing on the node.";
@@ -200,6 +221,7 @@ namespace NKikimr {
 
         TInstant now = TActivationContext::Now();
 
+        //  тут надо быть винмательнее, т.к. кучу мелких записей аггрегируют и потом разом пишут
         if (Controls.EnablePutBatching.Update(now) && partSize < MinHugeBlobInBytes &&
                 partSize <= MaxBatchedPutSize) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
@@ -216,9 +238,12 @@ namespace NKikimr {
                 PutBatchedBucketQueue.emplace_back(handleClass, tactic);
             }
 
+            
             if (batchedPuts.Queue.size() == MaxBatchedPutRequests || batchedPuts.Bytes + partSize > MaxBatchedPutSize) {
                 *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
                 ++*Mon->PutBatchesSent;
+                //  А вот и триггер записи с батчингом
+                //  [WDS:2B]
                 ProcessBatchedPutRequests(batchedPuts, handleClass, tactic);
             }
 
@@ -230,6 +255,8 @@ namespace NKikimr {
             TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
             bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
             // TODO(alexvru): MinLatency support
+            // интересное TODO, но вот тут тоже триггер записи
+            // [WDS:2A]
             PushRequest(CreateBlobStorageGroupPutRequest(
                 TBlobStorageGroupPutParameters{
                     .Common = {
@@ -552,6 +579,9 @@ namespace NKikimr {
                 // TODO(alexvru): MinLatency support
                 if (batchedPuts.Queue.size() == 1) {
                     auto& ev = batchedPuts.Queue.front();
+                    //  [WDS:2B:1] очередь разгружается так же, 
+                    //  как и единственная запись в пути [WDS:2A]
+                    //  из-за условия размера очереди в 1 запись
                     PushRequest(CreateBlobStorageGroupPutRequest(
                         TBlobStorageGroupPutParameters{
                             .Common = {
@@ -578,6 +608,9 @@ namespace NKikimr {
                         ev->Get()->Deadline
                     );
                 } else {
+                    //  А вот тут уже параметры для MultiPut
+                    //  отличия уже внутри PusgRequest можно глянуть
+                    //  тут важно увидеть, что в этом месте очередь передана как параметр
                     PushRequest(CreateBlobStorageGroupPutRequest(
                         TBlobStorageGroupMultiPutParameters{
                             .Common = {

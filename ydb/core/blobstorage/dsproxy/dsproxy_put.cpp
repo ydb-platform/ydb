@@ -108,6 +108,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         SanityCheck(); // May Die
     }
 
+    //  [WDS:9] тут и правда уже идут запросы к VDisk-вм
+    //      но вот только нет тут чексумм, я мог проглядеть какой-то
+    //      этап подготовки запросов, поэтому посмотрим, как происходит
+    //      запись на стороне дисков, вохможно per-part чексумма существует
+    //      и VDisk сверяется перед записью
     bool Action(bool accelerate = false) {
         UpdateExpiredVDiskSet();
 
@@ -118,9 +123,13 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         // Generate new VPut/VMultiPut events to disks.
+        // Превращаем результат стратегии в конкретные сообщения записи на VDisk. Каждый элемент 'events' --
+        // это либо TEvVPut с одной частью блоба, либо TEvVMultiPut с несколькими частями для одного VDisk.
         auto events = PutImpl.GeneratePutRequests();
 
         // Count them properly.
+        // С этого момента мы ждем ответ от каждого VDisk, в который отправили сообщение.
+        // Счетчики здесь по VDisk-сообщениям, а не по частям блоба: TEvVMultiPut тоже дает один ответ.
         UpdatePengingVDiskResponseCount(events);
         for (const auto& ev : events) {
             CountPut(std::visit([](const auto& item) { return item->GetBufferBytes(); }, ev));
@@ -138,8 +147,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         // Send to VDisks.
+        // Отправляем конкретные сообщения записи на VDisk. Variant скрывает, что внутри: одиночный VPut
+        // или батчевый VMultiPut; оба идут через один и тот же путь queue/backpressure.
         for (auto& ev : events) {
             if (LWPROBE_ENABLED(DSProxyVPutSent) || Orbit.HasShuttles()) {
+                // Достаем общие поля для трассировки из TEvVPut или TEvVMultiPut.
                 auto vDiskId = std::visit([](const auto& item) { return VDiskIDFromVDiskID(item->Record.GetVDiskID()); }, ev);
                 auto itemsCount = std::visit(overloaded{
                     [](const std::unique_ptr<TEvBlobStorage::TEvVPut>&) { return 1; },
@@ -155,12 +167,15 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                     accelerate
                 );
             }
+            // Здесь DSProxy реально передает запись в per-VDisk queue actor; queue доставит
+            // TEvVPut/TEvVMultiPut в VDisk skeleton, когда позволит backpressure.
             std::visit([&](auto& ev) { SendToQueue(std::move(ev), 0, TimeStatsEnabled); }, ev);
             ++RequestsSent;
             if (AccelerateRequestsSent == 0) {
                 RequestsPendingBeforeAcceleration++;
             }
         }
+        // Запросы отправлены; переводим записи истории из pending в состояние ожидания ответа.
         PutImpl.History.AddAllWaiting();
 
         return false;
@@ -258,6 +273,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         Action();
     }
 
+    //  [WDS:AFTERMATH A] Handle для результатов Put
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev) {
         DSP_LOG_LOG_S(ev->Get()->Record.GetStatus() == NKikimrProto::OK ? NLog::PRI_DEBUG : NLog::PRI_INFO,
             "BPP01", "received " << ev->Get()->ToString() << " from# " << VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID()));
@@ -324,6 +340,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
     }
 
+    //  [WDS:Aftermath B] Handle для результато MultiPut
     void Handle(TEvBlobStorage::TEvVMultiPutResult::TPtr &ev) {
         ProcessReplyFromQueue(ev->Get());
         ResponsesReceived++;
@@ -573,6 +590,7 @@ public:
         return ERequestType::Put;
     }
 
+    //  [WDS:4A] этот конструктор для одного Put
     TBlobStorageGroupPutRequest(TBlobStorageGroupPutParameters& params)
         : TBlobStorageGroupRequestActor(params)
         , PutImpl(Info, GroupQueues, params.Common.Event, Mon,
@@ -600,6 +618,7 @@ public:
         MaxSaneRequests = Info->Type.TotalPartCount() * (1ull + Info->Type.Handoff()) * 2;
     }
 
+    //  [WDS:4B] Этот конструктор для MultiPut
     TBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters& params)
         : TBlobStorageGroupRequestActor(params)
         , PutImpl(Info, GroupQueues, params.Events, Mon, params.HandleClass, params.Tactic,
@@ -640,6 +659,10 @@ public:
         ReportedBytes += bytes;
     }
 
+    //  [WDS:5] а вот это за счет наследдования вызывается уже в пуле экзекьюшена,
+    //      можно сказать, что это и есть логика экзекьюшена записи
+    //      тут идет подготовка, которую я не совсем понимаю
+    //      к чеу бы автор не готовился, он готов
     void Bootstrap() override {
         DSP_LOG_INFO_S("BPP13", "bootstrap"
             << " ActorId# " << SelfId()
@@ -651,6 +674,33 @@ public:
             << " RestartCounter# " << RestartCounter);
 
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
+            /*
+                вот тут было сложно разобраться с разверткой 
+                всех подлежащих макросов, но... (А что оно вообще делает? оставлю это на потом):
+                do {
+                    if ((NLWTrace_BLOBSTORAGE_PROVIDER::lwtrace_DSProxyPutBootstrapStart).Probe.GetExecutorsCount() > 0) {
+                        ::NLWTrace::TScopedThreadCpuTracker _cpuTracker(
+                            NLWTrace_BLOBSTORAGE_PROVIDER::lwtrace_DSProxyPutBootstrapStart
+                        );
+                        TReadSpinLockGuard g(
+                            (NLWTrace_BLOBSTORAGE_PROVIDER::lwtrace_DSProxyPutBootstrapStart).Probe.Lock
+                        );
+                        if ((NLWTrace_BLOBSTORAGE_PROVIDER::lwtrace_DSProxyPutBootstrapStart).Probe.GetExecutorsCount() > 0) {
+                            (NLWTrace_BLOBSTORAGE_PROVIDER::lwtrace_DSProxyPutBootstrapStart).Run(
+                                PutImpl.Blobs[blobIdx].Orbit
+                            );
+                        }
+                    } else {
+                        auto& _orbit = (PutImpl.Blobs[blobIdx].Orbit);
+                        if (HasShuttles(_orbit)) {
+                            ::NLWTrace::TScopedThreadCpuTracker _cpuTracker(
+                                NLWTrace_BLOBSTORAGE_PROVIDER::lwtrace_DSProxyPutBootstrapStart
+                            );
+                            (NLWTrace_BLOBSTORAGE_PROVIDER::lwtrace_DSProxyPutBootstrapStart).RunShuttles(_orbit);
+                        }
+                    }
+                } while (false);
+            */
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }
 
@@ -671,6 +721,16 @@ public:
             getTotalSize()
         );
 
+        //  [WDS:?] Интересно, что там внутри, но с этим не получилось быстро разобраться
+        /*
+
+        template <typename T, typename... TArgs>
+        void Become(T stateFunc, TArgs&&... args) {
+            // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
+            this->IActorCallback::Become(stateFunc, std::forward<TArgs>(args)...);
+        }
+
+        */
         Become(&TBlobStorageGroupPutRequest::StateWait, TDuration::MilliSeconds(DsPutWakeupMs), new TKikimrEvents::TEvWakeup);
 
         PartSets.resize(PutImpl.Blobs.size());
@@ -680,6 +740,7 @@ public:
         if (Info->GetEncryptionMode() == TBlobStorageGroupInfo::EEM_NONE) {
             BlobsEncrypted = PartSets.size();
         }
+        //  тоже не до конца понимаю этот вызов, но гдавное, что он вызывает EncodeQuantum
         ResumeBootstrap();
         CheckRequests(TEvents::TSystem::Bootstrap);
     }
@@ -694,6 +755,7 @@ public:
             }
             firstIteration = false;
 
+            //  вот тут мы шифруем те блобы, которые не были зашифрованы
             if (BlobsEncrypted <= BlobsSplit) { // first we encrypt the blob (if encryption is enabled)
                 auto& blob = PutImpl.Blobs[BlobsEncrypted];
                 const ui32 size = Min<ui32>(blob.Buffer.size() - CurrentEncryptionOffset, MaxBytesToEncryptAtOnce);
@@ -703,6 +765,7 @@ public:
                     ++BlobsEncrypted;
                     CurrentEncryptionOffset = 0;
                 }
+            //  а вот тут блобы бьются на парты
             } else { // BlobsSplit < BlobsEncrypted -- then we split it
                 auto& blob = PutImpl.Blobs[BlobsSplit];
                 const auto crcMode = static_cast<TErasureType::ECrcMode>(blob.BlobId.CrcMode());
@@ -751,7 +814,10 @@ public:
 
     void ResumeBootstrap() {
         if (EncodeQuantum()) {
+            //  Ну и тут уже подбираемся к триггерам записи на VDisk. После этой строки
+            //      запрос на запись будет готов
             PutImpl.GenerateInitialRequests(LogCtx, PartSets);
+            //  А вот тут мы уже и записывать бы должны начать
             Action();
             BootstrapInProgress = false;
         } else {
@@ -806,8 +872,8 @@ public:
         const ui32 type = ev->GetTypeRewrite();
         switch (type) {
             hFunc(TEvBlobStorage::TEvVStatusResult, Handle);
-            hFunc(TEvBlobStorage::TEvVPutResult, Handle);
-            hFunc(TEvBlobStorage::TEvVMultiPutResult, Handle);
+            hFunc(TEvBlobStorage::TEvVPutResult, Handle);       //  вызов для Put
+            hFunc(TEvBlobStorage::TEvVMultiPutResult, Handle);  //  вызов для MultiЗut
             hFunc(TEvAccelerate, Handle);
             cFunc(TEvBlobStorage::EvResume, ResumeBootstrap);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);

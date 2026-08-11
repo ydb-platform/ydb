@@ -38,6 +38,7 @@ namespace NKikimr {
 
     void TEvBlobStorage::TEvVPut::StorePayload(TRope&& buffer, bool checksumming) {
         if (checksumming) {
+            //  [WDS:IMPORTANT] ччексумма для записи одного парта кладется нормально
             Record.SetChecksum(CalculateXxh3Hash(buffer.Begin(), buffer.GetSize()).second);
             Record.SetChecksumType(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
         }
@@ -48,6 +49,7 @@ namespace NKikimr {
             bool checksumming) {
         TRope rope(buffer);
         if (checksumming) {
+            //  [WDS:IMPORTANT] ччексумма для записи одного парта в MultiPut тоже кладется нормально
             item->SetChecksum(CalculateXxh3Hash(rope.Begin(), rope.GetSize()).second);
             item->SetChecksumType(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
         }

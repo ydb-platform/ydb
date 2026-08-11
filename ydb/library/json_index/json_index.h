@@ -92,10 +92,17 @@ public:
     // Sets the tokens mode
     void SetTokensMode(ETokensMode mode);
 
+    // Returns true if the collected tokens exactly represent the predicate (no false positives)
+    bool IsCovered() const;
+
+    // Marks the result as not fully covered (tokens may produce false positives)
+    void SetNotCovered();
+
 private:
     std::variant<TTokens, TError> Result;
     ETokensMode TokensMode = ETokensMode::NotSet;
     bool Stopped = false;
+    bool Covered = true;
 };
 
 // Type of the callable function that is used for the JSON index collection

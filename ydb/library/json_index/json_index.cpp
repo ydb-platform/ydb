@@ -196,9 +196,16 @@ TCollectResult MergeBooleanOperands(
         }
     }
 
+    if (!right.IsCovered()) {
+        left.SetNotCovered();
+    }
+
     leftTokens.insert(rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
         auto finalMode = hasMix ? TCollectResult::ETokensMode::Or : combinedMode;
+        if (hasMix) {
+            left.SetNotCovered();
+        }
         left.SetTokensMode(finalMode);
         PruneRedundantTokens(leftTokens, finalMode);
     }
@@ -223,10 +230,15 @@ TCollectResult MergeComparisonPathResults(TCollectResult left, TCollectResult ri
         }
     }
 
+    if (!right.IsCovered()) {
+        left.SetNotCovered();
+    }
+
     leftTokens.insert(rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
         left.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : TCollectResult::ETokensMode::And);
     }
+    left.SetNotCovered();
     left.StopCollecting();
     return left;
 }
@@ -420,18 +432,24 @@ TCollectResult TQueryCollector::MemberAccess(const TJsonPathItem& item, EMode mo
     auto node = tokens.extract(tokens.begin());
     AppendKey(node.value().PathToken, item.GetString());
     tokens.insert(std::move(node));
+    if (Reader.GetMode() == EJsonPathMode::Strict) {
+        result.SetNotCovered();
+    }
     return result;
 }
 
 TCollectResult TQueryCollector::WildcardMemberAccess(const TJsonPathItem& item, EMode mode) {
     auto result = Collect(Reader.ReadInput(item), mode);
+    result.SetNotCovered();
     result.StopCollecting();
     return result;
 }
 
 TCollectResult TQueryCollector::ArrayAccess(const TJsonPathItem& item, EMode mode) {
     if (IsLax()) {
-        return Collect(Reader.ReadInput(item), mode);
+        auto result = Collect(Reader.ReadInput(item), mode);
+        result.SetNotCovered();
+        return result;
     }
     auto result = Collect(Reader.ReadInput(item), mode);
     if (!result.CanCollect()) {
@@ -461,6 +479,7 @@ TCollectResult TQueryCollector::UnaryArithmeticOp(const TJsonPathItem& item, EMo
     }
 
     auto result = Collect(Reader.ReadInput(item), mode);
+    result.SetNotCovered();
     result.StopCollecting();
     return result;
 }
@@ -539,7 +558,11 @@ TCollectResult TQueryCollector::FilterObject(const TJsonPathItem& item, EMode mo
     if (FilterObjectPrefixes.empty()) {
         return TCollectResult(TIssue("'@' is only allowed inside filters"));
     }
-    return TCollectResult(TString(FilterObjectPrefixes.back()));
+    auto result = TCollectResult(TString(FilterObjectPrefixes.back()));
+    if (Reader.GetMode() == EJsonPathMode::Strict) {
+        result.SetNotCovered();
+    }
+    return result;
 }
 
 TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode mode) {
@@ -576,6 +599,9 @@ TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode
         auto current = Collect(*predicateItem, EMode::Filter);
         if (current.IsError()) {
             FilterObjectPrefixes.pop_back();
+            if (Reader.GetMode() == EJsonPathMode::Strict) {
+                current.SetNotCovered();
+            }
             return current;
         }
 
@@ -589,6 +615,9 @@ TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode
     FilterObjectPrefixes.pop_back();
 
     predicateResult->StopCollecting();
+    if (Reader.GetMode() == EJsonPathMode::Strict) {
+        predicateResult->SetNotCovered();
+    }
     return *predicateResult;
 }
 
@@ -596,11 +625,13 @@ TCollectResult TQueryCollector::Methods(const TJsonPathItem& item, EMode mode) {
     const auto& input = Reader.ReadInput(item);
     if (IsSuffixType(input.Type) || EvaluteNumericLiteral(input).has_value()) {
         TCollectResult result(TTokens{});
+        result.SetNotCovered();
         result.StopCollecting();
         return result;
     }
 
     auto result = Collect(input, mode);
+    result.SetNotCovered();
     result.StopCollecting();
     return result;
 }
@@ -611,6 +642,7 @@ TCollectResult TQueryCollector::Predicates(const TJsonPathItem& item, EMode mode
     }
 
     auto result = Collect(Reader.ReadInput(item), EMode::Predicate);
+    result.SetNotCovered();
     result.StopCollecting();
     return result;
 }
@@ -641,6 +673,13 @@ TCollectResult TQueryCollector::CollectEqualOperands(const TJsonPathItem& leftIt
         }
 
         pathTokens.insert(std::move(node));
+
+        if (Reader.GetMode() == EJsonPathMode::Strict) {
+            pathResult.SetNotCovered();
+        }
+    } else {
+        // Literal not appended (e.g. path not collectable or no literal resolved)
+        pathResult.SetNotCovered();
     }
 
     pathResult.StopCollecting();
@@ -798,7 +837,8 @@ void AppendJsonIndexLiteral(TString& out, NBinaryJson::EEntryType type, TStringB
 }
 
 TCollectResult::TCollectResult(TTokens&& tokens)
-    : Result(std::move(tokens)) {
+    : Result(std::move(tokens))
+    , Covered(tokens.size()) {
 }
 
 TCollectResult::TCollectResult(TString&& token) {
@@ -844,6 +884,14 @@ TCollectResult::ETokensMode TCollectResult::GetTokensMode() const {
 
 void TCollectResult::SetTokensMode(ETokensMode mode) {
     TokensMode = mode;
+}
+
+bool TCollectResult::IsCovered() const {
+    return Covered;
+}
+
+void TCollectResult::SetNotCovered() {
+    Covered = false;
 }
 
 TVector<TString> TokenizeBinaryJson(TStringBuf text) {

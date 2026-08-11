@@ -2390,6 +2390,19 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
         .Settings(expectedSettings->Settings.BuildNode(ctx, node.Pos()))
         .Done();
 
+    if (expectedSettings->Covered) {
+        auto maybeIf = flatMap.Lambda().Body().Maybe<TCoOptionalIf>();
+        if (maybeIf) {
+            return Build<TCoMap>(ctx, node.Pos())
+                .Input(newInput)
+                .Lambda<TCoLambda>()
+                    .Args(flatMap.Lambda().Args())
+                    .Body(maybeIf.Cast().Value())
+                    .Build()
+                .Done();
+        }
+    }
+
     return Build<TCoFlatMap>(ctx, node.Pos())
         .Input(newInput)
         .Lambda(flatMap.Lambda())
@@ -2450,6 +2463,19 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(
         .QueryColumns(searchColumns.Ptr())
         .Settings(jsonIndexSettings.Settings.BuildNode(ctx, node.Pos()))
         .Done();
+
+    if (expectedSettings->Covered) {
+        auto maybeIf = flatMap.Lambda().Body().Maybe<TCoOptionalIf>();
+        if (maybeIf) {
+            return Build<TCoMap>(ctx, node.Pos())
+                .Input(newInput)
+                .Lambda<TCoLambda>()
+                    .Args(flatMap.Lambda().Args())
+                    .Body(maybeIf.Cast().Value())
+                    .Build()
+                .Done();
+        }
+    }
 
     return Build<TCoFlatMap>(ctx, node.Pos())
         .Input(newInput)

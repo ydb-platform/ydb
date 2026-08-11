@@ -68,7 +68,8 @@ bool IsJsonValueReturningNonIndexable(std::optional<EDataSlot> slot) {
     }
 }
 
-TExprBase UnwrapPredicate(TExprBase node) {
+std::pair<TExprBase, bool> UnwrapPredicate(TExprBase node) {
+    bool covered = true;
     while (true) {
         if (const auto just = node.Maybe<TCoJust>()) {
             node = just.Cast().Input();
@@ -83,11 +84,12 @@ TExprBase UnwrapPredicate(TExprBase node) {
             node = castNode.Predicate();
         } else if (const auto optionalIf = node.Maybe<TCoOptionalIf>()) {
             node = optionalIf.Cast().Predicate();
+            covered = false;
         } else {
             break;
         }
     }
-    return node;
+    return std::make_pair(node, covered);
 }
 
 // Returns true if a cast/convert from `from` to `to` is allowed for JSON index predicate extraction
@@ -445,10 +447,12 @@ std::optional<TPredicateCollectResult> MergePredicateResults(std::optional<TPred
     // AND semantics: one of the operands must be valid
     if (mode == TCollectResult::ETokensMode::And) {
         if (leftValid) {
+            left->Collect.SetNotCovered();
             return left;
         }
 
         if (rightValid) {
+            right->Collect.SetNotCovered();
             return right;
         }
 
@@ -544,6 +548,12 @@ std::expected<std::optional<TExprBase>, TString> TryExtractComparisonValue(const
 
 std::optional<TPredicateCollectResult> VisitJsonBinaryOperator(
     const TExprBase& node, const TExprBase& left, TExprBase right, TExprContext& ctx, const THashSet<TString>& indexedColumns) {
+    // Never covered because:
+    // json_value {a:x} $.a = x
+    // json_value [{a:x}] $.a = x
+    // json_value [{a:x},{a:y}] $.a = null
+    // => we can't just search on token "a=x"
+
     auto jsonSide = UnwrapValue(left);
     auto otherSide = UnwrapValue(std::move(right));
 
@@ -592,13 +602,22 @@ std::optional<TPredicateCollectResult> VisitJsonBinaryOperator(
     auto leftResult = ParseAndCollectJson(*leftParams, ECallableType::JsonValue, comparisonValue, ctx, left.Pos());
     if (rightParams.has_value()) {
         auto rightResult = ParseAndCollectJson(*rightParams, ECallableType::JsonValue, std::nullopt, ctx, otherSide.Pos());
-        return MergePredicateResults(std::move(leftResult), std::move(rightResult), TCollectResult::ETokensMode::And, ctx, otherSide.Pos());
+        auto res = MergePredicateResults(std::move(leftResult), std::move(rightResult), TCollectResult::ETokensMode::And, ctx, otherSide.Pos());
+        res->Collect.SetNotCovered();
+        return res;
     }
 
+    leftResult.Collect.SetNotCovered();
     return leftResult;
 }
 
 std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExprContext& ctx, const THashSet<TString>& indexedColumns) {
+    // Never covered because:
+    // json_value {a:x} $.a = x
+    // json_value [{a:x}] $.a = x
+    // json_value [{a:x},{a:y}] $.a = null
+    // => we can't just search on token "a=x"
+
     auto lookup = UnwrapValue(node.Lookup());
     auto collection = UnwrapValue(node.Collection());
 
@@ -664,6 +683,7 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
             baseResult.Collect.SetTokensMode(TCollectResult::ETokensMode::Or);
         }
 
+        baseResult.Collect.SetNotCovered();
         return baseResult;
     }
 
@@ -717,6 +737,9 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
         }
     }
 
+    if (acc.has_value()) {
+        acc->Collect.SetNotCovered();
+    }
     return acc;
 }
 
@@ -762,7 +785,9 @@ std::optional<TPredicateCollectResult> VisitJsonValue(const TExprBase& node, TEx
 
 std::optional<TPredicateCollectResult> VisitJsonPredicate(
     const TExprBase& predicate, TExprContext& ctx, const THashSet<TString>& indexedColumns) {
-    auto node = UnwrapPredicate(predicate);
+    auto nodeCovered = UnwrapPredicate(predicate);
+    auto node = nodeCovered.first;
+    auto covered = nodeCovered.second;
 
     if (const auto maybeAnd = node.Maybe<TCoAnd>()) {
         auto andNode = maybeAnd.Cast();
@@ -775,6 +800,9 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(
             auto nextNode = andNode.Arg(i);
             auto nextResult = VisitJsonPredicate(nextNode, ctx, indexedColumns);
             result = MergePredicateResults(std::move(result), std::move(nextResult), TCollectResult::ETokensMode::And, ctx, nextNode.Pos());
+        }
+        if (!covered && result.has_value()) {
+            result->Collect.SetNotCovered();
         }
 
         return result;
@@ -792,15 +820,24 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(
             auto nextResult = VisitJsonPredicate(nextNode, ctx, indexedColumns);
             result = MergePredicateResults(std::move(result), std::move(nextResult), TCollectResult::ETokensMode::Or, ctx, nextNode.Pos());
         }
+        if (!covered && result.has_value()) {
+            result->Collect.SetNotCovered();
+        }
 
         return result;
     }
 
     if (auto jsonExists = VisitJsonExists(node, ctx, indexedColumns)) {
+        if (!covered) {
+            jsonExists->Collect.SetNotCovered();
+        }
         return jsonExists;
     }
 
     if (auto jsonValue = VisitJsonValue(node, ctx, indexedColumns)) {
+        if (!covered) {
+            jsonValue->Collect.SetNotCovered();
+        }
         return jsonValue;
     }
 
@@ -910,6 +947,7 @@ std::expected<TJsonIndexSettings, TIssue> CollectJsonIndexPredicate(
     return TJsonIndexSettings{
         .ColumnName = std::move(result->ColumnName),
         .Settings = std::move(settings),
+        .Covered = collectResult.IsCovered(),
     };
 }
 

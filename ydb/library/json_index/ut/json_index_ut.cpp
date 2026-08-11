@@ -3345,4 +3345,172 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
     }
 }
 
+Y_UNIT_TEST_SUITE(Covered) {
+    // Helper: parse, collect, and return IsCovered()
+    bool CheckCovered(const TString& jsonPath, ECallableType callableType,
+        const TVarMap& variables = {}, const TVarMap& paramVariables = {})
+    {
+        NYql::TIssues issues;
+        const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
+        UNIT_ASSERT_C(issues.Empty(), "Parse errors for path: " + jsonPath + ": " + issues.ToOneLineString());
+
+        auto result = CollectJsonPath(path, callableType, variables, paramVariables);
+        UNIT_ASSERT_C(!result.IsError(), "Collect errors for path: " + jsonPath + ": " + result.GetError().GetMessage());
+
+        return result.IsCovered();
+    }
+
+    // --- Covered = true ---
+
+    Y_UNIT_TEST(JsonExistsSimpleKey) {
+        // $.key for JSON_EXISTS -> token \4key = exact existence check
+        UNIT_ASSERT(CheckCovered("$.key", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(JsonExistsNestedKey) {
+        UNIT_ASSERT(CheckCovered("$.a.b.c", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(EqualStringLiteral) {
+        // $.key == "val" -> path + literal suffix = exact value match
+        UNIT_ASSERT(CheckCovered(R"($ ? (@.key == "val"))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(EqualNumberLiteral) {
+        UNIT_ASSERT(CheckCovered(R"($ ? (@.key == 42))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(EqualBoolLiteral) {
+        UNIT_ASSERT(CheckCovered(R"($ ? (@.key == true))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(EqualNullLiteral) {
+        UNIT_ASSERT(CheckCovered(R"($ ? (@.key == null))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(EqualVariable) {
+        // $.key == $param -> path + param = exact value match at runtime
+        UNIT_ASSERT(CheckCovered(R"($ ? (@.key == $var))", ECallableType::JsonExists,
+            {{"var", strSuffix("hello")}}, {}));
+    }
+
+    Y_UNIT_TEST(EqualParamVariable) {
+        UNIT_ASSERT(CheckCovered(R"($ ? (@.key == $p))", ECallableType::JsonExists,
+            {}, {{"p", "$p"}}));
+    }
+
+    Y_UNIT_TEST(AndOfCoveredPredicates) {
+        UNIT_ASSERT(CheckCovered(R"($ ? (@.a == "x" && @.b == "y"))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(OrOfCoveredPredicates) {
+        UNIT_ASSERT(CheckCovered(R"($ ? (@.a == "x" || @.b == "y"))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(JsonValueEqualLiteral) {
+        UNIT_ASSERT(CheckCovered(R"($.key == "val")", ECallableType::JsonValue));
+    }
+
+    // --- Covered = false ---
+
+    Y_UNIT_TEST(WildcardMember) {
+        // $.* -> prefix token = matches all members
+        UNIT_ASSERT(!CheckCovered("$.*", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(ArrayAccess) {
+        // $.key[0] -> array subscript not in token
+        UNIT_ASSERT(!CheckCovered("$.key[0]", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(WildcardArrayAccess) {
+        UNIT_ASSERT(!CheckCovered("$.key[*]", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(MethodSize) {
+        // $.key.size() -> method result not in token
+        UNIT_ASSERT(!CheckCovered(R"($ ? (@.key.size() == 1))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(LessThan) {
+        // $.key < 5 -> range not encodable
+        UNIT_ASSERT(!CheckCovered(R"($ ? (@.key < 5))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(GreaterThan) {
+        UNIT_ASSERT(!CheckCovered(R"($ ? (@.key > 5))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(LessEqual) {
+        UNIT_ASSERT(!CheckCovered(R"($ ? (@.key <= 5))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(GreaterEqual) {
+        UNIT_ASSERT(!CheckCovered(R"($ ? (@.key >= 5))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(NotEqual) {
+        // $.key != "x" -> negation not encodable
+        UNIT_ASSERT(!CheckCovered(R"($ ? (@.key != "x"))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(ExistsPredicate) {
+        // exists($.key) is a predicate wrapping, not a simple path
+        UNIT_ASSERT(!CheckCovered(R"($ ? (exists(@.key)))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(StartsWithPredicate) {
+        // startsWith is a predicate that loses precision
+        UNIT_ASSERT(!CheckCovered(R"($ ? (@.key starts with "val"))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(PathEqualPath) {
+        // $.a == $.b -> path==path, no literal
+        UNIT_ASSERT(!CheckCovered(R"($ ? (@.a == @.b))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(AndWithNotCovered) {
+        // AND where one operand is not covered
+        UNIT_ASSERT(!CheckCovered(R"($ ? (@.a == "x" && @.b > 5))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(OrWithNotCovered) {
+        // OR where one operand is not covered
+        UNIT_ASSERT(!CheckCovered(R"($ ? (@.a == "x" || @.b > 5))", ECallableType::JsonExists));
+    }
+
+    Y_UNIT_TEST(MergeAndCoverage) {
+        // MergeAnd of two covered results should be covered
+        auto left = MakeTokens({"a"});
+        auto right = MakeTokens({"b"});
+        auto result = MergeAnd(std::move(left), std::move(right));
+        UNIT_ASSERT(result.IsCovered());
+    }
+
+    Y_UNIT_TEST(MergeAndNotCoveredPropagates) {
+        // MergeAnd where right is not covered
+        auto left = MakeTokens({"a"});
+        auto right = MakeTokens({"b"});
+        right.SetNotCovered();
+        auto result = MergeAnd(std::move(left), std::move(right));
+        UNIT_ASSERT(!result.IsCovered());
+    }
+
+    Y_UNIT_TEST(MergeOrCoverage) {
+        // MergeOr of two covered results should be covered
+        auto left = MakeTokens({"a"});
+        auto right = MakeTokens({"b"});
+        auto result = MergeOr(std::move(left), std::move(right));
+        UNIT_ASSERT(result.IsCovered());
+    }
+
+    Y_UNIT_TEST(MergeOrNotCoveredPropagates) {
+        auto left = MakeTokens({"a"});
+        auto right = MakeTokens({"b"});
+        right.SetNotCovered();
+        auto result = MergeOr(std::move(left), std::move(right));
+        UNIT_ASSERT(!result.IsCovered());
+    }
+}
+
 }  // namespace NKikimr::NJsonIndex

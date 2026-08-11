@@ -13,6 +13,7 @@ namespace NKikimr::NKqp::NOpt {
 struct TJsonIndexSettings {
     TString ColumnName;
     NYql::TKqpReadTableFullTextIndexSettings Settings;
+    bool Covered = false;
 };
 
 enum class EJsonIndexSelectionMode {

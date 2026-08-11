@@ -235,7 +235,7 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
         .Output(dqUnion.Output())
         .Done();
 
-    const bool enableCsWriteAffinity = kqpCtx.Config->EnableCsWriteAffinity.Get().GetOrElse(false);
+    const bool enableCsWriteAffinity = kqpCtx.Config->EnableCsWriteAffinity.Get().GetOrElse(true);
 
     if (enableCsWriteAffinity) {
         // Per-node write affinity: WriteActor (sink) is extracted into a separate

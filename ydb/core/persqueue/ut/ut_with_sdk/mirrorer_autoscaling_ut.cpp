@@ -388,8 +388,6 @@ namespace NKikimr::NPersQueueTests {
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
             mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
-            mirrorFrom.SetSyncWriteTime(true);
-
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
                 partitionsCount,
@@ -506,8 +504,6 @@ namespace NKikimr::NPersQueueTests {
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
             mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
-            mirrorFrom.SetSyncWriteTime(true);
-
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
                 partitionsCount,
@@ -653,8 +649,6 @@ namespace NKikimr::NPersQueueTests {
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
             mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
-            mirrorFrom.SetSyncWriteTime(true);
-
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
                 partitionsCount,
@@ -786,8 +780,6 @@ namespace NKikimr::NPersQueueTests {
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
             mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
-            mirrorFrom.SetSyncWriteTime(true);
-
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
                 partitionsCount + 1,
@@ -911,8 +903,6 @@ namespace NKikimr::NPersQueueTests {
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
             mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
-            mirrorFrom.SetSyncWriteTime(true);
-
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
                 partitionsCount,
@@ -1061,8 +1051,6 @@ namespace NKikimr::NPersQueueTests {
             mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
             mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
             mirrorFrom.SetConsumer("some_user");
-            mirrorFrom.SetSyncWriteTime(true);
-
             ctx.AnnoyingClient()->CreateTopic(
                 dstTopicFullName,
                 1,

@@ -11,6 +11,7 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -980,12 +981,92 @@ public:
         } while (true);
     }
 
+    TString ResolveTopicSdkPath(const TString& name) const {
+        if (UseConfigTables && !name.StartsWith("/Root")) {
+            return TopicPrefix + name;
+        }
+        return name;
+    }
+
+    static NYdb::NTopic::EAutoPartitioningStrategy ConvertPartitionStrategyType(
+        NKikimrPQ::TPQTabletConfig::TPartitionStrategyType type)
+    {
+        using NKikimrPQ::TPQTabletConfig;
+        switch (type) {
+            case TPQTabletConfig::CAN_SPLIT:
+                return NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp;
+            case TPQTabletConfig::CAN_SPLIT_AND_MERGE:
+                return NYdb::NTopic::EAutoPartitioningStrategy::ScaleUpAndDown;
+            case TPQTabletConfig::PAUSED:
+                return NYdb::NTopic::EAutoPartitioningStrategy::Paused;
+            default:
+                return NYdb::NTopic::EAutoPartitioningStrategy::Disabled;
+        }
+    }
+
+    void CreateTopicViaTopicSdk(const TRequestCreatePQ& createRequest) {
+        const TString path = ResolveTopicSdkPath(createRequest.Topic);
+        auto topicClient = NYdb::NTopic::TTopicClient(*Driver);
+
+        NYdb::NTopic::TCreateTopicSettings settings;
+        settings.PartitioningSettings(createRequest.NumParts, createRequest.NumParts);
+        settings.RetentionPeriod(TDuration::Seconds(createRequest.LifetimeS));
+        settings.PartitionWriteSpeedBytesPerSecond(createRequest.WriteSpeed);
+        settings.PartitionWriteBurstBytes(createRequest.WriteSpeed);
+        settings.SetSupportedCodecs({
+            NYdb::NTopic::ECodec::RAW,
+            NYdb::NTopic::ECodec::GZIP,
+            NYdb::NTopic::ECodec::LZOP,
+        });
+        settings.AddAttribute("_allow_unauthenticated_read", "true");
+        settings.AddAttribute("_allow_unauthenticated_write", "true");
+        if (createRequest.SourceIdMaxCount != 6000000) {
+            settings.AddAttribute("_max_partition_message_groups_seqno_stored", ToString(createRequest.SourceIdMaxCount));
+        }
+        if (createRequest.SourceIdLifetime != 86400) {
+            settings.AddAttribute(
+                "_message_group_seqno_retention_period_ms",
+                ToString(createRequest.SourceIdLifetime * 1000));
+        }
+
+        if (createRequest.PartitionStrategy) {
+            const auto& ps = *createRequest.PartitionStrategy;
+            const auto strategy = ConvertPartitionStrategyType(ps.GetPartitionStrategyType());
+            settings.PartitioningSettings(
+                ps.GetMinPartitionCount() ? ps.GetMinPartitionCount() : createRequest.NumParts,
+                ps.GetMaxPartitionCount() ? ps.GetMaxPartitionCount() : createRequest.NumParts,
+                NYdb::NTopic::TAutoPartitioningSettings(
+                    strategy,
+                    TDuration::Seconds(ps.GetScaleThresholdSeconds()),
+                    ps.GetScaleDownPartitionWriteSpeedThresholdPercent(),
+                    ps.GetScaleUpPartitionWriteSpeedThresholdPercent()));
+        }
+
+        THashSet<TString> important(createRequest.Important.begin(), createRequest.Important.end());
+        for (const auto& user : createRequest.ReadRules) {
+            settings.BeginAddConsumer(user)
+                .Important(important.contains(user))
+                .EndAddConsumer();
+        }
+
+        Cerr << "PQ Client: create topic via Topic SDK: " << path << Endl;
+        auto res = topicClient.CreateTopic(path, settings).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
     void CreateTopic(const TRequestCreatePQ& createRequest, bool doWait = true) {
         const TInstant start = TInstant::Now();
 
         ui32 prevVersion = GetTopicVersionFromMetadata(createRequest.Topic);
 
-        CallPersQueueGRPC(createRequest.GetRequest()->Record);
+        // Topic API has no mirror rule. PersQueue SDK maps ClientWriteDisabled→non-local,
+        // which fails federation validation for rt3.* topics. Keep msgbus only for mirror
+        // creates/alters.
+        if (createRequest.MirrorFrom) {
+            CallPersQueueGRPC(createRequest.GetRequest()->Record);
+        } else {
+            CreateTopicViaTopicSdk(createRequest);
+        }
 
         AddTopic(createRequest.Topic);
         while (doWait && GetTopicVersionFromPath(createRequest.Topic) < prevVersion + 1) {
@@ -1050,16 +1131,30 @@ public:
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {}
     ) {
         Y_ABORT_UNLESS(name.StartsWith("rt3."));
-        TRequestAlterPQ requestDescr(name, nParts, cacheSize, lifetimeS, fillPartitionConfig, mirrorFrom);
-        THolder<NMsgBusProxy::TBusPersQueue> alterRequest = requestDescr.GetRequest();
 
         ui32 prevVersion = GetTopicVersionFromMetadata(name);
         while (prevVersion == 0) {
             Sleep(TDuration::MilliSeconds(500));
-
             prevVersion = GetTopicVersionFromMetadata(name);
         }
-        CallPersQueueGRPC(alterRequest->Record);
+
+        const TString path = ResolveTopicSdkPath(name);
+        if (mirrorFrom) {
+            // Mirror alter is not representable in Topic API; keep msgbus for this case.
+            TRequestAlterPQ requestDescr(name, nParts, cacheSize, lifetimeS, fillPartitionConfig, mirrorFrom);
+            CallPersQueueGRPC(requestDescr.GetRequest()->Record);
+        } else {
+            auto topicClient = NYdb::NTopic::TTopicClient(*Driver);
+            NYdb::NTopic::TAlterTopicSettings settings;
+            settings.AlterPartitioningSettings(nParts, nParts);
+            if (fillPartitionConfig) {
+                settings.SetRetentionPeriod(TDuration::Seconds(lifetimeS));
+            }
+
+            Cerr << "PQ Client: alter topic via Topic SDK: " << path << Endl;
+            auto res = topicClient.AlterTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
         Cerr << "Alter got " << prevVersion << "\n";
 
         const TInstant start = TInstant::Now();
@@ -1085,9 +1180,9 @@ public:
     }
 
     NYdb::TStatus DropTopic(const TString& path) {
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+        auto topicClient = NYdb::NTopic::TTopicClient(*Driver);
         Cerr << "Drop topic: " << path << Endl;
-        auto res = pqClient.DropTopic(path).GetValueSync();
+        auto res = topicClient.DropTopic(path).GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
         return res;
     }
@@ -1098,12 +1193,13 @@ public:
     ) {
 
         Y_ABORT_UNLESS(name.StartsWith("rt3."));
-        THolder<NMsgBusProxy::TBusPersQueue> deleteRequest = TRequestDeletePQ{name}.GetRequest();
+        const TString path = ResolveTopicSdkPath(name);
+        auto topicClient = NYdb::NTopic::TTopicClient(*Driver);
+        Cerr << "PQ Client: drop topic via Topic SDK: " << path << Endl;
+        auto res = topicClient.DropTopic(path).GetValueSync();
 
-        CallPersQueueGRPC(deleteRequest->Record);
-
-        // wait for drop completion
         if (expectedStatus == NPersQueue::NErrorCode::OK) {
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             ui32 i = 0;
             for (; i < 500; ++i) {
                 TAutoPtr<NMsgBusProxy::TBusResponse> r = TryDropPersQueueGroup("/Root/PQ", name);
@@ -1114,6 +1210,12 @@ public:
                 Sleep(TDuration::MilliSeconds(50));
             }
             UNIT_ASSERT_C(i < 500, "Drop is taking too long"); //25 seconds
+        } else {
+            UNIT_ASSERT_C(!res.IsSuccess(), "expected drop failure");
+            UNIT_ASSERT_C(
+                expectedStatus == NPersQueue::NErrorCode::UNKNOWN_TOPIC,
+                TStringBuilder() << "DeleteTopic2 via Topic SDK currently maps only UNKNOWN_TOPIC failures, got "
+                                 << (ui32)expectedStatus);
         }
         RemoveTopic(name);
         const TInstant start = TInstant::Now();

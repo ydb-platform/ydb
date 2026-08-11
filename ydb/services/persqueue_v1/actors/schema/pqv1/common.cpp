@@ -446,9 +446,7 @@ TResult ApplyChangesInt( // create and alter
 
     if (settings.has_remote_mirror_rule()) {
         auto mirrorFrom = partConfig->MutableMirrorFrom();
-        if (!local) {
-            mirrorFrom->SetSyncWriteTime(true);
-        }
+        // SyncWriteTime removed; runtime always syncs write time when mirroring.
         {
             TString endpoint = settings.remote_mirror_rule().endpoint();
             if (endpoint.StartsWith(GRPCS_ENDPOINT_PREFIX)) {

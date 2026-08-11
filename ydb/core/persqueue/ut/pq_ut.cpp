@@ -428,7 +428,8 @@ Y_UNIT_TEST(TestCompaction) {
 
 // Regression for https://github.com/ydb-platform/ydb/issues/49436:
 // failed KV/cache read for compaction (cookie=ReadBlobsForCompaction) must not
-// unpack empty blobs in CompactRequestedBlob/GetBatches.
+// unpack empty blobs in CompactRequestedBlob/GetBatches. After the failure goes
+// away, a later compaction must keep the same messages (no loss / no duplicates).
 Y_UNIT_TEST(CompactionSurvivesFailedBlobRead) {
     TTestContext tc;
     TFinalizer finalizer(tc);
@@ -443,10 +444,16 @@ Y_UNIT_TEST(CompactionSurvivesFailedBlobRead) {
     PQTabletPrepare({.partitions = 1, .lowWatermark = 10_MB, .writeSpeed = 50_MB},
                     {{"user1", true}}, tc);
 
-    for (ui64 i = 0; i < 8; ++i) {
+    const TString sourceId = "sourceid_compaction_fail_read";
+    constexpr ui64 initialMessages = 8;
+    constexpr ui64 totalMessages = 9;
+    TVector<TString> payloads;
+    payloads.reserve(totalMessages);
+    for (ui64 i = 0; i < initialMessages; ++i) {
+        payloads.emplace_back(TString(200_KB, static_cast<char>('a' + i)));
         TVector<std::pair<ui64, TString>> data;
-        data.emplace_back(i + 1, TString(200_KB, 'x'));
-        CmdWrite(0, "sourceid_compaction_fail_read", data, tc, false, {}, i == 0, "", -1, static_cast<i64>(i));
+        data.emplace_back(i + 1, payloads.back());
+        CmdWrite(0, sourceId, data, tc, false, {}, i == 0, "", -1, static_cast<i64>(i));
     }
 
     bool injected = false;
@@ -485,10 +492,41 @@ Y_UNIT_TEST(CompactionSurvivesFailedBlobRead) {
 
     // After the fix: tablet stays alive and accepts further writes.
     // Before the fix: AFL_ENSURE(Data != End) aborts while handling the poisoned response.
+    payloads.emplace_back(TString(1_KB, 'y'));
     TVector<std::pair<ui64, TString>> more;
-    more.emplace_back(9, TString(1_KB, 'y'));
-    CmdWrite(0, "sourceid_compaction_fail_read", more, tc, false, {}, false, "", -1, 8);
-    PQGetPartInfo(0, 9, tc);
+    more.emplace_back(totalMessages, payloads.back());
+    CmdWrite(0, sourceId, more, tc, false, {}, false, "", -1, static_cast<i64>(initialMessages));
+    PQGetPartInfo(0, totalMessages, tc);
+
+    // Error is gone: next forced compaction must succeed and preserve the log.
+    tc.Runtime->SetObserverFunc([](TAutoPtr<IEventHandle>&) {
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+    CmdRunCompaction(0, tc);
+
+    auto assertExactLog = [&](const char* stage) {
+        PQGetPartInfo(0, totalMessages, tc);
+
+        TPQCmdReadSettings readSettings{
+            "", 0, 0, static_cast<ui32>(totalMessages + 1), 64_MB,
+            static_cast<ui32>(totalMessages), false,
+            {0, 1, 2, 3, 4, 5, 6, 7, 8}, 0, 0, "user1"};
+        const auto readResult = CmdReadAndGetResult(readSettings, tc);
+        UNIT_ASSERT_VALUES_EQUAL_C(readResult.ResultSize(), totalMessages, stage);
+        for (ui64 i = 0; i < totalMessages; ++i) {
+            const auto& msg = readResult.GetResult(i);
+            UNIT_ASSERT_VALUES_EQUAL_C(msg.GetOffset(), i, stage);
+            UNIT_ASSERT_VALUES_EQUAL_C(msg.GetSeqNo(), i + 1, stage);
+            UNIT_ASSERT_VALUES_EQUAL_C(msg.GetSourceId(), sourceId, stage);
+            UNIT_ASSERT_VALUES_EQUAL_C(msg.GetData(), payloads[i], stage);
+        }
+    };
+
+    assertExactLog("after successful compaction");
+
+    // Restart forces a fresh load from KV (compaction zone), not in-memory FastWrite state.
+    PQTabletRestart(tc);
+    assertExactLog("after restart");
 }
 
 Y_UNIT_TEST(BatchedMessagesWriteWithoutFeatureFlagFails) {

@@ -510,7 +510,8 @@ void TPartition::AbortBlobsCompaction(const TString& reason)
     CompactionInProgress = false;
     KeysForCompaction.clear();
     CompactionBlobsCount = 0;
-    FirstCompactionPart = Nothing();
+    // Keep FirstCompactionPart: on the read-failure path it still holds the
+    // init/restart skip marker and must not be cleared.
     CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
 
     // Do not retry immediately: a persistent KV/BS failure would loop.

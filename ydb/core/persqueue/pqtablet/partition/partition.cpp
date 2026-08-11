@@ -2135,7 +2135,21 @@ void TPartition::OnReadComplete(TReadInfo& info,
 void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx) {
     const ui64 cookie = ev->Get()->GetCookie();
     if (cookie == ERequestCookie::ReadBlobsForCompaction) {
-        BlobsForCompactionWereRead(ev->Get()->GetBlobs());
+        const auto* response = ev->Get();
+        if (HasError(*response)) {
+            AbortBlobsCompaction(TStringBuilder()
+                << "blob read failed: " << response->Error.ErrorStr, ctx);
+            return;
+        }
+        for (const auto& blob : response->GetBlobs()) {
+            if (blob.Empty()) {
+                AbortBlobsCompaction(TStringBuilder()
+                    << "empty blob in compaction read response"
+                    << " key=" << blob.Key.ToString(), ctx);
+                return;
+            }
+        }
+        BlobsForCompactionWereRead(response->GetBlobs());
         return;
     }
     auto it = ReadInfo.find(cookie);

@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 
+#include <algorithm>
 #include <optional>
 #include <utility>
 
@@ -39,19 +40,24 @@ struct TSubplanEntry {
 class TSubplans {
 public:
     void Add(const TInfoUnit& binding, TIntrusivePtr<ISimpleOperator> plan, ESubplanType type, TVector<TInfoUnit> tuple = {}) {
+        Y_ENSURE(plan, "Cannot register a null subplan for " << binding.GetFullName());
+        const bool inserted = Entries.emplace(
+            binding,
+            TSubplanEntry(std::move(plan), type, std::move(tuple), binding)).second;
+        Y_ENSURE(inserted, "Duplicate subplan binding " << binding.GetFullName());
         OrderedList.push_back(binding);
-        Entries.insert({binding, TSubplanEntry(std::move(plan), type, std::move(tuple), binding)});
     }
 
     void ReplacePlan(const TInfoUnit& binding, TIntrusivePtr<ISimpleOperator> plan) {
-        auto entry = Entries.at(binding);
-        entry.Plan = std::move(plan);
-        Entries.erase(binding);
-        Entries.insert({binding, std::move(entry)});
+        Y_ENSURE(plan, "Cannot replace " << binding.GetFullName() << " with a null subplan");
+        Entries.at(binding).Plan = std::move(plan);
     }
 
     void AddDependentIU(const TInfoUnit& binding, const TInfoUnit& iu) {
-        Entries.at(binding).DependentIUs.push_back(iu);
+        auto& dependentIUs = Entries.at(binding).DependentIUs;
+        if (std::find(dependentIUs.begin(), dependentIUs.end(), iu) == dependentIUs.end()) {
+            dependentIUs.push_back(iu);
+        }
     }
 
     TVector<TSubplanEntry> Get() {
@@ -63,8 +69,10 @@ public:
     }
 
     void Remove(const TInfoUnit& binding) {
+        const auto entryIt = Entries.find(binding);
+        Y_ENSURE(entryIt != Entries.end(), "Unknown subplan binding " << binding.GetFullName());
         std::erase(OrderedList, binding);
-        Entries.erase(binding);
+        Entries.erase(entryIt);
     }
 
     const TSubplanEntry* Find(const TInfoUnit& binding) const {

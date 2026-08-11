@@ -652,6 +652,45 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
     return EventsQueue->WaitEvent();
 }
 
+NThreading::TFuture<bool> TWriteSessionImpl::Flush() {
+    auto promise = NThreading::NewPromise<bool>();
+    auto future = promise.GetFuture();
+    auto complete = [connections = Connections, promise](bool value) mutable {
+        try {
+            connections->PostToResponseQueue([promise, value]() mutable {
+                promise.TrySetValue(value);
+            });
+        } catch (...) {
+        }
+    };
+    std::optional<bool> immediateResult;
+
+    {
+        std::lock_guard guard(Lock);
+        if (Aborting.load()) {
+            immediateResult = false;
+        } else {
+            if (!CurrentBatch.Empty()) {
+                WriteBatchImpl();
+            }
+
+            if (!OriginalMessagesToSend.empty()) {
+                OriginalMessagesToSend.back().FlushCallbacks.push_back(std::move(complete));
+            } else if (!SentOriginalMessages.empty()) {
+                SentOriginalMessages.back().FlushCallbacks.push_back(std::move(complete));
+            } else {
+                immediateResult = true;
+            }
+        }
+    }
+
+    if (immediateResult) {
+        complete(*immediateResult);
+    }
+
+    return future;
+}
+
 void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransactionBase* tx)
 {
     if (!tx) {
@@ -1444,6 +1483,27 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
     return result;
 }
 
+void TWriteSessionImpl::AbortFlushPromisesImpl() {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    auto abort = [](TOriginalMessage& message) {
+        message.CompleteFlushes(false);
+    };
+
+    for (auto& message : OriginalMessagesToSend) {
+        abort(message);
+    }
+
+    std::queue<TOriginalMessage> sentMessages;
+    SentOriginalMessages.swap(sentMessages);
+    while (!sentMessages.empty()) {
+        auto message = std::move(sentMessages.front());
+        sentMessages.pop();
+        abort(message);
+        SentOriginalMessages.push(std::move(message));
+    }
+}
+
 TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -2122,6 +2182,7 @@ void TWriteSessionImpl::AbortImpl() {
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
 
         CancelPendingWriteAcks();
+        AbortFlushPromisesImpl();
     }
 }
 

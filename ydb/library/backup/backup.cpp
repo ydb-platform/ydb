@@ -432,7 +432,7 @@ TString BuildQuotedPkList(const NTable::TTableDescription& desc) {
 }
 
 std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescription& desc,
-        const TString& fullTablePath, TMaybe<TValue> lastWrittenPK, bool ordered)
+        const TString& fullTablePath, TMaybe<TValue> lastWrittenPK)
 {
     TParamsBuilder paramsBuilder;
     TStringStream query;
@@ -447,7 +447,9 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
     if (lastWrittenPK) {
         query << " WHERE (" << BuildQuotedPkList(desc) << ") > $pk";
     }
-    if (ordered || lastWrittenPK) {
+    // lastWrittenPK is only a valid resume point if every attempt, including the first,
+    // returns rows in PK order - otherwise a retry can both skip and duplicate rows.
+    if (!desc.GetPrimaryKeyColumns().empty()) {
         query << " ORDER BY " << BuildQuotedPkList(desc);
     }
     query << ';';
@@ -455,9 +457,9 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
 }
 
 TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::TTableDescription& desc,
-        const TString& fullTablePath, const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32* fileCounter, bool ordered)
+        const TString& fullTablePath, const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32* fileCounter)
 {
-    const auto [query, params] = BuildSelectQueryAndParams(desc, fullTablePath, lastWrittenPK, ordered);
+    const auto [query, params] = BuildSelectQueryAndParams(desc, fullTablePath, lastWrittenPK);
     LOG_D("Execute query for column table " << fullTablePath.Quote() << ": " << query.Quote());
 
     const auto tx = NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SerializableRW()).CommitTx();
@@ -533,7 +535,7 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
 } // anonymous namespace
 
 void ReadColumnTable(TDriver driver, const NTable::TTableDescription& desc, const TString& fullTablePath,
-        const TFsPath& folderPath, bool ordered) {
+        const TFsPath& folderPath) {
     LOG_D("Read column table via ExecuteQuery " << fullTablePath.Quote());
 
     NQuery::TQueryClient client(driver);
@@ -542,7 +544,7 @@ void ReadColumnTable(TDriver driver, const NTable::TTableDescription& desc, cons
     i64 retries = READ_TABLE_RETRIES;
     ui32 fileCounter = 0;
     do {
-        lastWrittenPK = TryExecuteQueryRead(client, desc, fullTablePath, folderPath, lastWrittenPK, &fileCounter, ordered);
+        lastWrittenPK = TryExecuteQueryRead(client, desc, fullTablePath, folderPath, lastWrittenPK, &fileCounter);
         if (lastWrittenPK && retries) {
             LOG_D("Retry ExecuteQuery read from key: " << TString{FormatValueYson(*lastWrittenPK)}.Quote());
         }
@@ -775,7 +777,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
 
     if (!schemaOnly) {
         if (isColumnTable) {
-            ReadColumnTable(driver, desc, fullPath, folderPath, ordered);
+            ReadColumnTable(driver, desc, fullPath, folderPath);
         } else {
             ReadTable(driver, desc, fullPath, folderPath, ordered);
         }

@@ -36,10 +36,17 @@ class TEventHolder {
     TActorId Sender;
     ui64 Cookie;
     ui32 InterconnectChannel;
+    bool Local;
     mutable NLWTrace::TOrbit Orbit;
+
+    // exactly one of the two is set: either we keep the original event object
+    // and serialize it (if needed at all)
+    // when it is actually sent, or the event has arrived already serialized
+    // and we just keep the buffer
+    std::unique_ptr<IEventBase> Event;
     TIntrusivePtr<TEventSerializedData> Buffer;
+
     TBSProxyContextPtr BSProxyCtx;
-    std::unique_ptr<IEventBase> LocalEvent;
     std::optional<TMessageRelevance> Tracker;
 
 public:
@@ -48,16 +55,16 @@ public:
         , ByteSize(0)
         , Cookie(0)
         , InterconnectChannel(0)
+        , Local(false)
     {}
 
     template<typename TPtr>
-    TEventHolder(TPtr& ev, const ::NMonitoring::TDynamicCounters::TCounterPtr& serItems,
-            const ::NMonitoring::TDynamicCounters::TCounterPtr& serBytes, const TBSProxyContextPtr& bspctx,
-            ui32 interconnectChannel, bool local)
+    TEventHolder(TPtr& ev, const TBSProxyContextPtr& bspctx, ui32 interconnectChannel, bool local)
         : Type(ev->GetTypeRewrite())
         , Sender(ev->Sender)
         , Cookie(ev->Cookie)
         , InterconnectChannel(interconnectChannel)
+        , Local(local)
         , Orbit(MoveOrbit(ev))
         , BSProxyCtx(bspctx)
         , Tracker(std::move(ev->Get()->MessageRelevanceTracker))
@@ -71,17 +78,15 @@ public:
                     blob.BlobSize());
         }
 
-        if (local && ev->HasEvent()) {
+        if (ev->HasEvent()) {
+            // keep the event object itself; it is serialized in SendToVDisk,
+            // when the MsgQoS fields are known and the item is known to be actually going out --
+            // items that expire in the queue or get pruned while waiting never pay for serialization at all
             ByteSize = ev->Get()->GetCachedByteSize();
-            LocalEvent.reset(ev->ReleaseBase().Release());
+            Event.reset(ev->ReleaseBase().Release());
         } else {
-            const bool hasEvent = ev->HasEvent();
             Buffer = ev->ReleaseChainBuffer();
             ByteSize = Buffer->GetSize();
-            if (hasEvent) {
-                ++*serItems;
-                *serBytes += ByteSize;
-            }
         }
 
         BSProxyCtx->Queue.Add(ByteSize);
@@ -106,7 +111,7 @@ public:
     template<typename TCallable>
     auto Apply(TCallable&& callable) {
         switch (Type) {
-#define CASE(T) case TEvBlobStorage::T::EventType: return callable(static_cast<TEvBlobStorage::T*>(LocalEvent.get()))
+#define CASE(T) case TEvBlobStorage::T::EventType: return callable(static_cast<TEvBlobStorage::T*>(Event.get()))
             CASE(TEvVMovedPatch);
             CASE(TEvVPatchStart);
             CASE(TEvVPatchDiff);
@@ -145,7 +150,8 @@ public:
 
     void SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, ui64 queueCookie, ui64 msgId, ui64 sequenceId,
             bool sendMeCostSettings, NWilson::TTraceId traceId, const NBackpressure::TQueueClientId& clientId,
-            const TBSQueueTimer& processingTimer);
+            const TBSQueueTimer& processingTimer, const ::NMonitoring::TDynamicCounters::TCounterPtr& serItems,
+            const ::NMonitoring::TDynamicCounters::TCounterPtr& serBytes);
 
     void Discard();
 };

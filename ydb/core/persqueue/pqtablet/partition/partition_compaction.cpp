@@ -506,6 +506,8 @@ void TPartition::CancelBlobsCompaction()
     CompactionInProgress = false;
     KeysForCompaction.clear();
     CompactionBlobsCount = 0;
+
+    TryProcessGetWriteInfoRequest(ActorContext());
 }
 
 void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs)

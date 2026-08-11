@@ -121,6 +121,70 @@ public:
         return partition.KeysForCompaction.size();
     }
 
+    static bool StopCompaction(const TPartition& partition) {
+        return partition.StopCompaction;
+    }
+
+    static bool HasPendingGetWriteInfo(const TPartition& partition) {
+        return partition.PendingGetWriteInfoRequest != nullptr;
+    }
+
+    static void SetWasTheLastBlobBig(TPartition& partition, bool value) {
+        partition.WasTheLastBlobBig = value;
+    }
+
+    static bool WasTheLastBlobBig(const TPartition& partition) {
+        return partition.WasTheLastBlobBig;
+    }
+
+    static void SetFirstCompactionPart(TPartition& partition, TMaybe<std::pair<ui64, ui16>> value) {
+        partition.FirstCompactionPart = value;
+    }
+
+    static TMaybe<std::pair<ui64, ui16>> FirstCompactionPart(const TPartition& partition) {
+        return partition.FirstCompactionPart;
+    }
+
+    static void TryRunCompaction(TPartition& partition, bool force) {
+        partition.TryRunCompaction(force);
+    }
+
+    static size_t GetBodyKeysCountLimit(const TPartition& partition) {
+        return partition.GetBodyKeysCountLimit();
+    }
+
+    static ui64 GetCumulativeSizeLimit(const TPartition& partition) {
+        return partition.GetCumulativeSizeLimit();
+    }
+
+    static ui64 GetCompactedBlobSizeLowerBound(const TPartition& partition) {
+        return partition.GetCompactedBlobSizeLowerBound();
+    }
+
+    static bool InitDone(const TPartition& partition) {
+        return partition.InitDone;
+    }
+
+    static ui32 MaxBlobSize(const TPartition& partition) {
+        return partition.MaxBlobSize;
+    }
+
+    static bool ThereIsUncompactedData(const TPartition& partition) {
+        return partition.ThereIsUncompactedData();
+    }
+
+    static void InitFirstCompactionPart(TPartition& partition) {
+        partition.InitFirstCompactionPart();
+    }
+
+    static void CheckTimestampsOrderInZones(const TPartition& partition, TStringBuf reason) {
+        partition.CheckTimestampsOrderInZones(reason);
+    }
+
+    static void SetLowWatermark(TPartition& partition, ui32 lowWatermark) {
+        partition.Config.MutablePartitionConfig()->SetLowWatermark(lowWatermark);
+    }
+
 private:
     TInitMetaStep* MetaStep;
 };
@@ -369,6 +433,13 @@ protected:
     void SendEvent(IEventBase* event);
     void SendEvent(IEventBase* event, const TActorId& from, const TActorId& to);
 
+    void SendCompactionBlobResponse(TVector<TRequestedBlob> blobs);
+    void SendCompactionBlobErrorResponse(TString error);
+    THolder<TEvKeyValue::TEvRequest> GrabCompactionKvRequest();
+    void CompleteCompactionKvWrite(const TEvKeyValue::TEvRequest& request);
+    void WaitCompactionIdle(TPartition* partition);
+    void WaitPartitionInit(TPartition* partition);
+
     THolder<TEvPQ::TEvApproveWriteQuota> WaitForRequestQuotaAndHoldApproveWriteQuota();
     void SendDeletePartition();
     void WaitForDeletePartitionDoneTimeout();
@@ -509,6 +580,7 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
 
         WaitConfigRequest();
         SendConfigResponse(params.Config);
+        WaitPartitionInit(ret);
     } else {
         ret = CreatePartitionActor(params.Partition, config, false);
 
@@ -571,6 +643,62 @@ void TPartitionFixture::SendEvent(IEventBase* event) {
 
 void TPartitionFixture::SendEvent(IEventBase* event, const TActorId& from, const TActorId& to) {
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(to, from, event));
+}
+
+void TPartitionFixture::SendCompactionBlobResponse(TVector<TRequestedBlob> blobs) {
+    SendEvent(new TEvPQ::TEvBlobResponse(
+        TPartition::ERequestCookie::ReadBlobsForCompaction,
+        std::move(blobs)));
+}
+
+void TPartitionFixture::SendCompactionBlobErrorResponse(TString error) {
+    SendEvent(new TEvPQ::TEvBlobResponse(
+        TPartition::ERequestCookie::ReadBlobsForCompaction,
+        TVector<TRequestedBlob>{},
+        NPQ::TErrorInfo(NPersQueue::NErrorCode::ERROR, std::move(error))));
+}
+
+THolder<TEvKeyValue::TEvRequest> TPartitionFixture::GrabCompactionKvRequest() {
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT_C(event, "expected compaction KV request on Edge/BlobCache");
+    UNIT_ASSERT(event->Record.HasCookie());
+    UNIT_ASSERT_VALUES_EQUAL(
+        event->Record.GetCookie(),
+        static_cast<ui64>(TPartition::ERequestCookie::WriteBlobsForCompaction));
+    return event;
+}
+
+void TPartitionFixture::CompleteCompactionKvWrite(const TEvKeyValue::TEvRequest& request) {
+    auto response = MakeHolder<TEvKeyValue::TEvResponse>();
+    response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    response->Record.SetCookie(request.Record.GetCookie());
+    for (ui32 i = 0; i < request.Record.CmdWriteSize(); ++i) {
+        auto* wr = response->Record.AddWriteResult();
+        wr->SetStatus(NKikimrProto::OK);
+        wr->SetStatusFlags(NKikimrBlobStorage::StatusIsValid);
+    }
+    SendEvent(response.Release());
+}
+
+void TPartitionFixture::WaitCompactionIdle(TPartition* partition) {
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return !TPartitionTestWrapper::CompactionInProgress(*partition);
+    };
+    Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5));
+    UNIT_ASSERT(!TPartitionTestWrapper::CompactionInProgress(*partition));
+}
+
+void TPartitionFixture::WaitPartitionInit(TPartition* partition) {
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return TPartitionTestWrapper::InitDone(*partition)
+            && TPartitionTestWrapper::MaxBlobSize(*partition) > 0;
+    };
+    Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5));
+    UNIT_ASSERT(TPartitionTestWrapper::InitDone(*partition));
+    UNIT_ASSERT_C(TPartitionTestWrapper::MaxBlobSize(*partition) > 0,
+                  TPartitionTestWrapper::MaxBlobSize(*partition));
 }
 
 void TPartitionFixture::SendCreateSession(ui64 cookie,
@@ -4376,7 +4504,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoWithoutSrcIdInfo, TPartitionFixture) {
 
 namespace {
 
-TClientBlob MakeSinglePartBodyReadBlob(ui64 seqNo, char fill) {
+TClientBlob MakeSinglePartBodyReadBlob(ui64 seqNo, char fill, TInstant timestamp = TInstant::MilliSeconds(1)) {
     TString data(24, fill);
     const ui32 sz = data.size();
     return {
@@ -4384,15 +4512,16 @@ TClientBlob MakeSinglePartBodyReadBlob(ui64 seqNo, char fill) {
         seqNo,
         std::move(data),
         TMaybe<TPartData>(),
-        TInstant::MilliSeconds(1),
-        TInstant::MilliSeconds(1),
+        timestamp,
+        timestamp,
         sz,
         TString(),
         TString()
     };
 }
 
-TClientBlob MakeSinglePartBodyReadBlobWithLmc(ui64 seqNo, char fill, ui32 logicalMessageCount) {
+TClientBlob MakeSinglePartBodyReadBlobWithLmc(ui64 seqNo, char fill, ui32 logicalMessageCount,
+                                              TInstant timestamp = TInstant::MilliSeconds(1)) {
     TString data(24, fill);
     const ui32 sz = data.size();
     return {
@@ -4400,8 +4529,8 @@ TClientBlob MakeSinglePartBodyReadBlobWithLmc(ui64 seqNo, char fill, ui32 logica
         seqNo,
         std::move(data),
         TMaybe<TPartData>(),
-        TInstant::MilliSeconds(1),
-        TInstant::MilliSeconds(1),
+        timestamp,
+        timestamp,
         sz,
         TString(),
         TString(),
@@ -7006,6 +7135,829 @@ Y_UNIT_TEST_F(BlobsForCompactionWereReadStopsOnEmptyBlob, TPartitionFixture) {
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::KeysForCompactionSize(*partition), 0u);
 }
 
+namespace {
+
+struct TFwPackedBlob {
+    TKey Key;
+    TString Raw;
+    TDataKey DataKey;
+};
+
+TFwPackedBlob MakeFwPackedBlob(
+    const TPartitionId& partitionId,
+    ui64 offset,
+    ui64 seqNo,
+    char fill,
+    ui32 logicalMessageCount = 1,
+    bool isBatch = false,
+    TInstant timestamp = TInstant::MilliSeconds(1))
+{
+    std::deque<TClientBlob> dq;
+    if (isBatch) {
+        dq.push_back(MakeSinglePartBodyReadBlobWithLmc(seqNo, fill, logicalMessageCount, timestamp));
+    } else {
+        dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill, timestamp));
+    }
+    TBatch batch = TBatch::FromBlobs(offset, std::move(dq));
+    batch.Pack();
+    TString raw;
+    batch.SerializeTo(raw);
+
+    TMaybe<ui32> offsetDelta;
+    if (batch.HasOffsetDelta()) {
+        offsetDelta = batch.GetOffsetDelta();
+    }
+    const TKey key = TKey::ForFastWrite(
+        TKeyPrefix::TypeData, partitionId, offset, 0,
+        batch.GetCount(), batch.GetInternalPartsCount(),
+        offsetDelta);
+    TDataKey dataKey{key, static_cast<ui32>(raw.size()), timestamp, 0, MakeTestBlobKeyToken()};
+    return {key, std::move(raw), std::move(dataKey)};
+}
+
+// Several single-part messages packed into one FastWrite blob (contiguous offsets).
+TFwPackedBlob MakeFwPackedContiguousMessages(
+    const TPartitionId& partitionId,
+    ui64 startOffset,
+    ui32 messageCount,
+    ui64 firstSeqNo,
+    char fill,
+    TInstant timestamp = TInstant::MilliSeconds(1))
+{
+    std::deque<TClientBlob> dq;
+    for (ui32 i = 0; i < messageCount; ++i) {
+        dq.push_back(MakeSinglePartBodyReadBlob(firstSeqNo + i, fill, timestamp));
+    }
+    TBatch batch = TBatch::FromBlobs(startOffset, std::move(dq));
+    batch.Pack();
+    TString raw;
+    batch.SerializeTo(raw);
+
+    TMaybe<ui32> offsetDelta;
+    if (batch.HasOffsetDelta()) {
+        offsetDelta = batch.GetOffsetDelta();
+    }
+    const TKey key = TKey::ForFastWrite(
+        TKeyPrefix::TypeData, partitionId, startOffset, 0,
+        batch.GetCount(), batch.GetInternalPartsCount(),
+        offsetDelta);
+    TDataKey dataKey{key, static_cast<ui32>(raw.size()), timestamp, 0, MakeTestBlobKeyToken()};
+    return {key, std::move(raw), std::move(dataKey)};
+}
+
+TFwPackedBlob MakeFwPackedMultipartBlob(
+    const TPartitionId& partitionId,
+    ui64 offset,
+    ui64 seqNo,
+    ui16 partNo,
+    ui16 totalParts,
+    ui32 bytesPerPart,
+    char fill,
+    TInstant timestamp = TInstant::MilliSeconds(1))
+{
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeMultipartBodyReadBlob(seqNo, partNo, totalParts, bytesPerPart, fill));
+    TBatch batch = TBatch::FromBlobs(offset, std::move(dq));
+    batch.Pack();
+    TString raw;
+    batch.SerializeTo(raw);
+
+    TMaybe<ui32> offsetDelta;
+    if (batch.HasOffsetDelta()) {
+        offsetDelta = batch.GetOffsetDelta();
+    }
+    const TKey key = TKey::ForFastWrite(
+        TKeyPrefix::TypeData, partitionId, offset, partNo,
+        batch.GetCount(), batch.GetInternalPartsCount(),
+        offsetDelta);
+    TDataKey dataKey{key, static_cast<ui32>(raw.size()), timestamp, 0, MakeTestBlobKeyToken()};
+    return {key, std::move(raw), std::move(dataKey)};
+}
+
+TRequestedBlob MakeRequestedFromFw(const TFwPackedBlob& blob) {
+    return {
+        blob.Key.GetOffset(),
+        blob.Key.GetPartNo(),
+        blob.Key.GetCount(),
+        blob.Key.GetInternalPartsCount(),
+        blob.DataKey.Size,
+        blob.Raw,
+        blob.Key,
+        blob.DataKey.Timestamp.Seconds()
+    };
+}
+
+TRequestedBlob MakeEmptyRequestedFromKey(const TDataKey& dataKey) {
+    return {
+        dataKey.Key.GetOffset(),
+        dataKey.Key.GetPartNo(),
+        dataKey.Key.GetCount(),
+        dataKey.Key.GetInternalPartsCount(),
+        dataKey.Size,
+        TString(),
+        dataKey.Key,
+        dataKey.Timestamp.Seconds()
+    };
+}
+
+void SeedFwzBody(TPartition& partition, std::initializer_list<TDataKey> keys) {
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(partition);
+    fwz.DataKeysBody.clear();
+    fwz.BodySize = 0;
+    for (const auto& k : keys) {
+        fwz.DataKeysBody.push_back(k);
+        fwz.BodySize += k.Size;
+    }
+    if (!fwz.DataKeysBody.empty()) {
+        fwz.StartOffset = fwz.DataKeysBody.front().Key.GetOffset();
+        const auto& back = fwz.DataKeysBody.back().Key;
+        fwz.EndOffset = back.GetOffset() + back.GetCount();
+    }
+}
+
+void SeedCompactionZoneOffsets(TPartition& partition, ui64 startOffset, ui64 endOffset) {
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(partition);
+    cz.StartOffset = startOffset;
+    cz.EndOffset = endOffset;
+    cz.Head.Clear();
+    cz.NewHead.Clear();
+    cz.Head.Offset = endOffset;
+    cz.Head.PartNo = 0;
+    cz.Head.PackedSize = 0;
+}
+
+} // namespace
+
+// --- P0: partial OVERRUN / HasError / rename-only ---
+
+Y_UNIT_TEST_F(BlobsForCompactionPartialOverrunCompactsPrefix, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    auto b0 = MakeFwPackedBlob(partitionId, /*offset=*/10, /*seqNo=*/1, 'a');
+    auto b1 = MakeFwPackedBlob(partitionId, /*offset=*/11, /*seqNo=*/2, 'b');
+    SeedFwzBody(*partition, {b0.DataKey, b1.DataKey});
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition,
+        {{b0.DataKey, 0}, {b1.DataKey, 1}},
+        /*compactionBlobsCount=*/2);
+
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(MakeRequestedFromFw(b0));
+    blobs.push_back(MakeEmptyRequestedFromKey(b1.DataKey));
+    SendCompactionBlobResponse(std::move(blobs));
+
+    auto kv = GrabCompactionKvRequest();
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::KeysForCompactionSize(*partition), 1u);
+
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.front().Key.GetOffset(), 11u);
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionPartialOverrunAfterRename, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    // Large blob for rename (size >= LowWatermark — force via Max pos, size field only for bookkeeping).
+    const TKey bigKey = TKey::ForFastWrite(TKeyPrefix::TypeData, partitionId, 20, 0, 1, 0);
+    TDataKey bigDataKey{bigKey, /*size=*/8_MB, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()};
+    auto small = MakeFwPackedBlob(partitionId, /*offset=*/21, /*seqNo=*/2, 's', 1, false, TInstant::MilliSeconds(2));
+    SeedFwzBody(*partition, {bigDataKey, small.DataKey});
+
+    TPartitionTestWrapper::SetWasTheLastBlobBig(*partition, true);
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition,
+        {{bigDataKey, Max<size_t>()}, {small.DataKey, 0}},
+        /*compactionBlobsCount=*/1);
+
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(MakeEmptyRequestedFromKey(small.DataKey));
+    SendCompactionBlobResponse(std::move(blobs));
+
+    auto kv = GrabCompactionKvRequest();
+    UNIT_ASSERT(kv->Record.CmdRenameSize() >= 1u || kv->Record.CmdWriteSize() >= 1u);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::KeysForCompactionSize(*partition), 1u);
+
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.front().Key.ToString(),
+        small.Key.ToString());
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionReadHasErrorCancels, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    auto b0 = MakeFwPackedBlob(partitionId, 30, 1, 'x');
+    SeedFwzBody(*partition, {b0.DataKey});
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{b0.DataKey, 0}}, /*compactionBlobsCount=*/1);
+    UNIT_ASSERT(TPartitionTestWrapper::CompactionInProgress(*partition));
+
+    SendCompactionBlobErrorResponse("kv overrun");
+    WaitCompactionIdle(partition);
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::KeysForCompactionSize(*partition), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.size(), 1u);
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionRenameOnlyBatch, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    const TKey bigKey = TKey::ForFastWrite(TKeyPrefix::TypeData, partitionId, 40, 0, 2, 0);
+    TDataKey bigDataKey{bigKey, /*size=*/8_MB, TInstant::MilliSeconds(5), 0, MakeTestBlobKeyToken()};
+    SeedFwzBody(*partition, {bigDataKey});
+
+    TPartitionTestWrapper::SetWasTheLastBlobBig(*partition, true);
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition,
+        {{bigDataKey, Max<size_t>()}},
+        /*compactionBlobsCount=*/0);
+
+    SendCompactionBlobResponse(/*blobs=*/{});
+    auto kv = GrabCompactionKvRequest();
+    UNIT_ASSERT(kv->Record.CmdRenameSize() >= 1u);
+
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.empty());
+}
+
+// --- P1: WasTheLastBlobBig / FirstCompactionPart / triggers / GetWriteInfo ---
+
+Y_UNIT_TEST_F(BlobsForCompactionSmallThenBigForcesHeadCompact, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    auto small = MakeFwPackedBlob(partitionId, 50, 1, 'a', 1, false, TInstant::MilliSeconds(1));
+    const TKey bigKey = TKey::ForFastWrite(TKeyPrefix::TypeData, partitionId, 51, 0, 1, 0);
+    TDataKey bigDataKey{bigKey, 8_MB, TInstant::MilliSeconds(2), 0, MakeTestBlobKeyToken()};
+    SeedFwzBody(*partition, {small.DataKey, bigDataKey});
+
+    // Previous blob was small → rename must compact head first.
+    TPartitionTestWrapper::SetWasTheLastBlobBig(*partition, false);
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition,
+        {{small.DataKey, 0}, {bigDataKey, Max<size_t>()}},
+        /*compactionBlobsCount=*/1);
+
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(MakeRequestedFromFw(small));
+    SendCompactionBlobResponse(std::move(blobs));
+
+    auto kv = GrabCompactionKvRequest();
+    UNIT_ASSERT_C(kv->Record.CmdWriteSize() >= 1u, "expected head flush write before rename");
+    UNIT_ASSERT_C(kv->Record.CmdRenameSize() >= 1u, "expected large blob rename");
+
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+    UNIT_ASSERT(TPartitionTestWrapper::WasTheLastBlobBig(*partition));
+    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.empty());
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionIncompleteMultipartKeepsLastKey, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    // First part of a 2-part message: compaction ends with PartitionedBlob client blobs pending.
+    auto part0 = MakeFwPackedMultipartBlob(partitionId, 60, /*seqNo=*/7, /*partNo=*/0, /*totalParts=*/2, 64, 'p');
+    SeedFwzBody(*partition, {part0.DataKey});
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{part0.DataKey, 0}}, /*compactionBlobsCount=*/1);
+
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(MakeRequestedFromFw(part0));
+    SendCompactionBlobResponse(std::move(blobs));
+
+    // Either KV write happens with pop_back keeping key, or FirstCompactionPart is set.
+    auto kv = GrabCompactionKvRequest();
+    const size_t keysBeforeWrite = TPartitionTestWrapper::KeysForCompactionSize(*partition);
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    // Last key kept for next iteration OR FirstCompactionPart records progress.
+    const bool keptInFwz = !TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.empty();
+    const bool hasResume = TPartitionTestWrapper::FirstCompactionPart(*partition).Defined();
+    UNIT_ASSERT_C(keptInFwz || hasResume || keysBeforeWrite == 0,
+        "expected resume state after incomplete multipart");
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionFirstCompactionPartSkipsAlreadyDone, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    auto blob = MakeFwPackedBlob(partitionId, 70, 1, 'z');
+    SeedFwzBody(*partition, {blob.DataKey});
+
+    // Mark the only part as already compacted.
+    TPartitionTestWrapper::SetFirstCompactionPart(*partition, std::make_pair(ui64{70}, ui16{0}));
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{blob.DataKey, 0}}, /*compactionBlobsCount=*/1);
+
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(MakeRequestedFromFw(blob));
+    SendCompactionBlobResponse(std::move(blobs));
+
+    // All parts skipped → NewHead empty → early EndProcessWrites still sends KV request
+    // (possibly empty of data writes). Must not crash.
+    auto kv = GrabCompactionKvRequest();
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+}
+
+Y_UNIT_TEST_F(TryRunCompactionRespectsThresholdsAndForce, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    Ctx->Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(100);
+    Ctx->Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(50_MB);
+
+    auto b0 = MakeFwPackedBlob(partitionId, 80, 1, 'a');
+    SeedFwzBody(*partition, {b0.DataKey});
+
+    // Below thresholds: non-force compaction must not start. Call TryRunCompaction via
+    // actor mailbox (needs AppData TLS); ForceCompaction is the public entry for force=true.
+    const auto& ccfg = Ctx->Runtime->GetAppData(0).PQConfig.GetCompactionConfig();
+    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.size() < ccfg.GetBlobsCount());
+    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).BodySize < ccfg.GetBlobsSize());
+    UNIT_ASSERT(!TPartitionTestWrapper::CompactionInProgress(*partition));
+
+    SendEvent(new TEvPQ::TEvForceCompaction(partitionId.InternalPartitionId));
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return TPartitionTestWrapper::CompactionInProgress(*partition);
+        };
+        Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5));
+    }
+    UNIT_ASSERT(TPartitionTestWrapper::CompactionInProgress(*partition));
+
+    // Drain TEvRunCompaction → TEvBlobRequest on Edge.
+    auto blobReq = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT(blobReq);
+    UNIT_ASSERT_VALUES_EQUAL(blobReq->Cookie, static_cast<ui64>(TPartition::ERequestCookie::ReadBlobsForCompaction));
+
+    // Cancel via empty response to not leave CompactionInProgress.
+    SendCompactionBlobResponse({MakeEmptyRequestedFromKey(b0.DataKey)});
+    WaitCompactionIdle(partition);
+}
+
+Y_UNIT_TEST_F(TryRunCompactionReadBudgetStopsAtTwoMaxBlobSize, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    const ui32 maxBlob = TPartitionTestWrapper::MaxBlobSize(*partition);
+    const ui32 piece = Max(1u, maxBlob / 2);
+
+    // Force LowWatermark high so all pieces are "small" (append).
+    TPartitionTestWrapper::SetLowWatermark(*partition, maxBlob);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    fwz.DataKeysBody.clear();
+    fwz.BodySize = 0;
+    for (ui32 i = 0; i < 10; ++i) {
+        const TKey key = TKey::ForFastWrite(TKeyPrefix::TypeData, partitionId, i, 0, 1, 0);
+        TDataKey dk{key, piece, TInstant::MilliSeconds(i + 1), 0, MakeTestBlobKeyToken()};
+        fwz.DataKeysBody.push_back(dk);
+        fwz.BodySize += piece;
+    }
+    fwz.StartOffset = 0;
+    fwz.EndOffset = 10;
+
+    SendEvent(new TEvPQ::TEvForceCompaction(partitionId.InternalPartitionId));
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return TPartitionTestWrapper::CompactionInProgress(*partition);
+        };
+        Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5));
+    }
+    UNIT_ASSERT(TPartitionTestWrapper::CompactionInProgress(*partition));
+
+    auto blobReq = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT(blobReq);
+    // Requested small blobs only; total size of requested Raw payloads planned ≤ 2*MaxBlobSize.
+    ui64 requestedSize = 0;
+    for (const auto& b : blobReq->Blobs) {
+        requestedSize += b.Size;
+    }
+    UNIT_ASSERT_C(requestedSize <= 2ull * maxBlob, requestedSize);
+
+    // Finish cleanly.
+    TVector<TRequestedBlob> emptyBlobs;
+    for (const auto& b : blobReq->Blobs) {
+        emptyBlobs.push_back(MakeEmptyRequestedFromKey(TDataKey{
+            b.Key, b.Size, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()}));
+    }
+    // KeysForCompaction already set by RunCompaction; just respond.
+    SendCompactionBlobResponse(std::move(emptyBlobs));
+    WaitCompactionIdle(partition);
+}
+
+Y_UNIT_TEST_F(TryRunCompactionIgnoredWhileInProgress, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    auto b0 = MakeFwPackedBlob(partitionId, 90, 1, 'a');
+    SeedFwzBody(*partition, {b0.DataKey});
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{b0.DataKey, 0}}, 1);
+
+    TPartitionTestWrapper::TryRunCompaction(*partition, /*force=*/true);
+    UNIT_ASSERT(TPartitionTestWrapper::CompactionInProgress(*partition));
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::KeysForCompactionSize(*partition), 1u);
+
+    SendCompactionBlobResponse({MakeEmptyRequestedFromKey(b0.DataKey)});
+    WaitCompactionIdle(partition);
+}
+
+Y_UNIT_TEST_F(GetWriteInfoDuringCompactionIsDeferred, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    auto b0 = MakeFwPackedBlob(partitionId, 100, 1, 'a');
+    SeedFwzBody(*partition, {b0.DataKey});
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{b0.DataKey, 0}}, 1);
+
+    SendEvent(new TEvPQ::TEvGetWriteInfoRequest(true));
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return TPartitionTestWrapper::HasPendingGetWriteInfo(*partition);
+        };
+        Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5));
+    }
+    UNIT_ASSERT(TPartitionTestWrapper::StopCompaction(*partition));
+    UNIT_ASSERT(TPartitionTestWrapper::HasPendingGetWriteInfo(*partition));
+
+    // Complete compaction → pending GetWriteInfo is processed (supportive closes).
+    SendCompactionBlobResponse({MakeEmptyRequestedFromKey(b0.DataKey)});
+    WaitCompactionIdle(partition);
+    UNIT_ASSERT(!TPartitionTestWrapper::HasPendingGetWriteInfo(*partition));
+
+    // StopCompaction remains → further compaction suppressed.
+    SeedFwzBody(*partition, {b0.DataKey});
+    TPartitionTestWrapper::TryRunCompaction(*partition, /*force=*/true);
+    UNIT_ASSERT(!TPartitionTestWrapper::CompactionInProgress(*partition));
+}
+
+// --- P2: write-side / keys / StartOffset / LMC / timestamps ---
+
+Y_UNIT_TEST_F(BlobsForCompactionRenameOnlyNewHeadEmptyEarlyReturn, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    const TKey bigKey = TKey::ForFastWrite(TKeyPrefix::TypeData, partitionId, 110, 0, 1, 0);
+    TDataKey bigDataKey{bigKey, 8_MB, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()};
+    SeedFwzBody(*partition, {bigDataKey});
+
+    TPartitionTestWrapper::SetWasTheLastBlobBig(*partition, true);
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{bigDataKey, Max<size_t>()}}, 0);
+
+    SendCompactionBlobResponse({});
+    auto kv = GrabCompactionKvRequest();
+    // Rename-only: no NewHead serialization required.
+    UNIT_ASSERT_VALUES_EQUAL(kv->Record.CmdWriteSize(), 0u);
+    UNIT_ASSERT(kv->Record.CmdRenameSize() >= 1u);
+
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionWereWriteUpdatesStartOffset, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    auto b0 = MakeFwPackedBlob(partitionId, 120, 1, 'a');
+    auto b1 = MakeFwPackedBlob(partitionId, 121, 2, 'b');
+    SeedFwzBody(*partition, {b0.DataKey, b1.DataKey});
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{b0.DataKey, 0}}, 1);
+    SendCompactionBlobResponse({MakeRequestedFromFw(b0)});
+    auto kv = GrabCompactionKvRequest();
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::BlobEncoder(*partition).StartOffset, 121u);
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionLogicalMessageCountAdvancesOffset, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    constexpr ui32 lmc = 5;
+    auto batchBlob = MakeFwPackedBlob(partitionId, 130, 1, 'm', lmc, /*isBatch=*/true);
+    UNIT_ASSERT_VALUES_EQUAL(batchBlob.Key.GetCount(), lmc);
+    SeedFwzBody(*partition, {batchBlob.DataKey});
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{batchBlob.DataKey, 0}}, 1);
+    SendCompactionBlobResponse({MakeRequestedFromFw(batchBlob)});
+    auto kv = GrabCompactionKvRequest();
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, 130u + lmc);
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionTwoKafkaBatches, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    constexpr ui32 lmc0 = 3;
+    constexpr ui32 lmc1 = 4;
+    auto batch0 = MakeFwPackedBlob(partitionId, 300, 1, 'k', lmc0, /*isBatch=*/true, TInstant::MilliSeconds(1));
+    auto batch1 = MakeFwPackedBlob(partitionId, 300 + lmc0, 2, 'K', lmc1, /*isBatch=*/true, TInstant::MilliSeconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(batch0.Key.GetCount(), lmc0);
+    UNIT_ASSERT_VALUES_EQUAL(batch1.Key.GetCount(), lmc1);
+    SeedFwzBody(*partition, {batch0.DataKey, batch1.DataKey});
+    SeedCompactionZoneOffsets(*partition, /*startOffset=*/0, /*endOffset=*/300);
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{batch0.DataKey, 0}, {batch1.DataKey, 1}}, 2);
+    SendCompactionBlobResponse({MakeRequestedFromFw(batch0), MakeRequestedFromFw(batch1)});
+    auto kv = GrabCompactionKvRequest();
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, 300u + lmc0 + lmc1);
+    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.empty());
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionKafkaBatchAfterOffsetGap, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    // Regular messages 40,41 then hole; kafka batch (IsBatch+LMC) starts at 45.
+    auto regular = MakeFwPackedContiguousMessages(partitionId, 40, 2, /*firstSeqNo=*/1, 'r',
+                                                  TInstant::MilliSeconds(1));
+    constexpr ui32 lmc = 3;
+    auto kafkaBatch = MakeFwPackedBlob(partitionId, 45, 2, 'b', lmc, /*isBatch=*/true, TInstant::MilliSeconds(2));
+    SeedFwzBody(*partition, {regular.DataKey, kafkaBatch.DataKey});
+    SeedCompactionZoneOffsets(*partition, /*startOffset=*/0, /*endOffset=*/40);
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{regular.DataKey, 0}, {kafkaBatch.DataKey, 1}}, 2);
+    SendCompactionBlobResponse({MakeRequestedFromFw(regular), MakeRequestedFromFw(kafkaBatch)});
+    auto kv = GrabCompactionKvRequest();
+    UNIT_ASSERT_C(kv->Record.CmdWriteSize() >= 1u, "gap before kafka batch must compact head");
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, 45u + lmc);
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionMixedRegularAndKafkaBatch, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    auto before = MakeFwPackedBlob(partitionId, 50, 1, 'a', 1, false, TInstant::MilliSeconds(1));
+    constexpr ui32 lmc = 5;
+    auto kafkaBatch = MakeFwPackedBlob(partitionId, 51, 2, 'm', lmc, /*isBatch=*/true, TInstant::MilliSeconds(2));
+    auto after = MakeFwPackedBlob(partitionId, 51 + lmc, 3, 'z', 1, false, TInstant::MilliSeconds(3));
+    SeedFwzBody(*partition, {before.DataKey, kafkaBatch.DataKey, after.DataKey});
+    SeedCompactionZoneOffsets(*partition, /*startOffset=*/0, /*endOffset=*/50);
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition,
+        {{before.DataKey, 0}, {kafkaBatch.DataKey, 1}, {after.DataKey, 2}},
+        3);
+    SendCompactionBlobResponse({
+        MakeRequestedFromFw(before),
+        MakeRequestedFromFw(kafkaBatch),
+        MakeRequestedFromFw(after),
+    });
+    auto kv = GrabCompactionKvRequest();
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, 51u + lmc + 1u);
+    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.empty());
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionHeadClearedAfterRename, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    auto small = MakeFwPackedBlob(partitionId, 140, 1, 'a');
+    const TKey bigKey = TKey::ForFastWrite(TKeyPrefix::TypeData, partitionId, 141, 0, 1, 0);
+    TDataKey bigDataKey{bigKey, 8_MB, TInstant::MilliSeconds(2), 0, MakeTestBlobKeyToken()};
+    SeedFwzBody(*partition, {small.DataKey, bigDataKey});
+
+    TPartitionTestWrapper::SetWasTheLastBlobBig(*partition, false);
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition,
+        {{small.DataKey, 0}, {bigDataKey, Max<size_t>()}},
+        1);
+    SendCompactionBlobResponse({MakeRequestedFromFw(small)});
+    auto kv = GrabCompactionKvRequest();
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    // After rename cycle HeadCleared path synced; CZ head should be consistent.
+    TPartitionTestWrapper::CheckTimestampsOrderInZones(*partition, "after_rename_head_cleared");
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionTimestampsOrderAfterMixedCycle, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    auto s0 = MakeFwPackedBlob(partitionId, 150, 1, 'a', 1, false, TInstant::MilliSeconds(10));
+    auto s1 = MakeFwPackedBlob(partitionId, 151, 2, 'b', 1, false, TInstant::MilliSeconds(20));
+    SeedFwzBody(*partition, {s0.DataKey, s1.DataKey});
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{s0.DataKey, 0}, {s1.DataKey, 1}}, 2);
+    SendCompactionBlobResponse({MakeRequestedFromFw(s0), MakeRequestedFromFw(s1)});
+    auto kv = GrabCompactionKvRequest();
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    TPartitionTestWrapper::CheckTimestampsOrderInZones(*partition, "after_mixed_append_cycle");
+}
+
+Y_UNIT_TEST_F(ThereIsUncompactedDataReflectsInProgressAndLimits, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    Ctx->Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(100);
+    Ctx->Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(50_MB);
+
+    // ThereIsUncompactedData() uses AppData() when idle — check the same predicates from the test.
+    const auto& ccfg = Ctx->Runtime->GetAppData(0).PQConfig.GetCompactionConfig();
+    auto belowLimits = [&]() {
+        const auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+        return fwz.DataKeysBody.size() < ccfg.GetBlobsCount()
+            && fwz.BodySize < Min<ui64>(ccfg.GetBlobsSize(), 2ull * TPartitionTestWrapper::MaxBlobSize(*partition));
+    };
+
+    UNIT_ASSERT(!TPartitionTestWrapper::CompactionInProgress(*partition));
+    UNIT_ASSERT(belowLimits());
+
+    auto b0 = MakeFwPackedBlob(partitionId, 160, 1, 'a');
+    SeedFwzBody(*partition, {b0.DataKey});
+    UNIT_ASSERT(belowLimits());
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(*partition, {{b0.DataKey, 0}}, 1);
+    // CompactionInProgress short-circuits before AppData().
+    UNIT_ASSERT(TPartitionTestWrapper::ThereIsUncompactedData(*partition));
+
+    SendCompactionBlobResponse({MakeEmptyRequestedFromKey(b0.DataKey)});
+    WaitCompactionIdle(partition);
+    UNIT_ASSERT(!TPartitionTestWrapper::CompactionInProgress(*partition));
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionGapNeedCompactHead, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    // CZ empty at EndOffset=0; FWZ blob starts at 200 → gap → needCompactHead.
+    auto blob = MakeFwPackedBlob(partitionId, 200, 1, 'g');
+    SeedFwzBody(*partition, {blob.DataKey});
+    SeedCompactionZoneOffsets(*partition, /*startOffset=*/0, /*endOffset=*/0);
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{blob.DataKey, 0}}, 1);
+    SendCompactionBlobResponse({MakeRequestedFromFw(blob)});
+    auto kv = GrabCompactionKvRequest();
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    UNIT_ASSERT(cz.EndOffset >= 201u);
+    UNIT_ASSERT_VALUES_EQUAL(cz.StartOffset, 200u);
+}
+
+// Offset holes between FWZ keys: CurOffset < next.Key.Offset → needCompactHead
+// (example sequence 1,2,3,5,6 — missing 4 lives between body keys).
+
+Y_UNIT_TEST_F(BlobsForCompactionOffsetGapAtBlobStart, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    // CZ already at EndOffset=10; first FWZ blob starts at 12 → gap at the beginning of the blob.
+    auto b0 = MakeFwPackedContiguousMessages(partitionId, /*startOffset=*/12, /*messageCount=*/2, /*firstSeqNo=*/1, 'a',
+                                             TInstant::MilliSeconds(1));
+    auto b1 = MakeFwPackedBlob(partitionId, /*offset=*/14, /*seqNo=*/3, 'b', 1, false, TInstant::MilliSeconds(2));
+    SeedFwzBody(*partition, {b0.DataKey, b1.DataKey});
+    SeedCompactionZoneOffsets(*partition, /*startOffset=*/0, /*endOffset=*/10);
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{b0.DataKey, 0}, {b1.DataKey, 1}}, 2);
+    SendCompactionBlobResponse({MakeRequestedFromFw(b0), MakeRequestedFromFw(b1)});
+    auto kv = GrabCompactionKvRequest();
+    UNIT_ASSERT_C(kv->Record.CmdWriteSize() >= 1u, "gap before first blob must compact/flush head");
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, 15u);
+    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.empty());
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionOffsetGapInMiddle, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    // Offsets 1,2,3 then hole at 4, then 5,6 — gap between body keys (middle of compaction set).
+    auto head = MakeFwPackedContiguousMessages(partitionId, /*startOffset=*/1, /*messageCount=*/3, /*firstSeqNo=*/1, 'a',
+                                               TInstant::MilliSeconds(1));
+    auto tail = MakeFwPackedContiguousMessages(partitionId, /*startOffset=*/5, /*messageCount=*/2, /*firstSeqNo=*/4, 'b',
+                                               TInstant::MilliSeconds(2));
+    SeedFwzBody(*partition, {head.DataKey, tail.DataKey});
+    SeedCompactionZoneOffsets(*partition, /*startOffset=*/0, /*endOffset=*/1);
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition, {{head.DataKey, 0}, {tail.DataKey, 1}}, 2);
+    SendCompactionBlobResponse({MakeRequestedFromFw(head), MakeRequestedFromFw(tail)});
+    auto kv = GrabCompactionKvRequest();
+    UNIT_ASSERT_C(kv->Record.CmdWriteSize() >= 1u, "middle offset gap must force head compact");
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, 7u);
+    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.empty());
+    // Body keys get ctx.Now() on SyncDataKeysBody while post-gap Head keeps message WriteTimestamps —
+    // skip CheckTimestampsOrderInZones here (ordering across that boundary is not guaranteed in this fixture).
+}
+
+Y_UNIT_TEST_F(BlobsForCompactionOffsetGapBeforeLastBlob, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    // Contiguous 10,11,12 then gap; last blob starts at 15 → gap at the end of the compaction set.
+    auto b0 = MakeFwPackedBlob(partitionId, 10, 1, 'a', 1, false, TInstant::MilliSeconds(1));
+    auto b1 = MakeFwPackedBlob(partitionId, 11, 2, 'b', 1, false, TInstant::MilliSeconds(2));
+    auto b2 = MakeFwPackedBlob(partitionId, 12, 3, 'c', 1, false, TInstant::MilliSeconds(3));
+    auto bLast = MakeFwPackedContiguousMessages(partitionId, /*startOffset=*/15, /*messageCount=*/2, /*firstSeqNo=*/4, 'd',
+                                                TInstant::MilliSeconds(4));
+    SeedFwzBody(*partition, {b0.DataKey, b1.DataKey, b2.DataKey, bLast.DataKey});
+    SeedCompactionZoneOffsets(*partition, /*startOffset=*/0, /*endOffset=*/10);
+
+    TPartitionTestWrapper::PrepareBlobsCompactionRead(
+        *partition,
+        {{b0.DataKey, 0}, {b1.DataKey, 1}, {b2.DataKey, 2}, {bLast.DataKey, 3}},
+        4);
+    SendCompactionBlobResponse({
+        MakeRequestedFromFw(b0),
+        MakeRequestedFromFw(b1),
+        MakeRequestedFromFw(b2),
+        MakeRequestedFromFw(bLast),
+    });
+    auto kv = GrabCompactionKvRequest();
+    UNIT_ASSERT_C(kv->Record.CmdWriteSize() >= 1u, "gap before last blob must compact head");
+    CompleteCompactionKvWrite(*kv);
+    WaitCompactionIdle(partition);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, 17u);
+    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.empty());
+}
+
+Y_UNIT_TEST_F(DoubleCompactionDrainsFwz, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    auto b0 = MakeFwPackedBlob(partitionId, 170, 1, 'a');
+    auto b1 = MakeFwPackedBlob(partitionId, 171, 2, 'b');
+    SeedFwzBody(*partition, {b0.DataKey, b1.DataKey});
+
+    auto runOne = [&](const TFwPackedBlob& b) {
+        TPartitionTestWrapper::PrepareBlobsCompactionRead(
+            *partition, {{b.DataKey, 0}}, 1);
+        SendCompactionBlobResponse({MakeRequestedFromFw(b)});
+        auto kv = GrabCompactionKvRequest();
+        CompleteCompactionKvWrite(*kv);
+        WaitCompactionIdle(partition);
+    };
+
+    runOne(b0);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.size(), 1u);
+    runOne(b1);
+    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.empty());
+}
+
 void AddHeadKeyWithBatch(
     TPartitionBlobEncoder& encoder,
     ui32 levelBorder,
@@ -7072,6 +8024,23 @@ void AddHeadKeyWithPartNo(
     encoder.Head.AddBatch(batch);
     encoder.Head.Offset = offset;
     encoder.Head.PartNo = partNo;
+}
+
+Y_UNIT_TEST_F(InitFirstCompactionPartFromHeadBatch, TPartitionFixture) {
+    const TPartitionId partitionId(1);
+    TPartition* partition = CreatePartition({.Partition = partitionId, .Begin = 0, .End = 0});
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    AddHeadKeyWithBatch(cz, 8_MB, partitionId, /*offset=*/5, 'h', /*seqNo=*/1);
+    cz.Head.Offset = 5;
+    cz.Head.PartNo = 0;
+    cz.Head.PackedSize = cz.HeadKeys.front().Size;
+
+    TPartitionTestWrapper::InitFirstCompactionPart(*partition);
+    auto part = TPartitionTestWrapper::FirstCompactionPart(*partition);
+    UNIT_ASSERT(part.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(part->first, 5u);
+    UNIT_ASSERT_VALUES_EQUAL(part->second, 0u);
 }
 
 Y_UNIT_TEST_F(GetCompactionZoneEmptyStartOffsetUsesFwzBodyStart, TPartitionFixture) {

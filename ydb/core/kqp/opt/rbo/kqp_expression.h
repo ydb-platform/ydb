@@ -69,7 +69,7 @@ class TExpression {
     // an exception will be thrown
     const TVector<TInfoUnit>& GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
 
-    void BindPlanProps(TPlanProps* props) {
+    void BindPlanProps(TPlanProps* props) const {
         PlanProps = props;
     }
 
@@ -93,7 +93,7 @@ class TExpression {
 
     TExprNode::TPtr Node;
     TExprContext* Ctx = nullptr;
-    TPlanProps* PlanProps = nullptr;
+    mutable TPlanProps* PlanProps = nullptr;
 
   private:
     bool MaybeEquiJoinConditionInternal(bool includeExpressions) const;

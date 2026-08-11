@@ -71,7 +71,7 @@ const TVector<TInfoUnit>& IOperator::GetOutputIUs() {
 }
 
 void IOperator::BindExpressionPlanProps(TPlanProps* props) {
-    for (auto expression : GetExpressions()) {
+    for (const auto& expression : GetExpressions()) {
         expression.get().BindPlanProps(props);
     }
 }
@@ -313,10 +313,6 @@ const TExpression& TMapElement::GetExpression() const {
     return Expr;
 }
 
-TExpression& TMapElement::GetExpressionRef() {
-    return Expr;
-}
-
 bool TMapElement::DependsOnlyOn(const TVector<TInfoUnit>& availableIUs) const {
     const auto usedIUs = Expr.GetInputIUs(false, true);
     return IUSetDiff(usedIUs, availableIUs).empty();
@@ -433,10 +429,10 @@ TVector<TInfoUnit> TOpMap::GetUsedIUs(TPlanProps& props) {
     return result;
 }
 
-TVector<std::reference_wrapper<TExpression>> TOpMap::GetExpressions() {
-    TVector<std::reference_wrapper<TExpression>> result;
-    for (auto& mapElement : MapElements) {
-        result.push_back(mapElement.GetExpressionRef());
+TVector<std::reference_wrapper<const TExpression>> TOpMap::GetExpressions() const {
+    TVector<std::reference_wrapper<const TExpression>> result;
+    for (const auto& mapElement : MapElements) {
+        result.push_back(std::cref(mapElement.GetExpression()));
     }
     return result;
 }
@@ -635,8 +631,8 @@ void TOpFilter::ComputeOutputIUs() {
     Props.OutputIUs = GetInput()->GetOutputIUs();
 }
 
-TVector<std::reference_wrapper<TExpression>> TOpFilter::GetExpressions() {
-    return {FilterExpr};
+TVector<std::reference_wrapper<const TExpression>> TOpFilter::GetExpressions() const {
+    return {std::cref(FilterExpr)};
 }
 
 void TOpFilter::SetFilterExpression(TExpression filterExpr) {
@@ -748,10 +744,10 @@ TVector<TInfoUnit> TOpJoin::GetUsedIUs(TPlanProps& props) {
     return result;
 }
 
-TVector<std::reference_wrapper<TExpression>> TOpJoin::GetExpressions() {
-    TVector<std::reference_wrapper<TExpression>> result;
-    for (auto & expr : JoinFilters) {
-        result.push_back(expr);
+TVector<std::reference_wrapper<const TExpression>> TOpJoin::GetExpressions() const {
+    TVector<std::reference_wrapper<const TExpression>> result;
+    for (const auto& expr : JoinFilters) {
+        result.push_back(std::cref(expr));
     }
     return result;
 }
@@ -970,8 +966,8 @@ NJson::TJsonValue TOpLimit::ToJson(ui32 explainFlags) {
     return res;
 }
 
-TVector<std::reference_wrapper<TExpression>> TOpLimit::GetExpressions() {
-    return {LimitCond};
+TVector<std::reference_wrapper<const TExpression>> TOpLimit::GetExpressions() const {
+    return {std::cref(LimitCond)};
 }
 
 void TOpLimit::BindExpressionPlanProps(TPlanProps* props) {
@@ -1104,11 +1100,11 @@ TVector<TInfoUnit> TOpTableLookup::GetUsedIUs(TPlanProps& props) {
     return res;
 }
 
-TVector<std::reference_wrapper<TExpression>> TOpTableLookup::GetExpressions() {
+TVector<std::reference_wrapper<const TExpression>> TOpTableLookup::GetExpressions() const {
     if (!FetchedRowFilter) {
         return {};
     }
-    return {*FetchedRowFilter};
+    return {std::cref(*FetchedRowFilter)};
 }
 
 TString TOpTableLookup::ToString(TExprContext& ctx) {

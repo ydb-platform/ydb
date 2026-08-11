@@ -1,5 +1,7 @@
 #pragma once
 
+#include "blobstorage_pdisk_device_overestimation.h"
+
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/base/blobstorage_write_source.h>
@@ -311,6 +313,16 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceActualCostNs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceOverestimationRatio;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceNonperformanceMs;
+
+    // Merged device overestimation: combines samples from PDisk's own block
+    // device thread together with samples received from IO_URING sources
+    // (DDisk / PersistentBuffer actors) that share the same physical device,
+    // via TDeviceOverestimationAggregator. See blobstorage_pdisk_device_overestimation.h.
+    NPDisk::TDeviceOverestimationAggregator DeviceOverestimationMerged;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DeviceOverestimationRatioMerged;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DeviceNonperformanceMsMerged;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DeviceOverestimationDroppedSamples;
+
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceInterruptedSystemCalls;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceSubmitThreadBusyTimeNs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceCompletionThreadBusyTimeNs;

@@ -19,6 +19,13 @@ class TUringOperationBase {
     friend class TUringRouter;
 
 public:
+    // NHPTimer cycle count captured by TUringRouter right before the operation
+    // is submitted to the kernel (SQE prepared). Used together with the
+    // completion timestamp (captured by the completion poller) to build a
+    // TDeviceIoSample for device-overestimation tracking. 0 if unset.
+    ui64 SubmitCycles = 0;
+
+public:
     enum EOperationType {
         ENOT_SET = 0,
         EREAD,

@@ -130,6 +130,9 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceActualCostNs, true);
     COUNTER_INIT(DeviceGroup, DeviceOverestimationRatio, false);
     COUNTER_INIT(DeviceGroup, DeviceNonperformanceMs, false);
+    COUNTER_INIT(DeviceGroup, DeviceOverestimationRatioMerged, false);
+    COUNTER_INIT(DeviceGroup, DeviceNonperformanceMsMerged, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceOverestimationDroppedSamples, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceInterruptedSystemCalls, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceSubmitThreadBusyTimeNs, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceCompletionThreadBusyTimeNs, true);

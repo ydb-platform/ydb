@@ -1,5 +1,6 @@
 #include "common_describe.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
@@ -108,16 +109,8 @@ private:
         Response->PathId = ev->Get()->TopicInfo.Self->Info.GetPathId();
         Response->SchemeShardId = ev->Get()->TopicInfo.Self->Info.GetSchemeshardId();
 
-        absl::flat_hash_set<ui64> topicPartitions;
-        for (const auto& partition : ev->Get()->TopicInfo.Info->Description.GetPartitions()) {
-            topicPartitions.insert(partition.GetPartitionId());
-        }
-
         Response->Partitions.reserve(ev->Get()->Partitions.size());
         for (const auto& [partitionId, info] : ev->Get()->Partitions) {
-            if (!topicPartitions.contains(partitionId)) {
-                continue;
-            }
             if (!PartitionIds.empty() && !PartitionIds.contains(partitionId)) {
                 continue;
             }
@@ -161,8 +154,9 @@ private:
 
     void HandlePoison() {
         if (LogicActorId) {
+            // Logic replies CANCELLED via TEvDescribeResponse; proxy forwards it below.
             Send(LogicActorId, new NActors::TEvents::TEvPoison());
-            LogicActorId = {};
+            return;
         }
         if (Response) {
             ReplyWithError(

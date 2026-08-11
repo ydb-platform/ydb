@@ -1,7 +1,5 @@
 #pragma once
 
-#include "actors.h"
-
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/events.h>
@@ -9,12 +7,9 @@
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/util/backoff.h>
-#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
-#include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
 #include <util/string/join.h>
 
@@ -138,16 +133,11 @@ public:
     }
 
     void HandlePoison() {
-        // Prefer an explicit error to the parent over a silent death: otherwise the
-        // proxy/requester can wait forever for TEvDescribeResponse.
-        if (!IsDead) {
-            ReplyWithError(
-                Ydb::StatusIds::CANCELLED,
-                "Request was cancelled",
-                Ydb::PersQueue::ErrorCode::ERROR);
-            return;
-        }
-        PassAway();
+        // Explicit error so proxy/requester never wait forever for TEvDescribeResponse.
+        ReplyWithError(
+            Ydb::StatusIds::CANCELLED,
+            "Request was cancelled",
+            Ydb::PersQueue::ErrorCode::ERROR);
     }
 
 protected:
@@ -299,7 +289,7 @@ protected:
 
         LocationsReceived = true;
 
-        if (LocationsReceived && ReadSessionsReceived) {
+        if (ReadSessionsReceived) {
             TabletsInflight.erase(ReadBalancerTabletId);
             ReplyIfPossible();
         }
@@ -384,7 +374,7 @@ protected:
         }
 
         ReadSessionsReceived = true;
-        if (LocationsReceived && ReadSessionsReceived) {
+        if (LocationsReceived) {
             TabletsInflight.erase(ReadBalancerTabletId);
             ReplyIfPossible();
         }
@@ -448,7 +438,7 @@ protected:
         if (!LocationsReceived) {
             TVector<ui64> partitionIds;
             for (const auto& partition : TopicInfo.Info->Description.GetPartitions()) {
-                if (static_cast<TDerived*>(this)->NeedProcessPartition(partition)) {
+                if (NeedProcessPartition(partition)) {
                     partitionIds.push_back(partition.GetPartitionId());
                 }
             }
@@ -517,14 +507,6 @@ protected:
         return true;
     }
 
-    void FailBalancerUnavailable() {
-        TabletsInflight.erase(ReadBalancerTabletId);
-        ReplyWithError(
-            Ydb::StatusIds::UNAVAILABLE,
-            "Partition locations are not available",
-            Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED);
-    }
-
     void ScheduleBalancerRetry() {
         if (!RemainingRequestTimeout()) {
             HandleRequestTimeout();
@@ -535,7 +517,11 @@ protected:
         }
         if (!LocationsBackoff.HasMore()) {
             LOG_W("Balancer retries exceeded");
-            FailBalancerUnavailable();
+            TabletsInflight.erase(ReadBalancerTabletId);
+            ReplyWithError(
+                Ydb::StatusIds::UNAVAILABLE,
+                "Partition locations are not available",
+                Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED);
             return;
         }
         if (BalancerRetryPending) {

@@ -1,6 +1,7 @@
 #include "common_describe.h"
 
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
+#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 

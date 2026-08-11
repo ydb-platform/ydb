@@ -773,6 +773,27 @@ bool TPropose::CanPersistState(const TTxState& txState,
         return false;
     }
 
+    // Back-fill of an Id on a pre-existing topic must stamp IdTxStep with the exact plan
+    // step (see PersistState). For an alter StepCreated is already valid, so without this
+    // guard persist could run as soon as the shards report COMPLETE - potentially before
+    // TEvOperationPlan sets PlanStep. That would persist the Id with no IdTxStep, leaving
+    // the name-keyed fallback disabled for writers and losing live producers' mappings.
+    // Wait for the plan step instead; TEvOperationPlan will re-trigger TryPersistState.
+    if (AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()
+            && txState.TxType == TTxState::TxAlterPQGroup
+            && txState.PlanStep == InvalidStepId) {
+        TTopicInfo::TPtr pqGroup = context.SS->Topics[PathId];
+        if (pqGroup && pqGroup->AlterData) {
+            const auto& newTabletConfig = pqGroup->AlterData->GetTabletConfig();
+            if (newTabletConfig.HasId() && !newTabletConfig.HasIdTxStep()) {
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            DebugHint() << " can't persist state: " <<
+                            "Id back-fill is waiting for the plan step to stamp IdTxStep");
+                return false;
+            }
+        }
+    }
+
     return true;
 }
 

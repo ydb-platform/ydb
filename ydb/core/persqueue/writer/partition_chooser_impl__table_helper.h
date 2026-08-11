@@ -304,7 +304,6 @@ private:
         return ev;
     }
 
-private:
     enum class ESelectPhase {
         Primary,
         LegacyKey,

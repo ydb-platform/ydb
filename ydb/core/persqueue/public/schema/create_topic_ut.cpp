@@ -165,6 +165,25 @@ Y_UNIT_TEST(CreateTopicWithIdAttribute) {
         auto config = DescribeTabletConfig(runtime, path);
         UNIT_ASSERT(!config.HasId());
     }
+
+    // Federation + flag on: the _id attribute is accepted as the topic Id.
+    // IdTxStep is stamped 0 (sentinel = "filled at create") so writers never
+    // enable the name-keyed fallback for a brand-new federation topic.
+    {
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        const TString path = "/Root/topic_id_attr_federation";
+        auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_id"] = "my-federation-topic-uuid";
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
+
+        auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetId(), "my-federation-topic-uuid");
+        UNIT_ASSERT(config.HasIdTxStep());
+        UNIT_ASSERT_VALUES_EQUAL(config.GetIdTxStep(), 0u); // sentinel: filled at create
+        // Restore FirstClass mode for subsequent sub-cases if any.
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+    }
 }
 
 } // Y_UNIT_TEST_SUITE(CreateTopic)

@@ -70,6 +70,12 @@ const TVector<TInfoUnit>& IOperator::GetOutputIUs() {
     return Props.OutputIUs.value();
 }
 
+void IOperator::BindExpressionPlanProps(TPlanProps* props) {
+    for (auto expression : GetExpressions()) {
+        expression.get().BindPlanProps(props);
+    }
+}
+
 void IOperator::ComputeOutputIUsSubtree() {
     for (auto& op : GetChildren()) {
         for (const auto& item : IterateSubtree(op)) {
@@ -953,6 +959,13 @@ NJson::TJsonValue TOpLimit::ToJson(ui32 explainFlags) {
 
 TVector<std::reference_wrapper<TExpression>> TOpLimit::GetExpressions() {
     return {LimitCond};
+}
+
+void TOpLimit::BindExpressionPlanProps(TPlanProps* props) {
+    IOperator::BindExpressionPlanProps(props);
+    if (OffsetCond) {
+        OffsetCond->BindPlanProps(props);
+    }
 }
 
 /**

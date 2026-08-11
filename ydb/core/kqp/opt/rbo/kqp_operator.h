@@ -230,6 +230,9 @@ public:
         return {};
     }
 
+    // Overrides must also bind stored expressions not exposed by GetExpressions().
+    virtual void BindExpressionPlanProps(TPlanProps* props);
+
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) {
         Y_UNUSED(map);
         Y_UNUSED(ctx);
@@ -707,6 +710,7 @@ public:
     virtual TString GetExplainName() const override { return "Limit"; }
 
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
+    void BindExpressionPlanProps(TPlanProps* props) override;
 
     EOpPhase GetLimitPhase() const {
         return LimitPhase;

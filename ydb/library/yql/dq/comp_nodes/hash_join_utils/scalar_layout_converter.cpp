@@ -228,11 +228,9 @@ public:
     }
 
     void ExtractForPack(const NYql::NUdf::TUnboxedValue& value, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
-        Y_UNUSED(value);
-        auto& dataStorage = tempStorage.emplace_back(1);
-        dataStorage[0] = 0;
-
-        columnsData.push_back(dataStorage.data());
+        Y_UNUSED(value, tempStorage);
+        // skip the payload pointer entirely
+        columnsData.push_back(nullptr);
         columnsNullBitmap.push_back(nullptr);
     }
 
@@ -249,7 +247,7 @@ public:
     }
 
     ui32 GetElementSize() override {
-        return 1;
+        return 0;
     }
 
     NPackedTuple::EColumnSizeType GetElementSizeType() override {

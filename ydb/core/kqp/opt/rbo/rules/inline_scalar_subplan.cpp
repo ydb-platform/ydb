@@ -25,7 +25,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     }
 
     auto scalarIU = scalarIUs[0];
-    auto subplanEntry = props.Subplans.PlanMap.at(scalarIU);
+    const auto& subplanEntry = props.Subplans.At(scalarIU);
     auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
     auto subplanResIU = GetSubplanResultIUs(subplan)[0];
     auto subplanResType = subplan->GetIUType(subplanResIU);

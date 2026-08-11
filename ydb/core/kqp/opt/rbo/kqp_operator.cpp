@@ -1598,7 +1598,7 @@ void TOpIterator::Advance() {
 
         if (RecurseIntoSubplans && frame.NextSubplanIdx < frame.SubplanIUs.size()) {
             const auto& iu = frame.SubplanIUs[frame.NextSubplanIdx++];
-            const auto& subplan = PlanProps->Subplans.PlanMap.at(iu);
+            const auto& subplan = PlanProps->Subplans.At(iu);
             PushFrame(CastOperator<IOperator>(subplan.Plan), nullptr, size_t(0), std::make_shared<TInfoUnit>(iu));
             continue;
         }

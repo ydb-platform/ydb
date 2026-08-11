@@ -658,6 +658,11 @@ private:
                 return;
             }
 
+            // COMPAT(bulatman): old gRPC clients send an empty yt-user when no user is specified.
+            if (userString->empty()) {
+                return;
+            }
+
             User_ = std::string(*userString);
         }
 

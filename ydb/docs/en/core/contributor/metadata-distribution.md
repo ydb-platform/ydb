@@ -111,21 +111,21 @@ This is a key property: **any cluster node can independently compute on which re
 ```mermaid
 
 graph LR
-    Client["Клиент\n(любой узел)"]
-    Hash["Хеш-функция\nот ID записи"]
-    subgraph Реплики
-    R1["Реплика 1\n(Node A)"]
-    R2["Реплика 2\n(Node B)"]
-    R3["Реплика 3\n(Node C)"]
+    Client["Client\n(any node)"]
+    Hash["Hash function\nfrom record ID"]
+    subgraph Replicas
+    R1["Replica 1\n(Node A)"]
+    R2["Replica 2\n(Node B)"]
+    R3["Replica 3\n(Node C)"]
     RX["......"]
     classDef transp fill:#FFFFFF00,stroke:#FFFFFF00,color:#000,font-size:32px
     class RX transp
-    RN["Реплика N\n(Node N)"]
+    RN["Replica N\n(Node N)"]
     end
-    Client -->|"ID записи"| Hash
-    Hash -->|"выбирает"| R1
-    Hash -->|"выбирает"| R3
-    Hash -->|"выбирает"| RN
+    Client -->|"Record ID"| Hash
+    Hash -->|"selects"| R1
+    Hash -->|"selects"| R3
+    Hash -->|"selects"| RN
 ```
 
 
@@ -161,23 +161,23 @@ Replicas of each ring are placed within a single **failure domain** (fail domain
 
 ```mermaid
 graph TD
-    subgraph "Стойка 12 Кольцо 1"
-        R1A["Реплика 1"]
-        R1B["Реплика 2"]
-        R1C["Реплика 3"]
+    subgraph "Rack 12 Ring 1"
+        R1A["Replica 1"]
+        R1B["Replica 2"]
+        R1C["Replica 3"]
     end
-    subgraph "Стойка 15 Кольцо 2"
-        R2A["Реплика 1"]
-        R2B["Реплика 2"]
-        R2C["Реплика 3"]
+    subgraph "Rack 15 Ring 2"
+        R2A["Replica 1"]
+        R2B["Replica 2"]
+        R2C["Replica 3"]
     end
-    subgraph "Стойка 13 Кольцо 3"
-        R3A["Реплика 1"]
-        R3B["Реплика 2"]
-        R3C["Реплика 3"]
+    subgraph "Rack 13 Ring 3"
+        R3A["Replica 1"]
+        R3B["Replica 2"]
+        R3C["Replica 3"]
     end
-    Record1["Запись X\n(выборка из 3 колец)"]
-    Record2["Запись Y\n(выборка из 3 колец)"]
+    Record1["Record X\n(selection from 3 rings)"]
+    Record2["Record Y\n(selection from 3 rings)"]
     Record1 --> R1A
     Record1 --> R2C
     Record1 --> R3B
@@ -199,44 +199,44 @@ These restrictions make it possible to control how many rings a failure of an en
 
 ```mermaid
 graph TD
-    subgraph DC1["Дата-центр 1 (Fail realm 1)"]
-        subgraph "Стойка A (Кольцо 1)"
-            R1A["Реплика 1"]
-            R1B["Реплика 2"]
-            R1C["Реплика 3"]
+    subgraph DC1["Data center 1 (Fail realm 1)"]
+        subgraph "Rack A (Ring 1)"
+            R1A["Replica 1"]
+            R1B["Replica 2"]
+            R1C["Replica 3"]
         end
-        subgraph "Стойка B (Кольцо 2)"
-            R2A["Реплика 1"]
-            R2B["Реплика 2"]
-            R2C["Реплика 3"]
-        end
-    end
-    subgraph DC2["Дата-центр 2 (Fail realm 2)"]
-        subgraph "Стойка C (Кольцо 3)"
-            R3A["Реплика 1"]
-            R3B["Реплика 2"]
-            R3C["Реплика 3"]
-        end
-        subgraph "Стойка D (Кольцо 4)"
-            R4A["Реплика 1"]
-            R4B["Реплика 2"]
-            R4C["Реплика 3"]
+        subgraph "Rack B (Ring 2)"
+            R2A["Replica 1"]
+            R2B["Replica 2"]
+            R2C["Replica 3"]
         end
     end
-    subgraph DC3["Дата-центр 3 (Fail realm 3)"]
-        subgraph "Стойка E (Кольцо 5)"
-            R5A["Реплика 1"]
-            R5B["Реплика 2"]
-            R5C["Реплика 3"]
+    subgraph DC2["Data center 2 (Fail realm 2)"]
+        subgraph "Rack C (Ring 3)"
+            R3A["Replica 1"]
+            R3B["Replica 2"]
+            R3C["Replica 3"]
         end
-        subgraph "Стойка F (Кольцо 6)"
+        subgraph "Rack D (Ring 4)"
+            R4A["Replica 1"]
+            R4B["Replica 2"]
+            R4C["Replica 3"]
+        end
+    end
+    subgraph DC3["Data center 3 (Fail realm 3)"]
+        subgraph "Rack E (Ring 5)"
+            R5A["Replica 1"]
+            R5B["Replica 2"]
+            R5C["Replica 3"]
+        end
+        subgraph "Rack F (Ring 6)"
             direction TD
-            R6A["Реплика 1"]
-            R6B["Реплика 2"]
-            R6C["Реплика 3"]
+            R6A["Replica 1"]
+            R6B["Replica 2"]
+            R6C["Replica 3"]
         end
     end
-    Record["Запись X\n(по одной реплике из каждого кольца)"]
+    Record["Record X\n(one replica from each ring)"]
     Record --> R1B
     Record --> R2A
     Record --> R3C
@@ -255,20 +255,20 @@ Ring groups are a mechanism for **seamless configuration changes**. They allow i
 
 ```mermaid
 graph TD
-    subgraph G1["Группа колец 1 (основная)"]
-        G1R1["Кольцо 1\n(Стойка A)"]
-        G1R2["Кольцо 2\n(Стойка B)"]
-        G1R3["Кольцо 3\n(Стойка C)"]
+    subgraph G1["Ring group 1 (primary)"]
+        G1R1["Ring 1\n(Rack A)"]
+        G1R2["Ring 2\n(Rack B)"]
+        G1R3["Ring 3\n(Rack C)"]
     end
-    subgraph G2["Группа колец 2 (новая)"]
-        G2R1["Кольцо 1\n(Стойка D)"]
-        G2R2["Кольцо 2\n(Стойка E)"]
-        G2R3["Кольцо 3\n(Стойка F)"]
-        G2R4["Кольцо 4\n(Стойка G)"]
-        G2R5["Кольцо 5\n(Стойка H)"]
+    subgraph G2["Ring group 2 (new)"]
+        G2R1["Ring 1\n(Rack D)"]
+        G2R2["Ring 2\n(Rack E)"]
+        G2R3["Ring 3\n(Rack F)"]
+        G2R4["Ring 4\n(Rack G)"]
+        G2R5["Ring 5\n(Rack H)"]
     end
-    Client["Клиент"] --Кворум: 2 из 3--> G1
-    Client --Кворум: 3 из 5--> G2
+    Client["Client"] --Quorum: 2 of 3--> G1
+    Client --Quorum: 3 of 5--> G2
 ```
 
 

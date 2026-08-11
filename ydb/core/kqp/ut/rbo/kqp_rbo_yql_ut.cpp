@@ -1417,6 +1417,27 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "Subplan bindings are immutable");
     }
 
+    Y_UNIT_TEST(ExpressionInputIUsFollowSubplanRegistryMutations) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit binding("subplan", true);
+        const TInfoUnit dependency("outer_dependency");
+        auto expression = MakeColumnAccess(binding, pos, &exprCtx, &planProps);
+
+        UNIT_ASSERT(expression.GetRawInputIUs() == (TVector<TInfoUnit>{binding}));
+        UNIT_ASSERT(expression.GetInputIUs(false, true) == (TVector<TInfoUnit>{binding}));
+
+        planProps.Subplans.Add(binding, MakeIntrusive<TOpEmptySource>(pos), ESubplanType::EXPR);
+        UNIT_ASSERT(expression.GetInputIUs(false, true).empty());
+
+        planProps.Subplans.AddDependentIU(binding, dependency);
+        UNIT_ASSERT(expression.GetInputIUs(false, true) == (TVector<TInfoUnit>{dependency}));
+
+        planProps.Subplans.Remove(binding);
+        UNIT_ASSERT(expression.GetInputIUs(false, true) == (TVector<TInfoUnit>{binding}));
+    }
+
     Y_UNIT_TEST(ComputeParentsHandlesSharedDagAndIgnoresInactiveSubplans) {
         const auto pos = NYql::TPositionHandle();
         auto shared = MakeIntrusive<TOpEmptySource>(pos);

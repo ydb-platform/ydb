@@ -661,21 +661,52 @@ TExprNode::TPtr TExpression::GetExpressionBody() const {
 
 const TVector<TInfoUnit>& TExpression::GetInputIUs(bool includeSubplanVars, bool includeCorrelatedDeps) const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
-    ui32 index = ui32(includeSubplanVars)*2 + ui32(includeCorrelatedDeps);
-
-    if (InputIUs[index].has_value()) {
-        return InputIUs[index].value();
+    const auto& rawInputIUs = GetRawInputIUs();
+    if (rawInputIUs.empty()) {
+        return rawInputIUs;
     }
 
-    TVector<TInfoUnit> IUs;
-    GetAllMembers(Node, IUs);
-    if (!IUs.empty()) {
-        IUs.clear();
-        Y_ENSURE(PlanProps, "Plan properties null for an expression with members");
-        GetAllMembers(Node, IUs, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
+    Y_ENSURE(PlanProps, "Plan properties null for an expression with members");
+    if (PlanProps->Subplans.Empty()) {
+        return rawInputIUs;
     }
-    InputIUs[index] = std::move(IUs);
-    return InputIUs[index].value();
+
+    bool hasSubplanReference = false;
+    for (const auto& iu : rawInputIUs) {
+        if (PlanProps->Subplans.Contains(iu)) {
+            hasSubplanReference = true;
+            break;
+        }
+    }
+    if (!hasSubplanReference) {
+        return rawInputIUs;
+    }
+
+    const ui32 index = ui32(includeSubplanVars) * 2 + ui32(includeCorrelatedDeps);
+    auto& result = ResolvedInputIUs[index];
+    if (!result) {
+        result.emplace();
+    } else {
+        result->clear();
+    }
+
+    for (const auto& iu : rawInputIUs) {
+        AddResolvedInfoUnit(iu, *result, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
+    }
+    return *result;
+}
+
+const TVector<TInfoUnit>& TExpression::GetRawInputIUs() const {
+    if (!RawInputIUs || RawInputIUsCacheKey != Node) {
+        if (!RawInputIUs) {
+            RawInputIUs.emplace();
+        } else {
+            RawInputIUs->clear();
+        }
+        GetAllMembers(Node, *RawInputIUs);
+        RawInputIUsCacheKey = Node;
+    }
+    return *RawInputIUs;
 }
 
 TExpression TExpression::ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const {

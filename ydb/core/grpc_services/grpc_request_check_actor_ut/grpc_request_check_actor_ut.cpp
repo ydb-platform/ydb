@@ -413,7 +413,12 @@ TIntrusivePtr<TSecurityObject> MakeSecurityObjectWithoutConnect() {
     return MakeIntrusive<TSecurityObject>(object.GetOwnerSID(), object.GetACL().SerializeAsString(), false);
 }
 
-NGRpcService::TEvRequestAuthAndCheckResult* RunHttpAuthCheck(
+struct THttpAuthCheckResponse {
+    TAutoPtr<IEventHandle> Handle;
+    const NGRpcService::TEvRequestAuthAndCheckResult* Result = nullptr;
+};
+
+THttpAuthCheckResponse RunHttpAuthCheck(
     TTestSetup& setup,
     const TString& requestDatabase,
     TSchemeBoardEvents::TDescribeSchemeResult& describeSchemeResult,
@@ -455,10 +460,10 @@ NGRpcService::TEvRequestAuthAndCheckResult* RunHttpAuthCheck(
             .AccessServiceType = runtime->GetAppData().AuthConfig.GetAccessServiceType(),
         }));
 
-    TAutoPtr<IEventHandle> handle;
-    auto* result = runtime->GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(handle);
-    UNIT_ASSERT_C(result, "Expected TEvRequestAuthAndCheckResult");
-    return result;
+    THttpAuthCheckResponse response;
+    response.Result = runtime->GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(response.Handle);
+    UNIT_ASSERT_C(response.Result, "Expected TEvRequestAuthAndCheckResult");
+    return response;
 }
 
 } // namespace
@@ -470,11 +475,11 @@ Y_UNIT_TEST(DedicatedOwnDbOk) {
     ConfigureSecurityConfig(setup.GetRuntime());
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
-    auto* result = RunHttpAuthCheck(
+    const auto response = RunHttpAuthCheck(
         setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithConnect(TString{DatabaseOnlySid}));
-    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
-    UNIT_ASSERT_EQUAL(result->Database, "/Root/db");
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
+    UNIT_ASSERT_EQUAL(response.Result->Database, "/Root/db");
 }
 
 Y_UNIT_TEST(DedicatedNoConnectRightButSuccess) {
@@ -482,9 +487,9 @@ Y_UNIT_TEST(DedicatedNoConnectRightButSuccess) {
     ConfigureSecurityConfig(setup.GetRuntime());
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
-    auto* result = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
-    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
+    const auto response = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
 }
 
 Y_UNIT_TEST(ServerlessOwnDbOk) {
@@ -493,10 +498,10 @@ Y_UNIT_TEST(ServerlessOwnDbOk) {
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/serverless", 2);
     describeSchemeResult.MutablePathDescription()->MutableSelf()->SetPathType(NKikimrSchemeOp::EPathTypeExtSubDomain);
-    auto* result = RunHttpAuthCheck(
+    const auto response = RunHttpAuthCheck(
         setup, "/Root/serverless", describeSchemeResult, MakeSecurityObjectWithConnect(TString{DatabaseOnlySid}));
-    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
 }
 
 Y_UNIT_TEST(ServerlessForeignNoConnectRight) {
@@ -505,9 +510,9 @@ Y_UNIT_TEST(ServerlessForeignNoConnectRight) {
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/foreign", 3);
     describeSchemeResult.MutablePathDescription()->MutableSelf()->SetPathType(NKikimrSchemeOp::EPathTypeExtSubDomain);
-    auto* result = RunHttpAuthCheck(setup, "/Root/foreign", describeSchemeResult, MakeSecurityObjectWithoutConnect());
-    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
+    const auto response = RunHttpAuthCheck(setup, "/Root/foreign", describeSchemeResult, MakeSecurityObjectWithoutConnect());
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
 }
 
 Y_UNIT_TEST(TopicPathNotADatabaseDespiteConnectRight) {
@@ -515,10 +520,10 @@ Y_UNIT_TEST(TopicPathNotADatabaseDespiteConnectRight) {
     ConfigureSecurityConfig(setup.GetRuntime());
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupTopicInDedicatedSubDomain(describeSchemeResult, "/Root/db", "mytopic");
-    auto* result = RunHttpAuthCheck(
+    const auto response = RunHttpAuthCheck(
         setup, "/Root/db/mytopic", describeSchemeResult, MakeSecurityObjectWithConnect(TString{DatabaseOnlySid}));
-    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NotADatabase);
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NotADatabase);
 }
 
 Y_UNIT_TEST(EmptyDatabase) {
@@ -526,10 +531,10 @@ Y_UNIT_TEST(EmptyDatabase) {
     ConfigureSecurityConfig(setup.GetRuntime());
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
-    auto* result = RunHttpAuthCheck(
+    const auto response = RunHttpAuthCheck(
         setup, "", describeSchemeResult, MakeSecurityObjectWithConnect(TString{DatabaseOnlySid}));
-    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::EmptyDatabase);
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::EmptyDatabase);
 }
 
 Y_UNIT_TEST(RootDatabase) {
@@ -537,10 +542,10 @@ Y_UNIT_TEST(RootDatabase) {
     ConfigureSecurityConfig(setup.GetRuntime());
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root", 1);
-    auto* result = RunHttpAuthCheck(
+    const auto response = RunHttpAuthCheck(
         setup, "/Root", describeSchemeResult, MakeSecurityObjectWithConnect(TString{DatabaseOnlySid}));
-    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
 }
 
 Y_UNIT_TEST(ViewerTokenSkipsVerdict) {
@@ -548,9 +553,9 @@ Y_UNIT_TEST(ViewerTokenSkipsVerdict) {
     ConfigureSecurityConfig(setup.GetRuntime());
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
-    auto* result = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
-    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
+    const auto response = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
 }
 
 } // HttpDatabaseAccessObserveMode

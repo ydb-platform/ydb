@@ -4776,7 +4776,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE,
                 tableId, columns, 1, 11);
             req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableWriteSeqNum()->SetWriteSeqNum(1);
+            req->Record.MutableOperations(0)->MutableWriteSeqNum()->SetWriteSeqNum(1);
             return Write(runtime, sender, shard, std::move(req), expected);
         };
 
@@ -5047,7 +5047,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         req->SetLockId(lockTxId, lockNodeId);
         req->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
         req->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
-        auto* writeSeqNum = req->Record.MutableWriteSeqNum();
+        auto* writeSeqNum = req->Record.MutableOperations(0)->MutableWriteSeqNum();
         writeSeqNum->SetWriterIndex(0);
         writeSeqNum->SetWriteSeqNum(1);
         auto result = Write(runtime, sender, shard, std::move(req));
@@ -5081,7 +5081,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 tableId, columns, 1, 11);
-            req->Record.MutableWriteSeqNum()->SetWriteSeqNum(1);
+            req->Record.MutableOperations(0)->MutableWriteSeqNum()->SetWriteSeqNum(1);
             Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
 
@@ -5093,7 +5093,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 tableId, columns, 1, 11);
             req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableWriteSeqNum()->SetWriteSeqNum(1);
+            req->Record.MutableOperations(0)->MutableWriteSeqNum()->SetWriteSeqNum(1);
             Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
 
@@ -5104,7 +5104,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 tableId, columns, 1, 11);
             req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableWriteSeqNum()->SetWriteSeqNum(1);
+            req->Record.MutableOperations(0)->MutableWriteSeqNum()->SetWriteSeqNum(1);
             req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
             Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
@@ -5113,7 +5113,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto req = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
             req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableWriteSeqNum()->SetWriteSeqNum(1);
+            req->Record.AddOperations()->MutableWriteSeqNum()->SetWriteSeqNum(1);
             Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
 
@@ -5124,7 +5124,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 tableId, columns, 1, 11);
             req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableWriteSeqNum()->SetWriterIndex(1);
+            req->Record.MutableOperations(0)->MutableWriteSeqNum()->SetWriterIndex(1);
             Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
     }
@@ -5158,7 +5158,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 tableId, columns, 1, 11);
             req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableWriteSeqNum()->SetWriteSeqNum(1);
+            req->Record.MutableOperations(0)->MutableWriteSeqNum()->SetWriteSeqNum(1);
             runtime.SendToPipe(shard, writeSender, req.release());
         }
 

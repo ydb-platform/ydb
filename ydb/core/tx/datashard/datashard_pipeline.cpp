@@ -1780,24 +1780,37 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
             return writeOp;
     }
 
-    if (rec.HasWriteSeqNum()) {
-        const ui64 writerIndex = rec.GetWriteSeqNum().GetWriterIndex();
-        const ui64 writeSeqNum = rec.GetWriteSeqNum().GetWriteSeqNum();
-        // A write with LockTxId has to be immediate, see TKeyValidator::IsValidKey
-        if (writeSeqNum == 0
+    bool hasWriteSeqNum = false;
+    std::optional<ui64> writerIndex;
+    for (const auto& op : rec.GetOperations()) {
+        if (!op.HasWriteSeqNum()) {
+            continue;
+        }
+        hasWriteSeqNum = true;
+        const auto& writeSeqNum = op.GetWriteSeqNum();
+        const ui64 opWriterIndex = writeSeqNum.GetWriterIndex();
+        const ui64 seqNum = writeSeqNum.GetWriteSeqNum();
+        if (seqNum == 0
             || !rec.GetLockTxId()
             || rec.txmode() != NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
-            || rec.HasLocks()
-            || rec.OperationsSize() == 0)
+            || rec.HasLocks())
         {
             badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
-                << "WriteSeqNum " << writerIndex << ":" << writeSeqNum << " requires a non-zero"
-                   " WriteSeqNum, LockTxId, MODE_IMMEDIATE, at least one operation and no Locks");
+                << "WriteSeqNum " << opWriterIndex << ":" << seqNum
+                << " requires a non-zero WriteSeqNum, LockTxId, MODE_IMMEDIATE and no Locks");
             return writeOp;
         }
-        if (AppData()->FeatureFlags.GetEnableDataShardPipelinedUncommittedWrites()) {
-            writeOp->SetPipelinedWriteFlag();
+        // All operations must share the same WriterIndex — reject if they differ.
+        if (writerIndex && *writerIndex != opWriterIndex) {
+            badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                << "Different WriterIndex values in operations: " << *writerIndex
+                << " and " << opWriterIndex);
+            return writeOp;
         }
+        writerIndex = opWriterIndex;
+    }
+    if (hasWriteSeqNum && AppData()->FeatureFlags.GetEnableDataShardPipelinedUncommittedWrites()) {
+        writeOp->SetPipelinedWriteFlag();
     }
 
     // Make config checks for immediate op.

@@ -3002,7 +3002,8 @@ NKikimrDataEvents::TEvWriteResult UncommittedWrite(
         tableId, columns, key, value);
     req->SetLockId(lockTxId, lockNodeId);
     if (writeSeqNum) {
-        auto* reqWriteSeqNum = req->Record.MutableWriteSeqNum();
+        auto* op = req->Record.MutableOperations(0);
+        auto* reqWriteSeqNum = op->MutableWriteSeqNum();
         reqWriteSeqNum->SetWriterIndex(writerIndex);
         reqWriteSeqNum->SetWriteSeqNum(writeSeqNum);
     }

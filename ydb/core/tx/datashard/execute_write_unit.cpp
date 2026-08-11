@@ -122,13 +122,23 @@ public:
     std::optional<EExecutionStatus> CheckWriteSeqNum(TWriteOperation* writeOp, TSetupSysLocks& guardLocks,
         TTransactionContext& txc)
     {
-        const ui64 requested = writeOp->GetWriteSeqNum();
-        if (!requested) {
+        const auto& operations = writeOp->GetWriteTx()->GetOperations();
+
+        // Determine the writer index from the first operation that has a WriteSeqNum
+        ui64 writerIndex = 0;
+        bool hasWriteSeqNum = false;
+        for (const auto& op : operations) {
+            if (op.GetWriteSeqNum().WriteSeqNum) {
+                writerIndex = op.GetWriteSeqNum().WriterIndex;
+                hasWriteSeqNum = true;
+                break;
+            }
+        }
+        if (!hasWriteSeqNum) {
             return std::nullopt;
         }
 
         const ui64 tabletId = DataShard.TabletID();
-        const ui64 writerIndex = writeOp->GetWriterIndex();
         auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
 
         if (lock && lock->GetWriteSeqNum() && lock->GetWriterIndex() != writerIndex) {
@@ -141,40 +151,49 @@ public:
 
         // No lock means nothing applied yet, so current is 0.
         const ui64 current = lock ? lock->GetWriteSeqNum() : 0;
+        ui64 lastRequested = 0;
 
-        if (requested < current) {
-            // Only the last write's result is remembered, so an older duplicate cannot be
-            // answered accurately. BAD_REQUEST makes the reply unmistakably erroneous.
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
-                << "Uncommitted write " << writerIndex << ":" << requested
-                << " is already applied, writer is at " << current);
-            return EExecutionStatus::Executed;
+        for (const auto& op : operations) {
+            const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
+            if (!requested) {
+                continue;
+            }
+
+            if (requested < current) {
+                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                    << "Uncommitted write " << writerIndex << ":" << requested
+                    << " is already applied, writer is at " << current);
+                return EExecutionStatus::Executed;
+            }
+
+            if (requested == current) {
+                // A duplicate of the last write: report its result again, touch nothing else.
+                Y_ENSURE(lock, "A non-zero write seq num implies the lock that carries it");
+                auto res = NEvents::TDataEvents::TEvWriteResult::BuildAlreadyApplied(tabletId, writeOp->GetTxId());
+                if (const auto* stats = lock->GetWriteSeqNumStats()) {
+                    *res->Record.MutableTxStats() = *stats;
+                }
+                THashSet<TPathId> tables = lock->GetReadTables();
+                tables.insert(lock->GetWriteTables().begin(), lock->GetWriteTables().end());
+                for (const TPathId& pathId : tables) {
+                    res->AddTxLock(lock->GetLockId(), tabletId, lock->GetGeneration(),
+                                   lock->GetCounter(), pathId.OwnerId, pathId.LocalPathId,
+                                   lock->IsWriteLock(), writerIndex, current);
+                }
+                writeOp->SetWriteResult(std::move(res));
+                writeOp->ReleaseTxData(txc);
+                return EExecutionStatus::Executed;
+            }
+
+            // requested > current: apply the record.
+            // A gap is fine: KQP notices a lost write itself.
+            // Track the last requested for ApplyLocks to persist.
+            lastRequested = requested;
         }
 
-        if (requested == current) {
-            // A duplicate of the last write: report its result again, touch nothing else.
-            Y_ENSURE(lock, "A non-zero write seq num implies the lock that carries it");
-            auto res = NEvents::TDataEvents::TEvWriteResult::BuildAlreadyApplied(tabletId, writeOp->GetTxId());
-            if (const auto* stats = lock->GetWriteSeqNumStats()) {
-                *res->Record.MutableTxStats() = *stats;
-            }
-            // KQP may have missed the original reply and still needs the lock to commit
-            THashSet<TPathId> tables = lock->GetReadTables();
-            tables.insert(lock->GetWriteTables().begin(), lock->GetWriteTables().end());
-            for (const TPathId& pathId : tables) {
-                res->AddTxLock(lock->GetLockId(), tabletId, lock->GetGeneration(),
-                               lock->GetCounter(), pathId.OwnerId, pathId.LocalPathId,
-                               lock->IsWriteLock(), writerIndex, current);
-            }
-            writeOp->SetWriteResult(std::move(res));
-            writeOp->ReleaseTxData(txc);
-            return EExecutionStatus::Executed;
+        if (lastRequested) {
+            guardLocks.SetWriteSeqNum = TLockWriteSeqNum{writerIndex, lastRequested};
         }
-
-        // A gap means earlier writes never reached this shard, which is not the shard's
-        // business: more than one write may be in flight, and KQP detects the loss
-        // on its own and aborts if it has to.
-        guardLocks.SetWriteSeqNum = TLockWriteSeqNum{writerIndex, requested};
         return std::nullopt;
     }
 
@@ -204,12 +223,22 @@ public:
         }
         DataShard.SubscribeNewLocks(ctx);
 
-        if (const ui64 requested = writeOp->GetWriteSeqNum()) {
-            const ui64 writerIndex = writeOp->GetWriterIndex();
+        // The last applied operation's WriteSeqNum is what the lock should carry
+        ui64 lastRequested = 0;
+        ui64 writerIndex = 0;
+        bool hasWriteSeqNum = false;
+        for (const auto& op : writeOp->GetWriteTx()->GetOperations()) {
+            if (op.GetWriteSeqNum().WriteSeqNum) {
+                lastRequested = op.GetWriteSeqNum().WriteSeqNum;
+                writerIndex = op.GetWriteSeqNum().WriterIndex;
+                hasWriteSeqNum = true;
+            }
+        }
+        if (hasWriteSeqNum) {
             for (const auto& lock : locks) {
                 Y_ENSURE(lock.IsError()
-                             || (lock.WriterIndex == writerIndex && lock.WriteSeqNum == requested),
-                         "Pipelined write " << writerIndex << ":" << requested
+                             || (lock.WriterIndex == writerIndex && lock.WriteSeqNum == lastRequested),
+                         "Pipelined write " << writerIndex << ":" << lastRequested
                          << " reported lock with " << lock.WriterIndex << ":" << lock.WriteSeqNum);
             }
         }
@@ -792,10 +821,16 @@ public:
             KqpUpdateDataShardStatCounters(DataShard, counters);
             KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
 
-            if (const ui64 writeSeqNum = writeOp->GetWriteSeqNum()) {
+            ui64 lastRequested = 0;
+            for (const auto& op : writeOp->GetWriteTx()->GetOperations()) {
+                if (op.GetWriteSeqNum().WriteSeqNum) {
+                    lastRequested = op.GetWriteSeqNum().WriteSeqNum;
+                }
+            }
+            if (lastRequested) {
                 // Remembered for a duplicate delivery of this write
                 auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
-                if (lock && lock->GetWriteSeqNum() == writeSeqNum) {
+                if (lock && lock->GetWriteSeqNum() == lastRequested) {
                     lock->SetWriteSeqNumStats(writeResult->Record.GetTxStats());
                 }
             }

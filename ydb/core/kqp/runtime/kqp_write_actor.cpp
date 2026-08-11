@@ -1361,16 +1361,6 @@ public:
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
-            if (PipelinedWrites) {
-                // A resend (overload retry) must repeat the same seq num, not allocate a new one.
-                auto [it, allocated] = InFlightWriteSeqNum.try_emplace(shardId, 0);
-                if (allocated) {
-                    it->second = TxManager->NextWriteSeqNum(WriterIndex, shardId);
-                }
-                auto* writeSeqNum = evWrite->Record.MutableWriteSeqNum();
-                writeSeqNum->SetWriterIndex(WriterIndex);
-                writeSeqNum->SetWriteSeqNum(it->second);
-            }
 
             if (MvccSnapshot && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
@@ -1387,6 +1377,28 @@ public:
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
         YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
+
+        // Set per-operation WriteSeqNum for pipelined uncommitted writes
+        if (PipelinedWrites && !isPrepare && !isImmediateCommit && !InconsistentTx) {
+            const size_t opCount = evWrite->Record.OperationsSize();
+            auto [it, allocated] = InFlightWriteSeqNum.try_emplace(shardId, TVector<ui64>{});
+            if (allocated) {
+                // First send: allocate a new WriteSeqNum for each operation
+                it->second.reserve(opCount);
+                for (size_t i = 0; i < opCount; ++i) {
+                    it->second.push_back(TxManager->NextWriteSeqNum(WriterIndex, shardId));
+                }
+            }
+            // On resend: reuse the previously allocated seq nums
+            YQL_ENSURE(it->second.size() == opCount,
+                "Operation count mismatch on resend: stored " << it->second.size()
+                << " operations, got " << opCount);
+            for (size_t i = 0; i < opCount; ++i) {
+                auto* writeSeqNum = evWrite->Record.MutableOperations(i)->MutableWriteSeqNum();
+                writeSeqNum->SetWriterIndex(WriterIndex);
+                writeSeqNum->SetWriteSeqNum(it->second[i]);
+            }
+        }
 
         if (metadata->SendAttempts == 0) {
             if (!isPrepare) {
@@ -1730,8 +1742,9 @@ private:
     const bool PipelinedWrites;
     // This writer's id in the uncommitted write chain; one write actor per table today.
     static constexpr ui64 WriterIndex = 0;
-    // Write seq num of the batch in flight at each shard, kept until the shard confirms it.
-    THashMap<ui64, ui64> InFlightWriteSeqNum;
+    // Write seq nums of the batch in flight at each shard, kept until the shard confirms it.
+    // One per operation, since each operation has its own WriteSeqNum.
+    THashMap<ui64, TVector<ui64>> InFlightWriteSeqNum;
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     IKqpTableWriterCallbacks* Callbacks;

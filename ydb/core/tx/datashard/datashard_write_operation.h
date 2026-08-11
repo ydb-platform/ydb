@@ -31,6 +31,7 @@ private:
     YDB_READONLY_DEF(ui32, DefaultFilledColumnCount);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TIntrusivePtr<NACLib::TUserContext>, UserCtx);
+    YDB_READONLY_DEF(TLockWriteSeqNum, WriteSeqNum);
 };
 
 class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
@@ -129,9 +130,6 @@ private:
 
     YDB_READONLY_DEF(ui64, LockTxId);
     YDB_READONLY_DEF(ui32, LockNodeId);
-    YDB_READONLY_DEF(ui64, WriterIndex);
-    YDB_READONLY_DEF(ui64, WriteSeqNum);
-
     YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
     YDB_READONLY_DEF(TInstant, ReceivedAt);
@@ -258,14 +256,6 @@ public:
 
     ui64 IncrementPageFaultCount() {
         return ++PageFaultCount;
-    }
-
-    ui64 GetWriterIndex() const {
-        return WriteTx ? WriteTx->GetWriterIndex() : 0;
-    }
-
-    ui64 GetWriteSeqNum() const {
-        return WriteTx ? WriteTx->GetWriteSeqNum() : 0;
     }
 
     bool IsPipelinedWrite() const {

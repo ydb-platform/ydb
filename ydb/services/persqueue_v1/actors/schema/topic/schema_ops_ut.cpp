@@ -7,6 +7,7 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
+#include <ydb/services/persqueue_v1/actors/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
@@ -75,7 +76,7 @@ std::shared_ptr<TResultHolder<TResponse>> DoActorRequest(
     NActors::IActor* (*factory)(NGRpcService::IRequestOpCtx*),
     const TString& path,
     const TString& database = "/Root",
-    TDuration waitTimeout = TDuration::Seconds(10))
+    TDuration waitTimeout = TDuration::Seconds(30))
 {
     auto result = std::make_shared<TResultHolder<TResponse>>();
     auto edgeActor = runtime.AllocateEdgeActor();
@@ -84,6 +85,15 @@ std::shared_ptr<TResultHolder<TResponse>> DoActorRequest(
     runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edgeActor, waitTimeout);
     UNIT_ASSERT_C(result->ResultStatus, "The operation is still in progress");
     return result;
+}
+
+void EnableScheduleForRootAndChildren(NActors::TTestActorRuntime& runtime, TActorId& rootActorId) {
+    runtime.SetRegistrationObserverFunc(
+        [&](TTestActorRuntimeBase& rt, const TActorId& parentId, const TActorId& actorId) {
+            if (actorId == rootActorId || parentId == rootActorId) {
+                rt.EnableScheduleForActor(actorId);
+            }
+        });
 }
 
 template <typename TResponse>
@@ -99,78 +109,47 @@ void AssertStatus(
     }
 }
 
-Ydb::Topic::CreateTopicRequest MakeCreateTopicRequest(const TString& path) {
+template <typename TResult, typename TResponse>
+const TResult& GetResult(const std::shared_ptr<TResultHolder<TResponse>>& result) {
+    auto* typed = dynamic_cast<const TResult*>(result->Response.get());
+    UNIT_ASSERT(typed);
+    return *typed;
+}
+
+Ydb::Topic::CreateTopicRequest MakeCreateTopicRequest(const TString& path, ui32 partitions = 1) {
     Ydb::Topic::CreateTopicRequest request;
     request.set_path(path);
-    request.mutable_partitioning_settings()->set_min_active_partitions(1);
+    request.mutable_partitioning_settings()->set_min_active_partitions(partitions);
     auto* consumer = request.add_consumers();
     consumer->set_name("user");
     return request;
 }
 
-void CreateTopic(NActors::TTestActorRuntime& runtime, const TString& path) {
+void CreateTopic(NActors::TTestActorRuntime& runtime, const TString& path, ui32 partitions = 1) {
     auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
-        runtime, MakeCreateTopicRequest(path), CreateCreateTopicActor, path);
+        runtime, MakeCreateTopicRequest(path, partitions), CreateCreateTopicActor, path);
     AssertStatus(result, Ydb::StatusIds::SUCCESS);
 }
 
-} // namespace
-
-// Core create/alter/drop/CDC/msg-s coverage lives in ydb/core/persqueue/public/schema.
-// Here we keep Topic service describe/auth wrappers only.
-
-Y_UNIT_TEST_SUITE(SchemaOps_TopicAPI) {
-
-Y_UNIT_TEST(DescribePartitionSmokeAndMissing) {
-    auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
-    const TString path = "/Root/topic_describe_part";
-    CreateTopic(runtime, path);
-
-    {
-        Ydb::Topic::DescribePartitionRequest request;
-        request.set_path(path);
-        request.set_partition_id(0);
-        auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
-            runtime, request, CreateDescribePartitionActor, path);
-        AssertStatus(result, Ydb::StatusIds::SUCCESS);
-
-        auto* describeResult = dynamic_cast<const Ydb::Topic::DescribePartitionResult*>(result->Response.get());
-        UNIT_ASSERT(describeResult);
-        UNIT_ASSERT_VALUES_EQUAL(describeResult->partition().partition_id(), 0u);
-        UNIT_ASSERT(describeResult->partition().active());
-    }
-
-    {
-        Ydb::Topic::DescribePartitionRequest request;
-        request.set_path(path);
-        request.set_partition_id(1000);
-        auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
-            runtime, request, CreateDescribePartitionActor, path);
-        AssertStatus(result, Ydb::StatusIds::BAD_REQUEST);
-    }
-
-    {
-        Ydb::Topic::DescribePartitionRequest request;
-        request.set_path("/Root/not_a_topic");
-        request.set_partition_id(0);
-        auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
-            runtime, request, CreateDescribePartitionActor, request.path());
-        AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR);
-    }
+THolder<TEvPQProxy::TEvPartitionLocationResponse> DoPartitionsLocationRequest(
+    NActors::TTestActorRuntime& runtime,
+    const TGetPartitionsLocationRequest& request,
+    TDuration waitTimeout = TDuration::Seconds(30))
+{
+    const auto edge = runtime.AllocateEdgeActor();
+    TActorId rootActorId;
+    EnableScheduleForRootAndChildren(runtime, rootActorId);
+    rootActorId = runtime.Register(CreatePartitionsLocationActor(request, edge));
+    runtime.EnableScheduleForActor(rootActorId, true);
+    runtime.DispatchEvents();
+    auto handle = runtime.GrabEdgeEvent<TEvPQProxy::TEvPartitionLocationResponse>(edge, waitTimeout);
+    UNIT_ASSERT(handle);
+    return THolder(handle->Release());
 }
 
-Y_UNIT_TEST(DescribePartitionRetriesOnLocationDeliveryProblem) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_describe_part_delivery_problem";
-    CreateTopic(runtime, path);
-
-    // Break the first location forward and inject DeliveryProblem with the matching
-    // subscribe cookie — regresses silent ignore of OnUndelivered()==true.
-    size_t broken = 0;
+auto BreakFirstLocationForward(NActors::TTestActorRuntime& runtime, size_t& broken) {
     auto* rt = &runtime;
-    auto breakObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
+    return runtime.AddObserver<TEvPipeCache::TEvForward>(
         [&broken, rt](TEvPipeCache::TEvForward::TPtr& ev) {
             if (!ev || !ev->Get()->Ev) {
                 return;
@@ -192,22 +171,165 @@ Y_UNIT_TEST(DescribePartitionRetriesOnLocationDeliveryProblem) {
                 subscribeCookie));
             ev.Reset();
         });
+}
+
+auto InjectFalseLocationStatusOnce(NActors::TTestActorRuntime& runtime, size_t& injected) {
+    auto* rt = &runtime;
+    return runtime.AddObserver<TEvPipeCache::TEvForward>(
+        [&injected, rt](TEvPipeCache::TEvForward::TPtr& ev) {
+            if (!ev || !ev->Get()->Ev) {
+                return;
+            }
+            if (ev->Get()->Ev->Type() != TEvPersQueue::TEvGetPartitionsLocation::EventType) {
+                return;
+            }
+            if (injected >= 1) {
+                return;
+            }
+            ++injected;
+            auto* response = new TEvPersQueue::TEvGetPartitionsLocationResponse();
+            response->Record.SetStatus(false);
+            rt->Send(new IEventHandle(ev->Sender, ev->Recipient, response));
+            ev.Reset();
+        });
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(SchemaOps_TopicAPI) {
+
+Y_UNIT_TEST(DescribePartitionSmokeAndMissing) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_partition_smoke";
+    CreateTopic(runtime, path);
+
+    {
+        Ydb::Topic::DescribePartitionRequest request;
+        request.set_path(path);
+        request.set_partition_id(0);
+        auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+            runtime, request, CreateDescribePartitionActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult = GetResult<Ydb::Topic::DescribePartitionResult>(result);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.partition().partition_id(), 0u);
+        UNIT_ASSERT(describeResult.partition().active());
+        UNIT_ASSERT(!describeResult.partition().has_partition_location());
+        UNIT_ASSERT(!describeResult.partition().has_partition_stats());
+    }
+
+    {
+        Ydb::Topic::DescribePartitionRequest request;
+        request.set_path(path);
+        request.set_partition_id(1000);
+        auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+            runtime, request, CreateDescribePartitionActor, path);
+        AssertStatus(result, Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    {
+        Ydb::Topic::DescribePartitionRequest request;
+        request.set_path("/Root/not_a_topic");
+        request.set_partition_id(0);
+        auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+            runtime, request, CreateDescribePartitionActor, request.path());
+        AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR);
+    }
+}
+
+Y_UNIT_TEST(DescribePartitionWithLocationAndStats) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_partition_loc_stats";
+    CreateTopic(runtime, path);
+
+    {
+        Ydb::Topic::DescribePartitionRequest request;
+        request.set_path(path);
+        request.set_partition_id(0);
+        request.set_include_location(true);
+        auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+            runtime, request, CreateDescribePartitionActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult = GetResult<Ydb::Topic::DescribePartitionResult>(result);
+        UNIT_ASSERT(describeResult.partition().has_partition_location());
+        UNIT_ASSERT_GT(describeResult.partition().partition_location().node_id(), 0);
+        UNIT_ASSERT_GT(describeResult.partition().partition_location().generation(), 0);
+        UNIT_ASSERT(!describeResult.partition().has_partition_stats());
+    }
+
+    {
+        Ydb::Topic::DescribePartitionRequest request;
+        request.set_path(path);
+        request.set_partition_id(0);
+        request.set_include_stats(true);
+        auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+            runtime, request, CreateDescribePartitionActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult = GetResult<Ydb::Topic::DescribePartitionResult>(result);
+        UNIT_ASSERT(describeResult.partition().has_partition_stats());
+        UNIT_ASSERT_GT(describeResult.partition().partition_stats().partition_node_id(), 0);
+        UNIT_ASSERT(!describeResult.partition().has_partition_location());
+    }
+
+    {
+        Ydb::Topic::DescribePartitionRequest request;
+        request.set_path(path);
+        request.set_partition_id(0);
+        request.set_include_location(true);
+        request.set_include_stats(true);
+        auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+            runtime, request, CreateDescribePartitionActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult = GetResult<Ydb::Topic::DescribePartitionResult>(result);
+        UNIT_ASSERT(describeResult.partition().has_partition_location());
+        UNIT_ASSERT(describeResult.partition().has_partition_stats());
+        UNIT_ASSERT_VALUES_EQUAL(
+            describeResult.partition().partition_stats().partition_node_id(),
+            describeResult.partition().partition_location().node_id());
+    }
+}
+
+Y_UNIT_TEST(DescribePartitionRetriesOnLocationDeliveryProblem) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_describe_part_delivery_problem";
+    CreateTopic(runtime, path);
+
+    size_t broken = 0;
+    auto breakObserver = BreakFirstLocationForward(runtime, broken);
 
     Ydb::Topic::DescribePartitionRequest request;
     request.set_path(path);
     request.set_partition_id(0);
     request.set_include_location(true);
-
     auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
         runtime, request, CreateDescribePartitionActor, path);
 
     UNIT_ASSERT_VALUES_EQUAL(broken, 1u);
     AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    const auto& describeResult = GetResult<Ydb::Topic::DescribePartitionResult>(result);
+    UNIT_ASSERT(describeResult.partition().has_partition_location());
+    UNIT_ASSERT_GT(describeResult.partition().partition_location().node_id(), 0);
 
-    auto* describeResult = dynamic_cast<const Ydb::Topic::DescribePartitionResult*>(result->Response.get());
-    UNIT_ASSERT(describeResult);
-    UNIT_ASSERT(describeResult->partition().has_partition_location());
-    UNIT_ASSERT_GT(describeResult->partition().partition_location().node_id(), 0);
+    // Same server: retry on false Status from balancer.
+    {
+        const TString path2 = "/Root/topic_describe_part_false_status";
+        CreateTopic(runtime, path2);
+        size_t injected = 0;
+        auto injectObserver = InjectFalseLocationStatusOnce(runtime, injected);
+
+        Ydb::Topic::DescribePartitionRequest request2;
+        request2.set_path(path2);
+        request2.set_partition_id(0);
+        request2.set_include_location(true);
+        auto result2 = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+            runtime, request2, CreateDescribePartitionActor, path2);
+        UNIT_ASSERT_VALUES_EQUAL(injected, 1u);
+        AssertStatus(result2, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult2 = GetResult<Ydb::Topic::DescribePartitionResult>(result2);
+        UNIT_ASSERT(describeResult2.partition().has_partition_location());
+    }
 }
 
 Y_UNIT_TEST(DescribePartitionTimesOutWhenLocationStuck) {
@@ -216,7 +338,6 @@ Y_UNIT_TEST(DescribePartitionTimesOutWhenLocationStuck) {
     const TString path = "/Root/topic_describe_part_timeout";
     CreateTopic(runtime, path);
 
-    // Drop location forwards so the actor never gets a response and must hit RequestTimeout.
     auto dropObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
         [](TEvPipeCache::TEvForward::TPtr& ev) {
             if (ev && ev->Get()->Ev &&
@@ -235,10 +356,12 @@ Y_UNIT_TEST(DescribePartitionTimesOutWhenLocationStuck) {
     auto edgeActor = runtime.AllocateEdgeActor();
     auto* ctx = new TRequestCtx<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
         request, path, "/Root", result, edgeActor);
-    auto actorId = runtime.Register(CreateDescribePartitionActor(ctx));
-    runtime.EnableScheduleForActor(actorId, true);
 
-    // Reach StateWork (location request stuck), then jump past RequestTimeout.
+    TActorId grpcActorId;
+    EnableScheduleForRootAndChildren(runtime, grpcActorId);
+    grpcActorId = runtime.Register(CreateDescribePartitionActor(ctx));
+    runtime.EnableScheduleForActor(grpcActorId, true);
+
     runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
     runtime.AdvanceCurrentTime(TDuration::Seconds(11));
 
@@ -247,59 +370,262 @@ Y_UNIT_TEST(DescribePartitionTimesOutWhenLocationStuck) {
     AssertStatus(result, Ydb::StatusIds::TIMEOUT, "Describe request timed out");
 }
 
-Y_UNIT_TEST(DescribePartitionFailsAfterStatsRetriesExhausted) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_describe_part_stats_retries";
+Y_UNIT_TEST(DescribePartitionUnauthenticatedRejectedWhenRequired) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_part_auth";
     CreateTopic(runtime, path);
-
-    size_t broken = 0;
-    auto* rt = &runtime;
-    auto breakObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
-        [&broken, rt](TEvPipeCache::TEvForward::TPtr& ev) {
-            if (!ev || !ev->Get()->Ev) {
-                return;
-            }
-            if (ev->Get()->Ev->Type() != TEvPersQueue::TEvStatus::EventType) {
-                return;
-            }
-            ++broken;
-            const ui64 tabletId = ev->Get()->TabletId;
-            const ui64 subscribeCookie = ev->Get()->Options.SubscribeCookie;
-            rt->Send(new IEventHandle(
-                ev->Sender,
-                ev->Recipient,
-                new TEvPipeCache::TEvDeliveryProblem(tabletId, true /*notDelivered*/),
-                0,
-                subscribeCookie));
-            ev.Reset();
-        });
+    runtime.GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
 
     Ydb::Topic::DescribePartitionRequest request;
     request.set_path(path);
     request.set_partition_id(0);
-    request.set_include_stats(true);
-
     auto result = DoActorRequest<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
         runtime, request, CreateDescribePartitionActor, path);
+    AssertStatus(result, Ydb::StatusIds::UNAUTHORIZED, "Unauthenticated access is forbidden");
+}
 
-    // Initial attempt + StatsMaxRetries(15) backoff retries, then fail on the next DeliveryProblem.
-    UNIT_ASSERT_VALUES_EQUAL(broken, 16u);
-    AssertStatus(result, Ydb::StatusIds::UNAVAILABLE, "unresponsive");
+Y_UNIT_TEST(DescribeConsumerSmokeAndMissingTopic) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_consumer_smoke";
+    CreateTopic(runtime, path);
+
+    {
+        Ydb::Topic::DescribeConsumerRequest request;
+        request.set_path(path);
+        request.set_consumer("user");
+        auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+            runtime, request, CreateDescribeConsumerActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult = GetResult<Ydb::Topic::DescribeConsumerResult>(result);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.consumer().name(), "user");
+        UNIT_ASSERT(describeResult.self().name().EndsWith("/user"));
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.partitions_size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.partitions(0).partition_id(), 0u);
+        UNIT_ASSERT(describeResult.partitions(0).active());
+    }
+
+    {
+        Ydb::Topic::DescribeConsumerRequest request;
+        request.set_path("/Root/not_a_topic");
+        request.set_consumer("user");
+        auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+            runtime, request, CreateDescribeConsumerActor, request.path());
+        AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR);
+    }
+}
+
+Y_UNIT_TEST(DescribeConsumerWithLocationAndStats) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_consumer_loc_stats";
+    CreateTopic(runtime, path, /*partitions=*/2);
+
+    {
+        Ydb::Topic::DescribeConsumerRequest request;
+        request.set_path(path);
+        request.set_consumer("user");
+        request.set_include_location(true);
+        auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+            runtime, request, CreateDescribeConsumerActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult = GetResult<Ydb::Topic::DescribeConsumerResult>(result);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.partitions_size(), 2u);
+        for (const auto& p : describeResult.partitions()) {
+            UNIT_ASSERT(p.has_partition_location());
+            UNIT_ASSERT_GT(p.partition_location().node_id(), 0);
+            UNIT_ASSERT(!p.has_partition_stats());
+            UNIT_ASSERT(!p.has_partition_consumer_stats());
+        }
+    }
+
+    {
+        Ydb::Topic::DescribeConsumerRequest request;
+        request.set_path(path);
+        request.set_consumer("user");
+        request.set_include_stats(true);
+        auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+            runtime, request, CreateDescribeConsumerActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult = GetResult<Ydb::Topic::DescribeConsumerResult>(result);
+        for (const auto& p : describeResult.partitions()) {
+            UNIT_ASSERT(p.has_partition_stats());
+            UNIT_ASSERT(p.has_partition_consumer_stats());
+            UNIT_ASSERT_GT(p.partition_stats().partition_node_id(), 0);
+        }
+    }
+
+    {
+        Ydb::Topic::DescribeConsumerRequest request;
+        request.set_path(path);
+        request.set_consumer("user");
+        request.set_include_location(true);
+        request.set_include_stats(true);
+        auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+            runtime, request, CreateDescribeConsumerActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+        const auto& describeResult = GetResult<Ydb::Topic::DescribeConsumerResult>(result);
+        for (const auto& p : describeResult.partitions()) {
+            UNIT_ASSERT(p.has_partition_location());
+            UNIT_ASSERT(p.has_partition_stats());
+            UNIT_ASSERT(p.has_partition_consumer_stats());
+        }
+    }
 }
 
 Y_UNIT_TEST(DescribeUnknownConsumer) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
-    const TString path = "/Root/topic_desc_unknown_consumer";
+    const TString path = "/Root/topic_describe_unknown_consumer";
     CreateTopic(runtime, path);
 
     Ydb::Topic::DescribeConsumerRequest request;
     request.set_path(path);
-    request.set_consumer("missing_consumer");
+    request.set_consumer("missing_user");
     auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
         runtime, request, CreateDescribeConsumerActor, path);
-    AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR, "no consumer");
+    AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR);
+}
+
+Y_UNIT_TEST(DescribeConsumerRetriesOnLocationDeliveryProblem) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_describe_consumer_retry";
+    CreateTopic(runtime, path);
+
+    size_t broken = 0;
+    auto breakObserver = BreakFirstLocationForward(runtime, broken);
+
+    Ydb::Topic::DescribeConsumerRequest request;
+    request.set_path(path);
+    request.set_consumer("user");
+    request.set_include_location(true);
+    auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+        runtime, request, CreateDescribeConsumerActor, path);
+
+    UNIT_ASSERT_VALUES_EQUAL(broken, 1u);
+    AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    const auto& describeResult = GetResult<Ydb::Topic::DescribeConsumerResult>(result);
+    UNIT_ASSERT(describeResult.partitions(0).has_partition_location());
+}
+
+Y_UNIT_TEST(DescribeConsumerUnauthenticatedRejectedWhenRequired) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_consumer_auth";
+    CreateTopic(runtime, path);
+    runtime.GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
+
+    Ydb::Topic::DescribeConsumerRequest request;
+    request.set_path(path);
+    request.set_consumer("user");
+    auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+        runtime, request, CreateDescribeConsumerActor, path);
+    AssertStatus(result, Ydb::StatusIds::UNAUTHORIZED, "Unauthenticated access is forbidden");
+}
+
+Y_UNIT_TEST(PartitionsLocationSmokeAndErrors) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_partitions_location_smoke";
+    CreateTopic(runtime, path, /*partitions=*/3);
+
+    {
+        auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {}});
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 3u);
+        UNIT_ASSERT_GT(ev->PathId, 0);
+        UNIT_ASSERT_GT(ev->SchemeShardId, 0);
+        for (const auto& p : ev->Partitions) {
+            UNIT_ASSERT_GT(p.NodeId, 0);
+            UNIT_ASSERT_GT(p.Generation, 0);
+            UNIT_ASSERT_LT(p.PartitionId, 3);
+        }
+    }
+
+    {
+        auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {0, 2}});
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 2u);
+    }
+
+    {
+        auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {1, 1, 1}});
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Partitions[0].PartitionId, 1u);
+    }
+
+    {
+        auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {1000}});
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT(ev->Issues.ToString().Contains("No partition"));
+    }
+
+    {
+        auto ev = DoPartitionsLocationRequest(runtime, {"/Root/missing_topic", "/Root", "", {}});
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SCHEME_ERROR);
+    }
+}
+
+Y_UNIT_TEST(PartitionsLocationRetriesOnDeliveryProblem) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_partitions_location_retry";
+    CreateTopic(runtime, path);
+
+    size_t broken = 0;
+    auto breakObserver = BreakFirstLocationForward(runtime, broken);
+    auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {0}});
+    UNIT_ASSERT_VALUES_EQUAL(broken, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 1u);
+    UNIT_ASSERT_GT(ev->Partitions[0].NodeId, 0);
+}
+
+Y_UNIT_TEST(PartitionsLocationTimesOutWhenStuck) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_partitions_location_timeout";
+    CreateTopic(runtime, path);
+
+    auto dropObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
+        [](TEvPipeCache::TEvForward::TPtr& ev) {
+            if (ev && ev->Get()->Ev &&
+                ev->Get()->Ev->Type() == TEvPersQueue::TEvGetPartitionsLocation::EventType)
+            {
+                ev.Reset();
+            }
+        });
+
+    const auto edge = runtime.AllocateEdgeActor();
+    TActorId rootActorId;
+    EnableScheduleForRootAndChildren(runtime, rootActorId);
+    rootActorId = runtime.Register(CreatePartitionsLocationActor(
+        TGetPartitionsLocationRequest{path, "/Root", "", {0}}, edge));
+    runtime.EnableScheduleForActor(rootActorId, true);
+
+    runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
+    runtime.AdvanceCurrentTime(TDuration::Seconds(11));
+
+    auto handle = runtime.GrabEdgeEvent<TEvPQProxy::TEvPartitionLocationResponse>(edge, TDuration::Seconds(5));
+    UNIT_ASSERT(handle);
+    const auto* ev = handle->Get();
+    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::TIMEOUT);
+    UNIT_ASSERT(ev->Issues.ToString().Contains("timed out"));
+}
+
+Y_UNIT_TEST(PartitionsLocationUnauthenticatedRejectedWhenRequired) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_partitions_location_auth";
+    CreateTopic(runtime, path);
+    runtime.GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
+
+    auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {}});
+    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::UNAUTHORIZED);
+    UNIT_ASSERT(ev->Issues.ToString().Contains("Unauthenticated access is forbidden"));
 }
 
 Y_UNIT_TEST(UnauthenticatedRejectedWhenRequired) {

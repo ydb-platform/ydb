@@ -7,7 +7,7 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/public/list_topics/list_all_topics_actor.h>
-#include <ydb/services/persqueue_v1/actors/schema_actors.h>
+#include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
 #include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
@@ -168,7 +168,7 @@ TActorId TKafkaMetadataActor::SendTopicRequest(const TString& topic) {
 
     PendingResponses++;
 
-    return Register(new TPartitionsLocationActor(locationRequest, SelfId()));
+    return Register(NKikimr::NGRpcProxy::V1::NTopic::CreatePartitionsLocationActor(locationRequest, SelfId()));
 }
 
 TVector<TKafkaMetadataActor::TNodeInfo*> TKafkaMetadataActor::CheckTopicNodes(TEvLocationResponse* response) {

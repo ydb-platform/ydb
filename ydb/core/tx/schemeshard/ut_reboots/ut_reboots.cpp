@@ -869,4 +869,43 @@ Y_UNIT_TEST_SUITE(TSolomonReboots) {
             }
         });
     }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(UpdateChannelsBindingSolomonWithReboots, 2, 1, false) {
+        t.GetTestEnvOptions().AllowUpdateChannelsBindingOfSolomonPartitions(true);
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TestCreateSolomon(runtime, ++t.TxId, "/MyRoot", R"(
+                Name: "Solomon"
+                PartitionCount: 2
+                ChannelProfileId: 2
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            TestAlterSolomon(runtime, ++t.TxId, "/MyRoot", R"(
+                Name: "Solomon"
+                ChannelProfileId: 3
+                UpdateChannelsBinding: true
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                NKikimrSchemeOp::TDescribeOptions opts;
+                opts.SetReturnChannelsBinding(true);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon", opts), {
+                    NLs::Finished,
+                    NLs::ShardsInsideDomain(2),
+                    [] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                        const auto& desc = record.GetPathDescription().GetSolomonDescription();
+                        UNIT_ASSERT_VALUES_EQUAL(desc.PartitionsSize(), 2);
+                        for (const auto& partition : desc.GetPartitions()) {
+                            for (const auto& channel : partition.GetBoundChannels()) {
+                                UNIT_ASSERT_VALUES_EQUAL(channel.GetStoragePoolName(), "pool-2");
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    }
 }

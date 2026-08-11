@@ -220,8 +220,10 @@ public:
         , SkipCheckConnectRights_(skipCheckConnectRights)
         , FacilityProvider_(facilityProvider)
         , CloudPermissionsSettings(cloudPermissionsSettings)
-        , RequestSchemeData_(schemeData)
     {
+        if constexpr (IsHttpRequest) {
+            RequestSchemeData_ = schemeData;
+        }
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
         if (authToken) {
             TBase::SetSecurityToken(authToken.GetRef());
@@ -777,15 +779,16 @@ private:
     }
 
     EHttpDatabaseAccessVerdict EvaluateHttpDatabaseAccessVerdict() const {
+        Y_DEBUG_ABORT_UNLESS(RequestSchemeData_.Defined());
         const auto rawDatabaseName = GrpcRequestBaseCtx_->GetDatabaseName();
         if (!rawDatabaseName || rawDatabaseName->empty()) {
             return EHttpDatabaseAccessVerdict::EmptyDatabase;
         }
 
-        const auto& domainDescription = RequestSchemeData_.GetPathDescription().GetDomainDescription();
+        const auto& domainDescription = RequestSchemeData_->GetPathDescription().GetDomainDescription();
         const auto domainKey = TPathId::FromDomainKey(domainDescription.GetDomainKey());
-        const auto schemePathType = RequestSchemeData_.GetPathDescription().GetSelf().GetPathType();
-        const auto& self = RequestSchemeData_.GetPathDescription().GetSelf();
+        const auto schemePathType = RequestSchemeData_->GetPathDescription().GetSelf().GetPathType();
+        const auto& self = RequestSchemeData_->GetPathDescription().GetSelf();
         const auto selfPathId = TPathId(self.GetSchemeshardId(), self.GetPathId());
         const bool isDatabaseRootPath = domainKey == selfPathId;
         const bool isDatabasePathType =
@@ -838,7 +841,7 @@ private:
     NWilson::TSpan Span_;
     TCloudPermissionsSettings CloudPermissionsSettings;
     EHttpDatabaseAccessVerdict HttpDatabaseAccessVerdict_ = EHttpDatabaseAccessVerdict::Ok;
-    TSchemeBoardEvents::TDescribeSchemeResult RequestSchemeData_;
+    TMaybe<TSchemeBoardEvents::TDescribeSchemeResult> RequestSchemeData_;
 };
 
 // default behavior - attributes in schema

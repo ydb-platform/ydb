@@ -27,6 +27,7 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
@@ -443,7 +444,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             ReplyOk(ctx, response.GetCookie(), response.Span);
         } else {
-            Y_ABORT("Unexpected message");
+            PQ_ENSURE(false)("reason", "Unexpected message")("topic", TopicName())("cookie", response.GetCookie())("index", response.Body.index());
         }
         Responses.pop_front();
     }
@@ -1352,7 +1353,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 {"endOffset", BlobEncoder.EndOffset},
                 {"curOffset", curOffset},
                 {"offset", poffset});
-            Y_ENSURE(!p.Internal); // No Already for transactions;
+            PQ_ENSURE(!p.Internal)("topic", TopicName()); // No Already for transactions;
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
             MsgsDiscarded.Inc();
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());

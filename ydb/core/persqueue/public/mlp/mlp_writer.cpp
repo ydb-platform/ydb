@@ -4,6 +4,7 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
@@ -113,7 +114,7 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
 
     TString dataStr;
     bool res = proto.SerializeToString(&dataStr);
-    Y_ABORT_UNLESS(res);
+    AFL_ENSURE(res);
     cmdWrite.SetData(dataStr);
 
     return totalSize;

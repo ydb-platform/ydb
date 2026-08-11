@@ -152,7 +152,7 @@ const std::vector<std::string>& TNodeDescriptor::GetTags() const
 
 std::optional<TInstant> TNodeDescriptor::GetLastSeenTime() const
 {
-    auto cpuTime = LastSeenTime_.Load();
+    auto cpuTime = LastSeenTime_.load();
     if (cpuTime != 0) {
         return CpuInstantToInstant(cpuTime);
     } else {
@@ -163,8 +163,8 @@ std::optional<TInstant> TNodeDescriptor::GetLastSeenTime() const
 void TNodeDescriptor::UpdateLastSeenTime(TInstant at) const
 {
     auto cpuTime = InstantToCpuInstant(at);
-    if (auto currentTime = LastSeenTime_.Load(); cpuTime > currentTime) {
-        LastSeenTime_.Store(cpuTime);
+    if (auto currentTime = LastSeenTime_.load(); cpuTime > currentTime) {
+        LastSeenTime_.store(cpuTime);
     }
 }
 
@@ -573,7 +573,9 @@ void TNodeDirectory::OnDescriptorAdded(TNodeId id, const TNodeDescriptor* descri
 {
     if (auto it = IdToPromise_.find(id); it != IdToPromise_.end()) {
         it->second.TrySet(descriptor);
-        YT_LOG_DEBUG("Awaited node descriptor added (NodeId: %v, NodeAddress: %v)", id, descriptor->GetDefaultAddress());
+        YT_TLOG_DEBUG("Awaited node descriptor added")
+            .With("NodeId", id)
+            .With("NodeAddress", descriptor->GetDefaultAddress());
         IdToPromise_.erase(it);
     }
 }
@@ -600,7 +602,8 @@ TFuture<const TNodeDescriptor*> TNodeDirectory::GetAsyncDescriptor(TNodeId id)
 
     TPromise<const TNodeDescriptor*> promise;
     {
-        YT_LOG_DEBUG("Waiting for node descriptor (NodeId: %v)", id);
+        YT_TLOG_DEBUG("Waiting for node descriptor")
+            .With("NodeId", id);
         auto guard = WriterGuard(SpinLock_);
         if (auto it = IdToPromise_.find(id); it != IdToPromise_.end()) {
             promise = it->second;

@@ -12,7 +12,7 @@ The simplest way is to create a copy of a table (or several tables) within the s
 
 Suitable for:
 
-- Quickly creating a safety copy before a risky operation.
+- Quickly creating a safety copy before a dangerous operation.
 - Cloning data for testing.
 
 {% note warning %}
@@ -41,15 +41,27 @@ Suitable for:
 - Data migration between clusters.
 - Long-term archiving.
 
+### Export to NFS {#nfs}
+
+The [`{{ ydb-cli }} export nfs`](../reference/ydb-cli/export-import/export-nfs.md) and [`{{ ydb-cli }} import nfs`](../reference/ydb-cli/export-import/import-nfs.md) commands allow you to export and import data to a network file system (NFS) mounted on all hosts of the {{ ydb-short-name }} cluster. Unlike [dump to file system](#dump), the export is performed on the server side and does not require data transfer via CLI.
+
+Suitable for:
+
+- Disaster recovery (data is stored outside the cluster).
+- Data migration between clusters.
+- Long-term archiving.
+
+For more details on configuring NFS for backup and recovery, see the recipe [Backup and recovery via NFS](../recipes/nfs-backup/nfs-backup.md).
+
 ## Incremental backup {#incremental-backup}
 
-When working with large tables, repeatedly creating full backups can be too expensive. Incremental backup solves this problem: after an initial full copy, each subsequent increment captures only the changes (inserts, updates, deletes) that occurred since the previous backup.
+When working with large tables, repeatedly creating full backups can be too costly. Incremental backup solves this problem: after an initial full copy, each subsequent increment captures only the changes (inserts, updates, deletes) that occurred since the previous backup.
 
 Incremental backups are organized into a **chain**:
 
 
 ```text
-Full backup → Incremental₁ → Incremental₂ → ... → Incrementalₙ
+Full backup → Increment₁ → Increment₂ → ... → Incrementₙ
 ```
 
 
@@ -73,19 +85,19 @@ Currently, only backup of cluster system tablets is supported. Backup of databas
 
 The system tablet backup mechanism provides incremental copying of cluster metadata — such as [Hive](glossary.md#hive), [BSController](glossary.md#ds-controller), and [SchemeShard](glossary.md#scheme-shard) — to the local file system of cluster hosts.
 
-This mechanism is used to restore cluster metadata when [restoring from database backups](#full-backup) is technically possible but not suitable in terms of time or effort. A typical scenario is when the total volume of databases in the cluster is large due to their number, the size of individual databases, or a combination of both; a full `import/restore` of all data to a new cluster in such a case leads to prolonged downtime. In this scenario, you can restore the system tablets and bring the cluster back to a working state without performing a mass restore of user data on the new cluster.
+This mechanism is used to restore cluster metadata when [restoring from database backups](#full-backup) is technically possible but not suitable in terms of time or effort. A typical scenario is when the total volume of databases in the cluster is large due to their number, the size of individual databases, or a combination of both; a full `import/restore` of all data into a new cluster in such a case leads to prolonged downtime. In this scenario, you can restore system tablets and bring the cluster back to a working state without performing a bulk restore of user data on the new cluster.
 
-If the volume of databases allows standard restoration, use [export/import](#s3) or [dump/restore](#dump) first. System tablet backup should be used as a special mechanism for situations where you need to restore exactly the cluster metadata and reduce the volume of restoration operations.
+If the volume of databases allows for a standard restore, use [export/import](#s3) or [dump/restore](#dump) first. System tablet backup should be used as a special mechanism for situations where you need to restore cluster metadata and reduce the volume of restore operations.
 
 {% note info %}
 
-For practical instructions on enabling and restoring, see the [recipes for system tablet backup](../recipes/system-tablet-backup/index.md).
+For practical instructions on enabling and restoring, see [recipes for system tablet backup](../recipes/system-tablet-backup/index.md).
 
 {% endnote %}
 
 {% note warning %}
 
-Backups of different system tablets are created independently of each other and are not consistent with each other. After restoration, the state of the tablets may become inconsistent, which can negatively affect cluster operation.
+Backups of different system tablets are created independently of each other and are not consistent with each other. After restoration, the state of tablets may be inconsistent, which may negatively affect cluster operation.
 
 {% endnote %}
 
@@ -93,37 +105,37 @@ Backups of different system tablets are created independently of each other and 
 
 Backup consists of two components:
 
-- **State snapshot** — on each start, the tablet scans all its tables and writes its full state to a backup, including the data schema. Scanning is performed based on a state snapshot and does not block tablet operation.
-- **Change log** — on each data or schema change, the tablet asynchronously writes the change to the log in parallel with writing to the distributed storage. When the log size exceeds the snapshot size, the tablet automatically takes a new snapshot.
+- **State snapshot** — at each start, the tablet scans all its tables and writes its full state to a backup, including the data schema. The scan is based on a state snapshot and does not block tablet operation.
+- **Change log** — with each change to data or schema, the tablet asynchronously writes the change to the log in parallel with writing to the distributed storage. When the log size exceeds the snapshot size, the tablet automatically creates a new snapshot.
 
 {% note warning %}
 
-Due to asynchronous writing, recent changes that have not yet been written to the backup before a failure may be lost.
+Due to asynchronous writing, the latest changes that did not make it into the backup before the failure may be lost.
 
 {% endnote %}
 
-Backups are created **locally on the host where the tablet is currently running**. Therefore, the most up-to-date copy is on the host where the tablet was running just before the failure.
+Backups are created **locally on the host where the tablet is currently running**. Therefore, the most recent copy is on the host where the tablet was running just before the failure.
 
 The number of stored backups on a host is limited in the [configuration](../reference/configuration/system_tablet_backup_config.md). After a successful snapshot, the oldest copy is automatically deleted when the limit is exceeded. Incomplete copies (without a fully written snapshot) are deleted when a new backup is created.
 
 ## Comparison of approaches {#comparison}
 
-#|
-|| **Method** | **Storage location** | **Incremental** | **Use cases** ||
-|| [Copying tables within a cluster](#copy-table) | In the cluster | No | Quick copy before a risky operation ||
-|| [Dump to file system](#dump) | File system | No | Development, testing, small databases ||
-|| [Export to S3-compatible storage](#s3) | S3-compatible storage | No | Disaster recovery, migration, archiving ||
-|| [Incremental backup](#incremental-backup) | In the cluster ([exported](datamodel/backup-collection.md#external-storage) to S3 or file system) | Yes | Regular backups of large production databases ||
-|| [Backup of system tablets](#system-tablet-backup) | Local file system of cluster hosts | Yes | Restoring cluster metadata in emergency situations ||
-|#
+| **Method** | **Storage location** | **Incremental** | **Use cases** |
+| --- | --- | --- | --- |
+| [Copying tables within a cluster](#copy-table) | Within the cluster | No | Quick copy before a dangerous operation |
+| [Dump to file system](#dump) | File system | No | Development, testing, small databases |
+| [Export to S3-compatible storage](#s3) | S3-compatible storage | No | Disaster recovery, migration, archiving |
+| [Export to NFS](#nfs) | Network File System (NFS) | No | Disaster recovery, migration, archiving |
+| [Incremental backup](#incremental-backup) | Within the cluster ( [exported](datamodel/backup-collection.md#external-storage) to S3 or file system) | Yes | Regular backups of large production databases |
+| [System tablet backup](#system-tablet-backup) | Local file system of cluster hosts | Yes | Restoring cluster metadata in emergency situations |
 
 ## See also
 
 - [Backup and restore](../devops/backup-and-recovery/index.md) — practical guide
 - [Backup collections](datamodel/backup-collection.md) — architecture and limitations
-- [Recipes for backing up system tablets](../recipes/system-tablet-backup/index.md) — enabling and restoring
+- [Recipes for system tablet backup](../recipes/system-tablet-backup/index.md) — enabling and restoring
 - [Backup and restore](../devops/backup-and-recovery/index.md) — practical guide
-- [export/import reference](../reference/ydb-cli/export-import/index.md) — CLI commands
+- [Export/import reference](../reference/ydb-cli/export-import/index.md) — CLI commands
 - YQL reference:
 
   - [`CREATE BACKUP COLLECTION`](../yql/reference/syntax/create-backup-collection.md)

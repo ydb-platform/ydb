@@ -111,7 +111,7 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
 
     if (graph) {
         auto* node = graph.GetPartition(partitionId);
-        Y_VERIFY_S(node, "Partition " << partitionId << " not found. Known partitions " << graph.DebugString());
+        AFL_ENSURE(node)("partition_id", partitionId)("graph", graph.DebugString());
         for (const auto& p : partitionsData.GetPartition()) {
             if (node->IsParent(p.GetPartitionId())) {
                 for (const auto& g : p.GetMessageGroup()) {
@@ -441,7 +441,7 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
         PQ_ENSURE(TopicName.size())("description", "Need topic name here");
         ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(TopicName, cacheSize));
     } else {
-        //AFL_ENSURE(TopicName == Config.GetTopicName(), "Changing topic name is not supported");
+        //AFL_ENSURE(TopicName == Config.GetTopicName())("reason", "Changing topic name is not supported");
         TopicPath = Config.GetTopicPath();
         ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(cacheSize));
     }
@@ -5581,7 +5581,7 @@ void TPersQueue::EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig&
     }
 
     for (const auto& partition : Config.GetPartitions()) {
-        Y_VERIFY_S(was.contains(partition.GetPartitionId()), "New config is bad, missing partition " << partition.GetPartitionId());
+        PQ_ENSURE(was.contains(partition.GetPartitionId()))("partition_id", partition.GetPartitionId());
     }
 }
 

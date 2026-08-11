@@ -26,7 +26,7 @@ using namespace NJobTrackerClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, JobShellStructuredLogger, "JobShell");
+static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, JobShellStructuredLogger, "JobShell");
 
 ////////////////////////////////////////////////////////////////////////////////
 

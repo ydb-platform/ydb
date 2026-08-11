@@ -4,6 +4,7 @@ A {{ ydb-short-name }} cluster consists of multiple nodes, and one or more typic
 
 ## Syntax
 
+
 ```yaml
 host_configs:
 - host_config_id: 1
@@ -16,6 +17,7 @@ host_configs:
   ...
 ```
 
+
 The `host_config_id` attribute specifies a numeric configuration ID. The `drive` attribute contains a collection of descriptions of connected drives. Each description consists of two mandatory attributes:
 
 - `path`: Path to the mounted block device, for example, `/dev/disk/by-partlabel/ydb_disk_ssd_01`
@@ -27,6 +29,7 @@ Additionally, an optional `disk_scope` attribute can be specified — a label fo
 
 One configuration with ID 1 and one SSD disk accessible via `/dev/disk/by-partlabel/ydb_disk_ssd_01`:
 
+
 ```yaml
 host_configs:
 - host_config_id: 1
@@ -35,7 +38,9 @@ host_configs:
     type: SSD
 ```
 
+
 Two configurations with IDs 1 (two SSD disks) and 2 (three SSD disks):
+
 
 ```yaml
 host_configs:
@@ -55,6 +60,7 @@ host_configs:
     type: SSD
 ```
 
+
 ## Configuring disk_scope {#disk-scope}
 
 `disk_scope` is an optional string attribute of a disk that defines a finer-grained failure zone within a single node. It is taken into account when calculating [fail domains](../../concepts/glossary.md#fail-domain) during the selection of disks for placing [VDisks](../../concepts/glossary.md#vdisk) of [storage groups](../../concepts/glossary.md#storage-group).
@@ -64,6 +70,7 @@ A fail domain is determined by the physical location of a disk (data center, rac
 ### Example {#disk-scope-example}
 
 A cluster of 4 servers with 4 disks on each server, in the `block-4-2` fault tolerance mode:
+
 
 ``` yaml
 host_configs:
@@ -83,13 +90,17 @@ host_configs:
     disk_scope: fail-domain-2
 ```
 
+
 To calculate fail domains at the `disk_scope` level for the static group and other storage groups, specify the corresponding fail domain type in the yaml config (top-level key):
+
 
 ``` yaml
 fail_domain_type: disk_scope
 ```
 
+
 And in the domain configuration:
+
 
 ```yaml
 domains:
@@ -101,11 +112,13 @@ domains:
     ...
 ```
 
+
 With this configuration, two VDisks of each storage group will be placed on each server, and the maximum tolerated failure in such a configuration is the failure of a single server.
 
 ## Kubernetes Features {#host-configs-k8s}
 
 The {{ ydb-short-name }} Kubernetes operator mounts NBS disks for Storage nodes at the path `/dev/kikimr_ssd_00`. To use them, the following `host_configs` configuration must be specified:
+
 
 ```yaml
 host_configs:
@@ -114,5 +127,6 @@ host_configs:
   - path: /dev/kikimr_ssd_00
     type: SSD
 ```
+
 
 The example configuration files provided with the {{ ydb-short-name }} Kubernetes operator contain this section, and it does not need to be changed.

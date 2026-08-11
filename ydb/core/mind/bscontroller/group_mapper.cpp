@@ -2,6 +2,8 @@
 #include "group_geometry_info.h"
 #include "group_layout_checker.h"
 
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+
 namespace NKikimr::NBsController {
 
     using namespace NLayoutChecker;

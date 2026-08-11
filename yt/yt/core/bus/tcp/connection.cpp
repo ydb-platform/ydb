@@ -128,10 +128,9 @@ TConnection::TConnection(
     , UnixDomainSocketPath_(unixDomainSocketPath)
     , Handler_(std::move(handler))
     , Poller_(std::move(poller))
-    , LoggingTag_(Format("ConnectionId: %v, Endpoint: %v",
-        Id_,
-        EndpointDescription_))
-    , Logger(BusLogger().WithRawTag(LoggingTag_))
+    , Logger(BusLogger()
+        .WithTag("ConnectionId", Id_)
+        .WithTag("Endpoint", EndpointDescription_))
     , GenerateChecksums_(Config_->GenerateChecksums)
     , Socket_(socket)
     , MultiplexingBand_(multiplexingBand)
@@ -211,10 +210,10 @@ void TConnection::Close()
 
 void TConnection::Start()
 {
-    YT_LOG_DEBUG("Starting TCP connection (ConnectionType: %v, EncryptionMode: %v, VerificationMode: %v)",
-        ConnectionType_,
-        Config_->EncryptionMode,
-        Config_->VerificationMode);
+    YT_TLOG_DEBUG("Starting TCP connection")
+        .With("ConnectionType", ConnectionType_)
+        .With("EncryptionMode", Config_->EncryptionMode)
+        .With("VerificationMode", Config_->VerificationMode);
 
     // Offline in PendingControl_ prevents retrying events until end of Open().
     YT_VERIFY(Any(static_cast<EPollControl>(PendingControl_.load()) & EPollControl::Offline));
@@ -240,7 +239,8 @@ void TConnection::Start()
     }
 
     if (Config_->ConnectionStartDelay) {
-        YT_LOG_WARNING("Delay in opening activation of the test connection (Delay: %v)", Config_->ConnectionStartDelay);
+        YT_TLOG_WARNING("Delay in opening activation of the test connection")
+            .With("Delay", Config_->ConnectionStartDelay);
         TDelayedExecutor::WaitForDuration(Config_->ConnectionStartDelay.value());
     }
 
@@ -299,9 +299,9 @@ void TConnection::RunPeriodicCheck()
     }
 }
 
-const std::string& TConnection::GetLoggingTag() const
+const NLogging::TLoggingTagList& TConnection::GetLoggingTags() const
 {
-    return LoggingTag_;
+    return Logger.GetTags();
 }
 
 void TConnection::TryEnqueueHandshake()
@@ -330,7 +330,7 @@ void TConnection::TryEnqueueHandshake()
         std::move(message),
         messageSize);
 
-    YT_LOG_DEBUG("Handshake enqueued");
+    YT_TLOG_DEBUG("Handshake enqueued");
 }
 
 TSharedRefArray TConnection::MakeHandshakeMessage(const NProto::THandshake& handshake)
@@ -354,29 +354,29 @@ TSharedRefArray TConnection::MakeHandshakeMessage(const NProto::THandshake& hand
 std::optional<NProto::THandshake> TConnection::TryParseHandshakeMessage(const TSharedRefArray& message)
 {
     if (message.Size() != 1) {
-        YT_LOG_ERROR("Handshake packet contains invalid number of parts (PartCount: %v)",
-            message.Size());
+        YT_TLOG_ERROR("Handshake packet contains invalid number of parts")
+            .With("PartCount", message.Size());
         return {};
     }
 
     const auto& part = message[0];
     if (part.Size() < sizeof(HandshakeMessageSignature)) {
-        YT_LOG_ERROR("Handshake packet size is too small (Size: %v)",
-            part.Size());
+        YT_TLOG_ERROR("Handshake packet size is too small")
+            .With("Size", part.Size());
         return {};
     }
 
     auto signature = *reinterpret_cast<const ui32*>(part.Begin());
     if (signature != HandshakeMessageSignature) {
-        YT_LOG_ERROR("Invalid handshake packet signature (Expected: %x, Actual: %x)",
-            HandshakeMessageSignature,
-            signature);
+        YT_TLOG_ERROR("Invalid handshake packet signature")
+            .WithFormat("Expected", "%x", HandshakeMessageSignature)
+            .WithFormat("Actual", "%x", signature);
         return {};
     }
 
     NProto::THandshake handshake;
     if (!TryDeserializeProto(&handshake, part.Slice(sizeof(HandshakeMessageSignature), part.Size()))) {
-        YT_LOG_ERROR("Error deserializing handshake packet");
+        YT_TLOG_ERROR("Error deserializing handshake packet");
         return {};
     }
 
@@ -422,7 +422,8 @@ void TConnection::Open(TGuard<NThreading::TSpinLock>& guard)
 {
     State_ = EState::Open;
 
-    YT_LOG_DEBUG("TCP connection has been established (LocalPort: %v)", GetSocketPort());
+    YT_TLOG_DEBUG("TCP connection has been established")
+        .With("LocalPort", GetSocketPort());
 
     if (LastIncompleteWriteTime_ != std::numeric_limits<NProfiling::TCpuInstant>::max()) {
         // Rewind stall detection if already armed by pending send
@@ -441,7 +442,8 @@ void TConnection::Open(TGuard<NThreading::TSpinLock>& guard)
 
     // Something might be pending already, for example Terminate.
     if (Any(previousPendingControl & ~EPollControl::Offline)) {
-        YT_LOG_TRACE("Retrying event processing for Open (PendingControl: %v)", previousPendingControl);
+        YT_TLOG_TRACE("Retrying event processing for Open")
+            .With("PendingControl", previousPendingControl);
         Poller_->Retry(this);
     }
 }
@@ -458,7 +460,8 @@ void TConnection::ResolveAddress()
         try {
             EndpointHostName_ = FQDNHostName();
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Failed to resolve local host name");
+            YT_TLOG_ERROR("Failed to resolve local host name")
+                .With(TError(ex));
             EndpointHostName_ = "localhost";
         }
 
@@ -490,9 +493,9 @@ void TConnection::OnAddressResolveFinished(const TErrorOr<TNetworkAddress>& resu
     }
 
     TNetworkAddress address(result.Value(), Port_);
-    YT_LOG_DEBUG("Connection network address resolved (Address: %v, NetworkName: %v)",
-        address,
-        NetworkName_);
+    YT_TLOG_DEBUG("Connection network address resolved")
+        .With("Address", address)
+        .With("NetworkName", NetworkName_);
 
     OnAddressResolved(address);
 }
@@ -561,7 +564,8 @@ void TConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
         PendingControl_.fetch_or(static_cast<ui64>(EPollControl::Shutdown));
     }
 
-    YT_LOG_EVENT(Logger, logLevel, detailedError, "Connection aborted");
+    YT_TLOG_EVENT_FLUENT(Logger, logLevel, "Connection aborted")
+        .With(detailedError);
 
     // OnShutdown() will be called after draining events from thread pools.
     YT_UNUSED_FUTURE(Poller_->Unregister(this));
@@ -575,7 +579,7 @@ bool TConnection::AbortIfNetworkingDisabled()
         return false;
     }
 
-    YT_LOG_DEBUG("Aborting connection since networking is disabled");
+    YT_TLOG_DEBUG("Aborting connection since networking is disabled");
 
     Abort(TError(NBus::EErrorCode::TransportError, "Networking is disabled"));
     return true;
@@ -667,7 +671,7 @@ void TConnection::InitLocalBypass(
 
         LocalBypassActive_.store(true, std::memory_order::release);
 
-        YT_LOG_DEBUG("Local bypass activated");
+        YT_TLOG_DEBUG("Local bypass activated");
     }
 
     ReadyPromise_.TrySet();
@@ -686,9 +690,9 @@ void TConnection::FlushQueuedMessagesToLocalBypass()
         /*reverse*/ true,
         [&] (auto& queuedMessage) {
             // Log first to avoid producing weird traces.
-            YT_LOG_DEBUG("Queued message sent via local bypass (PacketId: %v, RequestId: %v)",
-                queuedMessage.PacketId,
-                queuedMessage.RequestId);
+            YT_TLOG_DEBUG("Queued message sent via local bypass")
+                .With("PacketId", queuedMessage.PacketId)
+                .With("RequestId", queuedMessage.RequestId);
             LocalBypassHandler_->HandleMessage(std::move(queuedMessage.Message), LocalBypassReplyBus_, nullptr, queuedMessage.PacketId);
 
             if (queuedMessage.Promise) {
@@ -711,7 +715,7 @@ void TConnection::ConnectSocket(const TNetworkAddress& address)
 
 void TConnection::OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError)
 {
-    YT_LOG_DEBUG("Dialer finished");
+    YT_TLOG_DEBUG("Dialer finished");
 
     DialerSession_.Reset();
 
@@ -862,14 +866,14 @@ void TConnection::Terminate(const TError& error)
         State_ == EState::Aborted ||
         State_ == EState::Closed)
     {
-        YT_LOG_DEBUG("Connection is already terminated, termination request ignored (State: %v, PendingControl: %v, PendingOutPayloadBytes: %v)",
-            State_.load(),
-            static_cast<EPollControl>(PendingControl_.load()),
-            PendingOutPayloadBytes_.load());
+        YT_TLOG_DEBUG("Connection is already terminated, termination request ignored")
+            .With("State", State_.load())
+            .With("PendingControl", static_cast<EPollControl>(PendingControl_.load()))
+            .With("PendingOutPayloadBytes", PendingOutPayloadBytes_.load());
         return;
     }
 
-    YT_LOG_DEBUG("Sending termination request");
+    YT_TLOG_DEBUG("Sending termination request");
 
     // Save error for OnTerminate().
     Error_ = detailedError;
@@ -881,7 +885,8 @@ void TConnection::Terminate(const TError& error)
 
     // To recover from bogus state always retry processing unless socket is offline
     if (None(previousPendingControl & EPollControl::Offline)) {
-        YT_LOG_TRACE("Retrying event processing for Terminate (PendingControl: %v)", previousPendingControl);
+        YT_TLOG_TRACE("Retrying event processing for Terminate")
+            .With("PendingControl", previousPendingControl);
         Poller_->Retry(this);
     }
 }
@@ -909,8 +914,8 @@ void TConnection::OnEvent(EPollControl control)
                     continue;
                 }
                 // CAS succeeded, bail out.
-                YT_LOG_TRACE("Event handler is already running (PendingControl: %v)",
-                    pendingControl);
+                YT_TLOG_TRACE("Event handler is already running")
+                    .With("PendingControl", pendingControl);
                 return;
             }
 
@@ -943,7 +948,7 @@ void TConnection::OnEvent(EPollControl control)
         return;
     }
 
-    YT_LOG_TRACE("Event processing started");
+    YT_TLOG_TRACE("Event processing started");
 
     // Update execution pool if needed.
     if (auto multiplexingBand = MultiplexingBand_.load(); multiplexingBand != ActualMultiplexingBand_) {
@@ -977,8 +982,8 @@ void TConnection::OnEvent(EPollControl control)
         OnSocketWrite();
     }
 
-    YT_LOG_TRACE("Event processing finished (HasUnsentData: %v)",
-        HasUnsentData());
+    YT_TLOG_TRACE("Event processing finished")
+        .With("HasUnsentData", HasUnsentData());
 
     FlushBusStatistics();
 
@@ -995,7 +1000,8 @@ void TConnection::OnEvent(EPollControl control)
         auto previousPendingControl = static_cast<EPollControl>(PendingControl_.fetch_and(~static_cast<ui64>(EPollControl::Running)));
         YT_ASSERT(Any(previousPendingControl & EPollControl::Running));
         if (Any(previousPendingControl & ~EPollControl::Running) && None(previousPendingControl & EPollControl::Shutdown)) {
-            YT_LOG_TRACE("Retrying event processing for OnEvent (PendingControl: %v)", previousPendingControl);
+            YT_TLOG_TRACE("Retrying event processing for OnEvent")
+                .With("PendingControl", previousPendingControl);
             Poller_->Retry(this);
         }
     }
@@ -1010,14 +1016,15 @@ void TConnection::OnShutdown()
     auto error = Error_;
     guard.Release();
 
-    YT_LOG_DEBUG(error, "Connection terminated");
+    YT_TLOG_DEBUG("Connection terminated")
+        .With(error);
 
     Terminated_.Fire(error);
 }
 
 void TConnection::OnSocketRead()
 {
-    YT_LOG_TRACE("Started serving read request");
+    YT_TLOG_TRACE("Started serving read request");
 
     bool readOnlySslAckPacket = RemainingSslAckPacketBytes_ > 0;
 
@@ -1035,7 +1042,8 @@ void TConnection::OnSocketRead()
                 bytesToRead = std::min(bytesToRead, RemainingSslAckPacketBytes_);
             }
 
-            YT_LOG_TRACE("Reading from socket into decoder (BytesToRead: %v)", bytesToRead);
+            YT_TLOG_TRACE("Reading from socket into decoder")
+                .With("BytesToRead", bytesToRead);
 
             size_t bytesRead;
             if (!ReadSocket(decoderChunk.Begin(), bytesToRead, &bytesRead)) {
@@ -1059,7 +1067,8 @@ void TConnection::OnSocketRead()
                 bytesToRead = std::min(bytesToRead, RemainingSslAckPacketBytes_);
             }
 
-            YT_LOG_TRACE("Reading from socket into buffer (BytesToRead: %v)", bytesToRead);
+            YT_TLOG_TRACE("Reading from socket into buffer")
+                .With("BytesToRead", bytesToRead);
 
             size_t bytesRead;
             if (!ReadSocket(ReadBuffer_.Begin(), bytesToRead, &bytesRead)) {
@@ -1079,10 +1088,10 @@ void TConnection::OnSocketRead()
                 decoderChunk = Decoder_->GetFragment();
                 decoderChunkSize = decoderChunk.Size();
                 size_t bytesToCopy = std::min(recvRemaining, decoderChunkSize);
-                YT_LOG_TRACE("Feeding buffer into decoder (DecoderNeededBytes: %v, RemainingBufferBytes: %v, BytesToCopy: %v)",
-                    decoderChunkSize,
-                    recvRemaining,
-                    bytesToCopy);
+                YT_TLOG_TRACE("Feeding buffer into decoder")
+                    .With("DecoderNeededBytes", decoderChunkSize)
+                    .With("RemainingBufferBytes", recvRemaining)
+                    .With("BytesToCopy", bytesToCopy);
                 std::copy(recvBegin, recvBegin + bytesToCopy, decoderChunk.Begin());
                 if (!AdvanceDecoder(bytesToCopy)) {
                     return;
@@ -1090,7 +1099,7 @@ void TConnection::OnSocketRead()
                 recvBegin += bytesToCopy;
                 recvRemaining -= bytesToCopy;
             }
-            YT_LOG_TRACE("Buffer exhausted");
+            YT_TLOG_TRACE("Buffer exhausted");
         }
 
         if (readOnlySslAckPacket && RemainingSslAckPacketBytes_ == 0) {
@@ -1108,8 +1117,8 @@ void TConnection::OnSocketRead()
         ? NProfiling::GetCpuInstant()
         : std::numeric_limits<NProfiling::TCpuInstant>::max();
 
-    YT_LOG_TRACE("Finished serving read request (BytesReadTotal: %v)",
-        bytesReadTotal);
+    YT_TLOG_TRACE("Finished serving read request")
+        .With("BytesReadTotal", bytesReadTotal);
 }
 
 bool TConnection::HasUnreadData() const
@@ -1142,8 +1151,8 @@ bool TConnection::ReadSocket(char* buffer, size_t size, size_t* bytesRead)
     auto result = DoReadSocket(buffer, size);
     auto elapsed = timer.GetElapsedTime();
     if (elapsed > ReadTimeWarningThreshold) {
-        YT_LOG_DEBUG("Socket read took too long (Elapsed: %v)",
-            elapsed);
+        YT_TLOG_DEBUG("Socket read took too long")
+            .With("Elapsed", elapsed);
     }
 
     if (!CheckReadError(result)) {
@@ -1154,7 +1163,8 @@ bool TConnection::ReadSocket(char* buffer, size_t size, size_t* bytesRead)
     *bytesRead = static_cast<size_t>(result);
     UpdateBusCounter(&TBusNetworkBandCounters::InBytes, result);
 
-    YT_LOG_TRACE("Socket read (BytesRead: %v)", *bytesRead);
+    YT_TLOG_TRACE("Socket read")
+        .With("BytesRead", *bytesRead);
 
     return true;
 }
@@ -1197,7 +1207,8 @@ bool TConnection::AdvanceDecoder(size_t size)
     }
 
     if (Config_->PacketDecoderDelay) {
-        YT_LOG_WARNING("Test delay in tcp connection packet decoder (Delay: %v)", Config_->PacketDecoderDelay);
+        YT_TLOG_WARNING("Test delay in tcp connection packet decoder")
+            .With("Delay", Config_->PacketDecoderDelay);
         TDelayedExecutor::WaitForDuration(Config_->PacketDecoderDelay.value());
     }
 
@@ -1238,9 +1249,9 @@ bool TConnection::OnPacketReceived() noexcept
         case EPacketType::Message:
             return OnMessagePacketReceived();
         default:
-            YT_LOG_ERROR("Packet of unknown type received, ignored (PacketId: %v, PacketType: %v)",
-                Decoder_->GetPacketId(),
-                Decoder_->GetPacketType());
+            YT_TLOG_ERROR("Packet of unknown type received, ignored")
+                .With("PacketId", Decoder_->GetPacketId())
+                .With("PacketType", Decoder_->GetPacketType());
             return true;
     }
 }
@@ -1263,7 +1274,8 @@ bool TConnection::OnAckPacketReceived()
         return false;
     }
 
-    YT_LOG_DEBUG("Ack received (PacketId: %v)", Decoder_->GetPacketId());
+    YT_TLOG_DEBUG("Ack received")
+        .With("PacketId", Decoder_->GetPacketId());
 
     if (unackedMessage->Promise) {
         unackedMessage->Promise.TrySet(TError());
@@ -1281,10 +1293,10 @@ bool TConnection::OnMessagePacketReceived()
         return OnHandshakePacketReceived();
     }
 
-    YT_LOG_DEBUG("Incoming message received (PacketId: %v, PacketSize: %v, PacketFlags: %v)",
-        Decoder_->GetPacketId(),
-        Decoder_->GetPacketSize(),
-        Decoder_->GetPacketFlags());
+    YT_TLOG_DEBUG("Incoming message received")
+        .With("PacketId", Decoder_->GetPacketId())
+        .With("PacketSize", Decoder_->GetPacketSize())
+        .With("PacketFlags", Decoder_->GetPacketFlags());
 
     if (Any(Decoder_->GetPacketFlags() & EPacketFlags::RequestAcknowledgement)) {
         EnqueuePacket(EPacketType::Ack, EPacketFlags::None, 0, Decoder_->GetPacketId());
@@ -1298,7 +1310,7 @@ bool TConnection::OnMessagePacketReceived()
 
 bool TConnection::OnHandshakePacketReceived()
 {
-    YT_LOG_DEBUG("Handshake received");
+    YT_TLOG_DEBUG("Handshake received");
 
     auto optionalHandshake = TryParseHandshakeMessage(Decoder_->GrabMessage());
     if (!optionalHandshake) {
@@ -1317,11 +1329,11 @@ bool TConnection::OnHandshakePacketReceived()
                 .Item("peer_verification_mode").Value(FromProto<EVerificationMode>(handshake.verification_mode()))
             .EndMap());
 
-    YT_LOG_DEBUG("Handshake received (PeerConnectionId: %v, PeerEncryptionMode: %v, PeerVerificationMode: %v, MultiplexingBand: %v)",
-        PeerAttributes_->Get<std::string>("peer_connection_id"),
-        PeerAttributes_->Get<std::string>("peer_encryption_mode"),
-        PeerAttributes_->Get<std::string>("peer_verification_mode"),
-        optionalMultiplexingBand);
+    YT_TLOG_DEBUG("Handshake received")
+        .With("PeerConnectionId", PeerAttributes_->Get<std::string>("peer_connection_id"))
+        .With("PeerEncryptionMode", PeerAttributes_->Get<std::string>("peer_encryption_mode"))
+        .With("PeerVerificationMode", PeerAttributes_->Get<std::string>("peer_verification_mode"))
+        .With("MultiplexingBand", optionalMultiplexingBand);
 
     if (ConnectionType_ == EConnectionType::Server && optionalMultiplexingBand) {
         auto guard = Guard(Lock_);
@@ -1383,10 +1395,10 @@ TFuture<void> TConnection::SendViaSocket(TSharedRefArray message, const TSendOpt
     auto pendingOutPayloadBytes = PendingOutPayloadBytes_.fetch_add(queuedMessage.PayloadSize);
 
     // Log first to avoid producing weird traces.
-    YT_LOG_DEBUG("Outcoming message enqueued (PacketId: %v, RequestId: %v, PendingOutPayloadBytes: %v)",
-        queuedMessage.PacketId,
-        queuedMessage.RequestId,
-        pendingOutPayloadBytes);
+    YT_TLOG_DEBUG("Outcoming message enqueued")
+        .With("PacketId", queuedMessage.PacketId)
+        .With("RequestId", queuedMessage.RequestId)
+        .With("PendingOutPayloadBytes", pendingOutPayloadBytes);
 
     if (LastIncompleteWriteTime_ == std::numeric_limits<NProfiling::TCpuInstant>::max()) {
         // Arm stall detection.
@@ -1399,7 +1411,7 @@ TFuture<void> TConnection::SendViaSocket(TSharedRefArray message, const TSendOpt
     {
         auto previousPendingControl = static_cast<EPollControl>(PendingControl_.fetch_or(static_cast<ui64>(EPollControl::Write)));
         if (None(previousPendingControl)) {
-            YT_LOG_TRACE("Retrying event processing for Send");
+            YT_TLOG_TRACE("Retrying event processing for Send");
             Poller_->Retry(this);
         }
     }
@@ -1420,8 +1432,8 @@ TFuture<void> TConnection::SendViaSocket(TSharedRefArray message, const TSendOpt
 TFuture<void> TConnection::SendViaLocalBypass(TSharedRefArray message, const TSendOptions& options)
 {
     // No real TCP packet in local bypass, so PacketId is empty.
-    YT_LOG_DEBUG("Outcoming message sent via local bypass (RequestId: %v)",
-        options.RequestId);
+    YT_TLOG_DEBUG("Outcoming message sent via local bypass")
+        .With("RequestId", options.RequestId);
 
     LocalBypassHandler_->HandleMessage(std::move(message), LocalBypassReplyBus_);
 
@@ -1454,7 +1466,7 @@ TConnection::TPacket* TConnection::EnqueuePacket(
 
 void TConnection::OnSocketWrite()
 {
-    YT_LOG_TRACE("Started serving write request");
+    YT_TLOG_TRACE("Started serving write request");
 
     size_t bytesWrittenTotal = 0;
     while (true) {
@@ -1485,7 +1497,8 @@ void TConnection::OnSocketWrite()
         }
     }
 
-    YT_LOG_TRACE("Finished serving write request (BytesWrittenTotal: %v)", bytesWrittenTotal);
+    YT_TLOG_TRACE("Finished serving write request")
+        .With("BytesWrittenTotal", bytesWrittenTotal);
 }
 
 bool TConnection::HasUnsentData() const
@@ -1519,7 +1532,8 @@ ssize_t TConnection::DoWriteFragments(const std::vector<struct iovec>& vec)
 
 bool TConnection::WriteFragments(size_t* bytesWritten)
 {
-    YT_LOG_TRACE("Writing fragments (EncodedFragments: %v)", EncodedFragments_.size());
+    YT_TLOG_TRACE("Writing fragments")
+        .With("EncodedFragments", EncodedFragments_.size());
 
     auto fragmentIt = EncodedFragments_.begin();
     auto fragmentEnd = EncodedFragments_.end();
@@ -1545,15 +1559,16 @@ bool TConnection::WriteFragments(size_t* bytesWritten)
     auto result = DoWriteFragments(SendVector_);
     auto elapsed = timer.GetElapsedTime();
     if (elapsed > WriteTimeWarningThreshold) {
-        YT_LOG_DEBUG("Socket write took too long (Elapsed: %v)",
-            elapsed);
+        YT_TLOG_DEBUG("Socket write took too long")
+            .With("Elapsed", elapsed);
     }
 
     *bytesWritten = result >= 0 ? static_cast<size_t>(result) : 0;
     bool isOK = CheckWriteError(result);
     if (isOK) {
         UpdateBusCounter(&TBusNetworkBandCounters::OutBytes, *bytesWritten);
-        YT_LOG_TRACE("Socket written (BytesWritten: %v)", *bytesWritten);
+        YT_TLOG_TRACE("Socket written")
+            .With("BytesWritten", *bytesWritten);
     }
     return isOK;
 }
@@ -1561,7 +1576,8 @@ bool TConnection::WriteFragments(size_t* bytesWritten)
 void TConnection::FlushWrittenFragments(size_t bytesWritten)
 {
     size_t bytesToFlush = bytesWritten;
-    YT_LOG_TRACE("Flushing fragments (BytesWritten: %v)", bytesWritten);
+    YT_TLOG_TRACE("Flushing fragments")
+        .With("BytesWritten", bytesWritten);
 
     while (bytesToFlush != 0) {
         YT_ASSERT(!EncodedFragments_.empty());
@@ -1569,14 +1585,15 @@ void TConnection::FlushWrittenFragments(size_t bytesWritten)
 
         if (fragment.Size() > bytesToFlush) {
             size_t bytesRemaining = fragment.Size() - bytesToFlush;
-            YT_LOG_TRACE("Partial write (Size: %v, RemainingSize: %v)",
-                fragment.Size(),
-                bytesRemaining);
+            YT_TLOG_TRACE("Partial write")
+                .With("Size", fragment.Size())
+                .With("RemainingSize", bytesRemaining);
             fragment = TRef(fragment.End() - bytesRemaining, bytesRemaining);
             break;
         }
 
-        YT_LOG_TRACE("Full write (Size: %v)", fragment.Size());
+        YT_TLOG_TRACE("Full write")
+            .With("Size", fragment.Size());
 
         bytesToFlush -= fragment.Size();
         EncodedFragments_.pop();
@@ -1586,7 +1603,8 @@ void TConnection::FlushWrittenFragments(size_t bytesWritten)
 void TConnection::FlushWrittenPackets(size_t bytesWritten)
 {
     size_t bytesToFlush = bytesWritten;
-    YT_LOG_TRACE("Flushing packets (BytesWritten: %v)", bytesWritten);
+    YT_TLOG_TRACE("Flushing packets")
+        .With("BytesWritten", bytesWritten);
 
     while (bytesToFlush != 0) {
         YT_ASSERT(!EncodedPacketSizes_.empty());
@@ -1594,14 +1612,15 @@ void TConnection::FlushWrittenPackets(size_t bytesWritten)
 
         if (packetSize > bytesToFlush) {
             size_t bytesRemaining = packetSize - bytesToFlush;
-            YT_LOG_TRACE("Partial write (Size: %v, RemainingSize: %v)",
-                packetSize,
-                bytesRemaining);
+            YT_TLOG_TRACE("Partial write")
+                .With("Size", packetSize)
+                .With("RemainingSize", bytesRemaining);
             packetSize = bytesRemaining;
             break;
         }
 
-        YT_LOG_TRACE("Full write (Size: %v)", packetSize);
+        YT_TLOG_TRACE("Full write")
+            .With("Size", packetSize);
 
         bytesToFlush -= packetSize;
         OnPacketSent();
@@ -1657,9 +1676,11 @@ bool TConnection::MaybeEncodeFragments()
            !QueuedPackets_.empty())
     {
         auto& queuedPacket = QueuedPackets_.front();
-        YT_LOG_TRACE("Checking packet cancel state (PacketId: %v)", queuedPacket->PacketId);
+        YT_TLOG_TRACE("Checking packet cancel state")
+            .With("PacketId", queuedPacket->PacketId);
         if (!queuedPacket->MarkEncoded()) {
-            YT_LOG_TRACE("Packet was canceled (PacketId: %v)", queuedPacket->PacketId);
+            YT_TLOG_TRACE("Packet was canceled")
+                .With("PacketId", queuedPacket->PacketId);
             QueuedPackets_.pop();
             continue;
         }
@@ -1674,7 +1695,8 @@ bool TConnection::MaybeEncodeFragments()
         const auto& packet = EncodedPackets_.back();
 
         // Encode the packet.
-        YT_LOG_TRACE("Starting encoding packet (PacketId: %v)", packet->PacketId);
+        YT_TLOG_TRACE("Starting encoding packet")
+            .With("PacketId", packet->PacketId);
 
         bool encodeResult = Encoder_->Start(
             packet->Type,
@@ -1697,14 +1719,16 @@ bool TConnection::MaybeEncodeFragments()
                 flushCoalesced();
                 EncodedFragments_.push(fragment);
             }
-            YT_LOG_TRACE("Fragment encoded (Size: %v)", fragment.Size());
+            YT_TLOG_TRACE("Fragment encoded")
+                .With("Size", fragment.Size());
             Encoder_->NextFragment();
         } while (!Encoder_->IsFinished());
 
         EncodedPacketSizes_.push(packet->PacketSize);
         encodedSize += packet->PacketSize;
 
-        YT_LOG_TRACE("Finished encoding packet (PacketId: %v)", packet->PacketId);
+        YT_TLOG_TRACE("Finished encoding packet")
+            .With("PacketId", packet->PacketId);
     }
 
     flushCoalesced();
@@ -1769,14 +1793,14 @@ void TConnection::OnPacketSent()
 
 void  TConnection::OnAckPacketSent(const TPacket& packet)
 {
-    YT_LOG_DEBUG("Ack sent (PacketId: %v)",
-        packet.PacketId);
+    YT_TLOG_DEBUG("Ack sent")
+        .With("PacketId", packet.PacketId);
 }
 
 void TConnection::OnMessagePacketSent(const TPacket& packet)
 {
-    YT_LOG_DEBUG("Outcoming message sent (PacketId: %v)",
-        packet.PacketId);
+    YT_TLOG_DEBUG("Outcoming message sent")
+        .With("PacketId", packet.PacketId);
 
     PendingOutPayloadBytes_.fetch_sub(packet.PayloadSize);
 
@@ -1790,7 +1814,7 @@ void TConnection::OnMessagePacketSent(const TPacket& packet)
 
 void TConnection::OnHandshakePacketSent()
 {
-    YT_LOG_DEBUG("Handshake sent");
+    YT_TLOG_DEBUG("Handshake sent");
 
     HandshakeSent_ = true;
 }
@@ -1801,7 +1825,7 @@ void TConnection::OnTerminate()
         return;
     }
 
-    YT_LOG_DEBUG("Termination request received");
+    YT_TLOG_DEBUG("Termination request received");
 
     auto guard = Guard(Lock_);
     auto error = Error_;
@@ -1833,11 +1857,11 @@ void TConnection::ProcessQueuedMessages()
                 packet->EnableCancel(MakeStrong(this));
             }
 
-            YT_LOG_DEBUG("Outcoming message dequeued (PacketId: %v, RequestId: %v, PacketSize: %v, Flags: %v)",
-                packetId,
-                queuedMessage.RequestId,
-                packet->PacketSize,
-                flags);
+            YT_TLOG_DEBUG("Outcoming message dequeued")
+                .With("PacketId", packetId)
+                .With("RequestId", queuedMessage.RequestId)
+                .With("PacketSize", packet->PacketSize)
+                .With("Flags", flags);
 
             if (queuedMessage.Promise && !queuedMessage.Options.EnableSendCancelation && None(flags & EPacketFlags::RequestAcknowledgement)) {
                 queuedMessage.Promise.TrySet();
@@ -1853,9 +1877,9 @@ void TConnection::DiscardOutcomingMessages()
     guard.Release();
 
     for (const auto& queuedMessage : queuedMessages) {
-        YT_LOG_DEBUG("Outcoming message discarded (PacketId: %v, RequestId: %v)",
-            queuedMessage.PacketId,
-            queuedMessage.RequestId);
+        YT_TLOG_DEBUG("Outcoming message discarded")
+            .With("PacketId", queuedMessage.PacketId)
+            .With("RequestId", queuedMessage.RequestId);
         if (queuedMessage.Promise) {
             queuedMessage.Promise.TrySet(error);
         }
@@ -1921,21 +1945,21 @@ void TConnection::InitSocketTosLevel(TTosLevel tosLevel)
 {
     if (TosLevel_ == BlackHoleTosLevel && tosLevel != BlackHoleTosLevel) {
         if (!TrySetSocketInputFilter(Socket_, false)) {
-            YT_LOG_DEBUG("Failed to remove socket input filter");
+            YT_TLOG_DEBUG("Failed to remove socket input filter");
         }
     }
 
     if (tosLevel == BlackHoleTosLevel) {
         if (TrySetSocketInputFilter(Socket_, true)) {
-            YT_LOG_DEBUG("Socket TOS level set to BlackHole");
+            YT_TLOG_DEBUG("Socket TOS level set to BlackHole");
         } else {
-            YT_LOG_DEBUG("Failed to set socket input filter");
+            YT_TLOG_DEBUG("Failed to set socket input filter");
         }
     } else if (TrySetSocketTosLevel(Socket_, tosLevel)) {
-        YT_LOG_DEBUG("Socket TOS level set (TosLevel: %x)",
-            tosLevel);
+        YT_TLOG_DEBUG("Socket TOS level set")
+            .WithFormat("TosLevel", "%x", tosLevel);
     } else {
-        YT_LOG_DEBUG("Failed to set socket TOS level");
+        YT_TLOG_DEBUG("Failed to set socket TOS level");
     }
 }
 
@@ -2085,15 +2109,15 @@ bool TConnection::DoSslHandshake()
     auto result = SSL_do_handshake(Ssl_.get());
     switch (SSL_get_error(Ssl_.get(), result)) {
         case SSL_ERROR_NONE:
-            YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_do_handshake");
+            YT_TLOG_DEBUG("TLS/SSL connection has been established by SSL_do_handshake");
             if (VerificationMode_ != EVerificationMode::None) {
                 NCrypto::TX509Ptr peerCertificate(SSL_get_peer_certificate(Ssl_.get()));
                 if (!peerCertificate) {
                     Abort(TError(NBus::EErrorCode::SslError, "TLS/SSL peer certificate is not available"));
                     return false;
                 }
-                YT_LOG_DEBUG("TLS/SSL peer certificate (FingerprintSHA256: %v)",
-                    NCrypto::GetFingerprintSHA256(peerCertificate));
+                YT_TLOG_DEBUG("TLS/SSL peer certificate")
+                    .With("FingerprintSHA256", NCrypto::GetFingerprintSHA256(peerCertificate));
             }
             MaxFragmentsPerWrite_ = 1;
             SslState_ = ESslState::Established;
@@ -2135,16 +2159,15 @@ void TConnection::DoSslShutdown()
                 break;
             case 1:
                 // Shutdown is finished.
-                YT_LOG_DEBUG("SSL_shutdown successful");
+                YT_TLOG_DEBUG("SSL_shutdown successful");
                 return;
             default:
                 int error = SSL_get_error(Ssl_.get(), result);
                 // We are closing connection so it is all right to ignore SSL_ERROR_WANT_{READ/WRITE}.
                 if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
-                    YT_LOG_WARNING(
-                        GetLastSslError("TLS/SSL shutdown error"),
-                        "Could not perform SSL_shutdown (SslErrorCode: %v)",
-                        error);
+                    YT_TLOG_WARNING("Could not perform SSL_shutdown")
+                        .With("SslErrorCode", error)
+                        .With(GetLastSslError("TLS/SSL shutdown error"));
                 }
 
                 // We did our best under the circumstances.
@@ -2175,7 +2198,7 @@ void TConnection::TryEnqueueSslAck()
         0,
         SslAckPacketId);
 
-    YT_LOG_DEBUG("TLS/SSL acknowledgement enqueued");
+    YT_TLOG_DEBUG("TLS/SSL acknowledgement enqueued");
 }
 
 void TConnection::TryEstablishSslSession()
@@ -2184,7 +2207,7 @@ void TConnection::TryEstablishSslSession()
         return;
     }
 
-    YT_LOG_DEBUG("Starting TLS/SSL connection");
+    YT_TLOG_DEBUG("Starting TLS/SSL connection");
 
     NCrypto::TCertificatePathResolver pathResolver;
     if (Config_->LoadCertsFromBusCertsDirectory) {
@@ -2309,7 +2332,7 @@ void TConnection::TryEstablishSslSession()
 
 bool TConnection::OnSslAckPacketReceived()
 {
-    YT_LOG_DEBUG("TLS/SSL acknowledgement received");
+    YT_TLOG_DEBUG("TLS/SSL acknowledgement received");
 
     SslAckReceived_ = true;
 
@@ -2325,7 +2348,7 @@ bool TConnection::OnSslAckPacketReceived()
 
 void TConnection::OnSslAckPacketSent()
 {
-    YT_LOG_DEBUG("TLS/SSL acknowledgement sent");
+    YT_TLOG_DEBUG("TLS/SSL acknowledgement sent");
 
     SslAckSent_ = true;
 

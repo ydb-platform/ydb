@@ -50,7 +50,7 @@ namespace NYT::NFS {
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FS");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "FS");
 
 [[noreturn]] [[maybe_unused]]
 void ThrowNotSupported()
@@ -254,15 +254,16 @@ std::string GetFileNameWithoutExtension(const std::string& path)
 
 void CleanTempFiles(const std::string& path)
 {
-    YT_LOG_INFO("Cleaning temp files in %v", path);
+    YT_TLOG_INFO("Cleaning temp files")
+        .With("Path", path);
 
     // TODO(ignat): specify suffix in EnumerateFiles.
     auto entries = EnumerateFiles(path, std::numeric_limits<int>::max());
     for (const auto& entry : entries) {
         if (entry.ends_with(TempFileSuffix)) {
             auto fileName = NFS::CombinePaths(path, entry);
-            YT_LOG_DEBUG("Removing file (FileName: %v)",
-                fileName);
+            YT_TLOG_DEBUG("Removing file")
+                .With("FileName", fileName);
             NFS::Remove(fileName);
         }
     }
@@ -879,7 +880,8 @@ void WrapIOErrors(std::function<void()> func)
 
             default: {
                 TError error(ex);
-                YT_LOG_FATAL(error, "Unexpected exception thrown during I/O operation");
+                YT_TLOG_FATAL("Unexpected exception thrown during I/O operation")
+                    .With(error);
                 break;
             }
         }
@@ -1103,7 +1105,7 @@ TFuture<TSpliceResult> SpliceAsync(
                     .Run())
                 .ThrowOnError();
         },
-        "SimplePollable");
+        NLogging::TLoggingTagList().With("Pollable", "Simple"));
 
     bool registered = poller->TryRegister(pollable);
     THROW_ERROR_EXCEPTION_UNLESS(registered, "Failed to register pollable");

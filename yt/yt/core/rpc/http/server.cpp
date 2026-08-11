@@ -153,7 +153,8 @@ public:
     TFuture<void> ReplySent(IServicePtr underlying, TRequestId requestId)
     {
         ReplySent_.OnCanceled(BIND([underlying, requestId, Logger = this->Logger] (const TError&) {
-            YT_LOG_INFO("Request cancelled (RequestId: %v)", requestId);
+            YT_TLOG_INFO("Request cancelled")
+                .With("RequestId", requestId);
             underlying->HandleRequestCancellation(requestId);
         }));
         return ReplySent_.ToFuture();
@@ -388,7 +389,7 @@ class TServer
 {
 public:
     explicit TServer(NYT::NHttp::IServerPtr httpServer)
-        : TServerBase(HttpLogger().WithTag("ServerId: %v", TGuid::Create()))
+        : TServerBase(HttpLogger().WithTag("ServerId", TGuid::Create()))
         , HttpServer_(std::move(httpServer))
     { }
 

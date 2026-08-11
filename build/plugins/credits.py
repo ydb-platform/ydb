@@ -3,13 +3,13 @@ from ymake import macro, Unit
 
 
 @macro
-def CREDITS_DISCLAIMER(unit: Unit, *args: tuple[str, ...]):
+def CREDITS_DISCLAIMER(unit: Unit, *args: str):
     if unit.get('WITH_CREDITS'):
         unit.message(["warn", "CREDITS WARNING: {}".format(' '.join(args))])
 
 
 @macro
-def CHECK_CONTRIB_CREDITS(unit: Unit, *args: tuple[str, ...]):
+def CHECK_CONTRIB_CREDITS(unit: Unit, *args: str):
     module_path = rootrel_arc_src(unit.path(), unit)
     excepts = set()
     if 'EXCEPT' in args:

@@ -7,56 +7,55 @@
 
 #include <util/generic/scope.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TWithContextWrapper: public TMutableComputationNode<TWithContextWrapper> {
-    typedef TMutableComputationNode<TWithContextWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TWithContextWrapper>;
 
 public:
     TWithContextWrapper(TComputationMutables& mutables, const std::string_view& contextType, IComputationNode* arg)
         : TBaseComputation(mutables)
-        , Arg(arg)
-        , ContextType(contextType)
+        , Arg_(arg)
+        , ContextType_(contextType)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         auto prev = TlsAllocState->CurrentContext;
-        TlsAllocState->CurrentContext = PgInitializeContext(ContextType);
+        TlsAllocState->CurrentContext = PgInitializeContext(ContextType_);
         Y_DEFER {
-            PgDestroyContext(ContextType, TlsAllocState->CurrentContext);
+            PgDestroyContext(ContextType_, TlsAllocState->CurrentContext);
             TlsAllocState->CurrentContext = prev;
         };
 
         TPAllocScope scope;
-        return Arg->GetValue(compCtx).Release();
+        return Arg_->GetValue(compCtx).Release();
     }
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Arg);
+        this->DependsOn(Arg_);
     }
 
-    IComputationNode* const Arg;
-    const std::string_view ContextType;
+    IComputationNode* const Arg_;
+    const std::string_view ContextType_;
 };
 
 struct TState: public TComputationValue<TState> {
     TState(TMemoryUsageInfo* memInfo, const std::string_view& contextType)
         : TComputationValue(memInfo)
-        , ContextType(contextType)
-        , Ctx(PgInitializeContext(ContextType))
+        , ContextType_(contextType)
+        , Ctx_(PgInitializeContext(ContextType_))
     {
-        Scope.Detach();
+        Scope_.Detach();
     }
 
     void Attach() {
-        Scope.Attach();
-        PrevContext = TlsAllocState->CurrentContext;
-        TlsAllocState->CurrentContext = Ctx;
+        Scope_.Attach();
+        PrevContext_ = TlsAllocState->CurrentContext;
+        TlsAllocState->CurrentContext = Ctx_;
     }
 
     void Detach(const bool cleanup) {
@@ -64,27 +63,27 @@ struct TState: public TComputationValue<TState> {
             Cleanup();
         }
 
-        Scope.Detach();
-        TlsAllocState->CurrentContext = PrevContext;
+        Scope_.Detach();
+        TlsAllocState->CurrentContext = PrevContext_;
     }
 
-    ~TState() {
+    ~TState() override {
         Cleanup();
     }
 
 private:
     void Cleanup() {
-        if (Ctx) {
-            PgDestroyContext(ContextType, Ctx);
-            Ctx = nullptr;
-            Scope.Cleanup();
+        if (Ctx_) {
+            PgDestroyContext(ContextType_, Ctx_);
+            Ctx_ = nullptr;
+            Scope_.Cleanup();
         }
     }
 
-    const std::string_view ContextType;
-    void* Ctx;
-    TPAllocScope Scope;
-    void* PrevContext = nullptr;
+    const std::string_view ContextType_;
+    void* Ctx_;
+    TPAllocScope Scope_;
+    void* PrevContext_ = nullptr;
 };
 
 class TWithContextFlowWrapper: public TStatefulFlowCodegeneratorNode<TWithContextFlowWrapper> {
@@ -94,8 +93,8 @@ public:
     TWithContextFlowWrapper(TComputationMutables& mutables, const std::string_view& contextType,
                             EValueRepresentation kind, IComputationNode* flow)
         : TBaseComputation(mutables, flow, kind, EValueRepresentation::Any)
-        , Flow(flow)
-        , ContextType(contextType)
+        , Flow_(flow)
+        , ContextType_(contextType)
     {
     }
 
@@ -107,12 +106,12 @@ public:
         auto& state = *static_cast<TState*>(stateValue.AsBoxed().Get());
         state.Attach();
 
-        auto item = Flow->GetValue(ctx);
+        auto item = Flow_->GetValue(ctx);
         state.Detach(item.IsFinish());
         return item.Release();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -138,7 +137,7 @@ public:
 
         EmitFunctionCall<&TState::Attach>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
-        const auto value = GetNodeValue(Flow, ctx, block);
+        const auto value = GetNodeValue(Flow_, ctx, block);
         const auto finish = IsFinish(value, block, context);
 
         EmitFunctionCall<&TState::Detach>(Type::getVoidTy(context), {stateArg, finish}, ctx, block);
@@ -148,15 +147,15 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TState>(ContextType);
+        state = ctx.HolderFactory.Create<TState>(ContextType_);
     }
 
     void RegisterDependencies() const final {
-        this->FlowDependsOn(Flow);
+        this->FlowDependsOn(Flow_);
     }
 
-    IComputationNode* const Flow;
-    const std::string_view ContextType;
+    IComputationNode* const Flow_;
+    const std::string_view ContextType_;
 };
 
 class TWithContextWideFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TWithContextWideFlowWrapper> {
@@ -166,8 +165,8 @@ public:
     TWithContextWideFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow,
                                 const std::string_view& contextType)
         : TBaseComputation(mutables, flow, EValueRepresentation::Any)
-        , Flow(flow)
-        , ContextType(contextType)
+        , Flow_(flow)
+        , ContextType_(contextType)
     {
     }
 
@@ -179,12 +178,12 @@ public:
         auto& state = *static_cast<TState*>(stateValue.AsBoxed().Get());
         state.Attach();
 
-        const auto status = Flow->FetchValues(ctx, output);
+        const auto status = Flow_->FetchValues(ctx, output);
         state.Detach(status == EFetchResult::Finish);
         return status;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -213,7 +212,7 @@ public:
 
         EmitFunctionCall<&TState::Attach>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
-        auto getres = GetNodeValues(Flow, ctx, block);
+        auto getres = GetNodeValues(Flow_, ctx, block);
 
         const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, getres.first, ConstantInt::get(getres.first->getType(), static_cast<i32>(EFetchResult::Yield)), "special", block);
 
@@ -251,15 +250,15 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TState>(ContextType);
+        state = ctx.HolderFactory.Create<TState>(ContextType_);
     }
 
     void RegisterDependencies() const final {
-        this->FlowDependsOn(Flow);
+        this->FlowDependsOn(Flow_);
     }
 
-    IComputationWideFlowNode* const Flow;
-    const std::string_view ContextType;
+    IComputationWideFlowNode* const Flow_;
+    const std::string_view ContextType_;
 };
 
 } // namespace
@@ -280,5 +279,4 @@ IComputationNode* WrapWithContext(TCallable& callable, const TComputationNodeFac
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

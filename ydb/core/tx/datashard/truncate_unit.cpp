@@ -1,7 +1,6 @@
 #include "datashard_impl.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
-#include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
@@ -67,12 +66,8 @@ EExecutionStatus TTruncateUnit::Execute(
         {"localTid", localTid},
         {"txId", op->GetTxId()});
 
-    // break locks
     TDataShardLocksDb locksDb(DataShard, txc);
 
-    TSetupSysLocks guardLocks(op, DataShard, &locksDb);
-    const TTableId fullTableId(pathId.OwnerId, tableId);
-    DataShard.SysLocksTable().BreakAllLocks(fullTableId);
     DataShard.GetConflictsCache().GetTableCache(localTid).RemoveAllUncommittedWrites(txc.DB);
 
     txc.DB.Truncate(localTid);
@@ -97,7 +92,8 @@ EExecutionStatus TTruncateUnit::Execute(
     userTable->StatsUpdateInProgress = false;
     userTable->StatsNeedUpdate = true;
 
-    DataShard.AddUserTable(pathId, userTable, &locksDb);
+    // Passing locksDb invalidates every lock of this shard, like any other schema change does.
+    DataShard.ReplaceUserTable(pathId, userTable, locksDb);
     if (userTable->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, actorCtx);
     }
@@ -105,9 +101,6 @@ EExecutionStatus TTruncateUnit::Execute(
     txc.DB.NoMoreReadsForTx();
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
-
-    DataShard.SysLocksTable().ApplyLocks();
-    DataShard.SubscribeNewLocks(actorCtx);
 
     YDB_LOG_DEBUG_CTX(actorCtx, "TTruncateUnit::Execute: finished successfully",
         {"tableId", tableId},

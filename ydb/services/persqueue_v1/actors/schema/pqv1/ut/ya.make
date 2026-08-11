@@ -9,6 +9,7 @@ SRCS(
     create_topic_ut.cpp
     create_topic_sdk_ut.cpp
     pqv1_sdk_test_utils.cpp
+    schema_ops_ut.cpp
 )
 
 PEERDIR(
@@ -18,6 +19,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
     library/cpp/testing/unittest
 )

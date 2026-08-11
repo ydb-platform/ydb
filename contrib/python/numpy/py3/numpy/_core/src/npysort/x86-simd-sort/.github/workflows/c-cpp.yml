@@ -1,0 +1,262 @@
+name: Build and run tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions: read-all
+
+jobs:
+  SKL-gcc9:
+
+    runs-on: intel-ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt -y install g++-9 libgtest-dev meson curl git
+
+    - name: Install Intel SDE
+      run: |
+        curl -o /tmp/sde.tar.xz https://downloadmirror.intel.com/784319/sde-external-9.24.0-2023-07-13-lin.tar.xz
+        mkdir /tmp/sde && tar -xvf /tmp/sde.tar.xz -C /tmp/sde/
+        sudo mv /tmp/sde/* /opt/sde && sudo ln -s /opt/sde/sde64 /usr/bin/sde
+
+    - name: Build
+      env:
+        CXX: g++-9
+      run: |
+        make clean
+        meson setup -Dbuild_tests=true --warnlevel 2 --werror --buildtype release builddir
+        cd builddir
+        ninja
+
+    - name: Run test suite on SKL
+      run: sde -skl -- ./builddir/testexe
+
+  SKX-gcc10:
+
+    runs-on: intel-ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt -y install g++-10 libgtest-dev meson curl git
+
+    - name: Install Intel SDE
+      run: |
+        curl -o /tmp/sde.tar.xz https://downloadmirror.intel.com/784319/sde-external-9.24.0-2023-07-13-lin.tar.xz
+        mkdir /tmp/sde && tar -xvf /tmp/sde.tar.xz -C /tmp/sde/
+        sudo mv /tmp/sde/* /opt/sde && sudo ln -s /opt/sde/sde64 /usr/bin/sde
+
+    - name: Build
+      env:
+        CXX: g++-10
+      run: |
+        make clean
+        meson setup -Dbuild_tests=true --warnlevel 2 --werror --buildtype release builddir
+        cd builddir
+        ninja
+
+    - name: Run test suite on SKX
+      run: sde -skx -- ./builddir/testexe
+
+  TGL-gcc11:
+
+    runs-on: intel-ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt -y install g++-11 libgtest-dev meson curl git
+
+    - name: Install Intel SDE
+      run: |
+        curl -o /tmp/sde.tar.xz https://downloadmirror.intel.com/784319/sde-external-9.24.0-2023-07-13-lin.tar.xz
+        mkdir /tmp/sde && tar -xvf /tmp/sde.tar.xz -C /tmp/sde/
+        sudo mv /tmp/sde/* /opt/sde && sudo ln -s /opt/sde/sde64 /usr/bin/sde
+
+    - name: Build
+      env:
+        CXX: g++-11
+      run: |
+        make clean
+        meson setup -Dbuild_tests=true --warnlevel 2 --werror --buildtype release builddir
+        cd builddir
+        ninja
+    - name: Run test suite on TGL
+      run: sde -tgl -- ./builddir/testexe
+
+  SPR-gcc13:
+
+    runs-on: intel-ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt -y install g++-13 libgtest-dev meson curl git
+
+    - name: Install Intel SDE
+      run: |
+        curl -o /tmp/sde.tar.xz https://downloadmirror.intel.com/784319/sde-external-9.24.0-2023-07-13-lin.tar.xz
+        mkdir /tmp/sde && tar -xvf /tmp/sde.tar.xz -C /tmp/sde/
+        sudo mv /tmp/sde/* /opt/sde && sudo ln -s /opt/sde/sde64 /usr/bin/sde
+
+    - name: Build examples
+      env:
+        CXX: g++-13
+      run: |
+        cd examples
+        make all
+
+    - name: Build
+      env:
+        CXX: g++-13
+      run: |
+        make clean
+        meson setup -Dbuild_tests=true --warnlevel 2 --werror --buildtype release builddir
+        cd builddir
+        ninja
+
+    - name: Run test suite on SPR
+      run: sde -spr -- ./builddir/testexe
+
+  SKX-SKL-openmp:
+
+    runs-on: intel-ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt -y install g++-10 libgtest-dev meson curl git
+
+    - name: Install Intel SDE
+      run: |
+        curl -o /tmp/sde.tar.xz https://downloadmirror.intel.com/784319/sde-external-9.24.0-2023-07-13-lin.tar.xz
+        mkdir /tmp/sde && tar -xvf /tmp/sde.tar.xz -C /tmp/sde/
+        sudo mv /tmp/sde/* /opt/sde && sudo ln -s /opt/sde/sde64 /usr/bin/sde
+
+    - name: Build
+      env:
+        CXX: g++-10
+      run: |
+        make clean
+        meson setup -Dbuild_tests=true -Duse_openmp=true --warnlevel 2 --werror --buildtype release builddir
+        cd builddir
+        ninja
+
+    - name: Run test suite on SKX and SKL
+      run: |
+        sde -skx -- ./builddir/testexe
+        sde -skl -- ./builddir/testexe
+
+  SPR-gcc13-special-cases:
+
+    runs-on: intel-ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt -y install g++-13 libgtest-dev meson curl git
+
+    - name: Install Intel SDE
+      run: |
+        curl -o /tmp/sde.tar.xz https://downloadmirror.intel.com/784319/sde-external-9.24.0-2023-07-13-lin.tar.xz
+        mkdir /tmp/sde && tar -xvf /tmp/sde.tar.xz -C /tmp/sde/
+        sudo mv /tmp/sde/* /opt/sde && sudo ln -s /opt/sde/sde64 /usr/bin/sde
+
+    - name: Build
+      env:
+        CXX: g++-13
+        CXXFLAGS: "-DXSS_MINIMAL_NETWORK_SORT -DXSS_TEST_KEYVALUE_BASE_CASE"
+      run: |
+        make clean
+        meson setup -Dbuild_tests=true --warnlevel 2 --werror --buildtype release builddir
+        cd builddir
+        ninja
+
+    - name: List exported symbols
+      run: |
+        nm --demangle --dynamic --defined-only --extern-only builddir/libx86simdsortcpp.so
+
+    - name: Run test suite on SPR
+      run: sde -spr -- ./builddir/testexe
+
+  manylinux-32bit:
+
+    runs-on: intel-ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+    - name: Build and test on 32-bit manylinux2014
+      run: |
+        docker run -v $(pwd):/xss quay.io/pypa/manylinux2014_i686 \
+        /bin/bash -xc "source /xss/.github/workflows/build-test-on-32bit.sh"
+
+  SPR-icpx:
+
+    runs-on: intel-ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+    - name: Install dependencies
+      run: |
+        echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+        sudo add-apt-repository -y "deb https://apt.repos.intel.com/oneapi all main"
+        sudo apt update --allow-insecure-repositories
+        sudo apt --allow-unauthenticated -y install intel-oneapi-compiler-dpcpp-cpp libgtest-dev curl git python3-pip
+        sudo pip3 install meson ninja
+
+    - name: Install Intel SDE
+      run: |
+        curl -o /tmp/sde.tar.xz https://downloadmirror.intel.com/784319/sde-external-9.24.0-2023-07-13-lin.tar.xz
+        mkdir /tmp/sde && tar -xvf /tmp/sde.tar.xz -C /tmp/sde/
+        sudo mv /tmp/sde/* /opt/sde && sudo ln -s /opt/sde/sde64 /usr/bin/sde
+
+    - name: Build examples
+      env:
+        CXX: icpx
+        CXXFLAGS: -fp-model=precise
+      run: |
+        source /opt/intel/oneapi/setvars.sh
+        cd examples
+        make all
+
+    - name: Build
+      env:
+        CXX: icpx
+        CXXFLAGS: -fp-model=precise
+      run: |
+        make clean
+        source /opt/intel/oneapi/setvars.sh
+        icpx --version
+        meson setup -Dbuild_tests=true --warnlevel 2 --werror --buildtype release builddir
+        cd builddir
+        ninja
+
+    - name: Run test suite on SPR
+      run: |
+        source /opt/intel/oneapi/setvars.sh
+        sde -spr -- ./builddir/testexe

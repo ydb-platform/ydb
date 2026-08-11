@@ -48,6 +48,7 @@
 
 #include <yt/yt/core/ytree/convert.h>
 
+#include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/yson/protobuf_helpers.h>
 
 namespace NYT::NApi::NRpcProxy {
@@ -253,7 +254,7 @@ ITransactionPtr TClient::AttachTransaction(
         options.PingPeriod,
         std::move(stickyParameters),
         rsp->sequence_number_source_id(),
-        "Transaction attached");
+        "Attached");
 }
 
 TFuture<IPrerequisitePtr> TClient::AttachChaosLease(
@@ -583,7 +584,7 @@ TFuture<void> TClient::AlterTable(
         ToProto(req->mutable_replication_progress(), *options.ReplicationProgress);
     }
     if (options.ClipTimestamp) {
-        req->set_clip_timestamp(*options.ClipTimestamp);
+        req->set_clip_timestamp(ToProto(*options.ClipTimestamp));
     }
 
     ToProto(req->mutable_mutating_options(), options);
@@ -697,7 +698,7 @@ TFuture<std::vector<TTableReplicaId>> TClient::GetInSyncReplicas(
     SetTimeoutOptions(*req, options);
 
     if (options.Timestamp) {
-        req->set_timestamp(options.Timestamp);
+        req->set_timestamp(ToProto(options.Timestamp));
     }
 
     YT_OPTIONAL_SET_PROTO(req, cached_sync_replicas_timeout, options.CachedSyncReplicasTimeout);
@@ -721,7 +722,7 @@ TFuture<std::vector<TTableReplicaId>> TClient::GetInSyncReplicas(
     SetTimeoutOptions(*req, options);
 
     if (options.Timestamp) {
-        req->set_timestamp(options.Timestamp);
+        req->set_timestamp(ToProto(options.Timestamp));
     }
 
     YT_OPTIONAL_SET_PROTO(req, cached_sync_replicas_timeout, options.CachedSyncReplicasTimeout);
@@ -760,8 +761,8 @@ TFuture<std::vector<TTabletInfo>> TClient::GetTabletInfos(
             tabletInfo.TotalRowCount = protoTabletInfo.total_row_count();
             tabletInfo.TrimmedRowCount = protoTabletInfo.trimmed_row_count();
             tabletInfo.DelayedLocklessRowCount = protoTabletInfo.delayed_lockless_row_count();
-            tabletInfo.BarrierTimestamp = protoTabletInfo.barrier_timestamp();
-            tabletInfo.LastWriteTimestamp = protoTabletInfo.last_write_timestamp();
+            tabletInfo.BarrierTimestamp = FromProto<NTransactionClient::TTimestamp>(protoTabletInfo.barrier_timestamp());
+            tabletInfo.LastWriteTimestamp = FromProto<NTransactionClient::TTimestamp>(protoTabletInfo.last_write_timestamp());
             tabletInfo.TableReplicaInfos = protoTabletInfo.replicas().empty()
                 ? std::nullopt
                 : std::make_optional(std::vector<TTabletInfo::TTableReplicaInfo>());
@@ -770,7 +771,7 @@ TFuture<std::vector<TTabletInfo>> TClient::GetTabletInfos(
             for (const auto& protoReplicaInfo : protoTabletInfo.replicas()) {
                 auto& currentReplica = tabletInfo.TableReplicaInfos->emplace_back();
                 currentReplica.ReplicaId = FromProto<TGuid>(protoReplicaInfo.replica_id());
-                currentReplica.LastReplicationTimestamp = protoReplicaInfo.last_replication_timestamp();
+                currentReplica.LastReplicationTimestamp = FromProto<NTransactionClient::TTimestamp>(protoReplicaInfo.last_replication_timestamp());
                 currentReplica.Mode = FromProto<ETableReplicaMode>(protoReplicaInfo.mode());
                 currentReplica.CurrentReplicationRowIndex = protoReplicaInfo.current_replication_row_index();
                 currentReplica.CommittedReplicationRowIndex = protoReplicaInfo.committed_replication_row_index();
@@ -2886,7 +2887,7 @@ TFuture<TQuery> TClient::GetQuery(
         ToProto(req->mutable_attributes(), options.Attributes);
     }
     if (options.Timestamp) {
-        req->set_timestamp(options.Timestamp);
+        req->set_timestamp(ToProto(options.Timestamp));
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryPtr& rsp) {
@@ -2944,7 +2945,7 @@ TFuture<TListQueriesResult> TClient::ListQueries(
         return TListQueriesResult{
             .Queries = FromProto<std::vector<TQuery>>(rsp->queries()),
             .Incomplete = rsp->incomplete(),
-            .Timestamp = rsp->timestamp(),
+            .Timestamp = FromProto<NTransactionClient::TTimestamp>(rsp->timestamp()),
         };
     }));
 }

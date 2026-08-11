@@ -1373,8 +1373,16 @@ void TYqlRowSpecInfo::FillAttrNode(NYT::TNode& attrs, bool useCompactForm) const
         if (itemType->GetKind() == ETypeAnnotationKind::Data && itemType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Yson) {
             patchedFields.insert(item->GetName());
         } else {
-            if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+            const bool wasOptional = itemType->GetKind() == ETypeAnnotationKind::Optional;
+            if (wasOptional) {
                 itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
+            }
+            const bool singular = itemType->GetKind() == ETypeAnnotationKind::Void
+                || itemType->GetKind() == ETypeAnnotationKind::Null;
+            if (wasOptional && singular && !(NativeYtTypeFlags & NTCF_COMPLEX)) {
+                // Backward compatibility with old optional singulars behavior
+                patchedFields.insert(item->GetName());
+                continue;
             }
             auto flags = GetNativeYtTypeFlagsImpl(itemType);
             if (flags != (flags & NativeYtTypeFlags)) {

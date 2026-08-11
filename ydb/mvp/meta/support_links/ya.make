@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    url_template.cpp
+    url_source.cpp
     entity.cpp
     grafana_dashboard_common.cpp
     grafana_dashboard_search_source.cpp
@@ -13,6 +15,9 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/fmt
+    library/cpp/uri
+    library/cpp/string_utils/url
     ydb/mvp/core
     ydb/mvp/meta/protos
     library/cpp/json

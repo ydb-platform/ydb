@@ -8,6 +8,7 @@ PEERDIR(
     library/cpp/yt/global
     library/cpp/yt/memory
     library/cpp/yt/misc
+    library/cpp/yt/mpl
     library/cpp/yt/system
     library/cpp/yt/threading
     library/cpp/yt/string

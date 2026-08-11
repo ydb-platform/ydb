@@ -15,7 +15,7 @@ namespace metrics
 {
 
 /**
- * Struct to hold PeriodicExortingMetricReader runtime options.
+ * Struct to hold PeriodicExportingMetricReader runtime options.
  */
 struct PeriodicExportingMetricReaderRuntimeOptions
 {

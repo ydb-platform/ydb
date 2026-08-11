@@ -10,6 +10,7 @@
 #include "opentelemetry/sdk/trace/id_generator.h"
 #include "opentelemetry/sdk/trace/processor.h"
 #include "opentelemetry/sdk/trace/sampler.h"
+#include "opentelemetry/sdk/trace/span_limits.h"
 #include "opentelemetry/sdk/trace/tracer_context.h"
 #include "opentelemetry/sdk/trace/tracer_provider.h"
 #include "opentelemetry/trace/tracer_provider.h"
@@ -55,6 +56,14 @@ public:
       std::unique_ptr<IdGenerator> id_generator,
       std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>> tracer_configurator);
 
+  static std::unique_ptr<opentelemetry::sdk::trace::TracerProvider> Create(
+      std::unique_ptr<SpanProcessor> processor,
+      const opentelemetry::sdk::resource::Resource &resource,
+      std::unique_ptr<Sampler> sampler,
+      std::unique_ptr<IdGenerator> id_generator,
+      std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>> tracer_configurator,
+      SpanLimits span_limits);
+
   /* Series of creator methods with a vector of processors. */
 
   static std::unique_ptr<opentelemetry::sdk::trace::TracerProvider> Create(
@@ -81,6 +90,14 @@ public:
       std::unique_ptr<Sampler> sampler,
       std::unique_ptr<IdGenerator> id_generator,
       std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>> tracer_configurator);
+
+  static std::unique_ptr<opentelemetry::sdk::trace::TracerProvider> Create(
+      std::vector<std::unique_ptr<SpanProcessor>> &&processors,
+      const opentelemetry::sdk::resource::Resource &resource,
+      std::unique_ptr<Sampler> sampler,
+      std::unique_ptr<IdGenerator> id_generator,
+      std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>> tracer_configurator,
+      SpanLimits span_limits);
 
   /* Create with a tracer context. */
 

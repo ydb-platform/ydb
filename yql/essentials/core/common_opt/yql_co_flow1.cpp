@@ -1413,11 +1413,6 @@ bool IsOptimizerToFlowOverIteratorWithDependsAllowed(const TTypeAnnotationContex
     return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
 }
 
-bool IsOptimizerToFlowOverCollectAllowed(const TTypeAnnotationContext& types) {
-    static const char Flag[] = "ToFlowOverCollect";
-    return !IsOptimizerDisabled<Flag>(types);
-}
-
 }
 
 void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
@@ -2100,13 +2095,11 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
                 return ctx.ChangeChildren(*node, std::move(newChildren));
             }
         }
-        if (IsOptimizerToFlowOverCollectAllowed(*optCtx.Types)) {
-            const auto head = node->HeadPtr();
-            if (head->IsCallable("Collect") && optCtx.IsSingleUsage(*head) &&
-                head->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
-                YQL_CLOG(DEBUG, Core) << "Drop ToFlow over Collect";
-                return head->HeadPtr();
-            }
+        const auto head = node->HeadPtr();
+        if (head->IsCallable("Collect") && optCtx.IsSingleUsage(*head) &&
+            head->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
+            YQL_CLOG(DEBUG, Core) << "Drop ToFlow over Collect";
+            return head->HeadPtr();
         }
         return node;
     };

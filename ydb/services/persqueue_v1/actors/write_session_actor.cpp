@@ -77,7 +77,7 @@ ECodec<Protocol> CodecByName(const TString& codec) {
         if constexpr (Protocol == EProtocol::Topic) {
             return (i32)Ydb::Topic::CODEC_UNSPECIFIED;
         }
-        Y_ABORT("Unsupported codec enum");
+        AFL_ENSURE(false)("reason", "Unsupported codec enum")("codec", codec);
     }
     return codecIt->second;
 }

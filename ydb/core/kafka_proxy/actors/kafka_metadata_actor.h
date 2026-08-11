@@ -19,7 +19,8 @@ namespace NKafka {
 
 TActorId MakeKafkaDiscoveryCacheID();
 
-class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor> {
+class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor>
+                         , public TKafkaExceptionHandler<TKafkaMetadataActor> {
 public:
     TKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message,
                         const TActorId& discoveryCacheActor)
@@ -32,6 +33,10 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx);
+
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
 
 private:
     using TEvLocationResponse = NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse;

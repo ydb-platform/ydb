@@ -60,7 +60,7 @@ namespace NActors {
 
         const TSessionParams& GetParams() const override { return Params; }
         const TIntrusivePtr<NInterconnect::TStreamSocket>& GetSocket() const override { return Socket; }
-        ui64 GetTotalOutputQueueSize() const override { return 0; }
+        ui64 GetTotalOutputQueueSize() const override;
         std::optional<ui8> GetXDCFlags() const override { return std::nullopt; }
         TDuration GetPingRTT() const override { return TDuration::FromValue(PingRTT->load()); }
         i64 GetClockSkew() const override { return ClockSkew->load(); }
@@ -125,9 +125,6 @@ namespace NActors {
 
         // io_uring data plane
         ui64 EngineHandle = 0;
-
-        ui64 BytesSent = 0;
-        ui64 BytesReceived = 0;
 
         struct TSubscriberInfo {
             ui64 Cookie = 0;

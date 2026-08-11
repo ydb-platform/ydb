@@ -4,6 +4,8 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
@@ -23,6 +25,7 @@ public:
         NActors::TActorSystem* actorSystem,
         ITraceService* traceService,
         IPartitionDirectService* partitionDirectService,
+        const TDiskDescription& diskDescription,
         ui32 regionIndex,
         const TVector<IDirectBlockGroupPtr>& directBlockGroups,
         const TVChunkConfigByIndex& vChunkConfigs,
@@ -50,6 +53,8 @@ private:
     void OnVChunksStopped();
 
     NActors::TActorSystem* const ActorSystem;
+    const TDiskDescription DiskDescription;
+
     TVector<TVChunkPtr> VChunks;
 };
 

@@ -1404,6 +1404,97 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         StopFastPathService(env, partition, edge);
     }
 
+    // The tablet-wide cleanup barrier is broadcast per DBG, and many DBGs of
+    // the tablet share the same pbuffer endpoints (each node/pdisk/slot keeps
+    // one barrier per tabletId). Without dedup a single cleanup tick sends the
+    // same barrier lsn to a shared endpoint once per DBG on it - a
+    // non-advancing MoveBarrier that DDisk logs as an error. Assert each
+    // pbuffer receives any given barrier lsn at most once.
+    Y_UNIT_TEST(ShouldNotResendSameBarrierToPBuffer)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(
+            env,
+            EWriteMode::DirectWrite,
+            TDuration::Seconds(1),
+            /*pbufferCleanupLsnStep=*/4,
+            /*syncRequestsBatchSize=*/1);
+
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        // Barrier lsn of every TEvErasePersistentBuffer, grouped by the pbuffer
+        // it was sent to.
+        TMap<TActorId, TVector<ui64>> barrierLsnsByRecipient;
+        runtime->FilterFunction =
+            [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                NDDisk::TEvErasePersistentBuffer::EventType)
+            {
+                barrierLsnsByRecipient[ev->GetRecipientRewrite()].push_back(
+                    ev->Get<NDDisk::TEvErasePersistentBuffer>()
+                        ->Record.GetLsn());
+            }
+            return true;
+        };
+
+        constexpr ui64 BlockCount = 16;
+        TVector<TString> data(BlockCount);
+        for (ui64 i = 0; i < BlockCount; ++i) {
+            data[i] = NUnitTest::RandomString(DefaultBlockSize, i);
+        }
+
+        // Two batches so the cleanup floor moves past lsn 1 and a non-zero
+        // barrier fires while later writes are still in flight - each cleanup
+        // tick fans the same bound out to the shared pbuffer endpoints.
+        for (ui64 i = 0; i < BlockCount / 2; ++i) {
+            WriteBlock(env, loadActorAdapter, edge, i, data[i]);
+        }
+        env.Sim(TDuration::Seconds(10));
+        for (ui64 i = BlockCount / 2; i < BlockCount; ++i) {
+            WriteBlock(env, loadActorAdapter, edge, i, data[i]);
+        }
+        env.Sim(TDuration::Seconds(10));
+
+        // A non-zero barrier actually reached a pbuffer (so the check is not
+        // vacuous), and no pbuffer received the same barrier lsn twice.
+        ui64 maxBarrierLsn = 0;
+        for (const auto& [recipient, lsns]: barrierLsnsByRecipient) {
+            THashSet<ui64> seen;
+            for (const ui64 lsn: lsns) {
+                UNIT_ASSERT_C(
+                    seen.insert(lsn).second,
+                    "pbuffer " << recipient << " got barrier lsn " << lsn
+                               << " more than once");
+                maxBarrierLsn = Max(maxBarrierLsn, lsn);
+            }
+        }
+        UNIT_ASSERT_C(
+            maxBarrierLsn > 0,
+            "no non-zero barrier reached a pbuffer");
+
+        // No data lost.
+        for (ui64 i = 0; i < BlockCount; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                ReadBlock(env, loadActorAdapter, edge, i),
+                data[i]);
+        }
+
+        StopFastPathService(env, partition, edge);
+    }
+
     Y_UNIT_TEST(MonitoringPageRenders)
     {
         TEnvironmentSetup env{{

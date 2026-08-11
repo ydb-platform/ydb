@@ -1724,7 +1724,8 @@ private:
             ResourcePoolsCache.GetLastResourcePoolMapSnapshot(),
             ResourcePoolsCache.GetClassifierViewFor(databaseId),
             databaseId,
-            std::move(context)
+            std::move(context),
+            *AppData()
         );
 
         ev->Get()->SetWmQueryClassifier(classifier);

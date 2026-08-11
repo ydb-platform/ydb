@@ -43,8 +43,8 @@ void VerifyError(size_t result)
             "Zstd codec failed with memory allocation error");
     }
 
-    YT_LOG_FATAL("Zstd compression failed (Error: %v)",
-        ZSTD_getErrorName(result));
+    YT_TLOG_FATAL("Zstd compression failed")
+        .With("Error", ZSTD_getErrorName(result));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

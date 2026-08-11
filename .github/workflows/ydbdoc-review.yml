@@ -50,13 +50,18 @@ jobs:
           YDBDOC_MODEL_TRANSLATE: ${{ vars.YDBDOC_MODEL_TRANSLATE }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           YDBDOC_REPO_PATH: ${{ github.workspace }}
+          GITHUB_ACTOR: ${{ github.event.sender.login }}
+          YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
+          YDBDOC_DAILY_BUDGET_RUB: ${{ vars.YDBDOC_DAILY_BUDGET_RUB }}
+          YDBDOC_TRANSCRIPT_BACKEND: ydb
+          YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
 
   trigger-translation-ci:
     needs: ydbdoc-review
     if: ${{ !cancelled() && needs.ydbdoc-review.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger PR-check and docs rebuild on translation PR
+      - name: Trigger PR-check (ok-to-test) on translation PR
         uses: actions/github-script@v8
         with:
           # PAT only here (no checkout): cascades into PR-check/docs rebuild without
@@ -96,6 +101,10 @@ jobs:
               return;
             }
 
+            // ok-to-test only. Do NOT add rebuild_docs here: pull_request already
+            // starts Build documentation on the translation PR, and rebuild's
+            // workflow_dispatch cancels that run (shared concurrency) while
+            // attaching its own success check to main — PR stays red (#48409).
             await github.rest.issues.addLabels({
               owner,
               repo,

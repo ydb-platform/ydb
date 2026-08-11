@@ -7,6 +7,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
@@ -15,6 +16,7 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/mind/bscontroller/types.h>
@@ -48,6 +50,7 @@ class TPartitionActor
 
 private:
     TLogTitle LogTitle;
+    TDiskDescription DiskDescription;
     TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
     NActors::TActorId BSControllerPipeClient;
@@ -96,14 +99,21 @@ private:
     void OnActivateExecutor(const NActors::TActorContext& ctx) override;
     void DefaultSignalTabletActive(const NActors::TActorContext& ctx) override;
 
+    void DetachEndpointAddDie(const NActors::TActorContext& ctx);
+
+    void HandleConnect(
+        NKikimr::TEvTabletPipe::TEvClientConnected::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleDisconnect(
+        NKikimr::TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleServerConnected(
         const NKikimr::TEvTabletPipe::TEvServerConnected::TPtr& ev,
         const NActors::TActorContext& ctx);
-
     void HandleServerDisconnected(
         const NKikimr::TEvTabletPipe::TEvServerDisconnected::TPtr& ev,
         const NActors::TActorContext& ctx);
-
     void HandleServerDestroyed(
         const NKikimr::TEvTabletPipe::TEvServerDestroyed::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -165,6 +175,11 @@ private:
         const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandleDeletePartition(
+        const NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionRequest::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     // Rejects (logs + notifies the DBG) and returns false if the AddHost
     // request is invalid; true if it may proceed.
     bool ValidateAddHostToDBGRequest(
@@ -181,6 +196,8 @@ private:
         THostIndex newHostIndex);
 
     [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
+
+    [[nodiscard]] TString GetSocketPath() const;
 
     void Start(
         const NActors::TActorContext& ctx,

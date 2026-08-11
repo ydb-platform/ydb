@@ -12,6 +12,7 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <limits>
 #include <util/string/join.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -530,7 +531,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
 
             TString str;
             bool res = proto.SerializeToString(&str);
-            Y_ABORT_UNLESS(res);
+            AFL_ENSURE(res)("reason", "failed to serialize TDataChunk");
 
             auto w = partitionRequest->AddCmdWrite();
             w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));

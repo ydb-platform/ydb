@@ -2051,6 +2051,15 @@ public:
     {
         Fields_ = GetFields(Specs_.Outputs[tableIndex].RowType, columns);
         NativeYtTypeFlags_ = Specs_.Outputs[tableIndex].NativeYtTypeFlags;
+
+        if (!(NativeYtTypeFlags_ & NTCF_COMPLEX)) {
+            // Backward compatibility with old optional singulars behavior
+            for (TField& field : Fields_) {
+                if (field.Optional && (field.Type->IsVoid() || field.Type->IsNull())) {
+                    field.Optional = false;
+                }
+            }
+        }
     }
 
 protected:

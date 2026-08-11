@@ -32,11 +32,6 @@ class ImagObj:
 
 assert_type(np.mintypecode(["f8"], typeset="qfQF"), str)
 
-assert_type(np.asfarray(AR_f8), npt.NDArray[np.float64])
-assert_type(np.asfarray(AR_LIKE_f), npt.NDArray[np.float64])
-assert_type(np.asfarray(AR_f8, dtype="c16"), npt.NDArray[np.complexfloating[Any, Any]])
-assert_type(np.asfarray(AR_f8, dtype="i8"), npt.NDArray[np.floating[Any]])
-
 assert_type(np.real(RealObj()), slice)
 assert_type(np.real(AR_f8), npt.NDArray[np.float64])
 assert_type(np.real(AR_c16), npt.NDArray[np.float64])
@@ -47,13 +42,13 @@ assert_type(np.imag(AR_f8), npt.NDArray[np.float64])
 assert_type(np.imag(AR_c16), npt.NDArray[np.float64])
 assert_type(np.imag(AR_LIKE_f), npt.NDArray[Any])
 
-assert_type(np.iscomplex(f8), np.bool_)
-assert_type(np.iscomplex(AR_f8), npt.NDArray[np.bool_])
-assert_type(np.iscomplex(AR_LIKE_f), npt.NDArray[np.bool_])
+assert_type(np.iscomplex(f8), np.bool)
+assert_type(np.iscomplex(AR_f8), npt.NDArray[np.bool])
+assert_type(np.iscomplex(AR_LIKE_f), npt.NDArray[np.bool])
 
-assert_type(np.isreal(f8), np.bool_)
-assert_type(np.isreal(AR_f8), npt.NDArray[np.bool_])
-assert_type(np.isreal(AR_LIKE_f), npt.NDArray[np.bool_])
+assert_type(np.isreal(f8), np.bool)
+assert_type(np.isreal(AR_f8), npt.NDArray[np.bool])
+assert_type(np.isreal(AR_LIKE_f), npt.NDArray[np.bool])
 
 assert_type(np.iscomplexobj(f8), bool)
 assert_type(np.isrealobj(f8), bool)

@@ -21,6 +21,14 @@ from s3transfer.compat import MAXINT
 from s3transfer.exceptions import CancelledError, TransferNotDoneError
 from s3transfer.utils import FunctionContainer, TaskSemaphore
 
+try:
+    from botocore.context import get_context
+except ImportError:
+
+    def get_context():
+        return None
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -126,6 +134,7 @@ class TransferMeta(BaseTransferMeta):
         self._transfer_id = transfer_id
         self._size = None
         self._user_context = {}
+        self._etag = None
 
     @property
     def call_args(self):
@@ -147,6 +156,11 @@ class TransferMeta(BaseTransferMeta):
         """A dictionary that requesters can store data in"""
         return self._user_context
 
+    @property
+    def etag(self):
+        """The etag of the stored object for validating multipart downloads"""
+        return self._etag
+
     def provide_transfer_size(self, size):
         """A method to provide the size of a transfer request
 
@@ -155,6 +169,15 @@ class TransferMeta(BaseTransferMeta):
         transfer.
         """
         self._size = size
+
+    def provide_object_etag(self, etag):
+        """A method to provide the etag of a transfer request
+
+        By providing this value, the TransferManager will validate
+        multipart downloads by supplying an IfMatch parameter with
+        the etag as the value to GetObject requests.
+        """
+        self._etag = etag
 
 
 class TransferCoordinator:
@@ -467,7 +490,9 @@ class BoundedExecutor:
             semaphore.release, task.transfer_id, acquire_token
         )
         # Submit the task to the underlying executor.
-        future = ExecutorFuture(self._executor.submit(task))
+        # Pass the current context to ensure child threads persist the
+        # parent thread's context.
+        future = ExecutorFuture(self._executor.submit(task, get_context()))
         # Add the Semaphore.release() callback to the future such that
         # it is invoked once the future completes.
         future.add_done_callback(release_callback)

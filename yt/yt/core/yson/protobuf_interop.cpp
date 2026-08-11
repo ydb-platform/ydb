@@ -84,7 +84,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "ProtobufInterop");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "ProtobufInterop");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1264,9 +1264,9 @@ protected:
             case EUtf8Check::Disable:
                 return;
             case EUtf8Check::LogOnFail:
-                YT_LOG_WARNING("String field got non UTF-8 value (Path: %v, Value: %v)",
-                    YPathStack_.GetHumanReadablePath(),
-                    data);
+                YT_TLOG_WARNING("String field got non UTF-8 value")
+                    .With("Path", YPathStack_.GetHumanReadablePath())
+                    .With("Value", data);
                 return;
             case EUtf8Check::ThrowOnFail:
                 THROW_ERROR_EXCEPTION("Non UTF-8 value in string field %v",

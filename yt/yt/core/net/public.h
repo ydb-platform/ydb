@@ -2,7 +2,8 @@
 
 #include <yt/yt/core/misc/public.h>
 #include <yt/yt/core/misc/configurable_singleton_decl.h>
-#include <yt/yt/core/misc/error_code.h>
+
+#include <library/cpp/yt/error/error_code.h>
 
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 

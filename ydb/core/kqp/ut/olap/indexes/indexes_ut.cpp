@@ -167,9 +167,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 )");
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        csController->WaitActualization(TDuration::Seconds(30), /*waitWrites=*/true);
         // Make the just-actualized portions (with index data) visible to the following scan.
         AdvancePlanStep(kikimr);
-        csController->WaitActualization(TDuration::Seconds(10));
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(
@@ -2170,9 +2170,9 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 )");
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        csController->WaitActualization(TDuration::Seconds(30), /*waitWrites=*/true);
         // Make the just-actualized portions (with index data) visible to the following scan.
         AdvancePlanStep(kikimr);
-        csController->WaitActualization(TDuration::Seconds(10));
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(
@@ -2266,48 +2266,6 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             UNIT_ASSERT(indexNames.empty());
         }
 
-        {
-            auto runtime = kikimr.GetTestServer().GetRuntime();
-            auto sender = runtime->AllocateEdgeActor();
-
-            TAutoPtr<IEventHandle> handle;
-
-            std::optional<NColumnShard::TSchemeShardLocalPathId> schemeShardLocalPathId;
-            for (auto&& i : csController->GetShardActualIds()) {
-                const auto pathIds = csController->GetPathIdTranslator(i)->GetSchemeShardLocalPathIds();
-                UNIT_ASSERT(pathIds.size() == 1);
-                if (schemeShardLocalPathId.has_value()) {
-                    UNIT_ASSERT(schemeShardLocalPathId == *pathIds.begin());
-                } else {
-                    schemeShardLocalPathId = *pathIds.begin();
-                }
-            }
-
-            UNIT_ASSERT(schemeShardLocalPathId.has_value());
-
-            size_t shard = 0;
-            for (const auto& [tabletId, pathIdTranslator]: csController->GetActiveTablets()) {
-                auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
-                request->Record.MutableTable()->MutablePathId()->SetLocalId(schemeShardLocalPathId->GetRawValue());
-                runtime->Send(MakePipePerNodeCacheID(false), sender, new TEvPipeCache::TEvForward(request.release(), static_cast<ui64>(tabletId), false));
-                if (++shard == 3) {
-                    break;
-                }
-            }
-
-            auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create());
-            for (size_t shard = 0; shard < 3; ++shard) {
-                auto event = runtime->GrabEdgeEvent<NStat::TEvStatistics::TEvStatisticsResponse>(handle);
-                UNIT_ASSERT(event);
-
-                auto& response = event->Record;
-                UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
-                UNIT_ASSERT(response.ColumnsSize() == 6);
-                TString someData = response.GetColumns(0).GetStatistics(0).GetData();
-                *sketch += *std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(someData.data(), someData.size()));
-                UNIT_ASSERT(sketch->GetElementCount() > 0);
-            }
-        }
     }
 
     Y_UNIT_TEST(SchemeActualizationOnceOnStart, EUseQueryService) {

@@ -72,7 +72,7 @@ struct TDescribeEnv {
     }
 
     TActorId StartDescribe(
-        std::unordered_set<TString> topics,
+        absl::flat_hash_set<TString> topics,
         const NDescriber::TDescribeSettings& settings = {},
         const TString& databasePath = "/Root")
     {

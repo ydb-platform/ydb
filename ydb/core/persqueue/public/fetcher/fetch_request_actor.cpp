@@ -169,7 +169,7 @@ public:
         YDB_LOG_DEBUG("DescribeTopics",
             {"logPrefix", LOG_PREFIX});
 
-        std::unordered_set<TString> topics;
+        absl::flat_hash_set<TString> topics;
         for (const auto& part : Settings.Partitions) {
             topics.insert(part.Topic);
         }

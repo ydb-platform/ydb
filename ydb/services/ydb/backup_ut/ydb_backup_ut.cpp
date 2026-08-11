@@ -3773,6 +3773,67 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
+    Y_UNIT_TEST(ColumnTableSkippedWhenCopyTableFallbackTriggered) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* rowTable = "/Root/row_table";
+        constexpr const char* columnTable = "/Root/column_table";
+
+        ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )", rowTable
+        ), true);
+        ExecuteQuery(session, Sprintf(R"(
+                UPSERT INTO `%s` (Key, Value) VALUES (1, "one"), (2, "two");
+            )", rowTable
+        ));
+
+        ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )", columnTable
+        ), true);
+        ExecuteQuery(session, Sprintf(R"(
+                UPSERT INTO `%s` (Key, Value) VALUES (1u, "a");
+            )", columnTable
+        ));
+
+        const auto originalRowTableContent = GetTableContent(session, rowTable);
+
+        NDump::TClient backupClient(driver);
+        const auto dumpResult = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
+        UNIT_ASSERT_C(dumpResult.IsSuccess(), dumpResult.GetIssues().ToString());
+
+        UNIT_ASSERT_C(!pathToBackup.Child("column_table").Exists(),
+            "Column table directory should not be present in the backup after the CopyTable fallback skipped it");
+        UNIT_ASSERT_C(pathToBackup.Child("row_table").Exists(),
+            "Row table should still be backed up via the fallback CopyTables call");
+
+        ExecuteQuery(session, Sprintf(R"(DROP TABLE `%s`;)", rowTable), true);
+
+        NDump::TClient restoreClient(driver);
+        const auto restoreResult = restoreClient.Restore(pathToBackup, "/Root");
+        UNIT_ASSERT_C(restoreResult.IsSuccess(), restoreResult.GetIssues().ToString());
+
+        CompareResults(GetTableContent(session, rowTable), originalRowTableContent);
+    }
+
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
         TestReplicationBackupRestore(/* tokenSecretType */ Nothing());
     }

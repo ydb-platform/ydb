@@ -493,6 +493,8 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
             if (tmpFile) {
                 if (ss.Data()) {
                     Flush(*tmpFile, ss, lastWrittenPK, lastReadPK);
+                } else if (lastReadPK) {
+                    lastWrittenPK = *lastReadPK;
                 }
                 CloseAndRename(*tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
             }

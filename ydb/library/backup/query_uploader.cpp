@@ -117,7 +117,13 @@ bool TUploader::Push(TParams params) {
                 LOG_W("Write tx was completed with issues: " << status.GetIssues().ToOneLineString());
             }
         } else {
-            LOG_E("Write tx failed: " << status.GetIssues().ToOneLineString());
+            const TString issues = status.GetIssues().ToOneLineString();
+            TStringBuilder message;
+            message << "Write tx failed: " << issues;
+            if (issues.Contains("Data manipulation queries with column-oriented tables are supported only by API QueryService.")) {
+                message << " Consider using the --bulk-upsert option to restore column-oriented tables.";
+            }
+            LOG_E(message);
             PleaseStop();
             return;
         }

@@ -945,7 +945,7 @@ namespace NYql::NDq {
         ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;
         ::NMonitoring::TDynamicCounters::TCounterPtr ActiveSessions;
-        static constexpr size_t MaxSupportedFullscanRequest = 50000;
+        static constexpr size_t MaxSupportedFullscanRequest = 20000;
     };
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateKikimrLookupActor(

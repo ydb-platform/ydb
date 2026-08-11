@@ -57,6 +57,10 @@ public:
     // Publish an arbitrary IDirectSession for NodeId (tests / advanced setup).
     void SetDirectSession(std::shared_ptr<NActors::IDirectSession> session);
 
+    // Events successfully sent through the injected fake IDirectSession.
+    // Zero when no fake session is enabled.
+    [[nodiscard]] ui64 GetFakeDirectSessionSentEventCount() const;
+
     void SetPendingConnect(EConnectionType type, const TDDiskId& ddiskId);
     void SetPendingReadFromDDisk(EConnectionType type, const TDDiskId& ddiskId);
     void SetPendingWriteToDDisk(EConnectionType type, const TDDiskId& ddiskId);

@@ -1629,11 +1629,18 @@ Y_UNIT_TEST_SUITE(TSessionsWithDirectSessionTransport)
         auto executor = MakeExecutor();
         auto transport =
             std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
-        transport->EnableFakeDirectSession();
+        auto* transportPtr = transport.get();
+        transportPtr->EnableFakeDirectSession();
 
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
         auto initialReady = RunAndGetInitialReady(dbg);
         WaitReady(executor, initialReady);
+
+        // Ready-path Connect is actor-based, but readiness may already have
+        // issued datapath reads via the fake session. Snapshot and require the
+        // explicit read below to increase the counter.
+        const ui64 sentBefore =
+            transportPtr->GetFakeDirectSessionSentEventCount();
 
         const auto range = TBlockRange64::WithLength(0, 1);
         TString buffer(DefaultBlockSize, 'r');
@@ -1652,6 +1659,9 @@ Y_UNIT_TEST_SUITE(TSessionsWithDirectSessionTransport)
         auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
         auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+        UNIT_ASSERT_GT(
+            transportPtr->GetFakeDirectSessionSentEventCount(),
+            sentBefore);
     }
 
     Y_UNIT_TEST_F(
@@ -1691,6 +1701,7 @@ Y_UNIT_TEST_SUITE(TSessionsWithDirectSessionTransport)
         auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
         DoAllExecutorAndRuntimeWork(executor);
         UNIT_ASSERT(!inFlightRead.HasValue());
+        UNIT_ASSERT_GT(transportPtr->GetFakeDirectSessionSentEventCount(), 0u);
 
         transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
         transportPtr->FireDisconnect(

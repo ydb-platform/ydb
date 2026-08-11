@@ -148,6 +148,11 @@ void TICStorageTransportTestAdapter::SetDirectSession(
     }
 }
 
+ui64 TICStorageTransportTestAdapter::GetFakeDirectSessionSentEventCount() const
+{
+    return FakeDirectSession ? FakeDirectSession->GetSentEventCount() : 0;
+}
+
 void TICStorageTransportTestAdapter::SetPendingConnect(
     EConnectionType type,
     const TDDiskId& ddiskId)

@@ -9,7 +9,9 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/sglist.h>
 
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/util/rope.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <atomic>
 
@@ -177,12 +179,13 @@ public:
         if (!Finished.load(std::memory_order_relaxed) &&
             !WaitingReplies.empty())
         {
+            TVector<NKikimrBlobStorage::NDDisk::TDDiskId> remaining(
+                WaitingReplies.begin(),
+                WaitingReplies.end());
             auto response = MakeWritePersistentBuffersResult(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED,
                 SessionBrokenErrorMessage,
-                TVector<NKikimrBlobStorage::NDDisk::TDDiskId>(
-                    WaitingReplies.begin(),
-                    WaitingReplies.end()));
+                remaining);
             Finish(response->Record);
         }
     }
@@ -248,6 +251,7 @@ private:
 // destructors completing with OUTDATED.
 template <typename TEvent>
 [[nodiscard]] bool TrySendDirect(
+    TActorSystem* actorSystem,
     const TSessionEntry& entry,
     TActorId recipient,
     ui64 cookie,
@@ -265,7 +269,16 @@ template <typename TEvent>
 
     // No replyCallback: the long-lived TSessionReplyRouter is already
     // registered for ReplyActorId and demultiplexes by cookie.
-    return entry.Session->Send(handle.Release());
+    if (entry.Session->Send(handle.Release())) {
+        return true;
+    }
+
+    LOG_WARN_S(
+        *actorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "Direct send failed, node# " << recipient.NodeId() << " eventType# "
+                                     << TEvent::EventType);
+    return false;
 }
 
 }   // namespace
@@ -344,6 +357,7 @@ TICDirectStorageTransport::WriteToPBuffer(
     }
 
     if (!TrySendDirect(
+            ActorSystem,
             entry,
             connection.GetServiceId(),
             cookie,
@@ -388,7 +402,7 @@ void TICDirectStorageTransport::WriteToManyPBuffers(
         (const TEvWriteToManyPersistentBuffersResult& result)
     {
         if (span) {
-            span->Event("Reply on IC thread");
+            span->Event("Reply received");
         }
         callback(result, span);
     };
@@ -426,6 +440,7 @@ void TICDirectStorageTransport::WriteToManyPBuffers(
     }
 
     if (!TrySendDirect(
+            ActorSystem,
             entry,
             connection.GetServiceId(),
             cookie,
@@ -487,6 +502,7 @@ TICDirectStorageTransport::WriteToDDisk(
     }
 
     if (!TrySendDirect(
+            ActorSystem,
             entry,
             connection.GetServiceId(),
             cookie,
@@ -533,6 +549,7 @@ TICDirectStorageTransport::BatchEraseFromPBuffer(
     }
 
     if (!TrySendDirect(
+            ActorSystem,
             entry,
             connection.GetServiceId(),
             cookie,
@@ -577,6 +594,7 @@ TICDirectStorageTransport::BarrierEraseFromPBuffer(
     }
 
     if (!TrySendDirect(
+            ActorSystem,
             entry,
             connection.GetServiceId(),
             cookie,
@@ -630,6 +648,7 @@ TICDirectStorageTransport::ReadFromPBuffer(
     }
 
     if (!TrySendDirect(
+            ActorSystem,
             entry,
             connection.GetServiceId(),
             cookie,
@@ -680,6 +699,7 @@ TICDirectStorageTransport::ReadFromDDisk(
     }
 
     if (!TrySendDirect(
+            ActorSystem,
             entry,
             connection.GetServiceId(),
             cookie,
@@ -744,6 +764,7 @@ TICDirectStorageTransport::SyncWithPBuffer(
     }
 
     if (!TrySendDirect(
+            ActorSystem,
             entry,
             ddiskConnection.GetServiceId(),
             cookie,
@@ -777,6 +798,7 @@ TICDirectStorageTransport::ListPBufferEntries(const THostConnection& connection)
     const ui64 cookie = entry.Router->Add(handler);
 
     if (!TrySendDirect(
+            ActorSystem,
             entry,
             connection.GetServiceId(),
             cookie,

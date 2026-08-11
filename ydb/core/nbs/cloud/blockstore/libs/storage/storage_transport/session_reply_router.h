@@ -7,6 +7,7 @@
 
 #include <array>
 #include <atomic>
+#include <bit>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
@@ -48,6 +49,7 @@ public:
 
 private:
     static constexpr size_t InFlightTrackingMapCount = 64;
+    static_assert(std::has_single_bit(InFlightTrackingMapCount));
 
     struct TInFlightTrackingMap
     {
@@ -57,7 +59,8 @@ private:
 
     [[nodiscard]] TInFlightTrackingMap& InFlightTrackingMapFor(ui64 cookie);
 
-    std::array<TInFlightTrackingMap, InFlightTrackingMapCount> InFlightTrackingMaps;
+    std::array<TInFlightTrackingMap, InFlightTrackingMapCount>
+        InFlightTrackingMaps;
     std::atomic<ui64> NextCookie{1};
 };
 

@@ -123,10 +123,12 @@ bool TFakeDirectSession::Send(
         // (empty here for both Connect and datapath). Cookie is preserved.
         auto rewritten = RewriteSender(std::move(ev), bridgeId);
         ActorSystem->Send(rewritten.release());
+        SentEventCount.fetch_add(1, std::memory_order_relaxed);
         return true;
     }
 
     ActorSystem->Send(ev.Release());
+    SentEventCount.fetch_add(1, std::memory_order_relaxed);
     return true;
 }
 
@@ -210,6 +212,11 @@ void TFakeDirectSession::Shutdown()
 bool TFakeDirectSession::IsConnected() const
 {
     return Connected.load(std::memory_order_acquire);
+}
+
+ui64 TFakeDirectSession::GetSentEventCount() const
+{
+    return SentEventCount.load(std::memory_order_relaxed);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

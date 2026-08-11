@@ -4,8 +4,11 @@
 
 #include <ydb/library/actors/interconnect/interconnect_direct_session.h>
 
+#include <library/cpp/threading/hot_swap/hot_swap.h>
+
 #include <util/generic/hash.h>
-#include <util/system/mutex.h>
+#include <util/generic/ptr.h>
+#include <util/system/spinlock.h>
 
 #include <memory>
 
@@ -40,9 +43,10 @@ struct TSessionEntry
 ////////////////////////////////////////////////////////////////////////////////
 
 // Thread-safe nodeId -> TSessionEntry map used by TICDirectStorageTransport.
-// Hot-path Get() is lock-free (atomic shared_ptr load of an immutable
-// snapshot). Writers (transport actor on TEvNodeConnected /
-// TEvNodeDisconnected) copy-on-write under a mutex and publish a new snapshot.
+// Hot-path Get() is wait-free via THotSwap. Writers (transport actor on
+// TEvNodeConnected / TEvNodeDisconnected) copy-on-write under WriterMutex and
+// publish a new snapshot. WriterMutex is needed because THotSwap serializes
+// AtomicStore but not the read-modify-write of the map contents.
 class TDirectSessionRegistry
 {
 public:
@@ -56,15 +60,19 @@ public:
     void Clear();
 
 private:
-    using TSnapshot = THashMap<ui32, TSessionEntry>;
+    struct TSnapshot: public TAtomicRefCount<TSnapshot>
+    {
+        THashMap<ui32, TSessionEntry> Entries;
 
-    // Published via std::atomic_load / std::atomic_store (free-function
-    // shared_ptr atomics). Arcadia's libc++ does not yet provide
-    // std::atomic<std::shared_ptr<T>>. Writers hold Mutex; readers never take
-    // it.
-    mutable std::shared_ptr<const TSnapshot> Snapshot =
-        std::make_shared<const TSnapshot>();
-    TMutex Mutex;
+        TSnapshot() = default;
+
+        TSnapshot(const TSnapshot& other)
+            : Entries(other.Entries)
+        {}
+    };
+
+    THotSwap<TSnapshot> Snapshot{MakeIntrusive<TSnapshot>()};
+    TAdaptiveLock WriterMutex;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -48,8 +48,8 @@ TSessionEntry MakeSessionEntry(
 
 TSessionEntry TDirectSessionRegistry::Get(ui32 nodeId) const
 {
-    auto snapshot = std::atomic_load(&Snapshot);
-    if (const auto* entry = snapshot->FindPtr(nodeId)) {
+    auto snapshot = Snapshot.AtomicLoad();
+    if (const auto* entry = snapshot->Entries.FindPtr(nodeId)) {
         return *entry;
     }
     return {};
@@ -62,54 +62,50 @@ void TDirectSessionRegistry::Set(ui32 nodeId, TSessionEntry entry)
         return;
     }
 
-    with_lock (Mutex) {
-        auto next = std::make_shared<TSnapshot>(*std::atomic_load(&Snapshot));
-        if (auto* previous = next->FindPtr(nodeId);
+    with_lock (WriterMutex) {
+        auto next = MakeIntrusive<TSnapshot>(*Snapshot.AtomicLoad());
+        if (auto* previous = next->Entries.FindPtr(nodeId);
             previous && previous->Session)
         {
             // Drop the previous long-lived registration before replacing.
             previous->Session->UnregisterReceiveCallback(
                 previous->ReplyActorId);
         }
-        (*next)[nodeId] = std::move(entry);
-        std::atomic_store(
-            &Snapshot,
-            std::shared_ptr<const TSnapshot>(std::move(next)));
+        next->Entries[nodeId] = std::move(entry);
+        Snapshot.AtomicStore(next);
     }
 }
 
 void TDirectSessionRegistry::Reset(ui32 nodeId)
 {
-    with_lock (Mutex) {
-        auto current = std::atomic_load(&Snapshot);
-        if (!current->FindPtr(nodeId)) {
+    with_lock (WriterMutex) {
+        auto current = Snapshot.AtomicLoad();
+        if (!current->Entries.FindPtr(nodeId)) {
             return;
         }
-        auto next = std::make_shared<TSnapshot>(*current);
-        if (auto* previous = next->FindPtr(nodeId);
+        auto next = MakeIntrusive<TSnapshot>(*current);
+        if (auto* previous = next->Entries.FindPtr(nodeId);
             previous && previous->Session)
         {
             previous->Session->UnregisterReceiveCallback(
                 previous->ReplyActorId);
         }
-        next->erase(nodeId);
-        std::atomic_store(
-            &Snapshot,
-            std::shared_ptr<const TSnapshot>(std::move(next)));
+        next->Entries.erase(nodeId);
+        Snapshot.AtomicStore(next);
     }
 }
 
 void TDirectSessionRegistry::Clear()
 {
-    with_lock (Mutex) {
-        auto current = std::atomic_load(&Snapshot);
-        for (const auto& [nodeId, entry]: *current) {
+    with_lock (WriterMutex) {
+        auto current = Snapshot.AtomicLoad();
+        for (const auto& [nodeId, entry]: current->Entries) {
             Y_UNUSED(nodeId);
             if (entry.Session) {
                 entry.Session->UnregisterReceiveCallback(entry.ReplyActorId);
             }
         }
-        std::atomic_store(&Snapshot, std::make_shared<const TSnapshot>());
+        Snapshot.AtomicStore(MakeIntrusive<TSnapshot>());
     }
 }
 

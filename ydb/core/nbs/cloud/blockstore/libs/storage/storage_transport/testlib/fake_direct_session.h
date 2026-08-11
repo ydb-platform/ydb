@@ -46,6 +46,10 @@ public:
 
     [[nodiscard]] bool IsConnected() const;
 
+    // Number of events successfully forwarded via Send(). Used by tests to
+    // prove the datapath hit IDirectSession rather than falling back.
+    [[nodiscard]] ui64 GetSentEventCount() const;
+
     // Used by the reply-bridge actor; returns nullptr if Shutdown() /
     // Unregister already dropped the callback.
     [[nodiscard]] TIntrusivePtr<NActors::IReceiveCallback> FindCallback(
@@ -60,6 +64,7 @@ private:
 
     NActors::TActorSystem* const ActorSystem;
     std::atomic<bool> Connected{true};
+    std::atomic<ui64> SentEventCount{0};
 
     mutable TMutex Lock;
     // Keyed by the transport's virtual reply ActorId (localActorId).

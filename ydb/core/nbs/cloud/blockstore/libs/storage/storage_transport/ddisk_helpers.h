@@ -15,16 +15,6 @@ struct TDDiskIdLess
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <typename T>
-void SetErrorStatus(
-    NKikimrBlobStorage::NDDisk::TReplyStatus_E status,
-    TStringBuf reason,
-    T& record)
-{
-    record.SetStatus(status);
-    record.SetErrorReason(TString(reason));
-}
-
 [[nodiscard]] std::unique_ptr<NKikimr::NDDisk::TEvWritePersistentBuffersResult>
 MakeWritePersistentBuffersResult(
     NKikimrBlobStorage::NDDisk::TReplyStatus_E status,

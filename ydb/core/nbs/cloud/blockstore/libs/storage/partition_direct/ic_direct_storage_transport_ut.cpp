@@ -407,6 +407,50 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             UndeliveryErrorMessage);
     }
 
+    // Actor-path fallback: a held PBuffer read must be rejected on node
+    // disconnect via RejectAllSessionRequestsForNode (not only DDisk maps).
+    Y_UNIT_TEST_F(ActorPathPBufferReadRejectedOnDisconnect, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport =
+            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+        auto* transportPtr = transport.get();
+
+        const auto& pbufferId = transportPtr->GetPBufferIds()[0];
+        auto connect = transportPtr->Connect(MakePBufferConnection(pbufferId));
+        WaitFuture(executor, connect.ConnectFuture, WaitTimeout);
+        auto connection = MakePBufferConnection(
+            pbufferId,
+            connect.ConnectFuture.GetValueSync().GetDDiskInstanceGuid());
+
+        transportPtr->SetPendingReadFromDDisk(
+            EConnectionType::PBuffer,
+            pbufferId);
+
+        TString readBuf(DefaultBlockSize, '\0');
+        auto future = transportPtr->ReadFromPBuffer(
+            connection,
+            NDDisk::TBlockSelector{0, 0, DefaultBlockSize},
+            /*lsn=*/1,
+            NDDisk::TReadInstruction(/*returnInRopePayload=*/true),
+            MakeSgList(readBuf),
+            nullptr);
+        DoAllExecutorAndRuntimeWork(executor);
+        UNIT_ASSERT(!future.HasValue());
+
+        transportPtr->FireDisconnect(
+            EConnectionType::PBuffer,
+            pbufferId,
+            transportPtr->GetNodeId());
+        WaitFuture(executor, future, WaitTimeout);
+        UNIT_ASSERT(
+            future.GetValueSync().GetStatus() ==
+            NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED);
+        UNIT_ASSERT_STRINGS_EQUAL(
+            future.GetValueSync().GetErrorReason(),
+            SessionBrokenErrorMessage);
+    }
+
     Y_UNIT_TEST_F(DirectPathEraseSyncList, TDBGFixture)
     {
         auto executor = MakeExecutor();

@@ -1,5 +1,7 @@
 #include "ddisk_helpers.h"
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage {
 
 bool TDDiskIdLess::operator()(const TDDiskId& lh, const TDDiskId& rh) const

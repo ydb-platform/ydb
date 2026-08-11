@@ -15,6 +15,8 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/threading/hot_swap
+
     ydb/core/mind/bscontroller
 
     ydb/core/nbs/cloud/blockstore/libs/common

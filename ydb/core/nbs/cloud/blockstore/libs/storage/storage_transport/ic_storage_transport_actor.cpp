@@ -1353,14 +1353,49 @@ void TICStorageTransportActor::RejectAllSessionRequestsForNode(
         nodeId);
 
     RejectRequestsForNode(ConnectRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvReadPersistentBufferResult>(
+        ReadFromPBufferRequests,
+        nodeId);
     RejectRequestsForNode<NDDisk::TEvReadResult>(ReadFromDDiskRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvWritePersistentBufferResult>(
+        WriteToPBufferRequests,
+        nodeId);
     RejectRequestsForNode<NDDisk::TEvWriteResult>(WriteToDDiskRequests, nodeId);
     RejectRequestsForNode<NDDisk::TEvSyncResult>(
         FlushFromPBufferRequests,
         nodeId);
+    RejectRequestsForNode<NDDisk::TEvErasePersistentBufferResult>(
+        BatchEraseFromPBufferRequests,
+        nodeId);
+    RejectRequestsForNode<NDDisk::TEvErasePersistentBufferResult>(
+        BarrierEraseFromPBufferRequests,
+        nodeId);
+    RejectRequestsForNode<NDDisk::TEvListPersistentBufferResult>(
+        ListPBufferEntriesRequests,
+        nodeId);
     RejectRequestsForNode<NDDisk::TEvDeleteTabletChunksResult>(
         DeleteTabletChunksRequests,
         nodeId);
+
+    for (auto it = WriteToManyPBuffersRequests.begin();
+         it != WriteToManyPBuffersRequests.end();)
+    {
+        auto& requestInfo = it->second;
+        if (requestInfo.Request->ServiceId.NodeId() != nodeId) {
+            ++it;
+            continue;
+        }
+
+        TVector<NKikimrBlobStorage::NDDisk::TDDiskId> remaining(
+            requestInfo.WaitingReplies.begin(),
+            requestInfo.WaitingReplies.end());
+        auto response = MakeWritePersistentBuffersResult(
+            NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED,
+            SessionBrokenErrorMessage,
+            remaining);
+        requestInfo.Request->Reply(response->Record);
+        WriteToManyPBuffersRequests.erase(it++);
+    }
 }
 
 void TICStorageTransportActor::HandleICNodeConnected(
@@ -1378,10 +1413,16 @@ void TICStorageTransportActor::HandleICNodeConnected(
         nodeId,
         directSession ? "true" : "false");
 
-    if (DirectSessionRegistry && directSession) {
-        DirectSessionRegistry->Set(
-            nodeId,
-            MakeSessionEntry(ctx.ActorSystem(), std::move(directSession)));
+    if (DirectSessionRegistry) {
+        if (directSession) {
+            DirectSessionRegistry->Set(
+                nodeId,
+                MakeSessionEntry(ctx.ActorSystem(), std::move(directSession)));
+        } else {
+            // Reconnect without a direct session must drop any previously
+            // published entry so datapath cannot send on a stale session.
+            DirectSessionRegistry->Reset(nodeId);
+        }
     }
 }
 

@@ -73,7 +73,7 @@ namespace NYql::NDq {
     using namespace NActors;
 
     namespace {
-        // TODO lookup parameters or PRAGMA?
+        // TODO consider moving to lookup parameters (...but likely not)
         constexpr ui32 RetriesLimit = 22;
         constexpr TDuration MinRetryDelay = TDuration::MilliSeconds(10);
         constexpr TDuration MaxRetryDelay = TDuration::Seconds(30);

@@ -398,6 +398,9 @@ void ReadTable(TDriver driver, const NTable::TTableDescription& desc, const TStr
 
 namespace {
 
+// Column names come from DescribeTable, i.e. from the real schema, not from user input.
+// SchemeShard's IsValidColumnName restricts them to [A-Za-z0-9_-], so they can never contain
+// a backtick and this substitution is safe from injection.
 TString BuildQuotedColumnList(const NTable::TTableDescription& desc) {
     TStringStream columns;
     bool needsComma = false;
@@ -412,6 +415,8 @@ TString BuildQuotedColumnList(const NTable::TTableDescription& desc) {
     return columns.Str();
 }
 
+// Same reasoning as BuildQuotedColumnList: names come from DescribeTable and are validated
+// by SchemeShard, so no escaping is needed here either.
 TString BuildQuotedPkList(const NTable::TTableDescription& desc) {
     TStringStream columns;
     bool needsComma = false;
@@ -455,7 +460,7 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
     const auto [query, params] = BuildSelectQueryAndParams(desc, fullTablePath, lastWrittenPK, ordered);
     LOG_D("Execute query for column table " << fullTablePath.Quote() << ": " << query.Quote());
 
-    const auto tx = NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SnapshotRO()).CommitTx();
+    const auto tx = NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SerializableRW()).CommitTx();
     const auto settings = NQuery::TExecuteQuerySettings()
         .StatsMode(NQuery::EStatsMode::None)
         .Syntax(NQuery::ESyntax::YqlV1);

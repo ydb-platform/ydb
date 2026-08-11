@@ -34,7 +34,7 @@ public:
 
 std::pair<std::shared_ptr<NYdb::NTopic::IReadSession>, ICompositeTopicReadSessionControl::TPtr> CreateCompositeTopicReadSession(
     const NActors::TActorContext& ctx,
-    ITopicClient& topicClient,
+    ITopicDataClient& topicClient,
     const TCompositeTopicReadSessionSettings& settings
 );
 

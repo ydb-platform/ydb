@@ -1876,13 +1876,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_sin)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_sins32(src, dst, len);
         return;
@@ -1908,13 +1907,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_cos)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_coss32(src, dst, len);
         return;
@@ -1940,13 +1938,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_tan)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_tans32(src, dst, len);
         return;
@@ -1972,13 +1969,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_exp)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_exps32(src, dst, len);
         return;
@@ -2004,13 +2000,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_exp2)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_exp2s32(src, dst, len);
         return;
@@ -2036,13 +2031,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_expm1)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_expm1s32(src, dst, len);
         return;
@@ -2068,13 +2062,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_log)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_logs32(src, dst, len);
         return;
@@ -2100,13 +2093,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_log2)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_log2s32(src, dst, len);
         return;
@@ -2132,13 +2124,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_log10)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_log10s32(src, dst, len);
         return;
@@ -2164,13 +2155,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_log1p)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_log1ps32(src, dst, len);
         return;
@@ -2196,13 +2186,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_cbrt)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_cbrts32(src, dst, len);
         return;
@@ -2228,13 +2217,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arcsin)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_asins32(src, dst, len);
         return;
@@ -2260,13 +2248,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arccos)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_acoss32(src, dst, len);
         return;
@@ -2292,13 +2279,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arctan)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_atans32(src, dst, len);
         return;
@@ -2324,13 +2310,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_sinh)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_sinhs32(src, dst, len);
         return;
@@ -2356,13 +2341,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_cosh)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_coshs32(src, dst, len);
         return;
@@ -2388,13 +2372,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_tanh)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_tanhs32(src, dst, len);
         return;
@@ -2420,13 +2403,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arcsinh)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_asinhs32(src, dst, len);
         return;
@@ -2452,13 +2434,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arccosh)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_acoshs32(src, dst, len);
         return;
@@ -2484,13 +2465,12 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arctanh)
 #if NPY_SIMD && defined(NPY_CAN_LINK_SVML)
     const npy_half *src = (npy_half*)args[0];
           npy_half *dst = (npy_half*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        (ssrc == 1) &&
-        (sdst == 1)) {
+        (steps[0] == sizeof(npy_half)) &&
+        (steps[1] == sizeof(npy_half))) {
 #if defined(NPY_HAVE_AVX512_SPR)
         __svml_atanhs32(src, dst, len);
         return;
@@ -2509,22 +2489,23 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_arctanh)
 }
 
 
-#line 194
-#line 198
+#line 193
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_exp2)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_exp2_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2535,21 +2516,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_exp2)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log2)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_log2_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2560,21 +2542,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log2)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log10)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_log10_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2585,21 +2568,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log10)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_expm1)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_expm1_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2610,21 +2594,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_expm1)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log1p)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_log1p_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2635,21 +2620,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log1p)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_cbrt)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_cbrt_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2660,21 +2646,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_cbrt)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_tan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_tan_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2685,21 +2672,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_tan)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arcsin)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_asin_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2710,21 +2698,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arcsin)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arccos)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_acos_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2735,21 +2724,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arccos)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_atan_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2760,21 +2750,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctan)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_sinh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_sinh_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2785,21 +2776,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_sinh)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_cosh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_cosh_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2810,21 +2802,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_cosh)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arcsinh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_asinh_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2835,21 +2828,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arcsinh)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arccosh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_acosh_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2860,21 +2854,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arccosh)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctanh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src = (npy_double*)args[0];
           npy_double *dst = (npy_double*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) &&
-        npyv_storable_stride_f64(sdst)) {
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_double);
+        const npy_intp sdst = steps[1] / sizeof(npy_double);
         simd_atanh_f64(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2886,22 +2881,23 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctanh)
 }
 
 
-#line 194
-#line 198
+#line 193
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_exp2)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_exp2_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2912,21 +2908,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_exp2)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log2)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_log2_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2937,21 +2934,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log2)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log10)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_log10_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2962,21 +2960,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log10)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_expm1)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_expm1_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -2987,21 +2986,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_expm1)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log1p)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_log1p_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -3012,21 +3012,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log1p)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_cbrt)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_cbrt_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -3037,21 +3038,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_cbrt)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_tan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_tan_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -3062,21 +3064,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_tan)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arcsin)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_asin_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -3087,21 +3090,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arcsin)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arccos)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_acos_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -3112,21 +3116,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arccos)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arctan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_atan_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -3137,21 +3142,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arctan)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_sinh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_sinh_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -3162,21 +3168,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_sinh)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_cosh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_cosh_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -3187,21 +3194,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_cosh)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arcsinh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_asinh_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -3212,21 +3220,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arcsinh)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arccosh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_acosh_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -3237,21 +3246,22 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arccosh)
     }
 }
 
-#line 198
+#line 197
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arctanh)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src = (npy_float*)args[0];
           npy_float *dst = (npy_float*)args[1];
-    const int lsize = sizeof(src[0]);
-    const npy_intp ssrc = steps[0] / lsize;
-    const npy_intp sdst = steps[1] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
+
     if (!is_mem_overlap(src, steps[0], dst, steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) &&
-        npyv_storable_stride_f32(sdst)) {
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1]))
+    {
+        const npy_intp ssrc = steps[0] / sizeof(npy_float);
+        const npy_intp sdst = steps[1] / sizeof(npy_float);
         simd_atanh_f32(src, ssrc, dst, sdst, len);
         return;
     }
@@ -3264,24 +3274,40 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arctanh)
 
 
 
-#line 230
-#line 234
+#line 231
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_power)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
+    int stride_zero = steps[1]==0;
+    if (stride_zero) {
+        BINARY_DEFS
+        const npy_double in2 = *(npy_double *)ip2;
+        if (in2 == 2.0) {
+            BINARY_LOOP_SLIDING {
+                const npy_double in1 = *(npy_double *)ip1;
+                *(npy_double *)op1 = in1 * in1;
+            }
+            return;
+        }
+    }
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_double *src1 = (npy_double*)args[0];
     const npy_double *src2 = (npy_double*)args[1];
           npy_double *dst  = (npy_double*)args[2];
-    const int lsize = sizeof(src1[0]);
-    const npy_intp ssrc1 = steps[0] / lsize;
-    const npy_intp ssrc2 = steps[1] / lsize;
-    const npy_intp sdst  = steps[2] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
-    if (!is_mem_overlap(src1, steps[0], dst, steps[2], len) && !is_mem_overlap(src2, steps[1], dst, steps[2], len) &&
-        npyv_loadable_stride_f64(ssrc1) && npyv_loadable_stride_f64(ssrc2) &&
-        npyv_storable_stride_f64(sdst)) {
+
+    if (!is_mem_overlap(src1, steps[0], dst, steps[2], len) &&
+        !is_mem_overlap(src2, steps[1], dst, steps[2], len) &&
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_loadable_stride_f64(steps[1]) &&
+        npyv_storable_stride_f64(steps[2])
+    ) {
+        const npy_intp ssrc1 = steps[0] / sizeof(npy_double);
+        const npy_intp ssrc2 = steps[1] / sizeof(npy_double);
+        const npy_intp sdst  = steps[2] / sizeof(npy_double);
+
         simd_pow_f64(src1, ssrc1, src2, ssrc2, dst, sdst, len);
         return;
     }
@@ -3293,7 +3319,8 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_power)
     }
 }
 
-#line 234
+
+#line 283
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctan2)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3301,15 +3328,19 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctan2)
     const npy_double *src1 = (npy_double*)args[0];
     const npy_double *src2 = (npy_double*)args[1];
           npy_double *dst  = (npy_double*)args[2];
-    const int lsize = sizeof(src1[0]);
-    const npy_intp ssrc1 = steps[0] / lsize;
-    const npy_intp ssrc2 = steps[1] / lsize;
-    const npy_intp sdst  = steps[2] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
-    if (!is_mem_overlap(src1, steps[0], dst, steps[2], len) && !is_mem_overlap(src2, steps[1], dst, steps[2], len) &&
-        npyv_loadable_stride_f64(ssrc1) && npyv_loadable_stride_f64(ssrc2) &&
-        npyv_storable_stride_f64(sdst)) {
+
+    if (!is_mem_overlap(src1, steps[0], dst, steps[2], len) &&
+        !is_mem_overlap(src2, steps[1], dst, steps[2], len) &&
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_loadable_stride_f64(steps[1]) &&
+        npyv_storable_stride_f64(steps[2])
+    ) {
+        const npy_intp ssrc1 = steps[0] / sizeof(npy_double);
+        const npy_intp ssrc2 = steps[1] / sizeof(npy_double);
+        const npy_intp sdst  = steps[2] / sizeof(npy_double);
+
         simd_atan2_f64(src1, ssrc1, src2, ssrc2, dst, sdst, len);
         return;
     }
@@ -3322,24 +3353,41 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_arctan2)
 }
 
 
-#line 230
-#line 234
+
+#line 231
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_power)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
+    int stride_zero = steps[1]==0;
+    if (stride_zero) {
+        BINARY_DEFS
+        const npy_float in2 = *(npy_float *)ip2;
+        if (in2 == 2.0) {
+            BINARY_LOOP_SLIDING {
+                const npy_float in1 = *(npy_float *)ip1;
+                *(npy_float *)op1 = in1 * in1;
+            }
+            return;
+        }
+    }
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
     const npy_float *src1 = (npy_float*)args[0];
     const npy_float *src2 = (npy_float*)args[1];
           npy_float *dst  = (npy_float*)args[2];
-    const int lsize = sizeof(src1[0]);
-    const npy_intp ssrc1 = steps[0] / lsize;
-    const npy_intp ssrc2 = steps[1] / lsize;
-    const npy_intp sdst  = steps[2] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
-    if (!is_mem_overlap(src1, steps[0], dst, steps[2], len) && !is_mem_overlap(src2, steps[1], dst, steps[2], len) &&
-        npyv_loadable_stride_f32(ssrc1) && npyv_loadable_stride_f32(ssrc2) &&
-        npyv_storable_stride_f32(sdst)) {
+
+    if (!is_mem_overlap(src1, steps[0], dst, steps[2], len) &&
+        !is_mem_overlap(src2, steps[1], dst, steps[2], len) &&
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_loadable_stride_f32(steps[1]) &&
+        npyv_storable_stride_f32(steps[2])
+    ) {
+        const npy_intp ssrc1 = steps[0] / sizeof(npy_float);
+        const npy_intp ssrc2 = steps[1] / sizeof(npy_float);
+        const npy_intp sdst  = steps[2] / sizeof(npy_float);
+
         simd_pow_f32(src1, ssrc1, src2, ssrc2, dst, sdst, len);
         return;
     }
@@ -3351,7 +3399,8 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_power)
     }
 }
 
-#line 234
+
+#line 283
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arctan2)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -3359,15 +3408,19 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arctan2)
     const npy_float *src1 = (npy_float*)args[0];
     const npy_float *src2 = (npy_float*)args[1];
           npy_float *dst  = (npy_float*)args[2];
-    const int lsize = sizeof(src1[0]);
-    const npy_intp ssrc1 = steps[0] / lsize;
-    const npy_intp ssrc2 = steps[1] / lsize;
-    const npy_intp sdst  = steps[2] / lsize;
+
     const npy_intp len = dimensions[0];
-    assert(len <= 1 || (steps[0] % lsize == 0 && steps[1] % lsize == 0));
-    if (!is_mem_overlap(src1, steps[0], dst, steps[2], len) && !is_mem_overlap(src2, steps[1], dst, steps[2], len) &&
-        npyv_loadable_stride_f32(ssrc1) && npyv_loadable_stride_f32(ssrc2) &&
-        npyv_storable_stride_f32(sdst)) {
+
+    if (!is_mem_overlap(src1, steps[0], dst, steps[2], len) &&
+        !is_mem_overlap(src2, steps[1], dst, steps[2], len) &&
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_loadable_stride_f32(steps[1]) &&
+        npyv_storable_stride_f32(steps[2])
+    ) {
+        const npy_intp ssrc1 = steps[0] / sizeof(npy_float);
+        const npy_intp ssrc2 = steps[1] / sizeof(npy_float);
+        const npy_intp sdst  = steps[2] / sizeof(npy_float);
+
         simd_atan2_f32(src1, ssrc1, src2, ssrc2, dst, sdst, len);
         return;
     }
@@ -3378,6 +3431,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_arctan2)
         *(npy_float *)op1 = npy_atan2f(in1, in2);
     }
 }
+
 
 
 

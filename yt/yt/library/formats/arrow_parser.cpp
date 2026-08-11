@@ -784,9 +784,24 @@ public:
         return ParseStringLikeArray<arrow20::StringArray>();
     }
 
+    arrow20::Status Visit(const arrow20::LargeStringType& /*type*/) override
+    {
+        return ParseStringLikeArray<arrow20::LargeStringArray>();
+    }
+
     arrow20::Status Visit(const arrow20::BinaryType& /*type*/) override
     {
         return ParseStringLikeArray<arrow20::BinaryArray>();
+    }
+
+    arrow20::Status Visit(const arrow20::LargeBinaryType& /*type*/) override
+    {
+        return ParseStringLikeArray<arrow20::LargeBinaryArray>();
+    }
+
+    arrow20::Status Visit(const arrow20::FixedSizeBinaryType& /*type*/) override
+    {
+        return ParseStringLikeArray<arrow20::FixedSizeBinaryArray>();
     }
 
     // Boolean type.
@@ -1251,10 +1266,28 @@ public:
         return ParseStringLikeArray<arrow20::StringArray>();
     }
 
+    arrow20::Status Visit(const arrow20::LargeStringType& type) override
+    {
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
+        return ParseStringLikeArray<arrow20::LargeStringArray>();
+    }
+
     arrow20::Status Visit(const arrow20::BinaryType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseStringLikeArray<arrow20::BinaryArray>();
+    }
+
+    arrow20::Status Visit(const arrow20::LargeBinaryType& type) override
+    {
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
+        return ParseStringLikeArray<arrow20::LargeBinaryArray>();
+    }
+
+    arrow20::Status Visit(const arrow20::FixedSizeBinaryType& type) override
+    {
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
+        return ParseStringLikeArray<arrow20::FixedSizeBinaryArray>();
     }
 
     // Boolean types.

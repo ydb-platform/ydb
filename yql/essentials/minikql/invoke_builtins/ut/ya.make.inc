@@ -9,6 +9,8 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+ENABLE(TIDY_ALLOW_GENERATED)
+
 PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy

@@ -786,7 +786,8 @@ public:
                    const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys,
                    const TVector<TString>& lookupKeyColumns, const TString& joinKind,
                    const std::optional<TExpression>& fetchedRowFilter,
-                   const std::optional<TLookupKeyPrefix>& prefix = std::nullopt);
+                   const std::optional<TLookupKeyPrefix>& prefix = std::nullopt,
+                   const TVector<std::pair<TInfoUnit, TInfoUnit>>& residualJoinKeys = {});
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
@@ -810,6 +811,7 @@ public:
     std::optional<TExpression> FetchedRowFilter;
     std::optional<TLookupKeyPrefix> Prefix;
     ELookupStrategy Strategy{ELookupStrategy::LookupRows};
+    TVector<std::pair<TInfoUnit, TInfoUnit>> ResidualJoinKeys;
 
 protected:
     void ComputeOutputIUs() override;

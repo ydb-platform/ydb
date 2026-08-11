@@ -5,6 +5,7 @@
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -1710,6 +1711,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             NKikimrSubDomains::EServerlessComputeResourcesModeShared
                         );
                     }
+
+                    domainInfo->SetTablesMetricsLevel(
+                        rowset.GetValueOrDefault<Schema::SubDomains::TablesMetricsLevel>(
+                            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
+                        )
+                    );
                 }
 
                 if (!rowset.Next())
@@ -1780,6 +1787,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     } else if (Self->IsServerlessDomain(alter) || Self->IsServerlessDomainGlobal(pathId, alter)) {
                         alter->SetServerlessComputeResourcesMode(
                             NKikimrSubDomains::EServerlessComputeResourcesModeShared
+                        );
+                    }
+
+                    if (!path->IsRoot() || !Self->IsDomainSchemeShard) {
+                        alter->SetTablesMetricsLevel(
+                            rowset.GetValueOrDefault<Schema::SubDomainsAlterData::TablesMetricsLevel>(
+                                subdomainInfo->GetTablesMetricsLevel()
+                            )
                         );
                     }
 

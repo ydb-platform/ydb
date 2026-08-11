@@ -5,7 +5,6 @@ from .constants import (
     NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
     PACKAGE_JSON_FILENAME,
     PNPM_BUILD_BACKUP_LOCKFILE_FILENAME,
-    PNPM_PRE_LOCKFILE_FILENAME,
     PNPM_LOCKFILE_FILENAME,
     PNPM_WS_FILENAME,
 )
@@ -107,10 +106,6 @@ def extract_package_name_from_path(p):
 
 
 # PNPM-specific utility functions
-def build_pre_lockfile_path(p):
-    return os.path.join(p, PNPM_PRE_LOCKFILE_FILENAME)
-
-
 def build_build_backup_lockfile_path(p):
     return os.path.join(p, PNPM_BUILD_BACKUP_LOCKFILE_FILENAME)
 

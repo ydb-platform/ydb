@@ -195,7 +195,7 @@ private:
     void DoEstablishConnection(
         THostIndex hostIndex,
         EConnectionType connectionType);
-    void OnConnectionEstablished(
+    void OnConnectResponse(
         EConnectionType connectionType,
         THostIndex hostIndex,
         ui64 seqNo,

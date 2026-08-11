@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -18,7 +17,7 @@ ui64 ShiftByMaxNegative(T value) {
         if (value < 0) {
             return ui64(value + std::numeric_limits<T>::max() + T(1));
         }
-        return ui64(value) + ui64(std::numeric_limits<T>::max()) + 1ul;
+        return ui64(value) + ui64(std::numeric_limits<T>::max()) + 1UL;
     }
     return ui64(value);
 }
@@ -42,7 +41,7 @@ ui64 GetElementsCount(T start, T end, TStep step) {
     ui64 newStep;
 
     if (step < 0) {
-        newStep = (step == std::numeric_limits<TStep>::min()) ? (ui64(std::numeric_limits<TStep>::max()) + 1ul) : ui64(TStep(0) - step);
+        newStep = (step == std::numeric_limits<TStep>::min()) ? (ui64(std::numeric_limits<TStep>::max()) + 1UL) : ui64(TStep(0) - step);
         std::swap(newStart, newEnd);
     } else {
         newStep = ui64(step);
@@ -62,15 +61,15 @@ private:
         public:
             TIterator(TMemoryUsageInfo* memInfo, T start, T end, TStep step)
                 : TComputationValue<TIterator>(memInfo)
-                , Current(start)
-                , Step(step)
-                , Count(GetElementsCount<T, TStep>(start, end, step))
+                , Current_(start)
+                , Step_(step)
+                , Count_(GetElementsCount<T, TStep>(start, end, step))
             {
             }
 
         protected:
             bool Skip() final {
-                if (!Count) {
+                if (!Count_) {
                     return false;
                 }
                 AddStep();
@@ -78,54 +77,54 @@ private:
             }
 
             bool Next(NUdf::TUnboxedValue& value) override {
-                if (!Count) {
+                if (!Count_) {
                     return false;
                 }
 
-                value = NUdf::TUnboxedValuePod(Current);
+                value = NUdf::TUnboxedValuePod(Current_);
                 AddStep();
                 return true;
             }
 
-            T Current;
-            const TStep Step;
-            ui64 Count;
+            T Current_;
+            const TStep Step_;
+            ui64 Count_;
 
         private:
             void AddStep() {
-                Current = SafeAdd(Current, static_cast<T>(Step));
-                --Count;
+                Current_ = SafeAdd(Current_, static_cast<T>(Step_));
+                --Count_;
             }
         };
 
         TValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, T start, T end, TStep step)
             : TComputationValue<TValue>(memInfo)
-            , Ctx(ctx)
-            , Start(start)
-            , End(end)
-            , Step(step)
+            , Ctx_(ctx)
+            , Start_(start)
+            , End_(end)
+            , Step_(step)
         {
         }
 
     protected:
         NUdf::TUnboxedValue GetListIterator() const override {
-            if (Step != TStep(0)) {
-                return Ctx.HolderFactory.template Create<TIterator>(Start, End, Step);
+            if (Step_ != TStep(0)) {
+                return Ctx_.HolderFactory.template Create<TIterator>(Start_, End_, Step_);
             } else {
-                return Ctx.HolderFactory.GetEmptyContainerLazy();
+                return Ctx_.HolderFactory.GetEmptyContainerLazy();
             }
         }
 
         ui64 GetListLength() const final {
             static_assert(std::is_integral_v<T>, "Invalid type");
-            return GetElementsCount<T, TStep>(Start, End, Step);
+            return GetElementsCount<T, TStep>(Start_, End_, Step_);
         }
 
         bool HasListItems() const final {
-            if (Step > TStep(0)) {
-                return Start < End;
-            } else if (Step < TStep(0)) {
-                return Start > End;
+            if (Step_ > TStep(0)) {
+                return Start_ < End_;
+            } else if (Step_ < TStep(0)) {
+                return Start_ > End_;
             } else {
                 return false;
             }
@@ -135,10 +134,10 @@ private:
             return true;
         }
 
-        TComputationContext& Ctx;
-        const T Start;
-        const T End;
-        const TStep Step;
+        TComputationContext& Ctx_;
+        const T Start_;
+        const T End_;
+        const TStep Step_;
     };
 
     class TFloatingValue: public TCustomListValue {
@@ -149,62 +148,58 @@ private:
         public:
             TIterator(TMemoryUsageInfo* memInfo, T start, T end, TStep step)
                 : TComputationValue<TIterator>(memInfo)
-                , Start(start)
-                , End(end)
-                , Step(step)
-                , ValidInput(CheckInput(start, end, step))
-                , Index(0ULL)
+                , Start_(start)
+                , End_(end)
+                , Step_(step)
+                , ValidInput_(CheckInput(start, end, step))
+                , Index_(0ULL)
             {
             }
 
         private:
             bool Next(NUdf::TUnboxedValue& value) final {
-                if (!ValidInput || Index >= MaxElementsCount) {
+                if (!ValidInput_ || Index_ >= MaxElementsCount) {
                     return false;
                 }
-                const T current = Start + Index * Step;
-                const bool outOfRange = Step > 0 ? current >= End : current <= End;
+                const T current = Start_ + Index_ * Step_;
+                const bool outOfRange = Step_ > 0 ? current >= End_ : current <= End_;
                 if (outOfRange) {
                     return false;
                 }
                 value = NUdf::TUnboxedValuePod(current);
-                Index++;
+                Index_++;
                 return true;
             }
 
             static bool CheckInput(T start, T end, TStep step) {
-                if (step == T(0) || std::isnan(step) || std::isnan(start) || std::isnan(end) ||
-                    std::isinf(start) || std::isinf(end) || std::isinf(step) || start == end) {
-                    return false;
-                }
-
-                return true;
+                return !static_cast<bool>(step == T(0) || std::isnan(step) || std::isnan(start) || std::isnan(end) ||
+                                          std::isinf(start) || std::isinf(end) || std::isinf(step) || start == end);
             }
 
-            const T Start;
-            const T End;
-            const TStep Step;
-            const bool ValidInput;
-            ui64 Index;
+            const T Start_;
+            const T End_;
+            const TStep Step_;
+            const bool ValidInput_;
+            ui64 Index_;
         };
         TFloatingValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, T start, T end, TStep step)
             : TCustomListValue(memInfo)
-            , Ctx(ctx)
-            , Start(start)
-            , End(end)
-            , Step(step)
+            , Ctx_(ctx)
+            , Start_(start)
+            , End_(end)
+            , Step_(step)
         {
         }
 
     protected:
         NUdf::TUnboxedValue GetListIterator() const override {
-            return Ctx.HolderFactory.template Create<TIterator>(Start, End, Step);
+            return Ctx_.HolderFactory.template Create<TIterator>(Start_, End_, Step_);
         }
 
-        TComputationContext& Ctx;
-        const T Start;
-        const T End;
-        const TStep Step;
+        TComputationContext& Ctx_;
+        const T Start_;
+        const T End_;
+        const TStep Step_;
     };
 
     class TTzValue: public TValue {
@@ -214,50 +209,50 @@ private:
             using TBase = typename TValue::TIterator;
             TTzIterator(TMemoryUsageInfo* memInfo, T start, T end, TStep step, ui16 Tz)
                 : TBase(memInfo, start, end, step)
-                , TimezoneId(Tz)
+                , TimezoneId_(Tz)
             {
             }
             bool Next(NUdf::TUnboxedValue& value) final {
                 if (TBase::Next(value)) {
-                    value.SetTimezoneId(TimezoneId);
+                    value.SetTimezoneId(TimezoneId_);
                     return true;
                 }
                 return false;
             }
 
         private:
-            const ui16 TimezoneId;
+            const ui16 TimezoneId_;
         };
         NUdf::TUnboxedValue GetListIterator() const final {
-            if (TValue::Step != TStep(0)) {
-                return TValue::Ctx.HolderFactory.template Create<TTzIterator>(TValue::Start, TValue::End, TValue::Step, TimezoneId);
+            if (TValue::Step_ != TStep(0)) {
+                return TValue::Ctx_.HolderFactory.template Create<TTzIterator>(TValue::Start_, TValue::End_, TValue::Step_, TimezoneId_);
             } else {
-                return TValue::Ctx.HolderFactory.GetEmptyContainerLazy();
+                return TValue::Ctx_.HolderFactory.GetEmptyContainerLazy();
             }
         }
         TTzValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, T start, T end, TStep step, ui16 TimezoneId)
             : TValue(memInfo, ctx, start, end, step)
-            , TimezoneId(TimezoneId)
+            , TimezoneId_(TimezoneId)
         {
         }
 
     private:
-        const ui16 TimezoneId;
+        const ui16 TimezoneId_;
     };
 
 public:
     TListFromRangeWrapper(TComputationMutables& mutables, IComputationNode* start, IComputationNode* end, IComputationNode* step)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , Start(start)
-        , End(end)
-        , Step(step)
+        , Start_(start)
+        , End_(end)
+        , Step_(step)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto start = Start->GetValue(ctx);
-        const auto end = End->GetValue(ctx);
-        auto step = Step->GetValue(ctx).Get<TStep>();
+        const auto start = Start_->GetValue(ctx);
+        const auto end = End_->GetValue(ctx);
+        auto step = Step_->GetValue(ctx).Get<TStep>();
         if constexpr (TConstFactor > 1) {
             if (step % TConstFactor) {
                 step = 0;
@@ -273,13 +268,13 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
-        const auto startv = GetNodeValue(Start, ctx, block);
-        const auto endv = GetNodeValue(End, ctx, block);
-        const auto stepv = GetNodeValue(Step, ctx, block);
+        const auto startv = GetNodeValue(Start_, ctx, block);
+        const auto endv = GetNodeValue(End_, ctx, block);
+        const auto stepv = GetNodeValue(Step_, ctx, block);
 
         const auto start = GetterFor<T>(startv, context, block);
         const auto end = GetterFor<T>(endv, context, block);
@@ -311,14 +306,14 @@ private:
     }
 
     void RegisterDependencies() const final {
-        this->DependsOn(Start);
-        this->DependsOn(End);
-        this->DependsOn(Step);
+        this->DependsOn(Start_);
+        this->DependsOn(End_);
+        this->DependsOn(Step_);
     }
 
-    IComputationNode* const Start;
-    IComputationNode* const End;
-    IComputationNode* const Step;
+    IComputationNode* const Start_;
+    IComputationNode* const End_;
+    IComputationNode* const Step_;
 };
 
 } // namespace
@@ -351,11 +346,11 @@ IComputationNode* WrapListFromRange(TCallable& callable, const TComputationNodeF
         case NUdf::EDataSlot::Double:
             return new TListFromRangeWrapper<double, double>(ctx.Mutables, start, end, step);
         case NUdf::EDataSlot::Date:
-            return new TListFromRangeWrapper<ui16, i64, 86400000000ll>(ctx.Mutables, start, end, step);
+            return new TListFromRangeWrapper<ui16, i64, 86400000000LL>(ctx.Mutables, start, end, step);
         case NUdf::EDataSlot::Date32:
-            return new TListFromRangeWrapper<i32, i64, 86400000000ll>(ctx.Mutables, start, end, step);
+            return new TListFromRangeWrapper<i32, i64, 86400000000LL>(ctx.Mutables, start, end, step);
         case NUdf::EDataSlot::TzDate:
-            return new TListFromRangeWrapper<ui16, i64, 86400000000ll, true>(ctx.Mutables, start, end, step);
+            return new TListFromRangeWrapper<ui16, i64, 86400000000LL, true>(ctx.Mutables, start, end, step);
         case NUdf::EDataSlot::Datetime:
             return new TListFromRangeWrapper<ui32, i64, 1000000>(ctx.Mutables, start, end, step);
         case NUdf::EDataSlot::Datetime64:
@@ -376,5 +371,4 @@ IComputationNode* WrapListFromRange(TCallable& callable, const TComputationNodeF
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

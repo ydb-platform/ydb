@@ -76,7 +76,8 @@ public:
         } catch (const TErrorException& ex) {
             auto error = TError(ex) << TErrorAttribute("listener", Name_);
             Abort(error);
-            YT_LOG_FATAL(error, "Listener crashed with fatal error");
+            YT_TLOG_FATAL("Listener crashed with fatal error")
+                .With(error);
         }
 
         auto guard = Guard(Lock_);

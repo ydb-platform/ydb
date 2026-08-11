@@ -20,6 +20,33 @@ namespace NYqlLangModule {
 
 namespace {
 
+void GetFullClusterMappingFromGateways(
+    const NYql::TGatewaysConfig& gateways,
+    THashMap<TString, TString>& clusterMapping)
+{
+    GetClusterMappingFromGateways(gateways, clusterMapping);
+    if (gateways.HasPostgresql()) {
+        AddClusters(gateways.GetPostgresql().GetClusterMapping(),
+                    TString{NYql::PgProviderName},
+                    &clusterMapping);
+    }
+    if (gateways.HasPq()) {
+        AddClusters(gateways.GetPq().GetClusterMapping(),
+                    TString{NYql::PqProviderName},
+                    &clusterMapping);
+    }
+    if (gateways.HasSolomon()) {
+        AddClusters(gateways.GetSolomon().GetClusterMapping(),
+                    TString{NYql::SolomonProviderName},
+                    &clusterMapping);
+    }
+    if (gateways.HasStat()) {
+        AddClusters(gateways.GetStat().GetClusterMapping(),
+                    TString{NYql::StatProviderName},
+                    &clusterMapping);
+    }
+}
+
 void ParseLangVersion(TStringBuf langVersion, NSQLTranslation::TTranslationSettings& settings) {
     if (langVersion.empty()) {
         return;
@@ -40,7 +67,7 @@ void ParseGatewaysConfig(TStringBuf cfg, NSQLTranslation::TTranslationSettings& 
 
     NSQLTranslation::TExtendedSqlFlags sqlFlags = NYql::TGatewaySQLFlags::FromTesting(config).ToMap();
 
-    GetClusterMappingFromGateways(config, settings.ClusterMapping);
+    GetFullClusterMappingFromGateways(config, settings.ClusterMapping);
     NSQLTranslation::ParseTranslationSettings(sqlFlags, settings);
 }
 

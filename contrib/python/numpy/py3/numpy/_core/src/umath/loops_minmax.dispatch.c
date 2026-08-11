@@ -6888,9 +6888,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -7063,9 +7063,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -7238,9 +7238,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -7413,9 +7413,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -7658,9 +7658,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -7833,9 +7833,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -8008,9 +8008,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -8183,9 +8183,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -8428,9 +8428,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -8603,9 +8603,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -8778,9 +8778,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -8953,9 +8953,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -9198,9 +9198,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -9373,9 +9373,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -9548,9 +9548,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -9723,9 +9723,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -9968,9 +9968,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -10143,9 +10143,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -10318,9 +10318,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -10493,9 +10493,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -10738,9 +10738,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -10913,9 +10913,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -11088,9 +11088,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -11263,9 +11263,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -11508,9 +11508,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -11683,9 +11683,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -11858,9 +11858,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -12033,9 +12033,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -12278,9 +12278,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -12453,9 +12453,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -12628,9 +12628,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -12803,9 +12803,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -13048,9 +13048,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -13223,9 +13223,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -13398,9 +13398,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -13573,9 +13573,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -13818,9 +13818,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -13993,9 +13993,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -14168,9 +14168,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -14343,9 +14343,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 0
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -14588,9 +14588,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 1
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -14763,9 +14763,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 1
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -14938,9 +14938,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 1
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -15113,9 +15113,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 1
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -15358,9 +15358,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 1
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -15533,9 +15533,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 1
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -15708,9 +15708,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 1
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -15883,9 +15883,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 1
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -16128,9 +16128,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGDOUBLE_maximum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 1
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_max)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -16303,9 +16303,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGDOUBLE_minimum)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 1
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_min)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -16478,9 +16478,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGDOUBLE_fmax)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 1
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_maxp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),
@@ -16653,9 +16653,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGDOUBLE_fmin)
         }
     // unroll scalars faster than non-contiguous vector load/store on Arm
     #if !defined(NPY_HAVE_NEON) && 1
-        if (TO_SIMD_SFX(npyv_loadable_stride)(is1/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_loadable_stride)(is2/sizeof(STYPE)) &&
-            TO_SIMD_SFX(npyv_storable_stride)(os1/sizeof(STYPE))
+        if (TO_SIMD_SFX(npyv_loadable_stride)(is1) &&
+            TO_SIMD_SFX(npyv_loadable_stride)(is2) &&
+            TO_SIMD_SFX(npyv_storable_stride)(os1)
         ) {
             TO_SIMD_SFX(simd_binary_minp)(
                 (STYPE*)ip1, is1/sizeof(STYPE),

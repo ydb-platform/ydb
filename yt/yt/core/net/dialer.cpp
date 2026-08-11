@@ -37,8 +37,8 @@ public:
 
     TFuture<IConnectionPtr> Run()
     {
-        YT_LOG_DEBUG("Dial started (Address: %v)",
-            RemoteAddress_);
+        YT_TLOG_DEBUG("Dial started")
+            .With("Address", RemoteAddress_);
 
         Session_->Dial();
 
@@ -68,9 +68,9 @@ private:
         }
 
         auto socket = fdOrError.Value();
-        YT_LOG_DEBUG("Dial completed (Address: %v, FD: %v)",
-            RemoteAddress_,
-            socket);
+        YT_TLOG_DEBUG("Dial completed")
+            .With("Address", RemoteAddress_)
+            .With("FD", socket);
 
         Promise_.TrySet(CreateConnectionFromFD(
             socket,
@@ -275,10 +275,10 @@ private:
             } else {
                 Socket_ = CreateTcpClientSocket(family);
                 if (Config_->EnableNoDelay && !TrySetSocketNoDelay(Socket_)) {
-                    YT_LOG_DEBUG("Failed to set socket no delay option");
+                    YT_TLOG_DEBUG("Failed to set socket no delay option");
                 }
                 if (!TrySetSocketKeepAlive(Socket_)) {
-                    YT_LOG_DEBUG("Failed to set socket keep alive option");
+                    YT_TLOG_DEBUG("Failed to set socket keep alive option");
                 }
             }
 
@@ -387,8 +387,8 @@ private:
             return;
         }
 
-        YT_LOG_DEBUG("Connect timeout; trying to reconnect (ReconnectTimeout: %v)",
-            ReconnectTimeout_);
+        YT_TLOG_DEBUG("Connect timeout; trying to reconnect")
+            .With("ReconnectTimeout", ReconnectTimeout_);
 
         Connect(guard);
     }

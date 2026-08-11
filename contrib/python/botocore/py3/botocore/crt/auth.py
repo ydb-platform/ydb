@@ -11,7 +11,6 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 
-import datetime
 from io import BytesIO
 
 from botocore.auth import (
@@ -22,7 +21,14 @@ from botocore.auth import (
     _get_body_as_dict,
     _host_from_url,
 )
-from botocore.compat import HTTPHeaders, awscrt, parse_qs, urlsplit, urlunsplit
+from botocore.compat import (
+    HTTPHeaders,
+    awscrt,
+    get_current_datetime,
+    parse_qs,
+    urlsplit,
+    urlunsplit,
+)
 from botocore.exceptions import NoCredentialsError
 from botocore.useragent import register_feature_id
 from botocore.utils import percent_encode_sequence
@@ -55,11 +61,7 @@ class CrtSigV4Auth(BaseSigner):
         if self.credentials is None:
             raise NoCredentialsError()
 
-        # Use utcnow() because that's what gets mocked by tests, but set
-        # timezone because CRT assumes naive datetime is local time.
-        datetime_now = datetime.datetime.utcnow().replace(
-            tzinfo=datetime.timezone.utc
-        )
+        datetime_now = get_current_datetime(remove_tzinfo=False)
 
         # Use existing 'X-Amz-Content-SHA256' header if able
         existing_sha256 = self._get_existing_sha256(request)
@@ -253,11 +255,7 @@ class CrtSigV4AsymAuth(BaseSigner):
         if self.credentials is None:
             raise NoCredentialsError()
 
-        # Use utcnow() because that's what gets mocked by tests, but set
-        # timezone because CRT assumes naive datetime is local time.
-        datetime_now = datetime.datetime.utcnow().replace(
-            tzinfo=datetime.timezone.utc
-        )
+        datetime_now = get_current_datetime(remove_tzinfo=False)
 
         # Use existing 'X-Amz-Content-SHA256' header if able
         existing_sha256 = self._get_existing_sha256(request)

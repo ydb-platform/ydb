@@ -1,8 +1,7 @@
 #include "has_shared_reading_matcher.h"
 
-#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
-
-#include <google/protobuf/any.pb.h>
+#include <ydb/library/yql/providers/pq/common/pq_shared_reading.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
 
 
 namespace NKikimr::NWorkloadManager {
@@ -15,14 +14,10 @@ bool UsesSharedReading(const NKqpProto::TKqpPhyQuery& phyQuery) {
                     continue;
                 }
                 const auto& externalSource = source.GetExternalSource();
-                if (!externalSource.GetSettings().Is<NYql::NPq::NProto::TDqPqTopicSource>()) {
+                if (externalSource.GetType() != NYql::PqSource) {
                     continue;
                 }
-                NYql::NPq::NProto::TDqPqTopicSource pqSource;
-                if (!externalSource.GetSettings().UnpackTo(&pqSource)) {
-                    continue;
-                }
-                if (pqSource.GetSharedReading()) {
+                if (NYql::HasSharedReading(externalSource.GetSettings())) {
                     return true;
                 }
             }

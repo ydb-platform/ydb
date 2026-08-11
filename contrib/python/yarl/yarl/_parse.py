@@ -3,10 +3,9 @@
 import re
 import unicodedata
 from functools import lru_cache
-from typing import Union
 from urllib.parse import scheme_chars, uses_netloc
 
-from ._quoters import QUOTER
+from ._quoters import QUOTER, UNQUOTER_PLUS
 
 # Leading and trailing C0 control and space to be stripped per WHATWG spec.
 # == "".join([chr(i) for i in range(0, 0x20 + 1)])
@@ -58,6 +57,14 @@ def split_url(url: str) -> SplitURLType:
                 delim = wdelim  # use earliest delim position
         netloc = url[2:delim]
         url = url[delim:]
+        # Backslash is not valid in the authority component per RFC 3986.
+        # WHATWG parsers treat \ as a path separator for special schemes, so
+        # accepting it in the authority can cause host parsing ambiguity.
+        if "\\" in netloc:
+            raise ValueError(
+                "Invalid URL: backslash ('\\') is not allowed in the authority "
+                "component per RFC 3986."
+            )
         has_left_bracket = "[" in netloc
         has_right_bracket = "]" in netloc
         if (has_left_bracket and not has_right_bracket) or (
@@ -65,15 +72,30 @@ def split_url(url: str) -> SplitURLType:
         ):
             raise ValueError("Invalid IPv6 URL")
         if has_left_bracket:
-            bracketed_host = netloc.partition("[")[2].partition("]")[0]
+            # Per RFC 3986, brackets are only valid at the START of the host
+            # for IP-literal addresses. Text before '[' (e.g. '127.0.0.1[::1]')
+            # is invalid and must be rejected to prevent SSRF bypasses. The
+            # count checks reject URLs with more than one bracket pair in the
+            # host subcomponent (e.g. 'http://[:localhost[]].google:80'),
+            # which would otherwise resolve to an unintended host.
+            hostinfo = netloc.rpartition("@")[2]
+            if hostinfo[0] != "[" or hostinfo.count("[") > 1 or hostinfo.count("]") > 1:
+                raise ValueError("Invalid IPv6 URL")
+            bracketed_host, _, after_bracket = hostinfo[1:].partition("]")
+            # Per RFC 3986 §3.2.2, after the closing ']' of an IP-literal
+            # only ":" <port> or end-of-authority is valid. Any other text
+            # (e.g. '[::1]allowed.example:1') must be rejected to prevent
+            # host-confusion where the suffix is silently dropped.
+            if after_bracket and after_bracket[0] != ":":
+                raise ValueError("Invalid IPv6 URL")
             # Valid bracketed hosts are defined in
             # https://www.rfc-editor.org/rfc/rfc3986#page-49
             # https://url.spec.whatwg.org/
-            if bracketed_host[0] == "v":
+            if bracketed_host and bracketed_host[0] == "v":
                 if not re.match(r"\Av[a-fA-F0-9]+\..+\Z", bracketed_host):
                     raise ValueError("IPvFuture address is invalid")
             elif ":" not in bracketed_host:
-                raise ValueError("An IPv4 address cannot be in brackets")
+                raise ValueError("The IPv6 content between brackets is not valid")
     if has_hash:
         url, _, fragment = url.partition("#")
     if has_question_mark:
@@ -97,7 +119,7 @@ def _check_netloc(netloc: str) -> None:
     # Note that there are no unicode decompositions for the character '@' so
     # its currently impossible to have test coverage for this branch, however if the
     # one should be added in the future we want to make sure its still checked.
-    for c in "/?#@:":  # pragma: no branch
+    for c in "/?#@:%":  # pragma: no branch
         if c in normalized_netloc:
             raise ValueError(
                 f"netloc '{netloc}' contains invalid "
@@ -108,11 +130,11 @@ def _check_netloc(netloc: str) -> None:
 @lru_cache  # match the same size as urlsplit
 def split_netloc(
     netloc: str,
-) -> tuple[Union[str, None], Union[str, None], Union[str, None], Union[int, None]]:
+) -> tuple[str | None, str | None, str | None, int | None]:
     """Split netloc into username, password, host and port."""
     if "@" not in netloc:
-        username: Union[str, None] = None
-        password: Union[str, None] = None
+        username: str | None = None
+        password: str | None = None
         hostinfo = netloc
     else:
         userinfo, _, hostinfo = netloc.rpartition("@")
@@ -121,8 +143,15 @@ def split_netloc(
             password = None
 
     if "[" in hostinfo:
+        if hostinfo[0] != "[" or hostinfo.count("[") > 1 or hostinfo.count("]") > 1:
+            raise ValueError("Invalid IPv6 URL")
         _, _, bracketed = hostinfo.partition("[")
         hostname, _, port_str = bracketed.partition("]")
+        # Defense-in-depth: after ']' only ':port' or empty is valid.
+        # split_url() should have already rejected invalid suffixes,
+        # but guard here too for callers that use split_netloc() directly.
+        if port_str and port_str[0] != ":":
+            raise ValueError("Invalid IPv6 URL")
         _, _, port_str = port_str.partition(":")
     else:
         hostname, _, port_str = hostinfo.partition(":")
@@ -157,10 +186,10 @@ def unsplit_result(
 
 @lru_cache  # match the same size as urlsplit
 def make_netloc(
-    user: Union[str, None],
-    password: Union[str, None],
-    host: Union[str, None],
-    port: Union[int, None],
+    user: str | None,
+    password: str | None,
+    host: str | None,
+    port: int | None,
     encode: bool = False,
 ) -> str:
     """Make netloc from parts.
@@ -187,3 +216,17 @@ def make_netloc(
     elif user and encode:
         user = QUOTER(user)
     return f"{user}@{ret}" if user else ret
+
+
+def query_to_pairs(query_string: str) -> list[tuple[str, str]]:
+    """Parse a query given as a string argument.
+
+    Works like urllib.parse.parse_qsl with keep empty values.
+    """
+    pairs: list[tuple[str, str]] = []
+    if not query_string:
+        return pairs
+    for k_v in query_string.split("&"):
+        k, _, v = k_v.partition("=")
+        pairs.append((UNQUOTER_PLUS(k), UNQUOTER_PLUS(v)))
+    return pairs

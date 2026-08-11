@@ -23,21 +23,21 @@ public:
     NUdf::TUnboxedValue GetElement(ui32 index) const final;
 
 private:
-    const NUdf::TUnboxedValue InputRow;
-    const ui64 RowIndex;
-    const TMeasureInputColumnOrder& ColumnOrder;
-    const NUdf::TUnboxedValue& MatchedVars;
-    const TUnboxedValueVector& VarNames;
-    ui64 MatchNumber;
+    const NUdf::TUnboxedValue InputRow_;
+    const ui64 RowIndex_;
+    const TMeasureInputColumnOrder& ColumnOrder_;
+    const NUdf::TUnboxedValue& MatchedVars_;
+    const TUnboxedValueVector& VarNames_;
+    ui64 MatchNumber_;
 };
 
 class TMeasureInputDataValue final: public TComputationValue<TMeasureInputDataValue> {
 public:
     TMeasureInputDataValue(
         TMemoryUsageInfo* memInfo,
-        const NUdf::TUnboxedValue& inputData,
+        NUdf::TUnboxedValue inputData,
         const TMeasureInputColumnOrder& columnOrder,
-        const NUdf::TUnboxedValue& matchedVars,
+        NUdf::TUnboxedValue matchedVars,
         const TUnboxedValueVector& varNames,
         ui64 matchNumber);
 
@@ -58,11 +58,11 @@ public:
     bool HasDictItems() const final;
 
 private:
-    const NUdf::TUnboxedValue InputData;
-    const TMeasureInputColumnOrder& ColumnOrder;
-    const NUdf::TUnboxedValue MatchedVars;
-    const TUnboxedValueVector& VarNames;
-    const ui64 MatchNumber;
+    const NUdf::TUnboxedValue InputData_;
+    const TMeasureInputColumnOrder& ColumnOrder_;
+    const NUdf::TUnboxedValue MatchedVars_;
+    const TUnboxedValueVector& VarNames_;
+    const ui64 MatchNumber_;
 };
 
 } // namespace NKikimr::NMiniKQL::NMatchRecognize

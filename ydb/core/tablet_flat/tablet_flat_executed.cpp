@@ -260,7 +260,7 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
     auto path = ev->Get()->PathInfo();
     TString queryString = cgi.Print();
 
-    if (path == "/app" || (UsesTabletDevUiSecurePath(AppData(), TabletType())
+    if (path == "/app" || (HasTabletDevUiSecureSubtree(AppData(), TabletType())
             && IsTabletDevUiSecurePath(path))) {
         OnRenderAppHtmlPage(ev, ctx);
         return;

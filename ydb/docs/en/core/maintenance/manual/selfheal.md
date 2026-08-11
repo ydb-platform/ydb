@@ -9,7 +9,7 @@ SelfHeal can:
 * Detect faulty system elements.
 * Transfer faulty elements carefully without data loss and disintegration of storage groups.
 
-SelfHeal is enabled by default.
+SelfHeal is enabled by default and automatically updates the configuration of [dynamic groups](../../concepts/glossary.md#dynamic-group). In clusters with configuration V2, you can also enable [static group SelfHeal](../../devops/configuration-management/configuration-v2/static-group-self-heal.md).
 
 {{ ydb-short-name }} component responsible for SelfHeal is called "Sentinel".
 

@@ -2,6 +2,9 @@
 
 #include "text_document.h"
 
+#include <yql/essentials/utils/json/from.h>
+#include <yql/essentials/utils/meta/reflection.h>
+
 namespace NLsp {
 
 struct TFormattingOptions {
@@ -15,6 +18,13 @@ struct TDocumentFormattingParams {
 };
 
 } // namespace NLsp
+
+namespace NYql::NReflection {
+
+YQL_DEFINE_REFLECTING(NLsp::TFormattingOptions, (TabSize)(InsertSpaces));
+YQL_DEFINE_REFLECTING(NLsp::TDocumentFormattingParams, (TextDocument)(Options));
+
+} // namespace NYql::NReflection
 
 namespace NYql::NJson {
 

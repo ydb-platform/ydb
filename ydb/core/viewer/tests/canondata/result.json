@@ -4134,7 +4134,8 @@
                             "Kind": "hdd",
                             "Name": "dynamic_storage_pool:1"
                         }
-                    ]
+                    ],
+                    "TablesMetricsLevel": 0
                 },
                 "Self": {
                     "ACL": "text",
@@ -4272,7 +4273,8 @@
                             "Kind": "hdd",
                             "Name": "/Root/dedicated_db:hdd"
                         }
-                    ]
+                    ],
+                    "TablesMetricsLevel": 0
                 },
                 "Self": {
                     "ACL": "text",
@@ -4393,7 +4395,8 @@
                             "Kind": "hdd",
                             "Name": "/Root/shared_db:hdd"
                         }
-                    ]
+                    ],
+                    "TablesMetricsLevel": 0
                 },
                 "Self": {
                     "ACL": "",
@@ -4530,7 +4533,8 @@
                             "Kind": "hdd",
                             "Name": "/Root/shared_db:hdd"
                         }
-                    ]
+                    ],
+                    "TablesMetricsLevel": 0
                 },
                 "Self": {
                     "ACL": "",

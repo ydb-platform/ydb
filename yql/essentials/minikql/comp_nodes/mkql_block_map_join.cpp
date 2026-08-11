@@ -13,8 +13,7 @@
 
 #include <util/generic/serialized_enum.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -59,8 +58,8 @@ public:
         const auto& pgBuilder = ctx.Builder->GetPgBuilder();
         MaxLength_ = CalcMaxBlockLength(outputItems);
         TBlockTypeHelper helper;
-        for (size_t i = 0; i < inputItems.size(); i++) {
-            TType* blockItemType = AS_TYPE(TBlockType, inputItems[i])->GetItemType();
+        for (const auto inputItem : inputItems) {
+            TType* blockItemType = AS_TYPE(TBlockType, inputItem)->GetItemType();
             Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
             Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));
             Hashers_.push_back(helper.MakeHasher(blockItemType));
@@ -121,8 +120,8 @@ public:
 
         if (!rightColumns.empty()) {
             Y_ENSURE(LeftIOMap_.size() + rightColumns.size() == OutputWidth_);
-            for (size_t i = 0; i < rightColumns.size(); i++) {
-                AddItem(rightColumns[i], builderIndex++);
+            for (auto rightColumn : rightColumns) {
+                AddItem(rightColumn, builderIndex++);
             }
         } else {
             while (builderIndex < OutputWidth_) {
@@ -306,7 +305,7 @@ public:
         }
 
     private:
-        TRowIterator(const TBlockStorage* blockStorage)
+        explicit TRowIterator(const TBlockStorage* blockStorage)
             : BlockStorage_(blockStorage)
         {
         }
@@ -523,7 +522,7 @@ class TBlockIndex: public TComputationValue<TBlockIndex> {
         TIndexNode* Next;
 
         TIndexNode() = delete;
-        TIndexNode(TBlockStorage::TRowEntry entry, TIndexNode* next = nullptr)
+        explicit TIndexNode(TBlockStorage::TRowEntry entry, TIndexNode* next = nullptr)
             : Entry(entry)
             , Next(next)
         {
@@ -537,7 +536,7 @@ class TBlockIndex: public TComputationValue<TBlockIndex> {
         {
         }
 
-        TIndexMapValue(TBlockStorage::TRowEntry entry) {
+        explicit TIndexMapValue(TBlockStorage::TRowEntry entry) {
             TIndexEntryUnion un;
             un.Entry = entry;
 
@@ -545,7 +544,7 @@ class TBlockIndex: public TComputationValue<TBlockIndex> {
             Raw = (un.Raw << 1) | 1;
         }
 
-        TIndexMapValue(TIndexNode* entryList)
+        explicit TIndexMapValue(TIndexNode* entryList)
             : EntryList(entryList)
         {
         }
@@ -620,12 +619,12 @@ public:
                         break;
 
                     case EIteratorType::INPLACE:
-                        Entry_ = other.Entry_;
-                        EntryConsumed_ = other.EntryConsumed_;
+                        Entry = other.Entry;
+                        EntryConsumed = other.EntryConsumed;
                         break;
 
                     case EIteratorType::LIST:
-                        Node_ = other.Node_;
+                        Node = other.Node;
                         break;
                 }
 
@@ -642,18 +641,18 @@ public:
                     return Nothing();
 
                 case EIteratorType::INPLACE:
-                    if (EntryConsumed_) {
+                    if (EntryConsumed) {
                         return Nothing();
                     }
 
-                    EntryConsumed_ = true;
-                    return BlockIndex_->IsKeyEquals(Entry_, ItemsToLookup_) ? TMaybe<TBlockStorage::TRowEntry>(Entry_) : Nothing();
+                    EntryConsumed = true;
+                    return BlockIndex_->IsKeyEquals(Entry, ItemsToLookup_) ? TMaybe<TBlockStorage::TRowEntry>(Entry) : Nothing();
 
                 case EIteratorType::LIST:
-                    for (; Node_ != nullptr; Node_ = Node_->Next) {
-                        if (BlockIndex_->IsKeyEquals(Node_->Entry, ItemsToLookup_)) {
-                            auto entry = Node_->Entry;
-                            Node_ = Node_->Next;
+                    for (; Node != nullptr; Node = Node->Next) {
+                        if (BlockIndex_->IsKeyEquals(Node->Entry, ItemsToLookup_)) {
+                            auto entry = Node->Entry;
+                            Node = Node->Next;
                             return entry;
                         }
                     }
@@ -673,9 +672,9 @@ public:
                 case EIteratorType::EMPTY:
                     return true;
                 case EIteratorType::INPLACE:
-                    return EntryConsumed_;
+                    return EntryConsumed;
                 case EIteratorType::LIST:
-                    return Node_ == nullptr;
+                    return Node == nullptr;
             }
         }
 
@@ -684,7 +683,7 @@ public:
         }
 
     private:
-        TIterator(const TBlockIndex* blockIndex)
+        explicit TIterator(const TBlockIndex* blockIndex)
             : Type_(EIteratorType::EMPTY)
             , BlockIndex_(blockIndex)
         {
@@ -693,8 +692,8 @@ public:
         TIterator(const TBlockIndex* blockIndex, TBlockStorage::TRowEntry entry, TKeyItemsRef itemsToLookup)
             : Type_(EIteratorType::INPLACE)
             , BlockIndex_(blockIndex)
-            , Entry_(entry)
-            , EntryConsumed_(false)
+            , Entry(entry)
+            , EntryConsumed(false)
             , ItemsToLookup_(std::move(itemsToLookup))
         {
         }
@@ -702,7 +701,7 @@ public:
         TIterator(const TBlockIndex* blockIndex, TIndexNode* node, TKeyItemsRef itemsToLookup)
             : Type_(EIteratorType::LIST)
             , BlockIndex_(blockIndex)
-            , Node_(node)
+            , Node(node)
             , ItemsToLookup_(std::move(itemsToLookup))
         {
         }
@@ -712,10 +711,10 @@ public:
         const TBlockIndex* BlockIndex_ = nullptr;
 
         union {
-            TIndexNode* Node_;
+            TIndexNode* Node;
             struct {
-                TBlockStorage::TRowEntry Entry_;
-                bool EntryConsumed_;
+                TBlockStorage::TRowEntry Entry;
+                bool EntryConsumed;
             };
         };
 
@@ -967,11 +966,11 @@ class TBlockMapJoinCoreWraper: public TMutableComputationNode<TBlockMapJoinCoreW
 public:
     TBlockMapJoinCoreWraper(
         TComputationMutables& mutables,
-        const TVector<TType*>&& resultItemTypes,
-        const TVector<TType*>&& leftItemTypes,
-        const TVector<ui32>&& leftKeyColumns,
-        const TVector<ui32>&& leftIOMap,
-        const TVector<ui32>&& rightIOMap,
+        TVector<TType*>&& resultItemTypes,
+        TVector<TType*>&& leftItemTypes,
+        TVector<ui32>&& leftKeyColumns,
+        TVector<ui32>&& leftIOMap,
+        TVector<ui32>&& rightIOMap,
         IComputationNode* leftStream,
         IComputationNode* rightBlockIndex)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -994,6 +993,7 @@ public:
             ResultItemTypes_);
 
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
+                                                      ResultItemTypes_.size(),
                                                       std::move(joinState),
                                                       LeftKeyColumns_,
                                                       RightIOMap_,
@@ -1003,20 +1003,21 @@ public:
     }
 
 private:
-    class TStreamValue: public TComputationValue<TStreamValue> {
-        using TBase = TComputationValue<TStreamValue>;
+    class TStreamValue: public TBlockStreamValue<TStreamValue> {
+        using TBase = TBlockStreamValue<TStreamValue>;
 
     public:
         TStreamValue(
             TMemoryUsageInfo* memInfo,
             const THolderFactory& holderFactory,
+            size_t outputWidth,
             NUdf::TUnboxedValue&& joinState,
             const TVector<ui32>& leftKeyColumns,
             const TVector<ui32>& rightIOMap,
             NUdf::TUnboxedValue&& leftStream,
             NUdf::TUnboxedValue&& rightBlockIndex,
             NYql::EDatumValidationMode validationMode)
-            : TBase(memInfo)
+            : TBase(memInfo, holderFactory, outputWidth)
             , JoinState_(joinState)
             , LeftKeyColumns_(leftKeyColumns)
             , RightIOMap_(rightIOMap)
@@ -1028,8 +1029,7 @@ private:
             LookupBatchKeyItems_.resize(PrefetchBatchSize * LeftKeyColumns_.size());
         }
 
-    private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus DoWideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
             auto& indexState = *static_cast<TIndexState*>(RightBlockIndex_.GetResource());
             auto& storageState = *static_cast<TStorageState*>(indexState.GetBlockStorage().GetResource());
@@ -1139,6 +1139,7 @@ private:
             return TKeyItemsRef(slot, keyWidth);
         }
 
+    private:
         NUdf::TUnboxedValue JoinState_;
 
         const TVector<ui32>& LeftKeyColumns_;
@@ -1188,10 +1189,10 @@ class TBlockCrossJoinCoreWraper: public TMutableComputationNode<TBlockCrossJoinC
 public:
     TBlockCrossJoinCoreWraper(
         TComputationMutables& mutables,
-        const TVector<TType*>&& resultItemTypes,
-        const TVector<TType*>&& leftItemTypes,
-        const TVector<ui32>&& leftIOMap,
-        const TVector<ui32>&& rightIOMap,
+        TVector<TType*>&& resultItemTypes,
+        TVector<TType*>&& leftItemTypes,
+        TVector<ui32>&& leftIOMap,
+        TVector<ui32>&& rightIOMap,
         IComputationNode* leftStream,
         IComputationNode* rightBlockStorage)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -1213,7 +1214,8 @@ public:
             ResultItemTypes_);
 
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
-                                                      std::move(joinState),
+                                                      ResultItemTypes_.size(),
+                                                      joinState,
                                                       RightIOMap_,
                                                       std::move(LeftStream_->GetValue(ctx)),
                                                       std::move(RightBlockStorage_->GetValue(ctx)),
@@ -1221,19 +1223,20 @@ public:
     }
 
 private:
-    class TStreamValue: public TComputationValue<TStreamValue> {
-        using TBase = TComputationValue<TStreamValue>;
+    class TStreamValue: public TBlockStreamValue<TStreamValue> {
+        using TBase = TBlockStreamValue<TStreamValue>;
 
     public:
         TStreamValue(
             TMemoryUsageInfo* memInfo,
             const THolderFactory& holderFactory,
+            size_t outputWidth,
             NUdf::TUnboxedValue&& joinState,
             const TVector<ui32>& rightIOMap,
             NUdf::TUnboxedValue&& leftStream,
             NUdf::TUnboxedValue&& rightBlockStorage,
             NYql::EDatumValidationMode validationMode)
-            : TBase(memInfo)
+            : TBase(memInfo, holderFactory, outputWidth)
             , JoinState_(joinState)
             , RightIOMap_(rightIOMap)
             , LeftStream_(leftStream)
@@ -1243,8 +1246,7 @@ private:
         {
         }
 
-    private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus DoWideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
             auto& storageState = *static_cast<TStorageState*>(RightBlockStorage_.GetResource());
 
@@ -1307,6 +1309,7 @@ private:
             return NUdf::EFetchStatus::Ok;
         }
 
+    private:
         NUdf::TUnboxedValue JoinState_;
 
         const TVector<ui32>& RightIOMap_;
@@ -1416,8 +1419,8 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     MKQL_ENSURE(joinStreamType->GetItemType()->IsMulti(),
                 "Expected Multi as a resulting item type");
     const auto joinComponents = GetWideComponents(joinStreamType);
-    MKQL_ENSURE(joinComponents.size() > 0, "Expected at least one column");
-    const TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
+    MKQL_ENSURE(!joinComponents.empty(), "Expected at least one column");
+    TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsStream(), "Expected WideStream as a left stream");
@@ -1425,8 +1428,8 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     MKQL_ENSURE(leftStreamType->GetItemType()->IsMulti(),
                 "Expected Multi as a left stream item type");
     const auto leftStreamComponents = GetWideComponents(leftStreamType);
-    MKQL_ENSURE(leftStreamComponents.size() > 0, "Expected at least one column");
-    const TVector<TType*> leftStreamItems(leftStreamComponents.cbegin(), leftStreamComponents.cend());
+    MKQL_ENSURE(!leftStreamComponents.empty(), "Expected at least one column");
+    TVector<TType*> leftStreamItems(leftStreamComponents.cbegin(), leftStreamComponents.cend());
 
     const auto joinKindNode = callable.GetInput(3);
     const auto rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
@@ -1567,5 +1570,4 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
 #undef JOIN_WRAPPER
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

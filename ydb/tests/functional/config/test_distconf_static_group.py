@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
 import time
 
+import grpc
 import pytest
 import yaml
 from hamcrest import assert_that
 
+from ydb.core.protos import blobstorage_base3_pb2 as bsbase
 from ydb.core.protos import blobstorage_config_pb2 as bsconfig
+from ydb.public.api.grpc.draft import ydb_distributed_storage_v1_pb2_grpc as distributed_storage_grpc
+from ydb.public.api.protos.draft import ydb_distributed_storage_pb2 as distributed_storage
 import ydb.public.api.protos.ydb_config_pb2 as config_pb
 from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
@@ -39,7 +43,7 @@ def cluster():
         separate_node_configs=True,
         simple_config=True,
         use_self_management=True,
-        extra_grpc_services=['config'],
+        extra_grpc_services=['config', 'distributed_storage'],
         additional_log_configs=log_configs,
     )
 
@@ -91,7 +95,7 @@ def pdisk_path(cluster, node_id, pdisk_id):
 def set_pdisk_faulty(cluster, node, path):
     for attempt in range(10):
         resp = cluster.client.update_drive_status(
-            node.host, node.ic_port, path, bsconfig.EDriveStatus.FAULTY
+            node.host, node.ic_port, path, bsbase.EDriveStatus.FAULTY
         ).BlobStorageConfigResponse
 
         if resp.Success:
@@ -115,6 +119,133 @@ def wait_static_group_relocated(cluster, victim_node_id, timeout=180):
             return nodes
         time.sleep(5)
     raise TimeoutError("Static group vdisk not relocated off node %d in %ds" % (victim_node_id, timeout))
+
+
+def vdisk_position(vdisk_id):
+    return (
+        vdisk_id.group_id,
+        vdisk_id.fail_realm_idx,
+        vdisk_id.fail_domain_idx,
+        vdisk_id.vdisk_idx,
+    )
+
+
+def vslot_id(vslot):
+    return vslot.node_id, vslot.pdisk_id, vslot.vslot_id
+
+
+def stream_static_vdisks(stub):
+    request = distributed_storage.StorageStateRequest(include_vdisks=True)
+    vdisks = []
+    for response in stub.StreamStorageState(request, timeout=30):
+        assert_that(
+            response.status == StatusIds.SUCCESS,
+            "StreamStorageState failed: %s" % response,
+        )
+        if response.HasField("result"):
+            for vdisk in response.result.vdisks:
+                if vdisk.is_static:
+                    copy = distributed_storage.VDisk()
+                    copy.CopyFrom(vdisk)
+                    vdisks.append(copy)
+    return vdisks
+
+
+def wait_static_vdisks_ready(stub, timeout=180):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        vdisks = stream_static_vdisks(stub)
+        if vdisks and all(vdisk.ready for vdisk in vdisks):
+            return vdisks
+        time.sleep(2)
+    raise TimeoutError("Static group VDisks did not become ready within %s seconds" % timeout)
+
+
+def wait_static_vdisk_reassigned(stub, previous_vdisk, target_slot, timeout=180):
+    position = vdisk_position(previous_vdisk.id)
+    target = vslot_id(target_slot)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        for vdisk in stream_static_vdisks(stub):
+            if (
+                vdisk_position(vdisk.id) == position
+                and vdisk.id.group_generation > previous_vdisk.id.group_generation
+                and vslot_id(vdisk.slot_id) == target
+            ):
+                return vdisk
+        time.sleep(2)
+    raise TimeoutError(
+        "Static VDisk %s was not reassigned to VSlot %s within %s seconds"
+        % (position, target, timeout)
+    )
+
+
+def find_target_pdisk(cluster, vdisks):
+    occupied_nodes = {vdisk.slot_id.node_id for vdisk in vdisks}
+    base_config = cluster.client.query_base_config().BaseConfig
+    candidates = [
+        (pdisk.NodeId, pdisk.PDiskId)
+        for pdisk in base_config.PDisk
+        if (
+            pdisk.DriveStatus == bsbase.EDriveStatus.ACTIVE
+            and pdisk.NodeId not in occupied_nodes
+        )
+    ]
+    assert_that(candidates, "No active target PDisk is available")
+    return min(candidates)
+
+
+def reassign_static_vdisk(stub, previous_vdisk, target_pdisk=None):
+    request = distributed_storage.ReassignVDiskRequest()
+    request.vdisk_id.CopyFrom(previous_vdisk.id)
+    if target_pdisk is not None:
+        request.target_pdisk_id.node_id = target_pdisk[0]
+        request.target_pdisk_id.pdisk_id = target_pdisk[1]
+
+    response = stub.ReassignVDisk(request, timeout=180)
+    assert_that(response.operation.ready, "ReassignVDisk operation is not ready")
+    assert_that(
+        response.operation.status == StatusIds.SUCCESS,
+        "ReassignVDisk failed: %s" % response.operation,
+    )
+
+    result = distributed_storage.ReassignVDiskResult()
+    assert_that(response.operation.result.Unpack(result), "Unexpected ReassignVDisk result type")
+    assert_that(result.vdisk_id == request.vdisk_id)
+    assert_that(vslot_id(result.source_slot_id) == vslot_id(previous_vdisk.slot_id))
+    assert_that(
+        vslot_id(result.target_slot_id)[:2] != vslot_id(result.source_slot_id)[:2],
+        "ReassignVDisk kept the static VDisk on the same PDisk",
+    )
+    if target_pdisk is not None:
+        assert_that(
+            vslot_id(result.target_slot_id)[:2] == target_pdisk,
+            "ReassignVDisk ignored the explicit target PDisk",
+        )
+
+    return wait_static_vdisk_reassigned(stub, previous_vdisk, result.target_slot_id)
+
+
+class TestStaticGroupManualReassign:
+
+    def test_evict_static_vdisk(self, cluster):
+        node = cluster.nodes[1]
+        with grpc.insecure_channel("%s:%s" % (node.host, node.grpc_port)) as channel:
+            stub = distributed_storage_grpc.DistributedStorageServiceStub(channel)
+            vdisks = wait_static_vdisks_ready(stub)
+
+            previous_vdisk = min(vdisks, key=lambda vdisk: vdisk_position(vdisk.id))
+            reassign_static_vdisk(stub, previous_vdisk)
+
+    def test_reassign_static_vdisk(self, cluster):
+        node = cluster.nodes[1]
+        with grpc.insecure_channel("%s:%s" % (node.host, node.grpc_port)) as channel:
+            stub = distributed_storage_grpc.DistributedStorageServiceStub(channel)
+            vdisks = wait_static_vdisks_ready(stub)
+
+            previous_vdisk = min(vdisks, key=lambda vdisk: vdisk_position(vdisk.id))
+            target_pdisk = find_target_pdisk(cluster, vdisks)
+            reassign_static_vdisk(stub, previous_vdisk, target_pdisk)
 
 
 class TestStaticGroupSelfHealAllowedNodes:

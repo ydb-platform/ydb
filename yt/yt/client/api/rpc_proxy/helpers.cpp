@@ -1514,8 +1514,6 @@ void FromProto(
     query->FinishTime = YT_OPTIONAL_FROM_PROTO(protoQuery, finish_time, TInstant);
     if (protoQuery.has_settings()) {
         query->Settings = TYsonString(protoQuery.settings());
-    } else {
-        query->Settings = TYsonString{};
     }
     query->User = YT_OPTIONAL_FROM_PROTO(protoQuery, user);
     query->AccessControlObject = YT_OPTIONAL_FROM_PROTO(protoQuery, access_control_object);
@@ -1524,19 +1522,13 @@ void FromProto(
     query->ResultCount = YT_OPTIONAL_FROM_PROTO(protoQuery, result_count);
     if (protoQuery.has_progress()) {
         query->Progress = TYsonString(protoQuery.progress());
-    } else {
-        query->Progress = TYsonString{};
     }
     query->Error = YT_APPLY_PROTO_OPTIONAL(protoQuery, error, FromProto<TError>);
     if (protoQuery.has_annotations()) {
         query->Annotations = TYsonString(protoQuery.annotations());
-    } else {
-        query->Annotations = TYsonString{};
     }
     if (protoQuery.has_other_attributes()) {
         query->OtherAttributes = NYTree::FromProto(protoQuery.other_attributes());
-    } else if (query->OtherAttributes) {
-        query->OtherAttributes->Clear();
     }
     if (protoQuery.has_secrets()) {
         query->Secrets = TYsonString(protoQuery.secrets());

@@ -188,7 +188,8 @@ public:
         for (auto& [topicPath, info] : ev->Get()->Topics) {
             switch (info.Status) {
                 case NDescriber::EStatus::SUCCESS: {
-                    auto& topicInfo = TopicInfo[topicPath];
+                    // Describer keys responses by the original request path; TopicInfo is keyed by CanonizePath.
+                    auto& topicInfo = TopicInfo[CanonizePath(topicPath)];
                     topicInfo.PQInfo = info.Info;
                     topicInfo.RealPath = std::move(info.RealPath);
                     break;

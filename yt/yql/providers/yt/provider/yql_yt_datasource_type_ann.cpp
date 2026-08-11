@@ -743,6 +743,14 @@ public:
                         }
                     }
 
+                    if (auto reserved = FindReservedColumnName(GetSeqItemType(*table.Ref().GetTypeAnn()), *State_)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(table.Pos()), TStringBuilder()
+                            << "Cannot read table " << TString{tableName}.Quote() << ": column "
+                            << TString{*reserved}.Quote() << " has reserved prefix "
+                            << TString{SystemMemberPrefix}.Quote()));
+                        return TStatus::Error;
+                    }
+
                     if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::UserSchema)) {
                         // Don't validate already substituted anonymous tables
                         if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous) || !tableName.StartsWith("tmp/")) {

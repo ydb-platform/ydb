@@ -2,7 +2,7 @@ import ydb.apps.dstool.lib.common as common
 from ydb.apps.dstool.lib.common import kikimr_bsconfig
 from operator import itemgetter, attrgetter
 from collections import OrderedDict
-import ydb.core.protos.blobstorage_pb2 as kikimr_bs
+import ydb.core.protos.blobstorage_base_pb2 as kikimr_bs
 
 
 class IdBase(object):

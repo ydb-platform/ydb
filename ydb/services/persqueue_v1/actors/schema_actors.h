@@ -7,6 +7,7 @@
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
 
 #include <optional>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -207,11 +208,11 @@ public:
     void ApplyResponse(TTabletInfo&,
                       NKikimr::TEvPersQueue::TEvStatusResponse::TPtr&,
                       const TActorContext&) override {
-        Y_ABORT();
+        AFL_ENSURE(false)("reason", "TPartitionsLocationActor: unexpected TEvStatusResponse");
     }
     virtual void ApplyResponse(TTabletInfo&, TEvPersQueue::TEvReadSessionsInfoResponse::TPtr&,
                                const TActorContext&) override {
-        Y_ABORT();
+        AFL_ENSURE(false)("reason", "TPartitionsLocationActor: unexpected TEvReadSessionsInfoResponse");
     }
 
     void Finalize();

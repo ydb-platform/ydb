@@ -313,8 +313,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             pendingRead.GetValue(WaitTimeout).GetValue(WaitTimeout);
 
         UNIT_ASSERT_VALUES_EQUAL(
-            E_CANCELLED,
-            readyReadResponse.Error.GetCode());
+            true,
+            IsCanNotAcquireDataError(readyReadResponse.Error));
 
         const auto& hostStat = dbg->GetOracle()->GetHostStatistics(ddiskHost);
         const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
@@ -1015,7 +1015,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             1,
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR));
 
-        // Drain OnConnectionEstablished (queues the reconnect) then the
+        // Drain OnConnectResponse (queues the reconnect) then the
         // reconnect itself (issues a fresh Connect).
         DrainExecutor(executor);
         DrainExecutor(executor);
@@ -1084,7 +1084,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             1,
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR));
 
-        // Drain OnConnectionEstablished (queues the reconnect) then the
+        // Drain OnConnectResponse (queues the reconnect) then the
         // reconnect itself (issues a fresh Connect).
         DrainExecutor(executor);
         DrainExecutor(executor);
@@ -1147,7 +1147,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 1,
                 NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR));
         }
-        // Drain OnConnectionEstablished + queued reconnects, then the
+        // Drain OnConnectResponse + queued reconnects, then the
         // reconnects.
         DrainExecutor(executor);
         DrainExecutor(executor);
@@ -1294,6 +1294,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             Runtime->GetActorSystem(0),
             TraceService.get(),
             Service.get(),
+            DiskDescription,
             TVChunkConfig::MakeDefault(
                 100,
                 DirectBlockGroupHostCount,
@@ -1329,8 +1330,12 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             "Enabled{+++++}",
             configBefore);
 
-        // Wait for DB request completed
-        DrainExecutor(executor);
+        // Reply UpdateConfig request.
+        {
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+            DrainExecutor(executor);
+        }
+
         TString configAfter;
         TString dirtyMapDDiskAfter;
 

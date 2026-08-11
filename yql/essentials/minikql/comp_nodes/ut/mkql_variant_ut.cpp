@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -620,5 +619,4 @@ Y_UNIT_TEST(TestDynamicVariantStructWithNullIndex) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLVariantTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

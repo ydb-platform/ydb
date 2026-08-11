@@ -57,8 +57,8 @@ using namespace NYPath;
 using namespace NYTree;
 using namespace NYson;
 
-using NYT::ToProto;
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -191,7 +191,7 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
         ToProto(req->mutable_attributes(), *options.Attributes);
     }
     if (options.StartTimestamp != NullTimestamp) {
-        req->set_start_timestamp(options.StartTimestamp);
+        req->set_start_timestamp(ToProto(options.StartTimestamp));
     }
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
@@ -232,7 +232,7 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
                 pingPeriod,
                 std::move(stickyParameters),
                 rsp->sequence_number_source_id(),
-                "Transaction started");
+                "Started");
         }));
 }
 
@@ -975,8 +975,8 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
         }
     }
     EnrichTracingForLookupRequest(req->TracingTags(), path, req->columns());
-    req->set_timestamp(options.Timestamp);
-    req->set_retention_timestamp(options.RetentionTimestamp);
+    req->set_timestamp(ToProto(options.Timestamp));
+    req->set_retention_timestamp(ToProto(options.RetentionTimestamp));
     req->set_keep_missing_rows(options.KeepMissingRows);
     req->set_enable_partial_result(options.EnablePartialResult);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
@@ -1028,7 +1028,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
         }
     }
     EnrichTracingForLookupRequest(req->TracingTags(), path, req->columns());
-    req->set_timestamp(options.Timestamp);
+    req->set_timestamp(ToProto(options.Timestamp));
     req->set_keep_missing_rows(options.KeepMissingRows);
     req->set_enable_partial_result(options.EnablePartialResult);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
@@ -1125,8 +1125,8 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
     }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
-    req->set_timestamp(options.Timestamp);
-    req->set_retention_timestamp(options.RetentionTimestamp);
+    req->set_timestamp(ToProto(options.Timestamp));
+    req->set_retention_timestamp(ToProto(options.RetentionTimestamp));
     req->set_multiplexing_band(static_cast<NProto::EMultiplexingBand>(options.MultiplexingBand));
     ToProto(req->mutable_tablet_read_options(), options);
 
@@ -1174,7 +1174,7 @@ void FillRequestBySelectRowsOptionsBase(
     const std::optional<NYPath::TYPath>& defaultUdfRegistryPath,
     TRequest request)
 {
-    request->set_timestamp(options.Timestamp);
+    request->set_timestamp(ToProto(options.Timestamp));
     if (options.UdfRegistryPath) {
         request->set_udf_registry_path(*options.UdfRegistryPath);
     } else if (defaultUdfRegistryPath) {
@@ -1209,7 +1209,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
 
     FillRequestBySelectRowsOptionsBase(options, config->UdfRegistryPath, req);
     // TODO(ifsmirnov): retention timestamp in explain_query.
-    req->set_retention_timestamp(options.RetentionTimestamp);
+    req->set_retention_timestamp(ToProto(options.RetentionTimestamp));
     // TODO(lukyan): Move to FillRequestBySelectRowsOptionsBase
     req->SetTimeout(options.Timeout.value_or(config->DefaultSelectRowsTimeout));
 
@@ -1292,7 +1292,7 @@ TFuture<TPullRowsResult> TClientBase::PullRows(
     req->set_tablet_rows_per_read(options.TabletRowsPerRead);
     ToProto(req->mutable_replication_progress(), options.ReplicationProgress);
     if (options.UpperTimestamp != NullTimestamp) {
-        req->set_upper_timestamp(options.UpperTimestamp);
+        req->set_upper_timestamp(ToProto(options.UpperTimestamp));
     }
     for (auto [tabletId, rowIndex] : options.StartReplicationRowIndexes) {
         auto* protoReplicationRowIndex = req->add_start_replication_row_indexes();

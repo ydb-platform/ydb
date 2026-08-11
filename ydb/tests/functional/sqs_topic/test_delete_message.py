@@ -164,6 +164,7 @@ class TestSqsTopicDeleteMessage(KikimrSqsTopicTestBase):
             QueueUrl=self._queue_url,
             MessageBody=message_body,
             MessageGroupId='message-group-1',
+            MessageDeduplicationId='deduplication-id-1',
         )
 
         assert_that(
@@ -207,6 +208,7 @@ class TestSqsTopicDeleteMessage(KikimrSqsTopicTestBase):
                 QueueUrl=self._queue_url,
                 MessageBody=message_body,
                 MessageGroupId='message-group-{}'.format(index),
+                MessageDeduplicationId='deduplication-id-{}'.format(index),
             )
 
         assert_that(

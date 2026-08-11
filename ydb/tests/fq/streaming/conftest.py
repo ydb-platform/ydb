@@ -9,8 +9,9 @@ from ydb.tests.fq.streaming_common.common import set_test_env
 
 @pytest.fixture(scope="module")
 def kikimr(request):
+    param = getattr(request, "param", {})
     set_test_env(request)
-    kikimr = Kikimr(get_ydb_config(request))
+    kikimr = Kikimr(get_ydb_config(request), enable_discovery=param.get("enable_discovery", True))
     yield kikimr
     kikimr.stop()
 

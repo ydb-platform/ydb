@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+
 namespace NKikimr {
 namespace NBsController {
 

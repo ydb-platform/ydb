@@ -44,6 +44,10 @@ CFLAGS(
 
 END()
 
+RECURSE(
+    tools
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

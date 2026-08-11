@@ -1,23 +1,27 @@
-# OpenTelemetry Protocol (OTLP) Specification
+# OpenTelemetry Protobuf Definitions
 
 [![Build Check](https://github.com/open-telemetry/opentelemetry-proto/workflows/Build%20Check/badge.svg?branch=main)](https://github.com/open-telemetry/opentelemetry-proto/actions?query=workflow%3A%22Build+Check%22+branch%3Amain)
 
-This repository contains the [OTLP protocol specification](docs/specification.md)
-and the corresponding Language Independent Interface Types ([.proto files](opentelemetry/proto)).
-
-## Language Independent Interface Types
-
-The proto files can be consumed as GIT submodules or copied and built directly in the consumer project.
-
-The compiled files are published to central repositories (Maven, ...) from OpenTelemetry client libraries.
+This repository contains the Protocol Buffer definitions for [OTLP](#otlp) (the primary OpenTelemetry data delivery protocol),
+and other [Protocols](#protocols) that share its common types and release machinery.
 
 See [contribution guidelines](CONTRIBUTING.md) if you would like to make any changes.
 
-## OTLP/JSON
+## Protocols
+
+### OTLP
+
+The primary OpenTelemetry data delivery protocol, used to export traces,
+metrics, logs, and profiles via gRPC and HTTP.
+
+- Specification: [docs/specification.md](docs/specification.md)
+- Proto files: everything under [opentelemetry/proto/](opentelemetry/proto/) except `processcontext/`
+
+#### OTLP/JSON
 
 See additional requirements for [OTLP/JSON wire representation here](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/otlp.md#json-protobuf-encoding).
 
-## Generate gRPC Client Libraries
+#### Generate gRPC Client Libraries
 
 To generate the raw gRPC client libraries, use `make gen-${LANGUAGE}`. Currently supported languages are:
 
@@ -31,19 +35,39 @@ To generate the raw gRPC client libraries, use `make gen-${LANGUAGE}`. Currently
 * python
 * ruby
 
+### Process Context Sharing
+
+A non-OTLP protocol for sharing process-level resource attributes with
+external readers (e.g. the [OpenTelemetry eBPF Profiler](https://github.com/open-telemetry/opentelemetry-ebpf-profiler))
+via memory-mapped regions. Not exchanged via gRPC, HTTP, or the
+OpenTelemetry Collector.
+
+- Documentation: [docs/process-context/process-context.md](docs/process-context/process-context.md)
+- Proto file: [opentelemetry/proto/processcontext/v1development/process_context.proto](opentelemetry/proto/processcontext/v1development/process_context.proto)
+- Design doc: [OTEP 4719](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4719-process-ctx.md)
+
+## Language Independent Interface Types
+
+The proto files can be consumed as GIT submodules or copied and built directly in the consumer project.
+
+OpenTelemetry [language libraries](https://opentelemetry.io/docs/languages/) may
+publish generated language bindings. Check the documentation of the language
+library you are using for more details.
+
 ## Maturity Level
 
 1.0.0 and newer releases from this repository may contain unstable (alpha or beta)
 components as indicated by the Maturity table below.
 
-| Component | Binary Protobuf Maturity | JSON Maturity |
-| --------- |--------------- | ------------- |
-| common/* | Stable | [Stable](docs/specification.md#json-protobuf-encoding) |
-| resource/* | Stable | [Stable](docs/specification.md#json-protobuf-encoding) |
-| metrics/\*<br>collector/metrics/* | Stable | [Stable](docs/specification.md#json-protobuf-encoding) |
-| trace/\*<br>collector/trace/* | Stable | [Stable](docs/specification.md#json-protobuf-encoding) |
-| logs/\*<br>collector/logs/* | Stable | [Stable](docs/specification.md#json-protobuf-encoding) |
-| profiles/\*<br>collector/profiles/* | Development | [Development](docs/specification.md#json-protobuf-encoding) |
+| Protocol                | Component                           | Binary Protobuf Maturity | JSON Maturity                                               |
+| ----------------------- | ----------------------------------- | ------------------------ | ----------------------------------------------------------- |
+| OTLP                    | common/*                            | Stable                   | [Stable](docs/specification.md#json-protobuf-encoding)      |
+| OTLP                    | resource/*                          | Stable                   | [Stable](docs/specification.md#json-protobuf-encoding)      |
+| OTLP                    | metrics/\*<br>collector/metrics/*   | Stable                   | [Stable](docs/specification.md#json-protobuf-encoding)      |
+| OTLP                    | trace/\*<br>collector/trace/*       | Stable                   | [Stable](docs/specification.md#json-protobuf-encoding)      |
+| OTLP                    | logs/\*<br>collector/logs/*         | Stable                   | [Stable](docs/specification.md#json-protobuf-encoding)      |
+| OTLP                    | profiles/\*<br>collector/profiles/* | Development              | [Development](docs/specification.md#json-protobuf-encoding) |
+| Process Context Sharing | processcontext/*                    | Development              | N/A                                                         |
 
 (See [Versioning and Stability](https://github.com/open-telemetry/opentelemetry-specification/blob/a08d1f92f62acd4aafe4dfaa04ae7bf28600d49e/specification/versioning-and-stability.md)
 for definition of maturity levels).
@@ -85,18 +109,28 @@ before and after the change interoperate.
 
 ## Experiments
 
-### New Experimental Components  
+### New Experimental Components
 
 Sometimes we need to experiment with new components, for example to add a
-completely new signal to OpenTelemetry. In this case, to define new experimental
-components we recommend placing new proto files in a "development" sub-directory.
+completely new signal to OpenTelemetry. When designing a new signal, we
+recommend a "development" package to be used. This package will be used
+throughout development until reaching release candidate, in which case the
+`development` suffix is removed (e.g. `v1` instead of `v1development`),
+creating a stable release package.
+
 Such isolated experimental components are excluded from
 above [stability requirements](#stability-definition).
 
 We recommend using
 `Development`, `Alpha`, `Beta`, `Release Candidate`
 [levels](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/0232-maturity-of-otel.md#maturity-levels)
-to communicate different grades of readiness of new components.
+to communicate different grades of readiness of new components. These levels
+MUST be communicated in the documentation of a message, field, etc. when the
+level does not match the stability of the package. For example, if a package is
+`Stable` but a field is not, the documentation MUST indicate that the field is
+experimental with the appropriate level (e.g. `Alpha`, `Beta`, etc).
+Conversely, individual `Status` annotations are not required if a component
+is the same maturity level as the package it is defined in.
 
 Experimental components may be removed completely at the end of the experiment,
 provided that they are not referenced from any `Stable` component.
@@ -108,16 +142,27 @@ Experiments which succeed, require a review to be marked `Stable`. Once marked
 
 New experimental fields or messages may be added in `Development` state to `Stable`
 components. The experimental fields and messages within `Stable components` are subject
-to the full [stability requirements](#stability-definition), and in addition, they must be
-clearly labeled as `Development` (or as any other non-`Stable` level) in the .proto file
-source code.
+to the full [stability requirements](#stability-definition).
+
+When the stability of a *portion* of the protocol doesn't match the expectations of the
+package, there MUST be a stability annotation in the docs. For example:
+
+```protobuf
+// A reference to an Entity.
+// Entity represents an object of interest associated with produced telemetry: e.g spans, metrics, profiles, or logs.
+//
+// Status: [Development]
+message EntityRef {
+  // ...
+}
+```
 
 If an experiment concludes and the previously added field or message is not needed
 anymore, the field/message must stay, but it may be declared "deprecated". During all
 phases of experimentation it must be clearly specified that the field or message may be
 deprecated. Typically, deprecated fields are left empty by the senders and the recipients
 that participate in experiments must expect during all experimental phases (including
-_after_ the experiment is concluded) that the experimental field or message has an
+*after* the experiment is concluded) that the experimental field or message has an
 empty value.
 
 Experiments which succeed, require a review before the field or the message is marked
@@ -130,12 +175,49 @@ is generated from the .proto files by any particular code generator.
 
 ## Maintainers
 
-- [OpenTelemetry Technical Committee](https://github.com/open-telemetry/community/blob/main/community-members.md#technical-committee)
+- [Armin Reuch](https://github.com/arminru)
+- [Bogdan Drutu](https://github.com/bogdandrutu)
+- [Carlos Alberto Cortez](https://github.com/carlosalberto)
+- [Joshua Suereth](https://github.com/jsuereth)
+- [Robert Pająk](https://github.com/pellared)
+- [Tigran Najaryan](https://github.com/tigrannajaryan)
 
 For more information about the maintainer role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#maintainer).
 
 ## Approvers
 
-- [OpenTelemetry Specification Sponsors](https://github.com/open-telemetry/community/blob/main/community-members.md#specifications-and-proto)
+- [Alex Boten](https://github.com/codeboten)
+- [Alexey Alexandrov](https://github.com/aalexand)
+- [Christian Neumüller](https://github.com/Oberon00)
+- [Christos Kalkanis](https://github.com/christos68k)
+- [Cijo Thomas](https://github.com/cijothomas)
+- [Daniel Dyla](https://github.com/dyladan)
+- [David Ashpole](https://github.com/dashpole)
+- [Felix Geisendörfer](https://github.com/felixge)
+- [Florian Lehner](https://github.com/florianl)
+- [Jack Berg](https://github.com/jack-berg)
+- [Jonathan Halliday](https://github.com/jhalliday)
+- [Josh MacDonald](https://github.com/jmacd)
+- [Juraci Paixão Kröhling](https://github.com/jpkrohling)
+- [Leighton Chen](https://github.com/lzchen)
+- [Marc Alff](https://github.com/marcalff)
+- [Reiley Yang](https://github.com/reyang)
+- [Severin Neumann](https://github.com/svrnm)
+- [Ted Young](https://github.com/tedsuo)
+- [Tristan Sloughter](https://github.com/tsloughter)
+- [Tyler Yahn](https://github.com/MrAlias)
 
 For more information about the approver role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).
+
+## Emeritus Maintainers
+
+Previously this package was maintained solely by the [OpenTelemetry Technical Committee](https://github.com/open-telemetry/community/blob/main/community-members.md#technical-committee).
+It now has a dedicated maintainer role that is independent of the OpenTelemetry
+specification.
+
+## Emeritus Approvers
+
+Previously the package had the same approvals as the specification, via
+[OpenTelemetry Specification Sponsors](https://github.com/open-telemetry/community/blob/main/community-members.md#specifications-and-proto).
+It now has a dedicated approver role that is independent of the OpenTelemetry
+specification.

@@ -25,7 +25,11 @@ enum class EHostHealth
     Sufferer,
     TemporaryOffline,
     Offline,
+    Broken,   // changes strictly outside of Oracle
 };
+
+// Indexed by EOperation.
+using TLatencyByOperation = std::array<TLatencyStats, OperationCount>;
 
 struct TOracleHostStat
 {
@@ -34,6 +38,7 @@ struct TOracleHostStat
         const THostState& state,
         EHostHealth health,
         const THostStat& hostStat,
+        TLatencyByOperation latencyByOperation,
         TInstant now);
 
     THostIndex Index;
@@ -42,6 +47,7 @@ struct TOracleHostStat
     TInflightByOperation InflightByOperation;
     THostStat::TErrorsInfo Errors;
     ui64 PBufferUsedSize;
+    TLatencyByOperation LatencyByOperation;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -71,6 +77,8 @@ public:
 
     virtual void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) = 0;
     virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
+    virtual void OnDDiskBroken(THostIndex hostIndex) = 0;
+
     virtual TDuration GetHostReconnectDelay(THostIndex hostIndex) = 0;
 
     // Picks the best host (by lowest inflight count) out of the provided set
@@ -137,6 +145,8 @@ public:
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
     [[nodiscard]] TDuration GetHostReconnectDelay(
         THostIndex hostIndex) override;
+    // Device is permanently broken, so force the host offline.
+    void OnDDiskBroken(THostIndex hostIndex) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
@@ -167,7 +177,11 @@ public:
     // If necessary, adds hosts to make the hostIndex valid.
     void AddHostIfNeeded(THostIndex hostIndex);
 
+    // Check if it's valid to QueryAddHost from HostStateController and do it.
+    void MaybeQueryAddHost();
+
     [[nodiscard]] TVector<TOracleHostStat> BuildHostStats(TInstant now) const;
+    [[nodiscard]] size_t GetLatencyHistoryCapacity() const;
 
 private:
     [[nodiscard]] TTimePredictor& AccessTimePredictor(EOperation operation);

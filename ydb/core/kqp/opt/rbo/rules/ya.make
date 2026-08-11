@@ -19,6 +19,7 @@ SRCS(
     inline_generic_in_exists_subplan.cpp
     kqp_cbo_trees.cpp
     peephole_predicate.cpp
+    merge_union_all.cpp
     map/prune_dead_outputs.cpp
     map/push_map_elements_into_map.cpp
     map/push_map_elements_through_aggregate.cpp
@@ -39,6 +40,7 @@ SRCS(
     propagate_hash_func_stage.cpp
     propagate_topsort_through_stage.cpp
     propagate_limit_through_stage.cpp
+    rewrite_join_to_index_lookup_join.cpp
     rewrite_right_join.cpp
     traces/kqp_cbo_trace.cpp
 )

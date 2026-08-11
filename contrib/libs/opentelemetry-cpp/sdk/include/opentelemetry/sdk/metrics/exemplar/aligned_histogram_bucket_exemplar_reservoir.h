@@ -75,11 +75,13 @@ public:
       return static_cast<int>(max_size);
     }
 
-  private:
+  public:
     void reset() override
     {
       // Do nothing
     }
+
+  private:
     std::vector<double> boundaries_;
   };
 };

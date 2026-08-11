@@ -369,6 +369,7 @@ public:
     bool EnableSystemColumns = true;
     bool DqEngineEnable = false;
     bool DqEngineForce = false;
+    bool EvaluateExprCache = false;
     TString CostBasedOptimizer;
     TMaybe<ui32> CostBasedOptimizerVersion;
     TMaybe<bool> JsonQueryReturnsJsonDocument;

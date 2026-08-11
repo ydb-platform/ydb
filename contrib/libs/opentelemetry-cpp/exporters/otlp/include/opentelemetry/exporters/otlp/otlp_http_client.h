@@ -17,19 +17,21 @@
 #include "opentelemetry/exporters/otlp/otlp_environment.h"
 #include "opentelemetry/exporters/otlp/otlp_http.h"
 #include "opentelemetry/ext/http/client/http_client.h"
+#include "opentelemetry/ext/http/client/http_client_factory.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/nostd/variant.h"
 #include "opentelemetry/sdk/common/exporter_utils.h"
 #include "opentelemetry/sdk/common/thread_instrumentation.h"
 #include "opentelemetry/version.h"
 
-// forward declare google::protobuf::Message
+// forward declare google::protobuf::Message and google::protobuf::Arena
 namespace google
 {
 namespace protobuf
 {
+class Arena;
 class Message;
-}
+}  // namespace protobuf
 }  // namespace google
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -155,8 +157,17 @@ class OtlpHttpClient
 public:
   /**
    * Create an OtlpHttpClient using the given options.
+   * Uses the default HTTP client factory (curl when available).
    */
   explicit OtlpHttpClient(OtlpHttpClientOptions &&options);
+
+  /**
+   * Create an OtlpHttpClient using the given options and HTTP client factory.
+   * @param options the Otlp http client options to be used for exporting
+   * @param factory the HTTP client factory used to create the underlying HTTP client
+   */
+  OtlpHttpClient(OtlpHttpClientOptions &&options,
+                 const std::shared_ptr<ext::http::client::HttpClientFactory> &factory);
 
   /**
    * Create an OtlpHttpClient using the specified http client.
@@ -173,35 +184,23 @@ public:
   OtlpHttpClient &operator=(OtlpHttpClient &&)      = delete;
 
   /**
-   * Sync export
+   * Export message with typed response. Synchronous when max_running_requests is 0,
+   * asynchronous otherwise.
    * @param message message to export, it should be ExportTraceServiceRequest,
    * ExportMetricsServiceRequest or ExportLogsServiceRequest
-   * @return return the status of this operation
-   */
-  sdk::common::ExportResult Export(const google::protobuf::Message &message) noexcept;
-
-  /**
-   * Async export
-   * @param message message to export, it should be ExportTraceServiceRequest,
-   * ExportMetricsServiceRequest or ExportLogsServiceRequest
-   * @param result_callback callback to call when the exporting is done
-   * @return return the status of this operation
-   */
-  sdk::common::ExportResult Export(
-      const google::protobuf::Message &message,
-      std::function<bool(opentelemetry::sdk::common::ExportResult)> &&result_callback) noexcept;
-
-  /**
-   * Async export
-   * @param message message to export, it should be ExportTraceServiceRequest,
-   * ExportMetricsServiceRequest or ExportLogsServiceRequest
+   * @param arena protobuf arena that owns response
+   * @param response the parsed body is written here on 2xx
    * @param result_callback callback to call when the exporting is done
    * @param max_running_requests wait for at most max_running_requests running requests
-   * @return return the status of this operation
+   * @return the export result; kSuccess for asynchronous exports (final result via
+   * result_callback)
    */
   sdk::common::ExportResult Export(
       const google::protobuf::Message &message,
-      std::function<bool(opentelemetry::sdk::common::ExportResult)> &&result_callback,
+      std::unique_ptr<google::protobuf::Arena> &&arena,
+      google::protobuf::Message *response,
+      std::function<bool(opentelemetry::sdk::common::ExportResult, google::protobuf::Message *)>
+          &&result_callback,
       std::size_t max_running_requests) noexcept;
 
   /**
@@ -242,23 +241,36 @@ private:
     std::shared_ptr<opentelemetry::ext::http::client::Session> session;
     std::shared_ptr<opentelemetry::ext::http::client::EventHandler> event_handle;
 
-    HttpSessionData() = default;
+    std::unique_ptr<google::protobuf::Arena> arena;
+    google::protobuf::Message *response = nullptr;
 
-    explicit HttpSessionData(
-        std::shared_ptr<opentelemetry::ext::http::client::Session> &&input_session,
-        std::shared_ptr<opentelemetry::ext::http::client::EventHandler> &&input_handle)
-        : session(std::move(input_session)), event_handle(std::move(input_handle))
-    {}
+    HttpSessionData() noexcept;
+    HttpSessionData(std::shared_ptr<opentelemetry::ext::http::client::Session> &&input_session,
+                    std::shared_ptr<opentelemetry::ext::http::client::EventHandler> &&input_handle,
+                    std::unique_ptr<google::protobuf::Arena> &&input_arena,
+                    google::protobuf::Message *input_response) noexcept;
+
+    ~HttpSessionData();
+    HttpSessionData(HttpSessionData &&) noexcept;
+    HttpSessionData &operator=(HttpSessionData &&) noexcept;
+    HttpSessionData(const HttpSessionData &)            = delete;
+    HttpSessionData &operator=(const HttpSessionData &) = delete;
   };
 
   /**
-   * @brief Create a Session object or return a error result
+   * @brief Create a Session object that deserializes the response body or return an error result.
    *
    * @param message The message to send
+   * @param arena Protobuf arena that owns response
+   * @param response the parsed body is written here on 2xx
+   * @param result_callback Callback for the export result; receives the populated response
    */
   nostd::variant<sdk::common::ExportResult, HttpSessionData> createSession(
       const google::protobuf::Message &message,
-      std::function<bool(opentelemetry::sdk::common::ExportResult)> &&result_callback) noexcept;
+      std::unique_ptr<google::protobuf::Arena> &&arena,
+      google::protobuf::Message *response,
+      std::function<bool(opentelemetry::sdk::common::ExportResult, google::protobuf::Message *)>
+          &&result_callback) noexcept;
 
   /**
    * Add http session and hold it's lifetime.

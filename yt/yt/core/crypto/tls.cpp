@@ -37,7 +37,7 @@ using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Tls");
+static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Tls");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -310,7 +310,7 @@ public:
 
     void StartClient(bool insecureSkipVerify)
     {
-        YT_LOG_WARNING_IF(insecureSkipVerify, "Started insecure TLS client connection");
+        YT_TLOG_WARNING_IF(insecureSkipVerify, "Started insecure TLS client connection");
         if (!insecureSkipVerify) {
             // Require and verify server certificate.
             SSL_set_verify(Ssl_.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nullptr);
@@ -628,7 +628,8 @@ private:
                     MaybeStartUnderlyingIO(true);
                 } else {
                     Error_ = GetLastSslError("SSL_do_handshake failed");
-                    YT_LOG_DEBUG(Error_, "TLS handshake failed");
+                    YT_TLOG_DEBUG("TLS handshake failed")
+                        .With(Error_);
                     CheckError();
                     return;
                 }
@@ -646,7 +647,8 @@ private:
 
                 if (count < 0) {
                     Error_ = GetLastSslError("SSL_write failed");
-                    YT_LOG_DEBUG(Error_, "TLS write failed");
+                    YT_TLOG_DEBUG("TLS write failed")
+                        .With(Error_);
                     CheckError();
                     return;
                 }
@@ -677,7 +679,8 @@ private:
                     MaybeStartUnderlyingIO(true);
                 } else {
                     Error_ = GetLastSslError("SSL_read failed");
-                    YT_LOG_DEBUG(Error_, "TLS read failed");
+                    YT_TLOG_DEBUG("TLS read failed")
+                        .With(Error_);
                     CheckError();
                     return;
                 }

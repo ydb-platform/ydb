@@ -1,6 +1,6 @@
-# Concepts for DevOps engineers
+# Concepts for Cluster Administration
 
-This section supplements the general section [{#T}](../../concepts/index.md) with theoretical materials that are primarily relevant for DevOps engineers.
+This section supplements the general section [{#T}](../../concepts/index.md) with theoretical materials that are primarily relevant for cluster administration.
 
 Main topics:
 

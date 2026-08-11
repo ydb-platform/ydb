@@ -78,8 +78,6 @@ def test_remove_storage_group(ydb_cluster, ydb_root, ydb_safe_test_name, ydb_cli
         storage_units_to_remove={'hdd': 2},
     )
 
-    ydb_cluster.restart_slots()
-
     def get_storage_units():
         status = ydb_cluster.get_database_status(database)
         units = sum([unit.count for unit in status.allocated_resources.storage_units])
@@ -95,5 +93,13 @@ def test_remove_storage_group(ydb_cluster, ydb_root, ydb_safe_test_name, ydb_cli
     status = ydb_cluster.get_database_status(database)
     assert_that(status.state, equal_to(cms_pb.GetDatabaseStatusResult.RUNNING))
 
-    ydb_cluster.unregister_and_stop_slots(database_nodes)
+    # Check data integrity
+    with ydb.QuerySessionPool(driver, size=1) as pool:
+        result_sets = pool.execute_with_retries("SELECT * FROM " + table_name)
+        assert len(result_sets) == 1
+        assert len(result_sets[0].rows) == 1
+        assert result_sets[0].rows[0].key == 1
+        assert result_sets[0].rows[0].value == b"value1"
+
     ydb_cluster.remove_database(database)
+    ydb_cluster.unregister_and_stop_slots(database_nodes)

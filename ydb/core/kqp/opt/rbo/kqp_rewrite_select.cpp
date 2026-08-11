@@ -999,21 +999,22 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
         return node;
     }
 
-    while (auto currentSize = sublinks.size()) {
-        auto& sublink = sublinks[currentSize-1];
+    while (!sublinks.empty()) {
+        auto& sublink = sublinks.back();
 
         TNodeOnNodeOwnedMap nodeReplacementMap;
         TExprNode::TPtr newNode;
 
         auto newSubquery = RewriteSelect(sublink->ChildPtr(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated, false);
+        auto sublinkType = sublink->Child(0)->Content();
 
-        if (sublink->Child(0)->Content() == "expr") {
+        if (sublinkType == "expr") {
             // clang-format off
             newNode = Build<TKqpExprSublink>(ctx, node->Pos())
                 .Subquery(newSubquery)
                 .Done().Ptr();
             // clang-format on
-        } else if (sublink->Child(0)->Content() == "any") {
+        } else if (sublinkType == "any") {
             // clang-format off
             newNode = Build<TKqpInSublink>(ctx, node->Pos())
                 .Subquery(newSubquery)
@@ -1021,7 +1022,7 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
                 .InLambda(sublink->Child(3))
                 .Done().Ptr();
             // clang-format on
-        } else if (sublink->Child(0)->Content() == "exists") {
+        } else if (sublinkType == "exists") {
             // clang-format off
             newNode = Build<TKqpExistsSublink>(ctx, node->Pos())
                 .Subquery(newSubquery)
@@ -1036,7 +1037,6 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
         node = ctx.ReplaceNodes(std::move(node), nodeReplacementMap);
         sublinks = FindSublinks(node);
     }
-
     return node;
 }
 

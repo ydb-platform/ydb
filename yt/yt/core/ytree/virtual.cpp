@@ -82,8 +82,9 @@ void ExecuteBatchRead(
         }
 
         // NB: Must wait for all futures to become set to ensure all lambdas above have finished accessing the state.
-        auto results = WaitForWithStrategy(AllSet(std::move(batchFutures)), offloadParams->WaitForStrategy)
-            .ValueOrThrow();
+        auto resultsFuture = AllSet(std::move(batchFutures));
+        WaitUntilSet(resultsFuture.AsVoid(), {.Strategy = offloadParams->WaitForStrategy});
+        auto results = resultsFuture.GetOrCrash().ValueOrThrow();
         for (const auto& result : results) {
             result.ThrowOnError();
         }

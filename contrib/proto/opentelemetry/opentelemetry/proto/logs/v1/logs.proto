@@ -85,7 +85,6 @@ message ScopeLogs {
 
 // Possible values for LogRecord.SeverityNumber.
 enum SeverityNumber {
-  // UNSPECIFIED is the default SeverityNumber, it MUST NOT be used.
   SEVERITY_NUMBER_UNSPECIFIED = 0;
   SEVERITY_NUMBER_TRACE  = 1;
   SEVERITY_NUMBER_TRACE2 = 2;

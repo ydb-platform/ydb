@@ -398,6 +398,18 @@ struct THash<NKikimr::NMiniKQL::TInternName> {
 
 namespace NKikimr::NMiniKQL {
 
+struct THasherTType {
+    inline size_t operator()(const TTypeBase* t) const noexcept {
+        return t->CalcHash();
+    }
+};
+
+struct TEqualTType {
+    inline bool operator()(const TTypeBase* lhs, const TTypeBase* rhs) const noexcept {
+        return lhs->IsSameType(*rhs);
+    }
+};
+
 class TTypeEnvironment: private TNonCopyable {
 public:
     explicit TTypeEnvironment(TScopedAlloc& alloc);
@@ -414,6 +426,7 @@ public:
     }
 
     TInternName InternName(const TStringBuf& name) const;
+    TType* InternType(TType* type) const;
 
     TTypeType* GetTypeOfTypeLazy() const;
     TVoidType* GetTypeOfVoidLazy() const;
@@ -467,6 +480,7 @@ private:
     mutable TPagedArena Arena_;
     mutable std::stack<NUdf::TStringValue> Strings_;
     mutable THashSet<TStringBuf> NamesPool_;
+    mutable THashSet<TType*, THasherTType, TEqualTType> TypesPool_;
     mutable std::vector<TNode*> Stack_;
 
     mutable TTypeType* TypeOfType_ = nullptr;
@@ -1685,17 +1699,5 @@ template <TType::EKind SingularKind>
 void TSingular<SingularKind>::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
-
-struct THasherTType {
-    inline size_t operator()(const TTypeBase& t) const noexcept {
-        return t.CalcHash();
-    }
-};
-
-struct TEqualTType {
-    inline bool operator()(const TTypeBase& lhs, const TTypeBase& rhs) const noexcept {
-        return lhs.IsSameType(rhs);
-    }
-};
 
 } // namespace NKikimr::NMiniKQL

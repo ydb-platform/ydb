@@ -341,6 +341,10 @@ void TColumnShard::UpdateIndexCounters() {
     const std::shared_ptr<const TTabletCountersHandle>& counters = Counters.GetTabletCounters();
     counters->SetCounter(COUNTER_INDEX_TABLES, Counters.GetPortionIndexCounters()->GetTablesCount());
 
+    auto diskUsedStats = Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TDiskUsedPortions());
+    counters->SetCounter(COUNTER_DATA_BYTES, diskUsedStats.GetDataBlobBytes());
+    counters->SetCounter(COUNTER_INDEX_BYTES, diskUsedStats.GetIndexBlobBytes());
+
     auto insertedStats =
         Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TPortionsByType<NOlap::NPortion::EProduced::INSERTED>());
     counters->SetCounter(COUNTER_INSERTED_PORTIONS, insertedStats.GetCount());

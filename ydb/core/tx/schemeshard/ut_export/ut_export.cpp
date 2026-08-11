@@ -1606,6 +1606,44 @@ partitioning_settings {
 )");
     }
 
+    Y_UNIT_TEST(ShouldRejectExportOfTableWithGeneratedColumn) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+
+        const TVector<TString> tables = { R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a"   Type: "Int32"  }
+            Columns { Name: "b"   Type: "Int32"  }
+            Columns {
+              Name: "sum"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + b"
+                Stored: true
+                DependencyColumnNames: ["a", "b"]
+                Context: ""
+              }
+            }
+            KeyColumnNames: ["key"]
+        )" };
+
+        Run(Runtime(), Env(), tables,
+            Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )",
+                S3Port()),
+            Ydb::StatusIds::CANCELLED);
+    }
+
     Y_UNIT_TEST(ShouldPreserveIncrBackupFlag) {
         const TTablesWithAttrs tables{
             {

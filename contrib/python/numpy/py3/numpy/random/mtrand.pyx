@@ -1,5 +1,5 @@
 #!python
-#cython: wraparound=False, nonecheck=False, boundscheck=False, cdivision=True, language_level=3, binding=False
+#cython: wraparound=False, nonecheck=False, boundscheck=False, cdivision=True, language_level=3, binding=True
 import operator
 import warnings
 from collections.abc import Sequence
@@ -21,6 +21,7 @@ from numpy.random cimport bitgen_t
 from ._common cimport (POISSON_LAM_MAX, CONS_POSITIVE, CONS_NONE,
             CONS_NON_NEGATIVE, CONS_BOUNDED_0_1, CONS_BOUNDED_GT_0_1,
             CONS_BOUNDED_LT_0_1, CONS_GTE_1, CONS_GT_1, LEGACY_CONS_POISSON,
+            LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG,
             double_fill, cont, kahan_sum, cont_broadcast_3,
             check_array_constraint, check_constraint, disc, discrete_broadcast_iii,
             validate_output_shape
@@ -204,10 +205,13 @@ cdef class RandomState:
         self.set_state(state)
 
     def __reduce__(self):
-        ctor, name_tpl, _ = self._bit_generator.__reduce__()
-
         from ._pickle import __randomstate_ctor
-        return __randomstate_ctor, (name_tpl[0], ctor), self.get_state(legacy=False)
+        # The third argument containing the state is required here since
+        # RandomState contains state information in addition to the state
+        # contained in the bit generator that described the gaussian
+        # generator. This argument is passed to __setstate__ after the
+        # Generator is created.
+        return __randomstate_ctor, (self._bit_generator, ), self.get_state(legacy=False)
 
     cdef _initialize_bit_generator(self, bit_generator):
         self._bit_generator = bit_generator
@@ -623,8 +627,13 @@ cdef class RandomState:
         tomaxint(size=None)
 
         Return a sample of uniformly distributed random integers in the interval
-        [0, ``np.iinfo(np.int_).max``]. The `np.int_` type translates to the C long
-        integer type and its precision is platform dependent.
+        [0, ``np.iinfo("long").max``].
+
+        .. warning::
+           This function uses the C-long dtype, which is 32bit on windows
+           and otherwise 64bit on 64bit platforms (and 32bit on 32bit ones).
+           Since NumPy 2.0, NumPy's default integer is 32bit on 32bit platforms
+           and 64bit on 64bit platforms.
 
         Parameters
         ----------
@@ -707,9 +716,16 @@ cdef class RandomState:
             single value is returned.
         dtype : dtype, optional
             Desired dtype of the result. Byteorder must be native.
-            The default value is int.
+            The default value is long.
 
             .. versionadded:: 1.11.0
+
+            .. warning::
+              This function defaults to the C-long dtype, which is 32bit on windows
+              and otherwise 64bit on 64bit platforms (and 32bit on 32bit ones).
+              Since NumPy 2.0, NumPy's default integer is 32bit on 32bit platforms
+              and 64bit on 64bit platforms.  Which corresponds to `np.intp`.
+              (`dtype=int` is not the same as in most NumPy functions.)
 
         Returns
         -------
@@ -758,7 +774,7 @@ cdef class RandomState:
             high = low
             low = 0
 
-        _dtype = np.dtype(dtype)
+        _dtype = np.dtype(dtype) if dtype is not int else np.dtype("long")
 
         if not _dtype.isnative:
             # numpy 1.17.0, 2019-05-28
@@ -792,12 +808,12 @@ cdef class RandomState:
             ret = _rand_uint16(low, high, size, _masked, _endpoint, &self._bitgen, self.lock)
         elif _dtype == np.uint8:
             ret = _rand_uint8(low, high, size, _masked, _endpoint, &self._bitgen, self.lock)
-        elif _dtype == np.bool_:
+        elif _dtype == np.bool:
             ret = _rand_bool(low, high, size, _masked, _endpoint, &self._bitgen, self.lock)
         else:
             raise TypeError('Unsupported dtype %r for randint' % _dtype)
 
-        if size is None and dtype in (bool, int):
+        if size is None and (dtype is bool or dtype is int):
             if np.array(ret).shape == ():
                 return dtype(ret)
         return ret
@@ -851,6 +867,13 @@ cdef class RandomState:
             New code should use the `~numpy.random.Generator.choice`
             method of a `~numpy.random.Generator` instance instead;
             please see the :ref:`random-quick-start`.
+
+        .. warning::
+            This function uses the C-long dtype, which is 32bit on windows
+            and otherwise 64bit on 64bit platforms (and 32bit on 32bit ones).
+            Since NumPy 2.0, NumPy's default integer is 32bit on 32bit platforms
+            and 64bit on 64bit platforms.
+
 
         Parameters
         ----------
@@ -934,7 +957,7 @@ cdef class RandomState:
         """
 
         # Format and Verify input
-        a = np.array(a, copy=False)
+        a = np.asarray(a)
         if a.ndim == 0:
             try:
                 # __index__ must return an integer by python rules.
@@ -993,7 +1016,7 @@ cdef class RandomState:
                 idx = cdf.searchsorted(uniform_samples, side='right')
                 # searchsorted returns a scalar
                 # force cast to int for LLP64
-                idx = np.array(idx, copy=False).astype(int, casting='unsafe')
+                idx = np.asarray(idx).astype(np.long, casting='unsafe')
             else:
                 idx = self.randint(0, pop_size, size=shape)
         else:
@@ -1008,7 +1031,7 @@ cdef class RandomState:
                     raise ValueError("Fewer non-zero entries in p than size")
                 n_uniq = 0
                 p = p.copy()
-                found = np.zeros(shape, dtype=int)
+                found = np.zeros(shape, dtype=np.long)
                 flat_found = found.ravel()
                 while n_uniq < size:
                     x = self.rand(size - n_uniq)
@@ -1290,11 +1313,11 @@ cdef class RandomState:
         """
         random_integers(low, high=None, size=None)
 
-        Random integers of type `np.int_` between `low` and `high`, inclusive.
+        Random integers of type `numpy.int_` between `low` and `high`, inclusive.
 
-        Return random integers of type `np.int_` from the "discrete uniform"
+        Return random integers of type `numpy.int_` from the "discrete uniform"
         distribution in the closed interval [`low`, `high`].  If `high` is
-        None (the default), then results are from [1, `low`]. The `np.int_`
+        None (the default), then results are from [1, `low`]. The `numpy.int_`
         type translates to the C long integer type and its precision
         is platform dependent.
 
@@ -1613,7 +1636,7 @@ cdef class RandomState:
         ----------
         .. [1] Weisstein, Eric W. "Gamma Distribution." From MathWorld--A
                Wolfram Web Resource.
-               http://mathworld.wolfram.com/GammaDistribution.html
+               https://mathworld.wolfram.com/GammaDistribution.html
         .. [2] Wikipedia, "Gamma distribution",
                https://en.wikipedia.org/wiki/Gamma_distribution
 
@@ -1698,7 +1721,7 @@ cdef class RandomState:
         ----------
         .. [1] Weisstein, Eric W. "Gamma Distribution." From MathWorld--A
                Wolfram Web Resource.
-               http://mathworld.wolfram.com/GammaDistribution.html
+               https://mathworld.wolfram.com/GammaDistribution.html
         .. [2] Wikipedia, "Gamma distribution",
                https://en.wikipedia.org/wiki/Gamma_distribution
 
@@ -1877,7 +1900,7 @@ cdef class RandomState:
         ----------
         .. [1] Weisstein, Eric W. "Noncentral F-Distribution."
                From MathWorld--A Wolfram Web Resource.
-               http://mathworld.wolfram.com/NoncentralF-Distribution.html
+               https://mathworld.wolfram.com/NoncentralF-Distribution.html
         .. [2] Wikipedia, "Noncentral F-distribution",
                https://en.wikipedia.org/wiki/Noncentral_F-distribution
 
@@ -2129,7 +2152,7 @@ cdef class RandomState:
               https://www.itl.nist.gov/div898/handbook/eda/section3/eda3663.htm
         .. [2] Weisstein, Eric W. "Cauchy Distribution." From MathWorld--A
               Wolfram Web Resource.
-              http://mathworld.wolfram.com/CauchyDistribution.html
+              https://mathworld.wolfram.com/CauchyDistribution.html
         .. [3] Wikipedia, "Cauchy distribution"
               https://en.wikipedia.org/wiki/Cauchy_distribution
 
@@ -2729,7 +2752,7 @@ cdef class RandomState:
                Generalizations, " Birkhauser, 2001.
         .. [3] Weisstein, Eric W. "Laplace Distribution."
                From MathWorld--A Wolfram Web Resource.
-               http://mathworld.wolfram.com/LaplaceDistribution.html
+               https://mathworld.wolfram.com/LaplaceDistribution.html
         .. [4] Wikipedia, "Laplace distribution",
                https://en.wikipedia.org/wiki/Laplace_distribution
 
@@ -2944,7 +2967,7 @@ cdef class RandomState:
                Fields," Birkhauser Verlag, Basel, pp 132-133.
         .. [2] Weisstein, Eric W. "Logistic Distribution." From
                MathWorld--A Wolfram Web Resource.
-               http://mathworld.wolfram.com/LogisticDistribution.html
+               https://mathworld.wolfram.com/LogisticDistribution.html
         .. [3] Wikipedia, "Logistic-distribution",
                https://en.wikipedia.org/wiki/Logistic_distribution
 
@@ -3418,7 +3441,7 @@ cdef class RandomState:
                and Quigley, 1972.
         .. [4] Weisstein, Eric W. "Binomial Distribution." From MathWorld--A
                Wolfram Web Resource.
-               http://mathworld.wolfram.com/BinomialDistribution.html
+               https://mathworld.wolfram.com/BinomialDistribution.html
         .. [5] Wikipedia, "Binomial distribution",
                https://en.wikipedia.org/wiki/Binomial_distribution
 
@@ -3444,7 +3467,7 @@ cdef class RandomState:
 
         # Uses a custom implementation since self._binomial is required
         cdef double _dp = 0
-        cdef long _in = 0
+        cdef np.npy_intp _in = 0
         cdef bint is_scalar = True
         cdef np.npy_intp i, cnt
         cdef np.ndarray randoms
@@ -3453,17 +3476,17 @@ cdef class RandomState:
 
         p_arr = <np.ndarray>np.PyArray_FROM_OTF(p, np.NPY_DOUBLE, np.NPY_ALIGNED)
         is_scalar = is_scalar and np.PyArray_NDIM(p_arr) == 0
-        n_arr = <np.ndarray>np.PyArray_FROM_OTF(n, np.NPY_LONG, np.NPY_ALIGNED)
+        n_arr = <np.ndarray>np.PyArray_FROM_OTF(n, np.NPY_INTP, np.NPY_ALIGNED)
         is_scalar = is_scalar and np.PyArray_NDIM(n_arr) == 0
 
         if not is_scalar:
             check_array_constraint(p_arr, 'p', CONS_BOUNDED_0_1)
-            check_array_constraint(n_arr, 'n', CONS_NON_NEGATIVE)
+            check_array_constraint(n_arr, 'n', LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG)
             if size is not None:
-                randoms = <np.ndarray>np.empty(size, int)
+                randoms = <np.ndarray>np.empty(size, np.long)
             else:
                 it = np.PyArray_MultiIterNew2(p_arr, n_arr)
-                randoms = <np.ndarray>np.empty(it.shape, int)
+                randoms = <np.ndarray>np.empty(it.shape, np.long)
 
             cnt = np.PyArray_SIZE(randoms)
 
@@ -3472,7 +3495,7 @@ cdef class RandomState:
             with self.lock, nogil:
                 for i in range(cnt):
                     _dp = (<double*>np.PyArray_MultiIter_DATA(it, 1))[0]
-                    _in = (<long*>np.PyArray_MultiIter_DATA(it, 2))[0]
+                    _in = (<np.npy_intp*>np.PyArray_MultiIter_DATA(it, 2))[0]
                     (<long*>np.PyArray_MultiIter_DATA(it, 0))[0] = \
                         legacy_random_binomial(&self._bitgen, _dp, _in,
                                                &self._binomial)
@@ -3482,16 +3505,16 @@ cdef class RandomState:
             return randoms
 
         _dp = PyFloat_AsDouble(p)
-        _in = <long>n
+        _in = n
         check_constraint(_dp, 'p', CONS_BOUNDED_0_1)
-        check_constraint(<double>_in, 'n', CONS_NON_NEGATIVE)
+        check_constraint(<double>_in, 'n', LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG)
 
         if size is None:
             with self.lock:
                 return <long>legacy_random_binomial(&self._bitgen, _dp, _in,
                                                     &self._binomial)
 
-        randoms = <np.ndarray>np.empty(size, int)
+        randoms = <np.ndarray>np.empty(size, np.long)
         cnt = np.PyArray_SIZE(randoms)
         randoms_data = <long *>np.PyArray_DATA(randoms)
 
@@ -3537,6 +3560,12 @@ cdef class RandomState:
             where each sample is equal to N, the number of failures that
             occurred before a total of n successes was reached.
 
+        .. warning::
+           This function returns the C-long dtype, which is 32bit on windows
+           and otherwise 64bit on 64bit platforms (and 32bit on 32bit ones).
+           Since NumPy 2.0, NumPy's default integer is 32bit on 32bit platforms
+           and 64bit on 64bit platforms.
+
         See Also
         --------
         random.Generator.negative_binomial: which should be used for new code.
@@ -3563,7 +3592,7 @@ cdef class RandomState:
         ----------
         .. [1] Weisstein, Eric W. "Negative Binomial Distribution." From
                MathWorld--A Wolfram Web Resource.
-               http://mathworld.wolfram.com/NegativeBinomialDistribution.html
+               https://mathworld.wolfram.com/NegativeBinomialDistribution.html
         .. [2] Wikipedia, "Negative binomial distribution",
                https://en.wikipedia.org/wiki/Negative_binomial_distribution
 
@@ -3644,7 +3673,7 @@ cdef class RandomState:
         ----------
         .. [1] Weisstein, Eric W. "Poisson Distribution."
                From MathWorld--A Wolfram Web Resource.
-               http://mathworld.wolfram.com/PoissonDistribution.html
+               https://mathworld.wolfram.com/PoissonDistribution.html
         .. [2] Wikipedia, "Poisson distribution",
                https://en.wikipedia.org/wiki/Poisson_distribution
 
@@ -3905,7 +3934,7 @@ cdef class RandomState:
                and Quigley, 1972.
         .. [2] Weisstein, Eric W. "Hypergeometric Distribution." From
                MathWorld--A Wolfram Web Resource.
-               http://mathworld.wolfram.com/HypergeometricDistribution.html
+               https://mathworld.wolfram.com/HypergeometricDistribution.html
         .. [3] Wikipedia, "Hypergeometric distribution",
                https://en.wikipedia.org/wiki/Hypergeometric_distribution
 
@@ -3933,13 +3962,12 @@ cdef class RandomState:
         cdef np.ndarray ongood, onbad, onsample
         cdef int64_t lngood, lnbad, lnsample
 
-        # This cast to long is required to ensure that the values are inbounds
-        ongood = <np.ndarray>np.PyArray_FROM_OTF(ngood, np.NPY_LONG, np.NPY_ALIGNED)
-        onbad = <np.ndarray>np.PyArray_FROM_OTF(nbad, np.NPY_LONG, np.NPY_ALIGNED)
-        onsample = <np.ndarray>np.PyArray_FROM_OTF(nsample, np.NPY_LONG, np.NPY_ALIGNED)
+        # This legacy function supports "long" values only (checked below).
+        ongood = <np.ndarray>np.PyArray_FROM_OTF(ngood, np.NPY_INT64, np.NPY_ALIGNED)
+        onbad = <np.ndarray>np.PyArray_FROM_OTF(nbad, np.NPY_INT64, np.NPY_ALIGNED)
+        onsample = <np.ndarray>np.PyArray_FROM_OTF(nsample, np.NPY_INT64, np.NPY_ALIGNED)
 
         if np.PyArray_NDIM(ongood) == np.PyArray_NDIM(onbad) == np.PyArray_NDIM(onsample) == 0:
-
             lngood = <int64_t>ngood
             lnbad = <int64_t>nbad
             lnsample = <int64_t>nsample
@@ -3947,7 +3975,7 @@ cdef class RandomState:
             if lngood + lnbad < lnsample:
                 raise ValueError("ngood + nbad < nsample")
             out = disc(&legacy_random_hypergeometric, &self._bitgen, size, self.lock, 0, 3,
-                       lngood, 'ngood', CONS_NON_NEGATIVE,
+                       lngood, 'ngood', LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG,
                        lnbad, 'nbad', CONS_NON_NEGATIVE,
                        lnsample, 'nsample', CONS_GTE_1)
             # Match historical output type
@@ -3955,12 +3983,9 @@ cdef class RandomState:
 
         if np.any(np.less(np.add(ongood, onbad), onsample)):
             raise ValueError("ngood + nbad < nsample")
-        # Convert to int64, if necessary, to use int64 infrastructure
-        ongood = ongood.astype(np.int64)
-        onbad = onbad.astype(np.int64)
-        onsample = onsample.astype(np.int64)
+
         out = discrete_broadcast_iii(&legacy_random_hypergeometric,&self._bitgen, size, self.lock,
-                                     ongood, 'ngood', CONS_NON_NEGATIVE,
+                                     ongood, 'ngood', LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG,
                                      onbad, 'nbad', CONS_NON_NEGATIVE,
                                      onsample, 'nsample', CONS_GTE_1)
         # Match historical output type
@@ -4123,9 +4148,9 @@ cdef class RandomState:
         Instead of specifying the full covariance matrix, popular
         approximations include:
 
-          - Spherical covariance (`cov` is a multiple of the identity matrix)
-          - Diagonal covariance (`cov` has non-negative elements, and only on
-            the diagonal)
+        - Spherical covariance (`cov` is a multiple of the identity matrix)
+        - Diagonal covariance (`cov` has non-negative elements, and only on
+          the diagonal)
 
         This geometrical property can be seen in two dimensions by plotting
         generated data-points:
@@ -4273,6 +4298,13 @@ cdef class RandomState:
             method of a `~numpy.random.Generator` instance instead;
             please see the :ref:`random-quick-start`.
 
+        .. warning::
+          This function defaults to the C-long dtype, which is 32bit on windows
+          and otherwise 64bit on 64bit platforms (and 32bit on 32bit ones).
+          Since NumPy 2.0, NumPy's default integer is 32bit on 32bit platforms
+          and 64bit on 64bit platforms.
+
+
         Parameters
         ----------
         n : int
@@ -4375,7 +4407,7 @@ cdef class RandomState:
                 shape = (operator.index(size), d)
             except:
                 shape = tuple(size) + (d,)
-        multin = np.zeros(shape, dtype=int)
+        multin = np.zeros(shape, dtype=np.long)
         mnarr = <np.ndarray>multin
         mnix = <long*>np.PyArray_DATA(mnarr)
         sz = np.PyArray_SIZE(mnarr)
@@ -4456,7 +4488,7 @@ cdef class RandomState:
         ----------
         .. [1] David McKay, "Information Theory, Inference and Learning
                Algorithms," chapter 23,
-               http://www.inference.org.uk/mackay/itila/
+               https://www.inference.org.uk/mackay/itila/
         .. [2] Wikipedia, "Dirichlet distribution",
                https://en.wikipedia.org/wiki/Dirichlet_distribution
 
@@ -4713,7 +4745,8 @@ cdef class RandomState:
         """
 
         if isinstance(x, (int, np.integer)):
-            arr = np.arange(x)
+            # keep using long as the default here (main numpy switched to intp)
+            arr = np.arange(x, dtype=np.result_type(x, np.long))
             self.shuffle(arr)
             return arr
 

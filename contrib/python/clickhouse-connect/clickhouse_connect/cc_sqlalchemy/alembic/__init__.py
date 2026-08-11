@@ -1,9 +1,14 @@
+from clickhouse_connect.cc_sqlalchemy.alembic import operations  # noqa: F401
 from clickhouse_connect.cc_sqlalchemy.alembic.adapter import (
     clickhouse_writer,
     include_object,
     patch_alembic_version,
 )
 from clickhouse_connect.cc_sqlalchemy.alembic.impl import ClickHouseImpl
+from clickhouse_connect.cc_sqlalchemy.alembic.operations import (
+    ClickHouseIndex,
+    ClickHouseProjection,
+)
 from clickhouse_connect.cc_sqlalchemy.alembic.utils import (
     make_include_name,
     make_include_object,
@@ -18,4 +23,6 @@ __all__ = [
     "make_include_name",
     "make_include_object",
     "prevent_empty_migrations",
+    "ClickHouseIndex",
+    "ClickHouseProjection",
 ]

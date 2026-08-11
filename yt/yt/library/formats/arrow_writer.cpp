@@ -898,7 +898,9 @@ void SerializeDateColumn(
                 },
                 [&] (auto value) {
                     if (value > std::numeric_limits<i32>::max()) {
-                        THROW_ERROR_EXCEPTION("Date value cannot be represented in arrow (Value: %v, MaxAllowedValue: %v)", value, std::numeric_limits<i32>::max());
+                        THROW_ERROR_EXCEPTION("Date value %v cannot be represented in arrow: maximum allowed value is %v",
+                            value,
+                            std::numeric_limits<i32>::max());
                     }
                     *currentOutput++ = value;
                 });
@@ -1007,7 +1009,7 @@ void SerializeTimestampColumn(
                 },
                 [&] (auto value) {
                     if (value > std::numeric_limits<i64>::max()) {
-                        THROW_ERROR_EXCEPTION("Timestamp value cannot be represented in arrow (Value: %v, MaxAllowedValue: %v)", value, std::numeric_limits<i64>::max());
+                        THROW_ERROR_EXCEPTION("Timestamp value %v cannot be represented in arrow: maximum allowed value is %v", value, std::numeric_limits<i64>::max());
                     }
                     *currentOutput++ = value;
                 });

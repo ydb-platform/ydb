@@ -2,7 +2,7 @@
 
 Секция `tls` настраивает параметры [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security) для [шифрования данных при передаче по сети](../../security/encryption/data-in-transit.md) в {{ ydb-short-name }}. Каждый сетевой протокол может иметь различные настройки TLS для обеспечения безопасной связи между компонентами кластера и клиентами.
 
-## Interconnect
+## Interconnect {#interconnect}
 
 [Интерконнект акторной системы {{ ydb-short-name }}](../../concepts/glossary.md#actor-system-interconnect) — это специализированный протокол для обмена данными между узлами {{ ydb-short-name }}.
 
@@ -19,7 +19,7 @@ interconnect_config:
 
 ## {{ ydb-short-name }} в роли сервера
 
-### gRPC
+### gRPC {#grpc}
 
 [Основной API {{ ydb-short-name }}](../../reference/ydb-sdk/overview-grpc-api.md) основан на [gRPC](https://grpc.io/). Он используется для внешнего взаимодействия с клиентскими приложениями, которые работают напрямую с {{ ydb-short-name }} через [SDK](../../reference/ydb-sdk/index.md) или [CLI](../../reference/ydb-cli/index.md).
 

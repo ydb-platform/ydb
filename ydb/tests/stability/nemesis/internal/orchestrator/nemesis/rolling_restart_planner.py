@@ -6,7 +6,11 @@ import logging
 import random
 
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch, fanout
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import (
+    NemesisPlannerBase,
+    normalize_candidates,
+)
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 logger = logging.getLogger(__name__)
@@ -25,7 +29,6 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
     of relying on the base class' constant ``PAYLOAD_INJECT``/``PAYLOAD_EXTRACT``.
     """
 
-    # Empty placeholders — actual payload is built per node in scheduled_tick / manual.
     PAYLOAD_INJECT: dict = {}
     PAYLOAD_EXTRACT: dict = {}
 
@@ -43,7 +46,16 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
         self._affected_nodes = set()
         self.nemesis_type = "ClusterRollingRestartNemesis"
 
-    def scheduled_tick(self, hosts: list[str]) -> list[DispatchCommand]:
+    def scheduled_tick(self, candidates: list[ChaosTarget]) -> list[DispatchCommand]:
+        safe = normalize_candidates(candidates)
+        # Empty candidates means the failure guard (or inventory) admitted nothing.
+        # Do not treat empty safe_hosts as "no filter" — that would bypass the guard.
+        if not safe:
+            logger.info("rolling restart tick: no safe candidates from guard/inventory")
+            return []
+        safe_hosts = {t.host for t in safe}
+        safe_ic_ports = {t.ic_port for t in safe if t.ic_port is not None}
+
         if not self._target_nodes:
             return []
         inject_targets: list[YdbCluster.Node] = []
@@ -60,7 +72,14 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
                     len(self._target_nodes), extract_targets,
                 )
             else:
-                avail = [n for n in self._target_nodes if n not in self._affected_nodes]
+                avail = [
+                    n for n in self._target_nodes
+                    if n not in self._affected_nodes
+                    and (
+                        n.host in safe_hosts
+                        or (getattr(n, "ic_port", None) in safe_ic_ports)
+                    )
+                ]
                 avail_hosts = sorted({n.host for n in avail})
                 if not avail:
                     logger.info(
@@ -82,7 +101,7 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
             result = [
                 dispatch(
                     self.nemesis_type,
-                    node.host,
+                    ChaosTarget.for_node(node.host, ic_port=int(node.ic_port)),
                     "inject",
                     self._build_inject_payload(node),
                 )
@@ -109,12 +128,6 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
 
     def _register_extract(self, host: str) -> None:
         pass
-
-    def _find_node_by_host(self, host: str) -> "YdbCluster.Node | None":
-        for node in self._target_nodes:
-            if node.host == host:
-                return node
-        return None
 
     def _drain_tracked_hosts(self) -> list[str]:
         targets = list({node.host for node in self._affected_nodes})

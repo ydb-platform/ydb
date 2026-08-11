@@ -7,23 +7,24 @@
 
 #include <util/string/cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TTimezoneIdWrapper: public TMutableComputationNode<TTimezoneIdWrapper> {
-    typedef TMutableComputationNode<TTimezoneIdWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TTimezoneIdWrapper>;
 
 public:
     TTimezoneIdWrapper(TComputationMutables& mutables, IComputationNode* value)
         : TBaseComputation(mutables)
-        , Value(value)
+        , Value_(value)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto value = Value->GetValue(ctx);
+        auto value = Value_->GetValue(ctx);
         if (!value) {
             return {};
         }
@@ -38,24 +39,24 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Value);
+        DependsOn(Value_);
     }
 
-    IComputationNode* const Value;
+    IComputationNode* const Value_;
 };
 
 class TTimezoneNameWrapper: public TMutableComputationNode<TTimezoneNameWrapper> {
-    typedef TMutableComputationNode<TTimezoneNameWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TTimezoneNameWrapper>;
 
 public:
     TTimezoneNameWrapper(TComputationMutables& mutables, IComputationNode* value)
         : TBaseComputation(mutables)
-        , Value(value)
+        , Value_(value)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto value = Value->GetValue(ctx);
+        auto value = Value_->GetValue(ctx);
         if (!value) {
             return {};
         }
@@ -70,33 +71,33 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Value);
+        DependsOn(Value_);
     }
 
-    IComputationNode* const Value;
+    IComputationNode* const Value_;
 };
 
 template <bool IsOptional1, bool IsOptional2>
 class TAddTimezoneWrapper: public TMutableCodegeneratorNode<TAddTimezoneWrapper<IsOptional1, IsOptional2>> {
-    typedef TMutableCodegeneratorNode<TAddTimezoneWrapper<IsOptional1, IsOptional2>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TAddTimezoneWrapper<IsOptional1, IsOptional2>>;
 
 public:
     TAddTimezoneWrapper(TComputationMutables& mutables, IComputationNode* value, IComputationNode* id)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Datetime(value)
-        , Id(id)
-        , TimezonesCount(InitTimezones())
-        , BlackList(GetTzBlackList())
+        , Datetime_(value)
+        , Id_(id)
+        , TimezonesCount_(InitTimezones())
+        , BlackList_(GetTzBlackList())
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto value = Datetime->GetValue(ctx);
+        auto value = Datetime_->GetValue(ctx);
         if (IsOptional1 && !value) {
             return {};
         }
 
-        const auto zone = Id->GetValue(ctx);
+        const auto zone = Id_->GetValue(ctx);
         if (IsOptional2 && !zone) {
             return {};
         }
@@ -111,13 +112,13 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto setz = BasicBlock::Create(context, "setz", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        const auto value = GetNodeValue(Datetime, ctx, block);
+        const auto value = GetNodeValue(Datetime_, ctx, block);
         const auto result = PHINode::Create(value->getType(), 2U + (IsOptional1 ? 1U : 0U), "result", done);
 
         if (IsOptional1) {
@@ -128,13 +129,13 @@ public:
             block = good;
         }
 
-        const auto tz = GetNodeValue(Id, ctx, block);
+        const auto tz = GetNodeValue(Id_, ctx, block);
         const auto id = GetterFor<ui16>(tz, context, block);
 
-        const auto big = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGE, id, ConstantInt::get(id->getType(), TimezonesCount), "big", block);
+        const auto big = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGE, id, ConstantInt::get(id->getType(), TimezonesCount_), "big", block);
         auto test = IsOptional2 ? BinaryOperator::CreateOr(IsEmpty(tz, block, context), big, "test", block) : static_cast<Value*>(big);
 
-        for (const auto black : BlackList) {
+        for (const auto black : BlackList_) {
             const auto& str = ToString(black);
             const auto bad = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, id, ConstantInt::get(id->getType(), black), ("bad_" + str).c_str(), block);
             test = BinaryOperator::CreateOr(test, bad, ("test_" + str).c_str(), block);
@@ -146,8 +147,8 @@ public:
         {
             block = setz;
 
-            const uint64_t init[] = {~0ULL, ~0xFFFFULL};
-            const auto mask = ConstantInt::get(value->getType(), APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {~0ULL, ~0xFFFFULL};
+            const auto mask = ConstantInt::get(value->getType(), APInt(128, init));
             const auto clean = BinaryOperator::CreateAnd(value, mask, "clean", block);
             const auto tzid = BinaryOperator::CreateShl(tz, ConstantInt::get(tz->getType(), 64), "tzid", block);
             const auto full = BinaryOperator::CreateOr(clean, tzid, "full", block);
@@ -162,14 +163,14 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Datetime);
-        this->DependsOn(Id);
+        this->DependsOn(Datetime_);
+        this->DependsOn(Id_);
     }
 
-    IComputationNode* const Datetime;
-    IComputationNode* const Id;
-    const ui16 TimezonesCount;
-    const std::vector<ui16> BlackList;
+    IComputationNode* const Datetime_;
+    IComputationNode* const Id_;
+    const ui16 TimezonesCount_;
+    const std::vector<ui16> BlackList_;
 };
 
 } // namespace
@@ -207,6 +208,4 @@ IComputationNode* WrapAddTimezone(TCallable& callable, const TComputationNodeFac
     return YQL_RUNTIME_DISPATCH_NEW(IComputationNode*, TAddTimezoneWrapper, 2, isOptional1, isOptional2, ctx.Mutables, value, id);
 }
 
-} // namespace NMiniKQL
-
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

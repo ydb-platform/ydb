@@ -109,3 +109,9 @@ class TestSqsTopicGetQueueAttributes(KikimrSqsTopicTestBase):
         assert_that(attributes, has_entries(self.EXPECTED_FIFO_ATTRIBUTE_VALUES))
         assert_that(attributes['CreatedTimestamp'], equal_to(attributes['LastModifiedTimestamp']))
         assert_that(attributes['QueueArn'], contains_string(queue_name))
+
+        fifo_only = self._boto_client.get_queue_attributes(
+            QueueUrl=self._queue_url,
+            AttributeNames=['FifoQueue'],
+        )
+        assert_that(fifo_only['Attributes'], equal_to({'FifoQueue': 'true'}))

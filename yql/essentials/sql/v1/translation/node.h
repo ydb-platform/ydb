@@ -1447,6 +1447,7 @@ struct TAlterTableParameters {
     TVector<TIdentifier> DropChangefeeds;
     ETableType TableType = ETableType::Table;
     TMaybe<TCompactEntry> Compact;
+    TVector<TIndexDescription> RebuildIndexes;
 
     bool IsEmpty() const {
         return AddColumns.empty() &&
@@ -1465,7 +1466,8 @@ struct TAlterTableParameters {
                AddChangefeeds.empty() &&
                AlterChangefeeds.empty() &&
                DropChangefeeds.empty() &&
-               !Compact.Defined();
+               !Compact.Defined() &&
+               RebuildIndexes.empty();
     }
 };
 
@@ -1553,6 +1555,7 @@ struct TTopicSettings {
     NYql::TResetableSetting<TNodePtr, void> AutoPartitioningDownUtilizationPercent;
     NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStrategy;
     NYql::TResetableSetting<TNodePtr, void> MetricsLevel;
+    NYql::TResetableSetting<TNodePtr, void> ContentBasedDeduplication;
 
     bool IsSet() const {
         return MinPartitions ||
@@ -1567,7 +1570,8 @@ struct TTopicSettings {
                AutoPartitioningUpUtilizationPercent ||
                AutoPartitioningDownUtilizationPercent ||
                AutoPartitioningStrategy ||
-               MetricsLevel;
+               MetricsLevel ||
+               ContentBasedDeduplication;
     }
 };
 

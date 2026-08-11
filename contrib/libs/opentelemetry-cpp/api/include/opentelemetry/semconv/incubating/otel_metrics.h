@@ -27,7 +27,11 @@ namespace otel
   error.type @endcode MUST contain the failure cause. For exporters with partial success semantics
   (e.g. OTLP with @code rejected_log_records @endcode), rejected log records MUST count as failed
   and only non-rejected log records count as success. If no rejection reason is available, @code
-  rejected @endcode SHOULD be used as value for @code error.type @endcode. <p> counter
+  rejected @endcode SHOULD be used as value for @code error.type @endcode. If the exporter retries
+  failed export attempts, the export operation is considered finished only after the final attempt
+  has concluded. Each log record MUST be counted exactly once per export operation: intermediate
+  failed attempts that are followed by a retry MUST NOT increment the counter, and @code error.type
+  @endcode reflects the cause of the final attempt. <p> counter
  */
 static constexpr const char *kMetricOtelSdkExporterLogExported = "otel.sdk.exporter.log.exported";
 static constexpr const char *descrMetricOtelSdkExporterLogExported =
@@ -68,9 +72,10 @@ CreateAsyncDoubleMetricOtelSdkExporterLogExported(metrics::Meter *meter)
 
 /**
   The number of log records which were passed to the exporter, but that have not been exported yet
-  (neither successful, nor failed). <p> For successful exports, @code error.type @endcode MUST NOT
-  be set. For failed exports, @code error.type @endcode MUST contain the failure cause. <p>
-  updowncounter
+  (neither successful, nor failed). <p> Log records are counted as inflight from when they are
+  passed to the exporter until the export operation has concluded. If the exporter retries failed
+  export attempts, log records remain inflight across all retry attempts and any backoff between
+  them. <p> updowncounter
  */
 static constexpr const char *kMetricOtelSdkExporterLogInflight = "otel.sdk.exporter.log.inflight";
 static constexpr const char *descrMetricOtelSdkExporterLogInflight =
@@ -117,7 +122,11 @@ CreateAsyncDoubleMetricOtelSdkExporterLogInflight(metrics::Meter *meter)
   error.type @endcode MUST contain the failure cause. For exporters with partial success semantics
   (e.g. OTLP with @code rejected_data_points @endcode), rejected data points MUST count as failed
   and only non-rejected data points count as success. If no rejection reason is available, @code
-  rejected @endcode SHOULD be used as value for @code error.type @endcode. <p> counter
+  rejected @endcode SHOULD be used as value for @code error.type @endcode. If the exporter retries
+  failed export attempts, the export operation is considered finished only after the final attempt
+  has concluded. Each metric data point MUST be counted exactly once per export operation:
+  intermediate failed attempts that are followed by a retry MUST NOT increment the counter, and
+  @code error.type @endcode reflects the cause of the final attempt. <p> counter
  */
 static constexpr const char *kMetricOtelSdkExporterMetricDataPointExported =
     "otel.sdk.exporter.metric_data_point.exported";
@@ -160,9 +169,10 @@ CreateAsyncDoubleMetricOtelSdkExporterMetricDataPointExported(metrics::Meter *me
 
 /**
   The number of metric data points which were passed to the exporter, but that have not been
-  exported yet (neither successful, nor failed). <p> For successful exports, @code error.type
-  @endcode MUST NOT be set. For failed exports, @code error.type @endcode MUST contain the failure
-  cause. <p> updowncounter
+  exported yet (neither successful, nor failed). <p> Metric data points are counted as inflight from
+  when they are passed to the exporter until the export operation has concluded. If the exporter
+  retries failed export attempts, metric data points remain inflight across all retry attempts and
+  any backoff between them. <p> updowncounter
  */
 static constexpr const char *kMetricOtelSdkExporterMetricDataPointInflight =
     "otel.sdk.exporter.metric_data_point.inflight";
@@ -214,7 +224,13 @@ CreateAsyncDoubleMetricOtelSdkExporterMetricDataPointInflight(metrics::Meter *me
   href="https://github.com/open-telemetry/opentelemetry-proto/blob/v1.5.0/docs/specification.md#full-success">grpc</a>.
   Anything else is defined as an unsuccessful operation. For successful operations, @code error.type
   @endcode MUST NOT be set. For unsuccessful export operations, @code error.type @endcode MUST
-  contain a relevant failure cause. <p> histogram
+  contain a relevant failure cause. If the exporter retries failed export attempts, exactly one
+  observation MUST be recorded per export operation, covering the wall-clock duration from the start
+  of the first attempt through the conclusion of the final attempt (including any backoff between
+  attempts).
+  @code error.type @endcode reflects the cause of the final attempt.
+  <p>
+  histogram
  */
 static constexpr const char *kMetricOtelSdkExporterOperationDuration =
     "otel.sdk.exporter.operation.duration";
@@ -245,7 +261,11 @@ CreateSyncDoubleMetricOtelSdkExporterOperationDuration(metrics::Meter *meter)
   error.type @endcode MUST contain the failure cause. For exporters with partial success semantics
   (e.g. OTLP with @code rejected_spans @endcode), rejected spans MUST count as failed and only
   non-rejected spans count as success. If no rejection reason is available, @code rejected @endcode
-  SHOULD be used as value for @code error.type @endcode. <p> counter
+  SHOULD be used as value for @code error.type @endcode. If the exporter retries failed export
+  attempts, the export operation is considered finished only after the final attempt has concluded.
+  Each span MUST be counted exactly once per export operation: intermediate failed attempts that are
+  followed by a retry MUST NOT increment the counter, and @code error.type @endcode reflects the
+  cause of the final attempt. <p> counter
  */
 static constexpr const char *kMetricOtelSdkExporterSpanExported = "otel.sdk.exporter.span.exported";
 static constexpr const char *descrMetricOtelSdkExporterSpanExported =
@@ -301,39 +321,48 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricOtelSdkExporterS
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricOtelSdkExporterSpanExportedCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricOtelSdkExporterSpanExportedCount,
                                          descrMetricOtelSdkExporterSpanExportedCount,
                                          unitMetricOtelSdkExporterSpanExportedCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricOtelSdkExporterSpanExportedCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricOtelSdkExporterSpanExportedCount,
                                           descrMetricOtelSdkExporterSpanExportedCount,
                                           unitMetricOtelSdkExporterSpanExportedCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricOtelSdkExporterSpanExportedCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricOtelSdkExporterSpanExportedCount,
                                                    descrMetricOtelSdkExporterSpanExportedCount,
                                                    unitMetricOtelSdkExporterSpanExportedCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricOtelSdkExporterSpanExportedCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricOtelSdkExporterSpanExportedCount,
                                                     descrMetricOtelSdkExporterSpanExportedCount,
                                                     unitMetricOtelSdkExporterSpanExportedCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
   The number of spans which were passed to the exporter, but that have not been exported yet
-  (neither successful, nor failed). <p> For successful exports, @code error.type @endcode MUST NOT
-  be set. For failed exports, @code error.type @endcode MUST contain the failure cause. <p>
+  (neither successful, nor failed). <p> Spans are counted as inflight from when they are passed to
+  the exporter until the export operation has concluded. If the exporter retries failed export
+  attempts, spans remain inflight across all retry attempts and any backoff between them. <p>
   updowncounter
  */
 static constexpr const char *kMetricOtelSdkExporterSpanInflight = "otel.sdk.exporter.span.inflight";
@@ -391,33 +420,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricOtelSdkExporterS
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricOtelSdkExporterSpanInflightCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricOtelSdkExporterSpanInflightCount,
                                          descrMetricOtelSdkExporterSpanInflightCount,
                                          unitMetricOtelSdkExporterSpanInflightCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricOtelSdkExporterSpanInflightCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricOtelSdkExporterSpanInflightCount,
                                           descrMetricOtelSdkExporterSpanInflightCount,
                                           unitMetricOtelSdkExporterSpanInflightCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricOtelSdkExporterSpanInflightCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricOtelSdkExporterSpanInflightCount,
                                                    descrMetricOtelSdkExporterSpanInflightCount,
                                                    unitMetricOtelSdkExporterSpanInflightCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricOtelSdkExporterSpanInflightCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricOtelSdkExporterSpanInflightCount,
                                                     descrMetricOtelSdkExporterSpanInflightCount,
                                                     unitMetricOtelSdkExporterSpanInflightCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -492,9 +529,13 @@ CreateSyncDoubleMetricOtelSdkMetricReaderCollectionDuration(metrics::Meter *mete
   The number of log records for which the processing has finished, either successful or failed.
   <p>
   For successful processing, @code error.type @endcode MUST NOT be set. For failed processing, @code
-  error.type @endcode MUST contain the failure cause. For the SDK Simple and Batching Log Record
-  Processor a log record is considered to be processed already when it has been submitted to the
-  exporter, not when the corresponding export call has finished. <p> counter
+  error.type @endcode MUST contain the failure cause. SDK Batching Log Record Processors MUST use
+  @code queue_full @endcode as the value of @code error.type @endcode for log records dropped due to
+  a full queue. SDK Log Record Processors MUST use @code already_shutdown @endcode as the value of
+  @code error.type @endcode for log records dropped because the processor has already been shut
+  down. For the SDK Simple and Batching Log Record Processor a log record is considered to be
+  processed already when it has been submitted to the exporter, not when the corresponding export
+  call has finished. <p> counter
  */
 static constexpr const char *kMetricOtelSdkProcessorLogProcessed =
     "otel.sdk.processor.log.processed";
@@ -626,9 +667,12 @@ CreateAsyncDoubleMetricOtelSdkProcessorLogQueueSize(metrics::Meter *meter)
   The number of spans for which the processing has finished, either successful or failed.
   <p>
   For successful processing, @code error.type @endcode MUST NOT be set. For failed processing, @code
-  error.type @endcode MUST contain the failure cause. For the SDK Simple and Batching Span Processor
-  a span is considered to be processed already when it has been submitted to the exporter, not when
-  the corresponding export call has finished. <p> counter
+  error.type @endcode MUST contain the failure cause. SDK Batching Span Processors MUST use @code
+  queue_full @endcode as the value of @code error.type @endcode for spans dropped due to a full
+  queue. SDK Span Processors MUST use @code already_shutdown @endcode as the value of @code
+  error.type @endcode for spans dropped because the processor has already been shut down. For the
+  SDK Simple and Batching Span Processor a span is considered to be processed already when it has
+  been submitted to the exporter, not when the corresponding export call has finished. <p> counter
  */
 static constexpr const char *kMetricOtelSdkProcessorSpanProcessed =
     "otel.sdk.processor.span.processed";
@@ -686,33 +730,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricOtelSdkProcessor
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricOtelSdkProcessorSpanProcessedCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricOtelSdkProcessorSpanProcessedCount,
                                          descrMetricOtelSdkProcessorSpanProcessedCount,
                                          unitMetricOtelSdkProcessorSpanProcessedCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricOtelSdkProcessorSpanProcessedCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricOtelSdkProcessorSpanProcessedCount,
                                           descrMetricOtelSdkProcessorSpanProcessedCount,
                                           unitMetricOtelSdkProcessorSpanProcessedCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricOtelSdkProcessorSpanProcessedCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricOtelSdkProcessorSpanProcessedCount,
                                                    descrMetricOtelSdkProcessorSpanProcessedCount,
                                                    unitMetricOtelSdkProcessorSpanProcessedCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricOtelSdkProcessorSpanProcessedCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricOtelSdkProcessorSpanProcessedCount,
                                                     descrMetricOtelSdkProcessorSpanProcessedCount,
                                                     unitMetricOtelSdkProcessorSpanProcessedCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -823,29 +875,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricOtelSdkSpanEnded
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricOtelSdkSpanEnded(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricOtelSdkSpanEnded, descrMetricOtelSdkSpanEnded,
                                     unitMetricOtelSdkSpanEnded);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricOtelSdkSpanEnded(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricOtelSdkSpanEnded, descrMetricOtelSdkSpanEnded,
                                     unitMetricOtelSdkSpanEnded);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricOtelSdkSpanEnded(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricOtelSdkSpanEnded, descrMetricOtelSdkSpanEnded,
                                              unitMetricOtelSdkSpanEnded);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricOtelSdkSpanEnded(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricOtelSdkSpanEnded, descrMetricOtelSdkSpanEnded,
                                               unitMetricOtelSdkSpanEnded);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -866,36 +926,46 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricOtelSdkSpanEnded
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricOtelSdkSpanEndedCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricOtelSdkSpanEndedCount, descrMetricOtelSdkSpanEndedCount,
                                     unitMetricOtelSdkSpanEndedCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricOtelSdkSpanEndedCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricOtelSdkSpanEndedCount, descrMetricOtelSdkSpanEndedCount,
                                     unitMetricOtelSdkSpanEndedCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricOtelSdkSpanEndedCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricOtelSdkSpanEndedCount,
                                              descrMetricOtelSdkSpanEndedCount,
                                              unitMetricOtelSdkSpanEndedCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricOtelSdkSpanEndedCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricOtelSdkSpanEndedCount,
                                               descrMetricOtelSdkSpanEndedCount,
                                               unitMetricOtelSdkSpanEndedCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
   The number of created spans with @code recording=true @endcode for which the end operation has not
-  been called yet. <p> updowncounter
+  been called yet. <p> Non-recording spans are not counted, hence @code otel.span.sampling_result
+  @endcode can only take values @code RECORD_ONLY @endcode and @code RECORD_AND_SAMPLE @endcode, not
+  @code DROP @endcode. <p> updowncounter
  */
 static constexpr const char *kMetricOtelSdkSpanLive = "otel.sdk.span.live";
 static constexpr const char *descrMetricOtelSdkSpanLive =
@@ -947,29 +1017,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricOtelSdkSpanLiveC
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricOtelSdkSpanLiveCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(
       kMetricOtelSdkSpanLiveCount, descrMetricOtelSdkSpanLiveCount, unitMetricOtelSdkSpanLiveCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricOtelSdkSpanLiveCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(
       kMetricOtelSdkSpanLiveCount, descrMetricOtelSdkSpanLiveCount, unitMetricOtelSdkSpanLiveCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricOtelSdkSpanLiveCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(
       kMetricOtelSdkSpanLiveCount, descrMetricOtelSdkSpanLiveCount, unitMetricOtelSdkSpanLiveCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricOtelSdkSpanLiveCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricOtelSdkSpanLiveCount, descrMetricOtelSdkSpanLiveCount, unitMetricOtelSdkSpanLiveCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**

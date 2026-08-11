@@ -75,6 +75,10 @@ TCommonJoinCoreLambdas MakeCommonJoinCoreLambdas(TPositionHandle pos, TExprConte
     ui32 tableIndex, bool useSortedReduce, ui32 sortIndex,
     const TMap<TStringBuf, TVector<TStringBuf>>& renameMap,
     bool myData, bool otherData, const TVector<TString>& ytReduceByColumns);
+
+// Flatten one {keys, _yql_sort, _yql_join_payload: Variant} row into the flat CommonJoinCoreInputType.
+TExprNode::TPtr FlattenCommonJoinPayloadRow(TPositionHandle pos, TExprContext& ctx, const TExprNode::TPtr& row,
+    const TExprNode::TPtr& reduceLambdaZero, const TExprNode::TPtr& reduceLambdaOne);
 TExprNode::TPtr PrepareForCommonJoinCore(TPositionHandle pos, TExprContext& ctx, const TExprNode::TPtr& input,
     const TExprNode::TPtr& reduceLambdaZero, const TExprNode::TPtr& reduceLambdaOne);
 

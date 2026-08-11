@@ -51,3 +51,8 @@ DEPENDS(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    streaming_large
+    generic
+)

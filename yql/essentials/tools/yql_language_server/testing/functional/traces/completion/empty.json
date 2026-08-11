@@ -1,0 +1,172 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didOpen",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "languageId": "yql",
+        "version": 1,
+        "text": ""
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "textDocument/completion",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql"
+      },
+      "position": {
+        "line": 0,
+        "character": 0
+      },
+      "context": {
+        "triggerKind": 1
+      }
+    }
+  },
+  {
+    "id": 1,
+    "jsonrpc": "2.0",
+    "result": {
+      "isIncomplete": false,
+      "items": [
+        {
+          "filterText": "select",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "SELECT"
+        },
+        {
+          "filterText": "pragma",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "PRAGMA"
+        },
+        {
+          "filterText": "from",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "FROM"
+        },
+        {
+          "filterText": "use",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "USE"
+        },
+        {
+          "filterText": "insert",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "INSERT"
+        },
+        {
+          "filterText": "with",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "WITH"
+        },
+        {
+          "filterText": "declare",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "DECLARE"
+        },
+        {
+          "filterText": "define",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "DEFINE"
+        },
+        {
+          "filterText": "do",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "DO"
+        },
+        {
+          "filterText": "import",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "IMPORT"
+        },
+        {
+          "filterText": "evaluate",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "EVALUATE"
+        },
+        {
+          "filterText": "commit",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "COMMIT"
+        },
+        {
+          "filterText": "replace",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "REPLACE"
+        },
+        {
+          "filterText": "process",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "PROCESS"
+        },
+        {
+          "filterText": "values",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "VALUES"
+        },
+        {
+          "filterText": "drop",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "DROP"
+        },
+        {
+          "filterText": "discard",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "DISCARD"
+        },
+        {
+          "filterText": "reduce",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "REDUCE"
+        },
+        {
+          "filterText": "export",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "EXPORT"
+        },
+        {
+          "filterText": "upsert",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "UPSERT"
+        },
+        {
+          "filterText": "explain",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "EXPLAIN"
+        },
+        {
+          "filterText": "combine",
+          "insertTextFormat": 1,
+          "kind": 14,
+          "label": "COMBINE"
+        }
+      ]
+    }
+  }
+]

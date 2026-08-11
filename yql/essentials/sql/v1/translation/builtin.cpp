@@ -3026,6 +3026,7 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
                 .Mode = aggMode,
                 .Args = args,
             };
+
             return BuildYqlAggregation(std::move(pos), std::move(aggregation));
         }
 
@@ -3357,7 +3358,8 @@ struct TBuiltinFuncData {
             {"pickle", {"Pickle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Pickle", 1, 1)}},
             {"stablepickle", {"StablePickle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StablePickle", 1, 1)}},
             {"unpickle", {"Unpickle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Unpickle", 2, 2)}},
-
+            {"aserased", {"AsErased", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsErased", 1, 1), NYql::NFeature::TypeErasure.MinLangVer}},
+            {"peekerased", {"PeekErased", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PeekErased", 2, 2), NYql::NFeature::TypeErasure.MinLangVer}},
             {"typehandle", {"TypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeHandle", 1, 1)}},
             {"parsetypehandle", {"ParseTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ParseTypeHandle", 1, 1)}},
             {"typekind", {"TypeKind", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeKind", 1, 1)}},
@@ -4138,6 +4140,10 @@ TNodeResult BuildBuiltinFunc(
         }
 
         if (normalizedName == "tablename") {
+            if (isYqlSelect) {
+                return UnsupportedYqlSelect(ctx, "TableName");
+            }
+
             return TNonNull(TNodePtr(new TTableName(pos, args, ctx.Scoped->CurrService)));
         }
 
@@ -4190,9 +4196,19 @@ TNodeResult BuildBuiltinFunc(
                     if ("first" == aggNormalizedName || "last" == aggNormalizedName) {
                         return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context")));
                     }
+
+                    auto result = (*aggrCallback).second.Callback(pos, args, aggMode, true, /*isYqlSelect=*/isYqlSelect);
+                    if (!result && result.error() == ESQLError::UnsupportedYqlSelect) {
+                        return UnsupportedYqlSelect(
+                            ctx, TStringBuilder() << "Aggregation '"
+                                                  << (originalNameSpace.empty() ? "" : originalNameSpace)
+                                                  << (originalNameSpace.empty() ? "" : "::")
+                                                  << name << "'");
+                    }
+
                     return WrapWithLangVerProxy(
                         pos,
-                        (*aggrCallback).second.Callback(pos, args, aggMode, true, /*isYqlSelect=*/isYqlSelect),
+                        std::move(result),
                         TString(aggrCallback->second.CanonicalSqlName),
                         aggrCallback->second.MinLangVer,
                         aggrCallback->second.MaxLangVer);
@@ -4283,6 +4299,22 @@ TNodeResult BuildBuiltinFunc(
 
             if (isYqlSelect && normalizedName == "grouping") {
                 return Wrap(BuildYqlGrouping(pos, args));
+            }
+
+            if (isYqlSelect && IsIn({"tablerow", "jointablerow", "tablerows"}, normalizedName)) {
+                return UnsupportedYqlSelect(ctx, "TableRow/JoinTableRow/TableRows");
+            }
+
+            if (isYqlSelect && normalizedName == "tablepath") {
+                return UnsupportedYqlSelect(ctx, "TablePath");
+            }
+
+            if (isYqlSelect && normalizedName == "tablerecordindex") {
+                return UnsupportedYqlSelect(ctx, "TableRecordIndex");
+            }
+
+            if (isYqlSelect && normalizedName == "weakfield") {
+                return UnsupportedYqlSelect(ctx, "WeakField");
             }
 
             return WrapWithLangVerProxy(

@@ -19,7 +19,7 @@ static void AddFakeCredRecord(NActorsInterconnect::TRdmaCreds& creds) noexcept {
     // fixed64, fixed32 - any value
     cred->SetAddress(0);
     cred->SetRkey(12345);
-    // uint64 - protobuf uses VLC - max possible value 
+    // uint64 - protobuf uses VLC - max possible value
     cred->SetSize(Max<ui64>());
 }
 
@@ -62,20 +62,19 @@ namespace NActors {
                         auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
                         if (memReg.Empty()) {
                             if (NActors::TlsActivationContext) {
-                                LOG_WARN_S(*NActors::TlsActivationContext, NActorsServices::INTERCONNECT_SESSION,
-                                    TStringBuilder() << "IsRdmaSectionLayoutConsistentWithData: RDMA preflight failed,"
-                                        << " eventType# " << event.Descr.Type
-                                        << " eventSerializedSize# " << event.EventSerializedSize
-                                        << " bufferSize# " << event.Buffer->GetSize()
-                                        << " sectionIndex# " << sectionIndex
-                                        << " sectionSize# " << section.Size
-                                        << " bytesLeft# " << bytesLeft
-                                        << " chunkIndex# " << chunkIndex
-                                        << " chunkOffset# " << offset
-                                        << " chunkSize# " << chunkSize
-                                        << " chunkBufSize# " << buf.GetSize()
-                                        << " rdmaDeviceIndex# " << rdmaDeviceIndex
-                                        << " sections# " << SerializeEventSections(event.Buffer->GetSerializationInfo()));
+                                YDB_LOG_WARN_COMP(NActorsServices::INTERCONNECT_SESSION, "IsRdmaSectionLayoutConsistentWithData: RDMA preflight failed",
+                                    {"eventType", event.Descr.Type},
+                                    {"eventSerializedSize", event.EventSerializedSize},
+                                    {"bufferSize", event.Buffer->GetSize()},
+                                    {"sectionIndex", sectionIndex},
+                                    {"sectionSize", section.Size},
+                                    {"bytesLeft", bytesLeft},
+                                    {"chunkIndex", chunkIndex},
+                                    {"chunkOffset", offset},
+                                    {"chunkSize", chunkSize},
+                                    {"chunkBufSize", buf.GetSize()},
+                                    {"rdmaDeviceIndex", rdmaDeviceIndex},
+                                    {"sections", SerializeEventSections(event.Buffer->GetSerializationInfo())});
                             }
                             return false;
                         }
@@ -139,7 +138,8 @@ namespace NActors {
     }
 
     void TEventOutputChannel::DropConfirmed(ui64 confirm, TEventHolderPool& pool) {
-        LOG_DEBUG_IC_SESSION("ICOCH98", "Dropping confirmed messages");
+        YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Dropping confirmed messages",
+            {"marker", "ICOCH98"});
         for (auto it = NotYetConfirmed.begin(); it != NotYetConfirmed.end() && it->Serial <= confirm; ) {
             pool.Release(NotYetConfirmed, it++);
         }
@@ -174,7 +174,7 @@ namespace NActors {
                         State = EState::BODY;
                         IEventBase *base = event.Event.Get();
                         if (event.EventSerializedSize) {
-                            Chunker.SetSerializingEvent(base, /*withCachedSizes=*/ true);
+                            Chunker.SetSerializingEvent(base, /*withCachedSizes=*/ true, /*withCord=*/ false);
                         }
                         SerializationInfoContainer = base->CreateSerializationInfo(Params.UseExternalDataChannel);
                         SerializationInfo = &SerializationInfoContainer;
@@ -310,12 +310,19 @@ namespace NActors {
         bool complete = false;
         if (event.Event) {
             while (!complete) {
-                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>().SubSpan(0, PartLenRemain);
+                Y_ABORT_UNLESS(event.EventActuallySerialized <= MaxSerializedEventSize);
+                const size_t limitRemain = MaxSerializedEventSize - event.EventActuallySerialized;
+                if (!limitRemain) {
+                    throw TExSerializedEventTooLarge(event.Descr.Type);
+                }
+
+                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>()
+                    .SubSpan(0, Min(PartLenRemain, limitRemain));
                 if (!out.size()) {
                     break;
                 }
-                for (const auto& [buffer, size] : Chunker.FeedBuf(out.data(), out.size())) {
-                    addChunk(buffer, size, false);
+                for (const auto& chunk : Chunker.FeedBuf(out.data(), out.size())) {
+                    addChunk(chunk.Buf, chunk.Size, false);
                 }
                 complete = Chunker.IsComplete();
                 if (complete) {
@@ -636,7 +643,10 @@ namespace NActors {
     }
 
     void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
-        LOG_DEBUG_IC_SESSION("ICOCH89", "Notyfying about Undelivered messages! NotYetConfirmed size: %zu, Queue size: %zu", NotYetConfirmed.size(), Queue.size());
+        YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Notyfying about Undelivered messages!",
+            {"marker", "ICOCH89"},
+            {"notYetConfirmed", NotYetConfirmed.size()},
+            {"queue", Queue.size()});
         if (State == EState::BODY && Queue.front().Event) {
             Y_ABORT_UNLESS(!Chunker.IsComplete()); // chunk must have an event being serialized
             Y_ABORT_UNLESS(!Queue.empty()); // this event must be the first event in queue

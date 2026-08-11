@@ -25,7 +25,7 @@ namespace {
 
             Ydb::StatusIds::StatusCode status;
             TString error;
-            if (!FillConsumer(*Result.mutable_consumer(), *consumer, status, error, false)) {
+            if (!FillConsumer(*Result.mutable_consumer(), TopicInfo.Info->Description.GetPQTabletConfig(), *consumer, status, error, false)) {
                 ReplyWithError(status, error);
                 return false;
             }

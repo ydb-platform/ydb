@@ -23,7 +23,6 @@ SRCS(
     actor_exception_ut.cpp
     actor_shared_threads.cpp
     benchmark_ut.cpp
-    cgroup_ut.cpp
     actor_ut.cpp
     actorsystem_ut.cpp
     performance_ut.cpp

@@ -1,27 +1,32 @@
-# Typical streaming query patterns
+# Common streaming query patterns
 
-This section contains minimal examples of streaming queries for the most common scenarios. First, a basic pattern for reading data from a topic is described, followed by variants of full data processing: data processing and writing results to a topic in JSON format, to a topic as a string, and to a table. Each example can be used as a starting point for your own tasks.
+This section collects minimal examples of [streaming queries](../../concepts/streaming-query/streaming-query.md) for typical scenarios. It starts with a basic topic read, then shows end-to-end processing: handling data and writing results to a topic as JSON, to a topic as a plain string, and to a table. Each example can be used as a starting point for your own workloads.
 
-The examples below use [local and external topics](../../concepts/query_execution/topics.md#local-external-topics). Notation:
+## ⟦C1⟧ — topic to read from; {#topic-read}
 
-- `ext_source` — a pre-created [`external data source`](../../concepts/datamodel/external_data_source.md)
-- `input_topic` — the topic from which data is read
-- `output_topic` — the topic where results are written
-- `output_table` — the {{ ydb-short-name }} table where results are written
+Data is read from a topic using `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. The `WITH` block specifies the input data format and schema — which fields are expected in each message and their types. This pattern is used in all subsequent examples.
 
-## Reading data from a topic {#topic-read}
+{% note info %}
 
-Reading structured messages is done using `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. The `WITH` block specifies the input data format and schema — which fields are expected in each message and their types.
+Working with [local and external topics](local-and-external-topics.md) is shown.
 
-The following fragment is used inside [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) in the `DO BEGIN ... END DO` block:
+In the examples:
+
+- `ext_source` — a pre-created `external data source`.
+- `input_topic` — the topic from which data is read.
+- `output_topic` — the topic where results are written.
+- `output_table` — the {{ ydb-short-name }} table where results are written.
+
+{% endnote %}
+
+The following fragment shows reading events from a topic in JSON format. It is used inside [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) in the `DO BEGIN ... END DO` block:
 
 
 ```yql
 SELECT
-    Id,
-    Name
+    *
 FROM
-    topic_name  -- local topic; for external: ext_source.topic_name
+    ext_source.input_topic -- or local topic input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -32,13 +37,11 @@ WITH (
 ```
 
 
-For more details on formats: [{#T}](streaming-query-formats.md).
-
-This pattern is used in all subsequent examples.
+The following snippet reads JSON events from a topic. Use it inside [CREATE STREAMING QUERY](streaming-query-formats.md) in a ⟦C1⟧ block:
 
 ## Writing to a topic (JSON) {#topic-json}
 
-The query reads events from the input topic, forms a JSON object from individual fields, and writes the result to the output topic. The `AsStruct` function creates a structure from the specified fields, `Yson::From` converts it to Yson, `Yson::SerializeJson` serializes it to a JSON string, and `ToBytes` converts it to the `String` type, which is required for writing to the topic.
+The query reads events from the input topic, builds a JSON object from fields, and writes to the output topic. `AsStruct` builds a structure from the fields, `Yson::From` converts it to Yson, `Yson::SerializeJson` serializes to a JSON string, and `ToBytes` converts to `String`, which is required for topic writes.
 
 
 ```yql
@@ -47,7 +50,7 @@ DO BEGIN
 
 INSERT INTO ext_source.output_topic -- or local topic output_topic
 SELECT
-    -- Building JSON from individual fields
+    -- Forming JSON from individual fields
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
         AsStruct(Id AS id, Name AS name)
     ))))
@@ -65,7 +68,7 @@ END DO
 ```
 
 
-For more details on functions:
+More on the functions:
 
 - [AsStruct](../../yql/reference/builtins/basic#as-container)
 - [Yson::From](../../yql/reference/udf/list/yson#ysonfrom)
@@ -75,7 +78,7 @@ For more details on functions:
 
 ## Writing to a topic (string) {#topic-utf8}
 
-The query reads events from the input topic and writes one field as a string to the output topic. To write strings to a topic, `SELECT` must return a single column of type `String` or `Utf8`.
+The query reads events from the input topic and writes a single field as a string to the output topic. Topic writes require `SELECT` to return a single column of type `String` or `Utf8`.
 
 
 ```yql
@@ -99,15 +102,15 @@ END DO
 ```
 
 
-For more details on write formats: [{#T}](streaming-query-formats.md#write_formats).
+More on write formats: [{#T}](streaming-query-formats.md#write_formats).
 
 ## Writing to a table {#table-write}
 
-The query reads events from the topic and writes them to the `output_table` table. The table must be created in advance with a schema matching the selected columns.
+The query reads events from a topic and writes them to `output_table`. Create the table beforehand with a schema that matches the selected columns.
 
 {% note warning %}
 
-Writing to tables in streaming queries is supported **only in UPSERT mode**. The `INSERT INTO` operation is not supported, because during reprocessing of events (the at-least-once guarantee) it would lead to duplicate rows. With `UPSERT`, if a row with such a primary key already exists, it will be updated; otherwise, a new row will be inserted, and `INSERT INTO` will fail with an error.
+Table writes in streaming queries support **UPSERT only**. `INSERT INTO` is not supported: with [at-least-once](../../concepts/streaming-query/streaming-query.md#guarantees) delivery, retries would duplicate rows. With `UPSERT`, an existing row with the same primary key is updated; otherwise a new row is inserted, while `INSERT INTO` fails.
 
 {% endnote %}
 
@@ -135,10 +138,10 @@ END DO
 ```
 
 
-For more details: [{#T}](table-writing.md).
+More details: [{#T}](table-writing.md).
 
 ## See also
 
-- [Local and external topics](../../concepts/query_execution/topics.md#local-external-topics)
+- [Local and external topics in streaming queries](local-and-external-topics.md)
 - [{#T}](../../yql/reference/syntax/create-streaming-query.md)
 - [{#T}](../../recipes/streaming_queries/topics.md)

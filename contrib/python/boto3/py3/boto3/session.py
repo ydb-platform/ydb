@@ -16,7 +16,11 @@ import os
 
 import botocore.session
 from botocore.client import Config
-from botocore.exceptions import DataNotFoundError, UnknownServiceError
+from botocore.exceptions import (
+    DataNotFoundError,
+    NoCredentialsError,
+    UnknownServiceError,
+)
 
 import boto3
 import boto3.utils
@@ -44,6 +48,8 @@ class Session:
     :type profile_name: string
     :param profile_name: The name of a profile to use. If not given, then
                          the default profile is used.
+    :type aws_account_id: string
+    :param aws_account_id: AWS account ID
     """
 
     def __init__(
@@ -54,6 +60,7 @@ class Session:
         region_name=None,
         botocore_session=None,
         profile_name=None,
+        aws_account_id=None,
     ):
         if botocore_session is not None:
             self._session = botocore_session
@@ -74,10 +81,21 @@ class Session:
         if profile_name is not None:
             self._session.set_config_variable('profile', profile_name)
 
-        if aws_access_key_id or aws_secret_access_key or aws_session_token:
-            self._session.set_credentials(
-                aws_access_key_id, aws_secret_access_key, aws_session_token
-            )
+        credentials_kwargs = {
+            "aws_access_key_id": aws_access_key_id,
+            "aws_secret_access_key": aws_secret_access_key,
+            "aws_session_token": aws_session_token,
+            "aws_account_id": aws_account_id,
+        }
+
+        if any(credentials_kwargs.values()):
+            if self._account_id_set_without_credentials(**credentials_kwargs):
+                raise NoCredentialsError()
+
+            if aws_account_id is None:
+                del credentials_kwargs["aws_account_id"]
+
+            self._session.set_credentials(*credentials_kwargs.values())
 
         if region_name is not None:
             self._session.set_config_variable('region', region_name)
@@ -224,6 +242,7 @@ class Session:
         aws_secret_access_key=None,
         aws_session_token=None,
         config=None,
+        aws_account_id=None,
     ):
         """
         Create a low-level service client by name.
@@ -291,20 +310,32 @@ class Session:
             <https://botocore.amazonaws.com/v1/documentation/api/latest/reference/config.html>`_
             for more details.
 
+        :type aws_account_id: string
+        :param aws_account_id: The account id to use when creating
+            the client.  Same semantics as aws_access_key_id above.
+
         :return: Service client instance
 
         """
+        create_client_kwargs = {
+            'region_name': region_name,
+            'api_version': api_version,
+            'use_ssl': use_ssl,
+            'verify': verify,
+            'endpoint_url': endpoint_url,
+            'aws_access_key_id': aws_access_key_id,
+            'aws_secret_access_key': aws_secret_access_key,
+            'aws_session_token': aws_session_token,
+            'config': config,
+            'aws_account_id': aws_account_id,
+        }
+        if aws_account_id is None:
+            # Remove aws_account_id for arbitrary
+            # botocore version mismatches in AWS Lambda.
+            del create_client_kwargs['aws_account_id']
+
         return self._session.create_client(
-            service_name,
-            region_name=region_name,
-            api_version=api_version,
-            use_ssl=use_ssl,
-            verify=verify,
-            endpoint_url=endpoint_url,
-            aws_access_key_id=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key,
-            aws_session_token=aws_session_token,
-            config=config,
+            service_name, **create_client_kwargs
         )
 
     def resource(
@@ -527,3 +558,17 @@ class Session:
                 event_emitter=self.events,
             ),
         )
+
+    def _account_id_set_without_credentials(
+        self,
+        *,
+        aws_account_id,
+        aws_access_key_id,
+        aws_secret_access_key,
+        **kwargs,
+    ):
+        if aws_account_id is None:
+            return False
+        elif aws_access_key_id is None or aws_secret_access_key is None:
+            return True
+        return False

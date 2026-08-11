@@ -8,6 +8,8 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/core/file_storage/file_storage.h>
 
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+
 namespace NYql {
 
 struct TDqState;
@@ -21,6 +23,7 @@ TDataProviderInitializer GetDqDataProviderInitializer(
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
     const IMetricsRegistryPtr& metrics,
     const TFileStoragePtr& fileStorage,
-    bool externalUser = false);
+    bool externalUser = false,
+    TDqCliqueValidator cliqueValidator = {});
 
 } // namespace NYql

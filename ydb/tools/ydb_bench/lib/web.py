@@ -6,6 +6,7 @@ a browser connection cannot stop a benchmark.
 """
 import hashlib
 import json
+import socket
 import tempfile
 import threading
 import uuid
@@ -28,6 +29,10 @@ _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self';
 _HTML = """<!doctype html><meta charset=utf-8><title>YDB benchmark runs</title><link rel=stylesheet href=/app.css><main><h1>YDB benchmark runs</h1><nav><a href=/#runs>Runs</a> <a href=/#comparisons>Comparisons</a> <a href=/#builder>Builder</a> <a href=/#yaml>YAML</a></nav><section id=app>Loading…</section><script src=/app.js></script></main>"""
 _CSS = "body{font:16px system-ui,sans-serif;margin:2rem;max-width:70rem}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:.4rem;text-align:left}a{color:#0759a5}code,textarea{white-space:pre-wrap;width:100%;min-height:14rem}button{margin:.3rem}"
 _JS = r"""const app=document.querySelector('#app'),esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));let yaml='ping-bench:\n  baseline:\n    threads: [1]\n    duration: 1\n    repetitions: 1\n    affinity: [none]\n';async function api(p,o){let r=await fetch(p,o);let v=await r.json();if(!r.ok)throw Error(v.error||r.status);return v}function editor(){return '<textarea id=y>'+esc(yaml)+'</textarea><p><button id=validate>Validate</button><button id=preview>Preview</button><button id=start>Start</button></p><pre id=result></pre>'}async function compose(){let h=location.hash.slice(1);if(h==='builder'||h==='yaml'){app.innerHTML='<h2>'+h+'</h2>'+editor();let get=()=>yaml=document.querySelector('#y').value;validate.onclick=async()=>{get();result.textContent=JSON.stringify(await api('/api/validate',{method:'POST',body:yaml}),null,2)};preview.onclick=async()=>{get();result.textContent=JSON.stringify(await api('/api/plan',{method:'POST',body:yaml}),null,2)};start.onclick=async()=>{get();let r=await api('/api/runs',{method:'POST',body:yaml});location.hash='run/'+encodeURIComponent(r.id)};return}if(h==='comparisons'){let c=await api('/api/comparisons');app.innerHTML='<h2>Comparisons</h2>'+c.runs.map(r=>'<label><input type=checkbox value="'+esc(r.id)+'" '+(c.selected.includes(r.id)?'checked':'')+'> '+esc(r.id)+' ('+esc(r.source)+')</label><br>').join('')+'<p><button id=save>Save selection</button></p><pre>'+esc(JSON.stringify(c.keys,null,2))+'</pre>';save.onclick=()=>api('/api/comparisons/selection',{method:'POST',body:JSON.stringify([...document.querySelectorAll("input:checked")].map(x=>x.value))}).then(compose);return}if(h.startsWith('run/')){let id=decodeURIComponent(h.slice(4));let draw=async()=>{let r=await api('/api/runs/'+encodeURIComponent(id));app.innerHTML='<h2>Run '+esc(id)+'</h2><button id=cancel>Cancel</button><pre>'+esc(JSON.stringify(r,null,2))+'</pre>';cancel.onclick=()=>api('/api/runs/'+encodeURIComponent(id)+'/cancel',{method:'POST'}).then(draw)};await draw();let e=new EventSource('/api/runs/'+encodeURIComponent(id)+'/events');e.onmessage=draw;return}let runs=await api('/api/runs');app.innerHTML='<h2>Runs</h2><input id=file type=file accept=.zip><button id=import>Import archive</button><table><tr><th>Run</th><th>Source</th><th>Status</th><th>Profiles</th></tr>'+runs.map(r=>'<tr><td><a href="#run/'+encodeURIComponent(r.id)+'">'+esc(r.id)+'</a></td><td>'+esc(r.source)+'</td><td>'+esc(r.status)+'</td><td>'+r.profiles+'</td></tr>').join('')+'</table>';document.querySelector('#import').onclick=async()=>{let f=file.files[0];if(!f)return;await api('/api/import',{method:'POST',body:await f.arrayBuffer()});compose()}}addEventListener('hashchange',compose);compose();"""
+
+
+class _IPv6ThreadingHTTPServer(ThreadingHTTPServer):
+    address_family = socket.AF_INET6
 
 
 def _utc_now():
@@ -271,7 +276,8 @@ def _handler(service):
 
 def make_server(listen, port, output, allow_remote=False, executor=None):
     if not _is_loopback(listen) and not allow_remote: raise BenchmarkError("non-loopback --listen requires --allow-remote")
-    return ThreadingHTTPServer((listen, port), _handler(RunService(output, executor=executor)))
+    server_class = _IPv6ThreadingHTTPServer if ":" in listen else ThreadingHTTPServer
+    return server_class((listen, port), _handler(RunService(output, executor=executor)))
 
 
 def serve(listen, port, output, no_open=False, allow_remote=False, executor=None):

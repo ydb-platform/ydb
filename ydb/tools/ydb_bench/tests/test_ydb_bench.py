@@ -3,6 +3,7 @@ import io
 import json
 import os
 import signal
+import socket
 import stat
 import tempfile
 import textwrap
@@ -1127,6 +1128,13 @@ class WebTest(unittest.TestCase):
         with redirect_stderr(stderr):
             self.assertEqual(main(["web", "--listen", "0.0.0.0", "--output", str(self.root), "--no-open"]), 1)
         self.assertIn("allow-remote", stderr.getvalue())
+
+    def test_web_uses_ipv6_socket_for_ipv6_listener(self):
+        server = make_server("::1", 0, self.root, allow_remote=True)
+        try:
+            self.assertEqual(server.address_family, socket.AF_INET6)
+        finally:
+            server.server_close()
 
     def test_web_run_api_validates_plans_runs_reconnects_and_cancels(self):
         """The web service owns a fake executor after each HTTP request ends."""

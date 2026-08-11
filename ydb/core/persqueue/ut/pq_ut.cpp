@@ -426,6 +426,70 @@ Y_UNIT_TEST(TestCompaction) {
     });
 }
 
+// Regression for https://github.com/ydb-platform/ydb/issues/49436:
+// failed KV/cache read for compaction (cookie=ReadBlobsForCompaction) must not
+// unpack empty blobs in CompactRequestedBlob/GetBatches.
+Y_UNIT_TEST(CompactionSurvivesFailedBlobRead) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(50000);
+    // High threshold so writes do not trigger async compaction before we inject the failure.
+    // ForceCompaction still runs because it passes force=true.
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
+
+    // Blobs below low watermark are read+rewritten (not renamed) during compaction.
+    PQTabletPrepare({.partitions = 1, .lowWatermark = 10_MB, .writeSpeed = 50_MB},
+                    {{"user1", true}}, tc);
+
+    for (ui64 i = 0; i < 8; ++i) {
+        TVector<std::pair<ui64, TString>> data;
+        data.emplace_back(i + 1, TString(200_KB, 'x'));
+        CmdWrite(0, "sourceid_compaction_fail_read", data, tc, false, {}, i == 0, "", -1, static_cast<i64>(i));
+    }
+
+    bool injected = false;
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* event = ev->CastAsLocal<TEvPQ::TEvBlobResponse>()) {
+            if (!injected && event->GetCookie() == 0) { // ERequestCookie::ReadBlobsForCompaction
+                injected = true;
+
+                TVector<TRequestedBlob> blobs = event->GetBlobs();
+                UNIT_ASSERT_C(!blobs.empty(), "compaction blob read response has no blobs");
+                for (auto& blob : blobs) {
+                    blob.Clear();
+                }
+
+                const TActorId recipient = ev->Recipient;
+                const TActorId sender = ev->Sender;
+                // Same shape as production failure: Error set, keys present, RawValue empty.
+                ev.Reset(new IEventHandle(
+                    recipient,
+                    sender,
+                    new TEvPQ::TEvBlobResponse(
+                        /*cookie=*/0,
+                        std::move(blobs),
+                        TErrorInfo(NPersQueue::NErrorCode::ERROR, "injected BS/KV failure"))));
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    CmdRunCompaction(0, tc);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return injected; };
+    tc.Runtime->DispatchEvents(options);
+    UNIT_ASSERT(injected);
+
+    // After the fix: tablet stays alive and accepts further writes.
+    // Before the fix: AFL_ENSURE(Data != End) aborts while handling the poisoned response.
+    TVector<std::pair<ui64, TString>> more;
+    more.emplace_back(9, TString(1_KB, 'y'));
+    CmdWrite(0, "sourceid_compaction_fail_read", more, tc, false, {}, false, "", -1, 8);
+    PQGetPartInfo(0, 9, tc);
+}
 
 Y_UNIT_TEST(BatchedMessagesWriteWithoutFeatureFlagFails) {
     TTestContext tc;

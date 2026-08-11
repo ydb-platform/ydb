@@ -146,7 +146,7 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<
 
     for (const auto& iu : subplanContextIUs) {
         const TTypeAnnotationNode* subplanType;
-        auto subplanEntry = props.Subplans.PlanMap.at(iu);
+        const auto& subplanEntry = props.Subplans.At(iu);
         if (subplanEntry.Type == ESubplanType::EXPR) {
             auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
             const auto resultIUs = GetSubplanResultIUs(subplan);

@@ -6288,7 +6288,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
 
-        const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
+        const auto& rewrittenEntry = root.PlanProps.Subplans.At(subplanIU);
         UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.Tuple.size(), 1);
         UNIT_ASSERT(rewrittenEntry.Tuple.front() == TInfoUnit("l_a"));
 
@@ -6343,7 +6343,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
 
-        const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
+        const auto& rewrittenEntry = root.PlanProps.Subplans.At(subplanIU);
         UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.DependentIUs.size(), 1);
         UNIT_ASSERT(rewrittenEntry.DependentIUs.front() == TInfoUnit("l_a"));
         UNIT_ASSERT_VALUES_EQUAL(addDeps->Dependencies.size(), 1);
@@ -6386,7 +6386,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
-        const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
+        const auto& rewrittenEntry = root.PlanProps.Subplans.At(subplanIU);
         UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.Tuple.size(), 1);
         UNIT_ASSERT(rewrittenEntry.Tuple.front() == TInfoUnit("b"));
     }

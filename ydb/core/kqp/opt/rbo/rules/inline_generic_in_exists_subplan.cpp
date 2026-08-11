@@ -54,7 +54,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
     // so the current iu is no longer marked as SubplanIU
 
     auto subplanIU = inOrExistsSubplans[0];
-    auto subplanEntry = props.Subplans.PlanMap.at(subplanIU);
+    const auto& subplanEntry = props.Subplans.At(subplanIU);
     TIntrusivePtr<IOperator> join;
     TVector<std::pair<TInfoUnit, TInfoUnit>> extraJoinKeys;
     auto uncorrSubplan = CastOperator<IOperator>(subplanEntry.Plan);

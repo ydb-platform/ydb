@@ -1178,7 +1178,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev) {
         if (!DirectImport) {
             YDB_LOG_ERROR("[Import] Unexpected EvPutResult without DirectImport",
-                {"logPrefix", LogPrefix()});
+                {"logPrefix", LogPrefix()},
+                {"ev", ev->Get()->Print(/*isFull=*/true)});
             return;
         }
 

@@ -6,11 +6,11 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/library/aws_init/aws.h>
 
+#include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <contrib/libs/zstd/include/zstd.h>
-
+#include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
 
@@ -34,12 +34,12 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 const TString EmptyTableState;
 
 TString ZstdCompress(const TStringBuf src) {
-    TString compressed;
-    compressed.resize(ZSTD_compressBound(src.size()));
-    const auto res = ZSTD_compress(compressed.Detach(), compressed.size(), src.data(), src.size(), ZSTD_CLEVEL_DEFAULT);
-    UNIT_ASSERT_C(!ZSTD_isError(res), "Zstd error: " << ZSTD_getErrorName(res));
-    compressed.resize(res);
-    return compressed;
+    TStringStream out;
+    {
+        TZstdCompress compress(&out);
+        compress.Write(src.data(), src.size());
+    }
+    return out.Str();
 }
 
 struct TTestEnv {
@@ -71,10 +71,10 @@ struct TTestEnv {
         return ++NextTxId;
     }
 
-    void StartS3(const TString& data, const TString& ext = ".csv") {
+    void StartS3(const TString& data, const TString& ext = ".csv", ui32 shardNum = 0) {
         S3Port = PortManager.GetPort();
         THashMap<TString, TString> objects;
-        objects[Sprintf("/data_00%s", ext.c_str())] = data;
+        objects[Sprintf("/data_%02d%s", shardNum, ext.c_str())] = data;
         S3Mock.Reset(new TS3Mock(std::move(objects), TS3Mock::TSettings(S3Port)));
         UNIT_ASSERT(S3Mock->Start());
     }
@@ -130,7 +130,8 @@ struct TTestEnv {
         const NKikimrSchemeOp::TTableDescription& desc,
         ui32 shardNum,
         ui32 readBatchSize,
-        ui64 txId)
+        ui64 txId,
+        const TString& tableName = "Table")
     {
         NKikimrTxDataShard::TFlatSchemeTransaction tx;
         // Must exceed LastSchemeOpSeqNo left by CreateTable via SchemeShard.
@@ -138,7 +139,7 @@ struct TTestEnv {
         tx.MutableSeqNo()->SetRound(txId);
 
         auto& restore = *tx.MutableRestore();
-        restore.SetTableName("Table");
+        restore.SetTableName(tableName);
         restore.SetTableId(tableId.PathId.LocalPathId);
         restore.SetShardNum(shardNum);
         restore.MutableTableDescription()->CopyFrom(desc);
@@ -160,11 +161,12 @@ struct TTestEnv {
         const TTableId& tableId,
         const NKikimrSchemeOp::TTableDescription& desc,
         ui32 shardNum = 0,
-        ui32 readBatchSize = 128)
+        ui32 readBatchSize = 128,
+        const TString& tableName = "Table")
     {
         const ui64 txId = AllocateTxId();
         const ui64 schemeshardId = tableId.PathId.OwnerId;
-        const auto body = BuildRestoreBody(tableId, desc, shardNum, readBatchSize, txId);
+        const auto body = BuildRestoreBody(tableId, desc, shardNum, readBatchSize, txId, tableName);
 
         TMaybe<NKikimrTxDataShard::TShardOpResult> opResult;
         auto prev = Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -222,10 +224,10 @@ TString MakeCsv(ui32 count, const TString& keyPrefix = "a") {
     TStringBuilder csv;
     const auto numWidth = ToString(count).size();
     for (ui32 i = 1; i <= count; ++i) {
-        const auto keyValue = keyPrefix
+        const auto keyValue = !keyPrefix.empty()
             ? TStringBuilder() << keyPrefix << LeftPad(i, numWidth, '0')
             : TStringBuilder() << i;
-        if (keyPrefix) {
+        if (!keyPrefix.empty()) {
             csv << "\"" << keyValue << "\",";
         } else {
             csv << keyValue << ",";
@@ -239,7 +241,7 @@ TString ExpectedUtf8TableState(ui32 count, const TString& keyPrefix = "a") {
     TStringBuilder out;
     const auto numWidth = ToString(count).size();
     for (ui32 i = 1; i <= count; ++i) {
-        const auto keyValue = keyPrefix
+        const auto keyValue = !keyPrefix.empty()
             ? TStringBuilder() << keyPrefix << LeftPad(i, numWidth, '0')
             : TStringBuilder() << i;
         out << "key = " << keyValue << ", value = value" << i << Endl;

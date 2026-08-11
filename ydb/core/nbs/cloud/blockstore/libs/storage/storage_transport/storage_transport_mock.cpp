@@ -303,6 +303,16 @@ TStorageTransportMock::ListPBufferEntries(const THostConnection& connection)
     return NThreading::MakeFuture(std::move(result));
 }
 
+NThreading::TFuture<TEvDeleteTabletChunksResult>
+TStorageTransportMock::DeleteTabletChunks(const THostConnection& connection)
+{
+    Y_UNUSED(connection);
+
+    TEvDeleteTabletChunksResult result;
+    result.SetStatus(DeleteTabletChunksStatus);
+    return NThreading::MakeFuture(std::move(result));
+}
+
 TStorageTransportMock::TKey TStorageTransportMock::MakeKey(
     EConnectionType type,
     const TDDiskId& ddiskId)

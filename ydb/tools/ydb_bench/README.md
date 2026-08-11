@@ -22,6 +22,15 @@ ydb/tools/ydb_bench/ydb_bench describe star-ping-bench
 ydb/tools/ydb_bench/ydb_bench config-schema
 ```
 
+For automation, use JSON discovery and validate the YAML before allocating any
+result directory:
+
+```bash
+ydb/tools/ydb_bench/ydb_bench list --json
+ydb/tools/ydb_bench/ydb_bench describe ping-bench --json
+ydb/tools/ydb_bench/ydb_bench validate --config bench.yaml --json
+```
+
 A configuration can contain multiple benchmarks and multiple arbitrarily named
 profiles for each benchmark:
 
@@ -64,6 +73,22 @@ ydb/tools/ydb_bench/ydb_bench run \
     --config bench.yaml \
     --output ydb-bench-results
 ```
+
+The default queue is fail-fast. Add `--continue-on-error` to attempt later
+profiles after one fails; the final top-level status remains `failed` if any
+profile failed. For an automation-friendly final report, use `--report-json`:
+
+```bash
+ydb/tools/ydb_bench/ydb_bench run --config bench.yaml --output results \
+    --report-json results/report.json
+# stdout is exactly one JSON value; progress and diagnostics use stderr.
+ydb/tools/ydb_bench/ydb_bench run --config bench.yaml --output results-stdout \
+    --report-json - > run.json
+```
+
+The path report is atomically written and has the exact same value as the
+top-level `results/run.json`. YAML remains the portable input contract;
+`config-schema` is provided only to help tools generate or validate it.
 
 Add `--perf` to record each repetition with the same `cycles:u`, 99 Hz, and
 DWARF-call-stack setup used by the YDB platform investigation:

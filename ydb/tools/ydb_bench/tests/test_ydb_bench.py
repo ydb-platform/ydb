@@ -117,6 +117,86 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(json.loads(schema_output.getvalue()), CONFIG_SCHEMA)
         self.assertEqual(set(CONFIG_SCHEMA["properties"]), {"ping-bench", "star-ping-bench"})
 
+    def test_cli_json_discovery_and_validation_do_not_create_output(self):
+        config = self._config(
+            """
+            ping-bench:
+              invalid:
+                threads: []
+                duration: 1
+                repetitions: 1
+                affinity: [none]
+            """
+        )
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(main(["list", "--json"]), 0)
+        listed = json.loads(output.getvalue())
+        self.assertIn("defaults", listed[0])
+        self.assertIn("affinity_modes", listed[0])
+        self.assertIn("examples", listed[0])
+
+        output, errors = io.StringIO(), io.StringIO()
+        with redirect_stdout(output), redirect_stderr(errors):
+            self.assertEqual(main(["validate", "--config", str(config), "--json"]), 1)
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["error"]["path"], "ping-bench.invalid.threads")
+        self.assertIn("non-empty", result["error"]["message"])
+        self.assertEqual(errors.getvalue(), "")
+        self.assertFalse((self.root / "output").exists())
+
+    def test_cli_report_stdout_and_queue_error_policies(self):
+        benchmark = self._script(
+            """
+            test "$ACTORSYSTEM_INFLIGHTS" = "2" || exit 23
+            echo "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs"
+            echo "1,32,2,1000,1.0,900,1100"
+            """
+        )
+        config = self._config(
+            """
+            ping-bench:
+              fails: {threads: [1], actor-pairs: [32], inflight: [1], duration: 1, repetitions: 1, affinity: [none]}
+              succeeds: {threads: [1], actor-pairs: [32], inflight: [2], duration: 1, repetitions: 1, affinity: [none]}
+            """
+        )
+        loader = lambda _: benchmark.read_bytes()
+        fail_fast = self.root / "fail-fast"
+        fail_fast_stdout, fail_fast_stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(fail_fast_stdout), redirect_stderr(fail_fast_stderr):
+            self.assertEqual(main(["run", "--config", str(config), "--output", str(fail_fast)], loader), 1)
+        self.assertEqual(len(json.loads((fail_fast / "run.json").read_text())["runs"]), 1)
+        self.assertEqual(fail_fast_stdout.getvalue(), "")
+        self.assertIn("failed 2 benchmark profiles: {}".format(fail_fast), fail_fast_stderr.getvalue())
+
+        continued, stdout, stderr = self.root / "continued", io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            self.assertEqual(main(["run", "--config", str(config), "--output", str(continued), "--continue-on-error", "--report-json", "-"], loader), 1)
+        report_payload = stdout.getvalue().strip()
+        report, offset = json.JSONDecoder().raw_decode(report_payload)
+        self.assertEqual(report_payload[offset:].strip(), "")
+        self.assertTrue(report_payload.startswith("{"))
+        self.assertTrue(report_payload.endswith("}"))
+        self.assertEqual(report_payload.count("{"), report_payload.count("}"))
+        report_stored = json.loads((continued / "run.json").read_text())
+        self.assertEqual(report, json.loads((continued / "run.json").read_text()))
+        self.assertEqual([run["status"] for run in report["runs"]], ["failed", "completed"])
+        self.assertEqual(report, report_stored)
+        self.assertIn("failed 2 benchmark profiles: {}".format(continued), stderr.getvalue())
+        self.assertIn("succeeds/summary.csv", stderr.getvalue())
+
+        report_json_output = self.root / "continued-path-report.json"
+        continued_path = self.root / "continued-path"
+        path_stdout, path_stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(path_stdout), redirect_stderr(path_stderr):
+            self.assertEqual(main(["run", "--config", str(config), "--output", str(continued_path), "--continue-on-error", "--report-json", str(report_json_output)], loader), 1)
+        self.assertEqual(path_stdout.getvalue(), "")
+        report = json.loads(report_json_output.read_text())
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["runs"], report_stored["runs"])
+        self.assertIn("failed 2 benchmark profiles:", path_stderr.getvalue())
+        self.assertIn("succeeds/summary.csv", path_stderr.getvalue())
+
     def test_registry_accepts_a_fake_adapter_and_generates_its_schema(self):
         """Adapters can be registered independently of the CLI, config loader, and executor."""
         registry = BenchmarkRegistry()
@@ -409,7 +489,7 @@ class YdbBenchTest(unittest.TestCase):
         )
         output = self.root / "multi-output"
         console = io.StringIO()
-        with redirect_stdout(console):
+        with redirect_stderr(console):
             code = main(
                 ["run", "--config", str(config), "--output", str(output)],
                 resource_loader=lambda _: benchmark.read_bytes(),

@@ -11,6 +11,7 @@ from ydb.tools.ydb_bench.lib.common import (
     BenchmarkError,
     BenchmarkInterrupted,
     atomic_copy_file,
+    atomic_write_json,
     extract_executable,
 )
 from ydb.tools.ydb_bench.lib.config import build_run_plan, config_schema, load_config
@@ -36,16 +37,22 @@ def _default_output_directory():
 def _create_parser():
     parser = argparse.ArgumentParser(prog="ydb_bench")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("list", help="list available benchmarks")
+    listed = subparsers.add_parser("list", help="list available benchmarks")
+    listed.add_argument("--json", action="store_true")
 
     describe = subparsers.add_parser("describe", help="describe a benchmark")
     describe.add_argument("benchmark", choices=tuple(BENCHMARKS))
+    describe.add_argument("--json", action="store_true")
 
     subparsers.add_parser("config-schema", help="print the benchmark configuration JSON Schema")
 
+    validate = subparsers.add_parser("validate", help="validate a YAML benchmark configuration")
+    validate.add_argument("--config", required=True, type=Path)
+    validate.add_argument("--json", action="store_true")
+
     run = subparsers.add_parser("run", help="run all benchmark profiles from a YAML configuration")
     run.add_argument("--config", required=True, type=Path)
-    run.add_argument("--output", type=Path)
+    run.add_argument("--output", required=True, type=Path)
     run.add_argument("--work-dir", type=Path)
     run.add_argument(
         "--perf",
@@ -58,11 +65,31 @@ def _create_parser():
         default=99,
         help="sampling frequency for --perf (default: 99 Hz)",
     )
+    run.add_argument("--report-json", type=str, help="write the top-level run report to a path or - for stdout")
+    run.add_argument("--continue-on-error", action="store_true", help="continue with later profiles after a failure")
     return parser
 
 
-def _describe(benchmark_name):
+def _benchmark_record(benchmark):
+    return {
+        "name": benchmark.name, "description": benchmark.description,
+        "test_filter": benchmark.test_filter, "parameter": {
+            "name": benchmark.parameter_name, "description": benchmark.parameter_description,
+            "environment": benchmark.parameter_environment, "column": benchmark.parameter_column,
+        }, "defaults": {"actor-pairs": [512], benchmark.parameter_name: [1]},
+        "affinity_modes": list(AFFINITY_MODES), "csv_columns": list(benchmark.csv_columns),
+        "examples": [
+            {benchmark.name: {"example": {"threads": [1], "duration": 1,
+                "repetitions": 1, "affinity": ["none"]}}}
+        ],
+    }
+
+
+def _describe(benchmark_name, as_json=False):
     benchmark = BENCHMARKS[benchmark_name]
+    if as_json:
+        print(json.dumps(_benchmark_record(benchmark), indent=2, sort_keys=True))
+        return
     print("{}: {}".format(benchmark.name, benchmark.description))
     print("test: {}".format(benchmark.test_filter))
     print("parameter: {}".format(benchmark.parameter_name))
@@ -84,6 +111,20 @@ def _utc_now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def _emit_report(report, destination):
+    if destination == "-":
+        print(json.dumps(report, indent=2, sort_keys=True))
+    elif destination:
+        atomic_write_json(destination, report)
+
+
+def _emit_progress(manifest, output_directory, planned_runs):
+    print("{} {} benchmark profiles: {}".format(manifest["status"], planned_runs, output_directory), file=sys.stderr)
+    for record in manifest["runs"]:
+        if record["status"] == "completed":
+            print("{}/{}: {}".format(record["benchmark"], record["profile"], record["summary"]), file=sys.stderr)
+
+
 def _run(arguments, resource_loader, tool_revision):
     if resource_loader is None:
         raise BenchmarkError("the benchmark executable resource loader is not configured")
@@ -95,6 +136,7 @@ def _run(arguments, resource_loader, tool_revision):
         perf_enabled=arguments.perf,
         perf_frequency=arguments.perf_frequency,
     )
+    planned_runs = len(loaded_config.runs)
     plan = build_run_plan(loaded_config)
     output_directory = _prepare_output(arguments.output)
     if arguments.work_dir is not None:
@@ -204,7 +246,10 @@ def _run(arguments, resource_loader, tool_revision):
                 except BenchmarkError as error:
                     run_record["status"] = "failed"
                     run_record["error"] = str(error)
-                    raise
+                    store.write()
+                    if not arguments.continue_on_error:
+                        raise
+                    continue
                 run_record["status"] = "completed"
                 run_record["manifest"] = str(relative_directory / "run.json")
                 run_record["summary"] = str(relative_directory / profile_manifest["summary"])
@@ -215,6 +260,10 @@ def _run(arguments, resource_loader, tool_revision):
         manifest["finished_at"] = _utc_now()
         manifest["error"] = str(error)
         store.write()
+        if arguments.report_json:
+            _emit_report(manifest, arguments.report_json)
+        _emit_progress(manifest, output_directory, planned_runs)
+        print("ydb_bench: error: {}".format(error), file=sys.stderr)
         raise
     except BenchmarkError as error:
         manifest["status"] = "failed"
@@ -222,31 +271,66 @@ def _run(arguments, resource_loader, tool_revision):
         manifest["finished_at"] = _utc_now()
         manifest["error"] = str(error)
         store.write()
-        raise
+        if arguments.report_json:
+            _emit_report(manifest, arguments.report_json)
+        _emit_progress(manifest, output_directory, planned_runs)
+        print("ydb_bench: error: {}".format(error), file=sys.stderr)
+        return 1
 
-    manifest["status"] = "completed"
-    manifest["state"] = "passed"
+    failed = [record for record in manifest["runs"] if record["status"] == "failed"]
+    manifest["status"] = "failed" if failed else "completed"
+    manifest["state"] = "failed" if failed else "passed"
     manifest["finished_at"] = _utc_now()
+    if failed:
+        manifest["error"] = "{} benchmark profile(s) failed".format(len(failed))
     store.write()
 
-    print("completed {} benchmark profiles: {}".format(len(loaded_config.runs), output_directory))
-    for record in manifest["runs"]:
-        print("{}/{}: {}".format(record["benchmark"], record["profile"], record["summary"]))
-    return 0
+    if arguments.report_json:
+        _emit_report(manifest, arguments.report_json)
+    _emit_progress(manifest, output_directory, planned_runs)
+    return 1 if failed else 0
+
+
+def _validation_error(error):
+    message = str(error)
+    marker = "invalid benchmark config at "
+    if marker in message:
+        location, _, detail = message.split(marker, 1)[1].partition(": ")
+        return {"valid": False, "error": {"path": location, "message": detail}}
+    return {"valid": False, "error": {"path": "$", "message": message}}
 
 
 def main(argv=None, resource_loader=None, tool_revision=None):
     arguments = _create_parser().parse_args(argv)
     try:
         if arguments.command == "list":
+            if arguments.json:
+                print(json.dumps([_benchmark_record(item) for item in BENCHMARKS.values()], indent=2, sort_keys=True))
+                return 0
             for benchmark in BENCHMARKS.values():
                 print("{}\t{}".format(benchmark.name, benchmark.description))
             return 0
         if arguments.command == "describe":
-            _describe(arguments.benchmark)
+            _describe(arguments.benchmark, arguments.json)
             return 0
         if arguments.command == "config-schema":
             print(json.dumps(config_schema(), indent=2, sort_keys=True))
+            return 0
+        if arguments.command == "validate":
+            try:
+                loaded = load_config(arguments.config)
+            except BenchmarkError as error:
+                result = _validation_error(error)
+                if arguments.json:
+                    print(json.dumps(result, sort_keys=True))
+                else:
+                    print("ydb_bench: error: {}".format(error), file=sys.stderr)
+                return 1
+            result = {"valid": True, "config": {"path": str(loaded.path), "sha256": loaded.sha256}, "steps": len(build_run_plan(loaded).steps)}
+            if arguments.json:
+                print(json.dumps(result, sort_keys=True))
+            else:
+                print("valid: {} ({} planned steps)".format(loaded.path, result["steps"]))
             return 0
         return _run(arguments, resource_loader, tool_revision or {"commit_id": "unknown"})
     except BenchmarkInterrupted as error:

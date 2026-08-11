@@ -322,7 +322,7 @@ namespace NYql::NDq {
                         value = NUdf::TUnboxedValue();
                     }
                 } else {
-                    if (state->SessionState && state->SessionState) {
+                    if (state->SessionState) {
                         Sessions.push_back(std::exchange(state->SessionState, {}));
                     }
                     YDB_LOG_DEBUG("Retry: parent MIA", COMMON_LOG);

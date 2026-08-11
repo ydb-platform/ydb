@@ -3869,12 +3869,14 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 SendReadingFinished(user);
             }
         } else if (user != CLIENTID_WITHOUT_CONSUMER) {
-            auto ui = UsersInfoStorage->GetIfExists(user);
-            if (ui && ui->LabeledCounters) {
-                ScheduleDropPartitionLabeledCounters(ui->LabeledCounters->GetGroup());
+            // Consumer may already have been removed by an earlier write cycle
+            // (e.g. ChangePartitionConfig drop + FillReadFromTimestamps ESCI_DROP_READ_RULE).
+            if (auto* ui = UsersInfoStorage->GetIfExists(user)) {
+                if (ui->LabeledCounters) {
+                    ScheduleDropPartitionLabeledCounters(ui->LabeledCounters->GetGroup());
+                }
+                UsersInfoStorage->Remove(user, ctx);
             }
-
-            UsersInfoStorage->Remove(user, ctx);
 
             // Finish all ongoing reads
             std::unordered_set<ui64> readCookies;

@@ -655,40 +655,46 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 
             NKikimrPQ::TUserInfo ud;
             UNIT_ASSERT(ud.ParseFromString(event->Record.GetCmdWrite(i).GetValue()));
+            UNIT_ASSERT(key.size() > (1 + 10 + 1)); // type + partition + mark + consumer
+            const TString consumerFromKey = key.substr(12);
 
             bool match = false;
             for (auto& [_, userInfo] : matcher.UserInfos) {
-                if (userInfo.Session && ud.HasSession()) {
-                    if (*userInfo.Session != ud.GetSession()) {
+                if (!userInfo.Consumer && !userInfo.Session) {
+                    continue;
+                }
+                if (userInfo.Consumer && *userInfo.Consumer != consumerFromKey) {
+                    continue;
+                }
+                if (userInfo.Session) {
+                    if (!ud.HasSession() || *userInfo.Session != ud.GetSession()) {
                         continue;
                     }
-
-                    match = true;
-
-                    if (userInfo.Generation) {
-                        UNIT_ASSERT(ud.HasGeneration());
-                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
-                    }
-                    if (userInfo.Step) {
-                        UNIT_ASSERT(ud.HasStep());
-                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
-                    }
-                    if (userInfo.Offset) {
-                        UNIT_ASSERT(ud.HasOffset());
-                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
-                    }
-                    if (userInfo.ReadRuleGeneration) {
-                        UNIT_ASSERT(ud.HasReadRuleGeneration());
-                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
-                    }
                 }
 
-                if (match) {
-                    break;
+                match = true;
+
+                if (userInfo.Generation) {
+                    UNIT_ASSERT(ud.HasGeneration());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
                 }
+                if (userInfo.Step) {
+                    UNIT_ASSERT(ud.HasStep());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
+                }
+                if (userInfo.Offset) {
+                    UNIT_ASSERT(ud.HasOffset());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
+                }
+                if (userInfo.ReadRuleGeneration) {
+                    UNIT_ASSERT(ud.HasReadRuleGeneration());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
+                }
+
+                break;
             }
 
-            UNIT_ASSERT(match);
+            UNIT_ASSERT_C(match, "No UserInfos matcher for consumer '" << consumerFromKey << "'");
 
             break;
         }

@@ -371,7 +371,7 @@ void TPCCRunner::RunSync() {
             warmupSeconds = 30 * 60;
         }
         warmupSeconds = std::max(warmupSeconds, minWarmupSeconds);
-        warmupSeconds = std::min(warmupSeconds, std::max(MaxAdaptiveWarmupSeconds, minWarmupSeconds));
+        warmupSeconds = std::min(warmupSeconds, MaxAdaptiveWarmupSeconds);
     } else {
         // user specified
         warmupSeconds = Config.WarmupDuration.Seconds();

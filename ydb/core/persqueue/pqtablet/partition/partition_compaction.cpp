@@ -500,6 +500,13 @@ void TPartition::AbortBlobsCompaction(const TString& reason)
 {
     const auto& ctx = ActorContext();
 
+    if (!CompactionInProgress) {
+        YDB_LOG_WARN_COMP(Service, "Ignore abort blobs compaction: compaction is not in progress",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"reason", reason});
+        return;
+    }
+
     YDB_LOG_WARN_COMP(Service, "Abort blobs compaction",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"reason", reason},

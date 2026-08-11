@@ -445,15 +445,22 @@ Y_UNIT_TEST(CompactionSurvivesFailedBlobRead) {
                     {{"user1", true}}, tc);
 
     const TString sourceId = "sourceid_compaction_fail_read";
+    constexpr ui64 startOffset = 100;
     constexpr ui64 initialMessages = 8;
     constexpr ui64 totalMessages = 9;
+    const ui64 endOffset = startOffset + totalMessages;
     TVector<TString> payloads;
     payloads.reserve(totalMessages);
+    TVector<i32> expectedOffsets;
+    expectedOffsets.reserve(totalMessages);
+    for (ui64 i = 0; i < totalMessages; ++i) {
+        expectedOffsets.push_back(static_cast<i32>(startOffset + i));
+    }
     for (ui64 i = 0; i < initialMessages; ++i) {
         payloads.emplace_back(TString(200_KB, static_cast<char>('a' + i)));
         TVector<std::pair<ui64, TString>> data;
         data.emplace_back(i + 1, payloads.back());
-        CmdWrite(0, sourceId, data, tc, false, {}, i == 0, "", -1, static_cast<i64>(i));
+        CmdWrite(0, sourceId, data, tc, false, {}, i == 0, "", -1, static_cast<i64>(startOffset + i));
     }
 
     bool injected = false;
@@ -495,8 +502,8 @@ Y_UNIT_TEST(CompactionSurvivesFailedBlobRead) {
     payloads.emplace_back(TString(1_KB, 'y'));
     TVector<std::pair<ui64, TString>> more;
     more.emplace_back(totalMessages, payloads.back());
-    CmdWrite(0, sourceId, more, tc, false, {}, false, "", -1, static_cast<i64>(initialMessages));
-    PQGetPartInfo(0, totalMessages, tc);
+    CmdWrite(0, sourceId, more, tc, false, {}, false, "", -1, static_cast<i64>(startOffset + initialMessages));
+    PQGetPartInfo(startOffset, endOffset, tc);
 
     // Error is gone: next forced compaction must succeed and preserve the log.
     tc.Runtime->SetObserverFunc([](TAutoPtr<IEventHandle>&) {
@@ -505,17 +512,17 @@ Y_UNIT_TEST(CompactionSurvivesFailedBlobRead) {
     CmdRunCompaction(0, tc);
 
     auto assertExactLog = [&](const char* stage) {
-        PQGetPartInfo(0, totalMessages, tc);
+        PQGetPartInfo(startOffset, endOffset, tc);
 
         TPQCmdReadSettings readSettings{
-            "", 0, 0, static_cast<ui32>(totalMessages + 1), 64_MB,
+            "", 0, static_cast<i64>(startOffset), static_cast<ui32>(totalMessages + 1), 64_MB,
             static_cast<ui32>(totalMessages), false,
-            {0, 1, 2, 3, 4, 5, 6, 7, 8}, 0, 0, "user1"};
+            expectedOffsets, 0, 0, "user1"};
         const auto readResult = CmdReadAndGetResult(readSettings, tc);
         UNIT_ASSERT_VALUES_EQUAL_C(readResult.ResultSize(), totalMessages, stage);
         for (ui64 i = 0; i < totalMessages; ++i) {
             const auto& msg = readResult.GetResult(i);
-            UNIT_ASSERT_VALUES_EQUAL_C(msg.GetOffset(), i, stage);
+            UNIT_ASSERT_VALUES_EQUAL_C(msg.GetOffset(), startOffset + i, stage);
             UNIT_ASSERT_VALUES_EQUAL_C(msg.GetSeqNo(), i + 1, stage);
             UNIT_ASSERT_VALUES_EQUAL_C(msg.GetSourceId(), sourceId, stage);
             UNIT_ASSERT_VALUES_EQUAL_C(msg.GetData(), payloads[i], stage);

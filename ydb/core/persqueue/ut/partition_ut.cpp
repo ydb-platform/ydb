@@ -54,6 +54,8 @@ struct TCreatePartitionParams {
     TMaybe<ui64> PlanStep;
     TMaybe<ui64> TxId;
     TConfigParams Config;
+    // Consumers present in KV user-info but not necessarily in Config (stale leftovers).
+    TVector<TCreateConsumerParams> ExtraDiskConsumers;
     TInstant EndWriteTimestamp;
     bool FillHead = false;
 };
@@ -502,7 +504,13 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         SendMetaReadResponse(params.Begin, params.End, params.PlanStep, params.TxId, params.EndWriteTimestamp);
 
         WaitInfoRangeRequest();
-        SendInfoRangeResponse(params.Partition.InternalPartitionId, params.Config.Consumers);
+        {
+            auto infoConsumers = params.Config.Consumers;
+            infoConsumers.insert(infoConsumers.end(),
+                                 params.ExtraDiskConsumers.begin(),
+                                 params.ExtraDiskConsumers.end());
+            SendInfoRangeResponse(params.Partition.InternalPartitionId, infoConsumers);
+        }
 
         WaitDataRangeRequest();
         SendDataRangeResponse(params.Partition.InternalPartitionId, params.Begin, params.End, params.FillHead);
@@ -639,43 +647,52 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
             if (key[11] != TKeyPrefix::MarkUser) {
                 break;
             }
+            if (matcher.UserInfos.empty()) {
+                break;
+            }
 
             NKikimrPQ::TUserInfo ud;
             UNIT_ASSERT(ud.ParseFromString(event->Record.GetCmdWrite(i).GetValue()));
+            UNIT_ASSERT(key.size() > (1 + 10 + 1)); // type + partition + mark + consumer
+            const TString consumerFromKey = key.substr(12);
 
             bool match = false;
             for (auto& [_, userInfo] : matcher.UserInfos) {
-                if (userInfo.Session && ud.HasSession()) {
-                    if (*userInfo.Session != ud.GetSession()) {
+                if (!userInfo.Consumer && !userInfo.Session) {
+                    continue;
+                }
+                if (userInfo.Consumer && *userInfo.Consumer != consumerFromKey) {
+                    continue;
+                }
+                if (userInfo.Session) {
+                    if (!ud.HasSession() || *userInfo.Session != ud.GetSession()) {
                         continue;
                     }
-
-                    match = true;
-
-                    if (userInfo.Generation) {
-                        UNIT_ASSERT(ud.HasGeneration());
-                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
-                    }
-                    if (userInfo.Step) {
-                        UNIT_ASSERT(ud.HasStep());
-                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
-                    }
-                    if (userInfo.Offset) {
-                        UNIT_ASSERT(ud.HasOffset());
-                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
-                    }
-                    if (userInfo.ReadRuleGeneration) {
-                        UNIT_ASSERT(ud.HasReadRuleGeneration());
-                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
-                    }
                 }
 
-                if (match) {
-                    break;
+                match = true;
+
+                if (userInfo.Generation) {
+                    UNIT_ASSERT(ud.HasGeneration());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
                 }
+                if (userInfo.Step) {
+                    UNIT_ASSERT(ud.HasStep());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
+                }
+                if (userInfo.Offset) {
+                    UNIT_ASSERT(ud.HasOffset());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
+                }
+                if (userInfo.ReadRuleGeneration) {
+                    UNIT_ASSERT(ud.HasReadRuleGeneration());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
+                }
+
+                break;
             }
 
-            UNIT_ASSERT(match);
+            UNIT_ASSERT_C(match, "No UserInfos matcher for consumer '" << consumerFromKey << "'");
 
             break;
         }
@@ -2698,6 +2715,95 @@ Y_UNIT_TEST_F(TabletConfig_Is_Newer_That_PartitionConfig, TPartitionFixture)
                  {0, {.Partition=3, .Consumer="client-1"}}
                  }});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+}
+
+//
+// #49435: on init, persisted Config is older than TabletConfig → ChangePartitionConfig is
+// PushFront'ed. FillReadFromTimestamps still compares UsersInfo against the *old* Config and
+// queues ESCI_DROP_READ_RULE for stale KV consumers. ChangingConfig blocks those acts until
+// the config write completes; the second write cycle then Remove()'s an already-deleted user.
+// Covers hypotheses: (1) double DROP on init+config upgrade, (2) non-idempotent Remove,
+// (3) FillReadFromTimestamps unaware of pending ChangePartitionConfig.
+//
+Y_UNIT_TEST_F(Init_StaleDiskConsumer_DoubleDrop_OnConfigUpgrade, TPartitionFixture)
+{
+    const TPartitionId partition{3};
+
+    CreatePartition({
+        .Partition = partition,
+        .Begin = 0,
+        .End = 10,
+        .Config = {
+            .Version = 1,
+            .Consumers = {{.Consumer = "client-keep", .Offset = 3}},
+        },
+        // Stale consumer still on disk, already absent from persisted Config.
+        .ExtraDiskConsumers = {{.Consumer = "stale-client", .Offset = 5}},
+    },
+    {
+        .Version = 2,
+        .Consumers = {{.Consumer = "client-keep"}},
+    });
+
+    // Write cycle 1: ChangePartitionConfig drops stale-client.
+    WaitCmdWrite({
+        .UserInfos = {{0, {.Consumer = "client-keep", .Session = "", .Offset = 3}}},
+        .DeleteRanges = {{0, {.Partition = 3, .Consumer = "stale-client"}}},
+    });
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    // Write cycle 2: FillReadFromTimestamps ESCI_DROP_READ_RULE for the same consumer.
+    // Must not VERIFY on the second Remove (#49435).
+    WaitCmdWrite({
+        .DeleteRanges = {{0, {.Partition = 3, .Consumer = "stale-client"}}},
+    });
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    Ctx->Runtime->SimulateSleep(TDuration::Seconds(1));
+}
+
+//
+// #49435 hypothesis (2): Remove is not idempotent across write cycles.
+// ChangePartitionConfig drops the consumer; a later ESCI_DROP_READ_RULE tries again.
+//
+Y_UNIT_TEST_F(DropReadRule_AfterConfigAlreadyRemovedConsumer, TPartitionFixture)
+{
+    const TPartitionId partition{3};
+
+    CreatePartition({
+        .Partition = partition,
+        .Begin = 0,
+        .End = 10,
+        .Config = {
+            .Version = 1,
+            .Consumers = {
+                {.Consumer = "client-1", .Offset = 0, .Session = "session-1"},
+                {.Consumer = "client-2", .Offset = 0, .Session = "session-2"},
+            },
+        },
+    });
+
+    SendChangePartitionConfig({
+        .Version = 2,
+        .Consumers = {{.Consumer = "client-1", .Generation = 0}},
+    });
+
+    WaitCmdWrite({
+        .UserInfos = {{0, {.Consumer = "client-1", .Session = "session-1", .Offset = 0}}},
+        .DeleteRanges = {{0, {.Partition = 3, .Consumer = "client-2"}}},
+    });
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged({.Partition = partition});
+
+    SendEvent(new TEvPQ::TEvSetClientInfo(
+        0, "client-2", 0, "", 0, 0, 0, TActorId{},
+        TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0));
+
+    WaitCmdWrite({
+        .DeleteRanges = {{0, {.Partition = 3, .Consumer = "client-2"}}},
+    });
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    // Must not VERIFY on Remove of an already-deleted consumer (#49435).
+    Ctx->Runtime->SimulateSleep(TDuration::Seconds(1));
 }
 
 void TPartitionFixture::CmdChangeOwner(ui64 cookie, const TString& sourceId, TDuration duration, TString& ownerCookie)

@@ -134,6 +134,7 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
 bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
     CompileStats = ev->Stats;
     UserFacingCompileSpans = std::move(ev->UserFacingCompileSpans);
+    UserFacingCompileActorSpan = ev->UserFacingCompileActorSpan;
     if (!SaveAndCheckCompileResult(ev->CompileResult)) {
         return false;
     }

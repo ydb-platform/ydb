@@ -17,4 +17,9 @@ struct TUserFacingCompileSpan {
     TInstant End;
 };
 
+struct TUserFacingCompileActorSpan {
+    TInstant Start;
+    TInstant End;
+};
+
 } // namespace NKikimr::NKqp

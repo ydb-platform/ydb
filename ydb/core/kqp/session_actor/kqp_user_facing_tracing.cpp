@@ -661,8 +661,12 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
     if (state.CompileWallStart && state.CompileWallEnd > state.CompileWallStart) {
         if (NWilson::TSpan compile = MakePhase(parentId, state.CompileWallStart, state.CompileWallEnd, "Compile",
                 {{"ydb.compile.cache_hit", state.CompileStats.FromCache}})) {
-            compile.Attribute("ydb.actor.types", TString("TKqpCompileService,TKqpCompileActor"));
-            if (state.UserFacingCompileSpans) {
+            compile.Attribute("ydb.actor.type", TString("TKqpCompileService"));
+            auto emitDependencies = [&](const NWilson::TTraceId& dependencyParent,
+                    TInstant windowStart, TInstant windowEnd) {
+                if (!state.UserFacingCompileSpans) {
+                    return;
+                }
                 for (const auto& dependency : *state.UserFacingCompileSpans) {
                     const bool metadata = dependency.Dependency == EUserFacingCompileDependency::SchemeCache;
                     TStringBuilder name;
@@ -670,7 +674,9 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
                     if (dependency.Target) {
                         name << " " << dependency.Target;
                     }
-                    if (NWilson::TSpan child = MakePhase(compile.GetTraceId(), dependency.Start, dependency.End, TString(name))) {
+                    const TInstant start = Max(dependency.Start, windowStart);
+                    const TInstant end = Min(dependency.End, windowEnd);
+                    if (NWilson::TSpan child = MakePhase(dependencyParent, start, end, TString(name))) {
                         child.Attribute("ydb.actor.type", TString("TActorRequestHandler"));
                         child.Attribute("ydb.code.component", TString("KqpTableMetadataLoader"));
                         child.Attribute("ydb.peer.actor.type", TString(metadata ? "SchemeCache" : "StatisticsService"));
@@ -680,6 +686,25 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
                         child.End();
                     }
                 }
+            };
+            bool actorEmitted = false;
+            if (state.UserFacingCompileActorSpan) {
+                const auto& actorWindow = *state.UserFacingCompileActorSpan;
+                const TInstant actorStart = Max(actorWindow.Start, state.CompileWallStart);
+                const TInstant actorEnd = Min(actorWindow.End, state.CompileWallEnd);
+                if (NWilson::TSpan actor = MakePhase(
+                        compile.GetTraceId(), actorStart, actorEnd, "Compile query")) {
+                    actor.Attribute("ydb.actor.type", TString("TKqpCompileActor"));
+                    if (actorWindow.Start < state.CompileWallStart) {
+                        actor.Attribute("ydb.compile.coalesced", true);
+                    }
+                    emitDependencies(actor.GetTraceId(), actorStart, actorEnd);
+                    actor.End();
+                    actorEmitted = true;
+                }
+            }
+            if (!actorEmitted) {
+                emitDependencies(compile.GetTraceId(), state.CompileWallStart, state.CompileWallEnd);
             }
             compile.End();
         }

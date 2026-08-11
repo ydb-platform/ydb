@@ -56,8 +56,12 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
     void ExecSQL(TTestActorRuntime& runtime, TActorId sender, const TString& sql,
             bool devTracing, bool userTracing,
             Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS,
-            const TString& sessionId = {}, ui32 proxyNodeIndex = 0, bool dml = true) {
+            const TString& sessionId = {}, ui32 proxyNodeIndex = 0, bool dml = true,
+            bool keepInCache = false) {
         THolder<NKqp::TEvKqp::TEvQueryRequest> request = MakeSQLRequest(sql, dml);
+        if (keepInCache) {
+            request->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
+        }
         if (sessionId) {
             request->Record.MutableRequest()->SetSessionId(sessionId);
         }
@@ -203,10 +207,22 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         auto compile = session->get().FindOne("Compile");
         UNIT_ASSERT_C(compile, "user Compile phase missing");
-        UNIT_ASSERT_C(compile->get().BFSFindOne("Load metadata /Root/table-1"),
+        auto compileQuery = compile->get().FindOne("Compile query");
+        UNIT_ASSERT_C(compileQuery, "compile actor span missing");
+        UNIT_ASSERT_C(compileQuery->get().BFSFindOne("Load metadata /Root/table-1"),
             "metadata request missing under Compile");
-        UNIT_ASSERT_C(compile->get().BFSFindOne("Load statistics /Root/table-1"),
+        UNIT_ASSERT_C(compileQuery->get().BFSFindOne("Load statistics /Root/table-1"),
             "statistics request missing under Compile");
+        const auto* compileSpan = FindSpan(*userUploader, "Compile");
+        const auto* compileQuerySpan = FindSpan(*userUploader, "Compile query");
+        UNIT_ASSERT(compileSpan);
+        UNIT_ASSERT(compileQuerySpan);
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindAttribute(*compileSpan, "ydb.actor.type")->value().string_value(),
+            "TKqpCompileService");
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindAttribute(*compileQuerySpan, "ydb.actor.type")->value().string_value(),
+            "TKqpCompileActor");
 
         auto run = execute->get().BFSFindOne("Run");
         UNIT_ASSERT(run);
@@ -253,6 +269,31 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_VALUES_EQUAL(1, devUploader->Traces.size());
         UNIT_ASSERT(userUploader->Spans.empty());
         UNIT_ASSERT_C(FindRootChild(*devUploader, "Session.query.QUERY_ACTION_EXECUTE"), "dev root span missing");
+    }
+
+    Y_UNIT_TEST(LocalCompileCacheHitHasNoCompileSpans) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        const TString query = "SELECT * FROM `/Root/table-1` WHERE key = 1u;";
+        ExecSQL(runtime, sender, query, /*devTracing*/ false, /*userTracing*/ false,
+            Ydb::StatusIds::SUCCESS, {}, 0, true, /*keepInCache*/ true);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
+
+        ExecSQL(runtime, sender, query, /*devTracing*/ false, /*userTracing*/ true,
+            Ydb::StatusIds::SUCCESS, {}, 0, true, /*keepInCache*/ true);
+
+        UNIT_ASSERT(devUploader->Spans.empty());
+        UNIT_ASSERT(userUploader->BuildTraceTrees());
+        const auto* querySpan = FindSpanWithAttribute(*userUploader, "ydb.compile.cache_hit");
+        UNIT_ASSERT_C(querySpan, "compile cache hit is not recorded on the query span");
+        const auto* cacheHit = FindAttribute(*querySpan, "ydb.compile.cache_hit");
+        UNIT_ASSERT(cacheHit);
+        UNIT_ASSERT(cacheHit->value().bool_value());
+        UNIT_ASSERT_C(!FindSpan(*userUploader, "Compile"),
+            "compile service span emitted for a local cache hit");
+        UNIT_ASSERT_C(!FindSpan(*userUploader, "Compile query"),
+            "compile actor span emitted for a cache hit");
+        AssertChildSpansAreWithinParents(*userUploader);
     }
 
     Y_UNIT_TEST(UserChannelWorksWithoutDevTracing) {

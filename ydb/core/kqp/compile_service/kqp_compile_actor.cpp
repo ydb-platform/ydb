@@ -490,8 +490,13 @@ private:
             KqpCompileResult->ReplayMessageUserView = std::move(*ReplayMessageUserView);
         }
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(KqpCompileResult);
+        const TInstant finishTime = TInstant::Now();
         if (UserFacingCompileCollector) {
             responseEv->UserFacingCompileSpans = UserFacingCompileCollector->Snapshot();
+            responseEv->UserFacingCompileActorSpan = TUserFacingCompileActorSpan{
+                .Start = StartTime,
+                .End = finishTime,
+            };
         }
 
         responseEv->ReplayMessage = std::move(ReplayMessage);
@@ -499,7 +504,7 @@ private:
         ReplayMessageUserView = std::nullopt;
         auto& stats = responseEv->Stats;
         stats.FromCache = false;
-        stats.DurationUs = (TInstant::Now() - StartTime).MicroSeconds();
+        stats.DurationUs = (finishTime - StartTime).MicroSeconds();
         stats.CpuTimeUs = CompileCpuTime.MicroSeconds();
         Send(Owner, responseEv.Release());
 

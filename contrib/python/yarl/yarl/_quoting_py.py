@@ -1,7 +1,7 @@
 import codecs
 import re
 from string import ascii_letters, ascii_lowercase, digits
-from typing import Union, overload
+from typing import overload
 
 BASCII_LOWERCASE = ascii_lowercase.encode("ascii")
 BPCT_ALLOWED = {f"%{i:02X}".encode("ascii") for i in range(256)}
@@ -37,7 +37,7 @@ class _Quoter:
     def __call__(self, val: str) -> str: ...
     @overload
     def __call__(self, val: None) -> None: ...
-    def __call__(self, val: Union[str, None]) -> Union[str, None]:
+    def __call__(self, val: str | None) -> str | None:
         if val is None:
             return None
         if not isinstance(val, str):
@@ -138,7 +138,7 @@ class _Unquoter:
     def __call__(self, val: str) -> str: ...
     @overload
     def __call__(self, val: None) -> None: ...
-    def __call__(self, val: Union[str, None]) -> Union[str, None]:
+    def __call__(self, val: str | None) -> str | None:
         if val is None:
             return None
         if not isinstance(val, str):

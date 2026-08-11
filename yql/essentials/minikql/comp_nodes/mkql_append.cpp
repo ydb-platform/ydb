@@ -3,6 +3,8 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
+#include <array>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -31,7 +33,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto factory = ctx.GetFactory();
@@ -45,8 +47,8 @@ public:
             const auto result = PHINode::Create(left->getType(), 2, "result", done);
             result->addIncoming(left, block);
 
-            const uint64_t init[] = {0x0ULL, 0x300000000000000ULL};
-            const auto mask = ConstantInt::get(right->getType(), APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {0x0ULL, 0x300000000000000ULL};
+            const auto mask = ConstantInt::get(right->getType(), APInt(128, init));
             const auto boxed = BinaryOperator::CreateAnd(right, mask, "boxed", block);
             const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, boxed, mask, "check", block);
             BranchInst::Create(work, done, check, block);

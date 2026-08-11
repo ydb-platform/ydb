@@ -122,7 +122,7 @@ public:
         return WrapList(ctx, List_->GetValue(ctx).Release(), Start_->GetValue(ctx).Get<ui64>(), Step_->GetValue(ctx).Get<ui64>());
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto list = GetNodeValue(List_, ctx, block);

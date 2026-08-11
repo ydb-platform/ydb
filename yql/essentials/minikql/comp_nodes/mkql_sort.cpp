@@ -9,7 +9,7 @@
 #include <yql/essentials/utils/sort.h>
 
 #include <algorithm>
-#include <iterator>
+#include <numeric>
 
 namespace NKikimr::NMiniKQL {
 
@@ -58,6 +58,7 @@ public:
     {
     }
 
+    // NOLINTNEXTLINE(google-explicit-constructor)
     operator TKeyPayloadPair() const {
         return TKeyPayloadPair(First_, Second_);
     }
@@ -74,9 +75,10 @@ public:
         return *this;
     }
 
-    friend void swap(TGatherIteratorRef x, TGatherIteratorRef y) {
-        std::swap(x.First_, y.First_);
-        std::swap(x.Second_, y.Second_);
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    friend void swap(TGatherIteratorRef lhs, TGatherIteratorRef rhs) {
+        std::swap(lhs.First_, rhs.First_);
+        std::swap(lhs.Second_, rhs.Second_);
     }
 
 private:
@@ -84,9 +86,14 @@ private:
     NUdf::TUnboxedValue& Second_;
 };
 
-class TGatherIterator: public std::iterator<std::random_access_iterator_tag, TKeyPayloadPair,
-                                            ptrdiff_t, TKeyPayloadPair*, TGatherIteratorRef> {
+class TGatherIterator {
 public:
+    using iterator_category = std::random_access_iterator_tag;
+    using value_type = TKeyPayloadPair;
+    using difference_type = ptrdiff_t;
+    using pointer = TKeyPayloadPair*;
+    using reference = TGatherIteratorRef;
+
     TGatherIterator()
         : First_(nullptr)
         , Second_(nullptr)
@@ -101,64 +108,61 @@ public:
 
     TGatherIterator(const TGatherIterator&) = default;
     TGatherIterator& operator=(const TGatherIterator&) = default;
+
     TGatherIteratorRef operator*() const& {
         return TGatherIteratorRef(*First_, *Second_);
     }
 
     TGatherIterator& operator++() {
-        First_++;
-        Second_++;
+        ++First_;
+        ++Second_;
         return *this;
     }
 
     TGatherIterator& operator--() {
-        First_--;
-        Second_--;
+        --First_;
+        --Second_;
         return *this;
     }
 
     TGatherIterator operator++(int) {
-        TGatherIterator tmp(*this);
-        First_++;
-        Second_++;
-        return tmp;
+        TGatherIterator previous(*this);
+        ++*this;
+        return previous;
     }
 
     TGatherIterator operator--(int) {
-        TGatherIterator tmp(*this);
-        First_--;
-        Second_--;
-        return tmp;
+        TGatherIterator previous(*this);
+        --*this;
+        return previous;
     }
 
-    TGatherIterator& operator+=(ptrdiff_t rhs) {
-        First_ += rhs;
-        Second_ += rhs;
+    TGatherIterator& operator+=(ptrdiff_t offset) {
+        First_ += offset;
+        Second_ += offset;
         return *this;
     }
 
-    TGatherIterator& operator-=(ptrdiff_t rhs) {
-        First_ -= rhs;
-        Second_ -= rhs;
+    TGatherIterator& operator-=(ptrdiff_t offset) {
+        First_ -= offset;
+        Second_ -= offset;
         return *this;
     }
 
-    ptrdiff_t operator-(TGatherIterator& rhs) const& {
+    ptrdiff_t operator-(const TGatherIterator& rhs) const& {
         return First_ - rhs.First_;
     }
 
-    TGatherIterator operator+(ptrdiff_t n) const& {
-        TGatherIterator tmp(*this);
-        tmp.First_ += n;
-        tmp.Second_ += n;
-        return tmp;
+    TGatherIterator operator+(ptrdiff_t offset) const& {
+        TGatherIterator result(*this);
+        result += offset;
+        return result;
     }
 
-    TGatherIterator operator-(ptrdiff_t n) const& {
-        TGatherIterator tmp(*this);
-        tmp.First_ -= n;
-        tmp.Second_ -= n;
-        return tmp;
+    TGatherIterator operator-(ptrdiff_t offset) const& {
+        TGatherIterator result(*this);
+        result -= offset;
+        return result;
     }
 
     bool operator==(const TGatherIterator& rhs) const& {
@@ -169,19 +173,19 @@ public:
         return First_ != rhs.First_;
     }
 
-    bool operator<(TGatherIterator& rhs) const& {
+    bool operator<(const TGatherIterator& rhs) const& {
         return First_ < rhs.First_;
     }
 
-    bool operator<=(TGatherIterator& rhs) const& {
+    bool operator<=(const TGatherIterator& rhs) const& {
         return First_ <= rhs.First_;
     }
 
-    bool operator>(TGatherIterator& rhs) const& {
+    bool operator>(const TGatherIterator& rhs) const& {
         return First_ > rhs.First_;
     }
 
-    bool operator>=(TGatherIterator& rhs) const& {
+    bool operator>=(const TGatherIterator& rhs) const& {
         return First_ >= rhs.First_;
     }
 
@@ -463,7 +467,8 @@ public:
         return result;
     }
 
-    void PerformInplace(TComputationContext&, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items, const TComparator& comparator) const {
+    void PerformInplace(TComputationContext&, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items,
+                        const TComparator& comparator) const {
         AlgorithmInplace_(TGatherIterator(keys, items), TGatherIterator(keys, items) + size, comparator);
     }
 
@@ -509,7 +514,8 @@ public:
         return result;
     }
 
-    void PerformInplace(TComputationContext& ctx, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items, const TComparator& comparator) const {
+    void PerformInplace(TComputationContext& ctx, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items,
+                        const TComparator& comparator) const {
         Y_UNUSED(ctx);
         Y_UNUSED(size);
         Y_UNUSED(keys);

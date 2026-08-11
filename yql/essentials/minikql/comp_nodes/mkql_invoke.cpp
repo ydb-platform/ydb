@@ -70,7 +70,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* arg, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* arg, BasicBlock*& block) const override {
         return this->DoGenGetValue(ctx, arg, block);
     }
 #endif
@@ -98,7 +98,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         const auto arg = GetNodeValue(Arg_, ctx, block);
         return this->DoGenGetValue(ctx, arg, block);
     }
@@ -133,7 +133,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         const std::array<Value*, 2U> args{{GetNodeValue(Left_, ctx, block), GetNodeValue(Right_, ctx, block)}};
         return reinterpret_cast<TGeneratorPtr>(Descriptor_.Generator)(args.data(), ctx, block);
     }
@@ -169,7 +169,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         std::array<Value*, Size> values;
         std::transform(ArgNodes_.cbegin(), ArgNodes_.cend(), values.begin(),
                        [&](IComputationNode* node) { return GetNodeValue(node, ctx, block); });

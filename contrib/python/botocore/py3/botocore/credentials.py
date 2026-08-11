@@ -11,6 +11,7 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
+import base64
 import datetime
 import getpass
 import json
@@ -19,9 +20,10 @@ import os
 import subprocess
 import threading
 import time
+import uuid
 from collections import namedtuple
 from copy import deepcopy
-from hashlib import sha1
+from hashlib import sha1, sha256
 
 import dateutil.parser
 from dateutil.parser import parse
@@ -30,14 +32,23 @@ from dateutil.tz import tzlocal, tzutc
 import botocore.compat
 import botocore.configloader
 from botocore import UNSIGNED
-from botocore.compat import compat_shell_split, total_seconds
+from botocore.compat import (
+    EC,
+    compat_shell_split,
+    total_seconds,
+)
 from botocore.config import Config
 from botocore.exceptions import (
     ConfigNotFound,
     CredentialRetrievalError,
     InfiniteLoopConfigError,
     InvalidConfigError,
+    LoginError,
+    LoginInsufficientPermissions,
+    LoginRefreshRequired,
+    LoginTokenLoadError,
     MetadataRetrievalError,
+    MissingDependencyException,
     PartialCredentialsError,
     RefreshWithMFAUnsupportedError,
     UnauthorizedSSOTokenError,
@@ -51,8 +62,10 @@ from botocore.utils import (
     FileWebIdentityTokenLoader,
     InstanceMetadataFetcher,
     JSONFileCache,
+    LoginTokenLoader,
     SSOTokenLoader,
     create_nested_client,
+    get_login_token_cache_directory,
     parse_key_val_file,
     resolve_imds_endpoint_mode,
 )
@@ -176,12 +189,18 @@ class ProfileProviderBuilder:
     """
 
     def __init__(
-        self, session, cache=None, region_name=None, sso_token_cache=None
+        self,
+        session,
+        cache=None,
+        region_name=None,
+        sso_token_cache=None,
+        login_token_cache=None,
     ):
         self._session = session
         self._cache = cache
         self._region_name = region_name
         self._sso_token_cache = sso_token_cache
+        self._login_token_cache = login_token_cache
 
     def providers(self, profile_name, disable_env_vars=False):
         return [
@@ -191,6 +210,7 @@ class ProfileProviderBuilder:
             ),
             self._create_sso_provider(profile_name),
             self._create_shared_credential_provider(profile_name),
+            self._create_login_provider(profile_name),
             self._create_process_provider(profile_name),
             self._create_config_provider(profile_name),
         ]
@@ -238,6 +258,14 @@ class ProfileProviderBuilder:
                 cache=self._sso_token_cache,
                 profile_name=profile_name,
             ),
+        )
+
+    def _create_login_provider(self, profile_name):
+        return LoginProvider(
+            load_config=lambda: self._session.full_config,
+            client_creator=self._session.create_client,
+            profile_name=profile_name,
+            token_cache=self._login_token_cache,
         )
 
 
@@ -1015,7 +1043,7 @@ class CredentialProvider:
         environment, the network or wherever), returning ``True`` if they were
         found & loaded.
 
-        If not found, this method should return ``False``, indictating that the
+        If not found, this method should return ``False``, indicating that the
         ``CredentialResolver`` should fall back to the next available method.
 
         The default implementation does nothing, assuming the user has set the
@@ -2456,4 +2484,298 @@ class SSOProvider(CredentialProvider):
         return DeferredRefreshableCredentials(
             method=self.METHOD,
             refresh_using=sso_fetcher.fetch_credentials,
+        )
+
+
+def _base64_url_encode_no_padding(data):
+    return base64.urlsafe_b64encode(data).rstrip(b'=').decode('ascii')
+
+
+def _build_dpop_header(private_key, uri, uid=None, ts=None):
+    if EC is None:
+        raise MissingDependencyException(
+            msg=(
+                "This operation requires an additional dependency. You"
+                " will need to pip install \"botocore[crt]\" before proceeding."
+            )
+        )
+    x, y = private_key.get_public_coords()
+    jwk = {
+        "kty": "EC",
+        "x": _base64_url_encode_no_padding(x),
+        "y": _base64_url_encode_no_padding(y),
+        "crv": "P-256",
+    }
+
+    header = {
+        "typ": "dpop+jwt",
+        "alg": "ES256",
+        "jwk": jwk,
+    }
+
+    payload = {
+        "htm": "POST",
+        "htu": uri,
+        "iat": ts or int(time.time()),
+        "jti": uid or str(uuid.uuid4()),
+    }
+    header_b64 = _base64_url_encode_no_padding(
+        json.dumps(header, separators=(',', ':')).encode()
+    )
+    payload_b64 = _base64_url_encode_no_padding(
+        json.dumps(payload, separators=(',', ':')).encode()
+    )
+    signing_input = f"{header_b64}.{payload_b64}".encode()
+    signature = private_key.sign(sha256(signing_input).digest())
+    signature_bytes = EC.decode_der_signature_to_padded_pair(
+        signature, pad_to=32
+    )
+    signature_b64 = _base64_url_encode_no_padding(signature_bytes)
+
+    return f"{header_b64}.{payload_b64}.{signature_b64}"
+
+
+def _build_add_dpop_header_handler(private_key):
+    """Builds a before-call handler for calculating and setting the DPoP header"""
+
+    def _add_dpop_header_handler(**kwargs):
+        kwargs['params']['headers']['DPoP'] = _build_dpop_header(
+            private_key, kwargs['params']['url']
+        )
+
+    return _add_dpop_header_handler
+
+
+class LoginCredentialFetcher:
+    """
+    Converts login access tokens from the cached token to
+    credentials, and supports refreshing them.
+    """
+
+    _REFRESH_THRESHOLD = 5 * 60
+    _REQUIRED_TOKEN_FIELDS = (
+        'accessToken',
+        'refreshToken',
+        'dpopKey',
+        'clientId',
+    )
+
+    def __init__(
+        self,
+        session_name,
+        token_loader,
+        client_creator,
+        time_fetcher=_local_now,
+        feature_ids=None,
+    ):
+        self._session_name = session_name
+        self._token_loader = token_loader
+        self._client_creator = client_creator
+        self._time_fetcher = time_fetcher
+        if feature_ids is None:
+            feature_ids = set()
+        self.feature_ids = feature_ids
+
+    def load_cached_credentials(self):
+        """Loads cached credentials without checking their expiry."""
+        token = self._token_loader.load_token(self._session_name)
+
+        if token is None:
+            raise LoginTokenLoadError(
+                error_msg='Unable to load a existing login session for session '
+                f'{self._session_name}. Please reauthenticate with '
+                "'aws login'.",
+            )
+
+        missing_fields = [
+            key for key in self._REQUIRED_TOKEN_FIELDS if key not in token
+        ]
+        if missing_fields:
+            raise LoginTokenLoadError(
+                error_msg=f'Failed to load access token from token cache, missing required fields: {", ".join(missing_fields)}.'
+            )
+
+        return self._token_to_credentials(token)
+
+    def refresh_credentials(self):
+        """Refreshes login credentials, including saving them to the cache."""
+        if self.feature_ids:
+            register_feature_ids(self.feature_ids)
+        # Reload the token from disk, we need the refresh info
+        token = self._token_loader.load_token(self._session_name)
+        private_key = self._load_private_key(token)
+
+        # Check if token has already been refreshed and is still valid
+        if (
+            token
+            and 'accessToken' in token
+            and 'expiresAt' in token['accessToken']
+        ):
+            expiry_time = _parse_if_needed(token['accessToken']['expiresAt'])
+            remaining_time = total_seconds(expiry_time - self._time_fetcher())
+            if remaining_time > self._REFRESH_THRESHOLD:
+                return self._token_to_credentials(token)
+
+        config = botocore.config.Config(
+            signature_version=botocore.UNSIGNED,
+        )
+        client = self._client_creator(
+            'signin',
+            config=config,
+        )
+
+        client.meta.events.register(
+            'before-call.signin.CreateOAuth2Token',
+            _build_add_dpop_header_handler(private_key),
+        )
+
+        try:
+            response = client.create_o_auth2_token(
+                tokenInput={
+                    'clientId': token['clientId'],
+                    'refreshToken': token['refreshToken'],
+                    'grantType': 'refresh_token',
+                },
+            )
+        except client.exceptions.AccessDeniedException as e:
+            error_type = e.response.get('error', '')
+            if error_type in ('TOKEN_EXPIRED', 'USER_CREDENTIALS_CHANGED'):
+                raise LoginRefreshRequired() from e
+            elif error_type == 'INSUFFICIENT_PERMISSIONS':
+                raise LoginInsufficientPermissions() from e
+            raise LoginError() from e
+
+        if response is None or 'tokenOutput' not in response:
+            raise LoginTokenLoadError(
+                error_msg=(
+                    "Unable to refresh access token due to an invalid service response. "
+                    "Please try running 'aws login' again. If the issue persists, there "
+                    "may be a temporary signin service problem."
+                )
+            )
+
+        output = response.get('tokenOutput')
+
+        expires_timestamp = self._time_fetcher().astimezone(
+            tzutc()
+        ) + datetime.timedelta(seconds=output['expiresIn'])
+
+        # Overwrite token with refreshed fields
+        token.update(
+            {
+                'accessToken': {
+                    'accessKeyId': output['accessToken']['accessKeyId'],
+                    'secretAccessKey': output['accessToken'][
+                        'secretAccessKey'
+                    ],
+                    'sessionToken': output['accessToken']['sessionToken'],
+                    'accountId': token['accessToken']['accountId'],
+                    'expiresAt': expires_timestamp.strftime(
+                        '%Y-%m-%dT%H:%M:%SZ'
+                    ),
+                },
+                'refreshToken': output['refreshToken'],
+            }
+        )
+        self._token_loader.save_token(self._session_name, token)
+
+        return self._token_to_credentials(token)
+
+    @staticmethod
+    def _token_to_credentials(token):
+        return {
+            'access_key': token['accessToken']['accessKeyId'],
+            'secret_key': token['accessToken']['secretAccessKey'],
+            'token': token['accessToken']['sessionToken'],
+            'expiry_time': token['accessToken']['expiresAt'],
+            'account_id': token['accessToken']['accountId'],
+        }
+
+    @staticmethod
+    def _load_private_key(token):
+        if 'dpopKey' not in token:
+            raise LoginTokenLoadError(
+                error_msg='Private key not found in cached token.'
+            )
+
+        # Remove the PEM header and footer lines
+        lines = token['dpopKey'].splitlines()
+        content_lines = [
+            line
+            for line in lines
+            if not line.startswith('-----BEGIN')
+            and not line.startswith('-----END')
+        ]
+
+        # strip should handle the optional newline at the end as well
+        contents = ''.join(content_lines).strip()
+
+        try:
+            return EC.new_key_from_der_data(base64.b64decode(contents))
+        except ValueError as e:
+            raise LoginTokenLoadError(
+                error_msg='Unable to load private key from cached token.'
+            ) from e
+
+
+class LoginProvider(CredentialProvider):
+    METHOD = 'login'
+
+    def __init__(
+        self,
+        load_config,
+        client_creator,
+        profile_name,
+        token_cache=None,
+    ):
+        super().__init__()
+        if token_cache is None:
+            token_cache = JSONFileCache(get_login_token_cache_directory())
+        self._token_cache = token_cache
+
+        self._load_config = load_config
+        self._client_creator = client_creator
+        self._profile_name = profile_name
+        self._feature_ids = {'CREDENTIALS_PROFILE_LOGIN', 'CREDENTIALS_LOGIN'}
+
+    def load(self):
+        loaded_config = self._load_config()
+        profiles = loaded_config.get('profiles', {})
+        profile_config = profiles.get(self._profile_name, {})
+
+        if 'login_session' not in profile_config:
+            return None
+
+        if EC is None:
+            raise MissingDependencyException(
+                msg=(
+                    "Using the login credential provider requires an "
+                    "additional dependency. You will need to pip install "
+                    "\"botocore[crt]\" before proceeding."
+                )
+            )
+
+        fetcher = LoginCredentialFetcher(
+            session_name=profile_config['login_session'],
+            token_loader=LoginTokenLoader(self._token_cache),
+            client_creator=self._client_creator,
+            time_fetcher=_local_now,
+            feature_ids=self._feature_ids,
+        )
+
+        register_feature_ids(self._feature_ids)
+
+        # Return the current cached credentials initially,
+        # regardless if they're expired
+        cached_credentials = fetcher.load_cached_credentials()
+
+        return RefreshableCredentials(
+            access_key=cached_credentials['access_key'],
+            secret_key=cached_credentials['secret_key'],
+            token=cached_credentials['token'],
+            expiry_time=_parse_if_needed(cached_credentials['expiry_time']),
+            account_id=cached_credentials['account_id'],
+            method=self.METHOD,
+            refresh_using=fetcher.refresh_credentials,
+            time_fetcher=_local_now,
         )

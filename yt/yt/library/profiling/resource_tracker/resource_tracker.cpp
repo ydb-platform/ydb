@@ -16,7 +16,7 @@
 
 #include <library/cpp/yt/threading/atomic_object.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -46,9 +46,9 @@ using namespace NCGroups;
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Profiling");
-YT_DEFINE_GLOBAL(const TProfiler, ResourceTrackerProfiler, "/resource_tracker");
-YT_DEFINE_GLOBAL(const TProfiler, MemoryProfiler, "/memory/cgroup");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Profiling");
+YT_DEFINE_LEAKY_GLOBAL(const TProfiler, ResourceTrackerProfiler, "/resource_tracker");
+YT_DEFINE_LEAKY_GLOBAL(const TProfiler, MemoryProfiler, "/memory/cgroup");
 
 // Please, refer to /proc documentation to know more about available information.
 // http://www.kernel.org/doc/Documentation/filesystems/proc.txt

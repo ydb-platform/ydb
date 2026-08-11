@@ -171,6 +171,14 @@ def test_with_host() -> None:
     assert str(url.with_host("example.org")) == "http://example.org:123"
 
 
+def test_with_host_ipv6_zone_id_bare_percent() -> None:
+    """RFC 4007 scoped literals with a bare ``%`` work in with_host()."""
+    url = URL("http://example.com/x")
+    url2 = url.with_host("fe80::1%1")
+    assert str(url2) == "http://[fe80::1%1]/x"
+    assert url2.host == "fe80::1%1"
+
+
 def test_with_host_empty() -> None:
     url = URL("http://example.com:123")
     with pytest.raises(ValueError):
@@ -204,6 +212,37 @@ def test_with_invalid_host(host: str, is_authority: bool) -> None:
         match += ", if .* use 'authority' instead of 'host'"
     with pytest.raises(ValueError, match=f"{match}$"):
         url.with_host(host=host)
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "127.0.0.1／allowed.example",
+        "127.0.0.1？allowed.example",
+        "127.0.0.1＃allowed.example",
+    ],
+    ids=["fullwidth-solidus", "fullwidth-question", "fullwidth-number-sign"],
+)
+def test_with_host_delimiter_from_normalization(host: str) -> None:
+    # A non-ascii character that expands to a URL delimiter under IDNA/NFKC
+    # normalization must be rejected, matching the parser's _check_netloc.
+    url = URL("http://example.com:123")
+    match = r"cannot contain '[/?#]' after IDNA normalization to "
+    with pytest.raises(ValueError, match=match):
+        url.with_host(host)
+
+
+@pytest.mark.parametrize(
+    "ignorable",
+    ["\u00ad", "\u200b", "\u2060", "\ufeff"],
+    ids=["soft-hyphen", "zwsp", "word-joiner", "bom"],
+)
+def test_with_host_default_ignorable(ignorable: str) -> None:
+    # IDNA strips default-ignorable code points, so with_host must reject a
+    # host containing one instead of collapsing it to a different host.
+    url = URL("http://example.com:123")
+    with pytest.raises(ValueError, match="cannot contain"):
+        url.with_host(f"e{ignorable}vil.com")
 
 
 def test_with_host_percent_encoded() -> None:

@@ -7,6 +7,8 @@
 
 #include <util/string/cast.h>
 
+#include <array>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -110,7 +112,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto setz = BasicBlock::Create(context, "setz", ctx.Func);
@@ -145,8 +147,8 @@ public:
         {
             block = setz;
 
-            const uint64_t init[] = {~0ULL, ~0xFFFFULL};
-            const auto mask = ConstantInt::get(value->getType(), APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {~0ULL, ~0xFFFFULL};
+            const auto mask = ConstantInt::get(value->getType(), APInt(128, init));
             const auto clean = BinaryOperator::CreateAnd(value, mask, "clean", block);
             const auto tzid = BinaryOperator::CreateShl(tz, ConstantInt::get(tz->getType(), 64), "tzid", block);
             const auto full = BinaryOperator::CreateOr(clean, tzid, "full", block);

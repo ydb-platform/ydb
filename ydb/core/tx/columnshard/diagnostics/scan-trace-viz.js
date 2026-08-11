@@ -302,7 +302,17 @@
         return `Scan scanId=${scanId}, txId=${txId}, pathId=${pathId}`;
     }
 
-    function buildFigure(allEvents, sourceIntervals, sendResults, cumul, active, speed) {
+    function maxEventTime(events) {
+        let maxT = 0;
+        for (const event of events) {
+            if (event.t > maxT) {
+                maxT = event.t;
+            }
+        }
+        return maxT;
+    }
+
+    function buildFigure(allEvents, sourceIntervals, sendResults, cumul, active, speed, sharedXMax) {
         const traces = [];
         const layout = {
             grid: {rows: 5, columns: 1, pattern: 'independent', roworder: 'top to bottom', ygap: 0.08},
@@ -519,6 +529,13 @@
             addPlaceholderTrace(traces, 'x5', 'y5');
         }
 
+        const xMax = sharedXMax > 0 ? sharedXMax : Math.max(maxEventTime(allEvents), 1);
+        const xRange = [0, xMax];
+        const sharedXAxis = {
+            range: xRange,
+            matches: 'x5',
+            showticklabels: false,
+        };
         layout.yaxis = {title: {text: 'MB'}};
         layout.yaxis2 = {title: {text: 'MB/s'}};
         layout.yaxis3 = {title: {text: 'Count'}};
@@ -529,8 +546,13 @@
             tickvals: [0.5, 1, 2, 3, 4.5, 5],
             ticktext: ['Ack', 'Send', 'Finish', 'Start', 'Select', 'Scan'],
         };
+        layout.xaxis = {...sharedXAxis};
+        layout.xaxis2 = {...sharedXAxis};
+        layout.xaxis3 = {...sharedXAxis};
+        layout.xaxis4 = {...sharedXAxis};
         layout.xaxis5 = {
             title: {text: 'Time since StartScan (ms)'},
+            range: xRange,
             rangeslider: {visible: true, thickness: 0.03},
         };
 
@@ -577,18 +599,45 @@
                 }
 
                 const scanGroups = groupEventsByScan(allEvents);
-                container.innerHTML = '';
-                let rendered = 0;
-
-                for (let i = 0; i < scanGroups.length; ++i) {
-                    const [scanId, scanEvents] = scanGroups[i];
+                const preparedScans = [];
+                let sharedXMax = 0;
+                for (const [scanId, scanEvents] of scanGroups) {
                     const normalizedEvents = normalizeScanTimes(scanEvents);
                     const {sourceIntervals, sendResults} = classifyEvents(normalizedEvents);
                     const cumul = buildCumulativeSeries(sourceIntervals);
                     const active = buildActiveSeries(sourceIntervals);
                     const speed = buildSpeedSeries(cumul.cumulTimes, cumul.cumulMb, 300.0);
-                    const scanTitle = getScanTitle(scanId, scanEvents);
-                    const figure = buildFigure(normalizedEvents, sourceIntervals, sendResults, cumul, active, speed);
+                    sharedXMax = Math.max(sharedXMax, maxEventTime(normalizedEvents));
+                    for (const si of sourceIntervals) {
+                        sharedXMax = Math.max(sharedXMax, si.end_t);
+                    }
+                    preparedScans.push({
+                        scanId,
+                        scanEvents,
+                        normalizedEvents,
+                        sourceIntervals,
+                        sendResults,
+                        cumul,
+                        active,
+                        speed,
+                    });
+                }
+
+                container.innerHTML = '';
+                let rendered = 0;
+
+                for (let i = 0; i < preparedScans.length; ++i) {
+                    const scan = preparedScans[i];
+                    const scanTitle = getScanTitle(scan.scanId, scan.scanEvents);
+                    const figure = buildFigure(
+                        scan.normalizedEvents,
+                        scan.sourceIntervals,
+                        scan.sendResults,
+                        scan.cumul,
+                        scan.active,
+                        scan.speed,
+                        sharedXMax
+                    );
 
                     const section = document.createElement('div');
                     section.style.marginBottom = '48px';
@@ -605,7 +654,7 @@
 
                     const chartDiv = document.createElement('div');
                     chartDiv.style.width = '100%';
-                    chartDiv.id = `scan-trace-viz-${scanId}`;
+                    chartDiv.id = `scan-trace-viz-${scan.scanId}`;
                     section.appendChild(chartDiv);
                     container.appendChild(section);
 

@@ -29,7 +29,7 @@ public:
         return (predicate.Get<bool>() ? ThenBranch_ : ElseBranch_)->GetValue(ctx).Release();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto then = BasicBlock::Create(context, "then", ctx.Func);
@@ -87,7 +87,7 @@ class TFlowIfWrapper: public TStatefulFlowCodegeneratorNode<TFlowIfWrapper<IsOpt
 
 public:
     TFlowIfWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* predicate, IComputationNode* thenBranch, IComputationNode* elseBranch)
-        : TBaseComputation(mutables, nullptr, kind)
+        : TBaseComputation(mutables, /*source=*/nullptr, kind)
         , Predicate_(predicate)
         , ThenBranch_(thenBranch)
         , ElseBranch_(elseBranch)
@@ -106,7 +106,7 @@ public:
         return (state.Get<bool>() ? ThenBranch_ : ElseBranch_)->GetValue(ctx).Release();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -176,7 +176,7 @@ class TWideIfWrapper: public TStatefulWideFlowCodegeneratorNode<TWideIfWrapper> 
 
 public:
     TWideIfWrapper(TComputationMutables& mutables, IComputationNode* predicate, IComputationWideFlowNode* thenBranch, IComputationWideFlowNode* elseBranch)
-        : TBaseComputation(mutables, nullptr, EValueRepresentation::Embedded)
+        : TBaseComputation(mutables, /*source=*/nullptr, EValueRepresentation::Embedded)
         , Predicate_(predicate)
         , ThenBranch_(thenBranch)
         , ElseBranch_(elseBranch)
@@ -191,7 +191,7 @@ public:
         return (state.Get<bool>() ? ThenBranch_ : ElseBranch_)->FetchValues(ctx, output);
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);

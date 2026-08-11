@@ -361,7 +361,7 @@ bool TTable::TryToPreallocateMemoryForJoin(TTable& t1, TTable& t2, EJoinKind /* 
         try {
             bucketForPreallocation.JoinSlots.reserve(nSlots * slotSize);
             bucketForPreallocationStats.BloomFilter.Reserve(bucketForPreallocationStats.TuplesNum);
-        } catch (TMemoryLimitExceededException) {
+        } catch (const TMemoryLimitExceededException&) {
             wasException = true;
         }
 

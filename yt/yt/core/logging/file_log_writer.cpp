@@ -28,7 +28,7 @@ using namespace NProfiling;
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
 
 constexpr size_t BufferSize = 64_KB;
 constexpr TStringBuf LogrotateTimestampSuffixFormat = ".%Y%m%d-%H%M%S";

@@ -285,9 +285,12 @@ TActorId TPartition::ReplyTo(const ui64 destination, const TActorId& replyTo) co
 
 void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo) {
     auto replyToActor = ReplyTo(dst, replyTo);
+    // IsInternal means "compaction / internal consumer reply", not merely "destined to Self".
+    // Timestamp reads use dst==0 and empty replyTo; they must stay non-internal so Handle(TEvError)
+    // can clear ReadingTimestamp. Compaction reads set replyTo to SelfId().
     ReplyPersQueueError(
         replyToActor, ctx, TabletId, TopicName(), Partition,
-        TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, replyToActor == SelfId()
+        TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, !!replyTo
     );
 }
 
@@ -2278,6 +2281,7 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
             // KeyCompactionReadCyclesTotal.Set(compacterCounters.ReadCyclesCount);
             // KeyCompactionWriteCyclesTotal.Set(compacterCounters.WriteCyclesCount);
         }
+        return;
     }
     ReadingTimestamp = false;
     auto userInfo = UsersInfoStorage->GetIfExists(ReadingForUser);
@@ -4713,7 +4717,8 @@ void TPartition::ScheduleReplyError(const ui64 dst, bool internal,
     Replies.emplace_back(internal ? SelfId() : TabletActorId,
                          MakeReplyError(dst,
                                         errorCode,
-                                        error).Release());
+                                        error,
+                                        internal).Release());
 }
 
 void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,

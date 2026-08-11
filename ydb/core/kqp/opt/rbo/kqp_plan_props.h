@@ -23,29 +23,29 @@ enum ESubplanType : ui32 { EXPR, IN_SUBPLAN, EXISTS };
 struct TPlanProps;
 
 struct TSubplanEntry {
-    TSubplanEntry(TIntrusivePtr<ISimpleOperator> plan, ESubplanType type, TVector<TInfoUnit> tuple, TInfoUnit iu)
+    TSubplanEntry(TIntrusivePtr<ISimpleOperator> plan, ESubplanType type, TVector<TInfoUnit> tuple)
         : Plan(std::move(plan))
         , Tuple(std::move(tuple))
-        , Type(type)
-        , IU(std::move(iu)) {
+        , Type(type) {
     }
 
     TIntrusivePtr<ISimpleOperator> Plan;
     TVector<TInfoUnit> Tuple;
     ESubplanType Type;
-    TInfoUnit IU;
     TVector<TInfoUnit> DependentIUs;
 };
 
 class TSubplans {
 public:
+    using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
+
+    // A binding is the stable identity of a registry entry. Replacing the
+    // referenced plan preserves that identity; changing it requires rewriting
+    // every expression that names it and is intentionally unsupported here.
     void Add(const TInfoUnit& binding, TIntrusivePtr<ISimpleOperator> plan, ESubplanType type, TVector<TInfoUnit> tuple = {}) {
         Y_ENSURE(plan, "Cannot register a null subplan for " << binding.GetFullName());
-        const bool inserted = Entries.emplace(
-            binding,
-            TSubplanEntry(std::move(plan), type, std::move(tuple), binding)).second;
+        const bool inserted = Entries.emplace(binding, TSubplanEntry(std::move(plan), type, std::move(tuple))).second;
         Y_ENSURE(inserted, "Duplicate subplan binding " << binding.GetFullName());
-        OrderedList.push_back(binding);
     }
 
     void ReplacePlan(const TInfoUnit& binding, TIntrusivePtr<ISimpleOperator> plan) {
@@ -60,18 +60,9 @@ public:
         }
     }
 
-    TVector<TSubplanEntry> Get() {
-        TVector<TSubplanEntry> result;
-        for (const auto& iu : OrderedList) {
-            result.push_back(Entries.at(iu));
-        }
-        return result;
-    }
-
     void Remove(const TInfoUnit& binding) {
         const auto entryIt = Entries.find(binding);
         Y_ENSURE(entryIt != Entries.end(), "Unknown subplan binding " << binding.GetFullName());
-        std::erase(OrderedList, binding);
         Entries.erase(entryIt);
     }
 
@@ -100,11 +91,10 @@ public:
         return Entries.end();
     }
 
-    bool RenameReferences(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx);
+    bool RenameExternalReferences(const TRenameMap& renameMap, TExprContext& ctx);
 
 private:
     THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> Entries;
-    TVector<TInfoUnit> OrderedList;
 };
 
 class TInfoUnitConstraintSet {

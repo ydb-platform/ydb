@@ -264,7 +264,7 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
         }
     }
     bottomMap->SetMapElements(std::move(bottomElements));
-    props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
+    props.Subplans.RenameExternalReferences(renameMap, ctx.ExprCtx);
 
     if (topElements.empty()) {
         return bottomMap;

@@ -310,7 +310,7 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
     }
     unionAll->Columns = std::move(newColumns);
     if (!renameMap.empty()) {
-        props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
+        props.Subplans.RenameExternalReferences(renameMap, ctx.ExprCtx);
     }
 
     if (residualElements.empty()) {

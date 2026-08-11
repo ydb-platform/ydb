@@ -215,7 +215,7 @@ bool TRewriteExpressionsToPreferredAliasesRule::MatchAndApply(TIntrusivePtr<IOpe
     }
 
     input->RenameUsedIUs(renameMap, ctx.ExprCtx);
-    const bool subplansChanged = props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
+    const bool subplansChanged = props.Subplans.RenameExternalReferences(renameMap, ctx.ExprCtx);
     Y_UNUSED(subplansChanged);
     return true;
 }

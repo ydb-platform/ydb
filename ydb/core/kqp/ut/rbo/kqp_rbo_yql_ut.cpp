@@ -7663,9 +7663,49 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(rewrittenUnion->Columns[0] == TInfoUnit("payload"));
         UNIT_ASSERT(rewrittenUnion->Columns[1] == TInfoUnit("l_a"));
 
-        for (const auto& child : rewrittenUnion->Children) {
+        for (const auto& child : rewrittenUnion->GetInputs()) {
             UNIT_ASSERT_C(child->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
             auto pushedMap = CastOperator<TOpMap>(child);
+            UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 1);
+            UNIT_ASSERT(pushedMap->GetMapElements().front().IsRename());
+            UNIT_ASSERT(pushedMap->GetMapElements().front().GetElementName() == TInfoUnit("l_a"));
+            UNIT_ASSERT(pushedMap->GetMapElements().front().GetRename() == TInfoUnit("a"));
+        }
+    }
+
+    Y_UNIT_TEST(PushMapElementsPushesRenameThroughVariadicUnionAll) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const TVector<TInfoUnit> columns{TInfoUnit("a"), TInfoUnit("payload")};
+
+        TVector<TIntrusivePtr<IOperator>> inputs{
+            MakeTestRead(columns, pos),
+            MakeTestRead(columns, pos),
+            MakeTestRead(columns, pos),
+        };
+        auto unionAll = MakeIntrusive<TOpUnionAll>(std::move(inputs), pos, columns);
+        auto aliasMap = MakeIntrusive<TOpMap>(unionAll, pos, TVector<TMapElement>{
+            MakeTestRename("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"l_a", "payload"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnionAllRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements through variadic UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::UnionAll, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenUnion = CastOperator<TOpUnionAll>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenUnion->GetInputs().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenUnion->Columns.size(), 2);
+        UNIT_ASSERT(rewrittenUnion->Columns[0] == TInfoUnit("payload"));
+        UNIT_ASSERT(rewrittenUnion->Columns[1] == TInfoUnit("l_a"));
+
+        for (const auto& child : rewrittenUnion->GetInputs()) {
+            UNIT_ASSERT_C(child->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+            const auto pushedMap = CastOperator<TOpMap>(child);
             UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 1);
             UNIT_ASSERT(pushedMap->GetMapElements().front().IsRename());
             UNIT_ASSERT(pushedMap->GetMapElements().front().GetElementName() == TInfoUnit("l_a"));

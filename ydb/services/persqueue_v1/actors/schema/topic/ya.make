@@ -8,7 +8,6 @@ PEERDIR(
 SRCS(
     actors.cpp
     alter_topic.cpp
-    common_describe.cpp
     create_topic.cpp
     describe_consumer.cpp
     describe_partition.cpp

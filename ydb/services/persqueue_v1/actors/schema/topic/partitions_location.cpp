@@ -1,12 +1,15 @@
-#include "common_describe.h"
-
+#include <ydb/core/persqueue/public/schema/describe_operation.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
+#include <absl/container/flat_hash_set.h>
+
 namespace NKikimr::NGRpcProxy::V1::NTopic {
 
 namespace {
+
+using namespace NPQ::NSchema;
 
 class TPartitionsLocationStrategy: public IDescribeStrategy {
 public:
@@ -44,8 +47,7 @@ public:
     }
 
     bool NeedProcessPartition(
-        const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition) const override
-    {
+        const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition) const override {
         return PartitionIds.empty() || PartitionIds.contains(partition.GetPartitionId());
     }
 
@@ -86,7 +88,7 @@ public:
             userToken = new NACLib::TUserToken(Request.Token);
         }
 
-        LogicActorId = RegisterWithSameMailbox(new TDescribeOperationActor(
+        LogicActorId = RegisterWithSameMailbox(CreateDescribeOperationActor(
             SelfId(),
             {
                 .Path = Request.Topic,
@@ -102,7 +104,7 @@ public:
     }
 
 private:
-    void Handle(TEvDescribeResponse::TPtr& ev) {
+    void Handle(TEvDescribeOperationResponse::TPtr& ev) {
         LogicActorId = {};
         if (!Response) {
             return;
@@ -159,7 +161,7 @@ private:
 
     void HandlePoison() {
         if (LogicActorId) {
-            // Logic replies CANCELLED via TEvDescribeResponse; proxy forwards it below.
+            // Logic replies CANCELLED via TEvDescribeOperationResponse; proxy forwards it below.
             Send(LogicActorId, new NActors::TEvents::TEvPoison());
             return;
         }
@@ -175,7 +177,7 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDescribeResponse, Handle);
+            hFunc(TEvDescribeOperationResponse, Handle);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         }
     }

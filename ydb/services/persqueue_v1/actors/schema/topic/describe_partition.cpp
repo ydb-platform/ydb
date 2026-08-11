@@ -1,11 +1,12 @@
-#include "common_describe.h"
-
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
+#include <ydb/core/persqueue/public/schema/describe_operation.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
 namespace NKikimr::NGRpcProxy::V1::NTopic {
 
 namespace {
+
+using namespace NPQ::NSchema;
 
 class TDescribePartitionStrategy: public IDescribeStrategy {
 public:
@@ -34,8 +35,7 @@ public:
     }
 
     bool NeedProcessPartition(
-        const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition) const override
-    {
+        const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition) const override {
         return partition.GetPartitionId() == PartitionId;
     }
 
@@ -63,13 +63,13 @@ public:
     void DoAction() {
         Become(&TDescribePartitionGrpc::StateWork);
 
-        LogicActorId = RegisterWithSameMailbox(new TDescribeOperationActor(
+        LogicActorId = RegisterWithSameMailbox(CreateDescribeOperationActor(
             SelfId(),
             {
                 .Path = GetProtoRequest()->path(),
                 .Database = GetDatabase(),
                 .UserToken = GetUserToken(),
-                .AccessRights = { NACLib::EAccessRights::DescribeSchema, NACLib::EAccessRights::UpdateRow },
+                .AccessRights = {NACLib::EAccessRights::DescribeSchema, NACLib::EAccessRights::UpdateRow},
                 .IncludeStats = GetProtoRequest()->include_stats(),
                 .IncludeLocation = GetProtoRequest()->include_location(),
             },
@@ -77,7 +77,7 @@ public:
     }
 
 private:
-    void Handle(TEvDescribeResponse::TPtr& ev) {
+    void Handle(TEvDescribeOperationResponse::TPtr& ev) {
         LogicActorId = {};
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             return ReplyWithError(ev->Get()->Status, ev->Get()->ErrorMessage, ev->Get()->IssueCode);
@@ -126,7 +126,7 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDescribeResponse, Handle);
+            hFunc(TEvDescribeOperationResponse, Handle);
             default:
                 TRpcOpBase::StateFuncBase(ev);
         }

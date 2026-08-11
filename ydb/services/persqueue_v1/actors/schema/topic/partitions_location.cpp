@@ -61,7 +61,7 @@ private:
 
 class TPartitionsLocationProxy: public NActors::TActorBootstrapped<TPartitionsLocationProxy> {
 public:
-    TPartitionsLocationProxy(const TGetPartitionsLocationRequest& request, const TActorId& requester)
+    TPartitionsLocationProxy(const TActorId& requester, const TGetPartitionsLocationRequest& request)
         : Request(request)
         , Requester(requester)
         , Response(MakeHolder<TEvPQProxy::TEvPartitionLocationResponse>())
@@ -186,10 +186,10 @@ private:
 } // namespace
 
 NActors::IActor* CreatePartitionsLocationActor(
-    const TGetPartitionsLocationRequest& request,
-    const TActorId& requester)
+    const TActorId& requester,
+    const TGetPartitionsLocationRequest& request)
 {
-    return new TPartitionsLocationProxy(request, requester);
+    return new TPartitionsLocationProxy(requester, request);
 }
 
 } // namespace NKikimr::NGRpcProxy::V1::NTopic

@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         TString currentTopicName = topicName;
         auto getDescribe = [&] (const TVector<ui32>& parts, bool fails = false) {
             auto partitionActor = runtime->Register(NTopic::CreatePartitionsLocationActor(
-                TGetPartitionsLocationRequest{TString("/Root/PQ/") + currentTopicName, "", "", parts}, edge
+                edge, TGetPartitionsLocationRequest{TString("/Root/PQ/") + currentTopicName, "", "", parts}
             ));
             runtime->EnableScheduleForActor(partitionActor);
             runtime->DispatchEvents();

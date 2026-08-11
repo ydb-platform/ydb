@@ -139,7 +139,7 @@ THolder<TEvPQProxy::TEvPartitionLocationResponse> DoPartitionsLocationRequest(
     const auto edge = runtime.AllocateEdgeActor();
     TActorId rootActorId;
     EnableScheduleForRootAndChildren(runtime, rootActorId);
-    rootActorId = runtime.Register(CreatePartitionsLocationActor(request, edge));
+    rootActorId = runtime.Register(CreatePartitionsLocationActor(edge, request));
     runtime.EnableScheduleForActor(rootActorId, true);
     runtime.DispatchEvents();
     auto handle = runtime.GrabEdgeEvent<TEvPQProxy::TEvPartitionLocationResponse>(edge, waitTimeout);
@@ -603,7 +603,7 @@ Y_UNIT_TEST(PartitionsLocationTimesOutWhenStuck) {
     TActorId rootActorId;
     EnableScheduleForRootAndChildren(runtime, rootActorId);
     rootActorId = runtime.Register(CreatePartitionsLocationActor(
-        TGetPartitionsLocationRequest{path, "/Root", "", {0}}, edge));
+        edge, TGetPartitionsLocationRequest{path, "/Root", "", {0}}));
     runtime.EnableScheduleForActor(rootActorId, true);
 
     runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));

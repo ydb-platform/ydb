@@ -13,7 +13,7 @@ NActors::IActor* CreateCreateTopicActor(NGRpcService::IRequestOpCtx* request);
 NActors::IActor* CreateDescribeConsumerActor(NGRpcService::IRequestOpCtx* request);
 NActors::IActor* CreateDescribePartitionActor(NGRpcService::IRequestOpCtx* request);
 NActors::IActor* CreateDropTopicActor(NGRpcService::IRequestOpCtx* request);
-NActors::IActor* CreatePartitionsLocationActor(const TGetPartitionsLocationRequest& request, const TActorId& requester);
+NActors::IActor* CreatePartitionsLocationActor(const TActorId& requester, const TGetPartitionsLocationRequest& request);
 
 } // namespace NTopic
 } // namespace NKikimr::NGRpcProxy::V1

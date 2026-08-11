@@ -168,7 +168,7 @@ TActorId TKafkaMetadataActor::SendTopicRequest(const TString& topic) {
 
     PendingResponses++;
 
-    return Register(NKikimr::NGRpcProxy::V1::NTopic::CreatePartitionsLocationActor(locationRequest, SelfId()));
+    return Register(NKikimr::NGRpcProxy::V1::NTopic::CreatePartitionsLocationActor(SelfId(), locationRequest));
 }
 
 TVector<TKafkaMetadataActor::TNodeInfo*> TKafkaMetadataActor::CheckTopicNodes(TEvLocationResponse* response) {

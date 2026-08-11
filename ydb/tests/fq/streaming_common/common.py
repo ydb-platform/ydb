@@ -369,9 +369,9 @@ class StreamingTestBase(TestYdsBase):
             value = self.get_schemeshard_counter(kikimr, counter_name)
             if value == expected_value:
                 break
-            assert time.time() < deadline, (
-                f"wait_schemeshard_counter failed: {counter_name}={value}, expected {expected_value}"
-            )
+            assert (
+                time.time() < deadline
+            ), f"wait_schemeshard_counter failed: {counter_name}={value}, expected {expected_value}"
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
     def wait_streaming_query_metric(

@@ -12,7 +12,7 @@
 
 {% endif %}
 
-CREATE [TEMP | TEMPORARY] TABLE table_name (
+    CREATE [TEMP | TEMPORARY] TABLE table_name (
         column1 type1,
 {% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
         ...

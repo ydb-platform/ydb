@@ -9,47 +9,53 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
 namespace {
 
-class TDescribeConsumerLogic: public TDescribeLogicActor<TDescribeConsumerLogic> {
-    using TBase = TDescribeLogicActor<TDescribeConsumerLogic>;
-
+class TDescribeConsumerStrategy: public IDescribeStrategy {
 public:
-    TDescribeConsumerLogic(
-        const NActors::TActorId& parent,
-        TDescribeSettings&& settings,
-        TString consumer)
-        : TBase(parent, std::move(settings))
-        , RequestedConsumer(std::move(consumer))
+    explicit TDescribeConsumerStrategy(TString consumer)
+        : RequestedConsumer(std::move(consumer))
     {
     }
 
-    bool ValidateSchema() override {
-        const auto normalizedConsumerName = NPersQueue::ConvertNewConsumerName(RequestedConsumer, ActorContext());
-        const auto* consumer = NPQ::GetConsumer(TopicInfo.Info->Description.GetPQTabletConfig(), normalizedConsumerName);
+    TString GetName() const override {
+        return "DescribeConsumer";
+    }
+
+    TDescribeSchemaResult ValidateSchema(const NPQ::NDescriber::TTopicInfo& topicInfo) override {
+        const auto normalizedConsumerName = NPersQueue::ConvertNewConsumerName(
+            RequestedConsumer, AppData()->PQConfig);
+        const auto* consumer = NPQ::GetConsumer(
+            topicInfo.Info->Description.GetPQTabletConfig(), normalizedConsumerName);
         if (!consumer) {
-            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
-                TStringBuilder() << "no consumer '" << RequestedConsumer << "' in topic");
-            return false;
+            return {
+                .Error = TDescribeSchemaError{
+                    .Status = Ydb::StatusIds::SCHEME_ERROR,
+                    .Message = TStringBuilder() << "no consumer '" << RequestedConsumer << "' in topic",
+                },
+            };
         }
 
         ConsumerName = consumer->GetName();
-        return true;
+        return {.ConsumerName = ConsumerName};
     }
 
-    bool NeedProcessPartition(const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition) override {
+    bool NeedProcessPartition(
+        const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition) const override
+    {
         Y_UNUSED(partition);
         return true;
     }
 
-    std::unique_ptr<TEvPersQueue::TEvGetReadSessionsInfo> CreateReadSessionsInfoRequest() override {
+    std::unique_ptr<TEvPersQueue::TEvGetReadSessionsInfo> CreateReadSessionsInfoRequest() const override {
         return std::make_unique<TEvPersQueue::TEvGetReadSessionsInfo>(ConsumerName);
     }
 
-    std::unique_ptr<TEvPersQueue::TEvStatus> CreateStatusRequest() override {
+    std::unique_ptr<TEvPersQueue::TEvStatus> CreateStatusRequest() const override {
         return std::make_unique<TEvPersQueue::TEvStatus>(ConsumerName);
     }
 
 private:
     const TString RequestedConsumer;
+    TString ConsumerName;
 };
 
 class TDescribeConsumerGrpc: public TGrpcProxyActor<TDescribeConsumerGrpc, NGRpcService::TEvDescribeConsumerRequest> {
@@ -64,14 +70,17 @@ public:
     void DoAction() {
         Become(&TDescribeConsumerGrpc::StateWork);
 
-        LogicActorId = RegisterWithSameMailbox(new TDescribeConsumerLogic(SelfId(), {
-            .Path = GetProtoRequest()->path(),
-            .Database = GetDatabase(),
-            .UserToken = GetUserToken(),
-            .AccessRights = NACLib::EAccessRights::DescribeSchema,
-            .IncludeStats = GetProtoRequest()->include_stats(),
-            .IncludeLocation = GetProtoRequest()->include_location(),
-        }, GetProtoRequest()->consumer()));
+        LogicActorId = RegisterWithSameMailbox(new TDescribeOperationActor(
+            SelfId(),
+            {
+                .Path = GetProtoRequest()->path(),
+                .Database = GetDatabase(),
+                .UserToken = GetUserToken(),
+                .AccessRights = NACLib::EAccessRights::DescribeSchema,
+                .IncludeStats = GetProtoRequest()->include_stats(),
+                .IncludeLocation = GetProtoRequest()->include_location(),
+            },
+            std::make_unique<TDescribeConsumerStrategy>(GetProtoRequest()->consumer())));
     }
 
 private:

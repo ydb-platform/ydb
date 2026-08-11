@@ -8,50 +8,52 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
 namespace {
 
-class TPartitionsLocationLogic: public TDescribeLogicActor<TPartitionsLocationLogic> {
-    using TBase = TDescribeLogicActor<TPartitionsLocationLogic>;
-
+class TPartitionsLocationStrategy: public IDescribeStrategy {
 public:
-    TPartitionsLocationLogic(
-        const NActors::TActorId& parent,
-        TDescribeSettings&& settings,
-        absl::flat_hash_set<ui32> partitionIds)
-        : TBase(parent, std::move(settings))
-        , PartitionIds(std::move(partitionIds))
+    explicit TPartitionsLocationStrategy(absl::flat_hash_set<ui32> partitionIds)
+        : PartitionIds(std::move(partitionIds))
     {
     }
 
-    bool ValidateSchema() override {
+    TString GetName() const override {
+        return "PartitionsLocation";
+    }
+
+    TDescribeSchemaResult ValidateSchema(const NPQ::NDescriber::TTopicInfo& topicInfo) override {
         if (PartitionIds.empty()) {
-            return true;
+            return {};
         }
 
         absl::flat_hash_set<ui32> topicPartitions;
-        for (const auto& partition : TopicInfo.Info->Description.GetPartitions()) {
+        for (const auto& partition : topicInfo.Info->Description.GetPartitions()) {
             topicPartitions.insert(partition.GetPartitionId());
         }
 
         for (const auto partitionId : PartitionIds) {
             if (!topicPartitions.contains(partitionId)) {
-                ReplyWithError(
-                    Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder() << "No partition " << partitionId << " in topic",
-                    Ydb::PersQueue::ErrorCode::BAD_REQUEST);
-                return false;
+                return {
+                    .Error = TDescribeSchemaError{
+                        .Status = Ydb::StatusIds::BAD_REQUEST,
+                        .Message = TStringBuilder() << "No partition " << partitionId << " in topic",
+                        .IssueCode = Ydb::PersQueue::ErrorCode::BAD_REQUEST,
+                    },
+                };
             }
         }
-        return true;
+        return {};
     }
 
-    bool NeedProcessPartition(const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition) override {
+    bool NeedProcessPartition(
+        const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition) const override
+    {
         return PartitionIds.empty() || PartitionIds.contains(partition.GetPartitionId());
     }
 
-    std::unique_ptr<TEvPersQueue::TEvGetReadSessionsInfo> CreateReadSessionsInfoRequest() override {
+    std::unique_ptr<TEvPersQueue::TEvGetReadSessionsInfo> CreateReadSessionsInfoRequest() const override {
         return nullptr;
     }
 
-    std::unique_ptr<TEvPersQueue::TEvStatus> CreateStatusRequest() override {
+    std::unique_ptr<TEvPersQueue::TEvStatus> CreateStatusRequest() const override {
         return nullptr;
     }
 
@@ -84,14 +86,17 @@ public:
             userToken = new NACLib::TUserToken(Request.Token);
         }
 
-        LogicActorId = RegisterWithSameMailbox(new TPartitionsLocationLogic(SelfId(), {
-            .Path = Request.Topic,
-            .Database = Request.Database,
-            .UserToken = userToken,
-            .AccessRights = NACLib::EAccessRights::DescribeSchema,
-            .IncludeStats = false,
-            .IncludeLocation = true,
-        }, PartitionIds));
+        LogicActorId = RegisterWithSameMailbox(new TDescribeOperationActor(
+            SelfId(),
+            {
+                .Path = Request.Topic,
+                .Database = Request.Database,
+                .UserToken = userToken,
+                .AccessRights = NACLib::EAccessRights::DescribeSchema,
+                .IncludeStats = false,
+                .IncludeLocation = true,
+            },
+            std::make_unique<TPartitionsLocationStrategy>(PartitionIds)));
 
         Become(&TPartitionsLocationProxy::StateWork);
     }

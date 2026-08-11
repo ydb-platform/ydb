@@ -7,37 +7,43 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
 namespace {
 
-class TDescribePartitionLogic: public TDescribeLogicActor<TDescribePartitionLogic> {
-    using TBase = TDescribeLogicActor<TDescribePartitionLogic>;
-
+class TDescribePartitionStrategy: public IDescribeStrategy {
 public:
-    TDescribePartitionLogic(const NActors::TActorId& parent, TDescribeSettings&& settings, ui32 partitionId)
-        : TBase(parent, std::move(settings))
-        , PartitionId(partitionId)
+    explicit TDescribePartitionStrategy(ui32 partitionId)
+        : PartitionId(partitionId)
     {
     }
 
-    bool ValidateSchema() override {
-        auto exists = AnyOf(TopicInfo.Info->Description.GetPartitions(), [this](const auto& p) {
+    TString GetName() const override {
+        return "DescribePartition";
+    }
+
+    TDescribeSchemaResult ValidateSchema(const NPQ::NDescriber::TTopicInfo& topicInfo) override {
+        auto exists = AnyOf(topicInfo.Info->Description.GetPartitions(), [this](const auto& p) {
             return p.GetPartitionId() == PartitionId;
         });
         if (!exists) {
-            ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << "No partition " << PartitionId << " in topic");
-            return false;
+            return {
+                .Error = TDescribeSchemaError{
+                    .Status = Ydb::StatusIds::BAD_REQUEST,
+                    .Message = TStringBuilder() << "No partition " << PartitionId << " in topic",
+                },
+            };
         }
-        return true;
+        return {};
     }
 
-    bool NeedProcessPartition(const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition) override {
+    bool NeedProcessPartition(
+        const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition) const override
+    {
         return partition.GetPartitionId() == PartitionId;
     }
 
-    std::unique_ptr<TEvPersQueue::TEvGetReadSessionsInfo> CreateReadSessionsInfoRequest() override {
+    std::unique_ptr<TEvPersQueue::TEvGetReadSessionsInfo> CreateReadSessionsInfoRequest() const override {
         return nullptr;
     }
 
-    std::unique_ptr<TEvPersQueue::TEvStatus> CreateStatusRequest() override {
+    std::unique_ptr<TEvPersQueue::TEvStatus> CreateStatusRequest() const override {
         return std::make_unique<TEvPersQueue::TEvStatus>();
     }
 
@@ -57,14 +63,17 @@ public:
     void DoAction() {
         Become(&TDescribePartitionGrpc::StateWork);
 
-        LogicActorId = RegisterWithSameMailbox(new TDescribePartitionLogic(SelfId(), {
-            .Path = GetProtoRequest()->path(),
-            .Database = GetDatabase(),
-            .UserToken = GetUserToken(),
-            .AccessRights = { NACLib::EAccessRights::DescribeSchema, NACLib::EAccessRights::UpdateRow },
-            .IncludeStats = GetProtoRequest()->include_stats(),
-            .IncludeLocation = GetProtoRequest()->include_location(),
-        }, GetProtoRequest()->partition_id()));
+        LogicActorId = RegisterWithSameMailbox(new TDescribeOperationActor(
+            SelfId(),
+            {
+                .Path = GetProtoRequest()->path(),
+                .Database = GetDatabase(),
+                .UserToken = GetUserToken(),
+                .AccessRights = { NACLib::EAccessRights::DescribeSchema, NACLib::EAccessRights::UpdateRow },
+                .IncludeStats = GetProtoRequest()->include_stats(),
+                .IncludeLocation = GetProtoRequest()->include_location(),
+            },
+            std::make_unique<TDescribePartitionStrategy>(GetProtoRequest()->partition_id())));
     }
 
 private:

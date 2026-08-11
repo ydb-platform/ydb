@@ -255,6 +255,12 @@ using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;
 struct TShardedWriteControllerSettings {
     i64 MemoryLimitTotal = 0;
     bool Inconsistent = false;
+    // Stage 7: When non-empty, the write controller will only route data to
+    // the specified shards. Rows destined for other shards are silently dropped.
+    // Used by CTAS (fill_table) per-node affinity mode: each WriteActor task
+    // is responsible for a subset of the target table's shards that live on the
+    // node it runs on. Empty means "write to all shards" (original behaviour).
+    THashSet<ui64> TargetShardIds;
 };
 
 IShardedWriteControllerPtr CreateShardedWriteController(

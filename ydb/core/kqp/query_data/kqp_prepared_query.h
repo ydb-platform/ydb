@@ -64,6 +64,10 @@ public:
         return Proto->GetEnableShuffleElimination();
     }
 
+    bool EnableCsWriteAffinity() const {
+        return Proto->GetEnableCsWriteAffinity();
+    }
+
     ui32 DqChannelVersion() const {
         return Proto->GetDqChannelVersion();
     }

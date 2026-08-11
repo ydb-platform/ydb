@@ -28,7 +28,7 @@ TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
-    auto conjuncts = filter->FilterExpr.SplitConjunct();
+    auto conjuncts = filter->GetFilterExpression().SplitConjunct();
     TVector<TExpression> pushedFilters;
     TVector<TExpression> remainingFilters;
 

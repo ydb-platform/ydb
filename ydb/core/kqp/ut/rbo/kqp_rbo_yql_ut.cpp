@@ -6608,7 +6608,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(addDeps->Dependencies.size(), 1);
         UNIT_ASSERT(addDeps->Dependencies.front() == TInfoUnit("l_a"));
 
-        const auto subplanFilterInputs = subplanFilter->FilterExpr.GetInputIUs(false, true);
+        const auto subplanFilterInputs = subplanFilter->GetFilterExpression().GetInputIUs(false, true);
         UNIT_ASSERT(std::find(subplanFilterInputs.begin(), subplanFilterInputs.end(), TInfoUnit("l_a")) != subplanFilterInputs.end());
         UNIT_ASSERT(std::find(subplanFilterInputs.begin(), subplanFilterInputs.end(), TInfoUnit("a")) == subplanFilterInputs.end());
     }
@@ -6678,7 +6678,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(rewrittenRead->Columns.front(), "a");
         UNIT_ASSERT(rewrittenRead->OutputIUs.front() == TInfoUnit("l_a"));
 
-        const auto filterInputs = rewrittenFilter->FilterExpr.GetInputIUs(false, true);
+        const auto filterInputs = rewrittenFilter->GetFilterExpression().GetInputIUs(false, true);
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("l_a")) != filterInputs.end());
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("a")) == filterInputs.end());
     }
@@ -7056,7 +7056,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
         UNIT_ASSERT_C(rewrittenFilter->GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
 
-        const auto filterInputs = rewrittenFilter->FilterExpr.GetInputIUs(false, true);
+        const auto filterInputs = rewrittenFilter->GetFilterExpression().GetInputIUs(false, true);
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("b")) != filterInputs.end());
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("a")) == filterInputs.end());
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("c")) == filterInputs.end());
@@ -7836,7 +7836,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
         auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
-        const auto filterInputs = rewrittenFilter->FilterExpr.GetInputIUs(false, true);
+        const auto filterInputs = rewrittenFilter->GetFilterExpression().GetInputIUs(false, true);
         UNIT_ASSERT(ContainsInfoUnit(filterInputs, TInfoUnit("x")));
         UNIT_ASSERT(!ContainsInfoUnit(filterInputs, TInfoUnit("a")));
     }

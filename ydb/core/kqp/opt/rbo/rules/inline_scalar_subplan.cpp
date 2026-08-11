@@ -58,7 +58,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
             }
         }
 
-        auto conjuncts = subplanFilter->FilterExpr.SplitConjunct();
+        auto conjuncts = subplanFilter->GetFilterExpression().SplitConjunct();
 
         for (const auto & conj : conjuncts) {
             if (!conj.MaybeEquiJoinCondition()) {

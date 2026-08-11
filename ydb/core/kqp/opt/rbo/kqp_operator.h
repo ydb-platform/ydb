@@ -631,7 +631,7 @@ public:
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
-    TExpression GetFilterExpression() const { return FilterExpr; }
+    const TExpression& GetFilterExpression() const { return FilterExpr; }
 
     TExpression FilterExpr;
 

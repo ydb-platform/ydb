@@ -66,7 +66,7 @@ public:
     }
 
     bool CouldUseTable(const TSnapshot& dropSnapshot) const {
-        if (dropSnapshot > MinSnapshotForNewReads) {
+        if (MinSnapshotForNewReads < dropSnapshot) {
             return true;
         }
         for (const auto& txSnapshot : TxInFlight) {

@@ -496,6 +496,29 @@ bool TPartition::InitNewHeadForCompaction()
     return true;
 }
 
+void TPartition::AbortBlobsCompaction(const TString& reason)
+{
+    const auto& ctx = ActorContext();
+
+    YDB_LOG_WARN_COMP(Service, "Abort blobs compaction",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"reason", reason},
+        {"compactionInProgress", CompactionInProgress},
+        {"keysForCompaction", KeysForCompaction.size()},
+        {"compactionBlobsCount", CompactionBlobsCount});
+
+    CompactionInProgress = false;
+    KeysForCompaction.clear();
+    CompactionBlobsCount = 0;
+    FirstCompactionPart = Nothing();
+    CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
+
+    // Do not retry immediately: a persistent KV/BS failure would loop.
+    // Compaction will be attempted again from the next write/wakeup path.
+    TryProcessGetWriteInfoRequest(ctx);
+    ProcessTxsAndUserActs(ctx);
+}
+
 void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs)
 {
     const auto& ctx = ActorContext();

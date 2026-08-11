@@ -2212,14 +2212,14 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
         const auto* response = ev->Get();
         if (HasError(*response)) {
             AbortBlobsCompaction(TStringBuilder()
-                << "blob read failed: " << response->Error.ErrorStr);
+                << "blob read failed: " << response->Error.ErrorStr, ctx);
             return;
         }
         for (const auto& blob : response->GetBlobs()) {
             if (blob.Empty()) {
                 AbortBlobsCompaction(TStringBuilder()
                     << "empty blob in compaction read response"
-                    << " key=" << blob.Key.ToString());
+                    << " key=" << blob.Key.ToString(), ctx);
                 return;
             }
         }

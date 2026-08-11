@@ -474,7 +474,7 @@ void TestCompactionSurvivesFailedBlobRead(ECompactionBlobReadInjection injection
     bool injected = false;
     tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         if (auto* event = ev->CastAsLocal<TEvPQ::TEvBlobResponse>()) {
-            if (!injected && event->GetCookie() == 0) { // ERequestCookie::ReadBlobsForCompaction
+            if (!injected && event->GetCookie() == TPartition::ERequestCookie::ReadBlobsForCompaction) {
                 injected = true;
 
                 TVector<TRequestedBlob> blobs = event->GetBlobs();
@@ -4526,7 +4526,7 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     TAutoPtr<IEventHandle> blobResponseEvent;
     auto observe = [&](TAutoPtr<IEventHandle>& ev) {
         if (auto* event = ev->CastAsLocal<TEvPQ::TEvBlobResponse>()) {
-            if (event->GetCookie() == 0) { // ERequestCookie::ReadBlobsForCompaction
+            if (event->GetCookie() == TPartition::ERequestCookie::ReadBlobsForCompaction) {
                 return TTestActorRuntimeBase::EEventAction::PROCESS;
             }
             blobResponseEvent = ev;

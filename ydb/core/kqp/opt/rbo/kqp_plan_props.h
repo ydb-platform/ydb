@@ -65,6 +65,14 @@ struct TSubplans {
         return PlanMap.at(binding);
     }
 
+    auto begin() const {
+        return PlanMap.begin();
+    }
+
+    auto end() const {
+        return PlanMap.end();
+    }
+
     bool RenameReferences(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx);
 
     THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> PlanMap;

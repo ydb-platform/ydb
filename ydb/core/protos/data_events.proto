@@ -119,6 +119,7 @@ message TEvWrite {
         optional uint32 DefaultFilledColumnCount = 7;
         optional bool IsBulk = 8;
         optional uint64 QuerySpanId = 9;
+        optional TWriteSeqNum WriteSeqNum = 10;
     }
 
     // Transaction operations
@@ -129,7 +130,6 @@ message TEvWrite {
     optional ETxMode TxMode = 3;
     optional uint64 LockTxId = 4;
     optional uint32 LockNodeId = 5;
-    optional TWriteSeqNum WriteSeqNum = 13;
     optional TKqpLocks Locks = 6;
 
     // Other params

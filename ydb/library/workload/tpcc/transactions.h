@@ -45,6 +45,15 @@ struct TTransactionContext {
 struct TUserAbortedException : public yexception {
 };
 
+// Build TTxControl for an in-flight transaction, optionally committing with the query.
+inline NQuery::TTxControl TxControl(const NQuery::TTransaction& tx, bool commit = false) {
+    auto control = NQuery::TTxControl::Tx(tx);
+    if (commit) {
+        control.CommitTx(true);
+    }
+    return control;
+}
+
 //-----------------------------------------------------------------------------
 
 NThreading::TFuture<TStatus> GetNewOrderTask(

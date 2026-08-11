@@ -69,6 +69,10 @@ class TExpression {
     // an exception will be thrown
     const TVector<TInfoUnit>& GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
 
+    void BindPlanProps(TPlanProps* props) {
+        PlanProps = props;
+    }
+
     // Rename column references in the expression
     TExpression ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const;
 
@@ -89,7 +93,7 @@ class TExpression {
 
     TExprNode::TPtr Node;
     TExprContext* Ctx = nullptr;
-    TPlanProps* PlanProps;
+    TPlanProps* PlanProps = nullptr;
 
   private:
     bool MaybeEquiJoinConditionInternal(bool includeExpressions) const;

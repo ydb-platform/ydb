@@ -279,9 +279,7 @@ TIntrusivePtr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
  
     // We need to propagate plan properties reference into expressions in the plan
     for (const auto& it : *opRoot) {
-        for (auto exprRef : it.Current->GetExpressions()) {
-            exprRef.get().PlanProps = &(opRoot->PlanProps);
-        }
+        it.Current->BindExpressionPlanProps(&opRoot->PlanProps);
     }
 
     // For subplans, we need to compute dependent variables correctly

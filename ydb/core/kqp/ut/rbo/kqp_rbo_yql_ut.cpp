@@ -1547,9 +1547,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         converter.Converted[inputNode.Get()] = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
 
         auto converted = CastOperator<TOpMap>(converter.ConvertTKqpOpMap(mapNode));
-        for (auto exprRef : converted->GetExpressions()) {
-            exprRef.get().PlanProps = &converter.PlanProps;
-        }
+        converted->BindExpressionPlanProps(&converter.PlanProps);
 
         UNIT_ASSERT_VALUES_EQUAL(converted->GetMapElements().size(), 2);
         UNIT_ASSERT(converted->GetMapElements()[0].GetElementName() == TInfoUnit("projected"));
@@ -6539,7 +6537,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         subplanEntry.Type = ESubplanType::IN_SUBPLAN;
         subplanEntry.IU = subplanIU;
         root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
-        filter->FilterExpr.PlanProps = &root.PlanProps;
+        filter->BindExpressionPlanProps(&root.PlanProps);
 
         TVector<std::unique_ptr<IRule>> rules;
         AddPushRenameRulesForTest(rules);
@@ -6593,8 +6591,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         subplanEntry.IU = subplanIU;
         subplanEntry.DependentIUs = {TInfoUnit("a")};
         root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
-        outerFilter->FilterExpr.PlanProps = &root.PlanProps;
-        subplanFilter->FilterExpr.PlanProps = &root.PlanProps;
+        outerFilter->BindExpressionPlanProps(&root.PlanProps);
+        subplanFilter->BindExpressionPlanProps(&root.PlanProps);
 
         TVector<std::unique_ptr<IRule>> rules;
         AddPushRenameRulesForTest(rules);
@@ -6637,7 +6635,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         subplanEntry.Type = ESubplanType::IN_SUBPLAN;
         subplanEntry.IU = subplanIU;
         root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
-        filter->FilterExpr.PlanProps = &root.PlanProps;
+        filter->BindExpressionPlanProps(&root.PlanProps);
 
         TVector<std::unique_ptr<IRule>> rules;
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());

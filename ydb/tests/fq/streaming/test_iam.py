@@ -105,6 +105,7 @@ class TestIamAuth(StreamingTestBase):
         result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
         assert json.loads(result) == {"time": "iam lunch time"}
 
+        self.wait_completed_checkpoints(kikimr, path)
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
         self.wait_completed_checkpoints(kikimr, path)

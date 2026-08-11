@@ -165,6 +165,25 @@ previous process stopped.
 
 The server binds to `127.0.0.1` on a free port by default. A non-loopback
 listener requires the explicit `--allow-remote` opt-in.
+
+## Portable result imports and comparisons
+
+The Runs page accepts a portable ZIP through `POST /api/import`. A portable
+archive contains a root `import.json`, `run.json`, and its related artifacts.
+`import.json` is format version 1 and lists every other member with its exact
+relative POSIX path, byte size, and SHA-256 hash. Only regular files are
+accepted; absolute paths, traversal, duplicate entries, symlinks, unlisted
+files, unknown member types, oversized archives, bad hashes, malformed import
+manifests, and non-v4 result manifests are rejected before extraction.
+
+Accepted results are installed under `OUTPUT/imports/import-<id>` without
+changing `run.json`; files are made read-only and a collision never overwrites
+an existing import. The Runs list labels them `imported` while local results
+remain `local`. The Comparisons page persists a chosen run set locally and
+shows only availability keys: shared benchmark/profile/affinity keys, shared
+benchmark/profile keys where that shared affinity is unique, and each run's
+own benchmark/profile keys. It intentionally performs no charting or metric
+calculation.
 # Result manifest compatibility
 
 Run manifests use schema version 4. Earlier manifests are intentionally not

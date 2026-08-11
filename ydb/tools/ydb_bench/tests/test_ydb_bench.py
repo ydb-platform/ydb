@@ -10,6 +10,7 @@ import threading
 import time
 import unittest
 import urllib.request
+import zipfile
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -35,7 +36,8 @@ from ydb.tools.ydb_bench.lib.topology import (
     plan_affinity,
     topology_record,
 )
-from ydb.tools.ydb_bench.lib.web import make_server, read_model
+from ydb.tools.ydb_bench.lib.import_results import import_archive
+from ydb.tools.ydb_bench.lib.web import comparison_keys, make_server, read_model
 
 
 class YdbBenchTest(unittest.TestCase):
@@ -1034,6 +1036,53 @@ class WebTest(unittest.TestCase):
             value["imported"] = True
         (directory / "run.json").write_text(json.dumps(value), encoding="utf-8")
 
+    def _portable_archive(self, extra=None, version=SCHEMA_VERSION, corrupt=False):
+        run = {"schema_version": version, "status": "completed", "state": "passed", "runs": [], "steps": [], "topology": {"version": 2}}
+        files = {"run.json": json.dumps(run).encode(), "artifact.txt": b"artifact"}
+        entries = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)} for name, data in files.items()]
+        if corrupt: entries[0]["sha256"] = "0" * 64
+        manifest = json.dumps({"format_version": 1, "files": entries}).encode()
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as archive:
+            archive.writestr("import.json", manifest)
+            for name, data in files.items(): archive.writestr(name, data)
+            for name, data in (extra or {}).items(): archive.writestr(name, data)
+        return stream.getvalue()
+
+    def test_import_rejects_hostile_corrupt_and_old_archives(self):
+        with self.assertRaisesRegex(BenchmarkError, "unsafe"):
+            import_archive(self.root, self._portable_archive({"../escape": b"x"}))
+        with self.assertRaisesRegex(BenchmarkError, "hash mismatch"):
+            import_archive(self.root, self._portable_archive(corrupt=True))
+        with self.assertRaisesRegex(BenchmarkError, "schema version"):
+            import_archive(self.root, self._portable_archive(version=3))
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as archive:
+            link = zipfile.ZipInfo("link"); link.external_attr = (stat.S_IFLNK | 0o777) << 16
+            archive.writestr(link, "run.json")
+            archive.writestr("import.json", b'{"format_version":1,"files":[]}')
+        with self.assertRaisesRegex(BenchmarkError, "unexpected member type"):
+            import_archive(self.root, stream.getvalue())
+
+    def test_import_installs_immutable_normalized_result(self):
+        imported = import_archive(self.root, self._portable_archive())
+        self.assertEqual(imported["source"], "imported")
+        run = self.root / imported["id"]
+        self.assertEqual(read_model(self.root)[imported["id"]]["source"], "imported")
+        self.assertFalse((run / "run.json").stat().st_mode & stat.S_IWUSR)
+        with self.assertRaises(FileExistsError):
+            (run / "artifact.txt").open("x")
+
+    def test_comparison_key_rules(self):
+        model = {
+            "one": {"steps": [{"benchmark": "ping", "profile": "p", "affinity": "none"}, {"benchmark": "ping", "profile": "q", "affinity": "pack"}], "runs": []},
+            "two": {"steps": [{"benchmark": "ping", "profile": "p", "affinity": "none"}, {"benchmark": "ping", "profile": "q", "affinity": "none"}], "runs": []},
+        }
+        keys = comparison_keys(model, ["one", "two"])
+        self.assertEqual(keys["benchmark_profile_affinity"], ["ping/p/none"])
+        self.assertEqual(keys["benchmark_profile_one_affinity"], ["ping/p", "ping/q"])
+        self.assertEqual(keys["within_run_benchmark_profile"]["one"], ["ping/p", "ping/q"])
+
     def test_web_read_model_covers_active_completed_and_imported_runs(self):
         self._manifest(self.root / "active", "running")
         self._manifest(self.root / "complete")
@@ -1055,6 +1104,9 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"app.js", response.read())
             with urllib.request.urlopen(base + "/api/runs") as response:
                 self.assertEqual(json.loads(response.read())[0]["id"], "complete")
+            request = urllib.request.Request(base + "/api/import", data=self._portable_archive(), method="POST")
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(json.loads(response.read())["source"], "imported")
             with self.assertRaisesRegex(Exception, "HTTP Error 400"):
                 urllib.request.urlopen(urllib.request.Request(base + "/api/runs", method="POST"))
         finally:

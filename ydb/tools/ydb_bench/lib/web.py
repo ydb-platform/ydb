@@ -21,12 +21,13 @@ from ydb.tools.ydb_bench.lib.config import build_run_plan, load_config
 from ydb.tools.ydb_bench.lib.results import ResultStore, load_manifest
 from ydb.tools.ydb_bench.lib.actors_core import run_actors_core
 from ydb.tools.ydb_bench.lib.common import extract_executable
+from ydb.tools.ydb_bench.lib.import_results import MAX_TOTAL_SIZE, import_archive
 
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
-_HTML = """<!doctype html><meta charset=utf-8><title>YDB benchmark runs</title><link rel=stylesheet href=/app.css><main><h1>YDB benchmark runs</h1><nav><a href=/#runs>Runs</a> <a href=/#builder>Builder</a> <a href=/#yaml>YAML</a></nav><section id=app>Loading…</section><script src=/app.js></script></main>"""
+_HTML = """<!doctype html><meta charset=utf-8><title>YDB benchmark runs</title><link rel=stylesheet href=/app.css><main><h1>YDB benchmark runs</h1><nav><a href=/#runs>Runs</a> <a href=/#comparisons>Comparisons</a> <a href=/#builder>Builder</a> <a href=/#yaml>YAML</a></nav><section id=app>Loading…</section><script src=/app.js></script></main>"""
 _CSS = "body{font:16px system-ui,sans-serif;margin:2rem;max-width:70rem}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:.4rem;text-align:left}a{color:#0759a5}code,textarea{white-space:pre-wrap;width:100%;min-height:14rem}button{margin:.3rem}"
-_JS = r"""const app=document.querySelector('#app'),esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));let yaml='ping-bench:\n  baseline:\n    threads: [1]\n    duration: 1\n    repetitions: 1\n    affinity: [none]\n';async function api(p,o){let r=await fetch(p,o);let v=await r.json();if(!r.ok)throw Error(v.error||r.status);return v}function editor(){return '<textarea id=y>'+esc(yaml)+'</textarea><p><button id=validate>Validate</button><button id=preview>Preview</button><button id=start>Start</button></p><pre id=result></pre>'}async function compose(){let h=location.hash.slice(1);if(h==='builder'||h==='yaml'){app.innerHTML='<h2>'+h+'</h2>'+editor();let get=()=>yaml=document.querySelector('#y').value;validate.onclick=async()=>{get();result.textContent=JSON.stringify(await api('/api/validate',{method:'POST',body:yaml}),null,2)};preview.onclick=async()=>{get();result.textContent=JSON.stringify(await api('/api/plan',{method:'POST',body:yaml}),null,2)};start.onclick=async()=>{get();let r=await api('/api/runs',{method:'POST',body:yaml});location.hash='run/'+encodeURIComponent(r.id)};return}if(h.startsWith('run/')){let id=decodeURIComponent(h.slice(4));let draw=async()=>{let r=await api('/api/runs/'+encodeURIComponent(id));app.innerHTML='<h2>Run '+esc(id)+'</h2><button id=cancel>Cancel</button><pre>'+esc(JSON.stringify(r,null,2))+'</pre>';cancel.onclick=()=>api('/api/runs/'+encodeURIComponent(id)+'/cancel',{method:'POST'}).then(draw)};await draw();let e=new EventSource('/api/runs/'+encodeURIComponent(id)+'/events');e.onmessage=draw;return}let runs=await api('/api/runs');app.innerHTML='<h2>Runs</h2><table><tr><th>Run</th><th>Status</th><th>Profiles</th></tr>'+runs.map(r=>'<tr><td><a href="#run/'+encodeURIComponent(r.id)+'">'+esc(r.id)+'</a></td><td>'+esc(r.status)+'</td><td>'+r.profiles+'</td></tr>').join('')+'</table>'}addEventListener('hashchange',compose);compose();"""
+_JS = r"""const app=document.querySelector('#app'),esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));let yaml='ping-bench:\n  baseline:\n    threads: [1]\n    duration: 1\n    repetitions: 1\n    affinity: [none]\n';async function api(p,o){let r=await fetch(p,o);let v=await r.json();if(!r.ok)throw Error(v.error||r.status);return v}function editor(){return '<textarea id=y>'+esc(yaml)+'</textarea><p><button id=validate>Validate</button><button id=preview>Preview</button><button id=start>Start</button></p><pre id=result></pre>'}async function compose(){let h=location.hash.slice(1);if(h==='builder'||h==='yaml'){app.innerHTML='<h2>'+h+'</h2>'+editor();let get=()=>yaml=document.querySelector('#y').value;validate.onclick=async()=>{get();result.textContent=JSON.stringify(await api('/api/validate',{method:'POST',body:yaml}),null,2)};preview.onclick=async()=>{get();result.textContent=JSON.stringify(await api('/api/plan',{method:'POST',body:yaml}),null,2)};start.onclick=async()=>{get();let r=await api('/api/runs',{method:'POST',body:yaml});location.hash='run/'+encodeURIComponent(r.id)};return}if(h==='comparisons'){let c=await api('/api/comparisons');app.innerHTML='<h2>Comparisons</h2>'+c.runs.map(r=>'<label><input type=checkbox value="'+esc(r.id)+'" '+(c.selected.includes(r.id)?'checked':'')+'> '+esc(r.id)+' ('+esc(r.source)+')</label><br>').join('')+'<p><button id=save>Save selection</button></p><pre>'+esc(JSON.stringify(c.keys,null,2))+'</pre>';save.onclick=()=>api('/api/comparisons/selection',{method:'POST',body:JSON.stringify([...document.querySelectorAll("input:checked")].map(x=>x.value))}).then(compose);return}if(h.startsWith('run/')){let id=decodeURIComponent(h.slice(4));let draw=async()=>{let r=await api('/api/runs/'+encodeURIComponent(id));app.innerHTML='<h2>Run '+esc(id)+'</h2><button id=cancel>Cancel</button><pre>'+esc(JSON.stringify(r,null,2))+'</pre>';cancel.onclick=()=>api('/api/runs/'+encodeURIComponent(id)+'/cancel',{method:'POST'}).then(draw)};await draw();let e=new EventSource('/api/runs/'+encodeURIComponent(id)+'/events');e.onmessage=draw;return}let runs=await api('/api/runs');app.innerHTML='<h2>Runs</h2><input id=file type=file accept=.zip><button id=import>Import archive</button><table><tr><th>Run</th><th>Source</th><th>Status</th><th>Profiles</th></tr>'+runs.map(r=>'<tr><td><a href="#run/'+encodeURIComponent(r.id)+'">'+esc(r.id)+'</a></td><td>'+esc(r.source)+'</td><td>'+esc(r.status)+'</td><td>'+r.profiles+'</td></tr>').join('')+'</table>';document.querySelector('#import').onclick=async()=>{let f=file.files[0];if(!f)return;await api('/api/import',{method:'POST',body:await f.arrayBuffer()});compose()}}addEventListener('hashchange',compose);compose();"""
 
 
 def _utc_now():
@@ -53,8 +54,26 @@ def _manifests(output):
 def read_model(output):
     result = {}
     for run_id, manifest in _manifests(output):
-        result[run_id] = {"id": run_id, "status": manifest.get("status", "unknown"), "state": manifest.get("state", "unknown"), "source": "imported" if (manifest.get("imported") or manifest.get("source") == "imported" or manifest.get("origin")) else "local", "started_at": manifest.get("started_at"), "finished_at": manifest.get("finished_at"), "profiles": len(manifest.get("runs", [])), "runs": manifest.get("runs", []), "steps": manifest.get("steps", []), "topology": manifest.get("topology"), "events": manifest.get("events", 0)}
+        result[run_id] = {"id": run_id, "status": manifest.get("status", "unknown"), "state": manifest.get("state", "unknown"), "source": "imported" if ((Path(output) / run_id / ".imported").is_file() or manifest.get("imported") or manifest.get("source") == "imported" or manifest.get("origin")) else "local", "started_at": manifest.get("started_at"), "finished_at": manifest.get("finished_at"), "profiles": len(manifest.get("runs", [])), "runs": manifest.get("runs", []), "steps": manifest.get("steps", []), "topology": manifest.get("topology"), "events": manifest.get("events", 0)}
     return result
+
+
+def comparison_keys(model, selected):
+    """Return only keys actually available under the requested comparison scope."""
+    selected = [run_id for run_id in selected if run_id in model]
+    per_run = []
+    for run_id in selected:
+        steps = model[run_id].get("steps", [])
+        keys = {(str(s.get("benchmark")), str(s.get("profile")), str(s.get("affinity"))) for s in steps if s.get("benchmark") is not None and s.get("profile") is not None and s.get("affinity") is not None}
+        # Older completed top-level records can lack steps; retain their local
+        # benchmark/profile availability but never invent an affinity.
+        pairs = {(str(r.get("benchmark")), str(r.get("profile"))) for r in model[run_id].get("runs", []) if r.get("benchmark") is not None and r.get("profile") is not None}
+        per_run.append((keys, pairs | {(a, b) for a, b, _ in keys}))
+    common_affinity = set.intersection(*(item[0] for item in per_run)) if per_run else set()
+    common_pairs = set.intersection(*(item[1] for item in per_run)) if per_run else set()
+    one_affinity_pairs = {pair for pair in common_pairs if all(len({a for x, y, a in keys if (x, y) == pair}) == 1 for keys, _ in per_run)}
+    within_run = {run_id: sorted("/".join(pair) for pair in pairs) for run_id, (_, pairs) in zip(selected, per_run)}
+    return {"benchmark_profile_affinity": sorted("/".join(key) for key in common_affinity), "benchmark_profile_one_affinity": sorted("/".join(pair) for pair in one_affinity_pairs), "within_run_benchmark_profile": within_run}
 
 
 def _load_yaml(yaml_text):
@@ -78,6 +97,7 @@ class RunService:
         self.executor = executor or self._unsupported_executor
         self.event_limit, self.tail_limit = event_limit, tail_limit
         self._runs, self._lock = {}, threading.RLock()
+        self._selection_path = self.output / ".comparison-selection.json"
         self._recover()
 
     def _recover(self):
@@ -155,6 +175,17 @@ class RunService:
         return {"id": run_id, "cancelled": True, "state": run["store"].manifest["state"]}
 
     def model(self): return read_model(self.output)
+    def comparisons(self, selected=None):
+        model = self.model()
+        if selected is None:
+            try: selected = json.loads(self._selection_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError): selected = []
+        selected = [item for item in selected if isinstance(item, str) and item in model]
+        return {"runs": [{"id": item["id"], "source": item["source"]} for item in model.values()], "selected": selected, "keys": comparison_keys(model, selected)}
+    def select_comparisons(self, selected):
+        if not isinstance(selected, list) or not all(isinstance(item, str) for item in selected): raise BenchmarkError("comparison selection must be a list of run ids")
+        atomic_write_json(self._selection_path, selected)
+        return self.comparisons(selected)
     def detail(self, run_id):
         item = self.model().get(run_id)
         if item and run_id in self._runs: item.update({"tail": self._runs[run_id]["tail"]})
@@ -199,13 +230,19 @@ def _handler(service):
         def _send(self, status, content_type, body):
             self.send_response(status); self.send_header("Content-Type", content_type); self.send_header("Content-Security-Policy", _CSP); self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
         def _json(self, status, value): self._send(status, "application/json", json.dumps(value).encode())
-        def _body(self): return self.rfile.read(int(self.headers.get("Content-Length", 0))).decode("utf-8")
+        def _raw_body(self):
+            try: size = int(self.headers.get("Content-Length", 0))
+            except ValueError: raise BenchmarkError("invalid Content-Length")
+            if size < 0 or size > MAX_TOTAL_SIZE: raise BenchmarkError("request exceeds import size limit")
+            return self.rfile.read(size)
+        def _body(self): return self._raw_body().decode("utf-8")
         def do_GET(self):
             parsed = urlparse(self.path); path = parsed.path
             if path == "/": return self._send(200, "text/html; charset=utf-8", _HTML.encode())
             if path == "/app.css": return self._send(200, "text/css; charset=utf-8", _CSS.encode())
             if path == "/app.js": return self._send(200, "application/javascript; charset=utf-8", _JS.encode())
             if path == "/api/runs": return self._json(200, [{k: v[k] for k in ("id", "status", "state", "source", "started_at", "finished_at", "profiles")} for v in service.model().values()])
+            if path == "/api/comparisons": return self._json(200, service.comparisons())
             if path.endswith("/events") and path.startswith("/api/runs/"):
                 run_id = unquote(path[len("/api/runs/"):-len("/events")]); after = int(parse_qs(parsed.query).get("after", [0])[0]); events = service.events(run_id, after)
                 payload = b"".join(("id: %s\ndata: %s\n\n" % (e["sequence"], json.dumps(e))).encode() for e in events) or b": connected\n\n"
@@ -215,11 +252,17 @@ def _handler(service):
                 return self._json(200 if item else 404, item or {"error": "run not found"})
             return self._json(404, {"error": "not found"})
         def do_POST(self):
-            path = urlparse(self.path).path; body = self._body()
+            path = urlparse(self.path).path
             try:
+                if path == "/api/import": return self._json(201, import_archive(service.output, self._raw_body()))
+                body = self._body()
                 if path == "/api/validate": return self._json(200, service.validate(body))
                 if path == "/api/plan": return self._json(200, service.plan(body))
                 if path == "/api/runs": return self._json(201, service.start(body))
+                if path == "/api/comparisons/selection":
+                    try: selected = json.loads(body)
+                    except ValueError as error: raise BenchmarkError("malformed comparison selection") from error
+                    return self._json(200, service.select_comparisons(selected))
                 if path.startswith("/api/runs/") and path.endswith("/cancel"): return self._json(200, service.cancel(unquote(path[len("/api/runs/"):-len("/cancel")])))
             except BenchmarkError as error: return self._json(400, {"error": str(error)})
             return self._json(404, {"error": "not found"})

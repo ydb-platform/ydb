@@ -313,8 +313,6 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
         UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
     }
 
-    // A transaction that pinned an MVCC snapshot before TRUNCATE must not be able to read the
-    // truncated table afterwards: its snapshot points at row versions TRUNCATE destroyed.
     Y_UNIT_TEST(TruncateBreaksStaleSnapshotSameTable) {
         auto serverHelper = TServerHelper();
         auto [server, runtime, edgeSender] = serverHelper.GetObjects();
@@ -349,8 +347,6 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
             "transaction must not commit after reading a truncated table");
     }
 
-    // Same, but the stale read targets a different table that the same DDL wave truncated.
-    // Catches the "pin per table at first touch" hole: tx1 never touched table_2 before.
     Y_UNIT_TEST(TruncateBreaksStaleSnapshotOtherTable) {
         auto serverHelper = TServerHelper();
         auto [server, runtime, edgeSender] = serverHelper.GetObjects();

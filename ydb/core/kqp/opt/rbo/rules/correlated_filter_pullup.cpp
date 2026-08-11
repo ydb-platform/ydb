@@ -106,7 +106,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
             }
         }
 
-        filter->FilterExpr = newExpr;
+        filter->SetFilterExpression(newExpr);
         map->SetInput(remainingFilter);
         deps->SetInput(map);
         input = filter;
@@ -130,7 +130,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
             }
         }
 
-        filter->FilterExpr = newExpr;
+        filter->SetFilterExpression(newExpr);
         aggregate->SetInput(remainingFilter);
         deps->SetInput(aggregate);
         input = filter;

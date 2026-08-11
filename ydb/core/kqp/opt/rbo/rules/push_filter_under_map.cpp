@@ -50,7 +50,7 @@ TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TInt
     }
 
     filter->SetInput(map->GetInput());
-    filter->FilterExpr = MakeConjunction(pushedFilters, props.PgSyntax);
+    filter->SetFilterExpression(MakeConjunction(pushedFilters, props.PgSyntax));
     map->SetInput(filter);
 
     if (remainingFilters.size()) {

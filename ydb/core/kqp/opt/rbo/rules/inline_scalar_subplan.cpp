@@ -100,7 +100,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         if (input->Kind == EOperator::Filter) {
             auto outerFilter = CastOperator<TOpFilter>(input);
-            outerFilter->FilterExpr = outerFilter->FilterExpr.ApplyRenames({{scalarIU, joinedSubplanResIU}});
+            outerFilter->SetFilterExpression(outerFilter->GetFilterExpression().ApplyRenames({{scalarIU, joinedSubplanResIU}}));
             outerFilter->SetInput(leftJoin);
         } else {
             TVector<TMapElement> renameElements;

@@ -333,10 +333,10 @@ A **semaphore** is an object within a [coordination node](#coordination-node) th
 
 ### Resource pool {#resource-pool}
 
-A **resource pool** is a schema object that describes the restrictions placed on the resources (CPU, RAM, etc.) available for executing queries in that pool. A query is always executed in some resource pool. By default, all queries run in a resource pool named `default`, which does not impose any restrictions. For more on using resource pools, see [{#T}](../dev/resource-consumption-management.md).
+A **resource pool** is a schema object that describes the restrictions placed on the resources (CPU, RAM, etc.) available for executing queries in that pool. A query is always executed in some resource pool. By default, all queries run in a resource pool named `default`, which does not impose any restrictions. For more on using resource pools, see [{#T}](../security/builtin-security.md).
 
+- [{#T}](../dev/resource-consumption-management.md)
 - [{#T}](query_execution/federated_query/index.md)
-- [{#T}](../security/builtin-security.md)
 
 ### Resource pool classifier {#resource-pool-classifier}
 
@@ -642,7 +642,7 @@ The **Mediator** is a system tablet that distributes the transactions planned by
 
 #### Hive {#hive}
 
-A **Hive** is a system tablet responsible for launching and managing other tablets. Its responsibilities include moving tablets between nodes in case of [node](#node) failure or overload.{% if audience != "corp" %} You can learn more about Hive in a [dedicated article](../contributor/hive.md).{% endif %}
+A **Hive** is a system tablet responsible for launching and managing other tablets. Its responsibilities include moving tablets between nodes in case of [node](#node) failure or overload.{% if audience != "corp" %} You can learn more about Hive in a dedicated article.{% endif %}
 
 #### Cluster management system {#cms}
 

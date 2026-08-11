@@ -97,7 +97,7 @@ TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntru
         return map->GetInput();
     }
 
-    return MakeIntrusive<TOpMap>(map->GetInput(), map->Pos, map->Props, finalElements, map->IsOrdered());
+    return MakeIntrusive<TOpMap>(map->GetInput(), map->Pos, map->Props, finalElements);
 }
 
 }

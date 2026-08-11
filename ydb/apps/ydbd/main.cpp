@@ -27,6 +27,7 @@ int main(int argc, char **argv) {
     factories->SchemeOperationFactory.reset(NKikimr::NSchemeShard::DefaultOperationFactory());
     factories->ConfigSwissKnife = NKikimr::NYamlConfig::CreateDefaultConfigSwissKnife();
     factories->TransferWriterFactory = std::make_shared<NKikimr::NReplication::NTransfer::TTransferWriterFactory>();
+    factories->PersQueueMirrorReaderFactory = std::make_shared<NKikimr::NPQ::TPersQueueInsecureMirrorReaderFactory>();
 
     return ParameterizedMain(argc, argv, std::move(factories));
 }

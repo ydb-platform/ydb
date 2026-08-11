@@ -170,4 +170,70 @@ public:
     }
 };
 
+class TPersQueueInsecureMirrorReaderFactory : public TPersQueueMirrorReaderFactory {
+protected:
+    NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr> GetCredentialsProviderImpl(
+        const NKikimrPQ::TMirrorPartitionConfig::TCredentials& /*cred*/
+    ) const override {
+        return NThreading::MakeFuture(NYdb::CreateInsecureCredentialsProviderFactory());
+    }
+
+        NYdb::NTopic::TTopicClient GetTopicClient(const NKikimrPQ::TMirrorPartitionConfig& config, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) const {
+        NYdb::NTopic::TTopicClientSettings clientSettings = NYdb::NTopic::TTopicClientSettings()
+            .DiscoveryEndpoint(TStringBuilder() << config.GetEndpoint() << ":" << config.GetEndpointPort())
+            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
+            .CredentialsProviderFactory(std::move(credentialsProviderFactory))
+            .SslCredentials(NYdb::TSslCredentials(config.GetUseSecureConnection()));
+        if (config.HasDatabase()) {
+            clientSettings.Database(config.GetDatabase());
+        }
+        return NYdb::NTopic::TTopicClient(*Driver, clientSettings);
+    }
+
+public:
+    std::shared_ptr<NYdb::NTopic::IReadSession> GetReadSession(
+        const NKikimrPQ::TMirrorPartitionConfig& config,
+        ui32 partition,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        ui64 maxMemoryUsageBytes,
+        TMaybe<TLog> logger = Nothing()
+    ) const override {
+        NYdb::NTopic::TReadSessionSettings settings = NYdb::NTopic::TReadSessionSettings()
+            .ConsumerName(config.GetConsumer())
+            .MaxMemoryUsageBytes(maxMemoryUsageBytes)
+            .Decompress(false)
+            .AutoPartitioningSupport(true)
+            .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
+        if (logger) {
+            settings.Log(logger.GetRef());
+        }
+        if (config.HasReadFromTimestampsMs()) {
+            settings.ReadFromTimestamp(TInstant::MilliSeconds(config.GetReadFromTimestampsMs()));
+        }
+        NYdb::NTopic::TTopicReadSettings topicSettings(config.GetTopic());
+        topicSettings.AppendPartitionIds({partition});
+        settings.AppendTopics(topicSettings);
+
+        NYdb::NTopic::TTopicClient topicClient = GetTopicClient(config, std::move(credentialsProviderFactory));
+        return topicClient.CreateReadSession(settings);
+    }
+
+    NThreading::TFuture<NYdb::NTopic::TDescribeTopicResult> GetTopicDescription(
+        const NKikimrPQ::TMirrorPartitionConfig& config,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory
+    ) const override {
+        NYdb::NTopic::TTopicClient topicClient = GetTopicClient(config, std::move(credentialsProviderFactory));
+        return topicClient.DescribeTopic(config.GetTopic());
+    }
+
+    NThreading::TFuture<NYdb::TStatus> CommitOffset(
+        const NKikimrPQ::TMirrorPartitionConfig& config,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        ui32 partition,
+        ui64 offset
+    ) const override {
+        NYdb::NTopic::TTopicClient topicClient = GetTopicClient(config, std::move(credentialsProviderFactory));
+        return topicClient.CommitOffset(config.GetTopic(), partition, config.GetConsumer(), offset);
+    }
+};
 } // namespace NKikimr::NSQS

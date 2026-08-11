@@ -27,7 +27,7 @@ using TRenameSourceCounts = THashMap<TInfoUnit, size_t, TInfoUnit::THashFunction
 TRenameSourceCounts CountRenameSources(const TOpMap& map) {
     TRenameSourceCounts result;
 
-    for (const auto& element : map.MapElements) {
+    for (const auto& element : map.GetMapElements()) {
         if (!element.IsRename()) {
             continue;
         }
@@ -62,7 +62,7 @@ bool TRenameToAppendRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOCon
     const auto& forbidden = GetForbidden(map.get());
     bool changed = false;
 
-    for (auto& mapElement : map->MapElements) {
+    for (auto& mapElement : map->GetMapElements()) {
         if (!mapElement.IsRename()) {
             continue;
         }

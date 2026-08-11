@@ -33,7 +33,7 @@ TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TInt
     TVector<TExpression> remainingFilters;
 
     TVector<TInfoUnit> newMapColumns;
-    for (const auto & mapEl : map->MapElements) {
+    for (const auto & mapEl : map->GetMapElements()) {
         newMapColumns.push_back(mapEl.GetElementName());
     }
 

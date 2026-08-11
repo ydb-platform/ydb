@@ -237,7 +237,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
 
-    for (const auto& mapElement : map->MapElements) {
+    for (const auto& mapElement : map->GetMapElements()) {
         if (mapElement.IsRename()) {
             Y_ENSURE(mapElement.IsColumnAccess(), "Rename map element must be a plain column access");
             renameSources.insert(mapElement.GetRename());
@@ -250,7 +250,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         }
     }
 
-    for (auto& mapElement : map->MapElements) {
+    for (auto& mapElement : map->GetMapElements()) {
         // This is type annotation update inplace, which is different comparing to yql type annotation.
         auto& lambda = mapElement.GetExpressionRef().Node;
         if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {

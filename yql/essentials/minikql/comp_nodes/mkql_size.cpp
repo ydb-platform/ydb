@@ -5,6 +5,8 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
+#include <array>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -26,10 +28,10 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
-        const uint64_t init[] = {Size, 0x100000000000000ULL};
-        const auto size = ConstantInt::get(value->getType(), APInt(128, 2, init));
+        const std::array<uint64_t, 2> init = {Size, 0x100000000000000ULL};
+        const auto size = ConstantInt::get(value->getType(), APInt(128, init));
         return SelectInst::Create(IsEmpty(value, block, context), value, size, "size", block);
     }
 #endif
@@ -57,7 +59,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto data = GetNodeValue(this->Data_, ctx, block);
@@ -110,7 +112,7 @@ public:
 
             block = free;
 
-            const auto fnType = FunctionType::get(Type::getVoidTy(context), {strptr->getType()}, false);
+            const auto fnType = FunctionType::get(Type::getVoidTy(context), {strptr->getType()}, /*isVarArg=*/false);
             const auto name = "DeleteString";
             ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DeleteString));
             const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);

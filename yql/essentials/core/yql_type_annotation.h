@@ -387,6 +387,13 @@ struct TLineageStats {
     ui32 Version = 0;
 };
 
+struct TEvaluationStats {
+    ui64 Count = 0;
+    ui64 CacheHits = 0;
+    ui64 CalcProviderCalls = 0;
+    TDuration CalcProviderDurationSum = TDuration::Zero();
+};
+
 struct TLineageSettings {
     bool EnableLineage = false;
     bool EnableStandaloneLineage = false;
@@ -490,6 +497,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool WindowNewPipeline = true;
     bool ForceDq = false;
     bool DqCaptured = false; // TODO: Add before/after recapture transformers
+    bool EnableEvaluateExprCache = false;
     EFallbackPolicy DqFallbackPolicy = EFallbackPolicy::Default;
     bool StrictTableProps = true;
     bool JsonQueryReturnsJsonDocument = false;
@@ -526,6 +534,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 AndOverOrExpansionLimit = 100;
     bool EarlyExpandSeq = true;
     bool DirectRowDependsOn = true;
+    TEvaluationStats EvaluationStats;
     TLineageStats LineageStats;
     TLineageSettings LineageSettings;
     bool FuzzUntypedLambda = false;

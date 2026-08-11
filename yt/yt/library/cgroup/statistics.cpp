@@ -3,7 +3,7 @@
 
 #include <library/cpp/yt/logging/logger.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 #include <util/stream/file.h>
 
@@ -15,7 +15,7 @@ namespace NYT::NCGroups {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "CGroups");
+static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "CGroups");
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -23,7 +23,9 @@
 
 namespace NKikimr::NMiniKQL {
 
+#ifndef MKQL_DISABLE_CODEGEN
 using NYql::EnsureDynamicCast;
+#endif
 using NYql::TChunkedBuffer;
 
 extern TStatKey Combine_FlushesCount;
@@ -43,7 +45,7 @@ struct TMyValueEqual {
 
     bool operator()(const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right) const {
         for (ui32 i = 0U; i < Types.size(); ++i) {
-            if (CompareValues(Types[i].first, true, Types[i].second, left[i], right[i])) {
+            if (CompareValues(Types[i].first, /*asc=*/true, Types[i].second, left[i], right[i])) {
                 return false;
             }
         }
@@ -260,14 +262,14 @@ private:
 
 public:
     TState(
-        TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal,
+        TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, THashFunc hash, TEqualsFunc equal,
         NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent, bool allowOutOfMemory = true)
         : TBase(memInfo)
         , KeyWidth_(keyWidth)
         , StateWidth_(stateWidth)
         , AllowOutOfMemory_(allowOutOfMemory)
-        , Hash_(hash)
-        , Equal_(equal)
+        , Hash_(std::move(hash))
+        , Equal_(std::move(equal))
         , Logger_(std::move(logger))
         , LogComponent_(logComponent)
     {
@@ -277,7 +279,7 @@ public:
         States_ = std::make_unique<TStates>(Hash_, Equal_, CountRowsOnPage);
     }
 
-    ~TState() {
+    ~TState() override {
         // Workaround for YQL-16663, consider to rework this class in a safe manner
         while (auto row = Extract()) {
             for (size_t i = 0; i != RowSize(); ++i) {
@@ -315,7 +317,7 @@ public:
     void GrowStates() {
         try {
             States_->CheckGrow();
-        } catch (TMemoryLimitExceededException) {
+        } catch (const TMemoryLimitExceededException&) {
             UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Info, TStringBuilder() << "State failed to grow");
             if (IsOutOfMemory || !AllowOutOfMemory_) {
                 throw;
@@ -375,7 +377,7 @@ public:
             return nullptr;
         }
         NUdf::TUnboxedValuePod* result = ExtractIt_->GetValuePtr();
-        CounterOutputRows_.Inc();
+        CounterOutputRows.Inc();
         return result;
     }
 
@@ -384,7 +386,7 @@ public:
     NUdf::TUnboxedValuePod* Throat = nullptr;
     i64 StoredDataSize = 0;
     bool IsOutOfMemory = false;
-    NYql::NUdf::TCounter CounterOutputRows_;
+    NYql::NUdf::TCounter CounterOutputRows;
 
 private:
     std::optional<TStorageIterator> ExtractIt_;
@@ -470,7 +472,7 @@ public:
         if (ctx.CountersProvider) {
             // id will be assigned externally in future versions
             TString id = TString(Operator_Aggregation) + "0";
-            CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+            CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, /*deriv=*/false);
         }
     }
 
@@ -504,7 +506,7 @@ public:
                     return EUpdateResult::Yield;
                 }
 
-                if (BufferForUsedInputItems_.size()) {
+                if (!BufferForUsedInputItems_.empty()) {
                     auto& bucket = SpilledBuckets_[BufferForUsedInputItemsBucketId_];
                     if (bucket.AsyncWriteOperation.has_value()) {
                         return EUpdateResult::Yield;
@@ -556,7 +558,7 @@ public:
         bucket.LineCount++;
 
         // Prepare space for raw data
-        MKQL_ENSURE(BufferForUsedInputItems_.size() == 0, "Internal logic error");
+        MKQL_ENSURE(BufferForUsedInputItems_.empty(), "Internal logic error");
         BufferForUsedInputItems_.resize(ItemNodesSize_);
         BufferForUsedInputItemsBucketId_ = bucketId;
 
@@ -578,7 +580,7 @@ public:
         }
 
         MKQL_ENSURE(SpilledBuckets_.front().BucketState == TSpilledBucket::EBucketState::InMemory, "Internal logic error");
-        MKQL_ENSURE(SpilledBuckets_.size() > 0, "Internal logic error");
+        MKQL_ENSURE(!SpilledBuckets_.empty(), "Internal logic error");
 
         value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets_.front().InMemoryProcessingState->Extract());
         if (value) {
@@ -1018,48 +1020,48 @@ private:
     llvm::IntegerType* BoolType_;
 
 protected:
-    using TBase::Context;
+    using TBase::GetContext;
 
 public:
     std::vector<llvm::Type*> GetFieldsArray() {
         std::vector<llvm::Type*> result = TBase::GetFields();
-        result.emplace_back(StatusType_);               // status
-        result.emplace_back(PtrValueType_);             // tongue
-        result.emplace_back(PtrValueType_);             // throat
-        result.emplace_back(StoredType_);               // StoredDataSize
-        result.emplace_back(BoolType_);                 // IsOutOfMemory
-        result.emplace_back(Type::getInt32Ty(Context)); // size
-        result.emplace_back(Type::getInt32Ty(Context)); // size
+        result.emplace_back(StatusType_);                    // status
+        result.emplace_back(PtrValueType_);                  // tongue
+        result.emplace_back(PtrValueType_);                  // throat
+        result.emplace_back(StoredType_);                    // StoredDataSize
+        result.emplace_back(BoolType_);                      // IsOutOfMemory
+        result.emplace_back(Type::getInt32Ty(GetContext())); // size
+        result.emplace_back(Type::getInt32Ty(GetContext())); // size
         return result;
     }
 
     llvm::Constant* GetStatus() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 0);
     }
 
     llvm::Constant* GetTongue() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 1);
     }
 
     llvm::Constant* GetThroat() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 2);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 2);
     }
 
     llvm::Constant* GetStored() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 3);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 3);
     }
 
     llvm::Constant* GetIsOutOfMemory() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 4);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 4);
     }
 
     explicit TLLVMFieldsStructureState(llvm::LLVMContext& context)
         : TBase(context)
-        , ValueType_(Type::getInt128Ty(Context))
+        , ValueType_(Type::getInt128Ty(context))
         , PtrValueType_(PointerType::getUnqual(ValueType_))
-        , StatusType_(Type::getInt32Ty(Context))
-        , StoredType_(Type::getInt64Ty(Context))
-        , BoolType_(Type::getInt1Ty(Context))
+        , StatusType_(Type::getInt32Ty(context))
+        , StoredType_(Type::getInt64Ty(context))
+        , BoolType_(Type::getInt1Ty(context))
     {
     }
 };
@@ -1149,7 +1151,7 @@ public:
         MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1287,7 +1289,8 @@ public:
             const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetTongue()}, "tongue_ptr", block);
             const auto tongue = new LoadInst(ptrValueType, tonguePtr, "tongue", block);
 
-            std::vector<Value*> keyPointers(Nodes_.KeyResultNodes.size(), nullptr), keys(Nodes_.KeyResultNodes.size(), nullptr);
+            std::vector<Value*> keyPointers(Nodes_.KeyResultNodes.size(), nullptr);
+            std::vector<Value*> keys(Nodes_.KeyResultNodes.size(), nullptr);
             for (ui32 i = 0U; i < Nodes_.KeyResultNodes.size(); ++i) {
                 auto& key = keys[i];
                 const auto keyPtr = keyPointers[i] = GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("key_") += ToString(i)).c_str(), block);
@@ -1486,7 +1489,7 @@ private:
             const auto ptr = static_cast<TState*>(state.AsBoxed().Get());
             // id will be assigned externally in future versions
             TString id = TString(Operator_Aggregation) + "0";
-            ptr->CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+            ptr->CounterOutputRows = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, /*deriv=*/false);
         }
     }
 
@@ -1605,7 +1608,7 @@ public:
 
                 switch (ptr->TasteIt()) {
                     case TSpillingSupportState::ETasteResult::Init:
-                        Nodes_.ProcessItem(ctx, nullptr, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                        Nodes_.ProcessItem(ctx, /*keys=*/nullptr, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                         break;
                     case TSpillingSupportState::ETasteResult::Update:
                         Nodes_.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
@@ -1619,7 +1622,7 @@ public:
         MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1748,7 +1751,8 @@ public:
         const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetTongue()}, "tongue_ptr", block);
         const auto tongue = new LoadInst(ptrValueType, tonguePtr, "tongue", block);
 
-        std::vector<Value*> keyPointers(Nodes_.KeyResultNodes.size(), nullptr), keys(Nodes_.KeyResultNodes.size(), nullptr);
+        std::vector<Value*> keyPointers(Nodes_.KeyResultNodes.size(), nullptr);
+        std::vector<Value*> keys(Nodes_.KeyResultNodes.size(), nullptr);
         for (ui32 i = 0U; i < Nodes_.KeyResultNodes.size(); ++i) {
             auto& key = keys[i];
             const auto keyPtr = keyPointers[i] = GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("key_") += ToString(i)).c_str(), block);
@@ -2065,15 +2069,15 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
 }
 
 IComputationNode* WrapWideCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapWideCombinerT<false>(callable, ctx, false);
+    return WrapWideCombinerT<false>(callable, ctx, /*allowSpilling=*/false);
 }
 
 IComputationNode* WrapWideLastCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapWideCombinerT<true>(callable, ctx, false);
+    return WrapWideCombinerT<true>(callable, ctx, /*allowSpilling=*/false);
 }
 
 IComputationNode* WrapWideLastCombinerWithSpilling(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapWideCombinerT<true>(callable, ctx, true);
+    return WrapWideCombinerT<true>(callable, ctx, /*allowSpilling=*/true);
 }
 
 } // namespace NKikimr::NMiniKQL

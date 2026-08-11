@@ -24,18 +24,18 @@ from stringprep import (
 from asn1crypto.x509 import Certificate
 
 from scramp.utils import (
-    ScramException,
-    SERVER_ERROR_CHANNEL_BINDING_NOT_SUPPORTED,
+    IterationCount,
     SERVER_ERROR_CHANNEL_BINDINGS_DONT_MATCH,
-    SERVER_ERROR_SERVER_DOES_SUPPORT_CHANNEL_BINDING,
+    SERVER_ERROR_CHANNEL_BINDING_NOT_SUPPORTED,
+    SERVER_ERROR_EXTENSIONS_NOT_SUPPORTED,
     SERVER_ERROR_INVALID_ENCODING,
     SERVER_ERROR_INVALID_PROOF,
     SERVER_ERROR_INVALID_USERNAME_ENCODING,
     SERVER_ERROR_OTHER_ERROR,
-    SERVER_ERROR_EXTENSIONS_NOT_SUPPORTED,
+    SERVER_ERROR_SERVER_DOES_SUPPORT_CHANNEL_BINDING,
     SERVER_ERROR_UNKNOWN_USER,
     SERVER_ERROR_UNSUPPORTED_CHANNEL_BINDING_TYPE,
-    IterationCount,
+    ScramException,
     b64dec,
     b64enc,
     h,
@@ -308,7 +308,7 @@ class ScramClient:
         self.iterations = mech.iteration_count
 
         self.c_nonce = Nonce.create() if c_nonce is None else Nonce(c_nonce)
-        self.username = username
+        self.username = Username(username)
         self.password = password
         self.channel_binding = channel_binding
         self.stage = None
@@ -616,7 +616,27 @@ def _parse_message(msg, desc, *expected_attr_sets):
         elif k not in PROTO_ATTRS:  # Optional extensions ignored
             continue
 
-        m[k] = p[2:]
+        v = p[2:]
+        if v == "":
+            raise ScramException(
+                f"Malformed {desc} message. Attribute values must at "
+                f"least one character long",
+                SERVER_ERROR_OTHER_ERROR,
+            )
+        elif "\x00" in v:
+            raise ScramException(
+                f"Malformed {desc} message. Attribute values can't "
+                f"contain the NUL character",
+                SERVER_ERROR_OTHER_ERROR,
+            )
+        elif "," in v:
+            raise ScramException(
+                f"Malformed {desc} message. Attribute values can't "
+                f"contain the ',' character",
+                SERVER_ERROR_OTHER_ERROR,
+            )
+
+        m[k] = v
 
     attr_set = m.keys()
     if attr_set in expected_attr_sets:
@@ -628,6 +648,27 @@ def _parse_message(msg, desc, *expected_attr_sets):
         f"{_print_set(attr_set)}",
         SERVER_ERROR_OTHER_ERROR,
     )
+
+
+class Username:
+    def __init__(self, username):
+        try:
+            self.username = saslprep(username)
+        except ScramException as e:
+            raise ScramException(e.args[0], SERVER_ERROR_INVALID_USERNAME_ENCODING)
+
+    def __str__(self):
+        return self.username
+
+    def __eq__(self, other):
+        return isinstance(other, Username) and self.username == other.username
+
+    def escape(self):
+        return _username_escape(self.username)
+
+    @classmethod
+    def from_escaped(cls, username):
+        return cls(_username_unescape(username))
 
 
 ESCAPE_EQUALS = "=3D"
@@ -649,14 +690,7 @@ def _username_unescape(username):
 
 
 def _get_client_first(username, c_nonce, gs2_header):
-    try:
-        prepped_u = saslprep(username)
-    except ScramException as e:
-        raise ScramException(e.args[0], SERVER_ERROR_INVALID_USERNAME_ENCODING)
-
-    u = _username_escape(prepped_u)
-
-    bare = ",".join((f"n={u}", f"r={c_nonce}"))
+    bare = ",".join((f"n={username.escape()}", f"r={c_nonce}"))
     return bare, str(gs2_header) + bare
 
 
@@ -712,10 +746,10 @@ def _set_client_first(client_first, s_nonce, channel_binding, use_binding, auth_
 
     c_nonce = Nonce(msg["r"])
     nonce = c_nonce + s_nonce
-    user = _username_unescape(msg["n"])
+    user = Username.from_escaped(msg["n"])
 
     try:
-        salt, stored_key, server_key, i = auth_fn(user)
+        salt, stored_key, server_key, i = auth_fn(str(user))
     except BaseException as e:
         raise ScramException("Unknown user", SERVER_ERROR_UNKNOWN_USER) from e
 

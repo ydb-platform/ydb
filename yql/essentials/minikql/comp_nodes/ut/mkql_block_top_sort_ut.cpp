@@ -102,10 +102,10 @@ Y_UNIT_TEST(TopSecondKeyDescending) {
 }
 
 Y_UNIT_TEST(TopScalarPayloadArrayKey) {
-    TVector<ui32> key = {3u, 1u, 2u};
+    TVector<ui32> key = {3U, 1U, 2U};
     TString payload = "same";
 
-    TVector<ui32> expectedKey = {1u, 2u};
+    TVector<ui32> expectedKey = {1U, 2U};
     TVector<TString> expectedPayload = {"same", "same"};
 
     RunTopOrSortTest(
@@ -115,12 +115,12 @@ Y_UNIT_TEST(TopScalarPayloadArrayKey) {
 }
 
 Y_UNIT_TEST(TopMultiKeyMixedDirections) {
-    TVector<ui32> key0 = {1u, 1u, 1u, 2u};
-    TVector<ui64> key1 = {30u, 10u, 20u, 5u};
+    TVector<ui32> key0 = {1U, 1U, 1U, 2U};
+    TVector<ui64> key1 = {30U, 10U, 20U, 5U};
     TVector<TString> payload = {"x", "y", "z", "w"};
 
-    TVector<ui32> expectedKey0 = {1u, 1u};
-    TVector<ui64> expectedKey1 = {30u, 20u};
+    TVector<ui32> expectedKey0 = {1U, 1U};
+    TVector<ui64> expectedKey1 = {30U, 20U};
     TVector<TString> expectedPayload = {"x", "z"};
 
     RunTopOrSortTest(
@@ -130,7 +130,7 @@ Y_UNIT_TEST(TopMultiKeyMixedDirections) {
 }
 
 Y_UNIT_TEST(TopAllScalars) {
-    ui32 key = 7u;
+    ui32 key = 7U;
     TString payload = "solo";
 
     RunTopOrSortTest(
@@ -140,14 +140,14 @@ Y_UNIT_TEST(TopAllScalars) {
 }
 
 Y_UNIT_TEST(TopDoubleOptionalPayload) {
-    TVector<ui32> key = {3u, 1u, 2u};
+    TVector<ui32> key = {3U, 1U, 2U};
     TVector<TMaybe<TMaybe<ui64>>> payload = {
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(3u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(3U)),
         TMaybe<TMaybe<ui64>>(TMaybe<ui64>()),
         TMaybe<TMaybe<ui64>>(),
     };
 
-    TVector<ui32> expectedKey = {1u, 2u};
+    TVector<ui32> expectedKey = {1U, 2U};
     TVector<TMaybe<TMaybe<ui64>>> expectedPayload = {payload[1], payload[2]};
 
     RunTopOrSortTest(
@@ -157,14 +157,14 @@ Y_UNIT_TEST(TopDoubleOptionalPayload) {
 }
 
 Y_UNIT_TEST(TopVoidPayload) {
-    TVector<ui32> key = {3u, 1u, 2u};
+    TVector<ui32> key = {3U, 1U, 2U};
     TVector<TMaybe<NTest::TSingularVoid>> payload = {
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
         TMaybe<NTest::TSingularVoid>(),
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
     };
 
-    TVector<ui32> expectedKey = {1u, 2u};
+    TVector<ui32> expectedKey = {1U, 2U};
     TVector<TMaybe<NTest::TSingularVoid>> expectedPayload = {payload[1], payload[2]};
 
     RunTopOrSortTest(
@@ -178,10 +178,10 @@ Y_UNIT_TEST(TopVoidPayload) {
 Y_UNIT_TEST_SUITE(TMiniKQLWideTopSortBlocksTest) {
 
 Y_UNIT_TEST(TopSortAllArraysAscending) {
-    TVector<ui32> key = {5u, 1u, 4u, 2u, 3u};
+    TVector<ui32> key = {5U, 1U, 4U, 2U, 3U};
     TVector<TString> payload = {"e", "a", "d", "b", "c"};
 
-    TVector<ui32> expectedKey = {1u, 2u, 3u};
+    TVector<ui32> expectedKey = {1U, 2U, 3U};
     TVector<TString> expectedPayload = {"a", "b", "c"};
 
     RunTopOrSortTest(
@@ -192,10 +192,10 @@ Y_UNIT_TEST(TopSortAllArraysAscending) {
 
 Y_UNIT_TEST(TopSortAllArraysDescending) {
     TVector<TString> key = {"aa", "dd", "bb", "cc"};
-    TVector<ui64> payload = {1u, 4u, 2u, 3u};
+    TVector<ui64> payload = {1U, 4U, 2U, 3U};
 
     TVector<TString> expectedKey = {"dd", "cc"};
-    TVector<ui64> expectedPayload = {4u, 3u};
+    TVector<ui64> expectedPayload = {4U, 3U};
 
     RunTopOrSortTest(
         [](TSetup<false>& setup, TRuntimeNode s) { return TopSortBlocksByKeys(setup, s, 2, {{0, false}}); },
@@ -238,11 +238,11 @@ Y_UNIT_TEST(TopSortBySecondThenFirst) {
 }
 
 Y_UNIT_TEST(TopSortScalarPayloadArrayKey) {
-    TVector<ui64> key = {40u, 10u, 30u, 20u};
-    ui32 payload = 9u;
+    TVector<ui64> key = {40U, 10U, 30U, 20U};
+    ui32 payload = 9U;
 
-    TVector<ui64> expectedKey = {10u, 20u};
-    TVector<ui32> expectedPayload = {9u, 9u};
+    TVector<ui64> expectedKey = {10U, 20U};
+    TVector<ui32> expectedPayload = {9U, 9U};
 
     RunTopOrSortTest(
         [](TSetup<false>& setup, TRuntimeNode s) { return TopSortBlocksByKeys(setup, s, 2, {{0, true}}); },
@@ -251,10 +251,10 @@ Y_UNIT_TEST(TopSortScalarPayloadArrayKey) {
 }
 
 Y_UNIT_TEST(TopSortNullablePayload) {
-    TVector<ui32> key = {3u, 1u, 4u, 2u};
+    TVector<ui32> key = {3U, 1U, 4U, 2U};
     TVector<TMaybe<TString>> payload = {TString("c"), TMaybe<TString>{}, TString("d"), TString("b")};
 
-    TVector<ui32> expectedKey = {1u, 2u, 3u};
+    TVector<ui32> expectedKey = {1U, 2U, 3U};
     TVector<TMaybe<TString>> expectedPayload = {TMaybe<TString>{}, TString("b"), TString("c")};
 
     RunTopOrSortTest(
@@ -264,7 +264,7 @@ Y_UNIT_TEST(TopSortNullablePayload) {
 }
 
 Y_UNIT_TEST(TopSortAllScalars) {
-    ui32 key = 7u;
+    ui32 key = 7U;
     TString payload = "solo";
 
     RunTopOrSortTest(
@@ -274,14 +274,14 @@ Y_UNIT_TEST(TopSortAllScalars) {
 }
 
 Y_UNIT_TEST(TopSortDoubleOptionalPayload) {
-    TVector<ui32> key = {3u, 1u, 2u};
+    TVector<ui32> key = {3U, 1U, 2U};
     TVector<TMaybe<TMaybe<ui64>>> payload = {
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(3u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(3U)),
         TMaybe<TMaybe<ui64>>(TMaybe<ui64>()),
         TMaybe<TMaybe<ui64>>(),
     };
 
-    TVector<ui32> expectedKey = {1u, 2u};
+    TVector<ui32> expectedKey = {1U, 2U};
     TVector<TMaybe<TMaybe<ui64>>> expectedPayload = {payload[1], payload[2]};
 
     RunTopOrSortTest(
@@ -291,14 +291,14 @@ Y_UNIT_TEST(TopSortDoubleOptionalPayload) {
 }
 
 Y_UNIT_TEST(TopSortVoidPayload) {
-    TVector<ui32> key = {3u, 1u, 2u};
+    TVector<ui32> key = {3U, 1U, 2U};
     TVector<TMaybe<NTest::TSingularVoid>> payload = {
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
         TMaybe<NTest::TSingularVoid>(),
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
     };
 
-    TVector<ui32> expectedKey = {1u, 2u};
+    TVector<ui32> expectedKey = {1U, 2U};
     TVector<TMaybe<NTest::TSingularVoid>> expectedPayload = {payload[1], payload[2]};
 
     RunTopOrSortTest(
@@ -322,10 +322,10 @@ Y_UNIT_TEST(SortAscending) {
 }
 
 Y_UNIT_TEST(SortDescending) {
-    TVector<ui32> key = {5u, 1u, 4u, 2u, 3u};
+    TVector<ui32> key = {5U, 1U, 4U, 2U, 3U};
     TVector<TString> payload = {"e", "a", "d", "b", "c"};
 
-    TVector<ui32> expectedKey = {5u, 4u, 3u, 2u, 1u};
+    TVector<ui32> expectedKey = {5U, 4U, 3U, 2U, 1U};
     TVector<TString> expectedPayload = {"e", "d", "c", "b", "a"};
 
     RunTopOrSortTest(
@@ -335,12 +335,12 @@ Y_UNIT_TEST(SortDescending) {
 }
 
 Y_UNIT_TEST(SortMultiKey) {
-    TVector<ui32> key0 = {1u, 1u, 2u, 2u};
-    TVector<ui64> key1 = {20u, 10u, 40u, 30u};
+    TVector<ui32> key0 = {1U, 1U, 2U, 2U};
+    TVector<ui64> key1 = {20U, 10U, 40U, 30U};
     TVector<TString> payload = {"a", "b", "c", "d"};
 
-    TVector<ui32> expectedKey0 = {1u, 1u, 2u, 2u};
-    TVector<ui64> expectedKey1 = {10u, 20u, 30u, 40u};
+    TVector<ui32> expectedKey0 = {1U, 1U, 2U, 2U};
+    TVector<ui64> expectedKey1 = {10U, 20U, 30U, 40U};
     TVector<TString> expectedPayload = {"b", "a", "d", "c"};
 
     RunTopOrSortTest(
@@ -350,11 +350,11 @@ Y_UNIT_TEST(SortMultiKey) {
 }
 
 Y_UNIT_TEST(SortScalarPayloadArrayKey) {
-    TVector<ui64> key = {40u, 10u, 30u, 20u};
-    ui32 payload = 9u;
+    TVector<ui64> key = {40U, 10U, 30U, 20U};
+    ui32 payload = 9U;
 
-    TVector<ui64> expectedKey = {10u, 20u, 30u, 40u};
-    TVector<ui32> expectedPayload = {9u, 9u, 9u, 9u};
+    TVector<ui64> expectedKey = {10U, 20U, 30U, 40U};
+    TVector<ui32> expectedPayload = {9U, 9U, 9U, 9U};
 
     RunTopOrSortTest(
         [](TSetup<false>& setup, TRuntimeNode s) { return SortBlocksByKeys(setup, s, {{0, true}}); },
@@ -363,10 +363,10 @@ Y_UNIT_TEST(SortScalarPayloadArrayKey) {
 }
 
 Y_UNIT_TEST(SortNullablePayload) {
-    TVector<ui32> key = {3u, 1u, 4u, 2u};
+    TVector<ui32> key = {3U, 1U, 4U, 2U};
     TVector<TMaybe<TString>> payload = {TString("c"), TMaybe<TString>{}, TString("d"), TString("b")};
 
-    TVector<ui32> expectedKey = {1u, 2u, 3u, 4u};
+    TVector<ui32> expectedKey = {1U, 2U, 3U, 4U};
     TVector<TMaybe<TString>> expectedPayload = {TMaybe<TString>{}, TString("b"), TString("c"), TString("d")};
 
     RunTopOrSortTest(
@@ -376,7 +376,7 @@ Y_UNIT_TEST(SortNullablePayload) {
 }
 
 Y_UNIT_TEST(SortAllScalars) {
-    ui32 key = 7u;
+    ui32 key = 7U;
     TString payload = "solo";
 
     RunTopOrSortTest(
@@ -386,14 +386,14 @@ Y_UNIT_TEST(SortAllScalars) {
 }
 
 Y_UNIT_TEST(SortDoubleOptionalPayload) {
-    TVector<ui32> key = {3u, 1u, 2u};
+    TVector<ui32> key = {3U, 1U, 2U};
     TVector<TMaybe<TMaybe<ui64>>> payload = {
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(3u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(3U)),
         TMaybe<TMaybe<ui64>>(TMaybe<ui64>()),
         TMaybe<TMaybe<ui64>>(),
     };
 
-    TVector<ui32> expectedKey = {1u, 2u, 3u};
+    TVector<ui32> expectedKey = {1U, 2U, 3U};
     TVector<TMaybe<TMaybe<ui64>>> expectedPayload = {payload[1], payload[2], payload[0]};
 
     RunTopOrSortTest(
@@ -403,14 +403,14 @@ Y_UNIT_TEST(SortDoubleOptionalPayload) {
 }
 
 Y_UNIT_TEST(SortVoidPayload) {
-    TVector<ui32> key = {3u, 1u, 2u};
+    TVector<ui32> key = {3U, 1U, 2U};
     TVector<TMaybe<NTest::TSingularVoid>> payload = {
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
         TMaybe<NTest::TSingularVoid>(),
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
     };
 
-    TVector<ui32> expectedKey = {1u, 2u, 3u};
+    TVector<ui32> expectedKey = {1U, 2U, 3U};
     TVector<TMaybe<NTest::TSingularVoid>> expectedPayload = {payload[1], payload[2], payload[0]};
 
     RunTopOrSortTest(

@@ -20,7 +20,7 @@ TType* MakeHashedGroupByReturnType(TProgramBuilder& pb, TRuntimeNode wideStream,
 
 TRuntimeNode CombineHashedByKeys(TSetup<false>& setup, TRuntimeNode fuzzedWideStream, const TVector<ui32>& keys) {
     TProgramBuilder& pb = *setup.PgmBuilder;
-    return pb.BlockCombineHashed(fuzzedWideStream, /*dropKeys=*/{}, keys, /*dropValues=*/{}, MakeHashedGroupByReturnType(pb, fuzzedWideStream, keys));
+    return pb.BlockCombineHashed(fuzzedWideStream, /*filterColumn=*/{}, keys, /*aggs=*/{}, MakeHashedGroupByReturnType(pb, fuzzedWideStream, keys));
 }
 
 template <typename... TExpected, typename... TInputs>
@@ -93,7 +93,7 @@ TType* MakeHashedAggReturnType(TProgramBuilder& pb, TRuntimeNode wideStream, con
 TRuntimeNode CombineHashedWithAggs(TSetup<false>& setup, TRuntimeNode fuzzedWideStream, const TVector<ui32>& keys,
                                    const TVector<TAggInfo>& aggs) {
     TProgramBuilder& pb = *setup.PgmBuilder;
-    return pb.BlockCombineHashed(fuzzedWideStream, /*dropKeys=*/{}, keys, aggs, MakeHashedAggReturnType(pb, fuzzedWideStream, keys, aggs));
+    return pb.BlockCombineHashed(fuzzedWideStream, /*filterColumn=*/{}, keys, aggs, MakeHashedAggReturnType(pb, fuzzedWideStream, keys, aggs));
 }
 
 template <typename... TExpected, typename... TInputs>
@@ -206,7 +206,7 @@ Y_UNIT_TEST(GroupByArrayScalarArrayKeys) {
         TMaybe<TString>{},
         TMaybe<TString>("truck"),
     };
-    TVector<ui32> key2 = {10u, 10u, 20u, 20u};
+    TVector<ui32> key2 = {10U, 10U, 20U, 20U};
 
     TVector<TMaybe<TString>> expectedKey0 = {
         TMaybe<TString>{},
@@ -215,7 +215,7 @@ Y_UNIT_TEST(GroupByArrayScalarArrayKeys) {
         TMaybe<TString>("truck"),
     };
     TVector<TString> expectedKey1 = {"berlin", "berlin", "berlin", "berlin"};
-    TVector<ui32> expectedKey2 = {10u, 10u, 20u, 20u};
+    TVector<ui32> expectedKey2 = {10U, 10U, 20U, 20U};
 
     RunHashedGroupByTest(std::make_tuple(expectedKey0, expectedKey1, expectedKey2),
                          std::make_tuple(key0, TString("berlin"), key2), {0, 1, 2});
@@ -223,55 +223,55 @@ Y_UNIT_TEST(GroupByArrayScalarArrayKeys) {
 
 Y_UNIT_TEST(GroupByAllScalarKeys) {
     TVector<TMaybe<TString>> expectedKey0 = {TMaybe<TString>("truck")};
-    TVector<ui32> expectedKey1 = {42u};
+    TVector<ui32> expectedKey1 = {42U};
 
     RunHashedGroupByTest(std::make_tuple(expectedKey0, expectedKey1),
-                         std::make_tuple(TMaybe<TString>("truck"), 42u), {0, 1});
+                         std::make_tuple(TMaybe<TString>("truck"), 42U), {0, 1});
 }
 
 Y_UNIT_TEST(CombineAllCountOverNullableArray) {
     TVector<TMaybe<TString>> names = {TString("a"), TMaybe<TString>{}, TString("b")};
 
-    RunCombineAllTest(std::make_tuple(TVector<ui64>{2}), std::make_tuple(names), {TAggInfo{"count", {0}}});
+    RunCombineAllTest(std::make_tuple(TVector<ui64>{2}), std::make_tuple(names), {TAggInfo{.Name = "count", .ArgsColumns = {0}}});
 }
 
 Y_UNIT_TEST(CombineAllScalarInputMin) {
-    RunCombineAllTest(std::make_tuple(TVector<ui32>{7}), std::make_tuple(7u), {TAggInfo{"min", {0}}});
+    RunCombineAllTest(std::make_tuple(TVector<ui32>{7}), std::make_tuple(7U), {TAggInfo{.Name = "min", .ArgsColumns = {0}}});
 }
 
 Y_UNIT_TEST(CombineAllMultipleAggsMixedTypes) {
-    TVector<ui32> vals = {5u, 2u, 9u, 2u};
+    TVector<ui32> vals = {5U, 2U, 9U, 2U};
     TVector<TMaybe<TString>> names = {TString("x"), TMaybe<TString>{}, TString("y"), TString("x")};
 
     RunCombineAllTest(std::make_tuple(TVector<ui32>{2}, TVector<ui32>{9}, TVector<ui64>{3}),
                       std::make_tuple(vals, names),
-                      {TAggInfo{"min", {0}}, TAggInfo{"max", {0}}, TAggInfo{"count", {1}}});
+                      {TAggInfo{.Name = "min", .ArgsColumns = {0}}, TAggInfo{.Name = "max", .ArgsColumns = {0}}, TAggInfo{.Name = "count", .ArgsColumns = {1}}});
 }
 
 Y_UNIT_TEST(CombineAllWithFilterColumn) {
-    TVector<ui32> vals = {1u, 2u, 3u, 4u, 5u};
+    TVector<ui32> vals = {1U, 2U, 3U, 4U, 5U};
     TVector<bool> filter = {true, false, true, false, true};
 
     RunCombineAllTest(std::make_tuple(TVector<ui64>{3}, TVector<ui32>{1}),
                       std::make_tuple(vals, filter),
-                      {TAggInfo{"count_all", {}}, TAggInfo{"min", {0}}},
+                      {TAggInfo{.Name = "count_all", .ArgsColumns = {}}, TAggInfo{.Name = "min", .ArgsColumns = {0}}},
                       /*filterColumn=*/1);
 }
 
 Y_UNIT_TEST(CombineAllEmptyInput) {
     TVector<ui32> vals = {};
 
-    RunCombineAllTest(std::make_tuple(TVector<ui64>{}), std::make_tuple(vals), {TAggInfo{"count_all", {}}});
+    RunCombineAllTest(std::make_tuple(TVector<ui64>{}), std::make_tuple(vals), {TAggInfo{.Name = "count_all", .ArgsColumns = {}}});
 }
 
 Y_UNIT_TEST(CombineAllDoubleOptionalValue) {
     TVector<TMaybe<TMaybe<ui64>>> vals = {
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1U)),
         TMaybe<TMaybe<ui64>>(TMaybe<ui64>()),
         TMaybe<TMaybe<ui64>>(),
     };
 
-    RunCombineAllTest(std::make_tuple(TVector<ui64>{2}), std::make_tuple(vals), {TAggInfo{"count", {0}}});
+    RunCombineAllTest(std::make_tuple(TVector<ui64>{2}), std::make_tuple(vals), {TAggInfo{.Name = "count", .ArgsColumns = {0}}});
 }
 
 Y_UNIT_TEST(CombineAllVoidValue) {
@@ -281,59 +281,59 @@ Y_UNIT_TEST(CombineAllVoidValue) {
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
     };
 
-    RunCombineAllTest(std::make_tuple(TVector<ui64>{2}), std::make_tuple(vals), {TAggInfo{"count", {0}}});
+    RunCombineAllTest(std::make_tuple(TVector<ui64>{2}), std::make_tuple(vals), {TAggInfo{.Name = "count", .ArgsColumns = {0}}});
 }
 
 Y_UNIT_TEST(CombineHashedCountAllByUi32Key) {
-    TVector<ui32> key = {1u, 1u, 2u, 2u, 2u};
+    TVector<ui32> key = {1U, 1U, 2U, 2U, 2U};
 
-    RunCombineHashedWithAggsTest(std::make_tuple(TVector<ui32>{1u, 2u}, TVector<ui64>{2u, 3u}),
-                                 std::make_tuple(key), {0}, {TAggInfo{"count_all", {}}});
+    RunCombineHashedWithAggsTest(std::make_tuple(TVector<ui32>{1U, 2U}, TVector<ui64>{2U, 3U}),
+                                 std::make_tuple(key), {0}, {TAggInfo{.Name = "count_all", .ArgsColumns = {}}});
 }
 
 Y_UNIT_TEST(CombineHashedMinMaxByNullableStringKey) {
     TVector<TMaybe<TString>> key = {TMaybe<TString>{}, TString("truck"), TMaybe<TString>{}, TString("truck")};
-    TVector<ui32> vals = {10u, 3u, 7u, 20u};
+    TVector<ui32> vals = {10U, 3U, 7U, 20U};
 
     RunCombineHashedWithAggsTest(
-        std::make_tuple(TVector<TMaybe<TString>>{TMaybe<TString>{}, TString("truck")}, TVector<ui32>{7u, 3u}, TVector<ui32>{10u, 20u}),
-        std::make_tuple(key, vals), {0}, {TAggInfo{"min", {1}}, TAggInfo{"max", {1}}});
+        std::make_tuple(TVector<TMaybe<TString>>{TMaybe<TString>{}, TString("truck")}, TVector<ui32>{7U, 3U}, TVector<ui32>{10U, 20U}),
+        std::make_tuple(key, vals), {0}, {TAggInfo{.Name = "min", .ArgsColumns = {1}}, TAggInfo{.Name = "max", .ArgsColumns = {1}}});
 }
 
 Y_UNIT_TEST(CombineHashedTupleKeyCountNullable) {
-    TVector<std::tuple<ui32, TString>> key = {{1u, "x"}, {1u, "x"}, {2u, "y"}, {2u, "y"}};
-    TVector<TMaybe<ui32>> vals = {5u, TMaybe<ui32>{}, TMaybe<ui32>{}, TMaybe<ui32>{}};
+    TVector<std::tuple<ui32, TString>> key = {{1U, "x"}, {1U, "x"}, {2U, "y"}, {2U, "y"}};
+    TVector<TMaybe<ui32>> vals = {5U, TMaybe<ui32>{}, TMaybe<ui32>{}, TMaybe<ui32>{}};
 
     RunCombineHashedWithAggsTest(
-        std::make_tuple(TVector<std::tuple<ui32, TString>>{{1u, "x"}, {2u, "y"}}, TVector<ui64>{1u, 0u}),
-        std::make_tuple(key, vals), {0}, {TAggInfo{"count", {1}}});
+        std::make_tuple(TVector<std::tuple<ui32, TString>>{{1U, "x"}, {2U, "y"}}, TVector<ui64>{1U, 0U}),
+        std::make_tuple(key, vals), {0}, {TAggInfo{.Name = "count", .ArgsColumns = {1}}});
 }
 
 Y_UNIT_TEST(CombineHashedAllScalarKeyMultipleAggs) {
-    RunCombineHashedWithAggsTest(std::make_tuple(TVector<ui32>{42u}, TVector<ui64>{1u}, TVector<ui32>{7u}),
-                                 std::make_tuple(42u, 7u), {0}, {TAggInfo{"count_all", {}}, TAggInfo{"min", {1}}});
+    RunCombineHashedWithAggsTest(std::make_tuple(TVector<ui32>{42U}, TVector<ui64>{1U}, TVector<ui32>{7U}),
+                                 std::make_tuple(42U, 7U), {0}, {TAggInfo{.Name = "count_all", .ArgsColumns = {}}, TAggInfo{.Name = "min", .ArgsColumns = {1}}});
 }
 
 Y_UNIT_TEST(CombineHashedMixedScalarArrayKeysWithChunking) {
-    TVector<ui32> key = {1u, 2u, 1u, 2u, 1u};
-    TVector<ui32> vals = {10u, 20u, 30u, 40u, 50u};
+    TVector<ui32> key = {1U, 2U, 1U, 2U, 1U};
+    TVector<ui32> vals = {10U, 20U, 30U, 40U, 50U};
 
     RunCombineHashedWithAggsTest(
-        std::make_tuple(TVector<ui32>{1u, 2u}, TVector<TString>{"region", "region"}, TVector<ui32>{10u, 20u}, TVector<ui32>{50u, 40u}),
-        std::make_tuple(key, TString("region"), vals), {0, 1}, {TAggInfo{"min", {2}}, TAggInfo{"max", {2}}});
+        std::make_tuple(TVector<ui32>{1U, 2U}, TVector<TString>{"region", "region"}, TVector<ui32>{10U, 20U}, TVector<ui32>{50U, 40U}),
+        std::make_tuple(key, TString("region"), vals), {0, 1}, {TAggInfo{.Name = "min", .ArgsColumns = {2}}, TAggInfo{.Name = "max", .ArgsColumns = {2}}});
 }
 
 Y_UNIT_TEST(CombineHashedDoubleOptionalKey) {
     TVector<TMaybe<TMaybe<ui64>>> key = {
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1U)),
         TMaybe<TMaybe<ui64>>(TMaybe<ui64>()),
         TMaybe<TMaybe<ui64>>(),
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1U)),
     };
 
     RunCombineHashedWithAggsTest(
-        std::make_tuple(TVector<TMaybe<TMaybe<ui64>>>{key[0], key[1], key[2]}, TVector<ui64>{2u, 1u, 1u}),
-        std::make_tuple(key), {0}, {TAggInfo{"count_all", {}}});
+        std::make_tuple(TVector<TMaybe<TMaybe<ui64>>>{key[0], key[1], key[2]}, TVector<ui64>{2U, 1U, 1U}),
+        std::make_tuple(key), {0}, {TAggInfo{.Name = "count_all", .ArgsColumns = {}}});
 }
 
 Y_UNIT_TEST(CombineHashedVoidKey) {
@@ -344,61 +344,61 @@ Y_UNIT_TEST(CombineHashedVoidKey) {
     };
 
     RunCombineHashedWithAggsTest(
-        std::make_tuple(TVector<TMaybe<NTest::TSingularVoid>>{key[0], key[1]}, TVector<ui64>{2u, 1u}),
-        std::make_tuple(key), {0}, {TAggInfo{"count_all", {}}});
+        std::make_tuple(TVector<TMaybe<NTest::TSingularVoid>>{key[0], key[1]}, TVector<ui64>{2U, 1U}),
+        std::make_tuple(key), {0}, {TAggInfo{.Name = "count_all", .ArgsColumns = {}}});
 }
 
 Y_UNIT_TEST(MergeFinalizeCountByUi32Key) {
-    TVector<ui32> key = {1u, 1u, 2u};
-    TVector<ui64> partialCounts = {2u, 3u, 7u};
+    TVector<ui32> key = {1U, 1U, 2U};
+    TVector<ui64> partialCounts = {2U, 3U, 7U};
 
-    RunMergeFinalizeHashedTest(std::make_tuple(TVector<ui32>{1u, 2u}, TVector<ui64>{5u, 7u}),
-                               std::make_tuple(key, partialCounts), {0}, {TAggInfo{"count", {1}}});
+    RunMergeFinalizeHashedTest(std::make_tuple(TVector<ui32>{1U, 2U}, TVector<ui64>{5U, 7U}),
+                               std::make_tuple(key, partialCounts), {0}, {TAggInfo{.Name = "count", .ArgsColumns = {1}}});
 }
 
 Y_UNIT_TEST(MergeFinalizeMinMaxByNullableStringKey) {
     TVector<TMaybe<TString>> key = {TMaybe<TString>{}, TMaybe<TString>{}, TString("truck"), TString("truck")};
-    TVector<ui32> vals = {10u, 7u, 3u, 20u};
+    TVector<ui32> vals = {10U, 7U, 3U, 20U};
 
     RunMergeFinalizeHashedTest(
-        std::make_tuple(TVector<TMaybe<TString>>{TMaybe<TString>{}, TString("truck")}, TVector<ui32>{7u, 3u}, TVector<ui32>{10u, 20u}),
-        std::make_tuple(key, vals), {0}, {TAggInfo{"min", {1}}, TAggInfo{"max", {1}}});
+        std::make_tuple(TVector<TMaybe<TString>>{TMaybe<TString>{}, TString("truck")}, TVector<ui32>{7U, 3U}, TVector<ui32>{10U, 20U}),
+        std::make_tuple(key, vals), {0}, {TAggInfo{.Name = "min", .ArgsColumns = {1}}, TAggInfo{.Name = "max", .ArgsColumns = {1}}});
 }
 
 Y_UNIT_TEST(MergeFinalizeTupleKeyCount) {
-    TVector<std::tuple<ui32, TString>> key = {{1u, "x"}, {1u, "x"}, {2u, "y"}};
-    TVector<ui64> partialCounts = {1u, 1u, 0u};
+    TVector<std::tuple<ui32, TString>> key = {{1U, "x"}, {1U, "x"}, {2U, "y"}};
+    TVector<ui64> partialCounts = {1U, 1U, 0U};
 
     RunMergeFinalizeHashedTest(
-        std::make_tuple(TVector<std::tuple<ui32, TString>>{{1u, "x"}, {2u, "y"}}, TVector<ui64>{2u, 0u}),
-        std::make_tuple(key, partialCounts), {0}, {TAggInfo{"count", {1}}});
+        std::make_tuple(TVector<std::tuple<ui32, TString>>{{1U, "x"}, {2U, "y"}}, TVector<ui64>{2U, 0U}),
+        std::make_tuple(key, partialCounts), {0}, {TAggInfo{.Name = "count", .ArgsColumns = {1}}});
 }
 
 Y_UNIT_TEST(MergeFinalizeAllScalarKeyMultipleAggs) {
-    RunMergeFinalizeHashedTest(std::make_tuple(TVector<ui32>{42u}, TVector<ui64>{1u}, TVector<ui32>{7u}),
-                               std::make_tuple(42u, ui64(1u), 7u), {0}, {TAggInfo{"count", {1}}, TAggInfo{"min", {2}}});
+    RunMergeFinalizeHashedTest(std::make_tuple(TVector<ui32>{42U}, TVector<ui64>{1U}, TVector<ui32>{7U}),
+                               std::make_tuple(42U, ui64(1U), 7U), {0}, {TAggInfo{.Name = "count", .ArgsColumns = {1}}, TAggInfo{.Name = "min", .ArgsColumns = {2}}});
 }
 
 Y_UNIT_TEST(MergeFinalizeMixedScalarArrayKeysWithChunking) {
-    TVector<ui32> key = {1u, 2u, 1u, 2u, 1u};
-    TVector<ui32> vals = {10u, 20u, 30u, 40u, 50u};
+    TVector<ui32> key = {1U, 2U, 1U, 2U, 1U};
+    TVector<ui32> vals = {10U, 20U, 30U, 40U, 50U};
 
     RunMergeFinalizeHashedTest(
-        std::make_tuple(TVector<ui32>{1u, 2u}, TVector<TString>{"region", "region"}, TVector<ui32>{10u, 20u}, TVector<ui32>{50u, 40u}),
-        std::make_tuple(key, TString("region"), vals), {0, 1}, {TAggInfo{"min", {2}}, TAggInfo{"max", {2}}});
+        std::make_tuple(TVector<ui32>{1U, 2U}, TVector<TString>{"region", "region"}, TVector<ui32>{10U, 20U}, TVector<ui32>{50U, 40U}),
+        std::make_tuple(key, TString("region"), vals), {0, 1}, {TAggInfo{.Name = "min", .ArgsColumns = {2}}, TAggInfo{.Name = "max", .ArgsColumns = {2}}});
 }
 
 Y_UNIT_TEST(MergeFinalizeDoubleOptionalKey) {
     TVector<TMaybe<TMaybe<ui64>>> key = {
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1U)),
         TMaybe<TMaybe<ui64>>(TMaybe<ui64>()),
         TMaybe<TMaybe<ui64>>(),
     };
-    TVector<ui64> partialCounts = {2u, 3u, 5u};
+    TVector<ui64> partialCounts = {2U, 3U, 5U};
 
     RunMergeFinalizeHashedTest(
-        std::make_tuple(TVector<TMaybe<TMaybe<ui64>>>{key[0], key[1], key[2]}, TVector<ui64>{2u, 3u, 5u}),
-        std::make_tuple(key, partialCounts), {0}, {TAggInfo{"count", {1}}});
+        std::make_tuple(TVector<TMaybe<TMaybe<ui64>>>{key[0], key[1], key[2]}, TVector<ui64>{2U, 3U, 5U}),
+        std::make_tuple(key, partialCounts), {0}, {TAggInfo{.Name = "count", .ArgsColumns = {1}}});
 }
 
 Y_UNIT_TEST(MergeFinalizeVoidKey) {
@@ -406,57 +406,57 @@ Y_UNIT_TEST(MergeFinalizeVoidKey) {
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
         TMaybe<NTest::TSingularVoid>(),
     };
-    TVector<ui64> partialCounts = {2u, 5u};
+    TVector<ui64> partialCounts = {2U, 5U};
 
     RunMergeFinalizeHashedTest(
-        std::make_tuple(TVector<TMaybe<NTest::TSingularVoid>>{key[0], key[1]}, TVector<ui64>{2u, 5u}),
-        std::make_tuple(key, partialCounts), {0}, {TAggInfo{"count", {1}}});
+        std::make_tuple(TVector<TMaybe<NTest::TSingularVoid>>{key[0], key[1]}, TVector<ui64>{2U, 5U}),
+        std::make_tuple(key, partialCounts), {0}, {TAggInfo{.Name = "count", .ArgsColumns = {1}}});
 }
 
 Y_UNIT_TEST(MergeManyFinalizeDisjointAggOwnershipByUi32Key) {
-    TVector<ui32> key = {1u, 1u, 2u, 2u};
-    TVector<ui32> streamIndex = {0u, 1u, 0u, 1u};
-    TVector<TMaybe<ui64>> countState = {TMaybe<ui64>(3u), TMaybe<ui64>{}, TMaybe<ui64>(5u), TMaybe<ui64>{}};
-    TVector<TMaybe<ui32>> minState = {TMaybe<ui32>{}, TMaybe<ui32>(7u), TMaybe<ui32>{}, TMaybe<ui32>(2u)};
+    TVector<ui32> key = {1U, 1U, 2U, 2U};
+    TVector<ui32> streamIndex = {0U, 1U, 0U, 1U};
+    TVector<TMaybe<ui64>> countState = {TMaybe<ui64>(3U), TMaybe<ui64>{}, TMaybe<ui64>(5U), TMaybe<ui64>{}};
+    TVector<TMaybe<ui32>> minState = {TMaybe<ui32>{}, TMaybe<ui32>(7U), TMaybe<ui32>{}, TMaybe<ui32>(2U)};
 
     RunMergeManyFinalizeHashedTest(
-        std::make_tuple(TVector<ui32>{1u, 2u}, TVector<ui64>{3u, 5u}, TVector<ui32>{7u, 2u}),
+        std::make_tuple(TVector<ui32>{1U, 2U}, TVector<ui64>{3U, 5U}, TVector<ui32>{7U, 2U}),
         std::make_tuple(key, streamIndex, countState, minState), {0},
-        {TAggInfo{"count", {2}}, TAggInfo{"min", {3}}}, /*streamIndexColumn=*/1, {{0}, {1}});
+        {TAggInfo{.Name = "count", .ArgsColumns = {2}}, TAggInfo{.Name = "min", .ArgsColumns = {3}}}, /*streamIndexColumn=*/1, {{0}, {1}});
 }
 
 Y_UNIT_TEST(MergeManyFinalizeScalarKeySingleStream) {
-    TVector<TMaybe<ui64>> countState = {TMaybe<ui64>(5u)};
+    TVector<TMaybe<ui64>> countState = {TMaybe<ui64>(5U)};
 
-    RunMergeManyFinalizeHashedTest(std::make_tuple(TVector<ui32>{42u}, TVector<ui64>{5u}),
-                                   std::make_tuple(42u, 0u, countState), {0}, {TAggInfo{"count", {2}}},
+    RunMergeManyFinalizeHashedTest(std::make_tuple(TVector<ui32>{42U}, TVector<ui64>{5U}),
+                                   std::make_tuple(42U, 0U, countState), {0}, {TAggInfo{.Name = "count", .ArgsColumns = {2}}},
                                    /*streamIndexColumn=*/1, {{0}});
 }
 
 Y_UNIT_TEST(MergeManyFinalizeMixedScalarArrayKeysWithChunking) {
-    TVector<ui32> key = {1u, 1u, 2u, 2u};
-    TVector<ui32> streamIndex = {0u, 1u, 0u, 1u};
-    TVector<TMaybe<ui64>> countState = {TMaybe<ui64>(2u), TMaybe<ui64>{}, TMaybe<ui64>(3u), TMaybe<ui64>{}};
-    TVector<TMaybe<ui32>> minState = {TMaybe<ui32>{}, TMaybe<ui32>(10u), TMaybe<ui32>{}, TMaybe<ui32>(20u)};
+    TVector<ui32> key = {1U, 1U, 2U, 2U};
+    TVector<ui32> streamIndex = {0U, 1U, 0U, 1U};
+    TVector<TMaybe<ui64>> countState = {TMaybe<ui64>(2U), TMaybe<ui64>{}, TMaybe<ui64>(3U), TMaybe<ui64>{}};
+    TVector<TMaybe<ui32>> minState = {TMaybe<ui32>{}, TMaybe<ui32>(10U), TMaybe<ui32>{}, TMaybe<ui32>(20U)};
 
     RunMergeManyFinalizeHashedTest(
-        std::make_tuple(TVector<ui32>{1u, 2u}, TVector<TString>{"region", "region"}, TVector<ui64>{2u, 3u}, TVector<ui32>{10u, 20u}),
+        std::make_tuple(TVector<ui32>{1U, 2U}, TVector<TString>{"region", "region"}, TVector<ui64>{2U, 3U}, TVector<ui32>{10U, 20U}),
         std::make_tuple(key, TString("region"), streamIndex, countState, minState), {0, 1},
-        {TAggInfo{"count", {3}}, TAggInfo{"min", {4}}}, /*streamIndexColumn=*/2, {{0}, {1}});
+        {TAggInfo{.Name = "count", .ArgsColumns = {3}}, TAggInfo{.Name = "min", .ArgsColumns = {4}}}, /*streamIndexColumn=*/2, {{0}, {1}});
 }
 
 Y_UNIT_TEST(MergeManyFinalizeDoubleOptionalKey) {
     TVector<TMaybe<TMaybe<ui64>>> key = {
-        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1u)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1U)),
         TMaybe<TMaybe<ui64>>(TMaybe<ui64>()),
         TMaybe<TMaybe<ui64>>(),
     };
-    TVector<ui32> streamIndex = {0u, 0u, 0u};
-    TVector<TMaybe<ui64>> countState = {TMaybe<ui64>(2u), TMaybe<ui64>(3u), TMaybe<ui64>(5u)};
+    TVector<ui32> streamIndex = {0U, 0U, 0U};
+    TVector<TMaybe<ui64>> countState = {TMaybe<ui64>(2U), TMaybe<ui64>(3U), TMaybe<ui64>(5U)};
 
     RunMergeManyFinalizeHashedTest(
-        std::make_tuple(TVector<TMaybe<TMaybe<ui64>>>{key[0], key[1], key[2]}, TVector<ui64>{2u, 3u, 5u}),
-        std::make_tuple(key, streamIndex, countState), {0}, {TAggInfo{"count", {2}}}, /*streamIndexColumn=*/1, {{0}});
+        std::make_tuple(TVector<TMaybe<TMaybe<ui64>>>{key[0], key[1], key[2]}, TVector<ui64>{2U, 3U, 5U}),
+        std::make_tuple(key, streamIndex, countState), {0}, {TAggInfo{.Name = "count", .ArgsColumns = {2}}}, /*streamIndexColumn=*/1, {{0}});
 }
 
 Y_UNIT_TEST(MergeManyFinalizeVoidKey) {
@@ -464,12 +464,12 @@ Y_UNIT_TEST(MergeManyFinalizeVoidKey) {
         TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
         TMaybe<NTest::TSingularVoid>(),
     };
-    TVector<ui32> streamIndex = {0u, 0u};
-    TVector<TMaybe<ui64>> countState = {TMaybe<ui64>(2u), TMaybe<ui64>(5u)};
+    TVector<ui32> streamIndex = {0U, 0U};
+    TVector<TMaybe<ui64>> countState = {TMaybe<ui64>(2U), TMaybe<ui64>(5U)};
 
     RunMergeManyFinalizeHashedTest(
-        std::make_tuple(TVector<TMaybe<NTest::TSingularVoid>>{key[0], key[1]}, TVector<ui64>{2u, 5u}),
-        std::make_tuple(key, streamIndex, countState), {0}, {TAggInfo{"count", {2}}}, /*streamIndexColumn=*/1, {{0}});
+        std::make_tuple(TVector<TMaybe<NTest::TSingularVoid>>{key[0], key[1]}, TVector<ui64>{2U, 5U}),
+        std::make_tuple(key, streamIndex, countState), {0}, {TAggInfo{.Name = "count", .ArgsColumns = {2}}}, /*streamIndexColumn=*/1, {{0}});
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockAggTest)

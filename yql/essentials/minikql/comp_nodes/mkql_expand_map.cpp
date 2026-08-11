@@ -36,7 +36,7 @@ public:
         return EFetchResult::One;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);

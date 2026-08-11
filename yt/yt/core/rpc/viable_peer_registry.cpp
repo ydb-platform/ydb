@@ -202,6 +202,7 @@ public:
             .With("RequestId", request->GetRequestId())
             .WithFormat("RequestHash", "%x", hash)
             .WithFormat("RandomIndex", "%v/%v", randomIndex, stickyGroupSize)
+            .With("PeerPriority", priorityWithPeers.first)
             .With("Address", channelIt->first.second);
 
         return channelIt->second;

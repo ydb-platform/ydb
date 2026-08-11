@@ -28,7 +28,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-[[maybe_unused]] static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Serialize");
+[[maybe_unused]] static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Serialize");
 
 struct TSerializedMessageTag
 { };

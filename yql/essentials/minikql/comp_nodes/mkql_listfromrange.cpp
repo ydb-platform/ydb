@@ -268,7 +268,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
@@ -346,11 +346,11 @@ IComputationNode* WrapListFromRange(TCallable& callable, const TComputationNodeF
         case NUdf::EDataSlot::Double:
             return new TListFromRangeWrapper<double, double>(ctx.Mutables, start, end, step);
         case NUdf::EDataSlot::Date:
-            return new TListFromRangeWrapper<ui16, i64, 86400000000ll>(ctx.Mutables, start, end, step);
+            return new TListFromRangeWrapper<ui16, i64, 86400000000LL>(ctx.Mutables, start, end, step);
         case NUdf::EDataSlot::Date32:
-            return new TListFromRangeWrapper<i32, i64, 86400000000ll>(ctx.Mutables, start, end, step);
+            return new TListFromRangeWrapper<i32, i64, 86400000000LL>(ctx.Mutables, start, end, step);
         case NUdf::EDataSlot::TzDate:
-            return new TListFromRangeWrapper<ui16, i64, 86400000000ll, true>(ctx.Mutables, start, end, step);
+            return new TListFromRangeWrapper<ui16, i64, 86400000000LL, true>(ctx.Mutables, start, end, step);
         case NUdf::EDataSlot::Datetime:
             return new TListFromRangeWrapper<ui32, i64, 1000000>(ctx.Mutables, start, end, step);
         case NUdf::EDataSlot::Datetime64:

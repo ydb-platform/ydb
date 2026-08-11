@@ -53,7 +53,7 @@ using ::testing::ContainsRegex;
 
 constexpr auto SleepQuantum = TDuration::MilliSeconds(100);
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "SchedulerTest");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "SchedulerTest");
 
 ////////////////////////////////////////////////////////////////////////////////
 

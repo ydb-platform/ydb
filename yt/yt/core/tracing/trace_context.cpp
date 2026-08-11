@@ -96,7 +96,7 @@ namespace NDetail {
 // NB: Don't use max value to avoid overflow during addition.
 std::atomic<TCpuDuration> TraceContextDefaultLeakDurationThreshold = 1LL << 60;
 
-YT_DEFINE_GLOBAL(TCounter, TraceContextsLeakedCounter, TracingProfiler().Counter("/trace_contexts_leaked"));
+YT_DEFINE_LEAKY_GLOBAL(TCounter, TraceContextsLeakedCounter, TracingProfiler().Counter("/trace_contexts_leaked"));
 
 // Expended from YT_DEFINE_THREAD_LOCAL(TTraceContext*, CurrentTraceContext);
 // with Overrides added.

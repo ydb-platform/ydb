@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: scramp
-Version: 1.4.14
+Version: 1.4.15
 Summary: An implementation of the SCRAM protocol.
 Project-URL: Homepage, https://codeberg.org/tlocke/scramp
 Author: The Contributors
@@ -55,6 +55,7 @@ Scramp supports the following mechanisms:
 * [OpenSSF Scorecard](#openssf-scorecard)
 * [Doing A Release Of Scramp](#doing-a-release-of-scramp)
 * [Release Notes](#release-notes)
+  * [Version 1.4.15, 2026-07-26](#version-1415-2026-07-26)
   * [Version 1.4.14, 2026-07-25](#version-1414-2026-07-25)
   * [Version 1.4.13, 2026-07-23](#version-1413-2026-07-23)
   * [Version 1.4.12, 2026-07-05](#version-1412-2026-07-05)
@@ -374,6 +375,9 @@ The `ScramServer` object has the following methods:
 - `set_client_final(message)` - Set the final client message.
 - `get_server_final()` - Get the server final message.
 
+Note that `ScramServer` doesn't enforce a maximum message or field length, so that's something you
+might want to consider doing if you're embedding it in a network-facing server.
+
 
 ### scramp.make\_channel\_binding(name, ssl\_socket)
 
@@ -407,6 +411,11 @@ Run `tox` to make sure all tests pass, then update the release notes, then do:
 
 
 ## Release Notes
+
+### Version 1.4.15, 2026-07-26
+
+- Check message attribute values don't have invalid characters.
+
 
 ### Version 1.4.14, 2026-07-25
 

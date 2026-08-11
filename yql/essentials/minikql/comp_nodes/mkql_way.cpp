@@ -35,7 +35,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);

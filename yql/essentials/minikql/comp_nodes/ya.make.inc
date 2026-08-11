@@ -1,6 +1,8 @@
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/invoke_builtins/header.ya.make.inc)
 
+ENABLE(TIDY_ALLOW_GENERATED)
+
 SET(ORIG_SRC_DIR ${ARCADIA_ROOT}/yql/essentials/minikql/comp_nodes)
 
 SET(ORIG_SOURCES

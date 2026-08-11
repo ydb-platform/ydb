@@ -2494,6 +2494,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
     const TStringBuf sqlWhere = isYql ? "YqlWhere" : "PgWhere";
     const TStringBuf sqlGroup = isYql ? "YqlGroup" : "PgGroup";
     const TStringBuf sqlGroupingSet = isYql ? "YqlGroupingSet" : "PgGroupingSet";
+    const TStringBuf sqlSubLink = isYql ? "YqlSubLink" : "PgSubLink";
 
     auto& options = input->Head();
     if (options.GetTypeAnn() && options.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
@@ -3599,10 +3600,18 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                     newGroupItems.push_back(data.Child(joinGroupNo)->ChildPtr(i));
                                 } else if (needRewrite && child->ChildrenSize() > 1 && child->Child(1)->Content() != "using") {
                                     const auto& quals = child->Tail();
+
+                                    const auto& expr = quals.Child(1)->TailPtr();
+                                    if (auto sublink = FindNode(expr, [&](const auto& x) { return x->IsCallable(sqlSubLink); })) {
+                                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(sublink->Pos()), TStringBuilder()
+                                            << "Subqueries are not supported in JOIN ON predicate yet"));
+                                        return IGraphTransformer::TStatus::Error;
+                                    }
+
                                     bool hasColumnRef = false;
                                     THashSet<TString> refs;
                                     THashMap<TString, THashSet<TString>> qualifiedRefs;
-                                    if (!ScanColumns(quals.Child(1)->TailPtr(), groupInputs, groupPossibleAliases, /*hasStar=*/nullptr, hasColumnRef,
+                                    if (!ScanColumns(expr, groupInputs, groupPossibleAliases, /*hasStar=*/nullptr, hasColumnRef,
                                         refs, &qualifiedRefs, ctx, scanColumnsOnly)) {
                                         return IGraphTransformer::TStatus::Error;
                                     }

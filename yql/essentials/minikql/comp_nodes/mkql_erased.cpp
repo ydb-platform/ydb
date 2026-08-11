@@ -4,8 +4,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -18,7 +17,7 @@ class TErasedResource: public TComputationValue<TErasedResource> {
 public:
     TErasedResource(TMemoryUsageInfo* memInfo, TType* type, NUdf::TUnboxedValue value)
         : TComputationValue(memInfo)
-        , Payload_{type, std::move(value)}
+        , Payload_{.Type = type, .Value = std::move(value)}
     {
     }
 
@@ -40,22 +39,22 @@ class TAsErasedWrapper: public TMutableComputationNode<TAsErasedWrapper> {
 public:
     TAsErasedWrapper(TComputationMutables& mutables, IComputationNode* value, TType* type)
         : TBaseComputation(mutables)
-        , Value(value)
-        , Type(type)
+        , Value_(value)
+        , Type_(type)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TErasedResource>(Type, Value->GetValue(ctx));
+        return ctx.HolderFactory.Create<TErasedResource>(Type_, Value_->GetValue(ctx));
     }
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Value);
+        DependsOn(Value_);
     }
 
-    IComputationNode* const Value;
-    TType* const Type;
+    IComputationNode* const Value_;
+    TType* const Type_;
 };
 
 class TPeekErasedWrapper: public TMutableComputationNode<TPeekErasedWrapper> {
@@ -64,18 +63,18 @@ class TPeekErasedWrapper: public TMutableComputationNode<TPeekErasedWrapper> {
 public:
     TPeekErasedWrapper(TComputationMutables& mutables, IComputationNode* resource, TType* expectedType)
         : TBaseComputation(mutables)
-        , Resource(resource)
-        , ExpectedType(expectedType)
+        , Resource_(resource)
+        , ExpectedType_(expectedType)
     {
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        auto res = Resource->GetValue(ctx);
+        auto res = Resource_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(res.GetResourceTag() == NUdf::TStringRef(ErasedResourceTag), "Expected _Erased resource");
         auto* payload = static_cast<TErasedPayload*>(res.GetResource());
         // Both the stored and the expected types go through InternType at wrap
         // time, so structural equality is encoded as pointer equality here.
-        if (payload->Type != ExpectedType) {
+        if (payload->Type != ExpectedType_) {
             return NUdf::TUnboxedValue(); // empty Optional<U>
         }
         return NUdf::TUnboxedValuePod(payload->Value).MakeOptional();
@@ -83,11 +82,11 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Resource);
+        DependsOn(Resource_);
     }
 
-    IComputationNode* const Resource;
-    TType* const ExpectedType;
+    IComputationNode* const Resource_;
+    TType* const ExpectedType_;
 };
 
 } // namespace
@@ -106,5 +105,4 @@ IComputationNode* WrapPeekErased(TCallable& callable, const TComputationNodeFact
     return new TPeekErasedWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), expectedType);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

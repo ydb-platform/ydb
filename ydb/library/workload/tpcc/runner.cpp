@@ -358,19 +358,16 @@ void TPCCRunner::RunSync() {
     uint32_t warmupSeconds = minWarmupSeconds;
     if (Config.WarmupDuration == TDuration()) {
         // Adaptive floors by scale. minWarmupSeconds is the per-terminal ramp lower
-        // bound (≈ terminals * 1ms); on large OLTP scales (10k/16k+) that bound is
-        // still only a few minutes, so we raise the floor further — otherwise measure
-        // starts while the workload is still ramping.
+        // bound (≈ terminals * 1ms); above 1000 warehouses that bound is still only
+        // a few minutes, so we raise the floor to 30m for large scales.
         if (Config.WarehouseCount <= 10) {
             warmupSeconds = 30;
         } else if (Config.WarehouseCount <= 100) {
             warmupSeconds = 5 * 60;
         } else if (Config.WarehouseCount <= 1000) {
             warmupSeconds = 10 * 60;
-        } else if (Config.WarehouseCount <= 10000) {
-            warmupSeconds = 30 * 60;
         } else {
-            warmupSeconds = 45 * 60;
+            warmupSeconds = 30 * 60;
         }
         warmupSeconds = std::max(warmupSeconds, minWarmupSeconds);
     } else {

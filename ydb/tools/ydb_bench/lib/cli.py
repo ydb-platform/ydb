@@ -17,7 +17,7 @@ from ydb.tools.ydb_bench.lib.common import (
 from ydb.tools.ydb_bench.lib.config import build_run_plan, config_schema, load_config
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, ResultStore
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, topology_record
-from ydb.tools.ydb_bench.lib.web import serve
+from ydb.tools.ydb_bench.lib.web import production_executor, serve
 
 
 RESOURCE_NAME = "actors_core_ut_fat"
@@ -342,7 +342,8 @@ def main(argv=None, resource_loader=None, tool_revision=None):
         if arguments.command == "web":
             if not 0 <= arguments.port <= 65535:
                 raise BenchmarkError("--port must be between 0 and 65535")
-            serve(arguments.listen, arguments.port, arguments.output, arguments.no_open, arguments.allow_remote)
+            serve(arguments.listen, arguments.port, arguments.output, arguments.no_open, arguments.allow_remote,
+                  executor=production_executor(resource_loader, tool_revision or {"commit_id": "unknown"}))
             return 0
         return _run(arguments, resource_loader, tool_revision or {"commit_id": "unknown"})
     except BenchmarkInterrupted as error:

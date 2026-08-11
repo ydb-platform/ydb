@@ -139,7 +139,7 @@ Use `--work-dir` when the system temporary directory is mounted with `noexec`.
 The run fails if a process exits unsuccessfully, times out, is interrupted, or
 produces empty or parameter-mismatched CSV data.
 
-## Offline result viewer
+## Local run control
 
 Serve completed, active, or imported schema-v4 result directories locally:
 
@@ -148,11 +148,23 @@ ydb/tools/ydb_bench/ydb_bench web --output ydb-bench-results --no-open
 ```
 
 The command prints its loopback URL and serves bundled HTML, CSS, and JavaScript
-without external resources. It exposes only `GET /api/runs` and
-`GET /api/runs/<id>`; the read model is built from versioned `run.json`
-manifests and their embedded topology DTO, never CSV files. The server binds to
-`127.0.0.1` on a free port by default. A non-loopback listener requires the
-explicit `--allow-remote` opt-in.
+without external resources. The Builder and YAML pages validate and preview the
+same parsed YAML and immutable `RunPlan` used by the CLI. Invalid YAML stays in
+the editor and is never replaced by Builder data. Starting a valid plan creates
+a durable `run.json` and navigates to its run detail.
+
+The API provides `POST /api/validate`, `POST /api/plan`, `POST /api/runs`,
+`POST /api/runs/<id>/cancel`, `GET /api/runs/<id>`, and replayable
+`GET /api/runs/<id>/events`. Runs are owned by the application service rather
+than a request handler. Event history and bounded stdout/stderr tails reconnect
+after a page reload; cancellation is idempotent. The detail view shows the
+benchmark/profile/affinity/repeat queue, active timeout, progress, and published
+artifacts. On service recovery an in-progress manifest is marked
+`recovery_required`: it is never restarted unless an executor can prove its
+previous process stopped.
+
+The server binds to `127.0.0.1` on a free port by default. A non-loopback
+listener requires the explicit `--allow-remote` opt-in.
 # Result manifest compatibility
 
 Run manifests use schema version 4. Earlier manifests are intentionally not

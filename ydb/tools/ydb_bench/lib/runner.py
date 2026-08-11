@@ -57,6 +57,7 @@ def run_command(
     work_dir_hint=None,
     grace_seconds=2.0,
     cpu_affinity=None,
+    cancel_event=None,
 ):
     command = tuple(str(part) for part in command)
     environment = os.environ.copy()
@@ -105,10 +106,24 @@ def run_command(
     timed_out = False
     interrupted = False
     try:
-        stdout, stderr = process.communicate(timeout=timeout_seconds)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        stdout, stderr = _stop_process_group(process, signal.SIGTERM, grace_seconds)
+        # Polling keeps the existing timeout semantics while allowing the web
+        # application service to terminate a process after an idempotent cancel.
+        deadline = started_monotonic + timeout_seconds
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                interrupted = True
+                stdout, stderr = _stop_process_group(process, signal.SIGINT, grace_seconds)
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                stdout, stderr = _stop_process_group(process, signal.SIGTERM, grace_seconds)
+                break
+            try:
+                stdout, stderr = process.communicate(timeout=min(0.2, remaining))
+                break
+            except subprocess.TimeoutExpired:
+                continue
     except KeyboardInterrupt:
         interrupted = True
         stdout, stderr = _stop_process_group(process, signal.SIGINT, grace_seconds)

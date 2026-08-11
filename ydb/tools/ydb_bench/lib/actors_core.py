@@ -137,6 +137,7 @@ def run_actors_core(
     work_dir_hint=None,
     profiler_binary_path=None,
     event_sink=None,
+    cancel_event=None,
 ):
     output_directory = Path(output_directory)
     benchmark = configuration.benchmark
@@ -262,6 +263,7 @@ def run_actors_core(
                     configuration.timeout_seconds,
                     work_dir_hint=work_dir_hint,
                     cpu_affinity=placement.cpus,
+                    cancel_event=cancel_event,
                 )
             except BenchmarkError as error:
                 failure = str(error)

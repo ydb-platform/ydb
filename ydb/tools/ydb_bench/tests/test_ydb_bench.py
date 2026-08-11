@@ -7,6 +7,7 @@ import stat
 import tempfile
 import textwrap
 import threading
+import time
 import unittest
 import urllib.request
 from contextlib import redirect_stderr, redirect_stdout
@@ -1054,7 +1055,7 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"app.js", response.read())
             with urllib.request.urlopen(base + "/api/runs") as response:
                 self.assertEqual(json.loads(response.read())[0]["id"], "complete")
-            with self.assertRaisesRegex(Exception, "HTTP Error 405"):
+            with self.assertRaisesRegex(Exception, "HTTP Error 400"):
                 urllib.request.urlopen(urllib.request.Request(base + "/api/runs", method="POST"))
         finally:
             server.shutdown(); worker.join(); server.server_close()
@@ -1067,6 +1068,47 @@ class WebTest(unittest.TestCase):
         with redirect_stderr(stderr):
             self.assertEqual(main(["web", "--listen", "0.0.0.0", "--output", str(self.root), "--no-open"]), 1)
         self.assertIn("allow-remote", stderr.getvalue())
+
+    def test_web_run_api_validates_plans_runs_reconnects_and_cancels(self):
+        """The web service owns a fake executor after each HTTP request ends."""
+        started = threading.Event()
+        release = threading.Event()
+
+        def fake_executor(run, emit, cancelled):
+            step = run["store"].manifest["steps"][0]
+            emit({"type": "step-started", "step_id": step["id"]})
+            emit({"type": "stdout", "data": "fake output\\n"})
+            started.set()
+            while not release.wait(.01):
+                if cancelled.is_set():
+                    return
+            emit({"type": "step-finished", "step_id": step["id"], "state": "passed"})
+
+        server = make_server("127.0.0.1", 0, self.root, executor=fake_executor)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = "http://127.0.0.1:{}".format(server.server_port)
+        yaml_text = "ping-bench:\n  fake: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+        try:
+            def request(path, method="GET", body=None):
+                value = urllib.request.urlopen(urllib.request.Request(base + path, data=body, method=method), timeout=3).read()
+                return json.loads(value)
+            self.assertTrue(request("/api/validate", "POST", yaml_text.encode())["valid"])
+            self.assertEqual(len(request("/api/plan", "POST", yaml_text.encode())["plan"]), 1)
+            created = request("/api/runs", "POST", yaml_text.encode())
+            self.assertTrue(started.wait(2))
+            detail = request("/api/runs/" + created["id"])
+            self.assertEqual(detail["steps"][0]["state"], "running")
+            self.assertIn("fake output", detail["tail"]["stdout"])
+            self.assertIn("step-started", urllib.request.urlopen(base + "/api/runs/" + created["id"] + "/events").read().decode())
+            self.assertTrue(request("/api/runs/" + created["id"] + "/cancel", "POST")["cancelled"])
+            self.assertTrue(request("/api/runs/" + created["id"] + "/cancel", "POST")["cancelled"])
+            for _ in range(100):
+                if request("/api/runs/" + created["id"])["state"] == "cancelled": break
+                time.sleep(.01)
+            self.assertEqual(request("/api/runs/" + created["id"])["state"], "cancelled")
+        finally:
+            release.set(); server.shutdown(); server.server_close()
 
 
 if __name__ == "__main__":

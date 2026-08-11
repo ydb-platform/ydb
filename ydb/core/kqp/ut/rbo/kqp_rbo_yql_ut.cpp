@@ -1352,6 +1352,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(last, op.Get());
     }
 
+    Y_UNIT_TEST(MapElementExpressionMutationPreservesRenameInvariant) {
+        NYql::TExprContext exprCtx;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit source("source");
+
+        TMapElement element(TInfoUnit("renamed"), source, pos, &exprCtx, &expressionProps);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            element.SetExpression(MakeConstant("Int32", "1", pos, &exprCtx)),
+            yexception,
+            "Rename map element must be a plain column access");
+        UNIT_ASSERT(element.GetRename() == source);
+    }
+
     Y_UNIT_TEST(ComputeParentsHandlesSharedDagAndIgnoresInactiveSubplans) {
         const auto pos = NYql::TPositionHandle();
         auto shared = MakeIntrusive<TOpEmptySource>(pos);

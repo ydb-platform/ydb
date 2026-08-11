@@ -518,18 +518,22 @@ public:
         return Ordered;
     }
 
-    TVector<TMapElement>& GetMapElements() { return MapElements; }
     const TVector<TMapElement>& GetMapElements() const { return MapElements; }
-    TMapElement* FindOutputElement(const TInfoUnit& output);
+    void SetMapElements(TVector<TMapElement> mapElements);
+    void AddMapElement(TMapElement mapElement);
+    void RemoveMapElement(size_t index);
+    void SetMapElementExpression(size_t index, TExpression expression);
     const TMapElement* FindOutputElement(const TInfoUnit& output) const;
     bool HasOutputElement(const TInfoUnit& output) const;
     bool HasRenames() const;
 
-    TVector<TMapElement> MapElements;
     bool Ordered = false;
 
 protected:
     void ComputeOutputIUs() override;
+
+private:
+    TVector<TMapElement> MapElements;
 };
 
 /**

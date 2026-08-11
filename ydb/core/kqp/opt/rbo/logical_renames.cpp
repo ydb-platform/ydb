@@ -30,7 +30,9 @@ bool RenameInfoUnits(TVector<TInfoUnit>& ius, const THashMap<TInfoUnit, TInfoUni
 }
 
 void RenameMapRenameSources(TOpMap& map, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-    for (auto& el : map.GetMapElements()) {
+    const auto& mapElements = map.GetMapElements();
+    for (size_t index = 0; index < mapElements.size(); ++index) {
+        const auto& el = mapElements[index];
         if (!el.IsRename()) {
             continue;
         }
@@ -42,7 +44,7 @@ void RenameMapRenameSources(TOpMap& map, const THashMap<TInfoUnit, TInfoUnit, TI
         }
 
         auto expr = el.GetExpression();
-        el.SetExpression(MakeColumnAccess(it->second, map.Pos, expr.Ctx, expr.PlanProps));
+        map.SetMapElementExpression(index, MakeColumnAccess(it->second, map.Pos, expr.Ctx, expr.PlanProps));
     }
 }
 
@@ -157,9 +159,9 @@ void TOpMap::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::T
 void TOpMap::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
     Y_UNUSED(ctx);
 
-    for (auto& el : MapElements) {
-        if (!el.IsRename()) {
-            el.SetExpression(el.GetExpression().ApplyRenames(renameMap));
+    for (size_t index = 0; index < MapElements.size(); ++index) {
+        if (!MapElements[index].IsRename()) {
+            SetMapElementExpression(index, MapElements[index].GetExpression().ApplyRenames(renameMap));
         }
     }
 }

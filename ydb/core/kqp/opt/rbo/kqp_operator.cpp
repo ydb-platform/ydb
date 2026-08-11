@@ -334,7 +334,8 @@ TInfoUnit TMapElement::GetColumnAccess() const {
 }
 
 void TMapElement::SetExpression(TExpression expr) {
-    Expr = expr;
+    Y_ENSURE(!Rename || expr.IsColumnAccess(), "Rename map element must be a plain column access");
+    Expr = std::move(expr);
 }
 
 /**
@@ -353,15 +354,6 @@ TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysi
     , Ordered(ordered) {
 }
 
-TMapElement* TOpMap::FindOutputElement(const TInfoUnit& output) {
-    for (auto& mapElement : MapElements) {
-        if (mapElement.GetElementName() == output) {
-            return &mapElement;
-        }
-    }
-    return nullptr;
-}
-
 const TMapElement* TOpMap::FindOutputElement(const TInfoUnit& output) const {
     for (const auto& mapElement : MapElements) {
         if (mapElement.GetElementName() == output) {
@@ -369,6 +361,23 @@ const TMapElement* TOpMap::FindOutputElement(const TInfoUnit& output) const {
         }
     }
     return nullptr;
+}
+
+void TOpMap::SetMapElements(TVector<TMapElement> mapElements) {
+    MapElements = std::move(mapElements);
+}
+
+void TOpMap::AddMapElement(TMapElement mapElement) {
+    MapElements.push_back(std::move(mapElement));
+}
+
+void TOpMap::RemoveMapElement(size_t index) {
+    Y_ENSURE(index < MapElements.size(), "Map element index is out of range: " << index);
+    MapElements.erase(MapElements.begin() + index);
+}
+
+void TOpMap::SetMapElementExpression(size_t index, TExpression expression) {
+    MapElements.at(index).SetExpression(std::move(expression));
 }
 
 bool TOpMap::HasOutputElement(const TInfoUnit& output) const {
@@ -490,7 +499,7 @@ void TOpMap::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) {
     for (size_t i = 0; i < MapElements.size(); i++) {
         if (!MapElements[i].IsRename()) {
             auto expr = MapElements[i].GetExpression();
-            MapElements[i].SetExpression(expr.ApplyReplaceMap(map, ctx));
+            SetMapElementExpression(i, expr.ApplyReplaceMap(map, ctx));
         }
     }
 }

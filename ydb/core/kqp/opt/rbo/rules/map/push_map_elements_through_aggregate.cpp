@@ -251,14 +251,16 @@ TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IO
     // Consume the renames from every consumer map and rebind what stays above
     // to the new output names.
     for (TOpMap* parent : parents) {
-        EraseIf(parent->GetMapElements(), [&](const TMapElement& element) {
+        auto mapElements = parent->GetMapElements();
+        EraseIf(mapElements, [&](const TMapElement& element) {
             return consumedTargets.contains(element.GetElementName());
         });
-        for (auto& element : parent->GetMapElements()) {
+        for (auto& element : mapElements) {
             if (!element.IsRename()) {
                 element.SetExpression(element.GetExpression().ApplyRenames(renames));
             }
         }
+        parent->SetMapElements(std::move(mapElements));
     }
 
     if (topMap->GetMapElements().empty()) {

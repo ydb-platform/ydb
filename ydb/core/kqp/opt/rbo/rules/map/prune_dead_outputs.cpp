@@ -45,9 +45,10 @@ void AddReadExpressionMemberDeps(const TOpRead& read, const TExprNode::TPtr& nod
 }
 
 TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut, const TInfoUnitSet& keepKeyColumns = {}) {
-    TVector<bool> keep(map->GetMapElements().size(), false);
-    for (size_t idx = 0; idx < map->GetMapElements().size(); ++idx) {
-        const auto& mapElement = map->GetMapElements()[idx];
+    const auto& mapElements = map->GetMapElements();
+    TVector<bool> keep(mapElements.size(), false);
+    for (size_t idx = 0; idx < mapElements.size(); ++idx) {
+        const auto& mapElement = mapElements[idx];
         const auto to = mapElement.GetElementName();
         if (liveOut.contains(to) || keepKeyColumns.contains(to)) {
             keep[idx] = true;
@@ -63,14 +64,14 @@ TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const
     while (changed) {
         changed = false;
         TInfoUnitSet keptOutputs;
-        for (size_t idx = 0; idx < map->GetMapElements().size(); ++idx) {
+        for (size_t idx = 0; idx < mapElements.size(); ++idx) {
             if (keep[idx]) {
-                AddInfoUnit(keptOutputs, map->GetMapElements()[idx].GetElementName());
+                AddInfoUnit(keptOutputs, mapElements[idx].GetElementName());
             }
         }
 
-        for (size_t idx = 0; idx < map->GetMapElements().size(); ++idx) {
-            const auto& mapElement = map->GetMapElements()[idx];
+        for (size_t idx = 0; idx < mapElements.size(); ++idx) {
+            const auto& mapElement = mapElements[idx];
             if (!keep[idx] && mapElement.IsRename() && keptOutputs.contains(mapElement.GetRename())) {
                 keep[idx] = true;
                 changed = true;
@@ -79,10 +80,10 @@ TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const
     }
 
     TVector<TMapElement> newElements;
-    newElements.reserve(map->GetMapElements().size());
-    for (size_t idx = 0; idx < map->GetMapElements().size(); ++idx) {
+    newElements.reserve(mapElements.size());
+    for (size_t idx = 0; idx < mapElements.size(); ++idx) {
         if (keep[idx]) {
-            const auto& mapElement = map->GetMapElements()[idx];
+            const auto& mapElement = mapElements[idx];
             newElements.push_back(mapElement);
         }
     }
@@ -181,7 +182,7 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
             return false;
         }
 
-        map->GetMapElements() = std::move(newElements);
+        map->SetMapElements(std::move(newElements));
     }
 
     return true;

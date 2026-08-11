@@ -154,7 +154,7 @@ bool DropRedundantAliasAppends(IOperator& op) {
     }
 
     if (changed) {
-        map.GetMapElements() = std::move(elements);
+        map.SetMapElements(std::move(elements));
     }
     return changed;
 }

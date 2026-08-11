@@ -102,7 +102,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
 
         if (!addToMap.empty()) {
             for (const auto & add : addToMap) {
-                map->GetMapElements().push_back(TMapElement(add, add, map->Pos, &ctx.ExprCtx, &props));
+                map->AddMapElement(TMapElement(add, add, map->Pos, &ctx.ExprCtx, &props));
             }
         }
 

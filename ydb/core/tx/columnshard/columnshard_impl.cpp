@@ -974,9 +974,7 @@ void TColumnShard::SetupCleanupTables() {
         for (const TInternalPathId pathId : pathIds) {
             if (snapshotHolders->CouldUseTable(pathId, dropSnapshot)) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
-                    ("event", "CleanupTableMetadataDeferredByActiveScan")
-                    ("path_id", pathId)
-                    ("drop_snapshot", dropSnapshot.DebugString());
+                ("event", "CleanupTableMetadataDeferredByActiveScan")("path_id", pathId)("drop_snapshot", dropSnapshot.DebugString());
                 continue;
             }
             pathIdsToCleanup.insert(pathId);

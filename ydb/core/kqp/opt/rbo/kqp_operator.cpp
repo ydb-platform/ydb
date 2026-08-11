@@ -630,8 +630,12 @@ TVector<std::reference_wrapper<TExpression>> TOpFilter::GetExpressions() {
     return {FilterExpr};
 }
 
+void TOpFilter::SetFilterExpression(TExpression filterExpr) {
+    FilterExpr = std::move(filterExpr);
+}
+
 void TOpFilter::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ctx) {
-    FilterExpr = FilterExpr.ApplyReplaceMap(map, ctx);
+    SetFilterExpression(FilterExpr.ApplyReplaceMap(map, ctx));
 }
 
 TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) const {

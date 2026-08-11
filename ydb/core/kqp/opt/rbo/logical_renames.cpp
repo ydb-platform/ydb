@@ -171,7 +171,7 @@ void TOpAddDependencies::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, 
 
 void TOpFilter::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
     Y_UNUSED(ctx);
-    FilterExpr = FilterExpr.ApplyRenames(renameMap);
+    SetFilterExpression(FilterExpr.ApplyRenames(renameMap));
 }
 
 void TOpJoin::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {

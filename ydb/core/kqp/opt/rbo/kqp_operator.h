@@ -636,11 +636,13 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     const TExpression& GetFilterExpression() const { return FilterExpr; }
-
-    TExpression FilterExpr;
+    void SetFilterExpression(TExpression filterExpr);
 
 protected:
     void ComputeOutputIUs() override;
+
+private:
+    TExpression FilterExpr;
 };
 
 bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& leftArg, TExprNode::TPtr& rightArg);

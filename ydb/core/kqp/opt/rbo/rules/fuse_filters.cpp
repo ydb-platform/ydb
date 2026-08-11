@@ -34,7 +34,7 @@ TIntrusivePtr<IOperator> TFuseFiltersRule::SimpleMatchAndApply(const TIntrusiveP
 
     conjunctions.insert(conjunctions.end(), bottomConjunctions.begin(), bottomConjunctions.end());
 
-    topFilter->FilterExpr = MakeConjunction(conjunctions);
+    topFilter->SetFilterExpression(MakeConjunction(conjunctions));
     topFilter->ReplaceChild(bottomFilter, bottomFilter->GetInput());
 
     return topFilter;

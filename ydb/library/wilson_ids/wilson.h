@@ -33,7 +33,7 @@ namespace NKikimr {
 
         enum : ui8 {
             // Detalisation level that doesn't reach storage nodes
-            DynnodesOnly = 4,
+            DynamicNodesOnly = 4,
             // The most verbose detalisation level used in production
             ProductionVerbose = 13,
             // The most verbose detalisation level

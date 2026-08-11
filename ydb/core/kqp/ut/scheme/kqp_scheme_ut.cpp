@@ -5435,9 +5435,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(RebuildVectorIndexInheritColumnsSql) {
-        // Omitting the ON (...) clause entirely must inherit the existing index columns
-        // and succeed (covers the !hasUserColumns branch in the KQP exec layer).
+    Y_UNIT_TEST(RebuildVectorIndexInvalidClustersAndLevelsSql) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
@@ -5448,7 +5446,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 CREATE TABLE `/Root/TestTable` (
                     Key Uint64,
-                    Data String,
                     Embedding String,
                     PRIMARY KEY (Key),
                     INDEX vector_idx
@@ -5460,22 +5457,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
         }
         {
-            // No ON (...) clause: columns are inherited from the existing index.
             auto status = session.ExecuteSchemeQuery(R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable`
                     REBUILD INDEX vector_idx
-                    WITH (levels = 2, clusters = 3);
+                    WITH (levels = 10, clusters = 10);
             )").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describe = session.DescribeTable("/Root/TestTable").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns()[0], "Embedding");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
+                "Invalid clusters^levels: 10^10 should be less than 1073741824");
         }
     }
 

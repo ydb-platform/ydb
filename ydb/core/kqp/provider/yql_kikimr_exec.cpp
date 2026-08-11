@@ -3340,9 +3340,18 @@ public:
                                 }
 
                                 TString error;
-                                NKikimr::NKMeans::FillSetting(
-                                    *vectorSettings,
-                                    settingName, value.StringValue(), error);
+                                if (settingName == "parallel") {
+                                    ui32 result = 0;
+                                    if (TryFromString(value.StringValue(), result) && result > 0) {
+                                        add_index->set_parallel(result);
+                                    } else {
+                                        error = TStringBuilder() << "Invalid " << settingName << ": " << value.StringValue();
+                                    }
+                                } else {
+                                    NKikimr::NKMeans::FillSetting(
+                                        *vectorSettings,
+                                        settingName, value.StringValue(), error);
+                                }
                                 if (error) {
                                     ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
                                     return SyncError();

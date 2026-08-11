@@ -2118,12 +2118,18 @@ private:
     void FlushSerializer(TWriteToken token) {
         const auto& writeInfo = WriteInfos.at(token);
         for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
-            // Stage 7: Per-node shard affinity — skip shards not assigned to this task.
+            // Per-node shard affinity: skip shards not assigned to this task.
             // When TargetShardIds is non-empty, this WriteActor only owns those shards.
-            // Rows routed to other shards by the serializer are silently dropped here;
-            // the owning task on the correct node will handle them once multi-task
-            // routing is enabled (Stage 8).
+            // Rows routed to other shards are intentionally discarded — they arrive via
+            // TDqCnBroadcast on every Sink task but will be written by the owning task.
             if (!Settings.TargetShardIds.empty() && !Settings.TargetShardIds.contains(shardId)) {
+                // Batch for a shard not owned by this task — discard it.
+                // The owning task (on the node where this shard lives) will write it.
+                // This is expected in the CTAS per-node affinity mode (EnableCsWriteAffinity):
+                // TDqCnBroadcast sends all rows to all M sink tasks; each task keeps only its shards.
+                AFL_TRACE(NKikimrServices::KQP_COMPUTE)("event", "ctas_affinity_shard_drop")
+                    ("shardId", shardId)
+                    ("targetShardCount", Settings.TargetShardIds.size());
                 continue;
             }
             for (auto& batch : batches) {

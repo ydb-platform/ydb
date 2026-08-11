@@ -3335,43 +3335,63 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
 
         FillKqpTableSinkSettings(settings, internalSinksOrder, task);
 
-        // Stage 5: Per-node shard affinity for CTAS (EnableCsWriteAffinity).
+        // Per-node shard affinity for CTAS (EnableCsWriteAffinity).
         //
-        // When the sink is a fill_table (CTAS) sink and write affinity is enabled,
-        // populate TargetShardIds with the shards of the target CTAS table that live on
-        // the node assigned to this task, and set ExpectedNodeId accordingly.
+        // Populate TargetShardIds with the target CTAS table shards that belong to this
+        // task. Two cases:
         //
-        // Prerequisites:
-        //   - ShardKey->GetPartitions() contains the target table's shards after the
-        //     table resolver has resolved the CTAS sink stage.
-        //   - GetMeta().ShardIdToNodeId maps every resolved shard → node.
-        //   - task.Meta.ExpectedNodeId is stamped by PlaceTasks() before BuildSinks() runs.
+        //  A. ShardIdToNodeId contains the target shards (e.g. when the target table's
+        //     shards were resolved and added to the global map):
+        //     CountComputeTasks() created M tasks, one per node. task.Meta.ExpectedNodeId
+        //     is stamped by PlaceTasks(). We collect only shards on that node.
         //
-        // Note: multi-task creation (M tasks per M nodes) is deferred to Stage 8 (routing).
-        // Here we only fill the metadata for the single task that currently handles all shards;
-        // on a single-node test cluster M == 1 so this is sufficient and all tests pass.
+        //  B. ShardIdToNodeId does NOT contain the target shards (typical for OLAP CTAS
+        //     where the resolver does not add the write-target shards to the global map):
+        //     CountComputeTasks() fell through to the standard 1-task path. All target
+        //     shards go into TargetShardIds for that single task.
+        //
+        // When TargetShardIds is populated, the WriteActor discards rows destined for
+        // shards not in the list (which are handled by other tasks in case A, or are an
+        // error in case B — but case B uses all shards so nothing is discarded).
         if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL
                 && stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()
                 && stageInfo.Meta.ShardKey
                 && !stageInfo.Meta.ShardKey->GetPartitions().empty()
                 && GetMeta().ShardsResolved) {
 
-            // Determine the node for this task: use ExpectedNodeId if already stamped,
-            // otherwise use the executer's own node (single-node fallback).
             const ui64 taskNodeId = task.Meta.ExpectedNodeId.value_or(GetMeta().ExecuterId.NodeId());
 
-            // Collect shards of the target CTAS table that reside on taskNodeId.
+            // Check whether target shards are in ShardIdToNodeId (Case A).
+            bool anyTargetShardResolved = false;
             for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                const ui64 shardId = partition.ShardId;
-                auto it = GetMeta().ShardIdToNodeId.find(shardId);
-                if (it != GetMeta().ShardIdToNodeId.end() && it->second == taskNodeId) {
-                    settings.AddTargetShardIds(shardId);
+                if (GetMeta().ShardIdToNodeId.contains(partition.ShardId)) {
+                    anyTargetShardResolved = true;
+                    break;
                 }
             }
 
-            // Always set ExpectedNodeId so downstream actors and the planner know
-            // which node this task must run on.
-            settings.SetExpectedNodeId(taskNodeId);
+            for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                const ui64 shardId = partition.ShardId;
+                if (!anyTargetShardResolved) {
+                    // Case B: no node info — assign all shards to the single task.
+                    settings.AddTargetShardIds(shardId);
+                } else {
+                    // Case A: assign only shards on this task's node.
+                    auto it = GetMeta().ShardIdToNodeId.find(shardId);
+                    if (it != GetMeta().ShardIdToNodeId.end() && it->second == taskNodeId) {
+                        settings.AddTargetShardIds(shardId);
+                    }
+                }
+            }
+
+            // Sanity check: TargetShardIds must be non-empty (otherwise all rows would
+            // be silently discarded). This should never happen given the logic above.
+            AFL_ENSURE(!settings.GetTargetShardIds().empty())
+                ("msg", "CTAS affinity sink has empty TargetShardIds — no shards assigned to this task")
+                ("taskNodeId", taskNodeId)
+                ("anyTargetShardResolved", anyTargetShardResolved)
+                ("totalShards", stageInfo.Meta.ShardKey->GetPartitions().size())
+                ("resolvedShards", GetMeta().ShardIdToNodeId.size());
         }
 
         output.SinkSettings.ConstructInPlace();
@@ -4137,6 +4157,65 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         } else {
             auto [newPartitionCount, _] = GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount);
             partitionsCount = std::max(newPartitionCount, partitionsCount);
+        }
+    }
+
+    // CsWriteAffinity (Per-Node CTAS): if this stage is a CTAS fill_table sink with
+    // EnableCsWriteAffinity, create M tasks (one per node that hosts target shards)
+    // each pinned to its corresponding node. The data arrives from the Transform Stage
+    // via TDqCnBroadcast (all rows to all tasks); each task filters to its own shards
+    // using TargetShardIds in TShardedWriteController::FlushSerializer.
+    //
+    // Conditions:
+    //  - MODE_FILL sink with EnableCsWriteAffinity in the transaction body
+    //  - ShardKey resolved (table resolver has run before BuildAllTasks)
+    //  - ShardIdToNodeId populated with target table's shards (from ResolveShards)
+    //
+    // NOTE: ShardIdToNodeId may only contain source table shards, not CTAS target
+    //       table shards. When the mapping is unavailable, fall through to the standard
+    //       single-task path (correctness preserved, node affinity benefit deferred).
+    {
+        bool isCsWriteAffinitySink = false;
+        if (stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()
+                && GetMeta().ShardsResolved
+                && stageInfo.Meta.ShardKey
+                && !stageInfo.Meta.ShardKey->GetPartitions().empty()) {
+            for (const auto& sink : stage.GetSinks()) {
+                if (sink.HasInternalSink()
+                        && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                    if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
+                            && sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                        isCsWriteAffinitySink = true;
+                    }
+                }
+            }
+        }
+
+        if (isCsWriteAffinitySink) {
+            // Build node→shards mapping from the target table's resolved partitions.
+            // Only shards whose nodeId is known (present in ShardIdToNodeId) are included.
+            THashMap<ui64 /* nodeId */, TVector<ui64 /* shardId */>> nodeToShards;
+            for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                const ui64 shardId = partition.ShardId;
+                auto it = GetMeta().ShardIdToNodeId.find(shardId);
+                if (it != GetMeta().ShardIdToNodeId.end()) {
+                    nodeToShards[it->second].push_back(shardId);
+                }
+            }
+
+            if (!nodeToShards.empty()) {
+                // FIXED: task count is determined here, independent of the upstream stage.
+                MaxTasksGraph->AddStage(stageInfo, TMaxTasksGraph::FIXED, inputs);
+                for (const auto& [nodeId, _] : nodeToShards) {
+                    MaxTasksGraph->AddTask(AddTask(stageInfo, TTask::UNKNOWN), nodeId);
+                }
+                return; // Early-return: M-task CTAS affinity path handled.
+            }
+            // Target table shards not in ShardIdToNodeId (e.g. OLAP CTAS where resolver
+            // doesn't add target shards to the global map). Fall through to single-task
+            // standard path: all shards handled by one task on the executer node.
+            // TargetShardIds in BuildInternalSinks will be populated with all shards.
         }
     }
 

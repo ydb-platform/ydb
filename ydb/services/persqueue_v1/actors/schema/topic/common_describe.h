@@ -79,11 +79,11 @@ class TDescribeLogicActor: public NActors::TActorBootstrapped<TDerived>
     using TThis = NActors::TActorBootstrapped<TDerived>;
 
     static constexpr NKikimrServices::EServiceKikimr Service = NKikimrServices::EServiceKikimr::PQ_SCHEMA;
-    static constexpr TDuration RequestTimeout = TDuration::Seconds(10);
+    static constexpr TDuration RequestTimeout = TDuration::Seconds(30);
     static constexpr size_t StatsMaxRetries = 15;
     static constexpr TDuration StatsRetryInitialDelay = TDuration::MilliSeconds(25);
     static constexpr TDuration StatsRetryMaxDelay = TDuration::MilliSeconds(250);
-    static constexpr ui64 LocationsRetryWakeupTag = 100;
+    static constexpr ui64 BalancerRetryWakeupTag = 100;
     static constexpr ui64 RequestTimeoutWakeupTag = 101;
 
 public:
@@ -137,6 +137,19 @@ public:
         TThis::PassAway();
     }
 
+    void HandlePoison() {
+        // Prefer an explicit error to the parent over a silent death: otherwise the
+        // proxy/requester can wait forever for TEvDescribeResponse.
+        if (!IsDead) {
+            ReplyWithError(
+                Ydb::StatusIds::CANCELLED,
+                "Request was cancelled",
+                Ydb::PersQueue::ErrorCode::ERROR);
+            return;
+        }
+        PassAway();
+    }
+
 protected:
     void ReplyWithError(
         Ydb::StatusIds::StatusCode status,
@@ -159,7 +172,7 @@ protected:
     STATEFN(StateDescribe) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, Handle);
-            sFunc(TEvents::TEvPoison, PassAway);
+            cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         case TEvents::TEvWakeup::EventType:
             if (ev->Get<TEvents::TEvWakeup>()->Tag == RequestTimeoutWakeupTag) {
                 HandleRequestTimeout();
@@ -245,10 +258,10 @@ protected:
             hFunc(TEvPersQueue::TEvGetPartitionsLocationResponse, Handle);
             hFunc(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
             hFunc(NKikimr::TEvPersQueue::TEvStatusResponse, Handle);
-            sFunc(TEvents::TEvPoison, PassAway);
+            cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         case TEvents::TEvWakeup::EventType:
-            if (ev->Get<TEvents::TEvWakeup>()->Tag == LocationsRetryWakeupTag) {
-                HandleLocationsRetryWakeup();
+            if (ev->Get<TEvents::TEvWakeup>()->Tag == BalancerRetryWakeupTag) {
+                HandleBalancerRetryWakeup();
                 return;
             }
             if (ev->Get<TEvents::TEvWakeup>()->Tag == RequestTimeoutWakeupTag) {
@@ -271,12 +284,12 @@ protected:
         const auto& record = ev->Get()->Record;
         if (!record.GetStatus()) {
             LOG_D("PartitionsLocation response status=false");
-            ScheduleLocationsRetry();
+            ScheduleBalancerRetry();
             return;
         }
 
         LocationsBackoff.Reset();
-        LocationsRetryPending = false;
+        BalancerRetryPending = false;
 
         for (const auto& location : record.GetLocations()) {
             auto& l = Partitions[location.GetPartitionId()].Location;
@@ -300,6 +313,22 @@ protected:
         }
 
         auto& record = ev->Get()->Record;
+        bool doRestart = record.PartResultSize() == 0;
+        for (const auto& partResult : record.GetPartResult()) {
+            if (partResult.GetStatus() == NKikimrPQ::TStatusResponse::STATUS_INITIALIZING ||
+                partResult.GetStatus() == NKikimrPQ::TStatusResponse::STATUS_UNKNOWN)
+            {
+                doRestart = true;
+                break;
+            }
+        }
+        if (doRestart) {
+            LOG_D("StatusResponse requires retry. TabletId=" << tabletId
+                << " parts=" << record.PartResultSize());
+            ScheduleStatsRetry(tabletId);
+            return;
+        }
+
         for (const auto& partResult : record.GetPartResult()) {
             Ydb::Topic::DescribeConsumerResult::PartitionInfo& partRes = Partitions[partResult.GetPartition()].Stats;
             Ydb::Topic::PartitionStats* partStats = partRes.mutable_partition_stats();
@@ -338,6 +367,7 @@ protected:
             );
         }
 
+        StatsRetryPending.erase(tabletId);
         TabletsInflight.erase(tabletId);
         ReplyIfPossible();
     }
@@ -372,7 +402,8 @@ protected:
         }
 
         if (ev->Get()->TabletId == ReadBalancerTabletId) {
-            ScheduleLocationsRetry();
+            // Retry whatever is still missing from the balancer (location and/or read sessions).
+            ScheduleBalancerRetry();
         } else {
             ScheduleStatsRetry(ev->Get()->TabletId);
         }
@@ -454,6 +485,7 @@ protected:
             tabletId, StatsMaxRetries, StatsRetryInitialDelay, StatsRetryMaxDelay);
         if (!it->second.HasMore()) {
             LOG_W("Stats retries exceeded for tablet " << tabletId);
+            StatsRetryPending.erase(tabletId);
             TabletsInflight.erase(tabletId);
             ReplyWithError(
                 Ydb::StatusIds::UNAVAILABLE,
@@ -466,7 +498,7 @@ protected:
         }
         const auto delay = it->second.Next();
         LOG_D("Stats retry " << tabletId << " " << it->second.GetIteration() << " in " << delay);
-        // Wakeup tag is the tablet id (distinct from LocationsRetry/RequestTimeout tags).
+        // Wakeup tag is the tablet id (distinct from BalancerRetry/RequestTimeout tags).
         this->Schedule(delay, new TEvents::TEvWakeup(tabletId));
     }
 
@@ -485,7 +517,7 @@ protected:
         return true;
     }
 
-    void FailLocationsUnavailable() {
+    void FailBalancerUnavailable() {
         TabletsInflight.erase(ReadBalancerTabletId);
         ReplyWithError(
             Ydb::StatusIds::UNAVAILABLE,
@@ -493,28 +525,36 @@ protected:
             Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED);
     }
 
-    void ScheduleLocationsRetry() {
+    void ScheduleBalancerRetry() {
         if (!RemainingRequestTimeout()) {
             HandleRequestTimeout();
             return;
         }
+        if (LocationsReceived && ReadSessionsReceived) {
+            return;
+        }
         if (!LocationsBackoff.HasMore()) {
-            LOG_W("PartitionsLocation retries exceeded");
-            FailLocationsUnavailable();
+            LOG_W("Balancer retries exceeded");
+            FailBalancerUnavailable();
             return;
         }
-        if (LocationsRetryPending) {
+        if (BalancerRetryPending) {
             return;
         }
-        LocationsRetryPending = true;
+        BalancerRetryPending = true;
         const auto delay = LocationsBackoff.Next();
-        LOG_D("PartitionsLocation retry " << LocationsBackoff.GetIteration() << " in " << delay);
-        this->Schedule(delay, new TEvents::TEvWakeup(LocationsRetryWakeupTag));
+        LOG_D("Balancer retry " << LocationsBackoff.GetIteration() << " in " << delay
+            << " needLocation=" << !LocationsReceived
+            << " needSessions=" << !ReadSessionsReceived);
+        this->Schedule(delay, new TEvents::TEvWakeup(BalancerRetryWakeupTag));
     }
 
-    void HandleLocationsRetryWakeup() {
-        LocationsRetryPending = false;
-        if (LocationsReceived || !TabletsInflight.contains(ReadBalancerTabletId)) {
+    void HandleBalancerRetryWakeup() {
+        BalancerRetryPending = false;
+        if (!TabletsInflight.contains(ReadBalancerTabletId)) {
+            return;
+        }
+        if (LocationsReceived && ReadSessionsReceived) {
             return;
         }
         RequestReadBalancer();
@@ -553,7 +593,7 @@ protected:
 
     bool LocationsReceived = false;
     bool ReadSessionsReceived = false;
-    bool LocationsRetryPending = false;
+    bool BalancerRetryPending = false;
     bool IsDead = false;
     TBackoff LocationsBackoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
     std::optional<TInstant> RequestStartTime;

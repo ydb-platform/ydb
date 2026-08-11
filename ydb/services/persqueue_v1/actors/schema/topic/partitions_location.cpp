@@ -98,6 +98,9 @@ public:
 private:
     void Handle(TEvDescribeResponse::TPtr& ev) {
         LogicActorId = {};
+        if (!Response) {
+            return;
+        }
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             return ReplyWithError(ev->Get()->Status, ev->Get()->ErrorMessage, ev->Get()->IssueCode);
         }
@@ -146,6 +149,10 @@ private:
         const TString& messageText,
         Ydb::PersQueue::ErrorCode::ErrorCode issueCode)
     {
+        if (!Response) {
+            PassAway();
+            return;
+        }
         Response->Status = status;
         Response->Issues.AddIssue(FillIssue(messageText, issueCode));
         Send(Requester, Response.Release());
@@ -157,7 +164,14 @@ private:
             Send(LogicActorId, new NActors::TEvents::TEvPoison());
             LogicActorId = {};
         }
-        PassAway();
+        if (Response) {
+            ReplyWithError(
+                Ydb::StatusIds::CANCELLED,
+                "Request was cancelled",
+                Ydb::PersQueue::ErrorCode::ERROR);
+        } else {
+            PassAway();
+        }
     }
 
     STATEFN(StateWork) {

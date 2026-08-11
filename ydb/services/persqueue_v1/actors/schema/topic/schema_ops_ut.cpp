@@ -363,7 +363,7 @@ Y_UNIT_TEST(DescribePartitionTimesOutWhenLocationStuck) {
     runtime.EnableScheduleForActor(grpcActorId, true);
 
     runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
-    runtime.AdvanceCurrentTime(TDuration::Seconds(11));
+    runtime.AdvanceCurrentTime(TDuration::Seconds(31));
 
     runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(edgeActor, TDuration::Seconds(5));
     UNIT_ASSERT_C(result->ResultStatus, "The operation is still in progress");
@@ -607,7 +607,7 @@ Y_UNIT_TEST(PartitionsLocationTimesOutWhenStuck) {
     runtime.EnableScheduleForActor(rootActorId, true);
 
     runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
-    runtime.AdvanceCurrentTime(TDuration::Seconds(11));
+    runtime.AdvanceCurrentTime(TDuration::Seconds(31));
 
     auto handle = runtime.GrabEdgeEvent<TEvPQProxy::TEvPartitionLocationResponse>(edge, TDuration::Seconds(5));
     UNIT_ASSERT(handle);

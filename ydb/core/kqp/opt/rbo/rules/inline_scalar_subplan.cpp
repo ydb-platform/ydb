@@ -10,9 +10,9 @@ namespace NKqp {
 // FIXME: Need to do correct general case decorellation in the future
 
 bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    auto subplanIUs = input->GetSubplanIUs(props);
+    const auto& subplanCandidates = input->GetSubplanCandidates();
     TVector<TInfoUnit> scalarIUs;
-    for (const auto& iu : subplanIUs) {
+    for (const auto& iu : subplanCandidates) {
         const auto* subplanEntry = props.Subplans.Find(iu);
         if (subplanEntry && subplanEntry->Type == ESubplanType::EXPR) {
             scalarIUs.push_back(iu);

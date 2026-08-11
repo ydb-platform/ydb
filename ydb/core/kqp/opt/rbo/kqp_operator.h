@@ -222,9 +222,13 @@ public:
         return {};
     }
 
-    virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) {
-        Y_UNUSED(props);
-        return {};
+    /**
+     * Get expression members that may currently bind to subplans. The result
+     * is plan-independent; callers classify the candidates against TSubplans.
+     */
+    virtual const TVector<TInfoUnit>& GetSubplanCandidates() const {
+        static const TVector<TInfoUnit> empty;
+        return empty;
     }
 
     const TTypeAnnotationNode* GetIUType(const TInfoUnit& iu);
@@ -492,7 +496,7 @@ public:
     TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
-    virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
+    virtual const TVector<TInfoUnit>& GetSubplanCandidates() const override;
     virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual bool PropagateNameConstraints() override;
@@ -525,7 +529,11 @@ protected:
     void ComputeOutputIUs() override;
 
 private:
+    void InvalidateSubplanCandidates();
+
     TVector<TMapElement> MapElements;
+    mutable bool SubplanCandidatesDirty = true;
+    mutable TVector<TInfoUnit> SubplanCandidates;
 };
 
 /**
@@ -616,7 +624,7 @@ public:
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
-    virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
+    virtual const TVector<TInfoUnit>& GetSubplanCandidates() const override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Filter"; }
@@ -639,6 +647,8 @@ protected:
 
 private:
     TExpression FilterExpr;
+    mutable bool SubplanCandidatesDirty = true;
+    mutable TVector<TInfoUnit> SubplanCandidates;
 };
 
 bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& leftArg, TExprNode::TPtr& rightArg);
@@ -950,10 +960,11 @@ private:
         TIntrusivePtr<IOperator> Parent;
         size_t ChildIndex = 0;
         std::shared_ptr<TInfoUnit> SubplanIU;
-        TVector<TInfoUnit> SubplanIUs;
-        size_t NextSubplanIdx = 0;
+        // Points into the operator's raw member cache; current subplan bindings
+        // are resolved live while the plan remains unmodified.
+        const TVector<TInfoUnit>* SubplanCandidates = nullptr;
+        size_t NextSubplanCandidateIdx = 0;
         size_t NextChildIdx = 0;
-        bool SubplansLoaded = false;
         // Pre-order only: the node was already emitted when its frame was entered
         bool Emitted = false;
     };

@@ -380,6 +380,14 @@ void ComputeLogicalTestProps(TOpRoot& root) {
     ComputePlanAliases(root);
 }
 
+size_t CountOperatorInTraversal(TOpRoot& root, const IOperator* expected) {
+    size_t count = 0;
+    for (const auto& item : root) {
+        count += item.Current.Get() == expected;
+    }
+    return count;
+}
+
 struct TMapRuleTestContext {
     TMapRuleTestContext()
         : FuncRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
@@ -1352,6 +1360,41 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(last, op.Get());
     }
 
+    Y_UNIT_TEST(MapSubplanCandidatesFollowExpressionMutations) {
+        NYql::TExprContext exprCtx;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit firstBinding("first_subplan", true);
+        const TInfoUnit replacementBinding("replacement_subplan", true);
+
+        auto map = MakeIntrusive<TOpMap>(
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            TVector<TMapElement>{
+                TMapElement(TInfoUnit("first"), MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps), false),
+                TMapElement(TInfoUnit("duplicate"), MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps), false),
+            });
+
+        UNIT_ASSERT(map->GetSubplanCandidates() == (TVector<TInfoUnit>{firstBinding}));
+
+        map->SetMapElementExpression(0, MakeColumnAccess(replacementBinding, pos, &exprCtx, &expressionProps));
+        UNIT_ASSERT(map->GetSubplanCandidates() == (TVector<TInfoUnit>{replacementBinding, firstBinding}));
+
+        map->RemoveMapElement(1);
+        UNIT_ASSERT(map->GetSubplanCandidates() == (TVector<TInfoUnit>{replacementBinding}));
+
+        map->AddMapElement(TMapElement(
+            TInfoUnit("first_again"),
+            MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps),
+            false));
+        UNIT_ASSERT(map->GetSubplanCandidates() == (TVector<TInfoUnit>{replacementBinding, firstBinding}));
+
+        map->SetMapElements({
+            TMapElement(TInfoUnit("first_again"), MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps), false),
+        });
+        UNIT_ASSERT(map->GetSubplanCandidates() == (TVector<TInfoUnit>{firstBinding}));
+    }
+
     Y_UNIT_TEST(MapElementExpressionMutationPreservesRenameInvariant) {
         NYql::TExprContext exprCtx;
         TPlanProps expressionProps;
@@ -1436,6 +1479,51 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         planProps.Subplans.Remove(binding);
         UNIT_ASSERT(expression.GetInputIUs(false, true) == (TVector<TInfoUnit>{binding}));
+    }
+
+    Y_UNIT_TEST(FilterSubplanCandidatesFollowExpressionMutation) {
+        NYql::TExprContext exprCtx;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit oldBinding("old_subplan", true);
+        const TInfoUnit newBinding("new_subplan", true);
+
+        auto filter = MakeIntrusive<TOpFilter>(
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            MakeColumnAccess(oldBinding, pos, &exprCtx, &expressionProps));
+
+        UNIT_ASSERT(filter->GetSubplanCandidates() == (TVector<TInfoUnit>{oldBinding}));
+
+        filter->SetFilterExpression(MakeColumnAccess(newBinding, pos, &exprCtx, &expressionProps));
+        UNIT_ASSERT(filter->GetSubplanCandidates() == (TVector<TInfoUnit>{newBinding}));
+    }
+
+    Y_UNIT_TEST(SubplanTraversalFollowsRegistryMutations) {
+        NYql::TExprContext exprCtx;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit binding("subplan", true);
+        auto filter = MakeIntrusive<TOpFilter>(
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            MakeColumnAccess(binding, pos, &exprCtx, &expressionProps));
+        TOpRoot root(filter, pos, {});
+        filter->BindExpressionPlanProps(&root.PlanProps);
+        auto originalSubplan = MakeIntrusive<TOpEmptySource>(pos);
+        auto replacementSubplan = MakeIntrusive<TOpEmptySource>(pos);
+
+        UNIT_ASSERT(filter->GetSubplanCandidates() == (TVector<TInfoUnit>{binding}));
+
+        root.PlanProps.Subplans.Add(binding, originalSubplan, ESubplanType::EXPR);
+        UNIT_ASSERT_VALUES_EQUAL(CountOperatorInTraversal(root, originalSubplan.Get()), 1);
+
+        root.PlanProps.Subplans.ReplacePlan(binding, replacementSubplan);
+        UNIT_ASSERT_VALUES_EQUAL(CountOperatorInTraversal(root, originalSubplan.Get()), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountOperatorInTraversal(root, replacementSubplan.Get()), 1);
+
+        root.PlanProps.Subplans.Remove(binding);
+        UNIT_ASSERT_VALUES_EQUAL(CountOperatorInTraversal(root, replacementSubplan.Get()), 0);
     }
 
     Y_UNIT_TEST(ComputeParentsHandlesSharedDagAndIgnoresInactiveSubplans) {

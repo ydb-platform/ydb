@@ -136,11 +136,16 @@ void TOpRead::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::
 void TOpMap::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
     Y_UNUSED(ctx);
 
+    bool changed = false;
     for (auto& el : MapElements) {
         const auto it = renameMap.find(el.GetElementName());
         if (it != renameMap.end()) {
             el.SetElementName(it->second);
+            changed = true;
         }
+    }
+    if (changed) {
+        InvalidateSubplanCandidates();
     }
 }
 

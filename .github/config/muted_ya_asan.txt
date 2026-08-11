@@ -374,6 +374,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrl
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrlEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrlOfNotExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrlWithConsumer
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestListQueues
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthCreateQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthDeleteMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthDeleteQueue
@@ -469,6 +470,7 @@ ydb/core/kqp/ut/rbo KqpRboOlap.DoubleOutOfRangeInJson
 ydb/core/kqp/ut/rbo KqpRboOlap.OlapFilterPeephole
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.Aggregation-ColumnStore
+ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin+UseBlockHashJoin
 ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin-UseBlockHashJoin
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
@@ -515,6 +517,7 @@ ydb/core/kqp/ut/tli KqpTli.SnapshotThenReadWrite
 ydb/core/kqp/ut/tli KqpTli.TwoVictimsOneBreaker
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTable
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTableMultiTable
+ydb/core/kqp/ut/tli unittest.[*/*] chunk
 ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks
 ydb/core/kqp/ut/tx KqpSinkTx.TIsolationSettingTest+IsOlap+UsePragma
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.ConflictWrite+IsOlap+FillTables
@@ -557,6 +560,7 @@ ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.DescribeEmptyTopic
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.DescribeTest
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.UnauthorizedDescriber
+ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.PurgeWhileMessagesLocked
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithData
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithManyPartitionAndData

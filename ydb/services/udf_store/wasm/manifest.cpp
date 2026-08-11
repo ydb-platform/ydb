@@ -1,4 +1,5 @@
 #include "manifest.h"
+#include "registry_helpers.h"
 
 #include <library/cpp/json/json_reader.h>
 
@@ -8,28 +9,6 @@
 namespace NKikimr::NUdfStore::NWasm {
 
 namespace {
-
-EUdfValueType ParseValueType(TStringBuf type) {
-    if (type == "int64") {
-        return EUdfValueType::Int64;
-    }
-    if (type == "uint64") {
-        return EUdfValueType::Uint64;
-    }
-    if (type == "double") {
-        return EUdfValueType::Double;
-    }
-    if (type == "boolean" || type == "bool") {
-        return EUdfValueType::Boolean;
-    }
-    if (type == "string") {
-        return EUdfValueType::String;
-    }
-    if (type == "null") {
-        return EUdfValueType::Null;
-    }
-    ythrow yexception() << "Unsupported wasm UDF manifest type: " << type;
-}
 
 void ValidateConcreteTag(const NJson::TJsonValue& block, TStringBuf where) {
     if (block.Has("tag")) {
@@ -168,9 +147,20 @@ void ExpandObjectsIntoFunctions(TWasmManifest& manifest) {
     }
 
     for (const auto& object : manifest.Objects) {
-        if (!object.CreateExport.empty() && knownNames.insert("New").second) {
+        if (!object.CreateExport.empty()) {
+            // Prefer "New" for the first free slot (backward compatible).
+            // Additional objects get New{ObjectName} so each stays YQL-visible.
+            TString ctorName = "New";
+            if (!knownNames.insert(ctorName).second) {
+                ctorName = TString("New") + object.Name;
+                if (!knownNames.insert(ctorName).second) {
+                    ythrow yexception()
+                        << "Cannot synthesize constructor for object '" << object.Name
+                        << "': YQL names 'New' and '" << ctorName << "' are already taken";
+                }
+            }
             TWasmUdfDescriptor createFn;
-            createFn.Name = "New";
+            createFn.Name = std::move(ctorName);
             createFn.ExportName = object.CreateExport;
             createFn.Binding = EWasmUdfBinding::Plain;
             createFn.Result = EUdfValueType::Uint64;

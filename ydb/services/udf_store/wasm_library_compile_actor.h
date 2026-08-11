@@ -18,8 +18,8 @@ private:
         MarkCompiling,
         ReadLibraryChunks,
         DeleteArtifactChunks,
-        UpsertArtifact,
         WriteArtifactChunk,
+        UpsertArtifact,
         UpdateMetaReady,
         UpdateMetaFailed,
     };

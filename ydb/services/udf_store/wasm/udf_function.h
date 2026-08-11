@@ -4,9 +4,19 @@
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 
+namespace NYdb::NWasm {
+struct IWebAssemblyCompartment;
+} // namespace NYdb::NWasm
+
 namespace NKikimr::NUdfStore::NWasm {
 
 using namespace NYql::NUdf;
+
+NYql::NUdf::TUnboxedValue ReadResultUnboxed(
+    const NYql::NUdf::IValueBuilder* valueBuilder,
+    NYdb::NWasm::IWebAssemblyCompartment* compartment,
+    uintptr_t resultOffset,
+    EUdfValueType expectedType);
 
 class TWasmUdfFunction: public TBoxedValue {
 public:

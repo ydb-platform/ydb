@@ -156,17 +156,18 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
                 return;
             }
             case EStep::DeleteArtifactChunks: {
-                Step_ = EStep::UpsertModuleArtifact;
-                ExecuteQuery(NTableQuery::BuildUpsertArtifactQuery(ArtifactTablePath_), false);
-                return;
-            }
-            case EStep::UpsertModuleArtifact: {
+                // Write all chunks first; publish artifact row only when data is complete.
                 StartWriteChunks();
                 return;
             }
             case EStep::WriteArtifactChunk: {
                 ++NextChunkWriteIndex_;
                 WriteNextChunk();
+                return;
+            }
+            case EStep::UpsertModuleArtifact: {
+                Step_ = EStep::UpdateMetaReady;
+                ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
                 return;
             }
             case EStep::UpdateMetaReady:
@@ -266,8 +267,8 @@ void TWasmCompileActor::StartWriteChunks() {
 
 void TWasmCompileActor::WriteNextChunk() {
     if (NextChunkWriteIndex_ >= PendingChunkWrites_.size()) {
-        Step_ = EStep::UpdateMetaReady;
-        ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
+        Step_ = EStep::UpsertModuleArtifact;
+        ExecuteQuery(NTableQuery::BuildUpsertArtifactQuery(ArtifactTablePath_), false);
         return;
     }
     Step_ = EStep::WriteArtifactChunk;

@@ -11,6 +11,7 @@
 #include <util/string/printf.h>
 
 #include <bit>
+#include <limits>
 
 namespace {
 
@@ -158,6 +159,15 @@ TUnversionedValue MakeEmptyValue() {
     value.Type = EAbiValueType::Null;
     value.Flags = EAbiValueFlags::None;
     return value;
+}
+
+ui32 CheckedAbiLength(size_t size, TStringBuf what) {
+    if (size > std::numeric_limits<ui32>::max()) {
+        ythrow yexception()
+            << what << " length " << size
+            << " exceeds ABI ui32 limit (" << std::numeric_limits<ui32>::max() << ")";
+    }
+    return static_cast<ui32>(size);
 }
 
 void StoreValue(IWebAssemblyCompartment* compartment, uintptr_t offset, const TUnversionedValue& value) {

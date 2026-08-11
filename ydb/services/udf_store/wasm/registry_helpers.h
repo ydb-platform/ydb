@@ -35,6 +35,9 @@ std::unique_ptr<NYdb::NWasm::IWebAssemblyCompartment> CreateRegistryCompartment(
 
 TUnversionedValue MakeEmptyValue();
 
+//! TUnversionedValue.Length is ui32 — reject oversized host strings.
+ui32 CheckedAbiLength(size_t size, TStringBuf what);
+
 void StoreValue(
     NYdb::NWasm::IWebAssemblyCompartment* compartment,
     uintptr_t offset,

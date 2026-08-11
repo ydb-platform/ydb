@@ -80,13 +80,32 @@ TWasmConfiguredCallable::TWasmConfiguredCallable(
 {
 }
 
-void TWasmConfiguredCallable::EnsureObject(TStringRef functionNameForErrors) const {
-    auto* queryHandle = GetCurrentQueryCompartment();
-    Y_ENSURE(queryHandle && queryHandle->Compartment,
-        "Query WASM compartment is not initialized");
-    Y_ENSURE(queryHandle->Generation != 0, "Query WASM compartment generation is unset");
+TWasmConfiguredCallable::~TWasmConfiguredCallable() {
+    try {
+        DestroyObjectIfAlive();
+    } catch (...) {
+        // Best-effort cleanup; never throw from destructor.
+    }
+}
 
-    if (Handle_ != 0 && CompartmentGeneration_ == queryHandle->Generation) {
+void TWasmConfiguredCallable::DestroyObjectIfAlive() const {
+    const ui64 handle = Handle_;
+    const ui64 generation = CompartmentGeneration_;
+    Handle_ = 0;
+    CompartmentGeneration_ = 0;
+    PinnedBlobOffset_ = 0;
+    PinnedBlobLength_ = 0;
+
+    if (handle == 0 || Descriptor_.DestroyExport.empty()) {
+        return;
+    }
+
+    auto* queryHandle = GetCurrentQueryCompartment();
+    if (!queryHandle || !queryHandle->Compartment
+        || queryHandle->Generation != generation)
+    {
+        // Old compartment is already gone (or TLS not installed): guest
+        // ObjectFramework / malloc state is freed with the compartment.
         return;
     }
 
@@ -98,11 +117,46 @@ void TWasmConfiguredCallable::EnsureObject(TStringRef functionNameForErrors) con
         context.WebAssemblyPool.Clear();
     };
 
-    if (CompartmentGeneration_ != queryHandle->Generation) {
-        PinnedBlobOffset_ = 0;
-        PinnedBlobLength_ = 0;
-        Handle_ = 0;
+    TUnversionedValue handleValue = MakeEmptyValue();
+    handleValue.Type = EAbiValueType::Uint64;
+    handleValue.Data.Uint64 = handle;
+    auto handleSlot = MakeEphemeralValue(compartment, handleValue);
+    auto resultSlot = MakeEphemeralValue(compartment, MakeEmptyValue());
+
+    const auto destroyKey = MakeExportKey(State_->ModuleName, Descriptor_.DestroyExport);
+    if (auto* destroyExport = queryHandle->Exports.FindPtr(destroyKey)) {
+        InvokeUdfExport(
+            compartment,
+            *destroyExport,
+            Descriptor_.DestroyExport,
+            std::bit_cast<uintptr_t>(&context),
+            resultSlot.Offset,
+            {handleSlot.Offset});
     }
+}
+
+void TWasmConfiguredCallable::EnsureObject(TStringRef functionNameForErrors) const {
+    auto* queryHandle = GetCurrentQueryCompartment();
+    Y_ENSURE(queryHandle && queryHandle->Compartment,
+        "Query WASM compartment is not initialized");
+    Y_ENSURE(queryHandle->Generation != 0, "Query WASM compartment generation is unset");
+
+    if (Handle_ != 0 && CompartmentGeneration_ == queryHandle->Generation) {
+        return;
+    }
+
+    // Drop the previous guest object if the compartment is still the same
+    // generation (defensive). Across generation changes DestroyObjectIfAlive
+    // is a no-op — the old compartment (and its ObjectFramework registry) is gone.
+    DestroyObjectIfAlive();
+
+    auto* compartment = queryHandle->Compartment.get();
+    TCurrentCompartmentGuard compartmentGuard(compartment);
+    TWasmUdfInvocationContext context(compartment);
+    TCurrentInvocationContextGuard invocationGuard(&context);
+    Y_DEFER {
+        context.WebAssemblyPool.Clear();
+    };
 
     if (PinnedBlobOffset_ == 0 && !ConfigBlob_.empty()) {
         PinnedBlobOffset_ = compartment->AllocateBytes(ConfigBlob_.size());
@@ -111,7 +165,7 @@ void TWasmConfiguredCallable::EnsureObject(TStringRef functionNameForErrors) con
             std::bit_cast<char*>(PinnedBlobOffset_),
             ConfigBlob_.size());
         std::memcpy(dst, ConfigBlob_.data(), ConfigBlob_.size());
-        PinnedBlobLength_ = static_cast<ui32>(ConfigBlob_.size());
+        PinnedBlobLength_ = CheckedAbiLength(ConfigBlob_.size(), "Wasm TypeConfig blob");
     }
 
     TUnversionedValue configValue = MakeEmptyValue();
@@ -214,7 +268,7 @@ TUnboxedValue TWasmConfiguredCallable::Run(
                         const TStringBuf string = arg.AsStringRef();
                         stringGuards.push_back(CopyIntoCompartment(string, compartment));
                         value.Type = EAbiValueType::String;
-                        value.Length = static_cast<ui32>(string.size());
+                        value.Length = CheckedAbiLength(string.size(), "Wasm UDF string argument");
                         value.Data.String = std::bit_cast<char*>(
                             stringGuards.back().GetCopiedOffset());
                         break;
@@ -241,34 +295,11 @@ TUnboxedValue TWasmConfiguredCallable::Run(
             resultSlot.Offset,
             argOffsets);
 
-        const auto result = *PtrFromVM(
+        return ReadResultUnboxed(
+            valueBuilder,
             compartment,
-            std::bit_cast<TUnversionedValue*>(resultSlot.Offset));
-        if (result.Type == EAbiValueType::Null) {
-            return {};
-        }
-        switch (Descriptor_.Result) {
-            case EUdfValueType::Int64:
-                return TUnboxedValuePod(result.Data.Int64);
-            case EUdfValueType::Uint64:
-                return TUnboxedValuePod(result.Data.Uint64);
-            case EUdfValueType::Double:
-                return TUnboxedValuePod(result.Data.Double);
-            case EUdfValueType::Boolean:
-                return TUnboxedValuePod(result.Data.Boolean != 0);
-            case EUdfValueType::String: {
-                const auto* hostData = PtrFromVM(
-                    compartment,
-                    result.Data.String,
-                    result.Length);
-                return valueBuilder->NewString(TStringRef(
-                    reinterpret_cast<const char*>(hostData),
-                    result.Length));
-            }
-            case EUdfValueType::Null:
-                return {};
-        }
-        return {};
+            resultSlot.Offset,
+            Descriptor_.Result);
     } catch (const std::exception& ex) {
         WasmError(ex, TStringRef(Descriptor_.Name), valueBuilder);
     }

@@ -155,7 +155,16 @@ void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf) {
                 << " before loading md5=" << udf.GetMd5();
             UnloadWasmUdf(md5);
         }
+    } catch (const std::exception& ex) {
+        ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
+            << "TUdfStoreService: skipping WASM load for md5=" << udf.GetMd5()
+            << " due to invalid manifest: " << ex.what();
+        return;
     } catch (...) {
+        ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
+            << "TUdfStoreService: skipping WASM load for md5=" << udf.GetMd5()
+            << " due to unknown manifest parse error";
+        return;
     }
     PendingWasmLoad.push_back(TPendingUdf{
         .Md5 = udf.GetMd5(),
@@ -636,7 +645,14 @@ void TUdfStoreService::Handle(TEvReadBodyResponse::TPtr& ev) {
             try {
                 const auto manifest = NWasm::ParseManifest(pending.Manifest);
                 LoadedWasmModuleNames[pending.Md5] = manifest.ModuleName;
+            } catch (const std::exception& ex) {
+                ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
+                    << "TUdfStoreService: loaded WASM UDF md5=" << pending.Md5
+                    << " but failed to record module name: " << ex.what();
             } catch (...) {
+                ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
+                    << "TUdfStoreService: loaded WASM UDF md5=" << pending.Md5
+                    << " but failed to record module name due to unknown error";
             }
             ALS_INFO(NKikimrServices::METADATA_PROVIDER)
                 << "TUdfStoreService: WASM UDF '" << pending.Md5

@@ -20,8 +20,8 @@ private:
         ReadModuleChunks,
         ReadLibraryArtifact,
         DeleteArtifactChunks,
-        UpsertModuleArtifact,
         WriteArtifactChunk,
+        UpsertModuleArtifact,
         UpdateMetaReady,
         UpdateMetaFailed,
     };

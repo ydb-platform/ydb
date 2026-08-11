@@ -74,7 +74,7 @@ TPreparedArg PrepareArgFromUnboxed(
                 const TStringBuf string = arg.AsStringRef();
                 prepared.Storage.StringGuard = CopyIntoCompartment(string, compartment);
                 value.Type = EAbiValueType::String;
-                value.Length = static_cast<ui32>(string.size());
+                value.Length = CheckedAbiLength(string.size(), "Wasm UDF string argument");
                 value.Data.String = std::bit_cast<char*>(prepared.Storage.StringGuard.GetCopiedOffset());
                 break;
             }
@@ -87,6 +87,8 @@ TPreparedArg PrepareArgFromUnboxed(
     StoreValue(compartment, offset, value);
     return prepared;
 }
+
+} // namespace
 
 TUnboxedValue ReadResultUnboxed(
     const IValueBuilder* valueBuilder,
@@ -143,8 +145,6 @@ TUnboxedValue ReadResultUnboxed(
 
     return {};
 }
-
-} // namespace
 
 TType* TWasmUdfFunction::BuildYqlType(IFunctionTypeInfoBuilder& builder, EUdfValueType type) {
     switch (type) {

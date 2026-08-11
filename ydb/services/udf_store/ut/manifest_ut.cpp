@@ -124,6 +124,49 @@ Y_UNIT_TEST(ParseObjectsPlainSnapshot) {
     UNIT_ASSERT_VALUES_EQUAL(TString(PlainWasmExport(parsed.Functions[1])), "ctx_snapshot");
 }
 
+Y_UNIT_TEST(SynthesizeNewObjectNameForSecondObject) {
+    const TString manifest = R"({
+        "module_name": "Multi",
+        "objects": [
+            {
+                "name": "Foo",
+                "create_export": "foo_create",
+                "methods": [
+                    {
+                        "name": "FooRun",
+                        "export": "foo_run",
+                        "yql_binding": "plain",
+                        "argument_types": [],
+                        "result_type": {"value": "uint64", "tag": "concrete_type"}
+                    }
+                ]
+            },
+            {
+                "name": "Bar",
+                "create_export": "bar_create",
+                "methods": [
+                    {
+                        "name": "BarRun",
+                        "export": "bar_run",
+                        "yql_binding": "plain",
+                        "argument_types": [],
+                        "result_type": {"value": "uint64", "tag": "concrete_type"}
+                    }
+                ]
+            }
+        ]
+    })";
+
+    const auto parsed = ParseManifest(manifest);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions.size(), 4u);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].Name, "New");
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].ExportName, "foo_create");
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[1].Name, "FooRun");
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[2].Name, "NewBar");
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[2].ExportName, "bar_create");
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[3].Name, "BarRun");
+}
+
 Y_UNIT_TEST(RejectTypeConfigOnPlainFunctions) {
     const TString manifest = R"({
         "module_name": "Bad",

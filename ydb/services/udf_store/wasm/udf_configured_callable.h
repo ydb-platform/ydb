@@ -16,6 +16,8 @@ public:
         const TWasmUdfDescriptor& descriptor,
         TString typeConfigBlob);
 
+    ~TWasmConfiguredCallable() override;
+
 private:
     TWasmConfiguredCallable(
         TWasmCompartmentStatePtr state,
@@ -27,6 +29,11 @@ private:
         const NYql::NUdf::TUnboxedValuePod* args) const override;
 
     void EnsureObject(NYql::NUdf::TStringRef functionNameForErrors) const;
+
+    //! Invokes DestroyExport for Handle_ when the current query compartment
+    //! still matches CompartmentGeneration_. No-op if the compartment is gone
+    //! (generation change / TLS cleared) — guest state dies with the compartment.
+    void DestroyObjectIfAlive() const;
 
     TWasmCompartmentStatePtr State_;
     TWasmUdfDescriptor Descriptor_;

@@ -87,6 +87,8 @@ TPreparedArg PrepareArgFromUnboxed(
     return prepared;
 }
 
+} // namespace
+
 TUnboxedValue ReadResultUnboxed(
     const IValueBuilder* valueBuilder,
     IWebAssemblyCompartment* compartment,
@@ -142,8 +144,6 @@ TUnboxedValue ReadResultUnboxed(
 
     return {};
 }
-
-} // namespace
 
 TType* TWasmUdfFunction::BuildYqlType(IFunctionTypeInfoBuilder& builder, EUdfValueType type) {
     switch (type) {

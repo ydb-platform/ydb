@@ -79,6 +79,58 @@ TWasmConfiguredCallable::TWasmConfiguredCallable(
 {
 }
 
+TWasmConfiguredCallable::~TWasmConfiguredCallable() {
+    try {
+        DestroyObjectIfAlive();
+    } catch (...) {
+        // Best-effort cleanup; never throw from destructor.
+    }
+}
+
+void TWasmConfiguredCallable::DestroyObjectIfAlive() const {
+    const ui64 handle = Handle_;
+    const ui64 generation = CompartmentGeneration_;
+    Handle_ = 0;
+    CompartmentGeneration_ = 0;
+    PinnedBlobOffset_ = 0;
+    PinnedBlobLength_ = 0;
+
+    if (handle == 0 || Descriptor_.DestroyExport.empty()) {
+        return;
+    }
+
+    auto* queryHandle = GetCurrentQueryCompartment();
+    if (!queryHandle || !queryHandle->Compartment
+        || queryHandle->Generation != generation)
+    {
+        // Old compartment is already gone (or TLS not installed): guest
+        // ObjectFramework / malloc state is freed with the compartment.
+        return;
+    }
+
+    auto* compartment = queryHandle->Compartment.get();
+    TCurrentCompartmentGuard compartmentGuard(compartment);
+    TWasmUdfInvocationContext context(compartment);
+    TCurrentInvocationContextGuard invocationGuard(&context);
+
+    TUnversionedValue handleValue = MakeEmptyValue();
+    handleValue.Type = EAbiValueType::Uint64;
+    handleValue.Data.Uint64 = handle;
+    auto handleSlot = MakeEphemeralValue(compartment, handleValue);
+    auto resultSlot = MakeEphemeralValue(compartment, MakeEmptyValue());
+
+    const auto destroyKey = MakeExportKey(State_->ModuleName, Descriptor_.DestroyExport);
+    if (auto* destroyExport = queryHandle->Exports.FindPtr(destroyKey)) {
+        InvokeUdfExport(
+            compartment,
+            *destroyExport,
+            Descriptor_.DestroyExport,
+            std::bit_cast<uintptr_t>(&context),
+            resultSlot.Offset,
+            {handleSlot.Offset});
+    }
+}
+
 void TWasmConfiguredCallable::EnsureObject(TStringRef functionNameForErrors) const {
     auto* queryHandle = GetCurrentQueryCompartment();
     Y_ENSURE(queryHandle && queryHandle->Compartment,
@@ -89,16 +141,15 @@ void TWasmConfiguredCallable::EnsureObject(TStringRef functionNameForErrors) con
         return;
     }
 
+    // Drop the previous guest object if the compartment is still the same
+    // generation (defensive). Across generation changes DestroyObjectIfAlive
+    // is a no-op — the old compartment (and its ObjectFramework registry) is gone.
+    DestroyObjectIfAlive();
+
     auto* compartment = queryHandle->Compartment.get();
     TCurrentCompartmentGuard compartmentGuard(compartment);
     TWasmUdfInvocationContext context(compartment);
     TCurrentInvocationContextGuard invocationGuard(&context);
-
-    if (CompartmentGeneration_ != queryHandle->Generation) {
-        PinnedBlobOffset_ = 0;
-        PinnedBlobLength_ = 0;
-        Handle_ = 0;
-    }
 
     if (PinnedBlobOffset_ == 0 && !ConfigBlob_.empty()) {
         PinnedBlobOffset_ = compartment->AllocateBytes(ConfigBlob_.size());

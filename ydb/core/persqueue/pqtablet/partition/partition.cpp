@@ -285,9 +285,11 @@ TActorId TPartition::ReplyTo(const ui64 destination, const TActorId& replyTo) co
 
 void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo) {
     auto replyToActor = ReplyTo(dst, replyTo);
-    // IsInternal means "compaction / internal consumer reply", not merely "destined to Self".
-    // Timestamp reads use dst==0 and empty replyTo; they must stay non-internal so Handle(TEvError)
-    // can clear ReadingTimestamp. Compaction reads set replyTo to SelfId().
+    // IsInternal means "compaction / internal consumer reply" (same as TEvRead::IsInternal:
+    // !!ReplyTo). Pass the original replyTo override here — not a destination already resolved
+    // via ReplyTo(), which is always non-empty (SelfId / TabletActorId) and would mark every
+    // external error as internal. Timestamp reads use dst==0 and empty replyTo; compaction
+    // sets replyTo to SelfId().
     ReplyPersQueueError(
         replyToActor, ctx, TabletId, TopicName(), Partition,
         TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, !!replyTo
@@ -4065,12 +4067,14 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 SendReadingFinished(user);
             }
         } else if (user != CLIENTID_WITHOUT_CONSUMER) {
-            auto ui = UsersInfoStorage->GetIfExists(user);
-            if (ui && ui->LabeledCounters) {
-                ScheduleDropPartitionLabeledCounters(ui->LabeledCounters->GetGroup());
+            // Consumer may already have been removed by an earlier write cycle
+            // (e.g. ChangePartitionConfig drop + FillReadFromTimestamps ESCI_DROP_READ_RULE).
+            if (auto* ui = UsersInfoStorage->GetIfExists(user)) {
+                if (ui->LabeledCounters) {
+                    ScheduleDropPartitionLabeledCounters(ui->LabeledCounters->GetGroup());
+                }
+                UsersInfoStorage->Remove(user, ctx);
             }
-
-            UsersInfoStorage->Remove(user, ctx);
 
             // Finish all ongoing reads
             std::unordered_set<ui64> readCookies;

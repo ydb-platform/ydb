@@ -18,15 +18,16 @@ items:
     href: distributed-storage.md
   - name: Metadata Distribution Subsystems
     href: metadata-distribution.md
-  - name: Hive
+  - name: LocalDB
     items:
     - name: Persistent uncommitted changes
       href: localdb-uncommitted-txs.md
   - name: Hive
+    href: hive.md
     items:
      - name: Tablet Boot Process
        href: hive-booting.md
-  - name: Configuration V2
+  - name: DataShard
     items:
     - name: Locks and transaction change visibility
       href: datashard-locks-and-change-visibility.md
@@ -39,6 +40,7 @@ items:
   - name: Spilling Service
     href: spilling-service.md
   - name: Testing with load actors
+    href: load-actors-overview.md
     items:
     - name: KqpLoad
       href: load-actors-kqp.md

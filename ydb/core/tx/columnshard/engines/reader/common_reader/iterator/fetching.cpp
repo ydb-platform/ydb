@@ -206,11 +206,13 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                         rawBytes += accessor.GetIndexRawBytes(indexEntityIds, false);
                     }
                 }
-                bool hasSubColumns = false;
-                if (source->GetSourceSchemaOptional()) {
-                    for (auto&& [colId, addr] : fetchProcessor->GetDataAddresses()) {
-                        if (source->GetSourceSchemaOptional()->GetColumnLoaderVerified(colId)->GetAccessorConstructor()->GetType() ==
-                            NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+            }
+            bool hasSubColumns = false;
+            // After ADD COLUMN the portion source schema may not contain the column yet.
+            if (fetchProcessor && source->GetSourceSchemaOptional()) {
+                for (auto&& [colId, addr] : fetchProcessor->GetDataAddresses()) {
+                    if (auto loader = source->GetSourceSchemaOptional()->GetColumnLoaderOptional(colId)) {
+                        if (loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
                             hasSubColumns = true;
                             break;
                         }

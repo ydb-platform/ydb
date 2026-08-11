@@ -1,80 +1,89 @@
 # Working with SelfHeal
 
-While a clusters are running, entire nodes or individual block devices that {{ ydb-short-name }} runs on can fail.
+During cluster operation, entire nodes or individual block devices on which {{ ydb-short-name }} runs may fail.
 
-SelfHeal ensures a cluster's continuous performance and fault tolerance if malfunctioning nodes or devices cannot be repaired quickly.
+SelfHeal is used to maintain cluster availability and fault tolerance if failed nodes or devices cannot be quickly restored.
 
-SelfHeal can:
+SelfHeal allows you to:
 
-* Detect faulty system elements.
-* Transfer faulty elements carefully without data loss and disintegration of storage groups.
+* Detect faulty system components.
+* Move faulty components in a gentle manner without data loss or disbanding storage groups.
 
 SelfHeal is enabled by default.
 
-{{ ydb-short-name }} component responsible for SelfHeal is called "Sentinel".
+The {{ ydb-short-name }} component responsible for SelfHeal is called Sentinel.
 
 ## Enabling and disabling SelfHeal {#on-off}
 
-You can enable and disable SelfHeal using [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md).
+You can enable and disable SelfHeal using the [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md) utility.
 
 To enable SelfHeal, run the command:
+
 
 ```bash
 ydb-dstool -e <bs_endpoint> cluster set --enable-self-heal
 ```
 
+
+`<bs_endpoint>` is the endpoint of any [storage node](../../concepts/glossary.md#storage-node) in the cluster.
+
 To disable SelfHeal, run the command:
+
 
 ```bash
 ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 ```
 
+
 ## SelfHeal settings {#settings}
 
 You can configure SelfHeal in **Viewer** → **Cluster Management System** → **CmsConfigItems**.
 
-To create the initial settings, click **Create**. If you want to update the current settings, click ![pencil](../../_assets/pencil.svg).
+To create settings for the first time, click **Create**. If you need to change existing settings, click the ![pencil](../../_assets/pencil.svg) button.
 
-You can use the following settings:
+The following settings are available:
 
 | **Parameter** | **Description** |
-|:---------------------------------------- |:------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| :--- | :--- |
 | **Status** | Enabling and disabling SelfHeal in CMS. |
-| **Dry run** | Enables/disables the mode in which the CMS doesn't change the BSC setting. |
-| **Config update interval (sec.)** | BSC configuration update interval. |
-| **Retry interval (sec.)** | Interval of configuration update attempts. |
-| **State update interval (sec.)** | PDisk state update interval. |
-| **Timeout (sec.)** | PDisk state update timeout. |
-| **Change status retries** | Number of retries to change the PDisk status for BSC (`ACTIVE`, `FAULTY`, `BROKEN`, and so on). |
-| **Change status retry interval (sec.)** | Delay between retries to update the PDisk status in BSC. CMS monitors the status of the disk with the interval **State update inverval**. If the disk remains in one **Status update interval** state during several cycles, the CMS changes its status to BSC.<br/>Next are the settings for the number of update cycles after which the CMS changes the disk status. If the disk state is `Normal`, the disk status changes to `ACTIVE`. In other states, the disk switches to `FAULTY`.<br/>The `0` value disables status changes for the state (by default, this is set for `Unknown`).<br/>For example, with the default settings, if the CMS detects the `Initial` disk state for five `Status update interval` cycles which are 60 seconds each, the disk status changes to `FAULTY`. |
-| **Default state limit** | For states with no setting specified, this value can be used by default. This value is also used for unknown PDisk states that don't have any settings. It's used if no value is set for states such as `Initial`, `InitialFormatRead`, `InitialSysLogRead`, `InitialCommonLogRead`, and `Normal`. |
-| **Initial** | PDisk starts initializing. Transition to `FAULTY`. |
-| **InitialFormatRead** | PDisk is reading its format. Transition to `FAULTY`. |
-| **InitialFormatReadError** | PDisk received an error when reading its format. Transition to `FAULTY`. |
-| **InitialSysLogRead** | PDisk is reading the system log. Transition to `FAULTY`. |
-| **InitialSysLogReadError** | PDisk received an error when reading the system log. Transition to `FAULTY`. |
-| **InitialSysLogParseError** | PDisk received an error when parsing and checking the consistency of the system log. Transition to `FAULTY`. |
-| **InitialCommonLogRead** | PDisk is reading the common VDisk log. Transition to `FAULTY`. |
-| **InitialCommonLogReadError** | PDisk received an error when reading the common VDisk log. Transition to `FAULTY`. |
-| **InitialCommonLogParseError** | PDisk received an error when parsing and checking the consistency of the common log. Transition to `FAULTY`. |
-| **CommonLoggerInitError** | PDisk received an error when initializing internal structures to be logged to the common log. Transition to `FAULTY`. |
-| **Normal** | PDisk completed initialization and is running normally. Transition to `ACTIVE` will occur after a specified number of cycles (for example, if the disk is `Normal` for 5 minutes, it switches to `ACTIVE`). |
-| **OpenFileError** | PDisk received an error when opening a disk file. Transition to `FAULTY`. |
-| **Missing** | The node responds, but this PDisk is missing from its list. Transition to `FAULTY`. |
-| **Timeout** | The node didn't respond within the specified timeout. Transition to `FAULTY`. |
-| **NodeDisconnected** | The node has disconnected. Transition to `FAULTY`. |
-| **Stopped** | PDisk has been stopped. Transition to `FAULTY`. |
-| **Unknown** | Unexpected response, for example, `TEvUndelivered` to the state request. Transition to `FAULTY`. |
+| **Dry run** | Enabling and disabling the mode in which CMS does not change the BSC setting. |
+| **Config update interval (sec.)** | Period of configuration updates from BSC. |
+| **Retry interval (sec.)** | Period of retries for configuration updates. |
+| **State update interval (sec.)** | Period of PDisk state updates. |
+| **Timeout (sec.)** | Timeout for PDisk state updates. |
+| **Change status retries** | Number of retries to change the PDisk status in BSC (`ACTIVE`, `FAULTY`, `BROKEN`, etc.). |
+| **Change status retry interval (sec.)** | Delay between attempts to change the PDisk status in BSC. CMS monitors the disk state at an interval of **State update interval**. If the disk remains in one state for several **Status update interval** cycles, CMS changes its status in BSC.<br/>Next are the settings for the number of update cycles after which CMS will change the disk status. If the disk state is `Normal`, the disk is moved to status `ACTIVE`; in other states, the disk is moved to status `FAULTY`.<br/>The value `0` disables status change for the state (as implemented for `Unknown` by default).<br/>For example, with default settings, if CMS observes disk state `Initial` for 5 `Status update interval` cycles of 60 seconds each, the disk status will be changed to `FAULTY`. |
+| **Default state limit** | For states for which no setting is specified, this "default" value can be used. For unknown PDisk states for which there is no setting, this value is also used. This value is used if the value is not set for states `Initial`, `InitialFormatRead`, `InitialSysLogRead`, `InitialCommonLogRead`, `Normal`. |
+| **Initial** | PDisk starts initialization. Transitions to `FAULTY`. |
+| **InitialFormatRead** | PDisk reads its format record. Transitions to `FAULTY`. |
+| **InitialFormatReadError** | PDisk received an error while reading its format record. Transitions to `FAULTY`. |
+| **InitialSysLogRead** | PDisk reads the system log. Transitions to `FAULTY`. |
+| **InitialSysLogReadError** | PDisk received an error while reading the system log. Transitions to `FAULTY`. |
+| **InitialSysLogParseError** | PDisk received an error while parsing or checking the consistency of the system log. Transitions to `FAULTY`. |
+| **InitialCommonLogRead** | PDisk reads the common log of VDisks. Transitions to `FAULTY`. |
+| **InitialCommonLogReadError** | PDisk received an error while reading the common log of VDisks. Transitions to `FAULTY`. |
+| **InitialCommonLogParseError** | PDisk received an error while parsing or checking the consistency of the common log. Transitions to `FAULTY`. |
+| **CommonLoggerInitError** | PDisk received an error while initializing internal structures intended for writing to the common log. Transitions to `FAULTY`. |
+| **Normal** | PDisk has completed initialization and is operating normally. Transition to `ACTIVE` will occur after the specified number of cycles (for example, if `Normal` persists for 5 minutes, the disk transitions to state `ACTIVE`). |
+| **OpenFileError** | PDisk received an error while opening the disk file. Transitions to `FAULTY`. |
+| **Missing** | The node responds, but this PDisk is not in its list. Transitions to `FAULTY`. |
+| **Timeout** | The node did not respond within the allotted timeout. Transitions to `FAULTY`. |
+| **NodeDisconnected** | Node disconnection. Transitions to `FAULTY`. |
+| **Stopped** | PDisk is stopped. Transitions to `FAULTY`. |
+| **Unknown** | Unexpected response, for example, response `TEvUndelivered` to a state request. Transitions to `FAULTY`. |
 
 ## Working with donor disks {#disks}
 
-The donor disk is the previous VDisk after the data transfer, which continues to store its data and only responds to read requests from the new VDisk. When data is transfered with donor disks enabled, previous VDisks continue to function until the data is fully moved to the new disks. To prevent data loss when moving a VDisk, enable donor disks:
+A donor disk is a previous VDisk after data migration that continues to store its data and only responds to read requests from the new VDisk. When migrating with donor disks enabled, previous VDisks continue to function until the data is fully migrated to new disks. To prevent data loss during VDisk migration, enable the use of donor disks:
+
 
 ```bash
 ydb-dstool -e <bs_endpoint> cluster set --enable-donor-mode
 ```
 
-To disable donor disks, run the command:
+
+To disable donor disks, enter the command:
+
 
 ```bash
 ydb-dstool -e <bs_endpoint> cluster set --disable-donor-mode

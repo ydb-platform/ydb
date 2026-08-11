@@ -113,11 +113,11 @@ TVector<DependencyPairType> ComputeDependentVariables(TIntrusivePtr<IOperator> o
             TVector<DependencyPairType> allOpDependencies;
 
             for (const auto & subplanVar : subplanIUs) {
-                auto & subplanEntry = props->Subplans.PlanMap.at(subplanVar);
+                const auto& subplanEntry = props->Subplans.At(subplanVar);
                 auto opDependencies = ComputeDependentVariables(CastOperator<IOperator>(subplanEntry.Plan), props);
                 if (opDependencies.size()) {
-                    for (const auto & [iu, type] : opDependencies) {
-                        subplanEntry.DependentIUs.push_back(iu);
+                    for (const auto& dependency : opDependencies) {
+                        props->Subplans.AddDependentIU(subplanVar, dependency.first);
                     }
                     AddUnique<DependencyPairType>(opDependencies, allOpDependencies);
                 }
@@ -211,16 +211,17 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
             replaceMap[sublink.Get()] = member;
             // clang-format on
             auto subplan = ExprNodeToOperator(TKqpSublinkBase(sublink).Subquery().Ptr());
-            TSubplanEntry entry;
+            ESubplanType subplanType;
+            TVector<TInfoUnit> tuple;
             if (TKqpExprSublink::Match(sublink.Get())) {
-                entry = TSubplanEntry(subplan, {}, ESubplanType::EXPR, sublinkVar);
+                subplanType = ESubplanType::EXPR;
             } else if (TKqpExistsSublink::Match(sublink.Get())) {
-                entry = TSubplanEntry(subplan, {}, ESubplanType::EXISTS, sublinkVar);
+                subplanType = ESubplanType::EXISTS;
             } else /* In sublink */ {
                 auto lambda = sublink->Child(TKqpInSublink::idx_InLambda);
 
                 Y_ENSURE(lambda->IsLambda());
-                TVector<TInfoUnit> tuple;
+                subplanType = ESubplanType::IN_SUBPLAN;
 
                 auto lambdaBody = lambda->Child(1);
                 //FIXME: Only YQL syntax is supported in this case, as we'll need to process the postgresql callable for equality
@@ -246,9 +247,8 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
                 //    Y_ENSURE(false, "Unsupported callable in IN sublink");
                 //}
 
-                entry = TSubplanEntry(subplan, tuple, ESubplanType::IN_SUBPLAN, sublinkVar);
             }
-            PlanProps.Subplans.Add(sublinkVar, entry);
+            PlanProps.Subplans.Add(sublinkVar, subplan, subplanType, std::move(tuple));
             TOptimizeExprSettings settings(&TypeCtx);
             RemapExpr(newLambdaBody, newLambdaBody, replaceMap, Ctx, settings);
 

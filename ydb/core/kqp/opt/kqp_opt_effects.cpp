@@ -233,9 +233,36 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
     auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
         .Output(dqUnion.Output())
         .Done();
-    auto stageInput = Build<TDqStage>(ctx, node.Pos())
+
+    // Stage 1: Transform stage (without sink)
+    auto transformOutput = Build<TDqOutput>(ctx, node.Pos())
+        .Done();
+    auto transformStage = Build<TDqStage>(ctx, node.Pos())
         .Inputs()
             .Add(mapCn)
+            .Build()
+        .Program()
+            .Args({rowArgument})
+            .Body<TCoToFlow>()
+                .Input(rowArgument)
+                .Build()
+            .Build()
+        .Outputs<TDqStageOutputsList>()
+            .Add(transformOutput)
+            .Build()
+        .Settings().Build()
+        .Done();
+
+    // Stage 2: Sink stage (separate stage for WriteActor)
+    auto sinkMapCn = Build<TDqCnMap>(ctx, node.Pos())
+        .Output<TDqOutput>()
+            .Stage(transformStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+    auto sinkStage = Build<TDqStage>(ctx, node.Pos())
+        .Inputs()
+            .Add(sinkMapCn)
             .Build()
         .Program()
             .Args({rowArgument})
@@ -250,7 +277,7 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
         .Done();
 
     effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-        .Stage(stageInput.Ptr())
+        .Stage(sinkStage.Ptr())
         .SinkIndex().Build("0")
         .Done();
 

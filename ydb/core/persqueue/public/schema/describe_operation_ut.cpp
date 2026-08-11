@@ -12,6 +12,7 @@
 
 #include <util/thread/pool.h>
 
+#include <memory>
 #include <optional>
 
 namespace NKikimr::NPQ::NSchema {
@@ -60,14 +61,45 @@ std::unique_ptr<TSimulatedServer> CreateSimulatedServer() {
     return out;
 }
 
-void EnableScheduleForRootAndChildren(NActors::TTestActorRuntime& runtime, TActorId& rootActorId) {
-    runtime.SetRegistrationObserverFunc(
-        [&](TTestActorRuntimeBase& rt, const TActorId& parentId, const TActorId& actorId) {
-            if (actorId == rootActorId || parentId == rootActorId) {
-                rt.EnableScheduleForActor(actorId);
-            }
-        });
-}
+class TEnableScheduleForRootGuard {
+public:
+    explicit TEnableScheduleForRootGuard(NActors::TTestActorRuntime& runtime)
+        : Runtime(runtime)
+        , RootActorId(std::make_shared<TActorId>())
+    {
+        PrevObserver = Runtime.SetRegistrationObserverFunc(
+            [rootActorId = RootActorId](
+                TTestActorRuntimeBase& rt,
+                const TActorId& parentId,
+                const TActorId& actorId)
+            {
+                if (actorId == *rootActorId || parentId == *rootActorId) {
+                    rt.EnableScheduleForActor(actorId);
+                }
+            });
+    }
+
+    ~TEnableScheduleForRootGuard() {
+        Runtime.SetRegistrationObserverFunc(std::move(PrevObserver));
+    }
+
+    TEnableScheduleForRootGuard(const TEnableScheduleForRootGuard&) = delete;
+    TEnableScheduleForRootGuard& operator=(const TEnableScheduleForRootGuard&) = delete;
+
+    void SetRoot(const TActorId& actorId) {
+        *RootActorId = actorId;
+        Runtime.EnableScheduleForActor(actorId, true);
+    }
+
+    const TActorId& GetRoot() const {
+        return *RootActorId;
+    }
+
+private:
+    NActors::TTestActorRuntime& Runtime;
+    std::shared_ptr<TActorId> RootActorId;
+    TTestActorRuntimeBase::TRegistrationObserver PrevObserver;
+};
 
 void CreateTopic(NActors::TTestActorRuntime& runtime, const TString& path, ui32 partitions) {
     AssertStatus(DoCreate(runtime, MakeCreateTopicRequest(path, partitions)), Ydb::StatusIds::SUCCESS);
@@ -134,11 +166,9 @@ THolder<TEvDescribeOperationResponse> RunDescribeOperation(
     TDuration waitTimeout = TDuration::Seconds(30))
 {
     const auto edge = runtime.AllocateEdgeActor();
-    TActorId rootActorId;
-    EnableScheduleForRootAndChildren(runtime, rootActorId);
-    rootActorId = runtime.Register(CreateDescribeOperationActor(
-        edge, std::move(settings), std::move(strategy)));
-    runtime.EnableScheduleForActor(rootActorId, true);
+    TEnableScheduleForRootGuard schedule(runtime);
+    schedule.SetRoot(runtime.Register(CreateDescribeOperationActor(
+        edge, std::move(settings), std::move(strategy))));
     runtime.DispatchEvents();
     auto handle = runtime.GrabEdgeEvent<TEvDescribeOperationResponse>(edge, waitTimeout);
     UNIT_ASSERT(handle);
@@ -387,13 +417,11 @@ Y_UNIT_TEST(TimesOutWhenLocationStuck) {
     auto dropObserver = DropLocationForwards(runtime);
 
     const auto edge = runtime.AllocateEdgeActor();
-    TActorId rootActorId;
-    EnableScheduleForRootAndChildren(runtime, rootActorId);
-    rootActorId = runtime.Register(CreateDescribeOperationActor(
+    TEnableScheduleForRootGuard schedule(runtime);
+    schedule.SetRoot(runtime.Register(CreateDescribeOperationActor(
         edge,
         MakeSettings(path, /*includeLocation=*/true),
-        std::make_unique<TTestDescribeStrategy>()));
-    runtime.EnableScheduleForActor(rootActorId, true);
+        std::make_unique<TTestDescribeStrategy>())));
 
     runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
     runtime.AdvanceCurrentTime(TDuration::Seconds(31));
@@ -414,16 +442,14 @@ Y_UNIT_TEST(PoisonRepliesCancelled) {
     auto dropObserver = DropLocationForwards(runtime);
 
     const auto edge = runtime.AllocateEdgeActor();
-    TActorId rootActorId;
-    EnableScheduleForRootAndChildren(runtime, rootActorId);
-    rootActorId = runtime.Register(CreateDescribeOperationActor(
+    TEnableScheduleForRootGuard schedule(runtime);
+    schedule.SetRoot(runtime.Register(CreateDescribeOperationActor(
         edge,
         MakeSettings(path, /*includeLocation=*/true),
-        std::make_unique<TTestDescribeStrategy>()));
-    runtime.EnableScheduleForActor(rootActorId, true);
+        std::make_unique<TTestDescribeStrategy>())));
 
     runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
-    runtime.Send(new IEventHandle(rootActorId, edge, new NActors::TEvents::TEvPoison()));
+    runtime.Send(new IEventHandle(schedule.GetRoot(), edge, new NActors::TEvents::TEvPoison()));
 
     auto handle = runtime.GrabEdgeEvent<TEvDescribeOperationResponse>(edge, TDuration::Seconds(5));
     UNIT_ASSERT(handle);

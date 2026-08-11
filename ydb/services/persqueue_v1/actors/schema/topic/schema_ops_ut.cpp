@@ -14,6 +14,8 @@
 
 #include <util/thread/pool.h>
 
+#include <memory>
+
 namespace NKikimr::NGRpcProxy::V1::NTopic {
 
 using namespace NYdb::NTopic::NTests;
@@ -87,14 +89,45 @@ std::shared_ptr<TResultHolder<TResponse>> DoActorRequest(
     return result;
 }
 
-void EnableScheduleForRootAndChildren(NActors::TTestActorRuntime& runtime, TActorId& rootActorId) {
-    runtime.SetRegistrationObserverFunc(
-        [&](TTestActorRuntimeBase& rt, const TActorId& parentId, const TActorId& actorId) {
-            if (actorId == rootActorId || parentId == rootActorId) {
-                rt.EnableScheduleForActor(actorId);
-            }
-        });
-}
+class TEnableScheduleForRootGuard {
+public:
+    explicit TEnableScheduleForRootGuard(NActors::TTestActorRuntime& runtime)
+        : Runtime(runtime)
+        , RootActorId(std::make_shared<TActorId>())
+    {
+        PrevObserver = Runtime.SetRegistrationObserverFunc(
+            [rootActorId = RootActorId](
+                TTestActorRuntimeBase& rt,
+                const TActorId& parentId,
+                const TActorId& actorId)
+            {
+                if (actorId == *rootActorId || parentId == *rootActorId) {
+                    rt.EnableScheduleForActor(actorId);
+                }
+            });
+    }
+
+    ~TEnableScheduleForRootGuard() {
+        Runtime.SetRegistrationObserverFunc(std::move(PrevObserver));
+    }
+
+    TEnableScheduleForRootGuard(const TEnableScheduleForRootGuard&) = delete;
+    TEnableScheduleForRootGuard& operator=(const TEnableScheduleForRootGuard&) = delete;
+
+    void SetRoot(const TActorId& actorId) {
+        *RootActorId = actorId;
+        Runtime.EnableScheduleForActor(actorId, true);
+    }
+
+    const TActorId& GetRoot() const {
+        return *RootActorId;
+    }
+
+private:
+    NActors::TTestActorRuntime& Runtime;
+    std::shared_ptr<TActorId> RootActorId;
+    TTestActorRuntimeBase::TRegistrationObserver PrevObserver;
+};
 
 template <typename TResponse>
 void AssertStatus(
@@ -137,10 +170,8 @@ THolder<TEvPQProxy::TEvPartitionLocationResponse> DoPartitionsLocationRequest(
     TDuration waitTimeout = TDuration::Seconds(30))
 {
     const auto edge = runtime.AllocateEdgeActor();
-    TActorId rootActorId;
-    EnableScheduleForRootAndChildren(runtime, rootActorId);
-    rootActorId = runtime.Register(CreatePartitionsLocationActor(edge, request));
-    runtime.EnableScheduleForActor(rootActorId, true);
+    TEnableScheduleForRootGuard schedule(runtime);
+    schedule.SetRoot(runtime.Register(CreatePartitionsLocationActor(edge, request)));
     runtime.DispatchEvents();
     auto handle = runtime.GrabEdgeEvent<TEvPQProxy::TEvPartitionLocationResponse>(edge, waitTimeout);
     UNIT_ASSERT(handle);
@@ -357,10 +388,8 @@ Y_UNIT_TEST(DescribePartitionTimesOutWhenLocationStuck) {
     auto* ctx = new TRequestCtx<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
         request, path, "/Root", result, edgeActor);
 
-    TActorId grpcActorId;
-    EnableScheduleForRootAndChildren(runtime, grpcActorId);
-    grpcActorId = runtime.Register(CreateDescribePartitionActor(ctx));
-    runtime.EnableScheduleForActor(grpcActorId, true);
+    TEnableScheduleForRootGuard schedule(runtime);
+    schedule.SetRoot(runtime.Register(CreateDescribePartitionActor(ctx)));
 
     runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
     runtime.AdvanceCurrentTime(TDuration::Seconds(31));
@@ -600,11 +629,9 @@ Y_UNIT_TEST(PartitionsLocationTimesOutWhenStuck) {
         });
 
     const auto edge = runtime.AllocateEdgeActor();
-    TActorId rootActorId;
-    EnableScheduleForRootAndChildren(runtime, rootActorId);
-    rootActorId = runtime.Register(CreatePartitionsLocationActor(
-        edge, TGetPartitionsLocationRequest{path, "/Root", "", {0}}));
-    runtime.EnableScheduleForActor(rootActorId, true);
+    TEnableScheduleForRootGuard schedule(runtime);
+    schedule.SetRoot(runtime.Register(CreatePartitionsLocationActor(
+        edge, TGetPartitionsLocationRequest{path, "/Root", "", {0}})));
 
     runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
     runtime.AdvanceCurrentTime(TDuration::Seconds(31));

@@ -1,6 +1,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/library/aws_init/aws.h>
@@ -374,6 +375,21 @@ Y_UNIT_TEST(ShouldFailOnOutboundKey) {
     UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), EmptyTableState);
 }
 
+Y_UNIT_TEST(ShouldFailOnWrongOrderedCsv) {
+    TTestEnv env;
+    auto [shards, tableId] = env.CreateUtf8Table();
+    const ui64 shardId = shards[0];
+    const auto desc = env.TableDescription(shardId, tableId);
+
+    // Direct part import requires strictly ascending keys.
+    env.StartS3("\"a2\",\"value2\"\n\"a1\",\"value1\"\n");
+
+    const auto result = env.ProposeAndPlanRestore(shardId, tableId, desc);
+    UNIT_ASSERT(!result.GetSuccess());
+    UNIT_ASSERT(result.GetExplain().Contains("strictly ascending"));
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), EmptyTableState);
+}
+
 Y_UNIT_TEST(CancelUponDirectWriteFinish) {
     TTestEnv env;
     auto [shards, tableId] = env.CreateUtf8Table();
@@ -382,14 +398,7 @@ Y_UNIT_TEST(CancelUponDirectWriteFinish) {
 
     env.StartS3(MakeCsv(1));
 
-    THolder<IEventHandle> delayed;
-    auto prev = env.Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-        if (ev->GetTypeRewrite() == TEvDataShard::TEvS3DirectWriteFinish::EventType) {
-            delayed.Reset(ev.Release());
-            return TTestActorRuntime::EEventAction::DROP;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    });
+    TBlockEvents<TEvDataShard::TEvS3DirectWriteFinish> blockedFinish(env.Runtime);
 
     const ui64 txId = env.AllocateTxId();
     const ui64 schemeshardId = tableId.PathId.OwnerId;
@@ -421,14 +430,9 @@ Y_UNIT_TEST(CancelUponDirectWriteFinish) {
         });
     }
 
-    if (!delayed) {
-        TDispatchOptions opts;
-        opts.FinalEvents.emplace_back([&delayed](IEventHandle&) {
-            return bool(delayed);
-        });
-        env.Runtime.DispatchEvents(opts);
-    }
-    env.Runtime.SetObserverFunc(prev);
+    env.Runtime.WaitFor("direct write finish", [&] {
+        return !blockedFinish.empty();
+    });
 
     env.Runtime.SendToPipe(
         shardId,
@@ -437,8 +441,8 @@ Y_UNIT_TEST(CancelUponDirectWriteFinish) {
         0,
         GetPipeConfigWithRetries());
 
-    // Drop the delayed finish so the part is never attached.
-    delayed.Destroy();
+    // Drop the blocked finish so the part is never attached.
+    blockedFinish.Stop();
 
     auto resultEv = env.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvProposeTransactionResult>(env.Sender);
     UNIT_ASSERT(resultEv);
@@ -448,6 +452,89 @@ Y_UNIT_TEST(CancelUponDirectWriteFinish) {
         resultEv->Get()->Record.ShortDebugString());
 
     UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), EmptyTableState);
+}
+
+Y_UNIT_TEST(WriteBlockedDuringRestore) {
+    TTestEnv env;
+    auto [shards, tableId] = env.CreateUint32Table();
+    const ui64 shardId = shards[0];
+    const auto desc = env.TableDescription(shardId, tableId);
+
+    env.StartS3(MakeCsv(1, ""));
+
+    const ui64 txId = env.AllocateTxId();
+    TMaybe<NKikimrTxDataShard::TShardOpResult> opResult;
+    auto schemaChanged = env.Runtime.AddObserver<TEvDataShard::TEvSchemaChanged>(
+        [&](TEvDataShard::TEvSchemaChanged::TPtr& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTxId() == txId && record.HasOpResult()) {
+                opResult = record.GetOpResult();
+            }
+        });
+    TBlockEvents<TEvDataShard::TEvS3DirectWriteFinish> blockedFinish(env.Runtime);
+
+    const ui64 schemeshardId = tableId.PathId.OwnerId;
+    const auto body = env.BuildRestoreBody(tableId, desc, 0, 128, txId);
+
+    env.Runtime.SendToPipe(
+        shardId,
+        env.Sender,
+        new TEvDataShard::TEvProposeTransaction(
+            NKikimrTxDataShard::TX_KIND_SCHEME,
+            schemeshardId,
+            env.Sender,
+            txId,
+            body,
+            NKikimrSubDomains::TProcessingParams()),
+        0,
+        GetPipeConfigWithRetries());
+
+    {
+        auto proposeEv = env.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvProposeTransactionResult>(env.Sender);
+        UNIT_ASSERT(proposeEv->Get()->IsPrepared());
+        const auto& prepare = proposeEv->Get()->Record;
+        UNIT_ASSERT(prepare.DomainCoordinatorsSize() > 0);
+        SendProposeToCoordinator(env.Runtime, env.Sender, {shardId}, {
+            .TxId = txId,
+            .Coordinator = prepare.GetDomainCoordinators(0),
+            .MinStep = prepare.GetMinStep(),
+            .MaxStep = prepare.GetMaxStep(),
+        });
+    }
+
+    env.Runtime.WaitFor("direct write finish", [&] {
+        return !blockedFinish.empty();
+    });
+
+    // Prepared writes cannot be planned while a non-readonly schema op is in flight.
+    const ui32 writeKey = 42;
+    const TString writeValue = "blocked";
+    const std::vector<TCell> cells = {
+        TCell::Make(writeKey),
+        TCell(writeValue.data(), writeValue.size()),
+    };
+    const auto writeResult = Upsert(
+        env.Runtime,
+        env.Sender,
+        shardId,
+        tableId,
+        env.AllocateTxId(),
+        NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+        {1, 2},
+        cells,
+        NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
+    UNIT_ASSERT_VALUES_EQUAL(writeResult.GetIssues().size(), 1);
+    UNIT_ASSERT(writeResult.GetIssues(0).message().Contains("blocked shard"));
+
+    blockedFinish.Unblock().Stop();
+    env.Runtime.WaitFor("restore complete", [&] {
+        return opResult.Defined();
+    });
+    schemaChanged.Remove();
+
+    UNIT_ASSERT(opResult);
+    UNIT_ASSERT(opResult->GetSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), ExpectedUint32TableState(1));
 }
 
 } // Y_UNIT_TEST_SUITE(DataShardDirectRestore)

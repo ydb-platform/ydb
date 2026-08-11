@@ -11,11 +11,11 @@ from ydb.tools.ydb_bench.lib.common import (
     BenchmarkError,
     BenchmarkInterrupted,
     atomic_copy_file,
-    atomic_write_json,
     extract_executable,
 )
-from ydb.tools.ydb_bench.lib.config import config_schema, load_config
-from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
+from ydb.tools.ydb_bench.lib.config import build_run_plan, config_schema, load_config
+from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, ResultStore
+from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, topology_record
 
 
 RESOURCE_NAME = "actors_core_ut_fat"
@@ -95,6 +95,7 @@ def _run(arguments, resource_loader, tool_revision):
         perf_enabled=arguments.perf,
         perf_frequency=arguments.perf_frequency,
     )
+    plan = build_run_plan(loaded_config)
     output_directory = _prepare_output(arguments.output)
     if arguments.work_dir is not None:
         arguments.work_dir.mkdir(parents=True, exist_ok=True)
@@ -103,14 +104,17 @@ def _run(arguments, resource_loader, tool_revision):
         work_dir_parent = None
 
     manifest = {
-        "schema_version": 1,
+        "schema_version": SCHEMA_VERSION,
         "status": "running",
+        "state": "running",
         "started_at": _utc_now(),
         "tool_revision": tool_revision,
         "config": {
-            "path": str(arguments.config),
+            "path": str(loaded_config.path),
             "sha256": loaded_config.sha256,
+            "snapshot": loaded_config.path.read_text(encoding="utf-8"),
         },
+        "topology": topology_record(discover_topology()),
         "profiler": (
             {
                 "type": "perf-record",
@@ -122,9 +126,23 @@ def _run(arguments, resource_loader, tool_revision):
             else None
         ),
         "runs": [],
+        "steps": [
+            {
+                "id": step.id,
+                "benchmark": step.benchmark,
+                "profile": step.profile,
+                "affinity": step.affinity,
+                "repeat": step.repeat,
+                "state": "pending",
+                "artifacts": [],
+            }
+            for step in plan.steps
+        ],
     }
     manifest_path = output_directory / "run.json"
-    atomic_write_json(manifest_path, manifest)
+    store = ResultStore(manifest_path, manifest)
+    manifest = store.manifest
+    store.write()
 
     try:
         with tempfile.TemporaryDirectory(prefix="ydb-bench-", dir=work_dir_parent) as temporary_directory:
@@ -139,7 +157,7 @@ def _run(arguments, resource_loader, tool_revision):
                 profiler_binary_path = output_directory / "profiler" / binary.path.name
                 atomic_copy_file(binary.path, profiler_binary_path, mode=0o755)
                 manifest["binary"]["artifact"] = str(profiler_binary_path.relative_to(output_directory))
-            atomic_write_json(manifest_path, manifest)
+            store.write()
 
             for configuration in loaded_config.runs:
                 relative_directory = Path(configuration.benchmark.name) / configuration.profile
@@ -150,11 +168,26 @@ def _run(arguments, resource_loader, tool_revision):
                     "profile": configuration.profile,
                     "status": "running",
                     "directory": str(relative_directory),
-                    "manifest": str(relative_directory / "run.json"),
                 }
                 manifest["runs"].append(run_record)
-                atomic_write_json(manifest_path, manifest)
+                store.write()
                 try:
+                    def on_event(event):
+                        step_id = next(
+                            step.id for step in plan.steps
+                            if step.benchmark == configuration.benchmark.name
+                            and step.profile == configuration.profile
+                            and step.affinity == event["affinity"]
+                            and step.repeat == event["repeat"]
+                        )
+                        if event["type"] == "step-started":
+                            store.transition_step(step_id, "running")
+                        elif event["type"] == "step-artifacts":
+                            store.add_artifacts(step_id, event["artifacts"])
+                        elif event["type"] == "step-finished":
+                            store.transition_step(step_id, event["state"], **event.get("fields", {}))
+                        else:
+                            raise BenchmarkError("unknown benchmark step event: {}".format(event["type"]))
                     profile_manifest = run_actors_core(
                         binary,
                         configuration,
@@ -162,6 +195,7 @@ def _run(arguments, resource_loader, tool_revision):
                         tool_revision=tool_revision,
                         work_dir_hint=temporary_directory,
                         profiler_binary_path=profiler_binary_path,
+                        event_sink=on_event,
                     )
                 except BenchmarkInterrupted as error:
                     run_record["status"] = "interrupted"
@@ -172,24 +206,28 @@ def _run(arguments, resource_loader, tool_revision):
                     run_record["error"] = str(error)
                     raise
                 run_record["status"] = "completed"
+                run_record["manifest"] = str(relative_directory / "run.json")
                 run_record["summary"] = str(relative_directory / profile_manifest["summary"])
-                atomic_write_json(manifest_path, manifest)
+                store.write()
     except BenchmarkInterrupted as error:
         manifest["status"] = "interrupted"
+        manifest["state"] = "cancelled"
         manifest["finished_at"] = _utc_now()
         manifest["error"] = str(error)
-        atomic_write_json(manifest_path, manifest)
+        store.write()
         raise
     except BenchmarkError as error:
         manifest["status"] = "failed"
+        manifest["state"] = "failed"
         manifest["finished_at"] = _utc_now()
         manifest["error"] = str(error)
-        atomic_write_json(manifest_path, manifest)
+        store.write()
         raise
 
     manifest["status"] = "completed"
+    manifest["state"] = "passed"
     manifest["finished_at"] = _utc_now()
-    atomic_write_json(manifest_path, manifest)
+    store.write()
 
     print("completed {} benchmark profiles: {}".format(len(loaded_config.runs), output_directory))
     for record in manifest["runs"]:

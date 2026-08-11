@@ -7,9 +7,9 @@ from ydb.tools.ydb_bench.lib.common import (
     BenchmarkError,
     BenchmarkInterrupted,
     atomic_copy_file,
-    atomic_write_json,
     atomic_write_text,
 )
+from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, write_manifest
 from ydb.tools.ydb_bench.lib.runner import run_command
 from ydb.tools.ydb_bench.lib.system_info import collect_system_info
 from ydb.tools.ydb_bench.lib.topology import discover_topology, plan_affinity, topology_record
@@ -136,6 +136,7 @@ def run_actors_core(
     tool_revision,
     work_dir_hint=None,
     profiler_binary_path=None,
+    event_sink=None,
 ):
     output_directory = Path(output_directory)
     benchmark = configuration.benchmark
@@ -159,10 +160,11 @@ def run_actors_core(
         binary_record["artifact"] = os.path.relpath(stored_binary, output_directory)
 
     manifest = {
-        "schema_version": 3,
+        "schema_version": SCHEMA_VERSION,
         "benchmark": benchmark.name,
         "profile": configuration.profile,
         "status": "running",
+        "state": "running",
         "started_at": _utc_now(),
         "tool_revision": tool_revision,
         "binary": binary_record,
@@ -201,16 +203,24 @@ def run_actors_core(
         "runs": [],
     }
     manifest_path = output_directory / "run.json"
-    atomic_write_json(manifest_path, manifest)
+    write_manifest(manifest_path, manifest)
 
     if not any(placement.supported for placement in placements):
+        if event_sink is not None:
+            for placement in placements:
+                for index in range(1, configuration.repetitions + 1):
+                    event_sink({
+                        "type": "step-finished", "affinity": placement.mode, "repeat": index,
+                        "state": "unsupported", "fields": {"reason": placement.reason},
+                    })
         failure = "none of the selected affinity modes is supported: {}".format(
             "; ".join("{}: {}".format(placement.mode, placement.reason) for placement in placements)
         )
         manifest["status"] = "failed"
         manifest["finished_at"] = _utc_now()
         manifest["error"] = failure
-        atomic_write_json(manifest_path, manifest)
+        manifest["state"] = "failed"
+        write_manifest(manifest_path, manifest)
         raise BenchmarkError(failure)
 
     repetition_rows = []
@@ -218,6 +228,12 @@ def run_actors_core(
     for placement_index, placement in enumerate(placements):
         affinity_record = manifest["affinity"][placement_index]
         if not placement.supported:
+            if event_sink is not None:
+                for index in range(1, configuration.repetitions + 1):
+                    event_sink({
+                        "type": "step-finished", "affinity": placement.mode, "repeat": index,
+                        "state": "unsupported", "fields": {"reason": placement.reason},
+                    })
             continue
         affinity_record["status"] = "running"
         mode_directory = output_directory / placement.mode
@@ -237,6 +253,8 @@ def run_actors_core(
             else:
                 command = _command_record(binary.path, benchmark)
             started_at = _utc_now()
+            if event_sink is not None:
+                event_sink({"type": "step-started", "affinity": placement.mode, "repeat": index})
             try:
                 result = run_command(
                     command,
@@ -266,7 +284,8 @@ def run_actors_core(
                 manifest["status"] = "failed"
                 manifest["finished_at"] = finished_at
                 manifest["error"] = failure
-                atomic_write_json(manifest_path, manifest)
+                manifest["state"] = "failed"
+                write_manifest(manifest_path, manifest)
                 raise
 
             if not configuration.perf_enabled:
@@ -339,19 +358,34 @@ def run_actors_core(
                 manifest["status"] = "interrupted" if interrupted else "failed"
                 manifest["finished_at"] = _utc_now()
                 manifest["error"] = failure
-                atomic_write_json(manifest_path, manifest)
+                manifest["state"] = "cancelled" if interrupted else "failed"
+                write_manifest(manifest_path, manifest)
+                if event_sink is not None:
+                    event_sink({
+                        "type": "step-finished", "affinity": placement.mode, "repeat": index,
+                        "state": "cancelled" if interrupted else "failed", "fields": {"error": failure},
+                    })
                 if interrupted:
                     raise BenchmarkInterrupted(failure)
                 raise BenchmarkError(failure)
-            atomic_write_json(manifest_path, manifest)
+            write_manifest(manifest_path, manifest)
+            if event_sink is not None:
+                artifacts = [run_record["stdout"], run_record["stderr"]]
+                if "metrics" in run_record:
+                    artifacts.append(run_record["metrics"])
+                if "perf_data" in run_record:
+                    artifacts.append(run_record["perf_data"])
+                event_sink({"type": "step-artifacts", "affinity": placement.mode, "repeat": index, "artifacts": artifacts})
+                event_sink({"type": "step-finished", "affinity": placement.mode, "repeat": index, "state": "passed"})
         affinity_record["status"] = "completed"
-        atomic_write_json(manifest_path, manifest)
+        write_manifest(manifest_path, manifest)
 
     summary = benchmark.summarize_metrics(repetition_rows, benchmark)
     atomic_write_text(output_directory / "summary.csv", benchmark.render_summary(summary, benchmark))
     manifest["status"] = "completed"
+    manifest["state"] = "passed"
     manifest["finished_at"] = _utc_now()
     manifest["summary"] = "summary.csv"
     manifest["summary_rows"] = len(summary)
-    atomic_write_json(manifest_path, manifest)
+    write_manifest(manifest_path, manifest)
     return manifest

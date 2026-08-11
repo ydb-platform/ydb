@@ -113,3 +113,8 @@ the temporary executable is removed.
 Use `--work-dir` when the system temporary directory is mounted with `noexec`.
 The run fails if a process exits unsuccessfully, times out, is interrupted, or
 produces empty or parameter-mismatched CSV data.
+# Result manifest compatibility
+
+Run manifests use schema version 4. Earlier manifests are intentionally not
+read as resumable results because they lack the immutable step plan and durable
+per-step artifact contract.

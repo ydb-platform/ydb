@@ -7,6 +7,7 @@ PY_SRCS(
     common.py
     config.py
     runner.py
+    results.py
     system_info.py
     topology.py
 )

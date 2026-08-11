@@ -21,7 +21,8 @@ from ydb.tools.ydb_bench.lib.actors_core import (
 from ydb.tools.ydb_bench.benchmarks.registry import BenchmarkDefinition, BenchmarkRegistry
 from ydb.tools.ydb_bench.lib.cli import main
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
-from ydb.tools.ydb_bench.lib.config import CONFIG_SCHEMA, config_schema, load_config
+from ydb.tools.ydb_bench.lib.config import CONFIG_SCHEMA, build_run_plan, config_schema, load_config
+from ydb.tools.ydb_bench.lib.results import ResultStore, SCHEMA_VERSION, load_manifest, transition
 from ydb.tools.ydb_bench.lib.runner import run_command
 from ydb.tools.ydb_bench.lib.topology import (
     AFFINITY_MODES,
@@ -203,6 +204,50 @@ class YdbBenchTest(unittest.TestCase):
         self.assertTrue(all(run.perf_enabled for run in loaded.runs))
         self.assertTrue(all(run.perf_frequency == 123 for run in loaded.runs))
 
+    def test_run_plan_expands_config_in_stable_queue_order(self):
+        loaded = load_config(self._config(
+            """
+            ping-bench:
+              first: {threads: [1], duration: 1, repetitions: 2, affinity: [none, pack-numa-pack-chiplet]}
+              second: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}
+            """
+        ))
+        plan = build_run_plan(loaded)
+        self.assertEqual([(s.profile, s.affinity, s.repeat) for s in plan.steps], [
+            ("first", "none", 1), ("first", "none", 2),
+            ("first", "pack-numa-pack-chiplet", 1), ("first", "pack-numa-pack-chiplet", 2),
+            ("second", "none", 1),
+        ])
+        self.assertEqual(len({step.id for step in plan.steps}), len(plan.steps))
+
+    def test_result_state_machine_rejects_invalid_transition_and_old_schema(self):
+        pending = {"id": "step-1", "state": "pending", "artifacts": []}
+        running = transition(pending, "running")
+        self.assertEqual(transition(running, "passed")["state"], "passed")
+        with self.assertRaisesRegex(BenchmarkError, "invalid result state transition"):
+            transition(pending, "passed")
+        old = self.root / "old.json"
+        old.write_text('{"schema_version": 3}', encoding="utf-8")
+        with self.assertRaisesRegex(BenchmarkError, "unsupported result manifest schema"):
+            load_manifest(old)
+
+    def test_result_store_never_publishes_missing_artifacts(self):
+        path = self.root / "run.json"
+        store = ResultStore(path, {"steps": [{"id": "step-1", "state": "pending", "artifacts": []}]})
+        store.write()
+        with self.assertRaisesRegex(BenchmarkError, "state pending"):
+            store.add_artifacts("step-1", ["missing.txt"])
+        store.transition_step("step-1", "running")
+        with self.assertRaisesRegex(BenchmarkError, "not durably available"):
+            store.add_artifacts("step-1", ["missing.txt"])
+        artifact = self.root / "stdout.txt"
+        artifact.write_text("ok", encoding="utf-8")
+        store.add_artifacts("step-1", ["stdout.txt"])
+        store.transition_step("step-1", "passed")
+        self.assertEqual(load_manifest(path)["steps"][0]["artifacts"], ["stdout.txt"])
+        with self.assertRaisesRegex(BenchmarkError, "state passed"):
+            store.add_artifacts("step-1", ["stdout.txt"])
+
     def test_config_rejects_empty_arrays_unknown_fields_and_unsafe_profile_names(self):
         """Reject empty threads, then an unknown field, then an unsafe profile path."""
         cases = (
@@ -373,6 +418,8 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(code, 0)
         manifest = json.loads((output / "run.json").read_text())
         self.assertEqual(manifest["status"], "completed")
+        self.assertEqual(manifest["state"], "passed")
+        self.assertEqual(manifest["schema_version"], SCHEMA_VERSION)
         self.assertEqual(len(manifest["runs"]), 3)
         self.assertTrue(all(run["status"] == "completed" for run in manifest["runs"]))
         self.assertEqual(
@@ -429,7 +476,11 @@ class YdbBenchTest(unittest.TestCase):
         generic_manifest = json.loads((self.root / "generic-error" / "run.json").read_text())
         interrupted_manifest = json.loads((self.root / "interrupted-error" / "run.json").read_text())
         self.assertEqual(generic_manifest["status"], "failed")
+        self.assertEqual(generic_manifest["state"], "failed")
+        self.assertEqual(generic_manifest["schema_version"], SCHEMA_VERSION)
         self.assertEqual(interrupted_manifest["status"], "interrupted")
+        self.assertEqual(interrupted_manifest["state"], "cancelled")
+        self.assertEqual(interrupted_manifest["schema_version"], SCHEMA_VERSION)
 
     def test_run_writes_manifest_raw_metrics_and_median_summary(self):
         script = self._script(
@@ -460,7 +511,8 @@ class YdbBenchTest(unittest.TestCase):
         self.assertTrue((output / "summary.csv").is_file())
         self.assertIn("none,1,32,1,3,1000.0,1000.0,1000.0,1.0", (output / "summary.csv").read_text())
         stored = json.loads((output / "run.json").read_text())
-        self.assertEqual(stored["schema_version"], 3)
+        self.assertEqual(stored["schema_version"], SCHEMA_VERSION)
+        self.assertEqual(stored["state"], "passed")
         self.assertEqual(stored["benchmark"], "ping-bench")
         self.assertEqual(stored["affinity"][0]["mode"], "none")
         self.assertEqual(stored["binary"]["sha256"], self._binary(script).sha256)
@@ -594,6 +646,8 @@ class YdbBenchTest(unittest.TestCase):
             )
         manifest = json.loads((output / "run.json").read_text())
         self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(manifest["schema_version"], SCHEMA_VERSION)
 
     def test_start_failure_finalizes_manifest(self):
         script = self._script("exit 0")
@@ -613,6 +667,8 @@ class YdbBenchTest(unittest.TestCase):
 
         manifest = json.loads((output / "run.json").read_text())
         self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(manifest["schema_version"], SCHEMA_VERSION)
         self.assertIn("finished_at", manifest)
         self.assertIn("noexec", manifest["error"])
         self.assertEqual(len(manifest["runs"]), 1)
@@ -868,6 +924,7 @@ class YdbBenchTest(unittest.TestCase):
 
         manifest = json.loads((output / "run.json").read_text())
         self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["state"], "failed")
         self.assertIn("finished_at", manifest)
         self.assertIn("spread-numa-pack-chiplet", manifest["error"])
         self.assertEqual(manifest["runs"], [])

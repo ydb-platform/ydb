@@ -136,6 +136,36 @@ class LoadedConfig:
     runs: tuple
 
 
+@dataclass(frozen=True)
+class RunStep:
+    id: str
+    benchmark: str
+    profile: str
+    affinity: str
+    repeat: int
+    configuration: RunConfiguration
+
+
+@dataclass(frozen=True)
+class RunPlan:
+    config_path: Path
+    config_sha256: str
+    steps: tuple
+
+
+def build_run_plan(loaded_config):
+    """Expand validated config in YAML/config order into an immutable queue."""
+    steps = []
+    for configuration in loaded_config.runs:
+        for affinity in configuration.affinity_modes:
+            for repeat in range(1, configuration.repetitions + 1):
+                step_id = "{:04d}-{}-{}-{}-{:03d}".format(
+                    len(steps) + 1, configuration.benchmark.name, configuration.profile, affinity, repeat
+                )
+                steps.append(RunStep(step_id, configuration.benchmark.name, configuration.profile, affinity, repeat, configuration))
+    return RunPlan(loaded_config.path, loaded_config.sha256, tuple(steps))
+
+
 def _config_error(location, message):
     raise BenchmarkError("invalid benchmark config at {}: {}".format(location, message))
 

@@ -33,12 +33,12 @@ ping-bench:
     inflight: [1]
     duration: 3
     repetitions: 5
-    affinity: [none, one-whole-numa, one-whole-chiplet, multi-chiplet]
+    affinity: [none, pack-numa, pack-numa-pack-chiplet, spread-numa-pack-chiplet]
   focused:
     threads: [16]
     duration: 20
     repetitions: 1
-    affinity: [one-whole-chiplet]
+    affinity: [pack-numa-pack-chiplet]
 
 star-ping-bench:
   star-sweep:
@@ -47,7 +47,7 @@ star-ping-bench:
     stars: [1, 2, 4]
     duration: 3
     repetitions: 5
-    affinity: [none, one-whole-chiplet]
+    affinity: [none, pack-numa-pack-chiplet]
 ```
 
 `threads`, `duration`, `repetitions`, and `affinity` are required and arrays
@@ -79,19 +79,22 @@ ydb/tools/ydb_bench/ydb_bench run \
 `--build=profile`. Profiling changes both the build and runtime overhead, so its
 throughput must not be mixed with a non-profile baseline.
 
-The available placement modes are:
+The available placement modes are `none`, `pack-numa`,
+`pack-numa-pack-chiplet`, `spread-numa-pack-chiplet`,
+`pack-numa-pack-chiplet-pack-core`, `pack-numa-pack-chiplet-spread-core`,
+`pack-numa-spread-chiplet-pack-core`, `pack-numa-spread-chiplet-spread-core`,
+`spread-numa-pack-chiplet-pack-core`, `spread-numa-pack-chiplet-spread-core`,
+`spread-numa-spread-chiplet-pack-core`, and
+`spread-numa-spread-chiplet-spread-core`.
 
-- `none`: no explicit affinity;
-- `one-whole-numa`: all allowed CPUs from one NUMA node;
-- `one-whole-chiplet`: all allowed CPUs from one L3-cache group (chiplet);
-- `multi-chiplet`: CPUs spread across chiplets inside one NUMA node.
-
-The `one-whole-*` modes use the complete allowed CPU set of the selected
-topology group, independently of the largest requested thread count. The
-`multi-chiplet` mode uses the same number of CPUs as that thread count. Topology
-is read from Linux sysfs and intersected with the process's allowed CPU set. A
-mode that the machine cannot provide is recorded as `unsupported` in the
-profile's `run.json`; it is never silently replaced with another placement.
+They compose placement policies over NUMA nodes, chiplets, physical cores, and
+vCPUs. `pack` exhausts the current entity; `spread` round-robins entities and
+continues to the next level. `pack-core` keeps all allowed SMT siblings of a
+core together, while `spread-core` takes one vCPU from every core before its
+siblings. Topology is read from Linux sysfs and intersected with the process's
+allowed CPU set. A mode that the machine cannot provide is recorded as
+`unsupported` in the profile's `run.json`; it is never silently replaced with
+another placement.
 
 The top-level output contains:
 

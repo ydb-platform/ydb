@@ -177,14 +177,14 @@ class YdbBenchTest(unittest.TestCase):
                 inflight: [2, 4]
                 duration: 10
                 repetitions: 1
-                affinity: [one-whole-chiplet]
+                affinity: [pack-numa-pack-chiplet]
             star-ping-bench:
               star-sweep:
                 threads: [8]
                 stars: [1, 2, 4]
                 duration: 4
                 repetitions: 2
-                affinity: [none, multi-chiplet]
+                affinity: [none, spread-numa-pack-chiplet]
             """
         )
         loaded = load_config(config, perf_enabled=True, perf_frequency=123)
@@ -750,30 +750,77 @@ class YdbBenchTest(unittest.TestCase):
                 self.assertEqual(record["version"], 2)
                 self.assertEqual(record["allowed_cpus"], list(case["allowed"]))
 
-    def test_affinity_modes_select_deterministic_masks(self):
+    def test_affinity_modes_select_compositional_deterministic_masks(self):
         topology = CpuTopology(
-            allowed_cpus=tuple(range(8)),
-            numa_nodes=((0, (0, 1, 2, 3)), (1, (4, 5, 6, 7))),
-            chiplets=((0, (0, 1)), (0, (2, 3)), (1, (4, 5)), (1, (6, 7))),
+            allowed_cpus=tuple(range(16)),
+            numa_nodes=((0, tuple(range(8))), (1, tuple(range(8, 16)))),
+            chiplets=((0, (0, 1, 2, 3)), (0, (4, 5, 6, 7)),
+                      (1, (8, 9, 10, 11)), (1, (12, 13, 14, 15))),
+            physical_cores=((0, 1), (2, 3), (4, 5), (6, 7),
+                            (8, 9), (10, 11), (12, 13), (14, 15)),
         )
+        expected = {
+            "none": None,
+            "pack-numa": tuple(range(8)),
+            "pack-numa-pack-chiplet": (0, 1, 2, 3),
+            "spread-numa-pack-chiplet": (0, 1, 2, 3),
+            "pack-numa-pack-chiplet-pack-core": (0, 1, 2, 3),
+            "pack-numa-pack-chiplet-spread-core": (0, 1, 2),
+            "pack-numa-spread-chiplet-pack-core": (0, 1, 4, 5),
+            "pack-numa-spread-chiplet-spread-core": (0, 2, 4),
+            "spread-numa-pack-chiplet-pack-core": (0, 1, 8, 9),
+            "spread-numa-pack-chiplet-spread-core": (0, 2, 8),
+            "spread-numa-spread-chiplet-pack-core": (0, 1, 8, 9),
+            "spread-numa-spread-chiplet-spread-core": (0, 4, 8),
+        }
         with mock.patch.object(os, "sched_setaffinity", create=True):
-            placements = {mode: plan_affinity(mode, topology, 2) for mode in AFFINITY_MODES}
-        self.assertIsNone(placements["none"].cpus)
-        self.assertEqual(placements["one-whole-numa"].cpus, (0, 1, 2, 3))
-        self.assertEqual(placements["one-whole-chiplet"].cpus, (0, 1))
-        self.assertEqual(placements["multi-chiplet"].cpus, (0, 2))
+            for mode, cpus in expected.items():
+                with self.subTest(mode=mode):
+                    placement = plan_affinity(mode, topology, 3)
+                    self.assertEqual(placement.cpus, cpus)
+                    self.assertEqual(plan_affinity(mode, topology, 3), placement)
 
-    def test_whole_affinity_modes_do_not_limit_masks_to_requested_threads(self):
+    def test_affinity_modes_support_smt_off_and_asymmetric_cpuset(self):
         topology = CpuTopology(
-            allowed_cpus=tuple(range(8)),
-            numa_nodes=((0, (0, 1, 2, 3)), (1, (4, 5, 6, 7))),
-            chiplets=((0, (0, 1, 2)), (0, (3,)), (1, (4, 5)), (1, (6, 7))),
+            allowed_cpus=(1, 2, 4, 7),
+            numa_nodes=((0, (1, 2, 4, 7)),),
+            chiplets=((0, (1, 2)), (0, (4, 7))),
+            physical_cores=((1,), (2,), (4,), (7,)),
         )
         with mock.patch.object(os, "sched_setaffinity", create=True):
-            numa = plan_affinity("one-whole-numa", topology, 2)
-            chiplet = plan_affinity("one-whole-chiplet", topology, 2)
-        self.assertEqual(numa.cpus, (0, 1, 2, 3))
-        self.assertEqual(chiplet.cpus, (0, 1, 2))
+            self.assertEqual(plan_affinity("pack-numa", topology, 2).cpus, (1, 2, 4, 7))
+            self.assertEqual(plan_affinity("pack-numa-spread-chiplet-spread-core", topology, 3).cpus,
+                             (1, 2, 4))
+            unsupported = plan_affinity("spread-numa-pack-chiplet", topology, 2)
+        self.assertFalse(unsupported.supported)
+        self.assertIn("spread-numa", unsupported.reason)
+
+    def test_all_affinity_modes_with_smt_disabled(self):
+        topology = CpuTopology(
+            allowed_cpus=tuple(range(16)),
+            numa_nodes=((0, tuple(range(8))), (1, tuple(range(8, 16)))),
+            chiplets=((0, (0, 1, 2, 3)), (0, (4, 5, 6, 7)),
+                      (1, (8, 9, 10, 11)), (1, (12, 13, 14, 15))),
+            physical_cores=tuple((cpu,) for cpu in range(16)),
+        )
+        expected = {
+            "none": None,
+            "pack-numa": tuple(range(8)),
+            "pack-numa-pack-chiplet": (0, 1, 2, 3),
+            "spread-numa-pack-chiplet": (0, 1, 2, 3),
+            "pack-numa-pack-chiplet-pack-core": (0, 1, 2),
+            "pack-numa-pack-chiplet-spread-core": (0, 1, 2),
+            "pack-numa-spread-chiplet-pack-core": (0, 2, 4),
+            "pack-numa-spread-chiplet-spread-core": (0, 2, 4),
+            "spread-numa-pack-chiplet-pack-core": (0, 2, 8),
+            "spread-numa-pack-chiplet-spread-core": (0, 2, 8),
+            "spread-numa-spread-chiplet-pack-core": (0, 4, 8),
+            "spread-numa-spread-chiplet-spread-core": (0, 4, 8),
+        }
+        with mock.patch.object(os, "sched_setaffinity", create=True):
+            for mode, cpus in expected.items():
+                with self.subTest(mode=mode):
+                    self.assertEqual(plan_affinity(mode, topology, 3).cpus, cpus)
 
     def test_unavailable_affinity_mode_is_reported_not_guessed(self):
         topology = CpuTopology(
@@ -782,9 +829,9 @@ class YdbBenchTest(unittest.TestCase):
             chiplets=((0, (0, 1)),),
         )
         with mock.patch.object(os, "sched_setaffinity", create=True):
-            placement = plan_affinity("multi-chiplet", topology, 2)
+            placement = plan_affinity("spread-numa-pack-chiplet", topology, 2)
         self.assertFalse(placement.supported)
-        self.assertIn("two chiplets", placement.reason)
+        self.assertIn("spread-numa", placement.reason)
 
     def test_run_fails_when_all_affinity_modes_are_unsupported(self):
         script = self._script("exit 99")
@@ -804,7 +851,7 @@ class YdbBenchTest(unittest.TestCase):
             duration_seconds=1,
             repetitions=1,
             timeout_seconds=5,
-            affinity_modes=("multi-chiplet",),
+            affinity_modes=("spread-numa-pack-chiplet",),
         )
 
         with mock.patch(
@@ -822,7 +869,7 @@ class YdbBenchTest(unittest.TestCase):
         manifest = json.loads((output / "run.json").read_text())
         self.assertEqual(manifest["status"], "failed")
         self.assertIn("finished_at", manifest)
-        self.assertIn("multi-chiplet", manifest["error"])
+        self.assertIn("spread-numa-pack-chiplet", manifest["error"])
         self.assertEqual(manifest["runs"], [])
         self.assertEqual(manifest["affinity"][0]["status"], "unsupported")
         self.assertFalse((output / "summary.csv").exists())

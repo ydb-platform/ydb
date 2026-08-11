@@ -6,9 +6,17 @@ from typing import Optional
 
 AFFINITY_MODES = (
     "none",
-    "one-whole-numa",
-    "one-whole-chiplet",
-    "multi-chiplet",
+    "pack-numa",
+    "pack-numa-pack-chiplet",
+    "spread-numa-pack-chiplet",
+    "pack-numa-pack-chiplet-pack-core",
+    "pack-numa-pack-chiplet-spread-core",
+    "pack-numa-spread-chiplet-pack-core",
+    "pack-numa-spread-chiplet-spread-core",
+    "spread-numa-pack-chiplet-pack-core",
+    "spread-numa-pack-chiplet-spread-core",
+    "spread-numa-spread-chiplet-pack-core",
+    "spread-numa-spread-chiplet-spread-core",
 )
 
 
@@ -186,25 +194,88 @@ def discover_topology(sys_root=Path("/sys/devices/system"), allowed_cpus=None):
     )
 
 
-def _spread(groups, count):
-    selected = []
+def _round_robin(groups):
+    result = []
     offset = 0
-    while len(selected) < count:
+    while True:
         progressed = False
         for group in groups:
             if offset < len(group):
-                selected.append(group[offset])
+                result.append(group[offset])
                 progressed = True
-                if len(selected) == count:
-                    break
         if not progressed:
-            break
+            return result
         offset += 1
-    return tuple(sorted(selected))
 
 
 def _unsupported(mode, reason):
     return AffinityPlacement(mode=mode, cpus=None, reason=reason)
+
+
+def _parse_mode(mode):
+    if mode not in AFFINITY_MODES:
+        raise ValueError("unknown affinity mode: {}".format(mode))
+    if mode == "none":
+        return ()
+    parts = mode.split("-")
+    return tuple((parts[index + 1], parts[index]) for index in range(0, len(parts), 2))
+
+
+def _core_groups(topology):
+    allowed = set(topology.allowed_cpus)
+    groups = topology.physical_cores or tuple((cpu,) for cpu in topology.allowed_cpus)
+    return tuple(sorted(tuple(sorted(set(group) & allowed)) for group in groups if set(group) & allowed))
+
+
+def _select_units(units, required_cpus):
+    selected = []
+    for unit in units:
+        selected.extend(unit)
+        if len(selected) >= required_cpus:
+            return tuple(sorted(selected))
+    return ()
+
+
+def _plan_units(mode, topology):
+    """Build ordered CPU bundles by composing NUMA, chiplet, and core policies."""
+    policy = dict(_parse_mode(mode))
+    cores = _core_groups(topology)
+
+    def cores_in(cpus):
+        return [core for core in cores if set(core).issubset(cpus)]
+
+    def chiplets_in(cpus):
+        return [
+            chiplet
+            for _, chiplet in sorted(topology.chiplets, key=lambda item: (item[0], item[1]))
+            if set(chiplet).issubset(cpus)
+        ]
+
+    def core_units(cpus):
+        groups = cores_in(cpus)
+        if policy.get("core") == "spread":
+            # Pick one sibling from every core before returning to sibling zero.
+            return [(cpu,) for cpu in _round_robin(groups)]
+        return groups
+
+    def chiplet_units(cpus):
+        groups = chiplets_in(cpus)
+        if not groups:
+            return []
+        if "core" not in policy:
+            return [tuple(group) for group in groups]
+        nested = [core_units(set(group)) for group in groups]
+        if policy["chiplet"] == "spread":
+            return _round_robin(nested)
+        return [unit for group in nested for unit in group]
+
+    node_groups = [cpus for _, cpus in sorted(topology.numa_nodes) if cpus]
+    if "chiplet" not in policy:
+        return [tuple(group) for group in node_groups]
+    nested = [chiplet_units(set(group)) for group in node_groups]
+    if policy["numa"] == "spread":
+        return _round_robin(nested)
+    return [unit for group in nested for unit in group]
 
 
 def plan_affinity(mode, topology, required_cpus):
@@ -212,39 +283,24 @@ def plan_affinity(mode, topology, required_cpus):
         return AffinityPlacement(mode=mode, cpus=None)
     if not hasattr(os, "sched_setaffinity"):
         return _unsupported(mode, "CPU affinity is not supported by this operating system")
-
-    if mode == "one-whole-numa":
-        node = next((cpus for _, cpus in topology.numa_nodes if cpus), None)
-        if node is None:
-            return _unsupported(mode, "no NUMA node contains allowed CPUs")
-        return AffinityPlacement(mode=mode, cpus=node)
-
-    if mode == "one-whole-chiplet":
-        chiplet = next((cpus for _, cpus in topology.chiplets if cpus), None)
-        if chiplet is None:
-            return _unsupported(mode, "no chiplet contains allowed CPUs")
-        return AffinityPlacement(mode=mode, cpus=chiplet)
-
-    if mode == "multi-chiplet":
-        by_node = {}
+    if required_cpus < 1:
+        return _unsupported(mode, "at least one CPU is required")
+    policy = dict(_parse_mode(mode))
+    numa_nodes = [cpus for _, cpus in topology.numa_nodes if cpus]
+    if policy.get("numa") == "spread" and len(numa_nodes) < 2:
+        return _unsupported(mode, "spread-numa requires at least two NUMA nodes with allowed CPUs")
+    if policy.get("chiplet") == "spread":
+        chiplets_by_node = {}
         for node_id, cpus in topology.chiplets:
-            by_node.setdefault(node_id, []).append(cpus)
-        groups = next(
-            (
-                node_chiplets
-                for _, node_chiplets in sorted(by_node.items())
-                if len(node_chiplets) >= 2 and sum(map(len, node_chiplets)) >= required_cpus
-            ),
-            None,
-        )
-        if required_cpus < 2 or groups is None:
-            return _unsupported(
-                mode,
-                "at least two chiplets in one NUMA node and {} allowed CPUs are required".format(required_cpus),
-            )
-        return AffinityPlacement(mode=mode, cpus=_spread(groups, required_cpus))
+            chiplets_by_node.setdefault(node_id, []).append(cpus)
+        if not any(len(groups) >= 2 for groups in chiplets_by_node.values()):
+            return _unsupported(mode, "spread-chiplet requires at least two chiplets in a NUMA node")
 
-    raise ValueError("unknown affinity mode: {}".format(mode))
+    units = _plan_units(mode, topology)
+    cpus = _select_units(units, required_cpus)
+    if not cpus:
+        return _unsupported(mode, "{} allowed CPUs are required by this placement".format(required_cpus))
+    return AffinityPlacement(mode=mode, cpus=cpus)
 
 
 def topology_record(topology):

@@ -1,6 +1,6 @@
 # admin cluster config replace
 
-With the `admin cluster config replace` command, you can upload a [dynamic configuration](../../../../../maintenance/manual/dynamic-config.md) to the {{ ydb-short-name }} cluster.
+With the `admin cluster config replace` command, you can upload a [dynamic configuration](../../../../../devops/configuration-management/configuration-v1/dynamic-config.md) to the {{ ydb-short-name }} cluster.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 

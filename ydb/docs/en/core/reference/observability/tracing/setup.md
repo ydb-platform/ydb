@@ -123,7 +123,7 @@ A detailed description of these options is provided in the [{#T}](./setup.md#sem
 
 The `external_throttling` section is not mandatory; if it is absent, all trace-ids in requests are **ignored** (no external traces are continued).
 
-This section can be modified without restarting the node using the [dynamic configuration](../../../maintenance/manual/dynamic-config.md) mechanism.
+This section can be modified without restarting the node using the [dynamic configuration](../../../devops/configuration-management/configuration-v1/dynamic-config.md) mechanism.
 
 ### Sampling
 
@@ -158,7 +158,7 @@ Both fields are mandatory.
 
 The `sampling` section is not mandatory; no requests will be sampled if it is absent.
 
-This section can be modified without restarting the node using the [dynamic configuration](../../../maintenance/manual/dynamic-config.md) mechanism.
+This section can be modified without restarting the node using the [dynamic configuration](../../../devops/configuration-management/configuration-v1/dynamic-config.md) mechanism.
 
 ## Rule semantics {#semantics}
 

@@ -486,10 +486,10 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType*>& columnTypes, const
     ui64 nColumns = ColumnTypes.size();
     ui64 nKeyColumns = keyColumns.size();
 
-    for (ui32 i = 0; i < keyColumns.size(); i++) {
-        auto colType = columnTypes[keyColumns[i]];
+    for (const auto& keyColumn : keyColumns) {
+        auto colType = columnTypes[keyColumn];
         auto packInfo = GetPackInfo(colType);
-        packInfo.ColumnIdx = keyColumns[i];
+        packInfo.ColumnIdx = keyColumn;
         packInfo.IsKeyColumn = true;
         ColumnsPackInfo.push_back(packInfo);
     }
@@ -575,7 +575,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType*>& columnTypes, const
         } else if (p.IsIType) {
             p.Offset = currIOffset;
             currIOffset++;
-            GraceJoin::TColTypeInterface cti{MakeHashImpl(p.MKQLType), MakeEquateImpl(p.MKQLType), std::make_shared<TValuePacker>(true, p.MKQLType), HolderFactory};
+            GraceJoin::TColTypeInterface cti{.HashI = MakeHashImpl(p.MKQLType), .EquateI = MakeEquateImpl(p.MKQLType), .Packer = std::make_shared<TValuePacker>(true, p.MKQLType), .HolderFactory = HolderFactory};
             ColumnInterfaces.push_back(cti);
         }
     }
@@ -639,7 +639,7 @@ public:
         if (ctx.CountersProvider) {
             // id will be assigned externally in future versions
             TString id = TString(Operator_Join) + "0";
-            CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+            CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, /*deriv=*/false);
         }
     }
 
@@ -1131,7 +1131,7 @@ public:
                       std::vector<ui32>&& leftRenames, std::vector<ui32>&& rightRenames,
                       std::vector<TType*>&& leftColumnsTypes, std::vector<TType*>&& rightColumnsTypes,
                       std::vector<EValueRepresentation>&& outputRepresentations, bool isSelfJoin, bool isSpillingAllowed)
-        : TBaseComputation(mutables, nullptr, EValueRepresentation::Boxed)
+        : TBaseComputation(mutables, /*source=*/nullptr, EValueRepresentation::Boxed)
         , FlowLeft_(flowLeft)
         , FlowRight_(flowRight)
         , JoinKind_(joinKind)
@@ -1156,7 +1156,7 @@ public:
         return static_cast<TGraceJoinSpillingSupportState*>(state.AsBoxed().Get())->FetchValues(ctx, output);
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1291,11 +1291,14 @@ IComputationNode* WrapGraceJoinCommon(TCallable& callable, const TComputationNod
     const auto outputFlowComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
     std::vector<EValueRepresentation> outputRepresentations;
     outputRepresentations.reserve(outputFlowComponents.size());
-    for (ui32 i = 0U; i < outputFlowComponents.size(); ++i) {
-        outputRepresentations.emplace_back(GetValueRepresentation(outputFlowComponents[i]));
+    for (auto outputFlowComponent : outputFlowComponents) {
+        outputRepresentations.emplace_back(GetValueRepresentation(outputFlowComponent));
     }
 
-    std::vector<ui32> leftKeyColumns, leftRenames, rightKeyColumns, rightRenames;
+    std::vector<ui32> leftKeyColumns;
+    std::vector<ui32> leftRenames;
+    std::vector<ui32> rightKeyColumns;
+    std::vector<ui32> rightRenames;
     std::vector<TType*> leftColumnsTypes(leftFlowComponents.begin(), leftFlowComponents.end());
     std::vector<TType*> rightColumnsTypes;
     if (isSelfJoin) {

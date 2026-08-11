@@ -3,6 +3,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
+#include <array>
 #include <utility>
 
 namespace NKikimr::NMiniKQL {
@@ -33,7 +34,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
@@ -107,7 +108,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
@@ -309,7 +310,7 @@ protected:
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = IsStream ? Type::getInt32Ty(context) : Type::getInt1Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -526,7 +527,7 @@ protected:
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = IsStream ? Type::getInt32Ty(context) : Type::getInt1Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(limitType), PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(limitType), PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -550,7 +551,7 @@ protected:
         const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        const auto limit = new LoadInst(limitType, limitArg, "limit", false, block);
+        const auto limit = new LoadInst(limitType, limitArg, "limit", /*isVolatile=*/false, block);
         const auto zero = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, limit, ConstantInt::get(limit->getType(), 0), "zero", block);
         BranchInst::Create(nope, init, zero, block);
 
@@ -718,16 +719,16 @@ public:
             const auto size = list.GetListLength();
 
             std::array<ui64, UseOnStack> stackBitSet;
-            std::unique_ptr<ui64[]> heapBitSet;
+            TVector<ui64> heapBitSet;
 
             const auto maskSize = (size + 63ULL) >> 6ULL;
             const bool useHeap = maskSize > UseOnStack;
 
             if (useHeap) {
-                heapBitSet = std::make_unique<ui64[]>(maskSize);
+                heapBitSet.resize(maskSize);
             }
 
-            const auto mask = useHeap ? heapBitSet.get() : stackBitSet.data();
+            const auto mask = useHeap ? heapBitSet.data() : stackBitSet.data();
 
             ui64 count = 0ULL;
 
@@ -773,7 +774,7 @@ public:
         return ctx.HolderFactory.Create<typename TBaseWrapper::TCodegenValue>(Filter_, &ctx, value);
     }
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
@@ -830,7 +831,7 @@ public:
             {
                 block = hmsk;
 
-                const auto fnType = FunctionType::get(bits->getType(), {shr->getType()}, false);
+                const auto fnType = FunctionType::get(bits->getType(), {shr->getType()}, /*isVarArg=*/false);
                 const auto name = "MyAlloc";
                 ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&MyAlloc));
                 const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
@@ -1000,7 +1001,7 @@ public:
             {
                 block = free;
 
-                const auto fnType = FunctionType::get(Type::getVoidTy(context), {bits->getType(), shr->getType()}, false);
+                const auto fnType = FunctionType::get(Type::getVoidTy(context), {bits->getType(), shr->getType()}, /*isVarArg=*/false);
                 const auto name = "MyFree";
                 ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&MyFree));
                 const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
@@ -1069,16 +1070,16 @@ public:
             const auto size = list.GetListLength();
 
             std::array<ui64, UseOnStack> stackBitSet;
-            std::unique_ptr<ui64[]> heapBitSet;
+            TVector<ui64> heapBitSet;
 
             const auto maskSize = (size + 63ULL) >> 6ULL;
             const bool useHeap = maskSize > UseOnStack;
 
             if (useHeap) {
-                heapBitSet = std::make_unique<ui64[]>(maskSize);
+                heapBitSet.resize(maskSize);
             }
 
-            const auto mask = useHeap ? heapBitSet.get() : stackBitSet.data();
+            const auto mask = useHeap ? heapBitSet.data() : stackBitSet.data();
 
             ui64 count = 0ULL;
 
@@ -1124,7 +1125,7 @@ public:
         return ctx.HolderFactory.Create<typename TBaseWrapper::TCodegenValue>(Filter_, &ctx, value, std::move(limit));
     }
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
@@ -1183,7 +1184,7 @@ public:
             {
                 block = hmsk;
 
-                const auto fnType = FunctionType::get(bits->getType(), {shr->getType()}, false);
+                const auto fnType = FunctionType::get(bits->getType(), {shr->getType()}, /*isVarArg=*/false);
                 const auto name = "MyAlloc";
                 ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&MyAlloc));
                 const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
@@ -1357,7 +1358,7 @@ public:
             {
                 block = free;
 
-                const auto fnType = FunctionType::get(Type::getVoidTy(context), {bits->getType(), shr->getType()}, false);
+                const auto fnType = FunctionType::get(Type::getVoidTy(context), {bits->getType(), shr->getType()}, /*isVarArg=*/false);
                 const auto name = "MyFree";
                 ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&MyFree));
                 const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);

@@ -4,6 +4,7 @@ import warnings
 from collections.abc import Mapping, Sequence
 from enum import Enum
 from functools import _CacheInfo, lru_cache
+from importlib.util import find_spec
 from ipaddress import ip_address
 from typing import (
     TYPE_CHECKING,
@@ -15,7 +16,7 @@ from typing import (
     cast,
     overload,
 )
-from urllib.parse import SplitResult, uses_relative
+from urllib.parse import SplitResult, scheme_chars, uses_relative
 
 import idna
 from multidict import MultiDict, MultiDictProxy, istr
@@ -55,8 +56,17 @@ from ._quoters import (
     human_quote,
 )
 
+# Avoid Pydantic import if not used (increases yarl's import time by 3-7x).
+HAS_PYDANTIC = find_spec("pydantic_core") is not None
+if TYPE_CHECKING:
+    from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
+    from pydantic.json_schema import JsonSchemaValue
+    from pydantic_core import CoreSchema
+
+
 DEFAULT_PORTS = {"http": 80, "https": 443, "ws": 80, "wss": 443, "ftp": 21}
 USES_RELATIVE = frozenset(uses_relative)
+_SCHEME_CHARS = frozenset(scheme_chars)
 
 # Special schemes https://url.spec.whatwg.org/#special-scheme
 # are not allowed to have an empty host https://url.spec.whatwg.org/#url-representation
@@ -78,6 +88,57 @@ NOT_REG_NAME = re.compile(
     """,
     re.VERBOSE,
 )
+
+# Invisible default-ignorable / format code points that must not appear in a
+# host (soft hyphen, zero-width space, word joiner, bidi controls, variation
+# selectors, ...). Depending on the code point IDNA either silently deletes it
+# (so ``e<ZWSP>vil.com`` encodes to ``evil.com``) or folds it into a different
+# punycode host; either way the parsed host differs from the string an
+# application validated. The set is the union of two authoritative sources,
+# matching the two encoders _idna_encode dispatches to:
+#
+# 1. Unicode Default_Ignorable_Code_Point (uts46=True path via the ``idna``
+#    package). Ranges taken from the DerivedCoreProperties data file:
+#    https://www.unicode.org/Public/UCD/latest/ucd/DerivedCoreProperties.txt
+#    (the E0000..E0FFF block is contiguous under this property).
+# 2. RFC 3454 (Stringprep) Table B.1 "commonly mapped to nothing", used by the
+#    stdlib ``str.encode("idna")`` / IDNA2003 nameprep fallback:
+#    https://www.rfc-editor.org/rfc/rfc3454#appendix-B.1
+#    This is the source of U+1806, which is not Default_Ignorable.
+#
+# Coverage is pinned to the installed ``idna``/Unicode data by a sweep test
+# (test_default_ignorable_covers_idna_stripped in tests/test_url.py) that
+# brute-forces every code point through _idna_encode and fails if any point it
+# silently deletes is not matched here.
+_DEFAULT_IGNORABLE_RE = re.compile(
+    "["
+    "\u00ad"  # SOFT HYPHEN
+    "\u034f"  # COMBINING GRAPHEME JOINER
+    "\u061c"  # ARABIC LETTER MARK
+    "\u115f-\u1160"  # HANGUL CHOSEONG/JUNGSEONG FILLER
+    "\u17b4-\u17b5"  # KHMER VOWEL INHERENT AQ/AA
+    "\u1806"  # MONGOLIAN TODO SOFT HYPHEN (nameprep maps to nothing)
+    "\u180b-\u180f"  # MONGOLIAN FVS ONE..FOUR and VOWEL SEPARATOR
+    "\u200b-\u200f"  # ZERO WIDTH SPACE..RIGHT-TO-LEFT MARK
+    "\u202a-\u202e"  # bidi embedding/override controls
+    "\u2060-\u206f"  # WORD JOINER..NOMINAL DIGIT SHAPES
+    "\u3164"  # HANGUL FILLER
+    "\ufe00-\ufe0f"  # VARIATION SELECTOR-1..16
+    "\ufeff"  # ZERO WIDTH NO-BREAK SPACE (BOM)
+    "\uffa0"  # HALFWIDTH HANGUL FILLER
+    "\ufff0-\ufff8"  # reserved default-ignorables
+    "\U0001bca0-\U0001bca3"  # SHORTHAND FORMAT controls
+    "\U0001d173-\U0001d17a"  # MUSICAL SYMBOL begin/end controls
+    "\U000e0000-\U000e0fff"  # tags and VARIATION SELECTOR SUPPLEMENT
+    "]"
+)
+
+# Zone IDs are OS-specific text strings with no format defined by the RFCs:
+# https://datatracker.ietf.org/doc/html/rfc4007#section-11.2
+# RFC 9844 §6.3 recommends rejecting characters inappropriate for the
+# environment; for yarl we reject ASCII control characters (CTL):
+# https://datatracker.ietf.org/doc/html/rfc9844#section-6-3
+_ZONE_ID_UNSAFE_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 _T = TypeVar("_T")
 
@@ -114,16 +175,16 @@ class _InternalURLCache(TypedDict, total=False):
     scheme: str
     raw_authority: str
     authority: str
-    raw_user: Union[str, None]
-    user: Union[str, None]
-    raw_password: Union[str, None]
-    password: Union[str, None]
-    raw_host: Union[str, None]
-    host: Union[str, None]
-    host_subcomponent: Union[str, None]
-    host_port_subcomponent: Union[str, None]
-    port: Union[int, None]
-    explicit_port: Union[int, None]
+    raw_user: str | None
+    user: str | None
+    raw_password: str | None
+    password: str | None
+    raw_host: str | None
+    host: str | None
+    host_subcomponent: str | None
+    host_port_subcomponent: str | None
+    port: int | None
+    explicit_port: int | None
     raw_path: str
     path: str
     _parsed_query: list[tuple[str, str]]
@@ -150,11 +211,22 @@ def rewrite_module(obj: _T) -> _T:
     return obj
 
 
+def _encode_relative_scheme_colon(path: str) -> str:
+    """Re-encode a scheme-shaped leading ``:`` in a relative path to ``%3A``."""
+    colon_pos = path.find(":")
+    if colon_pos <= 0:
+        return path
+    for c in path[:colon_pos]:
+        if c not in _SCHEME_CHARS:
+            return path
+    return path[:colon_pos] + "%3A" + path[colon_pos + 1 :]
+
+
 @lru_cache
 def encode_url(url_str: str) -> "URL":
     """Parse unencoded URL."""
     cache: _InternalURLCache = {}
-    host: Union[str, None]
+    host: str | None
     scheme, netloc, path, query, fragment = split_url(url_str)
     if not netloc:  # netloc
         host = ""
@@ -194,6 +266,8 @@ def encode_url(url_str: str) -> "URL":
         path = PATH_REQUOTER(path)
         if netloc and "." in path:
             path = normalize_path(path)
+        elif not scheme and not netloc:
+            path = _encode_relative_scheme_colon(path)
     if query:
         query = QUERY_REQUOTER(query)
     if fragment:
@@ -228,10 +302,10 @@ def pre_encoded_url(url_str: str) -> "URL":
 def build_pre_encoded_url(
     scheme: str,
     authority: str,
-    user: Union[str, None],
-    password: Union[str, None],
+    user: str | None,
+    password: str | None,
     host: str,
-    port: Union[int, None],
+    port: int | None,
     path: str,
     query_string: str,
     fragment: str,
@@ -250,6 +324,8 @@ def build_pre_encoded_url(
             self._netloc = make_netloc(user, password, host, port)
     else:
         self._netloc = ""
+    if path and not scheme and not self._netloc and ":" in path:
+        path = _encode_relative_scheme_colon(path)
     self._path = path
     self._query = query_string
     self._fragment = fragment
@@ -264,6 +340,8 @@ def from_parts_uncached(
     self = object.__new__(URL)
     self._scheme = scheme
     self._netloc = netloc
+    if path and not scheme and not netloc and ":" in path:
+        path = _encode_relative_scheme_colon(path)
     self._path = path
     self._query = query
     self._fragment = fragment
@@ -359,7 +437,7 @@ class URL:
         val: Union[str, SplitResult, "URL", UndefinedType] = UNDEFINED,
         *,
         encoded: bool = False,
-        strict: Union[bool, None] = None,
+        strict: bool | None = None,
     ) -> "URL":
         if strict is not None:  # pragma: no cover
             warnings.warn("strict parameter is ignored")
@@ -389,12 +467,12 @@ class URL:
         *,
         scheme: str = "",
         authority: str = "",
-        user: Union[str, None] = None,
-        password: Union[str, None] = None,
+        user: str | None = None,
+        password: str | None = None,
         host: str = "",
-        port: Union[int, None] = None,
+        port: int | None = None,
         path: str = "",
-        query: Union[Query, None] = None,
+        query: Query | None = None,
         query_string: str = "",
         fragment: str = "",
         encoded: bool = False,
@@ -442,7 +520,7 @@ class URL:
 
         self = object.__new__(URL)
         self._scheme = scheme
-        _host: Union[str, None] = None
+        _host: str | None = None
         if authority:
             user, password, _host, port = split_netloc(authority)
             _host = _encode_host(_host, validate_host=False) if _host else ""
@@ -470,6 +548,8 @@ class URL:
                 )
                 raise ValueError(msg)
 
+        if path and not self._scheme and not self._netloc and ":" in path:
+            path = _encode_relative_scheme_colon(path)
         self._path = path
         if not query and query_string:
             query_string = QUERY_QUOTER(query_string)
@@ -547,7 +627,7 @@ class URL:
 
     def __truediv__(self, name: str) -> "URL":
         if not isinstance(name, str):
-            return NotImplemented  # type: ignore[unreachable]
+            return NotImplemented
         return self._make_child((str(name),))
 
     def __mod__(self, query: Query) -> "URL":
@@ -556,11 +636,18 @@ class URL:
     def __bool__(self) -> bool:
         return bool(self._netloc or self._path or self._query or self._fragment)
 
-    def __getstate__(self) -> tuple[SplitResult]:
-        return (tuple.__new__(SplitResult, self._val),)
+    def __getstate__(self) -> tuple[SplitURLType]:
+        # Return a plain tuple rather than a ``SplitResult``. Constructing a
+        # ``SplitResult`` via ``tuple.__new__`` skips its ``__init__`` and on
+        # Python 3.15+ leaves ``_keep_empty`` unset, which breaks pickling: the
+        # new ``SplitResult.__getstate__`` indexes a state that ends up as
+        # ``None`` (gh-1632). ``__setstate__`` already unpacks both shapes, so
+        # pickles produced by older yarl releases (which embed a real
+        # ``SplitResult``) still load correctly.
+        return (self._val,)
 
     def __setstate__(
-        self, state: Union[tuple[SplitURLType], tuple[None, _InternalURLCache]]
+        self, state: tuple[SplitURLType] | tuple[None, _InternalURLCache]
     ) -> None:
         if state[0] is None and isinstance(state[1], dict):
             # default style pickle
@@ -687,7 +774,7 @@ class URL:
         return make_netloc(self.user, self.password, self.host, self.port)
 
     @cached_property
-    def raw_user(self) -> Union[str, None]:
+    def raw_user(self) -> str | None:
         """Encoded user part of URL.
 
         None if user is missing.
@@ -698,7 +785,7 @@ class URL:
         return self._cache["raw_user"]
 
     @cached_property
-    def user(self) -> Union[str, None]:
+    def user(self) -> str | None:
         """Decoded user part of URL.
 
         None if user is missing.
@@ -709,7 +796,7 @@ class URL:
         return UNQUOTER(raw_user)
 
     @cached_property
-    def raw_password(self) -> Union[str, None]:
+    def raw_password(self) -> str | None:
         """Encoded password part of URL.
 
         None if password is missing.
@@ -719,7 +806,7 @@ class URL:
         return self._cache["raw_password"]
 
     @cached_property
-    def password(self) -> Union[str, None]:
+    def password(self) -> str | None:
         """Decoded password part of URL.
 
         None if password is missing.
@@ -730,7 +817,7 @@ class URL:
         return UNQUOTER(raw_password)
 
     @cached_property
-    def raw_host(self) -> Union[str, None]:
+    def raw_host(self) -> str | None:
         """Encoded host part of URL.
 
         None for relative URLs.
@@ -744,21 +831,31 @@ class URL:
         return self._cache["raw_host"]
 
     @cached_property
-    def host(self) -> Union[str, None]:
+    def host(self) -> str | None:
         """Decoded host part of URL.
 
         None for relative URLs.
+
+        For IPv6 hosts that carry an RFC 6874 zone identifier, the
+        ``%25`` zone separator is decoded back to ``%``; the encoded
+        form is still available via :attr:`raw_host` and
+        :attr:`host_subcomponent`.
 
         """
         if (raw := self.raw_host) is None:
             return None
         if raw and raw[-1].isdigit() or ":" in raw:
-            # IP addresses are never IDNA encoded
+            # IP addresses are never IDNA encoded. The replace decodes
+            # every %25 in the raw host, i.e. the RFC 6874 zone
+            # separator and any %25 that percent-encodes a literal %
+            # inside the zone identifier.
+            if "%25" in raw:
+                return raw.replace("%25", "%")
             return raw
         return _idna_decode(raw)
 
     @cached_property
-    def host_subcomponent(self) -> Union[str, None]:
+    def host_subcomponent(self) -> str | None:
         """Return the host subcomponent part of URL.
 
         None for relative URLs.
@@ -780,7 +877,7 @@ class URL:
         return f"[{raw}]" if ":" in raw else raw
 
     @cached_property
-    def host_port_subcomponent(self) -> Union[str, None]:
+    def host_port_subcomponent(self) -> str | None:
         """Return the host and port subcomponent part of URL.
 
         Trailing dots are removed from the host part.
@@ -818,7 +915,7 @@ class URL:
         return f"[{raw}]:{port}" if ":" in raw else f"{raw}:{port}"
 
     @cached_property
-    def port(self) -> Union[int, None]:
+    def port(self) -> int | None:
         """Port part of URL, with scheme-based fallback.
 
         None for relative URLs or URLs without explicit port and
@@ -830,7 +927,7 @@ class URL:
         return DEFAULT_PORTS.get(self._scheme)
 
     @cached_property
-    def explicit_port(self) -> Union[int, None]:
+    def explicit_port(self) -> int | None:
         """Port part of URL, without scheme-based fallback.
 
         None for relative URLs or URLs without explicit port.
@@ -1068,7 +1165,7 @@ class URL:
             raise ValueError(msg)
         return from_parts(lower_scheme, netloc, self._path, self._query, self._fragment)
 
-    def with_user(self, user: Union[str, None]) -> "URL":
+    def with_user(self, user: str | None) -> "URL":
         """Return a new URL with user replaced.
 
         Autoencode user if needed.
@@ -1090,7 +1187,7 @@ class URL:
         netloc = make_netloc(user, password, encoded_host, self.explicit_port)
         return from_parts(self._scheme, netloc, self._path, self._query, self._fragment)
 
-    def with_password(self, password: Union[str, None]) -> "URL":
+    def with_password(self, password: str | None) -> "URL":
         """Return a new URL with password replaced.
 
         Autoencode password if needed.
@@ -1133,7 +1230,7 @@ class URL:
         netloc = make_netloc(self.raw_user, self.raw_password, encoded_host, port)
         return from_parts(self._scheme, netloc, self._path, self._query, self._fragment)
 
-    def with_port(self, port: Union[int, None]) -> "URL":
+    def with_port(self, port: int | None) -> "URL":
         """Return a new URL with port replaced.
 
         Clear port to default if None is passed.
@@ -1240,12 +1337,12 @@ class URL:
         >>> url.update_query(a=3, c=4)
         URL('http://example.com/?a=3&b=2&c=4')
         """
-        in_query: Union[
-            str,
-            Mapping[str, QueryVariable],
-            Sequence[tuple[Union[str, istr], SimpleQuery]],
-            None,
-        ]
+        in_query: (
+            str
+            | Mapping[str, QueryVariable]
+            | Sequence[tuple[str | istr, SimpleQuery]]
+            | None
+        )
         if kwargs:
             if args:
                 msg = "Either kwargs or single query parameter must be present"
@@ -1305,7 +1402,7 @@ class URL:
             )
         )
 
-    def with_fragment(self, fragment: Union[str, None]) -> "URL":
+    def with_fragment(self, fragment: str | None) -> "URL":
         """Return a new URL with fragment replaced.
 
         Autoencode fragment if needed.
@@ -1463,13 +1560,15 @@ class URL:
 
     def human_repr(self) -> str:
         """Return decoded human readable string for URL representation."""
-        user = human_quote(self.user, "#/:?@[]")
-        password = human_quote(self.password, "#/:?@[]")
+        user = human_quote(self.user, "#/:?@[]\\")
+        password = human_quote(self.password, "#/:?@[]\\")
         if (host := self.host) and ":" in host:
             host = f"[{host}]"
         path = human_quote(self.path, "#?")
         if TYPE_CHECKING:
             assert path is not None
+        if not self._scheme and not self._netloc:
+            path = _encode_relative_scheme_colon(path)
         query_string = "&".join(
             "{}={}".format(human_quote(k, "#&+;="), human_quote(v, "#&+;="))
             for k, v in self.query.items()
@@ -1479,6 +1578,48 @@ class URL:
             assert fragment is not None
         netloc = make_netloc(user, password, host, self.explicit_port)
         return unsplit_result(self._scheme, netloc, path, query_string, fragment)
+
+    if HAS_PYDANTIC:
+        # Borrowed from https://docs.pydantic.dev/latest/concepts/types/#handling-third-party-types
+        @classmethod
+        def __get_pydantic_json_schema__(
+            cls,
+            core_schema: "CoreSchema",
+            handler: "GetJsonSchemaHandler",
+        ) -> "JsonSchemaValue":
+            field_schema: dict[str, Any] = {}
+            field_schema.update(type="string", format="uri")
+            return field_schema
+
+        @classmethod
+        def __get_pydantic_core_schema__(
+            cls,
+            source_type: type[Self] | type[str],
+            handler: "GetCoreSchemaHandler",
+        ) -> "CoreSchema":
+            # Lazy import: pulling in pydantic_core at module load time
+            # increases yarl's import cost 3-7x for users who don't use
+            # pydantic. Keep this import function-scoped.
+            from pydantic_core import core_schema  # noqa: PLC0415
+
+            from_str_schema = core_schema.chain_schema(
+                [
+                    core_schema.str_schema(),
+                    core_schema.no_info_plain_validator_function(URL),
+                ]
+            )
+
+            return core_schema.json_or_python_schema(
+                json_schema=from_str_schema,
+                python_schema=core_schema.union_schema(
+                    [
+                        # check if it's an instance first before doing any further work
+                        core_schema.is_instance_schema(URL),
+                        from_str_schema,
+                    ]
+                ),
+                serialization=core_schema.plain_serializer_function_ser_schema(str),
+            )
 
 
 _DEFAULT_IDNA_SIZE = 256
@@ -1507,7 +1648,11 @@ def _encode_host(host: str, validate_host: bool) -> str:
     # If the host ends with a digit or contains a colon, its likely
     # an IP address.
     if host and (host[-1].isdigit() or ":" in host):
-        raw_ip, sep, zone = host.partition("%")
+        # RFC 6874 spells the IPv6 zone separator as the percent-encoded
+        # ``%25``; bare ``%`` is still accepted so that hosts constructed
+        # programmatically (e.g. ``with_host("fe80::1%1")``) keep working.
+        part = "%25" if "%25" in host else "%"
+        raw_ip, sep, zone = host.partition(part)
         # If it looks like an IP, we check with _ip_compressed_version
         # and fall-through if its not an IP address. This is a performance
         # optimization to avoid parsing IP addresses as much as possible
@@ -1531,12 +1676,14 @@ def _encode_host(host: str, validate_host: bool) -> str:
         except ValueError:
             pass
         else:
+            if sep and validate_host and (not zone or _ZONE_ID_UNSAFE_RE.search(zone)):
+                raise ValueError("Invalid characters in zone identifier")
             # These checks should not happen in the
             # LRU to keep the cache size small
             host = ip.compressed
             if ip.version == 6:
-                return f"[{host}%{zone}]" if sep else f"[{host}]"
-            return f"{host}%{zone}" if sep else host
+                return f"[{host}{sep}{zone}]" if sep else f"[{host}]"
+            return f"{host}{sep}{zone}" if sep else host
 
     # IDNA encoding is slow, skip it for ASCII-only strings
     if host.isascii():
@@ -1556,7 +1703,29 @@ def _encode_host(host: str, validate_host: bool) -> str:
             ) from None
         return host
 
-    return _idna_encode(host)
+    # IDNA/UTS-46 mapping silently deletes default-ignorable code points, which
+    # would turn e.g. ``e<ZWSP>vil.com`` into ``evil.com``, a different host
+    # than the string the caller supplied. Reject them on every path (this runs
+    # regardless of ``validate_host`` since the plain ``URL(str)`` constructor
+    # encodes with ``validate_host=False``) so the parsed host cannot diverge
+    # from the input, matching idna/httpx/urllib3.
+    if invalid := _DEFAULT_IGNORABLE_RE.search(host):
+        raise ValueError(
+            f"Host {host!r} cannot contain {invalid.group()!r} "
+            f"(at position {invalid.start()})"
+        ) from None
+    encoded = _idna_encode(host)
+    # IDNA uses NFKC equivalence, so normalization can expand a non-ascii
+    # character into an ASCII delimiter (e.g. the fullwidth solidus U+FF0F
+    # becomes '/'). The ascii branch above rejects such delimiters directly;
+    # apply the same check to the IDNA output so the builder APIs agree with
+    # the parser's _check_netloc.
+    if validate_host and (invalid := NOT_REG_NAME.search(encoded)):
+        raise ValueError(
+            f"Host {host!r} cannot contain {invalid.group()!r} "
+            f"after IDNA normalization to {encoded!r}"
+        ) from None
+    return encoded
 
 
 @rewrite_module
@@ -1582,11 +1751,11 @@ def cache_info() -> CacheInfo:
 @rewrite_module
 def cache_configure(
     *,
-    idna_encode_size: Union[int, None] = _DEFAULT_IDNA_SIZE,
-    idna_decode_size: Union[int, None] = _DEFAULT_IDNA_SIZE,
-    ip_address_size: Union[int, None, UndefinedType] = UNDEFINED,
-    host_validate_size: Union[int, None, UndefinedType] = UNDEFINED,
-    encode_host_size: Union[int, None, UndefinedType] = UNDEFINED,
+    idna_encode_size: int | None = _DEFAULT_IDNA_SIZE,
+    idna_decode_size: int | None = _DEFAULT_IDNA_SIZE,
+    ip_address_size: int | None | UndefinedType = UNDEFINED,
+    host_validate_size: int | None | UndefinedType = UNDEFINED,
+    encode_host_size: int | None | UndefinedType = UNDEFINED,
 ) -> None:
     """Configure LRU cache sizes."""
     global _idna_decode, _idna_encode, _encode_host

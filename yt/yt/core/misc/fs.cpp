@@ -50,7 +50,7 @@ namespace NYT::NFS {
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FS");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "FS");
 
 [[noreturn]] [[maybe_unused]]
 void ThrowNotSupported()

@@ -6,10 +6,11 @@
 
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 
+#include <array>
 #include <cstring>
+#include <exception>
 #include <vector>
 #include <cassert>
-#include <cstdlib>
 #include <cstdlib>
 #include <random>
 
@@ -19,8 +20,12 @@
 
 namespace NKikimr::NMiniKQL {
 
+namespace {
+
 constexpr bool IsVerbose = false;
 #define CTEST (IsVerbose ? Cerr : Cnull)
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
 Y_UNIT_TEST(TestMem1) {
@@ -30,8 +35,8 @@ Y_UNIT_TEST(TestMem1) {
     const ui64 BucketSize = (2 * NTuples * (TupleSize + 1)) / NBuckets;
 
     ui64* bigTuple = (ui64*)malloc(TupleSize * sizeof(ui64));
-    ui64* buckets[NBuckets];
-    ui64 tuplesPos[NBuckets];
+    std::array<ui64*, NBuckets> buckets{};
+    std::array<ui64, NBuckets> tuplesPos{};
 
     std::mt19937_64 rng;
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
@@ -184,13 +189,13 @@ constexpr ui64 BigTupleSize = 40;
 
 Y_UNIT_TEST_TWIN(TestTryToPreallocateMemoryForJoin, EXCEPTION) {
     TSetup<false> setup;
-    ui64 tuple[11] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    ui32 strSizes[2] = {4, 4};
-    char* strVals[] = {(char*)"aaaaa", (char*)"bbbb"};
+    std::array<ui64, 11> tuple = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::array<ui32, 2> strSizes = {4, 4};
+    std::array<char*, 2> strVals = {(char*)"aaaaa", (char*)"bbbb"};
 
-    char* bigStrVal[] = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                         (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
-    ui32 bigStrSize[2] = {151, 151};
+    std::array<char*, 2> bigStrVal = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                      (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+    std::array<ui32, 2> bigStrSize = {151, 151};
 
     GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
     GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
@@ -198,7 +203,7 @@ Y_UNIT_TEST_TWIN(TestTryToPreallocateMemoryForJoin, EXCEPTION) {
 
     const ui64 TupleSize = 1024;
 
-    ui64 bigTuple[TupleSize];
+    std::array<ui64, TupleSize> bigTuple;
 
     std::mt19937_64 rng; // deterministic PRNG
 
@@ -210,18 +215,18 @@ Y_UNIT_TEST_TWIN(TestTryToPreallocateMemoryForJoin, EXCEPTION) {
 
     std::uniform_int_distribution<ui64> smallDist(0, SmallTableTuples - 1);
 
-    smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+    smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
     for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
         tuple[1] = smallDist(rng);
         tuple[2] = tuple[1];
-        smallTable.AddTuple(tuple, strVals, strSizes);
+        smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     for (ui64 i = 0; i < BigTableTuples; i++) {
         tuple[1] = smallDist(rng);
         tuple[2] = tuple[1];
-        bigTable.AddTuple(tuple, strVals, strSizes);
+        bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     ui64 allocationsCount = 0;
@@ -230,6 +235,7 @@ Y_UNIT_TEST_TWIN(TestTryToPreallocateMemoryForJoin, EXCEPTION) {
         TlsAllocState->SetIncreaseMemoryLimitCallback([&allocationsCount](ui64, ui64 required) {
             // Preallocate memory for some buckets before fail
             if (allocationsCount++ > 5) {
+                // NOLINTNEXTLINE(hicpp-exception-baseclass)
                 throw TMemoryLimitExceededException();
             }
             TlsAllocState->SetLimit(required);
@@ -242,13 +248,13 @@ Y_UNIT_TEST_TWIN(TestTryToPreallocateMemoryForJoin, EXCEPTION) {
 
 Y_UNIT_TEST_LLVM(TestImp1) {
     TSetup<LLVM> setup;
-    ui64 tuple[11] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    ui32 strSizes[2] = {4, 4};
-    char* strVals[] = {(char*)"aaaaa", (char*)"bbbb"};
+    std::array<ui64, 11> tuple = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::array<ui32, 2> strSizes = {4, 4};
+    std::array<char*, 2> strVals = {(char*)"aaaaa", (char*)"bbbb"};
 
-    char* bigStrVal[] = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                         (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
-    ui32 bigStrSize[2] = {151, 151};
+    std::array<char*, 2> bigStrVal = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                      (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+    std::array<ui32, 2> bigStrSize = {151, 151};
 
     NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
     CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
@@ -261,7 +267,7 @@ Y_UNIT_TEST_LLVM(TestImp1) {
 
     const ui64 TupleSize = 1024;
 
-    ui64 bigTuple[TupleSize];
+    std::array<ui64, TupleSize> bigTuple;
 
     std::mt19937_64 rng; // deterministic PRNG
 
@@ -277,18 +283,18 @@ Y_UNIT_TEST_LLVM(TestImp1) {
 
     std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
-    smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+    smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
     for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
         tuple[1] = smallDist(rng);
         tuple[2] = tuple[1];
-        smallTable.AddTuple(tuple, strVals, strSizes);
+        smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     for (ui64 i = 0; i < BigTableTuples; i++) {
         tuple[1] = smallDist(rng);
         tuple[2] = tuple[1];
-        bigTable.AddTuple(tuple, strVals, strSizes);
+        bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -305,18 +311,18 @@ Y_UNIT_TEST_LLVM(TestImp1) {
 
     begin03 = std::chrono::steady_clock::now();
 
-    smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+    smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
     for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
         tuple[1] = smallDist(rng);
         tuple[2] = tuple[1];
-        smallTable.AddTuple(tuple, strVals, strSizes);
+        smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     for (ui64 i = 0; i < BigTableTuples; i++) {
         tuple[1] = smallDist(rng);
         tuple[2] = tuple[1];
-        bigTable.AddTuple(tuple, strVals, strSizes);
+        bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     end03 = std::chrono::steady_clock::now();
@@ -412,13 +418,13 @@ Y_UNIT_TEST_LLVM(TestImp1) {
 
 Y_UNIT_TEST_LLVM(TestImp1Batch) {
     TSetup<LLVM> setup;
-    ui64 tuple[11] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    ui32 strSizes[2] = {4, 4};
-    char* strVals[] = {(char*)"aaaaa", (char*)"bbbb"};
+    std::array<ui64, 11> tuple = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::array<ui32, 2> strSizes = {4, 4};
+    std::array<char*, 2> strVals = {(char*)"aaaaa", (char*)"bbbb"};
 
-    char* bigStrVal[] = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                         (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
-    ui32 bigStrSize[2] = {151, 151};
+    std::array<char*, 2> bigStrVal = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                      (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+    std::array<ui32, 2> bigStrSize = {151, 151};
 
     NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
     CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
@@ -431,7 +437,7 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
 
     const ui64 TupleSize = 1024;
 
-    ui64 bigTuple[TupleSize];
+    std::array<ui64, TupleSize> bigTuple;
 
     std::mt19937_64 rng; // deterministic PRNG
 
@@ -453,12 +459,12 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
     {
         std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
-        smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+        smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
         for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
             tuple[1] = smallDist(rng);
             tuple[2] = tuple[1];
-            smallTable.AddTuple(tuple, strVals, strSizes);
+            smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
         }
 
         std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -471,7 +477,7 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
         for (; pos < limit; ++pos) {
             tuple[1] = smallDist(rng);
             tuple[2] = tuple[1];
-            bigTable.AddTuple(tuple, strVals, strSizes);
+            bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
         }
         bigTable.Clear();
         std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -491,12 +497,12 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
     {
         auto begin03 = std::chrono::steady_clock::now();
 
-        smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+        smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
         for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
             tuple[1] = smallDist(rng);
             tuple[2] = tuple[1];
-            smallTable.AddTuple(tuple, strVals, strSizes);
+            smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
         }
 
         auto end03 = std::chrono::steady_clock::now();
@@ -533,7 +539,7 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
         for (; pos < limit; ++pos) {
             tuple[1] = smallDist(rng);
             tuple[2] = tuple[1];
-            bigTable.AddTuple(tuple, strVals, strSizes);
+            bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
         }
         auto end03 = std::chrono::steady_clock::now();
         millisecondsAdd += std::chrono::duration_cast<std::chrono::milliseconds>(end03 - begin03).count();
@@ -593,13 +599,13 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
 Y_UNIT_TEST_LLVM(TestImp2) {
     TSetup<LLVM> setup;
-    ui64 tuple[11] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    ui32 strSizes[2] = {4, 4};
-    char* strVals[] = {(char*)"aaaaa", (char*)"bbbb"};
+    std::array<ui64, 11> tuple = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::array<ui32, 2> strSizes = {4, 4};
+    std::array<char*, 2> strVals = {(char*)"aaaaa", (char*)"bbbb"};
 
-    char* bigStrVal[] = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                         (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
-    ui32 bigStrSize[2] = {151, 151};
+    std::array<char*, 2> bigStrVal = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                      (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+    std::array<ui32, 2> bigStrSize = {151, 151};
 
     GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
     GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
@@ -612,7 +618,7 @@ Y_UNIT_TEST_LLVM(TestImp2) {
 
     const ui64 TupleSize = 1024;
 
-    ui64 bigTuple[TupleSize];
+    std::array<ui64, TupleSize> bigTuple;
 
     for (auto& i : bigTuple) {
         i = dist(rng);
@@ -628,18 +634,18 @@ Y_UNIT_TEST_LLVM(TestImp2) {
 
     std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
-    smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+    smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
     for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
         tuple[1] = i;
         tuple[2] = tuple[1];
-        smallTable.AddTuple(tuple, strVals, strSizes);
+        smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     for (ui64 i = 0; i < BigTableTuples; i++) {
         tuple[1] = i % SmallTableTuples;
         tuple[2] = tuple[1];
-        bigTable.AddTuple(tuple, strVals, strSizes);
+        bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -731,13 +737,13 @@ Y_UNIT_TEST_LLVM(TestImp2) {
 Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
 Y_UNIT_TEST_LLVM(TestImp3) {
     TSetup<LLVM> setup;
-    ui64 tuple[11] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    ui32 strSizes[2] = {4, 4};
-    char* strVals[] = {(char*)"aaaaa", (char*)"bbbb"};
+    std::array<ui64, 11> tuple = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::array<ui32, 2> strSizes = {4, 4};
+    std::array<char*, 2> strVals = {(char*)"aaaaa", (char*)"bbbb"};
 
-    char* bigStrVal[] = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                         (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
-    ui32 bigStrSize[2] = {151, 151};
+    std::array<char*, 2> bigStrVal = {(char*)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                      (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+    std::array<ui32, 2> bigStrSize = {151, 151};
 
     GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
     GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
@@ -747,7 +753,7 @@ Y_UNIT_TEST_LLVM(TestImp3) {
 
     const ui64 TupleSize = 1024;
 
-    ui64 bigTuple[TupleSize];
+    std::array<ui64, TupleSize> bigTuple;
 
     std::mt19937_64 rng;
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
@@ -764,18 +770,18 @@ Y_UNIT_TEST_LLVM(TestImp3) {
 
     std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
-    smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+    smallTable.AddTuple(tuple.data(), bigStrVal.data(), bigStrSize.data());
 
     for (ui64 i = 0; i < SmallTableTuples + 1; i++) {
         tuple[1] = i;
         tuple[2] = tuple[1];
-        smallTable.AddTuple(tuple, strVals, strSizes);
+        smallTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     for (ui64 i = 0; i < BigTableTuples; i++) {
         tuple[1] = i % SmallTableTuples;
         tuple[2] = tuple[1];
-        bigTable.AddTuple(tuple, strVals, strSizes);
+        bigTable.AddTuple(tuple.data(), strVals.data(), strSizes.data());
     }
 
     std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();

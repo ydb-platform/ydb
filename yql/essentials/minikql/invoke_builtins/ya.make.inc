@@ -1,5 +1,7 @@
 INCLUDE(header.ya.make.inc)
 
+ENABLE(TIDY_ALLOW_GENERATED)
+
 SET(ORIG_SRC_DIR yql/essentials/minikql/invoke_builtins)
 
 SET(ORIG_SOURCES

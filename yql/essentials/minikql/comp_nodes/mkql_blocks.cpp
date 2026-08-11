@@ -116,7 +116,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_, MaxLength_);
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
-                                                      std::move(state),
+                                                      state,
                                                       std::move(Stream_->GetValue(ctx)),
                                                       MaxLength_,
                                                       ctx.RuntimeSettings.DatumValidation.Get());
@@ -140,7 +140,7 @@ private:
         }
 
     private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
             auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
             auto* inputFields = blockState.Pointer;
             const size_t inputWidth = blockState.Values.size() - 1;
@@ -434,7 +434,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -571,8 +571,8 @@ struct TWideFromBlocksState: public TComputationValue<TWideFromBlocksState> {
         Pointer = Values.data();
 
         const auto& pgBuilder = ctx.Builder->GetPgBuilder();
-        for (size_t i = 0; i < types.size(); ++i) {
-            const TType* blockItemType = AS_TYPE(TBlockType, types[i])->GetItemType();
+        for (const auto type : types) {
+            const TType* blockItemType = AS_TYPE(TBlockType, type)->GetItemType();
             Readers.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
             Converters.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));
         }
@@ -613,7 +613,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_);
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
-                                                      std::move(state),
+                                                      state,
                                                       std::move(Stream_->GetValue(ctx)));
     }
 
@@ -632,7 +632,7 @@ private:
         }
 
     private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
             auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
             auto* inputFields = blockState.Pointer;
             const size_t inputWidth = blockState.Values.size();
@@ -921,7 +921,7 @@ public:
         return AsScalar(Arg_->GetValue(ctx).Release(), ctx);
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto value = GetNodeValue(Arg_, ctx, block);
@@ -973,7 +973,7 @@ public:
         return Replicate(value, count, ctx);
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto value = GetNodeValue(Value_, ctx, block);
@@ -1049,7 +1049,7 @@ public:
         return EFetchResult::One;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);

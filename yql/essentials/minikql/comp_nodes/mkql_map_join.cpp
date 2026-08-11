@@ -102,8 +102,8 @@ protected:
     }
 
     bool IsUnusedInput(const ui32 index) const {
-        for (auto i = 0U; i < LeftRenames_.size(); ++i) {
-            if (LeftRenames_[i] == index) {
+        for (const auto& leftRename : LeftRenames_) {
+            if (leftRename == index) {
                 return false;
             }
         }
@@ -120,8 +120,8 @@ protected:
         const auto zero = ConstantInt::get(valueType, 0);
 
         auto width = 0U;
-        for (auto i = 0U; i < RightRenames_.size(); ++i) {
-            width = std::max(width, RightRenames_[i]);
+        for (const auto& rightRename : RightRenames_) {
+            width = std::max(width, rightRename);
         }
 
         const auto arrayType = ArrayType::get(valueType, ++width);
@@ -250,8 +250,8 @@ protected:
 
     std::set<ui32> GetUsedInputs() const {
         std::set<ui32> unique;
-        for (auto i = 0U; i < LeftKeyColumns_.size(); ++i) {
-            unique.emplace(LeftKeyColumns_[i]);
+        for (const auto& leftKeyColumn : LeftKeyColumns_) {
+            unique.emplace(leftKeyColumn);
         }
         for (auto i = 0U; i < LeftRenames_.size(); i += 2U) {
             unique.emplace(LeftRenames_[i]);
@@ -320,7 +320,7 @@ public:
         return EFetchResult::One;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* lookupPtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* lookupPtr, BasicBlock*& block) const override {
         MKQL_ENSURE(!this->Dict_->IsTemporaryValue(), "Dict_ can't be temporary");
 
         auto& context = ctx.Codegen.GetContext();
@@ -500,7 +500,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* iteraratorPtr, Value* itemPtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* iteraratorPtr, Value* itemPtr, BasicBlock*& block) const override {
         MKQL_ENSURE(!this->Dict_->IsTemporaryValue(), "Dict_ can't be temporary");
         auto& context = ctx.Codegen.GetContext();
 
@@ -948,14 +948,49 @@ enum class ERightKind {
     Many
 };
 
+template <typename TDerived, bool IsPairState>
+class TMapJoinFlowCodegeneratorBase;
+
+template <typename TDerived>
+class TMapJoinFlowCodegeneratorBase<TDerived, false>
+    : public TStatelessFlowCodegeneratorNode<TDerived> {
+    using TBase = TStatelessFlowCodegeneratorNode<TDerived>;
+
+protected:
+    TMapJoinFlowCodegeneratorBase(TComputationMutables& mutables, IComputationNode* flow, EValueRepresentation kind)
+        : TBase(mutables, flow, kind)
+    {
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
+        return static_cast<const TDerived*>(this)->GenerateGetValue(ctx, block);
+    }
+#endif
+};
+
+template <typename TDerived>
+class TMapJoinFlowCodegeneratorBase<TDerived, true>
+    : public TPairStateFlowCodegeneratorNode<TDerived> {
+    using TBase = TPairStateFlowCodegeneratorNode<TDerived>;
+
+protected:
+    TMapJoinFlowCodegeneratorBase(TComputationMutables& mutables, IComputationNode* flow, EValueRepresentation kind)
+        : TBase(mutables, flow, kind)
+    {
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* currentPtr, Value* iteratorPtr, BasicBlock*& block) const override {
+        return static_cast<const TDerived*>(this)->GenerateGetValue(ctx, currentPtr, iteratorPtr, block);
+    }
+#endif
+};
+
 template <ERightKind RightKind, bool RightRequired, bool IsTuple>
-class TMapJoinCoreFlowWrapper: public TMapJoinCoreWrapperBase<IsTuple>, public std::conditional_t<ERightKind::Many != RightKind,
-                                                                                                  TStatelessFlowCodegeneratorNode<TMapJoinCoreFlowWrapper<RightKind, RightRequired, IsTuple>>,
-                                                                                                  TPairStateFlowCodegeneratorNode<TMapJoinCoreFlowWrapper<RightKind, RightRequired, IsTuple>>> {
-    typedef std::conditional_t<ERightKind::Many != RightKind,
-                               TStatelessFlowCodegeneratorNode<TMapJoinCoreFlowWrapper<RightKind, RightRequired, IsTuple>>,
-                               TPairStateFlowCodegeneratorNode<TMapJoinCoreFlowWrapper<RightKind, RightRequired, IsTuple>>>
-        TBaseComputation;
+class TMapJoinCoreFlowWrapper: public TMapJoinCoreWrapperBase<IsTuple>,
+                               public TMapJoinFlowCodegeneratorBase<TMapJoinCoreFlowWrapper<RightKind, RightRequired, IsTuple>, ERightKind::Many == RightKind> {
+    using TBaseComputation = TMapJoinFlowCodegeneratorBase<TMapJoinCoreFlowWrapper<RightKind, RightRequired, IsTuple>, ERightKind::Many == RightKind>;
 
 public:
     TMapJoinCoreFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, std::vector<TFunctionDescriptor>&& leftKeyConverters,
@@ -1058,7 +1093,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* GenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1180,7 +1215,7 @@ public:
         return result;
     }
 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* currentPtr, Value* iteraratorPtr, BasicBlock*& block) const {
+    Value* GenerateGetValue(const TCodegenContext& ctx, Value* currentPtr, Value* iteraratorPtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1581,7 +1616,7 @@ private:
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, containerType, PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, containerType, PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -1735,7 +1770,7 @@ private:
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -1912,7 +1947,9 @@ IComputationNode* WrapMapJoinCore(TCallable& callable, const TComputationNodeFac
     const auto leftRenamesNode = AS_VALUE(TTupleLiteral, callable.GetInput(4));
     const auto rightRenamesNode = AS_VALUE(TTupleLiteral, callable.GetInput(5));
 
-    std::vector<ui32> leftKeyColumns, leftRenames, rightRenames;
+    std::vector<ui32> leftKeyColumns;
+    std::vector<ui32> leftRenames;
+    std::vector<ui32> rightRenames;
 
     leftKeyColumns.reserve(leftKeyColumnsNode->GetValuesCount());
     for (ui32 i = 0; i < leftKeyColumnsNode->GetValuesCount(); ++i) {
@@ -1981,7 +2018,7 @@ IComputationNode* WrapMapJoinCore(TCallable& callable, const TComputationNodeFac
                 return new TWideMapJoinWrapper<true, RIGHT_REQ, IS_TUPLE>(ctx.Mutables,                                                                                    \
                                                                           std::move(leftKeyConverters), dictType, std::move(outputRepresentations),                        \
                                                                           std::move(leftKeyColumns), std::move(leftRenames), std::move(rightRenames), wide, dict, width);  \
-            else if (isMany)                                                                                                                                               \
+            else if constexpr (ERightKind::Many == KIND)                                                                                                                   \
                 return new TWideMultiMapJoinWrapper<RIGHT_REQ, IS_TUPLE>(ctx.Mutables,                                                                                     \
                                                                          std::move(leftKeyConverters), dictType, std::move(outputRepresentations),                         \
                                                                          std::move(leftKeyColumns), std::move(leftRenames), std::move(rightRenames), wide, dict, width);   \

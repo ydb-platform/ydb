@@ -363,3 +363,9 @@ try:
     HAS_GZIP = True
 except ImportError:
     HAS_GZIP = False
+
+# Conditional import for awscrt EC crypto functionality
+if HAS_CRT and has_minimum_crt_version((0, 28, 4)):
+    from awscrt.crypto import EC
+else:
+    EC = None

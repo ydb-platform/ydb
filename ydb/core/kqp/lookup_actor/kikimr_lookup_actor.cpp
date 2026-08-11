@@ -286,7 +286,7 @@ namespace {
             hFunc(TEvQueryCreateSessionResponse, Handle)
             hFunc(TEvQuerySessionState, Handle)
             hFunc(TEvLookupRetry, Handle)
-            hFunc(NActors::TEvents::TEvPoison, Handle)
+            sFunc(NActors::TEvents::TEvPoison, PassAway)
             , ExceptionFunc(std::exception, HandleException)
         )
 
@@ -322,10 +322,6 @@ namespace {
             }
             state->ResultRows = 0;
             SendRequest(std::move(state));
-        }
-
-        void Handle(NActors::TEvents::TEvPoison::TPtr) {
-            PassAway();
         }
 
         void Handle(IDqAsyncLookupSource::TEvLookupRequest::TPtr ev) {

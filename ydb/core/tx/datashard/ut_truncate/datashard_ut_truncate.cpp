@@ -1,6 +1,8 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
 using namespace NKikimr;
@@ -311,6 +313,139 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
 
         auto afterResult = ReadTable(server, shards, tableId);
         UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
+    }
+
+    // A transaction that pinned an MVCC snapshot before TRUNCATE must not be able to read the
+    // truncated table afterwards: its snapshot points at row versions TRUNCATE destroyed.
+    Y_UNIT_TEST(TruncateBreaksStaleSnapshotSameTable) {
+        auto serverHelper = TServerHelper();
+        auto [server, runtime, edgeSender] = serverHelper.GetObjects();
+
+        CreateShardedTable(server, edgeSender, "/Root", "table_1", 1);
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/table_1` (key, value) VALUES (1, 100), (2, 200), (3, 300);
+        )");
+
+        TString sessionId, txId;
+        auto read1 = KqpSimpleBegin(*runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/table_1` ORDER BY key;
+        )"));
+        UNIT_ASSERT_C(!read1.empty() && !read1.StartsWith("ERROR"), "first read must succeed, got: " << read1);
+
+        ui64 truncateTxId = AsyncTruncateTable(server, edgeSender, "/Root", "table_1");
+        WaitTxNotification(server, edgeSender, truncateTxId);
+
+        auto read2 = KqpSimpleContinue(*runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/table_1` WHERE key >= 0 ORDER BY key;
+        )"));
+        Cerr << "read#2 after truncate: [" << read2 << "]" << Endl;
+
+        auto commitFuture = KqpSimpleSendCommit(*runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
+        auto commitResponse = AwaitResponse(*runtime, std::move(commitFuture));
+        Cerr << "commit status: " << commitResponse.operation().status() << Endl;
+
+        // The stale read must fail; the transaction must not be able to commit successfully.
+        UNIT_ASSERT_C(read2.StartsWith("ERROR"),
+            "stale read must fail after TRUNCATE, got: [" << read2 << "]");
+        UNIT_ASSERT_VALUES_UNEQUAL_C(commitResponse.operation().status(), Ydb::StatusIds::SUCCESS,
+            "transaction must not commit after reading a truncated table");
+    }
+
+    // Same, but the stale read targets a different table that the same DDL wave truncated.
+    // Catches the "pin per table at first touch" hole: tx1 never touched table_2 before.
+    Y_UNIT_TEST(TruncateBreaksStaleSnapshotOtherTable) {
+        auto serverHelper = TServerHelper();
+        auto [server, runtime, edgeSender] = serverHelper.GetObjects();
+
+        CreateShardedTable(server, edgeSender, "/Root", "table_1", 1);
+        CreateShardedTable(server, edgeSender, "/Root", "table_2", 1);
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/table_1` (key, value) VALUES (1, 100), (2, 200), (3, 300);
+        )");
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/table_2` (key, value) VALUES (1, 111), (2, 222);
+        )");
+
+        TString sessionId, txId;
+        auto read1 = KqpSimpleBegin(*runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/table_1` ORDER BY key;
+        )"));
+        UNIT_ASSERT_C(!read1.empty() && !read1.StartsWith("ERROR"), "first read must succeed, got: " << read1);
+
+        ui64 truncate1 = AsyncTruncateTable(server, edgeSender, "/Root", "table_1");
+        WaitTxNotification(server, edgeSender, truncate1);
+        ui64 truncate2 = AsyncTruncateTable(server, edgeSender, "/Root", "table_2");
+        WaitTxNotification(server, edgeSender, truncate2);
+
+        auto read2 = KqpSimpleContinue(*runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/table_2` WHERE key >= 0 ORDER BY key;
+        )"));
+        Cerr << "read#2 of table_2 after truncate: [" << read2 << "]" << Endl;
+
+        auto commitFuture = KqpSimpleSendCommit(*runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
+        auto commitResponse = AwaitResponse(*runtime, std::move(commitFuture));
+        Cerr << "commit status: " << commitResponse.operation().status() << Endl;
+
+        UNIT_ASSERT_C(read2.StartsWith("ERROR"),
+            "stale read of the other truncated table must fail, got: [" << read2 << "]");
+        UNIT_ASSERT_VALUES_UNEQUAL_C(commitResponse.operation().status(), Ydb::StatusIds::SUCCESS,
+            "transaction must not commit after reading a truncated table");
+    }
+
+    // A scan query registers a volatile snapshot on every shard, then scans. Here TRUNCATE lands
+    // after the snapshot exists but before the shard-side scan starts. The scan must not silently
+    // return data from a snapshot whose rows TRUNCATE destroyed: it should fail retryably.
+    Y_UNIT_TEST(TruncateDuringScan) {
+        auto serverHelper = TServerHelper();
+        auto [server, runtime, edgeSender] = serverHelper.GetObjects();
+
+        CreateShardedTable(server, edgeSender, "/Root", "table_1", 1);
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/table_1` (key, value) VALUES (1, 100), (2, 200), (3, 300);
+        )");
+
+        // Keep the stream pipeline moving: a scan query stalls without acks.
+        auto ackStreamData = [&](TAutoPtr<IEventHandle>& ev) -> TTestActorRuntime::EEventAction {
+            if (ev->GetTypeRewrite() == NKqp::TKqpExecuterEvents::EvStreamData) {
+                auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(
+                    record.GetSeqNo(), record.GetChannelId());
+                resp->Record.SetEnough(false);
+                resp->Record.SetFreeSpace(100);
+                runtime->Send(new IEventHandle(ev->Sender, edgeSender, resp.Release()));
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime->SetObserverFunc(ackStreamData);
+
+        // Hold the shard-side scan start so TRUNCATE can land in between.
+        TBlockEvents<TEvDataShard::TEvKqpScan> blockScan(*runtime);
+
+        auto streamSender = runtime->AllocateEdgeActor();
+        SendRequest(*runtime, streamSender,
+            MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table_1`;", false));
+
+        runtime->WaitFor("scan request reaching the datashard", [&]{ return blockScan.size() >= 1; });
+        Cerr << "SCAN blocked scan requests: " << blockScan.size() << Endl;
+
+        ui64 truncateTxId = AsyncTruncateTable(server, edgeSender, "/Root", "table_1");
+        WaitTxNotification(server, edgeSender, truncateTxId);
+        Cerr << "SCAN truncate done" << Endl;
+
+        blockScan.Stop().Unblock();
+
+        auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
+        const auto status = ev->Get()->Record.GetYdbStatus();
+        Cerr << "SCAN query status: " << Ydb::StatusIds::StatusCode_Name(status) << Endl;
+        {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
+            Cerr << "SCAN query issues: " << issues.ToString() << Endl;
+        }
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(status, Ydb::StatusIds::SUCCESS,
+            "scan must not succeed over a snapshot whose data TRUNCATE destroyed");
     }
 
     Y_UNIT_TEST(TruncateTableWithKqpSelects) {

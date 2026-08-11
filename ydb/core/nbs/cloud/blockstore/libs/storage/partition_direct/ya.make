@@ -25,7 +25,6 @@ SRCS(
     read_request_executor.cpp
     read_request_multiple_location.cpp
     read_request_single_location.cpp
-    region_geometry.cpp
     region.cpp
     restore_request.cpp
     vchunk.cpp

@@ -12,7 +12,6 @@
 #include <ydb/library/wasm/api/data_transfer.h>
 #include <ydb/library/wasm/api/pointer.h>
 
-#include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
@@ -74,7 +73,7 @@ TPreparedArg PrepareArgFromUnboxed(
                 const TStringBuf string = arg.AsStringRef();
                 prepared.Storage.StringGuard = CopyIntoCompartment(string, compartment);
                 value.Type = EAbiValueType::String;
-                value.Length = CheckedAbiLength(string.size(), "Wasm UDF string argument");
+                value.Length = static_cast<ui32>(string.size());
                 value.Data.String = std::bit_cast<char*>(prepared.Storage.StringGuard.GetCopiedOffset());
                 break;
             }
@@ -87,8 +86,6 @@ TPreparedArg PrepareArgFromUnboxed(
     StoreValue(compartment, offset, value);
     return prepared;
 }
-
-} // namespace
 
 TUnboxedValue ReadResultUnboxed(
     const IValueBuilder* valueBuilder,
@@ -145,6 +142,8 @@ TUnboxedValue ReadResultUnboxed(
 
     return {};
 }
+
+} // namespace
 
 TType* TWasmUdfFunction::BuildYqlType(IFunctionTypeInfoBuilder& builder, EUdfValueType type) {
     switch (type) {
@@ -219,9 +218,6 @@ TUnboxedValue TWasmUdfFunction::Run(
         TCurrentCompartmentGuard compartmentGuard(compartment);
         TWasmUdfInvocationContext context(compartment);
         TCurrentInvocationContextGuard invocationGuard(&context);
-        Y_DEFER {
-            context.WebAssemblyPool.Clear();
-        };
 
         TVector<TPreparedArg> preparedArgs;
         preparedArgs.reserve(Descriptor_.Args.size());

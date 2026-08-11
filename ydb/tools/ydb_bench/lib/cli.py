@@ -232,7 +232,10 @@ def _run(arguments, resource_loader, tool_revision):
                         if event["type"] == "step-started":
                             store.transition_step(step_id, "running")
                         elif event["type"] == "step-artifacts":
-                            store.add_artifacts(step_id, event["artifacts"])
+                            store.add_artifacts(
+                                step_id,
+                                [str(relative_directory / artifact) for artifact in event["artifacts"]],
+                            )
                         elif event["type"] == "step-finished":
                             store.transition_step(step_id, event["state"], **event.get("fields", {}))
                         else:

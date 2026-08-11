@@ -165,6 +165,7 @@ class YdbBenchTest(unittest.TestCase):
               succeeds: {threads: [1], actor-pairs: [32], inflight: [2], duration: 1, repetitions: 1, affinity: [none]}
             """
         )
+
         def loader(_):
             return benchmark.read_bytes()
         fail_fast = self.root / "fail-fast"

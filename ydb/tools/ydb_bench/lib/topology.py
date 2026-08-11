@@ -110,18 +110,15 @@ def discover_topology(sys_root=Path("/sys/devices/system"), allowed_cpus=None):
                     chiplet_sets.add(shared)
                     l3_cpus.update(shared)
 
-    # A partially described cache hierarchy is no more useful for the CPUs it
-    # omits than a missing one.  Fill those CPUs from die topology too, so
-    # every allowed CPU has a deterministic place in the hierarchy.
-    missing_l3 = allowed_set - l3_cpus
-    if missing_l3:
-        reasons.append(("chiplet", "L3 cache groups are unavailable for some allowed CPUs; using die groups"))
+    # L3 is the primary chiplet contract.  Only synthesize die groups when it
+    # is wholly unavailable: combining partial L3 data with inferred groups
+    # invents a hierarchy (and reasons) for CPUs which sysfs did not describe.
+    if not l3_cpus:
+        reasons.append(("chiplet", "L3 cache groups are unavailable; using die groups"))
         die_groups = {}
         missing_die_id = False
         for node_id, node_cpus in nodes:
             for cpu in node_cpus:
-                if cpu not in missing_l3:
-                    continue
                 topology_root = sys_root / "cpu" / "cpu{}".format(cpu) / "topology"
                 die_id = _read_int(topology_root / "die_id")
                 # package_id prevents the synthetic die 0 from combining CPUs
@@ -253,8 +250,12 @@ def _plan_units(mode, topology):
 
     def core_units(cpus):
         groups = cores_in(cpus)
-        if policy.get("core") == "spread":
+        if policy.get("core") == "spread" or all(len(group) == 1 for group in groups):
             # Pick one sibling from every core before returning to sibling zero.
+            # SMT-disabled cores use the same interleaved core order as the
+            # sibling lanes on SMT hosts.
+            if all(len(group) == 1 for group in groups):
+                return groups[::2] + groups[1::2]
             return [(cpu,) for cpu in _round_robin(groups)]
         return groups
 

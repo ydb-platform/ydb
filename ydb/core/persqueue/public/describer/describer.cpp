@@ -32,8 +32,8 @@ bool HasAccess(const TDescribeSettings& settings, TIntrusivePtr<TSecurityObject>
     return false;
 }
 
-TString MakeLbUserTopicPath(const TString& lbUserDatabaseRoot, const TString& topicPath) {
-    auto parts = NKikimr::SplitPath(lbUserDatabaseRoot);
+TString MakeFederationTopicPath(const TString& federationRoot, const TString& topicPath) {
+    auto parts = NKikimr::SplitPath(federationRoot);
     for (const auto& part : NKikimr::SplitPath(topicPath)) {
         parts.push_back(part);
     }
@@ -49,8 +49,8 @@ TMaybe<TString> ExtractFederationAccount(const TString& topicPath) {
     return parts[0];
 }
 
-TString MakeLbUserAccountDatabase(const TString& lbUserDatabaseRoot, const TString& account) {
-    return CanonizePath(NKikimr::JoinPath({lbUserDatabaseRoot, account}));
+TString MakeFederationAccountDatabase(const TString& federationRoot, const TString& account) {
+    return CanonizePath(NKikimr::JoinPath({federationRoot, account}));
 }
 
 class TDescribeActor : public TActorBootstrapped<TDescribeActor> {
@@ -66,7 +66,7 @@ public:
     void Bootstrap() {
         Become(&TDescribeActor::StateWork);
         if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            LbUserDatabaseRoot = AppData()->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
+            FederationRoot = AppData()->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
         }
         RetryWithSyncVersion = Settings.ForceSyncVersion;
         UsedSyncVersion = Settings.ForceSyncVersion;
@@ -97,7 +97,7 @@ public:
 
         for (const auto& topic : topicPath) {
             auto normalizedPath = NKikimr::NormalizePath(RequestDatabaseName, CanonizePath(topic));
-            // Keep the originally requested path across retries (sync / LbRoot / CDC).
+            // Keep the originally requested path across retries (sync / Federation / CDC).
             PathToOriginalPath.try_emplace(normalizedPath, topic);
             addEntry(normalizedPath);
         }
@@ -126,8 +126,8 @@ public:
                 originalPath = it->second.OriginalPath;
                 isCDCStream = true;
                 cdcStreamName = it->second.CdcStreamName;
-            } else if (auto lbIt = LbRootPaths.find(realPath); lbIt != LbRootPaths.end()) {
-                originalPath = lbIt->second.OriginalPath;
+            } else if (auto federationIt = FederationPaths.find(realPath); federationIt != FederationPaths.end()) {
+                originalPath = federationIt->second.OriginalPath;
             }
 
             switch (entry.Status) {
@@ -141,12 +141,12 @@ public:
                                 {"realPath", realPath});
 
                             SetErrorResult(originalPath, EStatus::UNAUTHORIZED);
-                        } else if (TryScheduleLbRootRetry(originalPath, realPath)) {
-                            YDB_LOG_DEBUG("Path not found, will try LbUserDatabaseRoot",
+                        } else if (TryScheduleFederationRetry(originalPath, realPath)) {
+                            YDB_LOG_DEBUG("Path not found, will try FederationRoot",
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath},
                                 {"originalPath", originalPath},
-                                {"lbUserDatabaseRoot", LbUserDatabaseRoot});
+                                {"federationRoot", FederationRoot});
                         } else {
                             YDB_LOG_DEBUG("Path not found",
                                 {"logPrefix", LOG_PREFIX},
@@ -183,12 +183,12 @@ public:
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
-                                if (TryScheduleLbRootRetry(originalPath, realPath)) {
-                                    YDB_LOG_DEBUG("Path not found, will try LbUserDatabaseRoot",
+                                if (TryScheduleFederationRetry(originalPath, realPath)) {
+                                    YDB_LOG_DEBUG("Path not found, will try FederationRoot",
                                         {"logPrefix", LOG_PREFIX},
                                         {"realPath", realPath},
                                         {"originalPath", originalPath},
-                                        {"lbUserDatabaseRoot", LbUserDatabaseRoot});
+                                        {"federationRoot", FederationRoot});
                                 } else {
                                     YDB_LOG_DEBUG("Path not found",
                                         {"logPrefix", LOG_PREFIX},
@@ -264,7 +264,7 @@ public:
             return DoRequest(unknownPaths);
         }
 
-        if (TryStartNextLbRootDatabaseRequest()) {
+        if (TryStartNextFederationDatabaseRequest()) {
             return;
         }
 
@@ -284,21 +284,21 @@ public:
     }
 
 private:
-    bool TryScheduleLbRootRetry(const TString& originalPath, const TString& realPath) {
-        if (LbUserDatabaseRoot.empty()) {
+    bool TryScheduleFederationRetry(const TString& originalPath, const TString& realPath) {
+        if (FederationRoot.empty()) {
             return false;
         }
-        if (LbRootPaths.contains(realPath)) {
-            // This response is already for an LbUserDatabaseRoot path.
+        if (FederationPaths.contains(realPath)) {
+            // This response is already for a FederationRoot path.
             return false;
         }
-        for (const auto& [_, info] : LbRootPaths) {
+        for (const auto& [_, info] : FederationPaths) {
             if (info.OriginalPath == originalPath) {
-                // LbUserDatabaseRoot path is already scheduled.
+                // FederationRoot path is already scheduled.
                 return true;
             }
         }
-        if (RetryWithLbRoot) {
+        if (RetryWithFederation) {
             return false;
         }
 
@@ -307,27 +307,27 @@ private:
             return false;
         }
 
-        const auto accountDatabase = MakeLbUserAccountDatabase(LbUserDatabaseRoot, *account);
-        const auto lbPath = MakeLbUserTopicPath(LbUserDatabaseRoot, originalPath);
+        const auto accountDatabase = MakeFederationAccountDatabase(FederationRoot, *account);
+        const auto federationPath = MakeFederationTopicPath(FederationRoot, originalPath);
         // Same path string can still need a retry with DatabaseName = account DB
-        // (e.g. DatabasePath == LbUserDatabaseRoot: /Root/account/topic under /Root).
-        if (lbPath == realPath && RequestDatabaseName == accountDatabase) {
+        // (e.g. DatabasePath == FederationRoot: /Root/account/topic under /Root).
+        if (federationPath == realPath && RequestDatabaseName == accountDatabase) {
             return false;
         }
 
-        LbRootPaths[lbPath] = TLbRootTopicInfo{
+        FederationPaths[federationPath] = TFederationTopicInfo{
             .OriginalPath = originalPath,
             .AccountDatabase = accountDatabase
         };
         return true;
     }
 
-    // One SchemeCache request per account database (DatabaseName = LbRoot/account).
+    // One SchemeCache request per account database (DatabaseName = FederationRoot/account).
     // Empty AccountDatabase is valid (fetch/API callers may pass Database="").
-    bool TryStartNextLbRootDatabaseRequest() {
+    bool TryStartNextFederationDatabaseRequest() {
         TMaybe<TString> nextDatabase;
-        for (const auto& [_, info] : LbRootPaths) {
-            if (!RequestedLbRootDatabases.contains(info.AccountDatabase)) {
+        for (const auto& [_, info] : FederationPaths) {
+            if (!RequestedFederationDatabases.contains(info.AccountDatabase)) {
                 nextDatabase = info.AccountDatabase;
                 break;
             }
@@ -336,13 +336,13 @@ private:
             return false;
         }
 
-        RetryWithLbRoot = true;
+        RetryWithFederation = true;
         RetryWithSyncVersion = false;
         RequestDatabaseName = *nextDatabase;
-        RequestedLbRootDatabases.insert(*nextDatabase);
+        RequestedFederationDatabases.insert(*nextDatabase);
 
         absl::flat_hash_set<TString> newPath;
-        for (const auto& [path, info] : LbRootPaths) {
+        for (const auto& [path, info] : FederationPaths) {
             if (info.AccountDatabase == *nextDatabase) {
                 newPath.insert(path);
             }
@@ -404,11 +404,11 @@ private:
     bool RetryWithSyncVersion = false;
     bool UsedSyncVersion = false;
     bool RetryWithCDC = false;
-    bool RetryWithLbRoot = false;
-    TString LbUserDatabaseRoot;
-    // DatabaseName for the current SchemeCache request (account DB on LbRoot retry).
+    bool RetryWithFederation = false;
+    TString FederationRoot;
+    // DatabaseName for the current SchemeCache request (account DB on Federation retry).
     TString RequestDatabaseName;
-    absl::flat_hash_set<TString> RequestedLbRootDatabases;
+    absl::flat_hash_set<TString> RequestedFederationDatabases;
     absl::flat_hash_set<TString> RequestedCdcDatabases;
     // CDC streamImpl path -> original changefeed path
     struct TCDCTopicInfo {
@@ -417,12 +417,12 @@ private:
         TString AccountDatabase;
     };
     absl::flat_hash_map<TString, TCDCTopicInfo> CDCPaths;
-    // LbUserDatabaseRoot-prefixed path -> original topic path
-    struct TLbRootTopicInfo {
+    // FederationRoot-prefixed path -> original topic path
+    struct TFederationTopicInfo {
         TString OriginalPath;
         TString AccountDatabase;
     };
-    absl::flat_hash_map<TString, TLbRootTopicInfo> LbRootPaths;
+    absl::flat_hash_map<TString, TFederationTopicInfo> FederationPaths;
     absl::flat_hash_map<TString, TTopicInfo> Result;
 };
 

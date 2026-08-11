@@ -668,23 +668,23 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
     }
 
     // -------------------------------------------------------------------------
-    // LbUserDatabaseRoot / federation-style paths
+    // FederationRoot / federation-style paths
     // -------------------------------------------------------------------------
 
-    Y_UNIT_TEST(TopicWithLbUserDatabaseRoot) {
+    Y_UNIT_TEST(TopicWithFederationRoot) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         EnableDescriberLogs(*setup);
 
-        const TString dbRoot = "/Root/LbAccount";
+        const TString federationRoot = "/Root/Federation";
         const TString account = "account";
         const TString shortTopicName = account + "/topic1";
-        const TString fullTopicPath = dbRoot + "/" + shortTopicName;
+        const TString fullTopicPath = federationRoot + "/" + shortTopicName;
 
-        ExecuteDDL(*setup, "CREATE TOPIC `LbAccount/account/topic1`");
+        ExecuteDDL(*setup, "CREATE TOPIC `Federation/account/topic1`");
 
         auto& runtime = setup->GetRuntime();
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
-        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(dbRoot);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(federationRoot);
 
         StartDescribe(runtime, {shortTopicName});
         auto topics = WaitResult(runtime);
@@ -695,19 +695,19 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, fullTopicPath);
     }
 
-    Y_UNIT_TEST(TopicWithLbUserDatabaseRootLeadingSlash) {
+    Y_UNIT_TEST(TopicWithFederationRootLeadingSlash) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         EnableDescriberLogs(*setup);
 
-        const TString dbRoot = "/Root/LbAccount";
+        const TString federationRoot = "/Root/Federation";
         const TString shortTopicName = "/account/topic";
-        const TString fullTopicPath = dbRoot + "/account/topic";
+        const TString fullTopicPath = federationRoot + "/account/topic";
 
-        ExecuteDDL(*setup, "CREATE TOPIC `LbAccount/account/topic`");
+        ExecuteDDL(*setup, "CREATE TOPIC `Federation/account/topic`");
 
         auto& runtime = setup->GetRuntime();
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
-        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(dbRoot);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(federationRoot);
 
         StartDescribe(runtime, {shortTopicName});
         auto topics = WaitResult(runtime);
@@ -718,13 +718,13 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, fullTopicPath);
     }
 
-    Y_UNIT_TEST(TopicWithLbUserDatabaseRootNotFound) {
+    Y_UNIT_TEST(TopicWithFederationRootNotFound) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         EnableDescriberLogs(*setup);
 
         auto& runtime = setup->GetRuntime();
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
-        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/LbAccount");
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/Federation");
 
         StartDescribe(runtime, {"account/topic_not_exists"});
         auto topics = WaitResult(runtime);
@@ -734,18 +734,18 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NOT_FOUND);
     }
 
-    Y_UNIT_TEST(TopicWithLbUserDatabaseRootIgnoredForFirstClassCitizen) {
+    Y_UNIT_TEST(TopicWithFederationRootIgnoredForFirstClassCitizen) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         EnableDescriberLogs(*setup);
 
-        const TString dbRoot = "/Root/LbAccount";
+        const TString federationRoot = "/Root/Federation";
         const TString shortTopicName = "account/topic1";
 
-        ExecuteDDL(*setup, "CREATE TOPIC `LbAccount/account/topic1`");
+        ExecuteDDL(*setup, "CREATE TOPIC `Federation/account/topic1`");
 
         auto& runtime = setup->GetRuntime();
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
-        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(dbRoot);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(federationRoot);
 
         StartDescribe(runtime, {shortTopicName});
         auto topics = WaitResult(runtime);
@@ -755,13 +755,13 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NOT_FOUND);
     }
 
-    Y_UNIT_TEST(TopicWithLbUserDatabaseRootMultipleAccounts) {
+    Y_UNIT_TEST(TopicWithFederationRootMultipleAccounts) {
         auto settings = NKikimr::NPersQueueTests::PQSettings(0, 1);
         settings.SetNodeCount(1);
         settings.SetDynamicNodeCount(2);
         settings.AddStoragePoolType("/Root/account1");
         settings.AddStoragePoolType("/Root/account2");
-        // Create topics with FICC=true; LbRoot describe path requires FICC=false later.
+        // Create topics with FICC=true; Federation describe path requires FICC=false later.
         settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
         settings.PQConfig.SetRoot("/Root");
         settings.PQConfig.SetDatabase("/Root");
@@ -788,7 +788,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
 
-        // Primary resolve under /Root misses into account tenants; LbRoot retries
+        // Primary resolve under /Root misses into account tenants; Federation retries
         // with DatabaseName=/Root/account1 and /Root/account2.
         StartDescribe(runtime, {"account1/topic", "account2/topic"}, {}, "/Root");
         auto topics = WaitResult(runtime);
@@ -804,17 +804,17 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topics["account2/topic"].RealPath, "/Root/account2/topic");
     }
 
-    Y_UNIT_TEST(TopicWithLbUserDatabaseRootSingleComponentPath) {
+    Y_UNIT_TEST(TopicWithFederationRootSingleComponentPath) {
         // Federation retry needs account/topic shape; a single component must not
-        // be rewritten under LbUserDatabaseRoot.
+        // be rewritten under FederationRoot.
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         EnableDescriberLogs(*setup);
 
-        ExecuteDDL(*setup, "CREATE TOPIC `LbAccount/account/topic1`");
+        ExecuteDDL(*setup, "CREATE TOPIC `Federation/account/topic1`");
 
         auto& runtime = setup->GetRuntime();
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
-        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/LbAccount");
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/Federation");
 
         StartDescribe(runtime, {"topic1"});
         auto topics = WaitResult(runtime);

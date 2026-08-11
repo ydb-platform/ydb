@@ -85,10 +85,10 @@ struct TDescribeEnv {
         EdgeId = Runtime.AllocateEdgeActor();
     }
 
-    void EnableLbRoot(const TString& lbRoot = "/Root/LbAccount") {
+    void EnableFederationRoot(const TString& federationRoot = "/Root/Federation") {
         auto& appData = Runtime.GetAppData();
         appData.PQConfig.SetTopicsAreFirstClassCitizen(false);
-        appData.PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(lbRoot);
+        appData.PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(federationRoot);
     }
 
     TActorId StartDescribe(
@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/table1/feed"].Status, NDescriber::EStatus::UNAUTHORIZED);
     }
 
-    Y_UNIT_TEST(LbRootRetryAfterMiss) {
+    Y_UNIT_TEST(FederationRetryAfterMiss) {
         TDescribeEnv env([](ui32 requestIndex, TNavigate& request, TNavigate::TEntry& entry) {
             if (requestIndex == 0) {
                 // Local resolve under /Root misses federation-style short path.
@@ -325,33 +325,33 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
                 entry.Status = TNavigate::EStatus::PathErrorUnknown;
                 return;
             }
-            // LbRoot account DB request.
+            // Federation account DB request.
             UNIT_ASSERT_VALUES_EQUAL(requestIndex, 2u);
-            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root/LbAccount/account");
+            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root/Federation/account");
             UNIT_ASSERT(!entry.SyncVersion);
-            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/LbAccount/account/topic1");
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic1");
             FillOkTopic(entry, /*balancerTabletId=*/123);
         });
-        env.EnableLbRoot("/Root/LbAccount");
+        env.EnableFederationRoot("/Root/Federation");
 
         env.StartDescribe({"account/topic1"});
         auto ev = env.WaitResponse();
 
         UNIT_ASSERT(ev->UsedSyncVersion);
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account/topic1"].Status, NDescriber::EStatus::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account/topic1"].RealPath, "/Root/LbAccount/account/topic1");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account/topic1"].RealPath, "/Root/Federation/account/topic1");
     }
 
-    Y_UNIT_TEST(LbRootSkippedForSingleComponentPath) {
+    Y_UNIT_TEST(FederationSkippedForSingleComponentPath) {
         ui32 requests = 0;
         TDescribeEnv env([&](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
             ++requests;
             UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
             entry.Status = TNavigate::EStatus::PathErrorUnknown;
         });
-        env.EnableLbRoot("/Root/LbAccount");
+        env.EnableFederationRoot("/Root/Federation");
 
-        // No account/topic shape → ExtractFederationAccount fails → no LbRoot retry.
+        // No account/topic shape → ExtractFederationAccount fails → no Federation retry.
         env.StartDescribe({"topic1"});
         auto ev = env.WaitResponse();
 
@@ -360,7 +360,7 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
     }
 
     Y_UNIT_TEST(SetErrorResultPreservesSuccess) {
-        // One topic succeeds locally; another misses into LbRoot and fails there.
+        // One topic succeeds locally; another misses into Federation and fails there.
         // Failure for the second must not erase the first SUCCESS.
         TDescribeEnv env([](ui32 requestIndex, TNavigate& request, TNavigate::TEntry& entry) {
             const auto path = EntryPath(entry);
@@ -378,10 +378,10 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
                 entry.Status = TNavigate::EStatus::PathErrorUnknown;
                 return;
             }
-            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root/LbAccount/account");
+            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root/Federation/account");
             entry.Status = TNavigate::EStatus::PathErrorUnknown;
         });
-        env.EnableLbRoot("/Root/LbAccount");
+        env.EnableFederationRoot("/Root/Federation");
 
         env.StartDescribe({"/Root/local", "account/missing"});
         auto ev = env.WaitResponse();

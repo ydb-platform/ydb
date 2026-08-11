@@ -244,7 +244,11 @@ Y_UNIT_TEST(ContentBasedDeduplication) {
     settings.set_retention_period_ms(TDuration::Days(1).MilliSeconds());
     settings.set_content_based_deduplication(true);
 
-    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(runtime, request);
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        runtime,
+        request,
+        CreateCreateTopicActor
+    );
 
     auto status = result->ResultStatus;
     UNIT_ASSERT(status);

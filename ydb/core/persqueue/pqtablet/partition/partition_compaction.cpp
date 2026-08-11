@@ -440,18 +440,15 @@ bool TPartition::InitNewHeadForCompaction()
 void TPartition::AbortBlobsCompaction(const TString& reason, const TActorContext& ctx)
 {
     if (!CompactionInProgress) {
-        YDB_LOG_WARN_COMP(Service, "Ignore abort blobs compaction: compaction is not in progress",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"reason", reason});
+        LOG_W("Ignore abort blobs compaction: compaction is not in progress." <<
+              "Reason: " << reason);
         return;
     }
 
-    YDB_LOG_WARN_COMP(Service, "Abort blobs compaction",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"reason", reason},
-        {"compactionInProgress", CompactionInProgress},
-        {"keysForCompaction", KeysForCompaction.size()},
-        {"compactionBlobsCount", CompactionBlobsCount});
+    LOG_W("Abort blobs compaction." <<
+          " Reason: " << reason <<
+          ", KeysForCompaction: " << KeysForCompaction.size() <<
+          ", CompactionBlobsCount: " << CompactionBlobsCount);
 
     CompactionInProgress = false;
     KeysForCompaction.clear();

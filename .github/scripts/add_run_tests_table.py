@@ -59,7 +59,7 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
     comment += "- **Test Size**: small, medium, large (default: small, medium)\n"
     comment += "- **Test Targets**: any directory path (default: `ydb/`)\n"
     comment += "- **Sanitizers**: ASAN, MSAN, TSAN\n"
-    comment += "- **Coredumps**: collected by default (first 10 dumps); can be disabled\n"
+    comment += "- **Coredumps**: collected by default to a 100G /coredumps volume; can be disabled\n"
     comment += "- **Additional args**: custom ya make arguments\n\n"
     comment += button
     return comment

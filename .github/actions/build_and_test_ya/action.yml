@@ -62,7 +62,7 @@ inputs:
   collect_coredumps:
     type: boolean
     default: true
-    description: "Collect coredumps (ulimit -c unlimited); keep only the first 10 dumps"
+    description: "Collect coredumps to a 100G loop volume at /coredumps (for ya test recovery)"
   pull_number:
     type: string
     required: false

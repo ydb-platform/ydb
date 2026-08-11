@@ -90,7 +90,7 @@ on:
       collect_coredumps:
         type: boolean
         default: true
-        description: "Collect coredumps (ulimit -c unlimited); keep only the first 10 dumps"
+        description: "Collect coredumps to a 100G loop volume at /coredumps (for ya test recovery)"
       test_threads:
         description: 'Test threads count (default: 52; build presets use a fraction of this value)'
         required: false

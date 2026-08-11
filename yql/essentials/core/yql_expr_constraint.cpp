@@ -2291,13 +2291,13 @@ private:
 
         const auto inputVarIndex = input->Head().GetConstraint<TVarIndexConstraintNode>();
         const bool emptyInput = input->Head().GetConstraint<TEmptyConstraintNode>();
-        const bool variantOutput = GetSeqItemType(*input->GetTypeAnn()).GetKind() == ETypeAnnotationKind::Variant;
-        if (variantOutput) {
+        bool hasStreamingInVariantOutput = false;
+        bool hasStreamingDirectOutput = false;
+        if (GetSeqItemType(*input->GetTypeAnn()).GetKind() == ETypeAnnotationKind::Variant) {
             ui32 outIndexOffset = 0;
             TMultiConstraintNode::TMapType multiItems;
             TVarIndexConstraintNode::TMapType remapItems;
             bool emptyOut = true;
-            bool hasStreamingOutput = false;
             for (size_t i = 2; i < input->ChildrenSize(); i += 2) {
                 const auto lambda = input->Child(i + 1);
                 const auto& lambdaItemType = GetSeqItemType(*lambda->GetTypeAnn());
@@ -2331,7 +2331,6 @@ private:
                         if (auto multi = lambda->GetConstraint<TMultiConstraintNode>()) {
                             for (auto& item: multi->GetItems()) {
                                 multiItems.insert_unique(std::make_pair(outIndexOffset + item.first, item.second));
-                                hasStreamingOutput = hasStreamingOutput || item.second.GetConstraint<TStreamingConstraintNode>();
                             }
                         }
                     }
@@ -2339,7 +2338,6 @@ private:
                 } else {
                     if (!emptyInput && outFromChildren.Test(i + 1) && !lambdaEmpty) {
                         multiItems[outIndexOffset] = lambda->GetConstraintSet();
-                        hasStreamingOutput = hasStreamingOutput || lambda->GetConstraint<TStreamingConstraintNode>();
                     }
                     ++outIndexOffset;
                 }
@@ -2360,19 +2358,21 @@ private:
             }
 
             if (!multiItems.empty()) {
+                hasStreamingInVariantOutput = std::any_of(multiItems.begin(), multiItems.end(), [](const auto& item) {
+                    return !!item.second.template GetConstraint<TStreamingConstraintNode>();
+                });
                 input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
             }
             if (emptyOut) {
                 input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
-            } else if (hasStreamingOutput || inputStreaming) {
-                input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
             }
         } else {
             YQL_ENSURE(input->ChildrenSize() == 4);
+            hasStreamingDirectOutput = input->Child(3)->GetConstraint<TStreamingConstraintNode>();
             input->CopyConstraints(*input->Child(3));
         }
 
-        if (!variantOutput && inputStreaming && !input->GetConstraint<TStreamingConstraintNode>()) {
+        if (hasStreamingInVariantOutput || (inputStreaming && !hasStreamingDirectOutput)) {
             input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
         }
 
@@ -2666,11 +2666,12 @@ private:
 
                 if (!items.empty()) {
                     input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(items)));
-                    if (hasStreaming) {
-                        input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
-                    }
                 } else if (index == emptyCount) {
                     input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+                }
+
+                if (hasStreaming) {
+                    input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
                 }
             }
         }
@@ -2714,14 +2715,16 @@ private:
             input->CopyConstraints(*input->Head().Child(FromString<ui32>(input->Child(1)->Content())));
         }
         else if (input->Head().IsCallable("Demux")) {
+            bool hasStreamingOutput = false;
             if (auto multi = input->Head().Head().GetConstraint<TMultiConstraintNode>()) {
                 if (auto c = multi->GetItem(FromString<ui32>(input->Child(1)->Content()))) {
+                    hasStreamingOutput = c->GetConstraint<TStreamingConstraintNode>();
                     input->SetConstraints(*c);
                 }
             }
 
             if (const auto c = input->Head().GetConstraint<TStreamingConstraintNode>();
-                c && !input->GetConstraint<TStreamingConstraintNode>()) {
+                c && !hasStreamingOutput) {
                 input->AddConstraint(c);
             }
         }

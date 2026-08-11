@@ -4938,6 +4938,26 @@ Y_UNIT_TEST(MultiItemStreamingConstraintWithSwitch) {
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "Nth", "Streaming");
 }
 
+Y_UNIT_TEST(EmptyVariantSwitchPreservesStreaming) {
+    const TStringBuf s = R"((
+        (let res (DataSink 'result))
+        (let list (AsList (AsStruct '('key (String '1)) '('event_time (Timestamp '1)))))
+        (let streaming (AssumeConstraints list '"{\"Streaming\" = [\"event_time\"]}"))
+        (let data (Mux '(streaming streaming)))
+        (let switched (Switch (Iterator data)
+            '0 '('0) (lambda '(items) (FlatMap items (lambda '(item) (Nothing (OptionalType (TypeOf item))))))
+            '('1) (lambda '(items) (FlatMap items (lambda '(item) (Nothing (OptionalType (TypeOf item))))))))
+        (let result (Nth (Demux switched) '0))
+        (let world (Write! world res (Key) (Collect result) '()))
+        (return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TEmptyConstraintNode>(exprRoot, "Switch", "Empty");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Switch", "Streaming");
+}
+
 Y_UNIT_TEST(StreamingConstraintEventTimeProjection) {
     struct TTestCase {
         std::string_view Query;

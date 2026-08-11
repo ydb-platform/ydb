@@ -427,10 +427,18 @@ Y_UNIT_TEST(TestCompaction) {
 }
 
 // Regression for https://github.com/ydb-platform/ydb/issues/49436:
-// failed KV/cache read for compaction (cookie=ReadBlobsForCompaction) must not
+// failed/partial KV/cache read for compaction (cookie=ReadBlobsForCompaction) must not
 // unpack empty blobs in CompactRequestedBlob/GetBatches. After the failure goes
 // away, a later compaction must keep the same messages (no loss / no duplicates).
-Y_UNIT_TEST(CompactionSurvivesFailedBlobRead) {
+enum class ECompactionBlobReadInjection {
+    // Production shape from #49436: Error set, all RawValues cleared.
+    ErrorAndAllBlobsEmpty,
+    // Exercises the empty-blob branch with HasError==false. Keep Blobs[0] nonempty
+    // to satisfy TEvBlobResponse::Check(); clear a later blob (OVERRUN/crop-like).
+    OkWithLaterBlobEmpty,
+};
+
+void TestCompactionSurvivesFailedBlobRead(ECompactionBlobReadInjection injection) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.EnableDetailedPQLog = true;
@@ -471,20 +479,34 @@ Y_UNIT_TEST(CompactionSurvivesFailedBlobRead) {
 
                 TVector<TRequestedBlob> blobs = event->GetBlobs();
                 UNIT_ASSERT_C(!blobs.empty(), "compaction blob read response has no blobs");
-                for (auto& blob : blobs) {
-                    blob.Clear();
+
+                TErrorInfo error;
+                switch (injection) {
+                    case ECompactionBlobReadInjection::ErrorAndAllBlobsEmpty:
+                        for (auto& blob : blobs) {
+                            blob.Clear();
+                        }
+                        error = TErrorInfo(NPersQueue::NErrorCode::ERROR, "injected BS/KV failure");
+                        break;
+                    case ECompactionBlobReadInjection::OkWithLaterBlobEmpty:
+                        UNIT_ASSERT_C(blobs.size() >= 2,
+                            "need at least two blobs to clear a later one while keeping Blobs[0]");
+                        UNIT_ASSERT_C(!blobs[0].Empty(), "Blobs[0] must stay nonempty for Check()");
+                        for (size_t i = 1; i < blobs.size(); ++i) {
+                            blobs[i].Clear();
+                        }
+                        // Default TErrorInfo is OK → HasError() == false.
+                        break;
                 }
 
                 const TActorId recipient = ev->Recipient;
                 const TActorId sender = ev->Sender;
-                // Same shape as production failure: Error set, keys present, RawValue empty.
-                ev.Reset(new IEventHandle(
-                    recipient,
-                    sender,
-                    new TEvPQ::TEvBlobResponse(
-                        /*cookie=*/0,
-                        std::move(blobs),
-                        TErrorInfo(NPersQueue::NErrorCode::ERROR, "injected BS/KV failure"))));
+                auto* poisoned = new TEvPQ::TEvBlobResponse(
+                    /*cookie=*/0,
+                    std::move(blobs),
+                    error);
+                poisoned->Check();
+                ev.Reset(new IEventHandle(recipient, sender, poisoned));
             }
         }
         return TTestActorRuntimeBase::EEventAction::PROCESS;
@@ -534,6 +556,14 @@ Y_UNIT_TEST(CompactionSurvivesFailedBlobRead) {
     // Restart forces a fresh load from KV (compaction zone), not in-memory FastWrite state.
     PQTabletRestart(tc);
     assertExactLog("after restart");
+}
+
+Y_UNIT_TEST(CompactionSurvivesFailedBlobRead) {
+    TestCompactionSurvivesFailedBlobRead(ECompactionBlobReadInjection::ErrorAndAllBlobsEmpty);
+}
+
+Y_UNIT_TEST(CompactionSurvivesEmptyLaterBlobWithoutError) {
+    TestCompactionSurvivesFailedBlobRead(ECompactionBlobReadInjection::OkWithLaterBlobEmpty);
 }
 
 Y_UNIT_TEST(BatchedMessagesWriteWithoutFeatureFlagFails) {

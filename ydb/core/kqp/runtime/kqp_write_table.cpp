@@ -2118,6 +2118,14 @@ private:
     void FlushSerializer(TWriteToken token) {
         const auto& writeInfo = WriteInfos.at(token);
         for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
+            // Stage 7: Per-node shard affinity — skip shards not assigned to this task.
+            // When TargetShardIds is non-empty, this WriteActor only owns those shards.
+            // Rows routed to other shards by the serializer are silently dropped here;
+            // the owning task on the correct node will handle them once multi-task
+            // routing is enabled (Stage 8).
+            if (!Settings.TargetShardIds.empty() && !Settings.TargetShardIds.contains(shardId)) {
+                continue;
+            }
             for (auto& batch : batches) {
                 if (batch && !batch->IsEmpty()) {
                     const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT

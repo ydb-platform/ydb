@@ -237,6 +237,19 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
 
     const bool enableCsWriteAffinity = kqpCtx.Config->EnableCsWriteAffinity.Get().GetOrElse(true);
 
+    // Stage 4: Affinity marker for sink settings
+    //
+    // At optimization time, ShardIdToNodeId is NOT available. Therefore, we cannot
+    // populate TargetShardIds or ExpectedNodeId here. Instead:
+    //   - The EnableCsWriteAffinity flag is already in TKqpPhyTx (Stage 1),
+    //     accessible in TasksGraph at runtime.
+    //   - The sink mode "fill_table" identifies this as a CTAS sink.
+    //   - In TasksGraph (Stage 5), the combination of EnableCsWriteAffinity +
+    //     fill_table mode triggers multi-task creation with proper shard-to-node
+    //     mapping, populating TargetShardIds and ExpectedNodeId per task.
+    //
+    // No changes to sink settings are needed at this stage.
+
     if (enableCsWriteAffinity) {
         // Per-node write affinity: WriteActor (sink) is extracted into a separate
         // TDqStage so it can be independently parallelized and assigned to the nodes

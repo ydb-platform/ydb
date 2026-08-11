@@ -463,7 +463,8 @@ public:
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
-        TIntrusivePtr<NACLib::TUserContext> userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx,
+        THashSet<ui64> targetShardIds = {})
         : MessageSettings(GetWriteActorSettings())
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
@@ -486,6 +487,7 @@ public:
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
                 .Inconsistent = InconsistentTx,
+                .TargetShardIds = std::move(targetShardIds),
             },
             Alloc);
 
@@ -2891,6 +2893,13 @@ public:
                 keyColumnTypes.push_back(typeInfoMod.TypeInfo);
             }
 
+            // Stage 7: Pass TargetShardIds from sink settings into the write controller.
+            // When non-empty, the controller will only write to the specified shards
+            // (rows destined for other shards are silently discarded).
+            THashSet<ui64> targetShardIds(
+                Settings.GetTargetShardIds().begin(),
+                Settings.GetTargetShardIds().end());
+
             WriteTableActor = new TKqpTableWriteActor(
                 this,
                 Settings.GetDatabase(),
@@ -2907,7 +2916,8 @@ public:
                 nullptr,
                 TActorId{},
                 Counters,
-                UserCtx);
+                UserCtx,
+                std::move(targetShardIds));
             // Set initial QuerySpanId for direct write actor
             WriteTableActor->SetCurrentQuerySpanId(Settings.GetQuerySpanId());
 

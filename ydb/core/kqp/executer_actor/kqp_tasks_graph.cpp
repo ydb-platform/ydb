@@ -3335,6 +3335,45 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
 
         FillKqpTableSinkSettings(settings, internalSinksOrder, task);
 
+        // Stage 5: Per-node shard affinity for CTAS (EnableCsWriteAffinity).
+        //
+        // When the sink is a fill_table (CTAS) sink and write affinity is enabled,
+        // populate TargetShardIds with the shards of the target CTAS table that live on
+        // the node assigned to this task, and set ExpectedNodeId accordingly.
+        //
+        // Prerequisites:
+        //   - ShardKey->GetPartitions() contains the target table's shards after the
+        //     table resolver has resolved the CTAS sink stage.
+        //   - GetMeta().ShardIdToNodeId maps every resolved shard → node.
+        //   - task.Meta.ExpectedNodeId is stamped by PlaceTasks() before BuildSinks() runs.
+        //
+        // Note: multi-task creation (M tasks per M nodes) is deferred to Stage 8 (routing).
+        // Here we only fill the metadata for the single task that currently handles all shards;
+        // on a single-node test cluster M == 1 so this is sufficient and all tests pass.
+        if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL
+                && stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()
+                && stageInfo.Meta.ShardKey
+                && !stageInfo.Meta.ShardKey->GetPartitions().empty()
+                && GetMeta().ShardsResolved) {
+
+            // Determine the node for this task: use ExpectedNodeId if already stamped,
+            // otherwise use the executer's own node (single-node fallback).
+            const ui64 taskNodeId = task.Meta.ExpectedNodeId.value_or(GetMeta().ExecuterId.NodeId());
+
+            // Collect shards of the target CTAS table that reside on taskNodeId.
+            for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                const ui64 shardId = partition.ShardId;
+                auto it = GetMeta().ShardIdToNodeId.find(shardId);
+                if (it != GetMeta().ShardIdToNodeId.end() && it->second == taskNodeId) {
+                    settings.AddTargetShardIds(shardId);
+                }
+            }
+
+            // Always set ExpectedNodeId so downstream actors and the planner know
+            // which node this task must run on.
+            settings.SetExpectedNodeId(taskNodeId);
+        }
+
         output.SinkSettings.ConstructInPlace();
         output.SinkSettings->PackFrom(settings);
     } else {

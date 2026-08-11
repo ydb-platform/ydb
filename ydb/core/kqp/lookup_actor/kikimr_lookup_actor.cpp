@@ -465,7 +465,7 @@ namespace NYql::NDq {
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
             Y_ABORT_UNLESS(state->StreamProcessor && state->StreamProcessor->HasData());
-            state->StreamProcessor->Read([actorSystem, selfId, state = std::move(state)](Ydb::Query::ExecuteQueryResponsePart&& response) {
+            state->StreamProcessor->Read([actorSystem, selfId, state = std::move(state)](Ydb::Query::ExecuteQueryResponsePart&& response) mutable {
                 actorSystem->Send(selfId, new TEvQueryExecuteQueryResponsePart(std::move(response), std::move(state)));
             });
         }

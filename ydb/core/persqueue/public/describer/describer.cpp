@@ -8,7 +8,6 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/maybe.h>
-#include <util/generic/maybe.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_DESCRIBER
 
@@ -235,7 +234,7 @@ public:
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
                             Result[originalPath] = TTopicInfo{
-                                .Status = EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS
+                                .Status = EStatus::UNAUTHORIZED
                             };
                         } else {
                             Result[originalPath] = TTopicInfo{

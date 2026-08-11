@@ -804,6 +804,103 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topics["account2/topic"].RealPath, "/Root/account2/topic");
     }
 
+    Y_UNIT_TEST(TopicWithLbUserDatabaseRootSingleComponentPath) {
+        // Federation retry needs account/topic shape; a single component must not
+        // be rewritten under LbUserDatabaseRoot.
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        ExecuteDDL(*setup, "CREATE TOPIC `LbAccount/account/topic1`");
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/LbAccount");
+
+        StartDescribe(runtime, {"topic1"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("topic1"));
+        UNIT_ASSERT_VALUES_EQUAL(topics["topic1"].Status, NDescriber::EStatus::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(CDCWithEmptyDatabase) {
+        // Same empty-Database contract as fetch/API callers (TFetchRequestTests.CDC).
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        ExecuteDDL(*setup, "CREATE TABLE table1 (id Uint64, PRIMARY KEY (id))");
+        ExecuteDDL(*setup, "ALTER TABLE table1 ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
+
+        auto& runtime = setup->GetRuntime();
+        StartDescribe(runtime, {"/Root/table1/feed"}, {}, /*databasePath=*/"");
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("/Root/table1/feed"));
+        auto& topicInfo = topics["/Root/table1/feed"];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/table1/feed/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStream, true);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStreamName, "feed");
+    }
+
+    Y_UNIT_TEST(TopicWithEmptyDatabaseAbsolutePath) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        ExecuteDDL(*setup, "CREATE TOPIC topic1");
+
+        auto& runtime = setup->GetRuntime();
+        StartDescribe(runtime, {"/Root/topic1"}, {}, /*databasePath=*/"");
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("/Root/topic1"));
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].RealPath, "/Root/topic1");
+    }
+
+    Y_UNIT_TEST(NotTopicWithDescribeAccess) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        ExecuteDDL(*setup, "CREATE TABLE table1 (id Uint64, PRIMARY KEY (id))");
+
+        NACLib::TDiffACL acl;
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "user1@staff");
+        setup->GetServer().AnnoyingClient->ModifyACL("/Root", "table1", acl.SerializeAsString());
+
+        auto& runtime = setup->GetRuntime();
+        auto settings = WithToken(
+            MakeIntrusiveConst<NACLib::TUserToken>("user1@staff", TVector<TString>{}),
+            NACLib::EAccessRights::SelectRow
+        );
+        StartDescribe(runtime, {"/Root/table1"}, settings);
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("/Root/table1"));
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1"].Status, NDescriber::EStatus::NOT_TOPIC);
+    }
+
+    Y_UNIT_TEST(MultipleCDC) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        ExecuteDDL(*setup, "CREATE TABLE table1 (id Uint64, PRIMARY KEY (id))");
+        ExecuteDDL(*setup, "ALTER TABLE table1 ADD CHANGEFEED feed1 WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
+        ExecuteDDL(*setup, "ALTER TABLE table1 ADD CHANGEFEED feed2 WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
+
+        auto& runtime = setup->GetRuntime();
+        StartDescribe(runtime, {"/Root/table1/feed1", "/Root/table1/feed2"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT_VALUES_EQUAL(topics.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed1"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed1"].CdcStream, true);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed1"].RealPath, "/Root/table1/feed1/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].CdcStream, true);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].RealPath, "/Root/table1/feed2/streamImpl");
+    }
+
 }
 
 }

@@ -8,6 +8,7 @@ IF(SANITIZER_TYPE == "address")
     SET(YDB_SAN_TYPE "-asan")
 ENDIF()
 # Not supported yet
+# Falling back to unsanitized binaries (prevents configuration errors for nightly tests)
 # ELSEIF(SANITIZER_TYPE == "memory")
 #    SET(YDB_SAN_TYPE "-msan")
 #ELSEIF(SANITIZER_TYPE == "thread")

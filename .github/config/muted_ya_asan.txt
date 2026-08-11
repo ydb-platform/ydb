@@ -84,6 +84,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithBadQueu
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithSameNameAndDifferentParams
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithSameNameAndDifferentParams_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithTags
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithWrongBody
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueue_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeferredTopicCreation_MessagingWhileTopicPending
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteMessageBatch
@@ -120,6 +121,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_ContentBas
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility_TablesFormat0
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_MigrationFinished_WithUserSettings
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSetQueueAttributes
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSetQueueAttributes_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTagQueueMultipleQueriesInflight
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTopicCreationStage_StdMessagingApis
@@ -295,6 +297,7 @@ ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/ut/tli KqpTli.Basic
+ydb/core/kqp/ut/tli KqpTli.BasicWithWilsonTracing
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.CrossTables
@@ -307,6 +310,7 @@ ydb/core/kqp/ut/tli KqpTli.MultipleKeys
 ydb/core/kqp/ut/tli KqpTli.SeparateCommit
 ydb/core/kqp/ut/tli KqpTli.SeparateCommitBreakerInMiddleOfSameShard
 ydb/core/kqp/ut/tli KqpTli.SeparateCommitDataQuery
+ydb/core/kqp/ut/tli KqpTli.SnapshotThenReadWrite
 ydb/core/kqp/ut/tli KqpTli.TwoVictimsOneBreaker
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTable
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTableMultiTable

@@ -8,7 +8,6 @@ Stream data processing is a widely used approach implemented in systems such as 
 
 ## Differences from regular queries {#differences}
 
-<<<<<<< HEAD
 Regular queries work with data already stored in tables. A query executes, returns a result, and terminates. A streaming query is created and runs indefinitely until explicitly canceled by the user. Data continuously arrives in a topic, flows through the query, and is written to a sink — another topic or table.
 
 | Characteristic | Regular queries | Streaming queries |
@@ -16,15 +15,6 @@ Regular queries work with data already stored in tables. A query executes, retur
 | Data | Finite set in tables | Infinite stream of events |
 | Lifetime | Terminates after processing | Runs continuously |
 | Result | Available after completion | Updated as data arrives |
-=======
-Regular queries work with data that is already stored in tables. A query executes, returns a result, and completes. A streaming query is created and continues running indefinitely until explicitly canceled by the user. Data continuously arrives in a topic, flows through the query, and is written to a sink — another topic or table.
-
-| Characteristic | Regular queries | Streaming queries |
-| --- | --- | --- |
-| Data | Finite dataset in tables | Infinite stream of events |
-| Lifetime | Completes after processing | Runs continuously |
-| Result | Available after completion | Updates as data arrives |
->>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 | Recovery on failures | Manual restart | Automatic recovery from [checkpoint](../../dev/streaming-query/checkpoints.md) |
 
 ## Data sources and sinks {#data-flow}
@@ -57,11 +47,7 @@ Detailed description of guarantees, anomalies, and ways to minimize them — in 
 
 {% note info %}
 
-<<<<<<< HEAD
 We are constantly working on developing streaming processing mechanisms. In future versions, the guarantees provided will be improved.
-=======
-We are constantly working on improving streaming processing mechanisms. In future versions, the provided guarantees will be improved.
->>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 
 {% endnote %}
 

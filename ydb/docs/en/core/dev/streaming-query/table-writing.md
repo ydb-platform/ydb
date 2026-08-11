@@ -8,23 +8,14 @@ For writing, [UPSERT INTO](../../yql/reference/syntax/upsert_into) is used — i
 
 Not supported:
 
-<<<<<<< HEAD
 - [INSERT INTO](../../yql/reference/syntax/insert_into.md) — use UPSERT INTO instead. `INSERT INTO` would duplicate rows on retries under at-least-once delivery.
 - Writing to {{ ydb-short-name }} tables in **external** databases. Currently only local tables can be written to.
-=======
-- The [INSERT INTO](../../yql/reference/syntax/insert_into) command — use UPSERT INTO. INSERT INTO is not used because reprocessing events (at-least-once guarantee) would lead to duplicate rows.
-- Writing to {{ ydb-short-name }} tables located in external databases. In the current version, writing is only possible to local tables.
->>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 
 {% endnote %}
 
 ## Example
 
-<<<<<<< HEAD
 The query reads events from a topic and writes them to `output_table`. `Ts` is cast from string to `Timestamp`, and [Unwrap](../../yql/reference/builtins/basic#unwrap) removes optionality.
-=======
-The query reads events from a topic and writes them to the `output_table` table. The `Ts` field is converted from a string to the `Timestamp` type using `CAST`, and [Unwrap](../../yql/reference/builtins/basic#unwrap) removes the optionality of the result.
->>>>>>> edc214622db (Auto-translate docs from PR #48793 (#49029))
 
 
 ```sql

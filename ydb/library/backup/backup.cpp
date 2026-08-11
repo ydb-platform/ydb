@@ -468,7 +468,9 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
     auto iter = client.StreamExecuteQuery(query, tx, params, settings).GetValueSync();
     VerifyStatus(iter, TStringBuilder() << "ExecuteQuery for column table " << fullTablePath.Quote() << " failed");
 
-    auto tmpFile = TFile(folderPath.Child(NDump::NFiles::IncompleteData().FileName), CreateAlways | WrOnly);
+    // Deferred until the first result set arrives, so that a table with no (more) rows
+    // to read never creates an IncompleteData file, mirroring TryReadTable's behavior.
+    TMaybe<TFile> tmpFile;
     TStringStream ss;
     ss.Reserve(IO_BUFFER_SIZE);
 
@@ -486,10 +488,12 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
                 VerifyStatus(part, TStringBuilder() << "ExecuteQuery for column table " << fullTablePath.Quote() << " failed");
             }
             LOG_D("ExecuteQuery stream was closed unexpectedly: " << part.GetIssues().ToOneLineString());
-            if (ss.Data()) {
-                Flush(tmpFile, ss, lastWrittenPK, lastReadPK);
+            if (tmpFile) {
+                if (ss.Data()) {
+                    Flush(*tmpFile, ss, lastWrittenPK, lastReadPK);
+                }
+                CloseAndRename(*tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
             }
-            CloseAndRename(tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
             return lastWrittenPK;
         }
 
@@ -498,15 +502,18 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
         }
 
         hasRows = true;
+        if (!tmpFile) {
+            tmpFile = TFile(folderPath.Child(NDump::NFiles::IncompleteData().FileName), CreateAlways | WrOnly);
+        }
         auto resultSet = part.ExtractResultSet();
         auto resultSetParser = TResultSetParser(resultSet);
-        lastReadPK = ProcessResultSet(ss, resultSetParser, &tmpFile, &desc);
+        lastReadPK = ProcessResultSet(ss, resultSetParser, &*tmpFile, &desc);
 
         if (ss.Size() > IO_BUFFER_SIZE) {
-            Flush(tmpFile, ss, lastWrittenPK, lastReadPK);
+            Flush(*tmpFile, ss, lastWrittenPK, lastReadPK);
         }
-        if (tmpFile.GetLength() > FILE_SPLIT_THRESHOLD) {
-            CloseAndRename(tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
+        if (tmpFile->GetLength() > FILE_SPLIT_THRESHOLD) {
+            CloseAndRename(*tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
             tmpFile = TFile(folderPath.Child(NDump::NFiles::IncompleteData().FileName), CreateAlways | WrOnly);
         }
     }
@@ -516,8 +523,10 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
         return {};
     }
 
-    Flush(tmpFile, ss, lastWrittenPK, lastReadPK);
-    CloseAndRename(tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
+    if (tmpFile) {
+        Flush(*tmpFile, ss, lastWrittenPK, lastReadPK);
+        CloseAndRename(*tmpFile, folderPath.Child(CreateDataFileName((*fileCounter)++)));
+    }
     return {};
 }
 

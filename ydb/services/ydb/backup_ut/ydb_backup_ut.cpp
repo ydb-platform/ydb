@@ -11,6 +11,7 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
@@ -2915,7 +2916,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto dumpSettings = NDump::TDumpSettings();
         auto restoreSettings = NDump::TRestoreSettings();
         if (isOlap) {
-            dumpSettings.AvoidCopy(true); // 
+            dumpSettings.AvoidCopy(true); 
             restoreSettings.Mode(NDump::TRestoreSettings::EMode::BulkUpsert); // Table Service YQL does not support column-oriented DML.
         }
 
@@ -3741,6 +3742,40 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 NDump::TRestoreSettings().Mode(NDump::TRestoreSettings::EMode::BulkUpsert)),
             /* isOlap */ true
         );
+    }
+
+    Y_UNIT_TEST(EmptyColumnTableBackupLeavesNoIncompleteDataFile) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        constexpr const char* table = "/Root/empty_olap_table";
+
+        ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )", table
+        ), true);
+
+        NDump::TClient backupClient(driver);
+        const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().AvoidCopy(true).Database("/Root"));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        TVector<TFsPath> children;
+        pathToBackup.Child("empty_olap_table").List(children);
+        for (const auto& child : children) {
+            UNIT_ASSERT_C(child.GetName() != NDump::NFiles::IncompleteData().FileName,
+                "Stray incomplete data file left behind after backing up an empty column table: " << child.GetPath());
+        }
     }
 
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {

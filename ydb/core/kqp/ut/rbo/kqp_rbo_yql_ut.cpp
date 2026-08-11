@@ -5645,7 +5645,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         auto newMap = MakeIntrusive<TOpMap>(read, pos, oldMap->Props, TVector<TMapElement>{
             MakeTestConstantAppend("new", pos, testContext.ExprCtx),
-        }, false);
+        });
 
         const auto& outputIUs = newMap->GetOutputIUs();
         UNIT_ASSERT_VALUES_EQUAL(outputIUs.size(), 2);

@@ -306,7 +306,7 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
     }
 
     for (auto& child : unionAll->GetInputs()) {
-        child = MakeIntrusive<TOpMap>(child, topMap->Pos, pushedElements, topMap->Ordered);
+        child = MakeIntrusive<TOpMap>(child, topMap->Pos, pushedElements);
     }
     unionAll->Columns = std::move(newColumns);
     if (!renameMap.empty()) {
@@ -317,7 +317,7 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
         return unionAll;
     }
 
-    return MakeIntrusive<TOpMap>(unionAll, topMap->Pos, residualElements, topMap->Ordered);
+    return MakeIntrusive<TOpMap>(unionAll, topMap->Pos, residualElements);
 }
 
 } // namespace NKqp

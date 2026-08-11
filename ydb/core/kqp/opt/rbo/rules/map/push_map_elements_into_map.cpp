@@ -270,7 +270,7 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
         return bottomMap;
     }
 
-    return MakeIntrusive<TOpMap>(bottomMap, topMap->Pos, topElements, topMap->Ordered);
+    return MakeIntrusive<TOpMap>(bottomMap, topMap->Pos, topElements);
 }
 
 } // namespace NKqp

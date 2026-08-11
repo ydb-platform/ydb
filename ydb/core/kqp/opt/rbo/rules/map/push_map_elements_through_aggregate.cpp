@@ -266,7 +266,7 @@ TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IO
     if (topMap->GetMapElements().empty()) {
         return aggregate;
     }
-    return MakeIntrusive<TOpMap>(aggregate, topMap->Pos, topMap->GetMapElements(), topMap->Ordered);
+    return MakeIntrusive<TOpMap>(aggregate, topMap->Pos, topMap->GetMapElements());
 }
 
 } // namespace NKqp

@@ -63,7 +63,7 @@ bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
     }
 
     filter->SetFilterExpression(MakeConjunction(newConjuncts, props.PgSyntax));
-    auto newMap = MakeIntrusive<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
+    auto newMap = MakeIntrusive<TOpMap>(filter->GetInput(), input->Pos, mapElements);
     filter->SetInput(newMap);
     return true;
 }

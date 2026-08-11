@@ -29,7 +29,6 @@ from ydb.tools.ydb_bench.lib.config import CONFIG_SCHEMA, build_run_plan, config
 from ydb.tools.ydb_bench.lib.results import ResultStore, SCHEMA_VERSION, load_manifest, transition
 from ydb.tools.ydb_bench.lib.runner import run_command
 from ydb.tools.ydb_bench.lib.topology import (
-    AFFINITY_MODES,
     CpuTopology,
     discover_topology,
     parse_cpu_list,
@@ -166,7 +165,8 @@ class YdbBenchTest(unittest.TestCase):
               succeeds: {threads: [1], actor-pairs: [32], inflight: [2], duration: 1, repetitions: 1, affinity: [none]}
             """
         )
-        loader = lambda _: benchmark.read_bytes()
+        def loader(_):
+            return benchmark.read_bytes()
         fail_fast = self.root / "fail-fast"
         fail_fast_stdout, fail_fast_stderr = io.StringIO(), io.StringIO()
         with redirect_stdout(fail_fast_stdout), redirect_stderr(fail_fast_stderr):
@@ -1040,13 +1040,16 @@ class WebTest(unittest.TestCase):
         run = {"schema_version": version, "status": "completed", "state": "passed", "runs": [], "steps": [], "topology": {"version": 2}}
         files = {"run.json": json.dumps(run).encode(), "artifact.txt": b"artifact"}
         entries = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)} for name, data in files.items()]
-        if corrupt: entries[0]["sha256"] = "0" * 64
+        if corrupt:
+            entries[0]["sha256"] = "0" * 64
         manifest = json.dumps({"format_version": 1, "files": entries}).encode()
         stream = io.BytesIO()
         with zipfile.ZipFile(stream, "w") as archive:
             archive.writestr("import.json", manifest)
-            for name, data in files.items(): archive.writestr(name, data)
-            for name, data in (extra or {}).items(): archive.writestr(name, data)
+            for name, data in files.items():
+                archive.writestr(name, data)
+            for name, data in (extra or {}).items():
+                archive.writestr(name, data)
         return stream.getvalue()
 
     def test_import_rejects_hostile_corrupt_and_old_archives(self):
@@ -1058,7 +1061,8 @@ class WebTest(unittest.TestCase):
             import_archive(self.root, self._portable_archive(version=3))
         stream = io.BytesIO()
         with zipfile.ZipFile(stream, "w") as archive:
-            link = zipfile.ZipInfo("link"); link.external_attr = (stat.S_IFLNK | 0o777) << 16
+            link = zipfile.ZipInfo("link")
+            link.external_attr = (stat.S_IFLNK | 0o777) << 16
             archive.writestr(link, "run.json")
             archive.writestr("import.json", b'{"format_version":1,"files":[]}')
         with self.assertRaisesRegex(BenchmarkError, "unexpected member type"):
@@ -1110,7 +1114,9 @@ class WebTest(unittest.TestCase):
             with self.assertRaisesRegex(Exception, "HTTP Error 400"):
                 urllib.request.urlopen(urllib.request.Request(base + "/api/runs", method="POST"))
         finally:
-            server.shutdown(); worker.join(); server.server_close()
+            server.shutdown()
+            worker.join()
+            server.server_close()
 
     def test_web_rejects_remote_listener_without_opt_in(self):
         self._manifest(self.root / "complete")
@@ -1156,11 +1162,14 @@ class WebTest(unittest.TestCase):
             self.assertTrue(request("/api/runs/" + created["id"] + "/cancel", "POST")["cancelled"])
             self.assertTrue(request("/api/runs/" + created["id"] + "/cancel", "POST")["cancelled"])
             for _ in range(100):
-                if request("/api/runs/" + created["id"])["state"] == "cancelled": break
+                if request("/api/runs/" + created["id"])["state"] == "cancelled":
+                    break
                 time.sleep(.01)
             self.assertEqual(request("/api/runs/" + created["id"])["state"], "cancelled")
         finally:
-            release.set(); server.shutdown(); server.server_close()
+            release.set()
+            server.shutdown()
+            server.server_close()
 
 
 if __name__ == "__main__":

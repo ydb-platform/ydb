@@ -2901,9 +2901,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestTableBackupRestore(bool isOlap = false) {
         NKikimrConfig::TAppConfig appConfig;
-        if (isOlap) {
-            appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        }
         TKikimrWithGrpcAndRootSchema server(appConfig);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
@@ -2917,7 +2914,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto restoreSettings = NDump::TRestoreSettings();
         if (isOlap) {
             dumpSettings.AvoidCopy(true); 
-            restoreSettings.Mode(NDump::TRestoreSettings::EMode::BulkUpsert); // Table Service YQL does not support column-oriented DML.
         }
 
         TestTableContentIsPreserved(
@@ -3711,7 +3707,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto restoreSettings = NDump::TRestoreSettings();
         if (IsOlap) {
             dumpSettings.AvoidCopy(true);
-            restoreSettings.Mode(NDump::TRestoreSettings::EMode::BulkUpsert);
         }
 
         TestPrimitiveType(

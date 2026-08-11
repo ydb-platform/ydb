@@ -21,21 +21,21 @@
     * `root` — логин пользователя с административными правами;
     * `auth_token` — имя файла, в который сохраняется токен аутентификации для последующего использования.
 
-2. Используя токен аутентификации, получите текущую [динамическую конфигурацию](../../../devops/configuration-management/configuration-v2/config-overview.md):
+2. Используя токен аутентификации, получите текущую [конфигурацию](../../../devops/configuration-management/configuration-v2/config-overview.md):
 
     ```bash
-    ydb --ca-file ca.crt --token-file auth_token -e grpcs://<node1.ydb.tech>:2135 admin cluster config fetch > dynamic_config.yaml
+    ydb --ca-file ca.crt --token-file auth_token -e grpcs://<node1.ydb.tech>:2135 admin cluster config fetch > config.yaml
     ```
 
     В примере команды выше используются следующие параметры:
     * `node1.ydb.tech` — FQDN любого из серверов, на которых уже размещены статические узлы кластера;
     * `2135` — номер порта gRPCs сервиса статических узлов;
     * `ca.crt` — имя файла с сертификатом центра регистрации;
-    * `dynamic_config.yaml` — имя файла, в который запишется текущая динамическая конфигурация;
+    * `config.yaml` — имя файла, в который запишется текущая конфигурация;
     * `auth_token` — имя файла, содержащего токен аутентификации.
 
 
-3. Отредактируйте секцию `config` динамической конфигурации `dynamic_config.yaml`.
+3. Отредактируйте секцию `config` конфигурации `config.yaml`.
 Если ваш кластер настроен в соответствии с [документацией](../../../devops/deployment-options/manual/initial-deployment/deployment-configuration-v2.md) по ручному развертыванию, то раздел `host_configs` секции `config` имеет вид:
 
 ```yaml
@@ -78,12 +78,12 @@ host_configs:
 
 * `/dev/disk/by-partlabel/ydb_disk_ssd_04` — имя размеченного диска (должно соответствовать имени из подготовительного этапа).
 
-Остальные секции и настройки динамического конфигурационного файла остаются без изменений.
+Остальные секции и настройки конфигурационного файла остаются без изменений.
 
-4. Используя полученный токен, отправьте измененную динамическую конфигурацию в кластер YDB:
+4. Используя полученный токен, отправьте измененную конфигурацию в кластер YDB:
 
 ```bash
-ydb -e grpcs://<node1.ydb.tech>:2135 --ca-file ca.crt --token-file auth_token admin cluster config replace -f dynamic_config.yaml
+ydb -e grpcs://<node1.ydb.tech>:2135 --ca-file ca.crt --token-file auth_token admin cluster config replace -f config.yaml
 ```
 
 В примере команды выше используются следующие параметры:
@@ -91,7 +91,7 @@ ydb -e grpcs://<node1.ydb.tech>:2135 --ca-file ca.crt --token-file auth_token ad
 * `node1.ydb.tech` — FQDN любого из серверов, на которых уже размещены статические узлы кластера;
 * `2135` — номер порта gRPCs сервиса статических узлов;
 * `ca.crt` — имя файла с сертификатом центра регистрации;
-* `dynamic_config.yaml` — имя файла с отредактированной динамической конфигурацией;
+* `config.yaml` — имя файла с отредактированной конфигурацией;
 * `auth_token` — имя файла, содержащего токен аутентификации.
 
 ## Проверьте состояние кластера

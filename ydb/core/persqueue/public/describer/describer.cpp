@@ -7,7 +7,8 @@
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/maybe.h>
+
+#include <optional>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_DESCRIBER
 
@@ -41,10 +42,10 @@ TString MakeFederationTopicPath(const TString& federationRoot, const TString& to
 }
 
 // First path component is federation account; requires account/topic shape.
-TMaybe<TString> ExtractFederationAccount(const TString& topicPath) {
+std::optional<TString> ExtractFederationAccount(const TString& topicPath) {
     auto parts = NKikimr::SplitPath(topicPath);
     if (parts.size() < 2 || parts[0].empty()) {
-        return Nothing();
+        return std::nullopt;
     }
     return parts[0];
 }
@@ -56,16 +57,16 @@ TString MakeFederationAccountDatabase(const TString& federationRoot, const TStri
 // Federation retries append account/topic under FederationRoot. Build that relative
 // suffix from the navigated absolute path vs the request database — never from a
 // database-prefixed originalPath (would become FederationRoot/Root/account/...).
-TMaybe<TString> MakeFederationRelativeTopicPath(const TString& databasePath, const TString& originalPath, const TString& realPath) {
+std::optional<TString> MakeFederationRelativeTopicPath(const TString& databasePath, const TString& originalPath, const TString& realPath) {
     if (!databasePath.empty()) {
         const auto dbParts = NKikimr::SplitPath(databasePath);
         const auto realParts = NKikimr::SplitPath(realPath);
         if (realParts.size() <= dbParts.size()) {
-            return Nothing();
+            return std::nullopt;
         }
         for (size_t i = 0; i < dbParts.size(); ++i) {
             if (dbParts[i] != realParts[i]) {
-                return Nothing();
+                return std::nullopt;
             }
         }
         return NKikimr::JoinPath(TVector<TString>(realParts.begin() + dbParts.size(), realParts.end()));
@@ -74,7 +75,7 @@ TMaybe<TString> MakeFederationRelativeTopicPath(const TString& databasePath, con
     // No database in the request: originalPath must already be account/topic-shaped.
     const auto parts = NKikimr::SplitPath(originalPath);
     if (parts.size() < 2 || parts[0].empty()) {
-        return Nothing();
+        return std::nullopt;
     }
     return NKikimr::JoinPath(parts);
 }
@@ -329,12 +330,12 @@ private:
         }
 
         const auto relativePath = MakeFederationRelativeTopicPath(DatabasePath, originalPath, realPath);
-        if (!relativePath.Defined()) {
+        if (!relativePath) {
             return false;
         }
 
         const auto account = ExtractFederationAccount(*relativePath);
-        if (!account.Defined()) {
+        if (!account) {
             return false;
         }
 
@@ -356,14 +357,14 @@ private:
     // One SchemeCache request per account database (DatabaseName = FederationRoot/account).
     // Empty AccountDatabase is valid (fetch/API callers may pass Database="").
     bool TryStartNextFederationDatabaseRequest() {
-        TMaybe<TString> nextDatabase;
+        std::optional<TString> nextDatabase;
         for (const auto& [_, info] : FederationPaths) {
             if (!RequestedFederationDatabases.contains(info.AccountDatabase)) {
                 nextDatabase = info.AccountDatabase;
                 break;
             }
         }
-        if (!nextDatabase.Defined()) {
+        if (!nextDatabase) {
             return false;
         }
 
@@ -386,14 +387,14 @@ private:
     // One SchemeCache request per account database for CDC streamImpl paths.
     // Empty AccountDatabase is valid (fetch/API callers may pass Database="").
     bool TryStartNextCdcDatabaseRequest() {
-        TMaybe<TString> nextDatabase;
+        std::optional<TString> nextDatabase;
         for (const auto& [_, info] : CDCPaths) {
             if (!RequestedCdcDatabases.contains(info.AccountDatabase)) {
                 nextDatabase = info.AccountDatabase;
                 break;
             }
         }
-        if (!nextDatabase.Defined()) {
+        if (!nextDatabase) {
             return false;
         }
 

@@ -160,6 +160,7 @@ TDqStage RebuildReturningPureStageWithSink(TExprNode::TPtr& returning, TExprBase
 }
 
 bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx,
     TMaybeNode<TExprBase>& effect, const i64 order)
 {
     const i64 priority = 0;
@@ -234,52 +235,89 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
         .Output(dqUnion.Output())
         .Done();
 
-    // Stage 1: Transform stage (without sink)
-    auto transformOutput = Build<TDqOutput>(ctx, node.Pos())
-        .Done();
-    auto transformStage = Build<TDqStage>(ctx, node.Pos())
-        .Inputs()
-            .Add(mapCn)
-            .Build()
-        .Program()
-            .Args({rowArgument})
-            .Body<TCoToFlow>()
-                .Input(rowArgument)
-                .Build()
-            .Build()
-        .Outputs<TDqStageOutputsList>()
-            .Add(transformOutput)
-            .Build()
-        .Settings().Build()
-        .Done();
+    const bool enableCsWriteAffinity = kqpCtx.Config->EnableCsWriteAffinity.Get().GetOrElse(false);
 
-    // Stage 2: Sink stage (separate stage for WriteActor)
-    auto sinkMapCn = Build<TDqCnMap>(ctx, node.Pos())
-        .Output<TDqOutput>()
-            .Stage(transformStage)
-            .Index().Build("0")
-            .Build()
-        .Done();
-    auto sinkStage = Build<TDqStage>(ctx, node.Pos())
-        .Inputs()
-            .Add(sinkMapCn)
-            .Build()
-        .Program()
-            .Args({rowArgument})
-            .Body<TCoToFlow>()
-                .Input(rowArgument)
+    if (enableCsWriteAffinity) {
+        // Per-node write affinity: WriteActor (sink) is extracted into a separate
+        // TDqStage so it can be independently parallelized and assigned to the nodes
+        // hosting the target column shards.
+        //
+        //   Transform Stage (mapCn -> ToFlow)
+        //       | TDqCnMap
+        //   Sink Stage (ToFlow -> DqSink -> TKqpDirectWriteActor)
+        //
+        // Transform stage: no explicit outputs list; the sink stage references its
+        // output via TDqOutput(Stage=transformStage, Index=0). This mirrors the
+        // stage-connection pattern used in the physical optimizer.
+        auto transformStage = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Add(mapCn)
                 .Build()
-            .Build()
-        .Outputs<TDqStageOutputsList>()
-            .Add(sink)
-            .Build()
-        .Settings().Build()
-        .Done();
+            .Program()
+                .Args({rowArgument})
+                .Body<TCoToFlow>()
+                    .Input(rowArgument)
+                    .Build()
+                .Build()
+            .Settings().Build()
+            .Done();
 
-    effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-        .Stage(sinkStage.Ptr())
-        .SinkIndex().Build("0")
-        .Done();
+        auto sinkInput = Build<TDqCnMap>(ctx, node.Pos())
+            .Output<TDqOutput>()
+                .Stage(transformStage)
+                .Index().Build("0")
+                .Build()
+            .Done();
+
+        // Distinct argument node for the sink stage lambda (must not be shared
+        // with the transform stage lambda).
+        const auto sinkRowArgument = Build<TCoArgument>(ctx, node.Pos())
+            .Name("sinkRow")
+            .Done();
+
+        auto sinkStage = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Add(sinkInput)
+                .Build()
+            .Program()
+                .Args({sinkRowArgument})
+                .Body<TCoToFlow>()
+                    .Input(sinkRowArgument)
+                    .Build()
+                .Build()
+            .Outputs<TDqStageOutputsList>()
+                .Add(sink)
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+            .Stage(sinkStage.Ptr())
+            .SinkIndex().Build("0")
+            .Done();
+    } else {
+        // Original behavior: transform program and sink in a single stage.
+        auto stageInput = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Add(mapCn)
+                .Build()
+            .Program()
+                .Args({rowArgument})
+                .Body<TCoToFlow>()
+                    .Input(rowArgument)
+                    .Build()
+                .Build()
+            .Outputs<TDqStageOutputsList>()
+                .Add(sink)
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+            .Stage(stageInput.Ptr())
+            .SinkIndex().Build("0")
+            .Done();
+    }
 
     return true;
 }
@@ -635,7 +673,7 @@ bool BuildEffects(const TVector<TExprBase>& effects, TExprNode::TPtr& returning,
         if (effect.Maybe<TKqlFillTable>()) {
             const auto maybeFillTable = effect.Maybe<TKqlFillTable>();
             AFL_ENSURE(maybeFillTable);
-            if (!BuildFillTableEffect(maybeFillTable.Cast(), ctx, newEffect, builtEffects.size())) {
+            if (!BuildFillTableEffect(maybeFillTable.Cast(), ctx, kqpCtx, newEffect, builtEffects.size())) {
                 return false;
             }
         } else if (effect.Maybe<TKqlTableEffect>()) {

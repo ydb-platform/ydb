@@ -2350,6 +2350,103 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(CTAS_WriteAffinity_Twin, EnableCsWriteAffinity) {
+        // TWIN test: verify CTAS produces identical results with EnableCsWriteAffinity=true/false
+        // and checks that the query plan has different number of stages:
+        // - Without pragma: single stage (transform + sink together)
+        // - With pragma: two stages (transform stage + separate sink stage)
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableMoveColumnTable(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        TKikimrRunner kikimr(settings);
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/Source` (
+                    Col1 Uint64 NOT NULL,
+                    Col2 Int32,
+                    PRIMARY KEY (Col1)
+                )
+                PARTITION BY HASH(Col1)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/Source` (Col1, Col2) VALUES
+                    (1u, 1), (2u, 2), (3u, 3);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Build the CTAS query with or without the pragma
+        const TString pragmaPrefix = EnableCsWriteAffinity
+            ? R"(PRAGMA ydb.EnableCsWriteAffinity = "true";
+)"
+            : TString();
+        const TString ctasQuery = TStringBuilder()
+            << pragmaPrefix
+            << R"(
+                CREATE TABLE `/Root/Destination` (
+                    PRIMARY KEY (Col1)
+                )
+                PARTITION BY HASH(Col1)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2)
+                AS SELECT * FROM `/Root/Source`;
+            )";
+
+        // Explain the CTAS query and inspect the physical plan. With the pragma
+        // enabled the WriteActor (sink) lives in its own TDqStage, so the plan
+        // contains exactly one more stage than without the pragma.
+        // Measured: 3 stages without the pragma, 4 stages with the pragma.
+        {
+            auto result = client.ExecuteQuery(
+                ctasQuery,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(result.GetStats().has_value(), "Expected query stats to be present");
+            const auto planStr = result.GetStats()->GetPlan();
+            UNIT_ASSERT_C(planStr.has_value(), "Expected query plan to be present");
+
+            NJson::TJsonValue plan;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(TString(*planStr), &plan, true),
+                "Failed to parse query plan: " << *planStr);
+
+            const ui32 expectedStages = EnableCsWriteAffinity ? 4 : 3;
+            const auto stages = FindPlanStages(plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(stages.size(), expectedStages,
+                "Expected " << expectedStages << " stages (EnableCsWriteAffinity="
+                << EnableCsWriteAffinity << "), got " << stages.size()
+                << ". Plan: " << *planStr);
+        }
+
+        // Execute CTAS query
+        {
+            auto result = client.ExecuteQuery(ctasQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Verify data was written correctly — result must be identical regardless of pragma value
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT Col1, Col2 FROM `/Root/Destination` ORDER BY Col1 ASC;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[1u;[1]];[2u;[2]];[3u;[3]]])");
+        }
+    }
+
     Y_UNIT_TEST(MixedCreateAsSelect) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableMoveColumnTable(true);

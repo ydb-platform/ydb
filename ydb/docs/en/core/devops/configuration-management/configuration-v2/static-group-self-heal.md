@@ -19,30 +19,34 @@ To enable or disable automatic static group management:
 
 1. Fetch the current cluster configuration using the [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md) command:
 
-    ```bash
-    ydb [global options...] admin cluster config fetch > config.yaml
-    ```
 
-1. Set the `automatic_static_group_management` parameter in the `config.yaml` configuration file:
+   ```bash
+   ydb [global options...] admin cluster config fetch > config.yaml
+   ```
 
-    ```yaml
-    config:
-      self_management_config:
-        enabled: true
-        automatic_static_group_management: true
-    ```
+2. Set the `automatic_static_group_management` parameter in the `config.yaml` configuration file:
 
-    `true` enables automatic static group management, while `false` disables it.
 
-1. Apply the updated configuration using the [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md) command:
+   ```yaml
+   config:
+     self_management_config:
+       enabled: true
+       automatic_static_group_management: true
+   ```
 
-    ```bash
-    ydb [global options...] admin cluster config replace -f config.yaml
-    ```
+
+   `true` enables automatic static group management, while `false` disables it.
+3. Apply the updated configuration using the [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md) command:
+
+
+   ```bash
+   ydb [global options...] admin cluster config replace -f config.yaml
+   ```
 
 ## Restricting the set of target nodes {#allowed-nodes}
 
 By default, SelfHeal can move a static group VDisk to any suitable node. To restrict the set of target nodes, specify their IDs in the [`static_group_self_heal_allowed_nodes`](../../../reference/configuration/self_management_config.md#parameters) parameter:
+
 
 ```yaml
 config:
@@ -54,5 +58,6 @@ config:
     - 2
     - 3
 ```
+
 
 An empty list means that no restrictions apply. The allowed nodes must have suitable PDisks and enough free space to move the VDisk without violating the failure model.

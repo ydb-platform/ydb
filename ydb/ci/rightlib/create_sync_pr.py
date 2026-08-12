@@ -213,7 +213,7 @@ class PrSyncCreator:
             self.base_branch, dev_branch_name, title=pr_title, body=pr_body, maintainer_can_modify=True
         )
         pr.add_to_labels(self.pr_label)
-        # pr.add_to_labels(automerge.automerge_pr_label)
+        pr.add_to_labels(automerge.automerge_pr_label)
         if merge_failed and len(conflict_files) > 0:
             pr.add_to_labels(automerge.pr_label_fail)
 

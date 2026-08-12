@@ -365,7 +365,11 @@ TTableInfo CreateColumnTable(TTestEnv& env, const TString& databaseName, const T
         << "WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << shardCount << ");";
 
     ExecuteYqlScript(env, createTable);
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    if (!env.GetServer().GetSettings().UseRealThreads) {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    } else {
+        Sleep(TDuration::Seconds(1));
+    }
 
     return MakeTableInfo(runtime, databaseName, tableName, true);
 }

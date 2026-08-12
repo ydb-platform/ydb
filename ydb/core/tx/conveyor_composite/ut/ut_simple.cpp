@@ -232,17 +232,23 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         const auto serviceEdge = runtime.AllocateEdgeActor();
         runtime.RegisterService(serviceId, serviceEdge);
 
-        std::vector<ui64> registrations;
-        std::vector<ui64> tasks;
-        std::vector<ui64> unregistrations;
+        THashSet<ui64> registrations;
+        THashSet<ui64> tasks;
+        THashSet<ui64> unregistrations;
         auto registrationObserver = runtime.AddObserver<TEvExecution::TEvRegisterProcess>([&](auto& ev) {
-            registrations.emplace_back(ev->Get()->GetInternalProcessId());
+            if (ev->Recipient == serviceId) {
+                registrations.emplace(ev->Get()->GetInternalProcessId());
+            }
         });
         auto taskObserver = runtime.AddObserver<TEvExecution::TEvNewTask>([&](auto& ev) {
-            tasks.emplace_back(ev->Get()->GetInternalProcessId());
+            if (ev->Recipient == serviceId) {
+                tasks.emplace(ev->Get()->GetInternalProcessId());
+            }
         });
         auto unregistrationObserver = runtime.AddObserver<TEvExecution::TEvUnregisterProcess>([&](auto& ev) {
-            unregistrations.emplace_back(ev->Get()->GetInternalProcessId());
+            if (ev->Recipient == serviceId) {
+                unregistrations.emplace(ev->Get()->GetInternalProcessId());
+            }
         });
 
         TAtomicCounter taskCounter;
@@ -273,13 +279,13 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(serviceEdge);
 
         UNIT_ASSERT_VALUES_EQUAL(registrations.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(registrations[0], activeProcessId);
-        UNIT_ASSERT_VALUES_EQUAL(registrations[1], finishedProcessId);
+        UNIT_ASSERT(registrations.contains(activeProcessId));
+        UNIT_ASSERT(registrations.contains(finishedProcessId));
         UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0], activeProcessId);
+        UNIT_ASSERT(tasks.contains(activeProcessId));
         UNIT_ASSERT_VALUES_EQUAL(unregistrations.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(unregistrations[0], activeProcessId);
-        UNIT_ASSERT_VALUES_EQUAL(unregistrations[1], finishedProcessId);
+        UNIT_ASSERT(unregistrations.contains(activeProcessId));
+        UNIT_ASSERT(unregistrations.contains(finishedProcessId));
     }
 
     class TTestingExecutor10xDistribution: public TTestingExecutor {

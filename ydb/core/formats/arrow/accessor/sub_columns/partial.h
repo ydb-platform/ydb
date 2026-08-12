@@ -116,8 +116,9 @@ public:
         return !NeedFetch(std::string_view(subColumnName.data(), subColumnName.size()));
     }
 
-    static std::shared_ptr<TSubColumnsPartialArray> BuildEmpty(const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount) {
-        return std::make_shared<TSubColumnsPartialArray>(TSubColumnsHeader::BuildEmpty(), recordsCount, dataType, NSubColumns::TSettings());
+    static std::shared_ptr<TSubColumnsPartialArray> BuildEmpty(
+        const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount, const NSubColumns::TSettings& settings) {
+        return std::make_shared<TSubColumnsPartialArray>(TSubColumnsHeader::BuildEmpty(), recordsCount, dataType, settings);
     }
 
     const TSubColumnsHeader& GetHeader() const {

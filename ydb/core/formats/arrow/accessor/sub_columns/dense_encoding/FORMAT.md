@@ -4,7 +4,7 @@ Dense encoding stores binary sub-columns and binary dictionary values. The
 constructor selected by `TEncodingParams` defines the format; the blob does not
 contain a format version, type, or codec - they come from the subcolumn header.
 
-All integers below are host-endian `ui32` values unless stated otherwise.
+Only little-endian hosts are supported. Multi-byte integers are little-endian.
 
 ## Frames and sections
 
@@ -32,7 +32,7 @@ The binary-array blob is:
 ```
 [has_nulls: ui8]
 [validity section]                 // only when has_nulls is 1
-[offsets section]
+[lengths section]
 [values section]
 ```
 
@@ -60,8 +60,8 @@ A dictionary blob is:
 [dictionary_length: ui32][binary-array blob][positions frame]
 ```
 
-`TDictionaryAccessorData` stores the boundary between the two blobs. The
-dictionary is encoded with the binary-array layout above. The positions frame
+`TDictionaryAccessorData` stores the `ui32` size of the dictionary prefix; the
+positions blob occupies the remaining bytes. The dictionary is encoded with the binary-array layout above. The positions frame
 contains this raw payload before frame compression:
 
 ```
@@ -80,7 +80,7 @@ omitted and restored from the validity bitmap.
 | Accessor-specific, with type, codec, and flags supplied externally. | Record-batch metadata describes buffers and compression; schema and dictionary batches follow the IPC protocol. |
 | Explicit field sections with `ui32` frame sizes; no alignment padding. | Buffer layout is described by FlatBuffer metadata and IPC body buffers are aligned. |
 | Binary lengths omit null positions and use byte-stream-split with a 1/2/4-byte width. | Binary arrays use a fixed-width offset buffer with one logical slot per array element. |
-| Dictionary values and positions share one accessor blob; accessor metadata gives their boundary. | Dictionary values are emitted as dictionary batches and indexes are an array buffer in a record batch. |
+| Dictionary values and positions share one accessor blob; accessor metadata gives the dictionary boundary. | Dictionary values are emitted as dictionary batches and indexes are an array buffer in a record batch. |
 | A compressed frame has a `ui32` uncompressed-size prefix and uses the externally selected codec. | Each compressed body buffer has the IPC compression framing, including an `int64` uncompressed-size prefix. |
 
 Arrow IPC's array-to-buffer traversal and per-buffer compression are implemented

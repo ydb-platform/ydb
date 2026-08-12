@@ -38,20 +38,26 @@ TBlobWithAdditionalAccessorData TDictionaryDenseConstructor::DoSerializeToBlobAn
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
     AFL_VERIFY(columnData->GetType() == IChunkedArray::EType::Dictionary)("type", columnData->GetType());
     const auto* dict = static_cast<const TDictionaryArray*>(columnData.get());
-    const auto& dictBinary = static_cast<const arrow::BinaryArray&>(*dict->GetDictionary());
+    const auto& dictionary = dict->GetDictionary();
+    AFL_VERIFY(dictionary->type_id() == arrow::Type::BINARY)("element_type", dictionary->type()->ToString());
+    const auto& dictBinary = static_cast<const arrow::BinaryArray&>(*dictionary);
     const auto codec = GetCompressionCodec(externalInfo);
     const TString dictBlob = SerializeBinaryArray(dictBinary, codec);
     const TString positionsBlob = SerializeIndices(
         dict->GetPositions(), NDictionary::TConstructor::GetTypeByVariantsCount(dictBinary.length()), codec);
 
-    // [dictionary length][dictionary blob][positions blob]. The metadata splits dictionary and positions blobs.
-    const ui32 dictLength = dictBinary.length();
+    // [dictionary length][dictionary blob][positions blob]. The metadata stores the dictionary boundary.
+    AFL_VERIFY(dictBinary.length() <= Max<ui32>())("length", dictBinary.length());
+    const ui32 dictLength = static_cast<ui32>(dictBinary.length());
+    AFL_VERIFY(sizeof(ui32) + dictBlob.size() <= Max<ui32>())("size", dictBlob.size());
+    AFL_VERIFY(positionsBlob.size() <= Max<ui32>())("size", positionsBlob.size());
+    const ui32 dictionaryBlobSize = static_cast<ui32>(sizeof(ui32) + dictBlob.size());
     TString result;
     result.reserve(sizeof(ui32) + dictBlob.size() + positionsBlob.size());
     result.append((const char*)&dictLength, sizeof(dictLength));
     result.append(dictBlob);
     result.append(positionsBlob);
-    auto meta = std::make_shared<TDictionaryAccessorData>(sizeof(ui32) + dictBlob.size(), positionsBlob.size());
+    auto meta = std::make_shared<TDictionaryAccessorData>(dictionaryBlobSize, static_cast<ui32>(positionsBlob.size()));
     return { std::move(result), std::move(meta) };
 }
 
@@ -60,13 +66,13 @@ TConclusion<std::shared_ptr<IChunkedArray>> TDictionaryDenseConstructor::DoDeser
     AFL_VERIFY(externalInfo.HasAdditionalAccessorData());
     const auto* meta = dynamic_cast<const TDictionaryAccessorData*>(externalInfo.GetAdditionalAccessorData().get());
     AFL_VERIFY(meta);
-    AFL_VERIFY(meta->DictionaryBlobSize >= sizeof(ui32));
-    AFL_VERIFY(meta->DictionaryBlobSize + meta->PositionsBlobSize == originalData.size());
+    const ui32 dictionaryBlobSize = meta->DictionaryBlobSize;
+    AFL_VERIFY(dictionaryBlobSize >= sizeof(ui32) && dictionaryBlobSize <= originalData.size());
 
     ui32 dictLength;
     memcpy(&dictLength, originalData.data(), sizeof(dictLength));
-    const TStringBuf dictBlob(originalData.data() + sizeof(ui32), meta->DictionaryBlobSize - sizeof(ui32));
-    const TStringBuf positionsBlob(originalData.data() + meta->DictionaryBlobSize, meta->PositionsBlobSize);
+    const TStringBuf dictBlob(originalData.data() + sizeof(ui32), dictionaryBlobSize - sizeof(ui32));
+    const TStringBuf positionsBlob(originalData.data() + dictionaryBlobSize, originalData.size() - dictionaryBlobSize);
     const auto codec = GetCompressionCodec(externalInfo);
 
     auto dictionary = DeserializeBinaryArray(dictBlob, dictLength, codec);

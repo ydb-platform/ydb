@@ -10,13 +10,34 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/bitmap_ops.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/byte_stream_split.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/util/endian.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 namespace {
 
+void VerifyLittleEndian() {
+    AFL_VERIFY(ARROW_LITTLE_ENDIAN)("endianness", "only little endian serialization/deserialization is supported");
+}
+
+size_t GetBitmapSize(const ui32 recordsCount) {
+    return recordsCount / CHAR_BIT + (recordsCount % CHAR_BIT != 0);
+}
+
+size_t GetFrameMaxSize(const TStringBuf payload, const std::shared_ptr<arrow::util::Codec>& codec) {
+    if (!codec) {
+        return sizeof(ui32) + payload.size();
+    }
+    return sizeof(ui32) + codec->MaxCompressedLen(payload.size(), (const uint8_t*)payload.data());
+}
+
+size_t GetSectionMaxSize(const TStringBuf payload, const std::shared_ptr<arrow::util::Codec>& codec) {
+    return sizeof(ui32) + GetFrameMaxSize(payload, codec);
+}
+
 // [uncompressed-size][payload], payload compressed with codec (or stored raw when codec is null).
 void AppendFrameCompressed(TString& out, const TStringBuf payload, const std::shared_ptr<arrow::util::Codec>& codec) {
+    AFL_VERIFY(payload.size() <= Max<ui32>())("size", payload.size());
     const ui32 rawSize = payload.size();
     out.append((const char*)&rawSize, sizeof(rawSize));
     if (!codec) {
@@ -48,7 +69,8 @@ TString FrameDecompress(TStringBuf blob, const std::shared_ptr<arrow::util::Code
     }
     TString raw;
     raw.ReserveAndResize(rawSize);
-    TStatusValidator::GetValid(codec->Decompress(payload.size(), (const uint8_t*)payload.data(), rawSize, (uint8_t*)raw.Detach()));
+    TStatusValidator::GetValid(codec->Decompress(
+        payload.size(), (const uint8_t*)payload.data(), rawSize, (uint8_t*)raw.Detach()));
     return raw;
 }
 
@@ -63,7 +85,6 @@ public:
         if (array.null_count() == 0) {
             return;
         }
-        AFL_VERIFY(array.null_bitmap_data());
         const i64 bytesCount = (array.length() + CHAR_BIT - 1) / CHAR_BIT;
         // We want to reference the underlying array bitmap without copying, but it is possible
         // only if the array is not a slice of another one with offset between byte borders (then copy).
@@ -139,18 +160,20 @@ void AppendSection(TString& out, const TStringBuf raw, const std::shared_ptr<arr
     out.append(sizeof(ui32), '\0');
     const size_t contentPosition = out.size();
     AppendFrameCompressed(out, raw, codec);
-    const ui32 totalSize = out.size() - contentPosition;
+    const size_t encodedSize = out.size() - contentPosition;
+    AFL_VERIFY(encodedSize <= Max<ui32>())("size", encodedSize);
+    const ui32 totalSize = encodedSize;
     memcpy(out.Detach() + sizePosition, &totalSize, sizeof(totalSize));
 }
 
 TString ReadSection(const TStringBuf blob, size_t& pos, const std::shared_ptr<arrow::util::Codec>& codec) {
-    AFL_VERIFY(blob.size() >= pos + sizeof(ui32))("size", blob.size())("pos", pos);
-    ui32 totalSize;
-    memcpy(&totalSize, blob.data() + pos, sizeof(totalSize));
-    pos += sizeof(totalSize);
-    AFL_VERIFY(blob.size() >= pos + totalSize)("size", blob.size())("need", pos + totalSize);
-    const TString result = FrameDecompress(TStringBuf(blob.data() + pos, totalSize), codec);
-    pos += totalSize;
+    AFL_VERIFY(pos <= blob.size() && blob.size() - pos >= sizeof(ui32))("size", blob.size())("pos", pos);
+    ui32 sectionSize;
+    memcpy(&sectionSize, blob.data() + pos, sizeof(sectionSize));
+    pos += sizeof(sectionSize);
+    AFL_VERIFY(sectionSize <= blob.size() - pos)("size", blob.size())("pos", pos)("section_size", sectionSize);
+    const TString result = FrameDecompress(TStringBuf(blob.data() + pos, sectionSize), codec);
+    pos += sectionSize;
     return result;
 }
 
@@ -171,9 +194,10 @@ TParsedPrefix ParsePrefix(const TString& raw, const ui32 recordsCount) {
     AFL_VERIFY(raw.size() >= 1);
     size_t pos = 0;
     const char hasNulls = raw[pos++];
+    AFL_VERIFY(hasNulls == 0 || hasNulls == 1)("has_nulls", hasNulls);
     if (hasNulls) {
-        const size_t bmBytes = (recordsCount + 7) / 8;
-        AFL_VERIFY(raw.size() >= pos + bmBytes)("size", raw.size());
+        const size_t bmBytes = GetBitmapSize(recordsCount);
+        AFL_VERIFY(bmBytes <= raw.size() - pos)("size", raw.size())("pos", pos)("bitmap_size", bmBytes);
         result.Validity = TStringBuf(raw.data() + pos, bmBytes);
         result.NullBitmap = CopyToBuffer(raw.data() + pos, bmBytes);
         result.PresentCount = CountSetBits(result.Validity, recordsCount);
@@ -185,9 +209,27 @@ TParsedPrefix ParsePrefix(const TString& raw, const ui32 recordsCount) {
     return result;
 }
 
+TString DecodeDenseValues(const TStringBuf encoded, const TParsedPrefix& prefix, const ui32 recordsCount, const ui32 width) {
+    TString values;
+    const size_t valuesSize = static_cast<size_t>(recordsCount) * width;
+    values.ReserveAndResize(valuesSize);
+    char* out = values.Detach();
+    size_t encodedValueIndex = 0;
+    for (size_t i = 0; i < recordsCount; ++i) {
+        if (prefix.IsValid(i)) {
+            memcpy(out + i * width, encoded.data() + encodedValueIndex++ * width, width);
+        } else {
+            memset(out + i * width, 0, width);
+        }
+    }
+    AFL_VERIFY(encodedValueIndex == prefix.PresentCount)("actual", encodedValueIndex)("expected", prefix.PresentCount);
+    return values;
+}
+
 }   // namespace
 
 TString EncodeLengths(TConstArrayRef<ui32> values) {
+    VerifyLittleEndian();
     ui32 maxLength = 0;
     for (size_t i = 0; i < values.size(); ++i) {
         maxLength = Max(maxLength, values[i]);
@@ -202,6 +244,7 @@ TString EncodeLengths(TConstArrayRef<ui32> values) {
 }
 
 TVector<ui32> DecodeLengths(TStringBuf data, ui32 count) {
+    VerifyLittleEndian();
     AFL_VERIFY(data.size());
     switch (static_cast<ui8>(data[0])) {
         case sizeof(ui8):
@@ -216,6 +259,7 @@ TVector<ui32> DecodeLengths(TStringBuf data, ui32 count) {
 }
 
 TString SerializeBinaryArray(const arrow::BinaryArray& array, const std::shared_ptr<arrow::util::Codec>& codec) {
+    VerifyLittleEndian();
     TVector<ui32> lengths;
     lengths.reserve(array.length() - array.null_count());
     TString values;
@@ -226,36 +270,41 @@ TString SerializeBinaryArray(const arrow::BinaryArray& array, const std::shared_
         }
         const auto view = array.GetView(i);
         values.append(view.data(), view.size());
-        lengths.emplace_back(view.size());
+        AFL_VERIFY(view.size() <= Max<ui32>())("size", view.size());
+        lengths.emplace_back(static_cast<ui32>(view.size()));
     }
 
     const TValidityBitmap validity(array);
     const TStringBuf validityData = validity.GetData();
+    const TString encodedLengths = EncodeLengths(lengths);
     TString out;
     const char hasNulls = validityData.empty() ? 0 : 1;
+    const size_t outputCapacity = 1 + (hasNulls ? GetSectionMaxSize(validityData, codec) : 0) +
+        GetSectionMaxSize(encodedLengths, codec) + GetSectionMaxSize(values, codec);
+    out.reserve(outputCapacity);
     out.append(&hasNulls, 1);
     if (hasNulls) {
         AppendSection(out, validityData, codec);
     }
-    AppendSection(out, EncodeLengths(lengths), codec);
+    AppendSection(out, encodedLengths, codec);
     AppendSection(out, values, codec);
     return out;
 }
 
 std::shared_ptr<arrow::BinaryArray> DeserializeBinaryArray(
     TStringBuf blob, ui32 recordsCount, const std::shared_ptr<arrow::util::Codec>& codec) {
+    VerifyLittleEndian();
     size_t pos = 0;
     AFL_VERIFY(blob.size() >= 1);
     const char hasNulls = blob[pos++];
+    AFL_VERIFY(hasNulls == 0 || hasNulls == 1)("has_nulls", static_cast<ui32>(hasNulls));
 
     std::shared_ptr<arrow::Buffer> nullBitmap;
-    TStringBuf validity;
-    TString validityHolder;
+    TString validity;
     ui32 presentCount = recordsCount;
     if (hasNulls) {
-        validityHolder = ReadSection(blob, pos, codec);
-        validity = validityHolder;
-        AFL_VERIFY(validity.size() == (recordsCount + CHAR_BIT - 1) / CHAR_BIT)("size", validity.size())("records", recordsCount);
+        validity = ReadSection(blob, pos, codec);
+        AFL_VERIFY(validity.size() == GetBitmapSize(recordsCount))("size", validity.size())("records", recordsCount);
         nullBitmap = CopyToBuffer(validity.data(), validity.size());
         presentCount = CountSetBits(validity, recordsCount);
     }
@@ -264,22 +313,28 @@ std::shared_ptr<arrow::BinaryArray> DeserializeBinaryArray(
     const TString values = ReadSection(blob, pos, codec);
     AFL_VERIFY(pos == blob.size())("pos", pos)("size", blob.size());
 
-    TString denseOffsets;
-    denseOffsets.ReserveAndResize(sizeof(int32_t) * (recordsCount + 1));
-    int32_t* op = (int32_t*)denseOffsets.Detach();
-    op[0] = 0;
+    // Here we directly build arrow array buffers (validity, offsets, values), because we conveniently have all the data for it.
+    size_t offsetsCount = recordsCount;
+    ++offsetsCount;
+    TVector<int32_t> offsets(offsetsCount);
     ui32 present = 0;
     for (ui32 i = 0; i < recordsCount; ++i) {
         if (!nullBitmap || GetBit(validity, i)) {
-            op[i + 1] = op[i] + lengths[present++];
+            AFL_VERIFY(present < lengths.size())("present", present)("lengths", lengths.size());
+            AFL_VERIFY(offsets[i] >= 0)("offset", offsets[i]);
+            const ui32 remaining = Max<int32_t>() - offsets[i];
+            AFL_VERIFY(lengths[present] <= remaining)("length", lengths[present])("offset", offsets[i]);
+            offsets[i + 1] = offsets[i] + static_cast<int32_t>(lengths[present++]);
         } else {
-            op[i + 1] = op[i];
+            offsets[i + 1] = offsets[i];
         }
     }
     AFL_VERIFY(present == lengths.size())("present", present)("lengths", lengths.size());
-    AFL_VERIFY(static_cast<size_t>(op[recordsCount]) == values.size())("offsets_back", op[recordsCount])("values_len", values.size());
+    AFL_VERIFY(values.size() <= Max<int32_t>())("values_len", values.size());
+    const int32_t valuesSize = values.size();
+    AFL_VERIFY(offsets.back() == valuesSize)("offsets_back", offsets.back())("values_len", values.size());
 
-    auto offsetsBuf = CopyToBuffer(denseOffsets.data(), denseOffsets.size());
+    auto offsetsBuf = CopyToBuffer(offsets.data(), sizeof(int32_t) * offsets.size());
     auto valuesBuf = CopyToBuffer(values.data(), values.size());
     auto data = arrow::ArrayData::Make(
         arrow::binary(), recordsCount, { nullBitmap, offsetsBuf, valuesBuf }, nullBitmap ? arrow::kUnknownNullCount : 0);
@@ -288,15 +343,16 @@ std::shared_ptr<arrow::BinaryArray> DeserializeBinaryArray(
 
 TString SerializeIndices(const std::shared_ptr<arrow::Array>& positions, const std::shared_ptr<arrow::FixedWidthType>& indexType,
     const std::shared_ptr<arrow::util::Codec>& codec) {
+    VerifyLittleEndian();
+    // reencode positions to specified arrow data type
     const auto casted = TStatusValidator::GetValid(arrow::compute::Cast(arrow::Datum(positions), indexType)).make_array();
     const ui32 width = GetIndexByteWidth(*indexType);
     const auto& data = *casted->data();
-    const ui8* values = data.buffers[1]->data() + data.offset * width;
-    const i64 n = casted->length();
+    const i64 length = casted->length();
 
     const TValidityBitmap validity(*casted);
     const TStringBuf validityData = validity.GetData();
-    const i64 encodedCount = n - casted->null_count();
+    const i64 encodedCount = length - casted->null_count();
     TString payload;
     payload.reserve(1 + validityData.size() + width * encodedCount);
     const char hasNulls = validityData.empty() ? 0 : 1;
@@ -304,9 +360,12 @@ TString SerializeIndices(const std::shared_ptr<arrow::Array>& positions, const s
     if (hasNulls) {
         payload.append(validityData);
     }
-    for (i64 i = 0; i < n; ++i) {
-        if (!casted->IsNull(i)) {
-            payload.append((const char*)(values + i * width), width);
+    if (length) {
+        const ui8* values = data.buffers[1]->data() + data.offset * width;
+        for (i64 i = 0; i < length; ++i) {
+            if (!casted->IsNull(i)) {
+                payload.append((const char*)(values + i * width), width);
+            }
         }
     }
     return FrameCompress(payload, codec);
@@ -314,25 +373,16 @@ TString SerializeIndices(const std::shared_ptr<arrow::Array>& positions, const s
 
 std::shared_ptr<arrow::Array> DeserializeIndices(TStringBuf blob, ui32 recordsCount, const std::shared_ptr<arrow::FixedWidthType>& indexType,
     const std::shared_ptr<arrow::util::Codec>& codec) {
+    VerifyLittleEndian();
     const TString raw = FrameDecompress(blob, codec);
     const ui32 width = GetIndexByteWidth(*indexType);
     const auto prefix = ParsePrefix(raw, recordsCount);
     const ui32 encodedCount = prefix.PresentCount;
-    AFL_VERIFY(raw.size() == prefix.Position + (size_t)width * encodedCount)("size", raw.size())("count", encodedCount);
+    size_t encodedSize = static_cast<size_t>(encodedCount) * width;
+    AFL_VERIFY(raw.size() == prefix.Position + encodedSize)("size", raw.size())("count", encodedCount);
 
-    TString dense;
-    dense.ReserveAndResize((size_t)width * recordsCount);
-    char* out = dense.Detach();
-    const char* encoded = raw.data() + prefix.Position;
-    ui32 k = 0;
-    for (ui32 i = 0; i < recordsCount; ++i) {
-        if (prefix.IsValid(i)) {
-            memcpy(out + (size_t)i * width, encoded + (size_t)(k++) * width, width);
-        } else {
-            memset(out + (size_t)i * width, 0, width);
-        }
-    }
-    auto valuesBuf = CopyToBuffer(dense.data(), dense.size());
+    const TString values = DecodeDenseValues(TStringBuf(raw.data() + prefix.Position, raw.size() - prefix.Position), prefix, recordsCount, width);
+    auto valuesBuf = CopyToBuffer(values.data(), values.size());
     auto data = arrow::ArrayData::Make(
         indexType, recordsCount, { prefix.NullBitmap, valuesBuf }, prefix.NullBitmap ? arrow::kUnknownNullCount : 0);
     return arrow::MakeArray(data);

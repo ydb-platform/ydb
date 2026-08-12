@@ -150,8 +150,8 @@ public:
     static TColumnChunkRestoreInfo BuildEmpty(
         const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo, const NArrow::NAccessor::NSubColumns::TSettings& settings) {
         TColumnChunkRestoreInfo result(TBlobRange(), chunkExternalInfo, settings);
-        result.PartialArray =
-            NArrow::NAccessor::TSubColumnsPartialArray::BuildEmpty(chunkExternalInfo.GetColumnType(), chunkExternalInfo.GetRecordsCount());
+        result.PartialArray = NArrow::NAccessor::TSubColumnsPartialArray::BuildEmpty(
+            chunkExternalInfo.GetColumnType(), chunkExternalInfo.GetRecordsCount(), settings);
         return result;
     }
 

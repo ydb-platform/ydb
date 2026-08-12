@@ -134,6 +134,12 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
         }
     }
 
+    Y_UNIT_TEST(EmptyIndicesRoundTrip) {
+        for (const auto& codec : { ZstdCodec(), RawCodec() }) {
+            CheckIndicesRoundTrip({}, codec);
+        }
+    }
+
     Y_UNIT_TEST(DictionaryMetadata) {
         const auto dictionary = MakeBinary({ "alpha", "beta", "gamma" });
         const auto positions = MakePositions({ 0, 1, 0, 2, std::nullopt, 1 });

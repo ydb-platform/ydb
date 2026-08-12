@@ -15,13 +15,26 @@ class PrSyncCreator:
     check_name = "checks_integrated"
     failed_comment_mark = "<!--SyncFailed-->"
 
-    def __init__(self, repo, base_branch, head_branch, token, pr_label, pr_label_failed, ours_on_conflict, theirs_on_conflict, overwrite_from_head):
+    def __init__(
+        self,
+        repo,
+        base_branch,
+        head_branch,
+        token,
+        pr_label,
+        pr_label_failed,
+        ours_on_conflict,
+        theirs_on_conflict,
+        overwrite_from_head,
+        overwrite_exclude,
+    ):
         self.repo_name = repo
         self.base_branch = base_branch
         self.head_branch = head_branch
         self.ours_on_conflict = ours_on_conflict
         self.theirs_on_conflict = theirs_on_conflict
         self.overwrite_from_head = overwrite_from_head
+        self.overwrite_exclude = overwrite_exclude
         self.token = token
         self.pr_label = pr_label
         self.pr_label_fail = pr_label_failed
@@ -119,6 +132,9 @@ class PrSyncCreator:
     def overwrite_paths_from_head(self):
         """Stage the given paths to exactly match the head branch (100% match, incl. deletions).
 
+        Excluded paths are restored from the base branch afterwards so main-only files
+        under overwritten directories are not deleted.
+
         This only updates the working tree and index; it does NOT create a commit.
         The caller folds the result into the merge commit itself, so git blame/log
         keep pointing at the original head-branch commits (the head branch is a
@@ -134,6 +150,17 @@ class PrSyncCreator:
             # Restore the exact head-branch content (stages it as well).
             self.git_run("checkout", self.head_branch, "--", path)
             self.git_run("add", path)
+
+        for path in self.overwrite_exclude:
+            self.logger.info(f"Preserving excluded path {path} from {self.base_branch}")
+            # fail=False: path may be absent on base in some edge cases; keep overwrite result then.
+            result = self.git_run("checkout", self.base_branch, "--", path, fail=False)
+            if result.returncode == 0:
+                self.git_run("add", path)
+            else:
+                self.logger.warning(
+                    f"Failed to restore excluded path {path} from {self.base_branch}, leaving overwritten state"
+                )
 
     def create_new_pr(self):
         dev_branch_name = f"merge-{self.head_branch}-{self.dtm}"
@@ -235,6 +262,7 @@ def main():
     parser.add_argument("--merge-ours", action="extend", nargs="+", default=[], type=str, help='Files that will be merged with --ours upon conflict')
     parser.add_argument("--merge-theirs", action="extend", nargs="+", default=[], type=str, help='Files that will be merged with --theirs upon conflict')
     parser.add_argument("--overwrite-from-head", action="extend", nargs="+", default=[], type=str, help='Directories/files to fully overwrite from the head branch (100%% match) instead of merging')
+    parser.add_argument("--overwrite-exclude", action="extend", nargs="+", default=[], type=str, help='Paths to preserve from the base branch after overwrite-from-head')
     args = parser.parse_args()
 
     log_fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
@@ -242,7 +270,18 @@ def main():
     repo = os.environ["REPO"]
     token = os.environ["TOKEN"]
 
-    syncer = PrSyncCreator(repo, args.base_branch, args.head_branch, token, args.process_label, f'{args.process_label}-fail', args.merge_ours, args.merge_theirs, args.overwrite_from_head)
+    syncer = PrSyncCreator(
+        repo,
+        args.base_branch,
+        args.head_branch,
+        token,
+        args.process_label,
+        f'{args.process_label}-fail',
+        args.merge_ours,
+        args.merge_theirs,
+        args.overwrite_from_head,
+        args.overwrite_exclude,
+    )
 
     syncer.cmd_create_pr()
 

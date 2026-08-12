@@ -99,14 +99,15 @@ ydb -e grpcs://<node1.ydb.tech>:2135 --ca-file ca.crt --token-file auth_token ad
 Проверьте, что кластер видит новые диски после обновления конфигурации.
 ![Кластер после обновления конфигурации](./_assets/disk_add_v2_after_config_update.png)
 
+На снимке экрана у каждого узла хранения в колонке `PDisks` появился четвёртый диск. Он пустой, потому что на нём ещё нет ни одного [VDisk](../../../concepts/glossary.md#vdisk): место в базах данных появится после добавления групп хранения.
 
-## Добавить новые группы хранения
+## Добавьте новые группы хранения
 
 <!-- markdownlint-disable-next-line MD051 -->
 Добавьте новые группы хранения с помощью утилиты `ydb-dstool`. Для выполнения операции потребуется токен аутентификации, обновите его при необходимости [командой выше](#get-auth-token).
 
   1. Установите утилиту [`ydb-dstool`](../../../reference/ydb-dstool/install.md).
-  2. Добавьте новые узлы хранения командой:
+  2. Добавьте новые группы хранения командой:
 
   ```bash
   ydb-dstool --verbose --token-file auth_token -e grpcs://<node1.ydb.tech> --ca-file ca.crt group add --pool-name /Root/testdb:ssd --groups 8
@@ -116,7 +117,6 @@ ydb -e grpcs://<node1.ydb.tech>:2135 --ca-file ca.crt --token-file auth_token ad
 
   * `node1.ydb.tech` — FQDN любого из серверов, на которых размещены статические узлы кластера;
   * `ca.crt` — имя файла с сертификатом центра регистрации;
-  * `/opt/ydb/cfg/config.yaml` — путь к файлу статической конфигурации;
   * `/Root/testdb:ssd` — `база данных : пул хранения`.
   * `8` — количество новых групп хранения.
   * `auth_token` — имя файла, содержащего токен аутентификации.
@@ -135,3 +135,14 @@ ydb -e grpcs://<node1.ydb.tech>:2135 --ca-file ca.crt --token-file auth_token ad
 
 Проверьте результат добавления новых групп:
 ![Результат](./_assets/disk_add_v2_result.png)
+
+На снимке экрана на новых PDisk каждого узла хранения появились VDisk.
+
+Тот же результат можно проверить в командной строке:
+
+```bash
+ydb-dstool --token-file auth_token -e grpcs://<node1.ydb.tech> --ca-file ca.crt pdisk list
+ydb-dstool --token-file auth_token -e grpcs://<node1.ydb.tech> --ca-file ca.crt pool list --show-group-status
+```
+
+По сравнению с состоянием до добавления диска на каждом узле хранения стало на один PDisk больше, новые PDisk имеют статус `ACTIVE` в колонке `Status`, а количество групп хранения в колонке `Groups_TOTAL` увеличилось на число добавленных групп. Все группы пула должны быть работоспособны: значение в колонке `Groups_FULL` совпадает со значением в колонке `Groups_TOTAL`.

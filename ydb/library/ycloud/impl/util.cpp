@@ -45,5 +45,4 @@ TString BuildUserAgentPrefix(const TStringBuf userAgentHint) {
         : TStringBuilder() << userAgentHint << '/' << revision;
 }
 
-
 } // namespace NCloud

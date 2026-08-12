@@ -51,7 +51,7 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
                 victimQuerySpanIdStr << " ";
             }
         }
-        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TLI, "",
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
             stlogMessageTLI,
             {"victimQuerySpanIds", victimQuerySpanIdStr.Str()});
     }
@@ -66,7 +66,7 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
             }
         }
 
-        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
             stlogMessage,
             {"component", "DataShard"},
             {"type", "Locks"},
@@ -89,27 +89,27 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
     // Build message body once (everything except Component and Type)
     TStructuredMessage stlogMessage = YDB_LOG_CREATE_MESSAGE(
         {"tabletId", ToString(tabletId)},
-        {"Message", message});
+        {"message", message});
 
     if (victimQuerySpanId && *victimQuerySpanId != 0) {
         YDB_LOG_UPDATE_MESSAGE(stlogMessage,
-            {"VictimQuerySpanId", ToString(*victimQuerySpanId)});
+            {"victimQuerySpanId", ToString(*victimQuerySpanId)});
     }
     if (currentQuerySpanId && *currentQuerySpanId != 0) {
         YDB_LOG_UPDATE_MESSAGE(stlogMessage,
-            {"CurrentQuerySpanId", ToString(*currentQuerySpanId)});
+            {"currentQuerySpanId", ToString(*currentQuerySpanId)});
     }
 
     // Log to TLI service
     if (tliEnabled) {
-        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
             stlogMessage,
             {"component", "DataShard"});
     }
 
     // Log to DATA_INTEGRITY service
     if (integrityEnabled) {
-        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
             stlogMessage,
             {"component", "DataShard"},
             {"type", "Locks"});

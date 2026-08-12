@@ -136,7 +136,7 @@ namespace {
         const std::optional<TString>& expectedText = std::nullopt)
     {
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: SessionActor") || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             auto text = ExtractBreakerQueryTextFromRecord(record);
@@ -193,7 +193,7 @@ namespace {
         const std::optional<TString>& expectedText = std::nullopt)
     {
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("сomponent=SessionActor") || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             auto text = ExtractVictimQueryTextFromRecord(record);
@@ -367,15 +367,9 @@ namespace {
     }
 
     void DumpTliRecords(const TString& logs) {
-        std::cerr << " " << std::endl;
-        std::cerr << logs << std::endl;
-        std::cerr << " " << std::endl;
-        std::cerr << "START DUMP RECORDS" << std::endl;
         for (const auto& record : ExtractTliRecords(logs)) {
             Cerr << record << Endl;
         }
-        std::cerr << "FINISH DUMP RECORDS" << std::endl;
-        std::cerr << " " << std::endl;
     }
 
     // ==================== TLI log patterns ====================
@@ -427,26 +421,21 @@ namespace {
             return {false, std::nullopt};
         }
 
-        std::cerr << "Enter ExtractMatchingFromBreakerDatashard" << std::endl;
         for (const auto& record : ExtractTliRecords(logs)) {
-            std::cerr << "   Parse:" << record << std::endl;
             if (!record.Contains("component=DataShard") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            std::cerr << "   Parse 1"<< std::endl;
             auto breakerQuerySpanId = ExtractNumericField(record, "breakerQuerySpanId");
             if (breakerQuerySpanId && *breakerQuerySpanId == *breakerQuerySpanIdFromKQP) {
-                std::cerr << "   Parse 2" << std::endl;
                 std::optional<std::vector<ui64>> matchingVictimIds;
                 static constexpr TStringBuf victimIdsPrefix = "victimQuerySpanIds=";
                 const size_t idsPos = record.find(victimIdsPrefix);
                 if (idsPos != TString::npos) {
-                    std::cerr << "   Parse 3" << std::endl;
-                    const size_t listStart = idsPos + victimIdsPrefix.size();
-                    const size_t listEnd = record.find(']', listStart);
-                    if (listEnd != TString::npos) {
+                    size_t listStart = idsPos + victimIdsPrefix.size();
+                    auto victimStr = NStructuredLog::TTextWriter::UnescapeFieldValue(record, listStart);
+                    if (victimStr.Defined()) {
                         matchingVictimIds.emplace();
-                        for (const auto& part : StringSplitter(record.substr(listStart, listEnd - listStart)).Split(' ').SkipEmpty()) {
+                        for (const auto& part : StringSplitter(victimStr.GetRef()).Split(' ').SkipEmpty()) {
                             matchingVictimIds->emplace_back(FromString<ui64>(part));
                         }
                     }
@@ -466,10 +455,10 @@ namespace {
             return false;
         }
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: DataShard") || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=DataShard") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            auto victimQuerySpanId = ExtractNumericField(record, "VictimQuerySpanId");
+            auto victimQuerySpanId = ExtractNumericField(record, "victimQuerySpanId");
             if (victimQuerySpanId && *victimQuerySpanId == *victimQuerySpanIdFromKQP) {
                 return true;
             }
@@ -836,7 +825,7 @@ namespace {
     size_t CountTliRecords(const TString& logs, const TString& component, const TString& messagePattern) {
         size_t count = 0;
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (record.Contains("Component: " + component) && MatchesMessage(record, messagePattern)) {
+            if (record.Contains("component=" + component) && MatchesMessage(record, messagePattern)) {
                 ++count;
             }
         }
@@ -1644,7 +1633,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         bool foundTraceIdInBreaker = false;
         bool foundTraceIdInVictim = false;
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: SessionActor")) {
+            if (!record.Contains("component=SessionActor")) {
                 continue;
             }
             if (MatchesMessage(record, patterns.BreakerSessionActorMessagePattern) && record.Contains("TraceId: ")) {

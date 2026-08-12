@@ -180,52 +180,60 @@ public:
 
         // No lock means nothing applied yet, so current is 0.
         const ui64 current = lock ? lock->GetWriteSeqNum() : 0;
-        ui64 lastRequested = 0;
 
+        // The maximum WriteSeqNum in this batch determines its position in the chain.
+        ui64 maxRequested = 0;
         for (const auto& op : operations) {
             const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
-            if (!requested) {
-                continue;
+            if (requested > maxRequested) {
+                maxRequested = requested;
             }
+        }
 
-            if (requested < current) {
+        // A duplicate of the entire batch: the max seq num matches the last applied.
+        if (maxRequested == current) {
+            Y_ENSURE(lock, "A non-zero write seq num implies the lock that carries it");
+            auto res = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
+            res->Record.SetOrigin(tabletId);
+            res->Record.SetTxId(writeOp->GetTxId());
+            res->Record.SetIsDuplicate(true);
+
+            FillDuplicateWriteResult(lock->GetWriteSeqNumState(), res->Record);
+
+            THashSet<TPathId> tables = lock->GetReadTables();
+            tables.insert(lock->GetWriteTables().begin(), lock->GetWriteTables().end());
+            for (const TPathId& pathId : tables) {
+                res->AddTxLock(lock->GetLockId(), tabletId, lock->GetGeneration(),
+                               lock->GetCounter(), pathId.OwnerId, pathId.LocalPathId,
+                               lock->IsWriteLock(), writerIndex, current);
+            }
+            writeOp->SetWriteResult(std::move(res));
+            writeOp->ReleaseTxData(txc);
+            return EExecutionStatus::Executed;
+        }
+
+        // The entire batch is stale: already applied and superseded.
+        if (maxRequested < current) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                << "Uncommitted write " << writerIndex << ":" << maxRequested
+                << " is already applied, writer is at " << current);
+            return EExecutionStatus::Executed;
+        }
+
+        // maxRequested > current: the batch advances the chain.
+        // But partial overlap with already-applied writes is a protocol error.
+        for (const auto& op : operations) {
+            const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
+            if (requested && requested <= current) {
                 writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
                     << "Uncommitted write " << writerIndex << ":" << requested
                     << " is already applied, writer is at " << current);
                 return EExecutionStatus::Executed;
             }
-
-            if (requested == current) {
-                // A duplicate of the last write: report its result again, touch nothing else.
-                Y_ENSURE(lock, "A non-zero write seq num implies the lock that carries it");
-                auto res = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
-                res->Record.SetOrigin(tabletId);
-                res->Record.SetTxId(writeOp->GetTxId());
-                res->Record.SetIsDuplicate(true);
-
-                FillDuplicateWriteResult(lock->GetWriteSeqNumState(), res->Record);
-
-                THashSet<TPathId> tables = lock->GetReadTables();
-                tables.insert(lock->GetWriteTables().begin(), lock->GetWriteTables().end());
-                for (const TPathId& pathId : tables) {
-                    res->AddTxLock(lock->GetLockId(), tabletId, lock->GetGeneration(),
-                                   lock->GetCounter(), pathId.OwnerId, pathId.LocalPathId,
-                                   lock->IsWriteLock(), writerIndex, current);
-                }
-                writeOp->SetWriteResult(std::move(res));
-                writeOp->ReleaseTxData(txc);
-                return EExecutionStatus::Executed;
-            }
-
-            // requested > current: apply the record.
-            // A gap is fine: KQP notices a lost write itself.
-            // Track the last requested for ApplyLocks to persist.
-            lastRequested = requested;
         }
 
-        if (lastRequested) {
-            guardLocks.SetWriteSeqNum = TLockWriteSeqNum{writerIndex, lastRequested};
-        }
+        // All operations are new: track the max for ApplyLocks to persist.
+        guardLocks.SetWriteSeqNum = TLockWriteSeqNum{writerIndex, maxRequested};
         return std::nullopt;
     }
 
@@ -255,13 +263,16 @@ public:
         }
         DataShard.SubscribeNewLocks(ctx);
 
-        // The last applied operation's WriteSeqNum is what the lock should carry
-        ui64 lastRequested = 0;
+        // The max WriteSeqNum across all operations is what the lock should carry
+        ui64 maxRequested = 0;
         ui64 writerIndex = 0;
         bool hasWriteSeqNum = false;
         for (const auto& op : writeOp->GetWriteTx()->GetOperations()) {
-            if (op.GetWriteSeqNum().WriteSeqNum) {
-                lastRequested = op.GetWriteSeqNum().WriteSeqNum;
+            const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
+            if (requested) {
+                if (requested > maxRequested) {
+                    maxRequested = requested;
+                }
                 writerIndex = op.GetWriteSeqNum().WriterIndex;
                 hasWriteSeqNum = true;
             }
@@ -269,8 +280,8 @@ public:
         if (hasWriteSeqNum) {
             for (const auto& lock : locks) {
                 Y_ENSURE(lock.IsError()
-                             || (lock.WriterIndex == writerIndex && lock.WriteSeqNum == lastRequested),
-                         "Pipelined write " << writerIndex << ":" << lastRequested
+                             || (lock.WriterIndex == writerIndex && lock.WriteSeqNum == maxRequested),
+                         "Pipelined write " << writerIndex << ":" << maxRequested
                          << " reported lock with " << lock.WriterIndex << ":" << lock.WriteSeqNum);
             }
         }

@@ -980,6 +980,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     Y_UNIT_TEST(StrictSerializable_CommitTimestamp_SnapshotRW) {
         TKikimrSettings settings;
         settings.SetEnableStrictSerializableIsolation(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
         auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();

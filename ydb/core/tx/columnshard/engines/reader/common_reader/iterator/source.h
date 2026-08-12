@@ -59,7 +59,7 @@ private:
     // the immutable compiled graph.
     TString StartCategoryName;
     std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
-    std::atomic<TPrevNodeState> PrevNode;
+    std::atomic<TPrevNodeState> PrevNode = {};
 
 public:
     void SetStartCategoryName(TString&& name) {

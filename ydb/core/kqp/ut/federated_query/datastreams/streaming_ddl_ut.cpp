@@ -4343,14 +4343,19 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         WaitFor(TDuration::Seconds(60), "wait streaming query issues", [&](TString& error) {
-            const auto& result = ExecQuery("SELECT Issues FROM `.sys/streaming_queries`");
+            const auto& result = ExecQuery("SELECT Status, Issues FROM `.sys/streaming_queries`");
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
 
             bool hasIssues = false;
-            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+            CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
                 const TString issuesJson = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
                 hasIssues = issuesJson.contains("Previous query retries") && issuesJson.contains("Not enough resources to execute query");
                 error = TStringBuilder() << "issues: " << issuesJson;
+
+                const auto status = *resultSet.ColumnParser("Status").GetOptionalUtf8();
+                if (!IsIn({"RUNNING", "SUSPENDED"}, status)) {
+                    UNIT_FAIL("Unexpected query status: " << status);
+                }
             });
 
             return hasIssues;

@@ -1567,7 +1567,6 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
 
             size_t evLockCounter = 0;
             size_t evReadCounter = 0;
-            size_t evWriteCounter = 0;
             std::vector<std::unique_ptr<IEventHandle>> blockedLocks;
 
             auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
@@ -1580,7 +1579,6 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
                 } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
                     ++evReadCounter;
                 } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
-                    ++evWriteCounter;
                     auto* writeEv = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
                     auto lockMode = writeEv->Record.GetLockMode();
                     UNIT_ASSERT_VALUES_EQUAL(lockMode, NKikimrDataEvents::PESSIMISTIC_NONE);
@@ -2378,11 +2376,10 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
             auto resultB = runtime.WaitFuture(futureB);
             UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
             auto txB = resultB.GetTransaction();
-            if (txB) {
-                auto commitB = Kikimr->RunInThreadPool([&] { return txB->Commit().ExtractValueSync(); });
-                auto commitResult = runtime.WaitFuture(commitB);
-                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
-            }
+            UNIT_ASSERT(txB && txB->IsActive());
+            auto commitB = Kikimr->RunInThreadPool([&] { return txB->Commit().ExtractValueSync(); });
+            auto commitResult = runtime.WaitFuture(commitB);
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
 
             auto verify = Kikimr->RunCall([&] {
                 return session1.ExecuteQuery(Q_(R"(
@@ -2453,11 +2450,10 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
             auto resultB = runtime.WaitFuture(futureB);
             UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
             auto txB = resultB.GetTransaction();
-            if (txB) {
-                auto commitB = Kikimr->RunInThreadPool([&] { return txB->Commit().ExtractValueSync(); });
-                auto commitResult = runtime.WaitFuture(commitB);
-                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
-            }
+            UNIT_ASSERT(txB && txB->IsActive());
+            auto commitB = Kikimr->RunInThreadPool([&] { return txB->Commit().ExtractValueSync(); });
+            auto commitResult = runtime.WaitFuture(commitB);
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
 
             auto verify = Kikimr->RunCall([&] {
                 return session1.ExecuteQuery(Q_(R"(

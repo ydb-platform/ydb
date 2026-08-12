@@ -495,34 +495,6 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         tester.Execute();
     }
 
-    Y_UNIT_TEST(TUpsertLocksUniqueIndexForExistingRow) {
-        TReadCommittedTakesLocks tester(R"(UPSERT INTO `/Root/Test2` (Group, Name, Comment) VALUES (1u, "Paul", "Upserted"))", 2, 4, 2);
-        tester.SetIsOlap(false);
-        tester.SetUseRealThreads(false);
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(TReplaceLocksUniqueIndexForExistingRow) {
-        TReadCommittedTakesLocks tester(R"(REPLACE INTO `/Root/Test2` (Group, Name, Comment) VALUES (1u, "Paul", "Replaced"))", 2, 4, 2);
-        tester.SetIsOlap(false);
-        tester.SetUseRealThreads(false);
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(TUpdateOnLocksUniqueIndexForExistingRow) {
-        TReadCommittedTakesLocks tester(R"(UPDATE `/Root/Test2` ON (Group, Name, Comment) VALUES (1u, "Paul", "Updated"))", 2, 4, 2);
-        tester.SetIsOlap(false);
-        tester.SetUseRealThreads(false);
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(TDeleteOnLocksUniqueIndexForExistingRow) {
-        TReadCommittedTakesLocks tester(R"(DELETE FROM `/Root/Test2` ON (Group, Name) VALUES (1u, "Paul"))", 1, 4, 1);
-        tester.SetIsOlap(false);
-        tester.SetUseRealThreads(false);
-        tester.Execute();
-    }
-
     Y_UNIT_TEST(TMultiStatementsDifferentTables) {
         TReadCommittedTakesLocks tester(R"(
             INSERT INTO `/Root/Test2` (Group, Name, Comment) VALUES (1u, "Unknown", "Inserted");

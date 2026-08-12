@@ -737,4 +737,42 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
             }
         }
     }
+
+    Y_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
+        TScalarLayoutConverterTestData data;
+
+        auto* const nullType = data.Env.GetTypeOfNullLazy();
+        TVector<NKikimr::NMiniKQL::TType*> types{nullType};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        constexpr size_t testSize = 17;
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+
+        NYql::NUdf::TUnboxedValue nullValue;
+        TPackResult packRes;
+        for (size_t i = 0; i < testSize; ++i) {
+            converter->Pack(&nullValue, packRes);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(packRes.NTuples, testSize);
+
+        const auto* layout = converter->GetTupleLayout();
+        UNIT_ASSERT_VALUES_EQUAL(layout->KeyColumnsNum, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(layout->Columns[0].DataSize, 0u);
+
+        for (size_t row = 0; row < testSize; ++row) {
+            const ui8* tuple = packRes.PackedTuples.data() + row * layout->TotalRowSize;
+            const ui8 bit = (tuple[layout->BitmaskOffset] >> 0) & 1u;
+            UNIT_ASSERT_VALUES_EQUAL_C(bit, 0u, "Null key column must be packed as NULL");
+
+            NYql::NUdf::TUnboxedValue unpacked[1];
+            converter->Unpack(packRes, row, unpacked);
+            UNIT_ASSERT_C(!unpacked[0].HasValue(), "Unpack must restore Null, not Void");
+        }
+
+        const ui8* row0 = packRes.PackedTuples.data();
+        const ui8* row1 = packRes.PackedTuples.data() + layout->TotalRowSize;
+        UNIT_ASSERT_C(
+            !layout->KeysEqual(row0, packRes.Overflow.data(), row1, packRes.Overflow.data()),
+            "Null keys must not compare equal");
+    }
 }

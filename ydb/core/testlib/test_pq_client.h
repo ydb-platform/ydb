@@ -564,11 +564,13 @@ public:
         , Kikimr(GetClientConfig())
     {
         TString endpoint = TStringBuilder() << "localhost:" << GRpcPort;
+        // Topic/PQv1 scheme ops reject empty tokens when credentials are required.
+        // ACL UTs also use this driver for create before RequireCredentials flips on.
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(endpoint)
+            .SetDatabase(databaseName ? *databaseName : TString("/Root"))
+            .SetAuthToken(BUILTIN_ACL_ROOT)
             .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
-        if (databaseName)
-            driverConfig.SetDatabase(*databaseName);
         Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig));
 
         grpc::ChannelArguments args;
@@ -1172,19 +1174,35 @@ public:
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
+    // Msgbus-only create for semantics Topic/PQv1 cannot express (LowWatermark,
+    // consumers without service_type under DisallowDefaultClientServiceType).
+    void CreateTopicViaMsgBus(const TRequestCreatePQ& createRequest, bool doWait = true) {
+        const TInstant start = TInstant::Now();
+        ui32 prevVersion = GetTopicVersionFromMetadata(createRequest.Topic);
+        CallPersQueueGRPC(createRequest.GetRequest()->Record);
+        AddTopic(createRequest.Topic);
+        while (doWait && GetTopicVersionFromPath(createRequest.Topic) < prevVersion + 1) {
+            Sleep(TDuration::MilliSeconds(500));
+            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+        }
+        while (doWait && GetTopicVersionFromMetadata(createRequest.Topic, prevVersion) < prevVersion + 1) {
+            Sleep(TDuration::MilliSeconds(500));
+            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+        }
+    }
+
     void CreateTopic(const TRequestCreatePQ& createRequest, bool doWait = true) {
         const TInstant start = TInstant::Now();
 
         ui32 prevVersion = GetTopicVersionFromMetadata(createRequest.Topic);
 
-        // Topic/PQv1 SDK create does not preserve msgbus semantics needed by many
-        // legacy UTs (LowWatermark, consumers without service type under
-        // DisallowDefaultClientServiceType, unauthenticated scheme ops). Keep
-        // msgbus for non-mirror creates; mirrors use PersQueue RemoteMirrorRule.
+        // Non-mirror → Topic SDK (authenticated driver). Mirrors → PersQueue
+        // RemoteMirrorRule. Call CreateTopicViaMsgBus for LowWatermark / empty
+        // service_type migration UTs.
         if (createRequest.MirrorFrom) {
             CreateTopicViaPersQueueSdk(createRequest);
         } else {
-            CallPersQueueGRPC(createRequest.GetRequest()->Record);
+            CreateTopicViaTopicSdk(createRequest);
         }
 
         AddTopic(createRequest.Topic);

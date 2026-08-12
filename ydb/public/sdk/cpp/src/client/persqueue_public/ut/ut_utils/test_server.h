@@ -63,9 +63,11 @@ public:
         CleverServer = MakeHolder<NKikimr::Tests::TServer>(ServerSettings);
         CleverServer->EnableGRpc(GrpcServerOptions);
 
+        // Used by ModifyTopicACL and SDK sessions; match AnnoyingClient admin token.
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(Endpoint)
-            .SetDatabase("/" + ServerSettings.DomainName);
+            .SetDatabase("/" + ServerSettings.DomainName)
+            .SetAuthToken("root@builtin");
         Driver = MakeHolder<NYdb::TDriver>(driverConfig);
 
         Log << TLOG_INFO << "TTestServer started on Port " << Port << " GrpcPort " << GrpcPort;

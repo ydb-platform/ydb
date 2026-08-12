@@ -3453,7 +3453,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         settings.PQConfig.MutableCompactionConfig()->SetMaxWTimeLagSec(1);
         settings.PQConfig.MutableCompactionConfig()->SetBlobsSize(1_MB);
         NPersQueue::TTestServer server(settings);
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8_MB, 86400);
+        // LowWatermark is not expressible via Topic API; msgbus create keeps 8MB.
+        server.AnnoyingClient->CreateTopicViaMsgBus(
+            TRequestCreatePQ(DEFAULT_TOPIC_NAME, 1, 0, 86400, 8_MB));
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
@@ -7296,7 +7298,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             createTopicRequest.ReadRules.push_back("acc@user1");
             createTopicRequest.ReadRules.push_back("acc@user2");
             createTopicRequest.ReadRules.push_back("acc@user3");
-            server.AnnoyingClient->CreateTopic(createTopicRequest);
+            // Topic/PQv1 always assign a service type; this UT needs empty types
+            // under DisallowDefault — only msgbus/raw config can do that.
+            server.AnnoyingClient->CreateTopicViaMsgBus(createTopicRequest);
         }
 
         std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;

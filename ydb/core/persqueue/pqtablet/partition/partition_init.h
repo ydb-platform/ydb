@@ -157,8 +157,6 @@ public:
 private:
     void FillBlobsMetaData(const TActorContext& ctx);
     void FormHeadAndProceed();
-    // Meta may report StartOffset < EndOffset while data keys are gone (retention /
-    // crash under Nemesis). Collapse both encoders to an empty partition at EndOffset.
     void NormalizeOffsetsForEmptyData();
 
     TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult> Ranges;

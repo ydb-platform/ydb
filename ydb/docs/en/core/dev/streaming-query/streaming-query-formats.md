@@ -69,6 +69,8 @@ END DO
 
 See also: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
 
+If a single streaming query writes to multiple topics, all output topics must be different.
+
 ## Read formats {#read_formats}
 
 ### `csv_with_names` {#csv_with_names}

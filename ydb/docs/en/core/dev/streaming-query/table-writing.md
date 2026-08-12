@@ -1,8 +1,8 @@
 # Writing to tables
 
-Writing to tables lets you persist streaming query results for analysis with regular SQL. For example, you can aggregate events from a stream and store summaries in a table.
+Writing to tables lets you save the results of a streaming query for later analysis with regular SQL queries. For example, you can aggregate events from a stream and save the results to a table.
 
-Writes use [UPSERT INTO](../../yql/reference/syntax/upsert_into) — insert a new row or update an existing row by primary key. UPSERT is idempotent by primary key: writing the same row again updates it rather than duplicating. That matters because streaming queries provide [at-least-once](../../concepts/streaming-query/streaming-query.md#guarantees) delivery — after recovery from a [checkpoint](checkpoints.md), some events may be processed more than once.
+For writing, [UPSERT INTO](../../yql/reference/syntax/upsert_into) is used — inserting a new row or updating an existing one by primary key. The UPSERT operation is idempotent by primary key: rewriting the same row results in an update, not duplication. This is important because streaming queries provide the [at-least-once](../../concepts/streaming-query/streaming-query.md#guarantees) guarantee — when recovering from a [checkpoint](checkpoints.md), some events may be processed again.
 
 {% note alert %}
 
@@ -34,7 +34,7 @@ FROM
     -- Read events from topic
     ydb_source.input_topic
 WITH (
-    -- Data format in the topic
+    -- Data format in a topic
     FORMAT = json_each_row,
     -- Data schema
     SCHEMA = (
@@ -46,3 +46,11 @@ WITH (
 
 END DO
 ```
+
+
+## Limitations
+
+In a single streaming query:
+
+- You cannot use the same table for [stream enrichment](./enrichment.md) using `JOIN` and for writing the query result.
+- You cannot write to the same table multiple times.

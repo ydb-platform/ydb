@@ -3904,7 +3904,9 @@ function buildDutyContext(item, diveId) {
     (view.fails || []).forEach(q => pushQ(q, 'fail'));
     (view.slows || []).forEach(q => pushQ(q, 'slow'));
     (view.softs || []).slice(0, 12).forEach(q => pushQ(q, 'watch'));
-    (view.nodatas || []).slice(0, 24).forEach(q => pushQ(q, 'nodata'));
+    // All nodata — truncate used to leave suite-wipe tails out of queries[] while
+    // ticket_coverage.uncovered_queries still listed them → agent/validate missed affected.
+    (view.nodatas || []).forEach(q => pushQ(q, 'nodata'));
   } else {
     for (const q of catalog) {
       query_counts.total++;
@@ -3919,7 +3921,7 @@ function buildDutyContext(item, diveId) {
     (data.slow_queries || item.slow_queries || []).forEach(q => pushQ(q, 'slow'));
     catalog.filter(q => q.kind === 'watch').slice(0, 12).forEach(q => pushQ(q, 'watch'));
     catalog.filter(q => q.kind === 'nodata' || q.kind === 'missing')
-      .slice(0, 24).forEach(q => pushQ(q, 'nodata'));
+      .forEach(q => pushQ(q, 'nodata'));
   }
   // Uncovered fail/nodata first — agent should dig these before covered tickets.
   const covRank = { uncovered: 0, wrong_branch: 1, covered: 2, ok: 3 };
@@ -4003,7 +4005,7 @@ function buildDutyContext(item, diveId) {
       });
     };
     cg.fails.forEach(q => pushCmp(q, 'fail'));
-    cg.nodatas.slice(0, 24).forEach(q => pushCmp(q, 'nodata'));
+    cg.nodatas.forEach(q => pushCmp(q, 'nodata'));
     cg.slows.slice(0, 8).forEach(q => pushCmp(q, 'slow'));
     compareBlock = {
       wave_id: cmpId,
@@ -4012,7 +4014,7 @@ function buildDutyContext(item, diveId) {
       label: (cmpWave && cmpWave.label) || (cmpPack && cmpPack.label) || null,
       run: cmpPack,
       query_counts: cmpQc,
-      queries: cmpQueries.slice(0, 40),
+      queries: cmpQueries.slice(0, 200),
       note: 'Compare wave selected in heatmap — dig compare.run (Allure/sha/gaps) as well as selection.focus_run (now/latest). Do not stop at last only.',
     };
   }
@@ -4066,8 +4068,9 @@ function buildDutyContext(item, diveId) {
       duty_decision: suiteDecision,
       wait_next_queries: waitNextQueries,
     },
-    // uncovered fail/nodata first, then covered, then soft samples
-    queries: queries.slice(0, 60),
+    // Fail + all nodata first (see push order/sort); soft samples truncated above.
+    // Cap high enough for suite wipe (Clickbench ~43+); do not re-truncate nodata here.
+    queries: queries.slice(0, 200),
     sticky_query: sticky,
     sticky_detail,
     suite_history: compactHist(data.history || item.history, 24),

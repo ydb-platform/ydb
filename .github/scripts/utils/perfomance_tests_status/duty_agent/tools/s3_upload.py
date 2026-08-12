@@ -527,9 +527,25 @@ def _summary_from_out_dir(out_dir: Path, *, max_len: int = 180) -> str:
     return ""
 
 
+def _add_wait_next_query(name: str, out: list[str], seen: set[str]) -> None:
+    q = str(name or "").strip()
+    if not q or q in seen:
+        return
+    seen.add(q)
+    out.append(q)
+
+
 def _queries_for_wait_next(out_dir: Path) -> list[str]:
-    """Query names under wait_next_wave (from problems.json), for per-query badges."""
-    problems = _read_json_file(Path(out_dir) / "problems.json")
+    """Query names under wait_next_wave for per-query dashboard badges.
+
+    Collects ``test`` / ``query`` / ``sample`` / ``queries`` from wait_next
+    problems. If none look like ``QueryNN`` (suite wipe / only
+    ``Infrastructure error``), falls back to pack
+    ``focus_run.uncovered_queries`` so the UI can attach ``wait next`` under
+    nodata/fail rows (see ``waitNextAppliesToQuery`` in olap/template.html).
+    """
+    out_dir = Path(out_dir)
+    problems = _read_json_file(out_dir / "problems.json")
     if isinstance(problems, dict):
         items = problems.get("items") or []
     elif isinstance(problems, list):
@@ -538,16 +554,27 @@ def _queries_for_wait_next(out_dir: Path) -> list[str]:
         items = []
     out: list[str] = []
     seen: set[str] = set()
+    any_wait = False
     for it in items:
         if not isinstance(it, dict):
             continue
         if str(it.get("resolution") or "") != "wait_next_wave":
             continue
-        test = str(it.get("test") or it.get("query") or "").strip()
-        if not test or test in seen:
-            continue
-        seen.add(test)
-        out.append(test)
+        any_wait = True
+        _add_wait_next_query(str(it.get("test") or it.get("query") or ""), out, seen)
+        for key in ("sample", "queries"):
+            vals = it.get(key)
+            if not isinstance(vals, list):
+                continue
+            for raw in vals:
+                _add_wait_next_query(str(raw or ""), out, seen)
+    has_query_nn = any(re.search(r"(?i)\bQuery\d+\b", q) for q in out)
+    if any_wait and not has_query_nn:
+        ctx = _read_json_file(out_dir / "context.json")
+        if isinstance(ctx, dict):
+            fr = ((ctx.get("selection") or {}).get("focus_run") or {})
+            for raw in fr.get("uncovered_queries") or []:
+                _add_wait_next_query(str(raw or ""), out, seen)
     return out
 
 

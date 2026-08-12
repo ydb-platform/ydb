@@ -799,6 +799,197 @@ affected:
             r2 = validate_analysis_md(fixed, out_dir=d)
             self.assertTrue(r2["ok"], r2["errors"])
 
+    def test_nodata_uncovered_queries_beyond_pack_sample(self):
+        """ticket_coverage.uncovered_queries must be in affected even if not in queries[]."""
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(
+                d / "detect_type.json",
+                {
+                    "analysis_types": ["olap_fail", "olap_nodata"],
+                    "query_counts": {"fail": 1, "nodata": 43, "ok": 0},
+                    "problems_seed": [
+                        {
+                            "id": "p_fail",
+                            "analysis_type": "olap_fail",
+                            "title": "Query00 SIGSEGV",
+                            "test": "Query00",
+                        },
+                        {
+                            "id": "p_nd",
+                            "analysis_type": "olap_nodata",
+                            "title": "no data ×43",
+                        },
+                    ],
+                },
+            )
+            write_json(
+                d / "context.json",
+                {
+                    "suite_now": {"n_nodata": 43, "query_counts": {"nodata": 43}},
+                    # Truncated sample (legacy Save context slice) — only Q00–Q01.
+                    "queries": [
+                        {"test": "Query00", "kind": "nodata"},
+                        {"test": "Query01", "kind": "nodata"},
+                    ],
+                    "ticket_coverage": {
+                        "status": "uncovered",
+                        "uncovered_queries": [
+                            "Query00",
+                            "Query01",
+                            "Query29",
+                            "Infrastructure error",
+                        ],
+                    },
+                    "selection": {
+                        "focus_run": {
+                            "uncovered_queries": [
+                                "Query00",
+                                "Query01",
+                                "Query29",
+                                "Infrastructure error",
+                            ]
+                        }
+                    },
+                },
+            )
+            write_json(
+                d / "problems.json",
+                {
+                    "items": [
+                        {
+                            "id": "p1",
+                            "analysis_type": "olap_fail",
+                            "title": "Query00 crash",
+                        },
+                        {
+                            "id": "p2",
+                            "analysis_type": "olap_nodata",
+                            "title": "no data ×43 следствие abort",
+                            "queries": ["Query00", "Query01"],
+                        },
+                    ]
+                },
+            )
+            write_json(d / "focus.json", {"fetched": True, "fatal": {"signals": ["verify"]}})
+            write_json(
+                d / "code_bisect.json",
+                {"introduced_in_window": False, "conclusion": "unchanged"},
+            )
+            write_json(d / "priors.json", {"prior_scans": []})
+            write_json(d / "dig_runs.json", {"kind": "olap", "summary": {"slice_count": 2}})
+            base = """# Perf duty — x
+
+## Заключение
+- **Проблема:** Query00 VERIFY abort; suite nodata×43
+- **Из‑за чего:** crash compaction AppendSlice; nodata — следствие cut-off
+- **Чинить:** уже [#48261](https://github.com/ydb-platform/ydb/issues/48261)
+- **Решение:** update_known
+- **Виновник:** unknown
+- **Уверенность:** высокая
+- **Давность:** на разбираемом прогоне
+
+## Проблемы
+### P1 — crash
+- Тип: olap_fail
+- Что сломалось: VERIFY Query00
+- Почему / механика: abort
+- Логи: kikimr__stderr VERIFY; kikimr__logs disconnect
+- Код ([`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)): AppendSlice
+- Кто (если есть): unknown
+- Давность: этот прогон
+- Гипотеза проверена: yes
+- Связанный issue: [#48261](https://github.com/ydb-platform/ydb/issues/48261)
+- Тикет: [#48261](https://github.com/ydb-platform/ydb/issues/48261)
+### P2 — nodata хвост
+- Тип: olap_nodata
+- Что сломалось: nodata×43
+- Почему / механика: в отчёте тоже нет → следствие abort P1
+- Логи: suite cut-off
+- Код ([`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)): n/a
+- Кто (если есть): unknown
+- Давность: этот прогон
+- Гипотеза проверена: yes
+- Связанный issue: [#48261](https://github.com/ydb-platform/ydb/issues/48261)
+- Тикет: [#48261](https://github.com/ydb-platform/ydb/issues/48261)
+
+## Гипотезы происхождения
+- **H1** (подтверждена): crash в compaction AppendSlice — [`merged_column.cpp`](https://github.com/ydb-platform/ydb/blob/f88e100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/ydb/core/tx/columnshard/engines/changes/compaction/plain/merged_column.cpp#L8)
+- Issues (поиск): fingerprint AppendSlice — учёл [#48261](https://github.com/ydb-platform/ydb/issues/48261); иных совпадений нет.
+
+## Причины
+- Повтор [#48261](https://github.com/ydb-platform/ydb/issues/48261); хвост suite — следствие abort.
+
+## Как починить
+1. Как в [#48261](https://github.com/ydb-platform/ydb/issues/48261): чинить AppendSlice path.
+
+## Что дальше
+1. annotate-issue
+
+## Материалы для issue
+### Title
+```
+Comment: AppendSlice matches #48261
+```
+### Body
+#### Фактура
+| | |
+|--|--|
+| Suite / DB | `ClickbenchParallel1` / `vla_small_column` |
+| Branch · Version | `main` · [`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100) |
+| Run | `2026-07-29_f88e100` · `2026-07-29T12:00:00` UTC |
+| Allure | https://proxy.sandbox.yandex-team.ru/12923171727/index.html |
+| Failed | Query00
+#### Что сломалось
+VERIFY; nodata хвост — следствие.
+#### К чему приводит
+- Abort; cut-off suite.
+#### Из‑за чего
+crash compaction AppendSlice; nodata — следствие cut-off.
+#### Чинить
+уже [#48261](https://github.com/ydb-platform/ydb/issues/48261)
+#### Детали ошибки
+```
+VERIFY AppendSlice
+```
+#### Код
+| | |
+|--|--|
+| Место падения | AppendSlice |
+| Связанный issue | [#48261](https://github.com/ydb-platform/ydb/issues/48261) |
+
+<!-- perf-duty-match
+kind: olap
+fingerprint: AppendSlice
+keys:
+  - AppendSlice
+affected:
+  - suite: ClickbenchParallel1
+    db: vla_small_column
+    queries: [Query00, Query01]
+-->
+"""
+            r = validate_analysis_md(base, out_dir=d)
+            self.assertFalse(r["ok"], r)
+            self.assertTrue(
+                any("nodata after abort" in e for e in r["errors"]),
+                r["errors"],
+            )
+            self.assertTrue(
+                any("Query29" in e or "Infrastructure" in e for e in r["errors"]),
+                r["errors"],
+            )
+            self.assertTrue(
+                any("ticket_coverage.uncovered_queries" in e for e in r["errors"]),
+                r["errors"],
+            )
+            fixed = base.replace(
+                "queries: [Query00, Query01]",
+                "queries: [Query00, Query01, Query29, Infrastructure error]",
+            )
+            r2 = validate_analysis_md(fixed, out_dir=d)
+            self.assertTrue(r2["ok"], r2["errors"])
+
     def test_ok_minimal_olap_fail(self):
         with tempfile.TemporaryDirectory() as td:
             d = Path(td)
@@ -1952,6 +2143,48 @@ class S3UploadHelpersTests(unittest.TestCase):
         )
         self.assertIn("workload-log", url)
         self.assertTrue(url.endswith("analysis.md"))
+
+    def test_wait_next_queries_fallback_uncovered(self):
+        """Suite wipe: only Infrastructure error in problems → use pack uncovered."""
+        from tools.s3_upload import _queries_for_wait_next
+
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(
+                d / "context.json",
+                {
+                    "report": {"kind": "olap"},
+                    "selection": {
+                        "branch": "main",
+                        "db": "sas_small_column",
+                        "suite": "Tpcds10",
+                        "focus_run": {
+                            "label": "2026-08-09_1137c6b",
+                            "uncovered_queries": [
+                                "Infrastructure error",
+                                "Query01",
+                                "Query16",
+                            ],
+                        },
+                    },
+                },
+            )
+            write_json(
+                d / "problems.json",
+                {
+                    "items": [
+                        {
+                            "test": "Infrastructure error",
+                            "resolution": "wait_next_wave",
+                        },
+                        {"resolution": "wait_next_wave", "summary": "nodata tail"},
+                    ]
+                },
+            )
+            qs = _queries_for_wait_next(d)
+            self.assertIn("Infrastructure error", qs)
+            self.assertIn("Query01", qs)
+            self.assertIn("Query16", qs)
 
     def test_build_wait_next_wave_decision_and_index_merge(self):
         from common.duty_decisions import (

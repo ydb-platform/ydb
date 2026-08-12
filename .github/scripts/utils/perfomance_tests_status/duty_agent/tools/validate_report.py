@@ -71,7 +71,13 @@ def _section_needs_gfm_table_header(section: str) -> bool:
 
 
 def _nodata_query_names(out_dir: Path | None) -> set[str]:
-    """Query names marked nodata/missing in pack / detect / problems."""
+    """Query names that must land in issue affected after abort/cut-off nodata.
+
+    Prefer the full Now gap list from ``ticket_coverage.uncovered_queries`` /
+    ``selection.focus_run.uncovered_queries`` (includes suite tails and
+    ``Infrastructure error``). Also fold pack ``queries`` kind=nodata and
+    detect/problems seeds — older packs truncated nodata to 24 in ``queries[]``.
+    """
     if out_dir is None:
         return set()
     names: set[str] = set()
@@ -95,6 +101,16 @@ def _nodata_query_names(out_dir: Path | None) -> set[str]:
             kind = str(q.get("kind") or "").lower()
             if kind in ("nodata", "missing", "no_data"):
                 _add(q)
+        # Full suite gaps (may be longer than truncated queries[] samples).
+        tc = ctx.get("ticket_coverage") or {}
+        if isinstance(tc, dict):
+            for q in tc.get("uncovered_queries") or []:
+                _add(q)
+        sel = ctx.get("selection") or {}
+        fr = (sel.get("focus_run") or {}) if isinstance(sel, dict) else {}
+        if isinstance(fr, dict):
+            for q in fr.get("uncovered_queries") or []:
+                _add(q)
 
     det_path = out_dir / "detect_type.json"
     if det_path.is_file():
@@ -110,6 +126,10 @@ def _nodata_query_names(out_dir: Path | None) -> set[str]:
                     _add(q)
         for q in det.get("nodata_queries") or []:
             _add(q)
+        tc = det.get("ticket_coverage") or {}
+        if isinstance(tc, dict):
+            for q in tc.get("uncovered_queries") or []:
+                _add(q)
 
     probs_path = out_dir / "problems.json"
     if probs_path.is_file():
@@ -1198,7 +1218,9 @@ def validate_analysis_md(
                                         if len(missing) > 12
                                         else ""
                                     )
-                                    + "; run annotate-issue --queries … --no-comment"
+                                    + "; use ticket_coverage.uncovered_queries "
+                                    "(not only queries[] sample) — "
+                                    "annotate-issue --queries … --no-comment"
                                 )
 
     # After the human created/pointed an issue: require S3 publish + Duty report in Фактура.

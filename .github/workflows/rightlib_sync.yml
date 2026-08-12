@@ -25,6 +25,6 @@ jobs:
           head_branch: rightlib
           label: rightlib
           repository: ${{ github.repository }}
-          overwrite_from_head: "build certs contrib library tools util vendor yql yt .arcadia.root .mapping.json .piglet-meta.json ya ya.bat ya.conf"
+          force_overwrite: true
           overwrite_exclude: "build/ext_mapping.conf.json build/internal/conf/autoincludes.json build/internal/conf/internal.conf build/internal/conf/settings.conf build/internal/ya.conf"
           gh_personal_access_token: ${{ env.GH_TOKEN }}

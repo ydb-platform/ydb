@@ -17,10 +17,10 @@ inputs:
     description: "File to resolve with --ours (base branch) upon merge conflict"
   merge_theirs:
     description: "File to resolve with --theirs (head branch) upon merge conflict"
-  overwrite_from_head:
-    description: "Directories/files to fully overwrite from the head branch (100% match) instead of merging"
+  force_overwrite:
+    description: "If true, fully overwrite all top-level paths from the head branch (100% match)"
   overwrite_exclude:
-    description: "Paths to preserve from the base branch after overwrite-from-head"
+    description: "Paths to preserve from the base branch after force overwrite"
   gh_personal_access_token:
     required: true
     description: "token for access GitHub"
@@ -53,8 +53,8 @@ runs:
         if [ -n "${{ inputs.merge_theirs }}" ]; then
           MERGE_ARGS+=" --merge-theirs ${{ inputs.merge_theirs }}"
         fi
-        if [ -n "${{ inputs.overwrite_from_head }}" ]; then
-          MERGE_ARGS+=" --overwrite-from-head ${{ inputs.overwrite_from_head }}"
+        if [ "${{ inputs.force_overwrite }}" = "true" ]; then
+          MERGE_ARGS+=" --force-overwrite"
         fi
         if [ -n "${{ inputs.overwrite_exclude }}" ]; then
           MERGE_ARGS+=" --overwrite-exclude ${{ inputs.overwrite_exclude }}"

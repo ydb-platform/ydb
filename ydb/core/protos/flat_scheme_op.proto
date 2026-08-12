@@ -2460,6 +2460,7 @@ message TIamImpersonate {
     optional string ServiceAccountId = 1;
     optional string InitialTokenSecretName = 2;
     optional string ResourceId = 3;
+    optional string DelegationReferrerId = 4;
 }
 
 message TAuth {

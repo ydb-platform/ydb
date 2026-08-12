@@ -1,17 +1,22 @@
 #include "manager.h"
+#include "iam_delegation.h"
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/conclusion/generic/result.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/external_sources/iceberg_fields.h>
 #include <ydb/services/scheme_secret/resolver.h>
+
+#include <util/generic/guid.h>
 
 namespace NKikimr::NKqp {
 
@@ -23,6 +28,109 @@ using TAsyncStatus = TExternalDataSourceManager::TAsyncStatus;
 template <typename TValue>
 using TYqlConclusion = TConclusionImpl<TYqlConclusionStatus, TValue>;
 
+struct TIamObjectDescription : NYql::IKikimrGateway::TGenericResult {
+    TYqlConclusionStatus Status = TYqlConclusionStatus::Success();
+    NExternalDataSource::TIamDelegation Delegation;
+};
+
+struct TCloudIdDescription : NYql::IKikimrGateway::TGenericResult {
+    TYqlConclusionStatus Status = TYqlConclusionStatus::Success();
+    TString CloudId;
+};
+
+NThreading::TFuture<TCloudIdDescription> DescribeDatabaseCloudId(
+    const TExternalDataSourceManager::TExternalModificationContext& context)
+{
+    using TRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
+    using TResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
+
+    auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    auto& entry = navigate->ResultSet.emplace_back();
+    entry.Path = NKikimr::SplitPath(context.GetDatabase());
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+    navigate->DatabaseName = context.GetDatabase();
+    if (context.GetUserToken()) {
+        navigate->UserToken = MakeIntrusive<NACLib::TUserToken>(*context.GetUserToken());
+    }
+
+    auto promise = NThreading::NewPromise<TCloudIdDescription>();
+    auto future = promise.GetFuture();
+    context.GetActorSystem()->Register(new TActorRequestHandler<TRequest, TResponse, TCloudIdDescription>(
+        MakeSchemeCacheID(), new TRequest(navigate.Release()), promise,
+        [](NThreading::TPromise<TCloudIdDescription> promise, TResponse&& response) {
+            TCloudIdDescription result;
+            const auto& request = *response.Request;
+            if (request.ErrorCount || request.ResultSet.size() != 1) {
+                result.Status = TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+                    "Cannot describe database for IAM delegation");
+            } else if (const auto it = request.ResultSet.front().Attributes.find("cloud_id");
+                       it != request.ResultSet.front().Attributes.end() && !it->second.empty())
+            {
+                result.CloudId = it->second;
+            } else {
+                result.Status = TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                    "Database has no cloud_id attribute required by AUTH_METHOD=IAM");
+            }
+            promise.SetValue(std::move(result));
+        }));
+    return future;
+}
+
+NThreading::TFuture<TIamObjectDescription> DescribeIamObject(
+    const TString& path,
+    const TExternalDataSourceManager::TExternalModificationContext& context)
+{
+    using TRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
+    using TResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
+
+    auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    auto& entry = navigate->ResultSet.emplace_back();
+    entry.Path = NKikimr::SplitPath(path);
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown;
+    entry.Kind = NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource;
+    navigate->DatabaseName = context.GetDatabase();
+    if (context.GetUserToken()) {
+        navigate->UserToken = MakeIntrusive<NACLib::TUserToken>(*context.GetUserToken());
+    }
+
+    auto promise = NThreading::NewPromise<TIamObjectDescription>();
+    auto future = promise.GetFuture();
+    context.GetActorSystem()->Register(new TActorRequestHandler<TRequest, TResponse, TIamObjectDescription>(
+        MakeSchemeCacheID(), new TRequest(navigate.Release()), promise,
+        [](NThreading::TPromise<TIamObjectDescription> promise, TResponse&& response) {
+            TIamObjectDescription result;
+            const auto& request = *response.Request;
+            if (request.ErrorCount || request.ResultSet.size() != 1 ||
+                !request.ResultSet.front().ExternalDataSourceInfo)
+            {
+                result.Status = TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+                    "Cannot describe external data source for IAM delegation");
+                promise.SetValue(std::move(result));
+                return;
+            }
+            const auto& description = request.ResultSet.front().ExternalDataSourceInfo->Description;
+            if (!description.GetAuth().HasIam()) {
+                promise.SetValue(std::move(result));
+                return;
+            }
+            const auto& iam = description.GetAuth().GetIam();
+            if (!iam.HasDelegationReferrerId()) {
+                // Objects created before DDL-managed delegation have nothing to
+                // revoke. In particular, do not invent a reference from PathId.
+                promise.SetValue(std::move(result));
+                return;
+            }
+            result.Delegation.ResourceId = iam.GetResourceId();
+            result.Delegation.ServiceAccountId = iam.GetServiceAccountId();
+            result.Delegation.ReferrerId = iam.GetDelegationReferrerId();
+            promise.SetValue(std::move(result));
+        }));
+    return future;
+}
+
 //// Async actions
 
 TAsyncStatus ValidateExternalDatasourceSecrets(const NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc, const TExternalDataSourceManager::TInternalModificationContext& context, const std::shared_ptr<std::vector<TString>>& secrets) {
@@ -32,8 +140,7 @@ TAsyncStatus ValidateExternalDatasourceSecrets(const NKikimrSchemeOp::TExternalD
         externalDataSourceDesc.GetAuth(),
         userToken ? new NACLib::TUserToken(*userToken) : nullptr,
         externalData.GetDatabase(),
-        externalData.GetActorSystem(),
-        true
+        externalData.GetActorSystem()
     );
 
     return describeFuture.Apply([secrets](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& f) {
@@ -159,14 +266,23 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     } else if (authMethod == "IAM") {
         auto& iam = *externalDataSourceDesc.MutableAuth()->MutableIam();
         iam.SetServiceAccountId(GetOrEmpty(settings, "service_account_id"));
-        iam.SetInitialTokenSecretName(GetSecretName(settings, "initial_token_secret"));
-        // Note: user must not be allowed to specify resource_id;
-        // database authorization relies on resource_id lookup;
-        if (const auto status =
-            CheckOldSecretCreationAllowed(
-                disableOldSecretCreation, iam.GetInitialTokenSecretName()); status.IsFail())
-        {
-            return status;
+        const bool delegationEnabled = actorSystem &&
+            AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSourceIamDelegation();
+        if (delegationEnabled) {
+            iam.SetDelegationReferrerId(NExternalDataSource::MakeIamDelegationReferrerId(
+                name, CreateGuidAsString()));
+            if (iam.GetServiceAccountId().empty()) {
+                return TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                    "SERVICE_ACCOUNT_ID is required for AUTH_METHOD=IAM");
+            }
+        } else {
+            iam.SetInitialTokenSecretName(GetSecretName(settings, "initial_token_secret"));
+            if (const auto status = CheckOldSecretCreationAllowed(
+                    disableOldSecretCreation, iam.GetInitialTokenSecretName()); status.IsFail())
+            {
+                return status;
+            }
         }
     } else {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Unknown auth method: " << authMethod);
@@ -372,108 +488,274 @@ TAsyncStatus TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSc
 }
 
 namespace {
-bool IsIamAuth(const auto& schemeTx) {
-    return schemeTx.GetCreateExternalDataSource().GetAuth().identity_case() == NKikimrSchemeOp::TAuth::kIam;
-}
 bool IsResolveResourceIdNeeded(const auto& schemeTx) {
-    return !schemeTx.GetCreateExternalDataSource().GetAuth().GetIam().HasResourceId();
+    return schemeTx.GetCreateExternalDataSource().GetAuth().identity_case() == NKikimrSchemeOp::TAuth::kIam
+        && !schemeTx.GetCreateExternalDataSource().GetAuth().GetIam().HasResourceId();
 }
 
-TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
-    auto actorSystem = context.GetActorSystem();
-    return ChainFeatures(validationFuture, [schemeTxState, secrets, actorSystem] () -> TAsyncStatus {
-        if (!secrets || secrets->size() != 1) {
-            return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "AUTH=IAM expected resolved secrets"));
-        }
-        const auto& desc = schemeTxState->GetCreateExternalDataSource();
-        if (desc.GetSourceType() != ToString(NYql::EDatabaseType::Ydb)) {
-            return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "AUTH=IAM supported only for EXTERNAL DATA SOURCES ... SOURCE_TYPE=" << NYql::EDatabaseType::Ydb << ", requested for: " << desc.GetSourceType()));
-        }
-        const auto& prop = desc.GetProperties().GetProperties();
-        TString endpoint = desc.GetLocation();
-        TString database;
-        bool useTls = false;
-        TString caCert;
-        if (auto it = prop.find("database_name"); it != prop.end()) {
-            database = it->second;
-        }
-        if (auto it = prop.find("use_tls"); it != prop.end()) {
-            auto maybeUseTls = TryFromString<bool>(it->second);
-            if (!maybeUseTls) {
-                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "use_tls: expected bool, got " << it->second));
-            }
-            useTls = *maybeUseTls;
-        }
-        // XXX caCert: not available
-        return DescribeExternalDataSourceResourceId(endpoint, database, useTls, caCert, (*secrets)[0], actorSystem)
-            .Apply([schemeTxState](const auto& future) {
-                auto& value = future.GetValue();
-                if (value.Status != Ydb::StatusIds::SUCCESS) {
-                    return TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(value.Status), value.Issues.ToString());
-                }
-                auto& desc = *schemeTxState->MutableCreateExternalDataSource();
-                desc.MutableAuth()->MutableIam()->SetResourceId(value.ResourceId);
-                return TYqlConclusionStatus::Success();
+NExternalDataSource::TIamDelegationSettings GetIamDelegationSettings(NActors::TActorSystem* actorSystem) {
+    const auto& config = AppData(actorSystem)->ReplicationConfig.GetIamServiceControl();
+    NExternalDataSource::TIamDelegationSettings settings;
+    settings.Endpoint = config.GetEndpoint();
+    settings.ServiceId = config.GetServiceId();
+    settings.MicroserviceId = config.GetMicroserviceId();
+    settings.ResourceType = config.GetResourceType();
+    settings.EnableSsl = config.GetEnableSsl();
+    return settings;
+}
 
-            });
+TAsyncStatus DelegationResultToStatus(NThreading::TFuture<NExternalDataSource::TIamDelegationResult> future) {
+    return future.Apply([](const auto& f) {
+        const auto& result = f.GetValue();
+        return result.Success
+            ? TYqlConclusionStatus::Success()
+            : TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, result.Error);
     });
 }
 
-TYqlConclusionStatus YqlConclusionFromGrpcStatus(const NYdbGrpc::TGrpcStatus& grpcStatus) {
-    if (grpcStatus.Ok()) {
+TString GetIamSubject(const NACLib::TUserToken& token) {
+    return NExternalDataSource::NormalizeIamSubject(token.GetUserSID());
+}
+
+TAsyncStatus ResolveResourceIdFromDatabase(
+    const TExternalDataSourceManager::TExternalModificationContext& context,
+    const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState)
+{
+    return DescribeDatabaseCloudId(context).Apply([schemeTxState](const auto& f) {
+        auto result = f.GetValue();
+        if (result.Status.IsFail()) {
+            return result.Status;
+        }
+        schemeTxState->MutableCreateExternalDataSource()
+            ->MutableAuth()->MutableIam()->SetResourceId(result.CloudId);
         return TYqlConclusionStatus::Success();
-    }
-    if (grpcStatus.InternalError) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Grpc internal error: "<< grpcStatus.Msg);
-    }
-    return TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(NKikimr::NRpcService::GrpcStatusToYdbStatus(static_cast<grpc::StatusCode>(grpcStatus.GRpcStatusCode))), grpcStatus.ToDebugString());
-}
-
-TAsyncStatus ValidateServiceAccount(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
-    auto actorSystem = context.GetActorSystem();
-    return ChainFeatures(validationFuture, [schemeTxState, actorSystem, secrets] {
-        Y_ENSURE(secrets && secrets->size() == 1);
-        auto& iamAuth = schemeTxState->GetCreateExternalDataSource().GetAuth().GetIam();
-        return AuthorizeServiceAccountUse(iamAuth.GetServiceAccountId(),
-                (*secrets)[0],
-                actorSystem
-        ).Apply([](const NThreading::TFuture<NYdbGrpc::TGrpcStatus>& future) {
-            try {
-                auto grpcStatus = future.GetValueSync();
-                return YqlConclusionFromGrpcStatus(grpcStatus);
-            } catch (std::exception&) {
-                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
-            }
-        });
     });
 }
+
+TAsyncStatus ExecuteLegacySchemeRequest(
+    const NKikimrSchemeOp::TModifyScheme& schemeTx,
+    const TExternalDataSourceManager::TExternalModificationContext& context)
+{
+    if (!IsResolveResourceIdNeeded(schemeTx)) {
+        return ValidateExternalDatasourceSecrets(
+            schemeTx.GetCreateExternalDataSource(), context, nullptr).Apply(
+                [schemeTx, context](const auto& f) {
+                    if (f.GetValue().IsFail()) {
+                        return NThreading::MakeFuture(f.GetValue());
+                    }
+                    return SendSchemeRequest(schemeTx, context);
+                });
+    }
+
+    auto* actorSystem = context.GetActorSystem();
+    if (!AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
+        return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_UNSUPPORTED,
+            "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
+    }
+
+    auto schemeTxState = std::make_shared<NKikimrSchemeOp::TModifyScheme>(schemeTx);
+    auto secrets = std::make_shared<std::vector<TString>>();
+    return ValidateExternalDatasourceSecrets(
+        schemeTxState->GetCreateExternalDataSource(), context, secrets).Apply(
+            [schemeTxState, secrets, context, actorSystem](const auto& f) -> TAsyncStatus {
+                if (f.GetValue().IsFail()) {
+                    return NThreading::MakeFuture(f.GetValue());
+                }
+                if (secrets->size() != 1) {
+                    return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
+                        NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                        "AUTH=IAM expected resolved secrets"));
+                }
+                const auto& desc = schemeTxState->GetCreateExternalDataSource();
+                if (desc.GetSourceType() != ToString(NYql::EDatabaseType::Ydb)) {
+                    return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
+                        NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                        TStringBuilder() << "AUTH=IAM supported only for SOURCE_TYPE="
+                            << NYql::EDatabaseType::Ydb));
+                }
+                const auto& props = desc.GetProperties().GetProperties();
+                TString database;
+                bool useTls = false;
+                if (const auto it = props.find("database_name"); it != props.end()) {
+                    database = it->second;
+                }
+                if (const auto it = props.find("use_tls"); it != props.end()) {
+                    const auto parsed = TryFromString<bool>(it->second);
+                    if (!parsed) {
+                        return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
+                            NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                            TStringBuilder() << "use_tls: expected bool, got " << it->second));
+                    }
+                    useTls = *parsed;
+                }
+                return DescribeExternalDataSourceResourceId(
+                    desc.GetLocation(), database, useTls, {}, (*secrets)[0], actorSystem).Apply(
+                        [schemeTxState, context](const auto& described) {
+                            const auto& value = described.GetValue();
+                            if (value.Status != Ydb::StatusIds::SUCCESS) {
+                                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
+                                    NYql::YqlStatusFromYdbStatus(value.Status), value.Issues.ToString()));
+                            }
+                            schemeTxState->MutableCreateExternalDataSource()
+                                ->MutableAuth()->MutableIam()->SetResourceId(value.ResourceId);
+                            return SendSchemeRequest(*schemeTxState, context);
+                        });
+            });
+}
+
 } // namespace {
 
 TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
+    if (!AppData(context.GetActorSystem())->FeatureFlags.GetEnableExternalDataSourceIamDelegation()) {
+        if (operationCase == NKqpProto::TKqpSchemeOperation::kDropExternalDataSource) {
+            return SendSchemeRequest(schemeTx, context);
+        }
+        return ExecuteLegacySchemeRequest(schemeTx, context);
+    }
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kDropExternalDataSource) {
+        const TString path = TStringBuilder() << schemeTx.GetWorkingDir() << '/' << schemeTx.GetDrop().GetName();
+        auto schemeTxState = std::make_shared<NKikimrSchemeOp::TModifyScheme>(schemeTx);
+        return DescribeIamObject(path, context).Apply([schemeTxState, context](const auto& f) -> TAsyncStatus {
+            auto described = f.GetValue();
+            if (described.Status.IsFail()) {
+                if (schemeTxState->GetSuccessOnNotExist()) {
+                    return SendSchemeRequest(*schemeTxState, context);
+                }
+                return NThreading::MakeFuture(described.Status);
+            }
+            if (!NExternalDataSource::IsManagedIamDelegation(described.Delegation)) {
+                return SendSchemeRequest(*schemeTxState, context);
+            }
+            auto schemeFuture = SendSchemeRequest(*schemeTxState, context);
+            return schemeFuture.Apply([delegation = std::move(described.Delegation), context](const auto& f) -> TAsyncStatus {
+                const auto schemeStatus = f.GetValue();
+                if (NExternalDataSource::SelectCleanupAfterSchemeRequest(
+                        !schemeStatus.IsFail(), delegation, {}) !=
+                    NExternalDataSource::EDelegationCleanup::Previous)
+                {
+                    return NThreading::MakeFuture(schemeStatus);
+                }
+                // A committed DROP cannot be converted to a client-visible error.
+                return NExternalDataSource::RevokeIamDelegation(
+                    GetIamDelegationSettings(context.GetActorSystem()), delegation,
+                    context.GetActorSystem()).Apply([schemeStatus](const auto&) {
+                        return schemeStatus;
+                    });
+            });
+        });
+    }
+
     TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
     auto schemeTxState = std::make_shared<NKikimrSchemeOp::TModifyScheme>(schemeTx);
+    auto previousIam = std::make_shared<TIamObjectDescription>();
     if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
-        bool isIamAuth = IsIamAuth(schemeTx);
-        bool isResolveResourceIdNeeded = isIamAuth && IsResolveResourceIdNeeded(schemeTx);
-        auto secrets = isIamAuth ? std::make_shared<std::vector<TString>>() : nullptr;
-        if (isIamAuth) {
+        const bool hasIam = schemeTx.GetCreateExternalDataSource().GetAuth().HasIam();
+        if (hasIam) {
             auto actorSystem = context.GetActorSystem();
             if (!AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
-                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNSUPPORTED, "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
+                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_UNSUPPORTED,
+                    "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
             }
+            const auto& userToken = context.GetUserToken();
+            if (!userToken || !userToken->HasAuthType() || userToken->GetAuthType() != "AccessService") {
+                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_ACCESS_DENIED,
+                    "AUTH_METHOD=IAM requires a cloud IAM authenticated session"));
+            }
+            if (schemeTx.GetCreateExternalDataSource().GetSourceType() != ToString(NYql::EDatabaseType::Ydb)) {
+                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                    "AUTH_METHOD=IAM is supported only for SOURCE_TYPE=Ydb"));
+            }
+            if (IsResolveResourceIdNeeded(schemeTx)) {
+                validationFuture = ChainFeatures(validationFuture, [schemeTxState, context] {
+                    return ResolveResourceIdFromDatabase(context, schemeTxState);
+                });
+            }
+        } else {
+            validationFuture = ChainFeatures(validationFuture, [schemeTxState, context] {
+                return ValidateExternalDatasourceSecrets(
+                    schemeTxState->GetCreateExternalDataSource(), context, nullptr);
+            });
         }
-        validationFuture = ChainFeatures(validationFuture, [schemeTxState, context, secrets] {
-            return ValidateExternalDatasourceSecrets(schemeTxState->GetCreateExternalDataSource(), context, secrets);
-        });
-        if (isResolveResourceIdNeeded) {
-            validationFuture = ResolveResourceId(validationFuture, context, schemeTxState, secrets);
-        }
-        if (isIamAuth) {
-            validationFuture = ValidateServiceAccount(validationFuture, context, schemeTxState, secrets);
+        if (schemeTx.GetReplaceIfExists()) {
+            const TString path = TStringBuilder() << schemeTx.GetWorkingDir() << '/'
+                << schemeTx.GetCreateExternalDataSource().GetName();
+            validationFuture = ChainFeatures(validationFuture, [previousIam, path, context] {
+                return DescribeIamObject(path, context).Apply([previousIam](const auto& f) {
+                    auto described = f.GetValue();
+                    if (!described.Status.IsFail()) {
+                        *previousIam = std::move(described);
+                    }
+                    return TYqlConclusionStatus::Success();
+                });
+            });
         }
     }
-    return ChainFeatures(validationFuture, [schemeTxState, context] {
-        return SendSchemeRequest(*schemeTxState, context);
+    return ChainFeatures(validationFuture, [schemeTxState, previousIam, context, operationCase]() -> TAsyncStatus {
+        if (operationCase != NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
+            return SendSchemeRequest(*schemeTxState, context);
+        }
+        if (!schemeTxState->GetCreateExternalDataSource().GetAuth().HasIam()) {
+            if (!NExternalDataSource::IsManagedIamDelegation(previousIam->Delegation)) {
+                return SendSchemeRequest(*schemeTxState, context);
+            }
+            auto schemeFuture = SendSchemeRequest(*schemeTxState, context);
+            return schemeFuture.Apply([previousIam, context](const auto& f) -> TAsyncStatus {
+                const auto schemeStatus = f.GetValue();
+                if (schemeStatus.IsFail()) {
+                    return NThreading::MakeFuture(schemeStatus);
+                }
+                return NExternalDataSource::RevokeIamDelegation(
+                    GetIamDelegationSettings(context.GetActorSystem()),
+                    previousIam->Delegation,
+                    context.GetActorSystem()).Apply([schemeStatus](const auto&) {
+                        return schemeStatus;
+                    });
+            });
+        }
+
+        const auto& iam = schemeTxState->GetCreateExternalDataSource().GetAuth().GetIam();
+        NExternalDataSource::TIamDelegation delegation {
+            .ResourceId = iam.GetResourceId(),
+            .ServiceAccountId = iam.GetServiceAccountId(),
+            .ReferrerId = iam.GetDelegationReferrerId(),
+        };
+        auto setupFuture = DelegationResultToStatus(NExternalDataSource::SetupIamDelegation(
+            GetIamDelegationSettings(context.GetActorSystem()),
+            delegation,
+            GetIamSubject(*context.GetUserToken()),
+            context.GetActorSystem()));
+
+        const auto& old = previousIam->Delegation;
+        return ChainFeatures(setupFuture, [schemeTxState, old, delegation, context] {
+            auto schemeFuture = SendSchemeRequest(*schemeTxState, context);
+            return schemeFuture.Apply([old, delegation, context](const auto& f) -> TAsyncStatus {
+                const auto schemeStatus = f.GetValue();
+                const auto cleanup = NExternalDataSource::SelectCleanupAfterSchemeRequest(
+                    !schemeStatus.IsFail(), old, delegation);
+                if (cleanup == NExternalDataSource::EDelegationCleanup::Staged) {
+                    // The staged delegation must not outlive a rejected ALTER.
+                    return NExternalDataSource::RevokeIamDelegation(
+                        GetIamDelegationSettings(context.GetActorSystem()), delegation,
+                        context.GetActorSystem()).Apply([schemeStatus](const auto&) {
+                            return schemeStatus;
+                        });
+                }
+                if (cleanup != NExternalDataSource::EDelegationCleanup::Previous) {
+                    return NThreading::MakeFuture(schemeStatus);
+                }
+                // The old delegation remains usable until SchemeShard commits.
+                // Cleanup is best effort and cannot turn committed DDL into an error.
+                return NExternalDataSource::RevokeIamDelegation(
+                    GetIamDelegationSettings(context.GetActorSystem()), old,
+                    context.GetActorSystem()).Apply([schemeStatus](const auto&) {
+                        return schemeStatus;
+                    });
+            });
+        });
     });
 }
 

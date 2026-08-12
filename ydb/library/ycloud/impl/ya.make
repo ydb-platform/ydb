@@ -18,6 +18,8 @@ SRCS(
     mock_access_service.h
     service_account_service.cpp
     service_account_service.h
+    service_control.cpp
+    service_control.h
     user_account_service.cpp
     user_account_service.h
     util.cpp

@@ -361,4 +361,7 @@ message TFeatureFlags {
     optional bool EnableGeneratedStored = 308 [default = false];
     optional bool EnableGeneratedVirtual = 309 [default = false];
     optional bool EnableTxIdInStats = 310 [default = false];
+    // Manage IAM delegations during external data source DDL in the KQP gateway.
+    // When disabled, IAM external data sources retain their original secret-based flow.
+    optional bool EnableExternalDataSourceIamDelegation = 311 [default = false];
 }

@@ -90,8 +90,9 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
         return;
     }
     const auto& step = source->GetExecutionContext().GetCursorStep();
-    const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
-    const TString tracingExecutionResult = source->GetExecutionContext().GetPrevExecutionResult() + " - " + currentExecutionResult;
+    const auto prevTracing = source->GetExecutionContext().GetPrevNodeTracing();
+    const TString tracingName = prevTracing.CategoryName + " - " + currentCategoryName;
+    const TString tracingExecutionResult = prevTracing.ExecutionResult + " - " + currentExecutionResult;
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
     const auto processorType = processor->GetProcessorType();
     const TString details = processor->DebugJson().GetStringRobust();

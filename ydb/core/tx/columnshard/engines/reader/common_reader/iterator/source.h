@@ -61,6 +61,16 @@ private:
     std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     std::atomic<TPrevNodeState> PrevNode = {};
 
+    TString RenderCategoryName(const TPrevNodeState& state) const {
+        if (!state.Defined) {
+            return StartCategoryName;
+        }
+        AFL_VERIFY(Program);
+        auto it = Program->GetNodes().find(state.NodeId);
+        AFL_VERIFY(it != Program->GetNodes().end())("node_id", state.NodeId);
+        return it->second->GetProcessor()->GetSignalCategoryName();
+    }
+
 public:
     void SetStartCategoryName(TString&& name) {
         StartCategoryName = std::move(name);
@@ -74,25 +84,23 @@ public:
     }
 
     TString GetPrevCategoryName() const {
-        const TPrevNodeState state = PrevNode.load(std::memory_order_acquire);
-        if (!state.Defined) {
-            return StartCategoryName;
-        }
-        AFL_VERIFY(Program);
-        auto it = Program->GetNodes().find(state.NodeId);
-        AFL_VERIFY(it != Program->GetNodes().end())("node_id", state.NodeId);
-        return it->second->GetProcessor()->GetSignalCategoryName();
+        return RenderCategoryName(PrevNode.load(std::memory_order_acquire));
     }
 
-    TString GetPrevExecutionResult() const {
+    struct TPrevNodeTracing {
+        TString CategoryName;
+        TString ExecutionResult;
+    };
+
+    // CategoryName/ExecutionResult are coupled only in the program-step transition tracing; a single
+    // load keeps the pair consistent.
+    TPrevNodeTracing GetPrevNodeTracing() const {
         const TPrevNodeState state = PrevNode.load(std::memory_order_acquire);
-        if (!state.Defined) {
-            return TString();
+        TString executionResult;
+        if (state.Defined) {
+            executionResult = state.Failed ? "Fail" : ::ToString(state.Result);
         }
-        if (state.Failed) {
-            return "Fail";
-        }
-        return ::ToString(state.Result);
+        return TPrevNodeTracing{ .CategoryName = RenderCategoryName(state), .ExecutionResult = std::move(executionResult) };
     }
 
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);

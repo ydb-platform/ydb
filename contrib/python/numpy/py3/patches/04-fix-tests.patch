@@ -28,8 +28,8 @@
 +import yatest.common as yc
 +pwd = yc.source_path(os.path.dirname(__file__))
 @@ -539,1 +539,1 @@ class TestSFC64(Base):
--        pkl_file = os.path.join(base_path, "data", f"sfc64_np126.pkl.gz")
-+        pkl_file = os.path.join(pwd, "data", f"sfc64_np126.pkl.gz")
+-        pkl_file = os.path.join(base_path, "data", "sfc64_np126.pkl.gz")
++        pkl_file = os.path.join(pwd, "data", "sfc64_np126.pkl.gz")
 --- contrib/python/numpy/py3/numpy/lib/tests/test_format.py	(index)
 +++ contrib/python/numpy/py3/numpy/lib/tests/test_format.py	(working tree)
 @@ -90 +90 @@ Test the magic string writing.

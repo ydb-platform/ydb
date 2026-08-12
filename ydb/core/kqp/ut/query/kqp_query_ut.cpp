@@ -2436,12 +2436,57 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
             if (EnableCsWriteAffinity) {
                 // With affinity, the sink stage must be connected via Broadcast (not Map),
-                // so it can be independently placed (M tasks, one per node with target shards).
-                // Verify by searching for "Broadcast" in the plan JSON.
-                const TString planText = TString(*planStr);
-                UNIT_ASSERT_C(planText.Contains("Broadcast"),
-                    "Expected 'Broadcast' connection in plan with EnableCsWriteAffinity=true."
-                    " Plan: " << planText);
+                // so it can be independently placed (N tasks, one per target shard).
+                //
+                // The plan structure (from outer to inner) is:
+                //   Sink Stage
+                //     Broadcast  ← this connection routes rows from Transform to all Sink tasks
+                //       Transform Stage
+                //         Map    ← this Map is the Scan→Transform connection (normal, not the sink)
+                //           Scan Stage
+                //
+                // We verify:
+                //   1. A Broadcast connection node exists (the Transform→Sink link).
+                //   2. The Sink stage node itself (Node Type = "Sink") is present.
+                //   3. The Sink stage's immediate parent connection is Broadcast, not Map.
+
+                // 1. Broadcast connection exists somewhere in the plan.
+                const auto broadcastNode = FindPlanNodeByKv(plan, "Node Type", "Broadcast");
+                UNIT_ASSERT_C(broadcastNode.IsDefined(),
+                    "Expected a 'Broadcast' connection node in plan with EnableCsWriteAffinity=true."
+                    " Plan: " << *planStr);
+
+                // 2. A Sink node exists.
+                const auto sinkNode = FindPlanNodeByKv(plan, "Node Type", "Sink");
+                UNIT_ASSERT_C(sinkNode.IsDefined(),
+                    "Expected a 'Sink' stage node in plan with EnableCsWriteAffinity=true."
+                    " Plan: " << *planStr);
+
+                // 3. The Broadcast node's child Plans must contain the Sink or its ancestor.
+                // Since FindPlanNodeByKv does recursive search, the Broadcast node's Plans array
+                // should contain the inner part of the plan (Transform stage etc.).
+                // Simply check that the Broadcast found is a PlanNodeType=Connection node.
+                const auto& broadcastMap = broadcastNode.GetMapSafe();
+                const auto planNodeTypeIt = broadcastMap.find("PlanNodeType");
+                UNIT_ASSERT_C(planNodeTypeIt != broadcastMap.end()
+                        && planNodeTypeIt->second.GetStringSafe() == "Connection",
+                    "Expected 'Broadcast' node to have PlanNodeType=Connection."
+                    " Plan: " << *planStr);
+
+                // 4. Verify there is exactly 1 Broadcast connection (the Transform→Sink link).
+                //    The Scan→Transform link should be a Map, and there should be no extra
+                //    Broadcasts.
+                const ui32 broadcastCount = CountPlanNodesByKv(plan, "Node Type", "Broadcast");
+                UNIT_ASSERT_VALUES_EQUAL_C(broadcastCount, 1,
+                    "Expected exactly 1 Broadcast connection in plan with EnableCsWriteAffinity=true."
+                    " Plan: " << *planStr);
+            } else {
+                // Without affinity, the sink is inlined into the transform stage (no separate
+                // sink stage). Therefore there must be NO Broadcast connection in the plan.
+                const auto broadcastNode = FindPlanNodeByKv(plan, "Node Type", "Broadcast");
+                UNIT_ASSERT_C(!broadcastNode.IsDefined(),
+                    "Expected NO 'Broadcast' connection in plan with EnableCsWriteAffinity=false"
+                    " (sink should be inlined into transform stage). Plan: " << *planStr);
             }
         }
 

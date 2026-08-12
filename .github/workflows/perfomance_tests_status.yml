@@ -60,6 +60,16 @@ jobs:
           echo "$RUNNER_TEMP/gh-bin/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/gh-bin/bin/gh" --version
 
+      # Refresh OLAP marts used by Now/duty (same as collect_analytics_fast) so hourly
+      # reports do not wait up to ~30 min for the scheduled mart job.
+      - name: Upload olap perfomance suites data mart
+        continue-on-error: true
+        run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_suites_mart.sql --table_path perfomance/olap/fast_results_siutes --store_type column --partition_keys RunTs --primary_keys RunTs Db Suite --ttl_min 43200 --ttl_key RunTs
+
+      - name: Upload olap perfomance data mart
+        continue-on-error: true
+        run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_mart.sql --table_path perfomance/olap/fast_results --store_type column --partition_keys Run_start_timestamp --primary_keys Run_start_timestamp Db Suite Test Branch --ttl_min 43200 --ttl_key Run_start_timestamp
+
       - name: Fetch data and generate reports
         id: build
         env:

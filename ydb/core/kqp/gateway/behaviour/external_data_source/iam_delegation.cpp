@@ -47,7 +47,8 @@ public:
         settings.RequestTimeoutMs = Settings.Timeout.MilliSeconds();
         ServiceControl = Register(NCloud::CreateServiceControl(settings));
 
-        Credentials = NYdb::CreateIamCredentialsProviderFactory()->CreateProvider();
+        Credentials = NYdb::CreateIamCredentialsProviderFactory(
+            MakeMetadataServiceHost(Settings))->CreateProvider();
         Credentials->GetAuthInfoAsync().Subscribe([
             actorSystem = TActivationContext::ActorSystem(), self = SelfId()](const auto& future) {
             try {
@@ -181,6 +182,13 @@ NThreading::TFuture<TIamDelegationResult> Run(
 }
 
 } // anonymous namespace
+
+NYdb::TIamHost MakeMetadataServiceHost(const TIamDelegationSettings& settings) {
+    NYdb::TIamHost result;
+    result.Host = settings.MetadataServiceHost;
+    result.Port = settings.MetadataServicePort;
+    return result;
+}
 
 yandex::cloud::priv::servicecontrol::v1::EnsureEnabledRequest MakeEnsureEnabledRequest(
     const TIamDelegationSettings& settings,

@@ -1,5 +1,6 @@
 #include "manager.h"
 #include "iam_delegation.h"
+#include "iam_object_lookup.h"
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
@@ -8,6 +9,7 @@
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -30,6 +32,7 @@ using TYqlConclusion = TConclusionImpl<TYqlConclusionStatus, TValue>;
 
 struct TIamObjectDescription : NYql::IKikimrGateway::TGenericResult {
     TYqlConclusionStatus Status = TYqlConclusionStatus::Success();
+    bool NotFound = false;
     NExternalDataSource::TIamDelegation Delegation;
 };
 
@@ -102,9 +105,19 @@ NThreading::TFuture<TIamObjectDescription> DescribeIamObject(
         [](NThreading::TPromise<TIamObjectDescription> promise, TResponse&& response) {
             TIamObjectDescription result;
             const auto& request = *response.Request;
+            if (request.ResultSet.size() == 1) {
+                const auto& entry = request.ResultSet.front();
+                if (NExternalDataSource::ClassifyIamObjectLookup(
+                        entry.Status, static_cast<bool>(entry.ExternalDataSourceInfo)) ==
+                    NExternalDataSource::EIamObjectLookupResult::NotFound) {
+                    result.NotFound = true;
+                    promise.SetValue(std::move(result));
+                    return;
+                }
+            }
             if (request.ErrorCount || request.ResultSet.size() != 1 ||
-                !request.ResultSet.front().ExternalDataSourceInfo)
-            {
+                request.ResultSet.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok ||
+                !request.ResultSet.front().ExternalDataSourceInfo) {
                 result.Status = TYqlConclusionStatus::Fail(
                     NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
                     "Cannot describe external data source for IAM delegation");
@@ -501,6 +514,11 @@ NExternalDataSource::TIamDelegationSettings GetIamDelegationSettings(NActors::TA
     settings.MicroserviceId = config.GetMicroserviceId();
     settings.ResourceType = config.GetResourceType();
     settings.EnableSsl = config.GetEnableSsl();
+    const auto& authConfig = AppData(actorSystem)->AuthConfig;
+    if (authConfig.HasLocalMetadataService()) {
+        settings.MetadataServiceHost = authConfig.GetLocalMetadataService().GetHost();
+        settings.MetadataServicePort = authConfig.GetLocalMetadataService().GetPort();
+    }
     return settings;
 }
 
@@ -619,10 +637,10 @@ TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchem
         return DescribeIamObject(path, context).Apply([schemeTxState, context](const auto& f) -> TAsyncStatus {
             auto described = f.GetValue();
             if (described.Status.IsFail()) {
-                if (schemeTxState->GetSuccessOnNotExist()) {
-                    return SendSchemeRequest(*schemeTxState, context);
-                }
                 return NThreading::MakeFuture(described.Status);
+            }
+            if (described.NotFound) {
+                return SendSchemeRequest(*schemeTxState, context);
             }
             if (!NExternalDataSource::IsManagedIamDelegation(described.Delegation)) {
                 return SendSchemeRequest(*schemeTxState, context);
@@ -686,7 +704,10 @@ TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchem
             validationFuture = ChainFeatures(validationFuture, [previousIam, path, context] {
                 return DescribeIamObject(path, context).Apply([previousIam](const auto& f) {
                     auto described = f.GetValue();
-                    if (!described.Status.IsFail()) {
+                    if (described.Status.IsFail()) {
+                        return described.Status;
+                    }
+                    if (!described.NotFound) {
                         *previousIam = std::move(described);
                     }
                     return TYqlConclusionStatus::Success();

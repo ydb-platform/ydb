@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/gateway/behaviour/external_data_source/iam_delegation.h>
+#include <ydb/core/kqp/gateway/behaviour/external_data_source/iam_object_lookup.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -190,6 +191,33 @@ Y_UNIT_TEST_SUITE(IamDelegation) {
     Y_UNIT_TEST(DelegationFeatureIsOptIn) {
         NKikimrConfig::TFeatureFlags flags;
         UNIT_ASSERT(!flags.GetEnableExternalDataSourceIamDelegation());
+    }
+
+    Y_UNIT_TEST(ConfiguredMetadataServiceIsPreserved) {
+        auto settings = Settings();
+        settings.MetadataServiceHost = "metadata.proxy.local";
+        settings.MetadataServicePort = 8123;
+        const auto host = MakeMetadataServiceHost(settings);
+        UNIT_ASSERT_VALUES_EQUAL(host.Host, "metadata.proxy.local");
+        UNIT_ASSERT_VALUES_EQUAL(host.Port, 8123);
+    }
+
+    Y_UNIT_TEST(OnlyConfirmedMissingObjectCanBeIgnored) {
+        using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
+        UNIT_ASSERT(ClassifyIamObjectLookup(EStatus::RootUnknown, false) ==
+            EIamObjectLookupResult::NotFound);
+        UNIT_ASSERT(ClassifyIamObjectLookup(EStatus::PathErrorUnknown, false) ==
+            EIamObjectLookupResult::NotFound);
+        UNIT_ASSERT(ClassifyIamObjectLookup(EStatus::Ok, true) ==
+            EIamObjectLookupResult::Found);
+        UNIT_ASSERT(ClassifyIamObjectLookup(EStatus::LookupError, false) ==
+            EIamObjectLookupResult::Error);
+        UNIT_ASSERT(ClassifyIamObjectLookup(EStatus::RedirectLookupError, false) ==
+            EIamObjectLookupResult::Error);
+        UNIT_ASSERT(ClassifyIamObjectLookup(EStatus::AccessDenied, false) ==
+            EIamObjectLookupResult::Error);
+        UNIT_ASSERT(ClassifyIamObjectLookup(EStatus::Ok, false) ==
+            EIamObjectLookupResult::Error);
     }
 }
 

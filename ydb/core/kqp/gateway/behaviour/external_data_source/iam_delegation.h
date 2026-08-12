@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/public/api/client/yc_private/servicecontrol/service_control_service.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 
 #include <library/cpp/threading/future/future.h>
 
@@ -12,6 +13,8 @@ struct TIamDelegationSettings {
     TString ServiceId;
     TString MicroserviceId;
     TString ResourceType;
+    TString MetadataServiceHost;
+    ui16 MetadataServicePort = 0;
     bool EnableSsl = true;
     TDuration Timeout = TDuration::Seconds(10);
 };
@@ -27,6 +30,8 @@ struct TIamDelegationResult {
     bool Success = false;
     TString Error;
 };
+
+NYdb::TIamHost MakeMetadataServiceHost(const TIamDelegationSettings& settings);
 
 enum class EDelegationCleanup {
     None,

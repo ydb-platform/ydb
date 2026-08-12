@@ -735,11 +735,6 @@ namespace NActors {
         TPollerToken::TPtr XdcPollerToken;
         ui32 SendBufferSize;
 
-        struct TRdmaSendInFlight {
-            size_t Bytes = 0;
-            bool IsOutOfBand = false;
-        };
-        std::optional<TRdmaSendInFlight> RdmaSendInFlight;
         ui64 RdmaSendWrSubmitted = 0;
         ui64 RdmaSendWrCompleted = 0;
         bool RdmaInitialTrafficStateReported = false;

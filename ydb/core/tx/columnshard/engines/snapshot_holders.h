@@ -72,7 +72,7 @@ public:
         if (TxInFlight.empty()) {
             return false;
         }
-        return TxInFlight.front() < dropSnapshot;
+        return !TxInFlight.empty() && TxInFlight.front() < dropSnapshot;
     }
 };
 

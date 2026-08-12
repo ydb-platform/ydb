@@ -4327,7 +4327,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 PRAGMA ydb.MaxTasksPerStage = "1000";
                 PRAGMA ydb.OverridePlanner = @@ [
-                    { "tx": 0, "stage": 0, "tasks": 1000 }
+                    {{ "tx": 0, "stage": 0, "tasks": 1000 }}
                 ] @@;
 
                 INSERT INTO `{pq_source}`.`{output_topic}`

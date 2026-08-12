@@ -717,6 +717,7 @@ NProto::TReduceTaskParams ReduceTaskParamsToProto(const TReduceTaskParams& reduc
     protoReduceTaskParams.SetSerializedReduceJobState(reduceTaskParams.SerializedReduceJobState);
     auto protoReduceOperationSpec = ReduceOperationSpecToProto(reduceTaskParams.ReduceOperationSpec);
     protoReduceTaskParams.MutableReduceOperationSpec()->Swap(&protoReduceOperationSpec);
+    protoReduceTaskParams.SetSortByHasKeyHashPrefix(reduceTaskParams.SortByHasKeyHashPrefix);
     return protoReduceTaskParams;
 }
 
@@ -730,6 +731,7 @@ TReduceTaskParams ReduceTaskParamsFromProto(const NProto::TReduceTaskParams& pro
     reduceTaskParams.Output = outputTables;
     reduceTaskParams.SerializedReduceJobState = protoReduceTaskParams.GetSerializedReduceJobState();
     reduceTaskParams.ReduceOperationSpec = ReduceOperationSpecFromProto(protoReduceTaskParams.GetReduceOperationSpec());
+    reduceTaskParams.SortByHasKeyHashPrefix = protoReduceTaskParams.GetSortByHasKeyHashPrefix();
     return reduceTaskParams;
 }
 
@@ -830,6 +832,23 @@ TFillOperationParams FillOperationParamsFromProto(const NProto::TFillOperationPa
         outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
     }
     return TFillOperationParams{.Output = outputTables, .SerializedFillJobState = protoFillOperationParams.GetSerializedFillJobState()};
+}
+
+NProto::TTouchOperationParams TouchOperationParamsToProto(const TTouchOperationParams& touchOperationParams) {
+    NProto::TTouchOperationParams protoTouchOperationParams;
+    for (auto& fmrTableRef: touchOperationParams.Output) {
+        auto protoFmrTableRef = FmrTableRefToProto(fmrTableRef);
+        protoTouchOperationParams.AddOutput()->Swap(&protoFmrTableRef);
+    }
+    return protoTouchOperationParams;
+}
+
+TTouchOperationParams TouchOperationParamsFromProto(const NProto::TTouchOperationParams& protoTouchOperationParams) {
+    std::vector<TFmrTableRef> outputTables;
+    for (auto& protoFmrTableRef: protoTouchOperationParams.GetOutput()) {
+        outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
+    }
+    return TTouchOperationParams{.Output = outputTables};
 }
 
 NProto::TFillTaskParams FillTaskParamsToProto(const TFillTaskParams& fillTaskParams) {
@@ -952,6 +971,9 @@ NProto::TOperationParams OperationParamsToProto(const TOperationParams& operatio
     } else if (const auto* mapReduceOperationParamsPtr = std::get_if<TMapReduceOperationParams>(&operationParams)) {
         NProto::TMapReduceOperationParams protoMapReduceOperationParams = MapReduceOperationParamsToProto(*mapReduceOperationParamsPtr);
         protoOperationParams.MutableMapReduceOperationParams()->Swap(&protoMapReduceOperationParams);
+    } else if (const auto* touchOperationParamsPtr = std::get_if<TTouchOperationParams>(&operationParams)) {
+        NProto::TTouchOperationParams protoTouchOperationParams = TouchOperationParamsToProto(*touchOperationParamsPtr);
+        protoOperationParams.MutableTouchOperationParams()->Swap(&protoTouchOperationParams);
     }
     return protoOperationParams;
 }
@@ -979,6 +1001,8 @@ TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoO
         return FillOperationParamsFromProto(protoOperationParams.GetFillOperationParams());
     } else if (protoOperationParams.HasMapReduceOperationParams()) {
         return MapReduceOperationParamsFromProto(protoOperationParams.GetMapReduceOperationParams());
+    } else if (protoOperationParams.HasTouchOperationParams()) {
+        return TouchOperationParamsFromProto(protoOperationParams.GetTouchOperationParams());
     }
     return TOperationParams();
 }

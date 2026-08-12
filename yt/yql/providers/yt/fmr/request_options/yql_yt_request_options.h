@@ -43,7 +43,8 @@ enum EOperationType {
     Reduce = 8,
     Pull = 9,
     Fill = 10,
-    MapReduce = 11
+    MapReduce = 11,
+    Touch = 12
 };
 
 enum class ETaskType {
@@ -493,6 +494,12 @@ struct TFillTaskParams {
     TString SerializedFillJobState;
 };
 
+// Touch has no job/lambda and produces no tasks — the coordinator registers its
+// (empty) output tables synchronously inside StartOperation.
+struct TTouchOperationParams {
+    std::vector<TFmrTableRef> Output;
+};
+
 struct TSortOperationParams {
     std::vector<TOperationTableRef> Input;
     TFmrTableRef Output;
@@ -538,6 +545,11 @@ struct TReduceTaskParams {
     std::vector<TFmrTableOutputRef> Output;
     TString SerializedReduceJobState;
     TReduceOperationSpec ReduceOperationSpec;
+    // Whether Input's rows are sorted by [_yql_key_hash, ...ReduceOperationSpec.SortBy] (true for
+    // a MapReduce operation's reduce stage, which shuffles via a synthetic hash column) or by
+    // ReduceOperationSpec.SortBy alone (a plain Reduce operation, which reads real YT-sorted
+    // input with no hash column at all).
+    bool SortByHasKeyHashPrefix = false;
 };
 
 // Service column added by map stage to hash-route rows to the correct reducer.
@@ -570,7 +582,7 @@ struct TMapReduceMapTaskParams {
     TReduceOperationSpec ReduceOperationSpec; // tells worker which columns to hash and sort by
 };
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams, TReduceOperationParams, TPullOperationParams, TFillOperationParams, TMapReduceOperationParams>;
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams, TReduceOperationParams, TPullOperationParams, TFillOperationParams, TMapReduceOperationParams, TTouchOperationParams>;
 
 using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams, TReduceTaskParams, TPullTaskParams, TFillTaskParams, TMapReduceMapTaskParams>;
 

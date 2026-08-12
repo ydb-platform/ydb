@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <memory>
+#include <utility>
 
 #include "opentelemetry/version.h"
 

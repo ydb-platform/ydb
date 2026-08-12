@@ -94,8 +94,12 @@ TYtRunTool::TYtRunTool(TString name)
                             counters << TStringBuf(" (") << (100ul * progress.Counters->Completed / progress.Counters->Total) << TStringBuf("%)");
                         }
                     }
+                    TStringBuilder waitingRemoteId;
+                    if (progress.WaitingRemoteId) {
+                        waitingRemoteId << ", waitingRemoteId: " << progress.WaitingRemoteId;
+                    }
                     Cerr << "Operation: [" << progress.Category << "] " << progress.Id
-                        << ", state: " << progress.State << remoteId << counters
+                        << ", state: " << progress.State << remoteId << waitingRemoteId << counters
                         << ", current stage: " << progress.Stage.first << Endl;
                 });
             });

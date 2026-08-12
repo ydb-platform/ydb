@@ -100,7 +100,7 @@ void TCube<T>::Remove(TTagIdList tagIds)
     auto it = Projections_.find(tagIds);
     if (it == Projections_.end()) {
         THROW_ERROR_EXCEPTION("Can't remove tags from cube")
-            << TErrorAttribute("tag_ids", tagIds);
+            .With("tag_ids", tagIds);
     }
 
     it->second.UsageCount--;
@@ -124,7 +124,7 @@ void TCube<T>::Update(TTagIdList tagIds, T value)
     auto it = Projections_.find(tagIds);
     if (it == Projections_.end()) {
         THROW_ERROR_EXCEPTION("Can't update tags in cube")
-            << TErrorAttribute("tag_ids", tagIds);
+            .With("tag_ids", tagIds);
     }
 
     if constexpr (std::is_same_v<T, double>) {
@@ -362,8 +362,8 @@ int TCube<T>::ReadSensors(
                 for (auto index : indices) {
                     if (index < 0 || static_cast<size_t>(index) >= window->Values.size()) {
                         THROW_ERROR_EXCEPTION("Read index is invalid")
-                            << TErrorAttribute("index", index)
-                            << TErrorAttribute("window_size", window->Values.size());
+                            .With("index", index)
+                            .With("window_size", window->Values.size());
                     }
 
                     value += window->Values[index];

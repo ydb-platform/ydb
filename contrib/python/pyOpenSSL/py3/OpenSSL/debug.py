@@ -1,16 +1,12 @@
-from __future__ import print_function
-
 import ssl
 import sys
 
 import cffi
-
 import cryptography
 
 import OpenSSL.SSL
 
 from . import version
-
 
 _env_info = """\
 pyOpenSSL: {pyopenssl}

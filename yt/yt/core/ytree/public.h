@@ -6,7 +6,8 @@
 
 #include <yt/yt/core/rpc/public.h>
 
-#include <yt/yt/core/misc/mpl.h>
+#include <library/cpp/yt/mpl/concepts.h>
+#include <library/cpp/yt/mpl/type_traits.h>
 
 namespace NYT::NYTree {
 
@@ -102,7 +103,7 @@ DECLARE_REFCOUNTED_STRUCT(IYPathService)
 DECLARE_REFCOUNTED_STRUCT(IYPathServiceContext)
 DECLARE_REFCOUNTED_STRUCT(ICachedYPathService)
 DECLARE_REFCOUNTED_STRUCT(IServiceCombiner)
-DECLARE_REFCOUNTED_CLASS(TCompositeMapService)
+DECLARE_REFCOUNTED_STRUCT(ICompositeMapService)
 
 DECLARE_REFCOUNTED_CLASS(TYPathRequest)
 DECLARE_REFCOUNTED_CLASS(TYPathResponse)

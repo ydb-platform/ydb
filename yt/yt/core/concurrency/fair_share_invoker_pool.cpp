@@ -5,7 +5,6 @@
 #include <yt/yt/core/actions/invoker_detail.h>
 
 #include <yt/yt/core/misc/finally.h>
-#include <yt/yt/core/misc/ring_queue.h>
 
 #include <yt/yt/core/profiling/public.h>
 #include <yt/yt/core/profiling/timing.h>
@@ -13,6 +12,8 @@
 #include <yt/yt/library/profiling/sensor.h>
 
 #include <yt/yt/library/ytprof/api/api.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/misc/port.h>
 

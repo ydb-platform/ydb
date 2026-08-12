@@ -34,35 +34,35 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockWayTest) {
 Y_UNIT_TEST(TupleVariant_Ui32Ui64_Mixed) {
     using TVariant = std::variant<ui32, ui64>;
     TVector<TVariant> data = {TVariant{ui32{1}}, TVariant{ui64{2}}, TVariant{ui32{3}}};
-    TVector<ui32> expected = {0u, 1u, 0u};
+    TVector<ui32> expected = {0U, 1U, 0U};
     TestBlockWay(data, expected);
 }
 
 Y_UNIT_TEST(TupleVariant_AllIndex0) {
     using TVariant = std::variant<ui32, ui64>;
     TVector<TVariant> data = {TVariant{ui32{10}}, TVariant{ui32{20}}, TVariant{ui32{30}}};
-    TVector<ui32> expected = {0u, 0u, 0u};
+    TVector<ui32> expected = {0U, 0U, 0U};
     TestBlockWay(data, expected);
 }
 
 Y_UNIT_TEST(TupleVariant_AllIndex1) {
     using TVariant = std::variant<ui32, ui64>;
     TVector<TVariant> data = {TVariant{ui64{10}}, TVariant{ui64{20}}, TVariant{ui64{30}}};
-    TVector<ui32> expected = {1u, 1u, 1u};
+    TVector<ui32> expected = {1U, 1U, 1U};
     TestBlockWay(data, expected);
 }
 
 Y_UNIT_TEST(TupleVariant_StringAlternative) {
     using TVariant = std::variant<ui32, TString>;
     TVector<TVariant> data = {TVariant{ui32{42}}, TVariant{TString{"hello"}}, TVariant{ui32{7}}};
-    TVector<ui32> expected = {0u, 1u, 0u};
+    TVector<ui32> expected = {0U, 1U, 0U};
     TestBlockWay(data, expected);
 }
 
 Y_UNIT_TEST(TupleVariant_InnerOptional) {
     using TVariant = std::variant<TMaybe<ui32>, ui64>;
-    TVector<TVariant> data = {TVariant{TMaybe<ui32>{10u}}, TVariant{ui64{20u}}, TVariant{TMaybe<ui32>{}}};
-    TVector<ui32> expected = {0u, 1u, 0u};
+    TVector<TVariant> data = {TVariant{TMaybe<ui32>{10U}}, TVariant{ui64{20U}}, TVariant{TMaybe<ui32>{}}};
+    TVector<ui32> expected = {0U, 1U, 0U};
     TestBlockWay(data, expected);
 }
 
@@ -121,6 +121,26 @@ Y_UNIT_TEST(StructVariant_Optional_MixedNull) {
     TestBlockWay(items, expected);
 }
 
+Y_UNIT_TEST(StructVariant_Optional_NoNull) {
+    using TFirstMember = NTest::TStructMember<"x", ui32>;
+    using TSecondMember = NTest::TStructMember<"y", ui64>;
+    using TVariant = NTest::TStructVariant<TFirstMember, TSecondMember>;
+
+    auto elem1 = TMaybe<TVariant>(TFirstMember{1});
+    auto elem2 = TMaybe<TVariant>(TSecondMember{2});
+    auto elem3 = TMaybe<TVariant>(TFirstMember{3});
+
+    TVector<TMaybe<TVariant>> items = {elem1, elem2, elem3};
+
+    TVector<TMaybe<TUtf8>> expected = {
+        TMaybe<TUtf8>{"x"},
+        TMaybe<TUtf8>{"y"},
+        TMaybe<TUtf8>{"x"},
+    };
+
+    TestBlockWay(items, expected);
+}
+
 Y_UNIT_TEST(StructVariant_LongNames_ChunkedOutput) {
     constexpr size_t ItemsPerIteration = 10000;
     constexpr size_t NameLength = 100;
@@ -136,7 +156,7 @@ Y_UNIT_TEST(StructVariant_LongNames_ChunkedOutput) {
 
     helper.WithScopedFuzzers([&] {
         size_t randomSize = rng->GenRand() % ItemsPerIteration;
-        const TVector<TVariant> data = GenerateRandomData<TVariant>(rng, randomSize);
+        const TVector<TVariant> data = NYql::GenerateRandomData<TVariant>(rng, randomSize);
 
         TVector<TUtf8> expected;
         expected.reserve(data.size());
@@ -169,7 +189,7 @@ Y_UNIT_TEST(StructVariant_LongNames_ChunkedOutput_Optional) {
 
     helper.WithScopedFuzzers([&] {
         size_t randomSize = rng->GenRand() % ItemsPerIteration;
-        const TVector<TVariant> data = GenerateRandomData<TVariant>(rng, randomSize);
+        const TVector<TVariant> data = NYql::GenerateRandomData<TVariant>(rng, randomSize);
 
         TVector<TMaybe<TUtf8>> expected;
         expected.reserve(data.size());
@@ -207,7 +227,7 @@ Y_UNIT_TEST(StructVariant_Scalar) {
     using TVariant = NTest::TStructVariant<TMemberAlpha, TMemberBeta>;
 
     TBlockHelper().RunNodeOverWideStream(
-        TUtf8("beta_member_longer_than_sixteen_bytes"),
+        TUtf8(TString("beta_member_longer_than_sixteen_bytes")),
         [](TSetup<false>& setup, TRuntimeNode variantBlock) {
             return setup.PgmBuilder->BlockWay(variantBlock);
         },

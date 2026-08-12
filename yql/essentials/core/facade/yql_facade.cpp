@@ -12,11 +12,11 @@
 #include <yql/essentials/core/services/yql_eval_params.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/utils/log/profile.h>
@@ -156,6 +156,37 @@ TGatewaySQLFlags SQLFlagsFromYson(const NYT::TNode& node) {
     return flags;
 }
 
+void WriteEvaluationStatistics(NYson::TYsonWriter& writer, const TEvaluationStats& stats) {
+    writer.OnKeyedItem("Evaluation");
+    writer.OnBeginMap();
+
+    writer.OnKeyedItem("Count");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.Count);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CacheHits");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.CacheHits);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CalcProviderCalls");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.CalcProviderCalls);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CalcProviderDurationUs");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("sum");
+    writer.OnInt64Scalar(stats.CalcProviderDurationSum.MicroSeconds());
+    writer.OnEndMap();
+
+    writer.OnEndMap();
+}
+
 } // namespace
 
 TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context) {
@@ -212,6 +243,10 @@ void TProgramFactory::UnrepeatableRandom() {
 
 void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
+}
+
+void TProgramFactory::EnableAutoUseYqlLibs() {
+    AutoUseYqlLibs_ = true;
 }
 
 void TProgramFactory::SetIssueReportTarget(const TString& reportTarget) {
@@ -317,7 +352,7 @@ TProgramPtr TProgramFactory::Create(
     return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
-                        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
+                        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
                         qContext, RemoteLayersProviders_);
 }
 
@@ -349,6 +384,7 @@ TProgram::TProgram(
     TString sessionId,
     const TString& runner,
     bool enableRangeComputeFor,
+    bool autoUseYqlLibs,
     IArrowResolver::TPtr arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
@@ -438,6 +474,12 @@ TProgram::TProgram(
                     YQL_ENSURE(SavedUserDataTable_.emplace(TUserDataKey::File(alias.AsString()), block).second);
                 }
             }
+        }
+    }
+
+    for (auto& [key, block] : SavedUserDataTable_) {
+        if (autoUseYqlLibs && key.Alias().StartsWith(NYql::GetDefaultFilePrefix() + "yql_libs/")) {
+            block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true); // See YQL-21401
         }
     }
 
@@ -879,8 +921,14 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+        /*isAmbiguityError=*/false,
+        /*isAmbiguityDebugging=*/false,
+        currentSettings.MaxParseTreeDepth);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+        /*isAmbiguityError=*/false,
+        /*isAmbiguityDebugging=*/false,
+        currentSettings.MaxParseTreeDepth);
 
     NSQLTranslation::TTranslators translators(
         nullptr,
@@ -1833,6 +1881,10 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     }
 
     writer.OnEndMap(); // system
+
+    if (TypeCtx_->EvaluationStats.Count > 0) {
+        WriteEvaluationStatistics(writer, TypeCtx_->EvaluationStats);
+    }
 
     if (TypeCtx_->Modules) {
         writer.OnKeyedItem("moduleResolver");

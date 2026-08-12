@@ -2026,7 +2026,7 @@ NYT::TNode TStreamingConstraintNode::ToYson() const {
 }
 
 bool TStreamingConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) const {
-    return IsIn({ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind());
+    return IsIn({ETypeAnnotationKind::Tuple, ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind());
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -3,20 +3,45 @@
 #include "yql_yt_sorted_partitioner_base.h"
 
 #include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NYql::NFmr {
+
+namespace {
+
+// Binary YSON key rows may contain arbitrary non-UTF8 bytes; text YSON escapes them, keeping error messages valid UTF-8.
+TString FormatKeyRow(const TString& binaryYsonRow) {
+    return NYT::NodeToYsonString(NYT::NodeFromYsonString(binaryYsonRow));
+}
+
+} // namespace
 
 TReducePartitioner::TReducePartitioner(
     const std::unordered_map<TFmrTableId, std::vector<TString>>& partIdsForTables,
     const std::unordered_map<TString, std::vector<TChunkStats>>& partIdStats,
-    const TSortingColumns& reduceBy,
+    const TSortingColumns& sortColumns,
+    const TSortingColumns& groupColumns,
     const TReducePartitionSettings& settings
 )
-    : TSortedPartitionerBase(partIdsForTables, partIdStats, reduceBy, settings.FmrPartitionSettings)
-    , ReduceBy_(reduceBy)
+    : TSortedPartitionerBase(partIdsForTables, partIdStats, sortColumns, settings.FmrPartitionSettings)
+    , SortColumns_(sortColumns)
+    , GroupColumns_(groupColumns)
+    , NumGroupColumns_(groupColumns.Columns.size())
+    , GroupIsFullKey_(groupColumns.Columns.size() == sortColumns.Columns.size())
     , Settings_(settings)
 {
     YQL_ENSURE(Settings_.MaxKeySizePerPart <= Settings_.FmrPartitionSettings.MaxDataWeightPerPart);
+    YQL_ENSURE(GroupColumns_.Columns.size() <= SortColumns_.Columns.size(),
+        "reduce group columns must be a prefix of sort columns");
+}
+
+bool TReducePartitioner::InSameReduceGroup(const TFmrTableKeysBoundary& lhs, const TFmrTableKeysBoundary& rhs) const {
+    // Fast path when there is no SortBy tail: the group key is the whole sort key, so an exact
+    // compare is both correct and cheapest. Otherwise compare only the group prefix, reusing the
+    // already-parsed markups (no YSON round-trip).
+    return GroupIsFullKey_
+        ? lhs == rhs
+        : CompareKeyRowPrefix(lhs, rhs, NumGroupColumns_) == 0;
 }
 
 TFmrTableKeysRange TReducePartitioner::GetReadRangeFromSlices(const std::vector<TSlice>& slices, bool isLastRange) {
@@ -37,7 +62,11 @@ TFmrTableKeysRange TReducePartitioner::GetReadRangeFromSlices(const std::vector<
     bool taskRangeRightBorderInclusive = maxSliceReadRange.IsLastBoundInclusive;
     LeftBoundary_ = Nothing();
     if (maxSliceReadRange.IsLastBoundInclusive) {
-        // don't take last key if inclusive, because we need to guarantee that all reduce keys are in the same job.
+        // Carry the full last key to the next job and make this job's right border exclusive. The
+        // reduce reader constrains task boundaries on the reduce-group prefix only (see
+        // numBoundaryKeyColumns), so a full key here still keeps the whole reduce group together in
+        // the next job - we only additionally have to carry that group's chunks (see the
+        // group-aware collection below), which the previous exact-key match failed to do.
         LeftBoundary_ = *maxSliceReadRange.LastKeysBound;
         if (!isLastRange) {
             taskRangeRightBorderInclusive = false;
@@ -47,12 +76,15 @@ TFmrTableKeysRange TReducePartitioner::GetReadRangeFromSlices(const std::vector<
     YQL_ENSURE(taskRangeLeftBorderInclusive, " task range left border should always be true for reduce paritioner");
 
     if (taskRangeLeftBorder == taskRangeRightBorder && !taskRangeRightBorderInclusive) {
-        ythrow yexception() << "Key " << taskRangeLeftBorder.Row << " takes all slice and is too large, cannot partition";
+        ythrow yexception() << "Key " << FormatKeyRow(taskRangeLeftBorder.Row) << " takes all slice and is too large, cannot partition";
     }
 
     taskRange.SetFirstKeysBound(taskRangeLeftBorder, taskRangeLeftBorderInclusive);
     taskRange.SetLastKeysBound(taskRangeRightBorder, taskRangeRightBorderInclusive);
 
+    // Carry every chunk that reaches into the boundary reduce group (compared on the group prefix,
+    // not the full sort key) so the next job - which now owns the whole group - gets all of its
+    // chunks, including build-side chunks whose last row is an early sortBy tiebreaker value.
     std::unordered_map<TString, std::vector<TChunkUnit>> chunksByTable;
     std::unordered_map<TString, std::unordered_set<TString>> seenChunksByTable;
 
@@ -61,7 +93,7 @@ TFmrTableKeysRange TReducePartitioner::GetReadRangeFromSlices(const std::vector<
             auto& out = chunksByTable[tableId];
             auto& seen = seenChunksByTable[tableId];
             for (const auto& chunk : sliceChunks) {
-                if (chunk.KeyRange.LastKeysBound != taskRangeRightBorder || !chunk.KeyRange.IsLastBoundInclusive) {
+                if (!chunk.KeyRange.IsLastBoundInclusive || !InSameReduceGroup(*chunk.KeyRange.LastKeysBound, taskRangeRightBorder)) {
                     continue;
                 }
 
@@ -93,7 +125,7 @@ void TReducePartitioner::CheckMaxKeySizePerSlices(const std::vector<TSlice>& sli
 
         if (*curLeftBorder != curRightBorder) {
             if (currentFilledSlicesWeight > maxKeySizePerPart) {
-                ythrow yexception() << "Key " << curLeftBorder->Row << " weighs at least " << currentFilledSlicesWeight << " bytes which is larget than maxKeySizePerPart - " << maxKeySizePerPart << " - cannot partition";
+                ythrow yexception() << "Key " << FormatKeyRow(curLeftBorder->Row) << " weighs at least " << currentFilledSlicesWeight << " bytes which is larget than maxKeySizePerPart - " << maxKeySizePerPart << " - cannot partition";
             }
             curLeftBorder = Nothing();
             currentFilledSlicesWeight = 0;
@@ -102,7 +134,7 @@ void TReducePartitioner::CheckMaxKeySizePerSlices(const std::vector<TSlice>& sli
         }
     }
     if (currentFilledSlicesWeight > maxKeySizePerPart) {
-        ythrow yexception() << "Key " << curLeftBorder->Row << " weighs at least " << currentFilledSlicesWeight << " bytes which is larget than maxKeySizePerPart - " << maxKeySizePerPart;
+        ythrow yexception() << "Key " << FormatKeyRow(curLeftBorder->Row) << " weighs at least " << currentFilledSlicesWeight << " bytes which is larget than maxKeySizePerPart - " << maxKeySizePerPart;
     }
     CurrentLastKeyWeight_ = currentFilledSlicesWeight;
 }

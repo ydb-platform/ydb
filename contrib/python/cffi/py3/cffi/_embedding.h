@@ -177,9 +177,6 @@ static int _cffi_initialize_python(void)
     if (PyDict_SetItemString(global_dict, "__builtins__", builtins) < 0)
         goto error;
     x = PyEval_EvalCode(
-#if PY_MAJOR_VERSION < 3
-                        (PyCodeObject *)
-#endif
                         pycode, global_dict, global_dict);
     if (x == NULL)
         goto error;
@@ -225,7 +222,7 @@ static int _cffi_initialize_python(void)
 
         if (f != NULL && f != Py_None) {
             PyFile_WriteString("\nFrom: " _CFFI_MODULE_NAME
-                               "\ncompiled with cffi version: 2.0.0"
+                               "\ncompiled with cffi version: 2.1.0"
                                "\n_cffi_backend module: ", f);
             modules = PyImport_GetModuleDict();
             mod = PyDict_GetItemString(modules, "_cffi_backend");
@@ -246,10 +243,6 @@ static int _cffi_initialize_python(void)
     result = -1;
     goto done;
 }
-
-#if PY_VERSION_HEX < 0x03080000
-PyAPI_DATA(char *) _PyParser_TokenNames[];  /* from CPython */
-#endif
 
 static int _cffi_carefully_make_gil(void)
 {
@@ -295,27 +288,6 @@ static int _cffi_carefully_make_gil(void)
     */
 
 #ifdef WITH_THREAD
-# if PY_VERSION_HEX < 0x03080000
-    char *volatile *lock = (char *volatile *)_PyParser_TokenNames;
-    char *old_value, *locked_value;
-
-    while (1) {    /* spin loop */
-        old_value = *lock;
-        locked_value = old_value + 1;
-        if (old_value[0] == 'E') {
-            assert(old_value[1] == 'N');
-            if (cffi_compare_and_swap(lock, old_value, locked_value))
-                break;
-        }
-        else {
-            assert(old_value[0] == 'N');
-            /* should ideally do a spin loop instruction here, but
-               hard to do it portably and doesn't really matter I
-               think: PyEval_InitThreads() should be very fast, and
-               this is only run at start-up anyway. */
-        }
-    }
-# else
 #  if PY_VERSION_HEX < 0x030C0000
     int volatile *lock = (int volatile *)&PyCapsule_Type.tp_version_tag;
     int old_value, locked_value = -42;
@@ -348,26 +320,16 @@ static int _cffi_carefully_make_gil(void)
                this is only run at start-up anyway. */
         }
     }
-# endif
 #endif
 
     /* call Py_InitializeEx() */
     if (!Py_IsInitialized()) {
         _cffi_py_initialize();
-#if PY_VERSION_HEX < 0x03070000
-        PyEval_InitThreads();
-#endif
         PyEval_SaveThread();  /* release the GIL */
         /* the returned tstate must be the one that has been stored into the
            autoTLSkey by _PyGILState_Init() called from Py_Initialize(). */
     }
     else {
-#if PY_VERSION_HEX < 0x03070000
-        /* PyEval_InitThreads() is always a no-op from CPython 3.7 */
-        PyGILState_STATE state = PyGILState_Ensure();
-        PyEval_InitThreads();
-        PyGILState_Release(state);
-#endif
     }
 
 #ifdef WITH_THREAD

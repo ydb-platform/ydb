@@ -29,7 +29,6 @@ static PyObject *build_primitive_type(int num);   /* forward */
 static int init_global_types_dict(PyObject *ffi_type_dict)
 {
     int err;
-    Py_ssize_t i;
     PyObject *ct_void, *ct_char, *ct2, *pnull;
     /* XXX some leaks in case these functions fail, but well,
        MemoryErrors during importing an extension module are kind
@@ -78,7 +77,7 @@ static int init_global_types_dict(PyObject *ffi_type_dict)
 #ifdef Py_GIL_DISABLED
     // Ensure that all primitive types are initialised to avoid race conditions
     // on the first access.
-    for (i = 0; i < _CFFI__NUM_PRIM; i++) {
+    for (Py_ssize_t i = 0; i < _CFFI__NUM_PRIM; i++) {
         ct2 = get_primitive_type(i);
         if (ct2 == NULL)
             return -1;
@@ -247,13 +246,13 @@ static PyObject *realize_global_int(builder_c_t *builder, int gindex)
 
     case 0:
         if (value <= (unsigned long long)LONG_MAX)
-            return PyInt_FromLong((long)value);
+            return PyLong_FromLong((long)value);
         else
             return PyLong_FromUnsignedLongLong(value);
 
     case 1:
         if ((long long)value >= (long long)LONG_MIN)
-            return PyInt_FromLong((long)value);
+            return PyLong_FromLong((long)value);
         else
             return PyLong_FromLongLong((long long)value);
 
@@ -551,7 +550,7 @@ realize_c_type_or_func_now(builder_c_t *builder, _cffi_opcode_t op,
                 j = 0;
                 while (p[j] != ',' && p[j] != '\0')
                     j++;
-                tmp = PyText_FromStringAndSize(p, j);
+                tmp = PyUnicode_FromStringAndSize(p, j);
                 if (tmp == NULL)
                     break;
                 PyTuple_SET_ITEM(enumerators, i, tmp);

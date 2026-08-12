@@ -1,10 +1,10 @@
 Metadata-Version: 2.4
 Name: responses
-Version: 0.26.1
+Version: 0.26.2
 Summary: A utility library for mocking out the `requests` Python library.
 Home-page: https://github.com/getsentry/responses
 Author: David Cramer
-License: Apache 2.0
+License: Apache-2.0
 Project-URL: Bug Tracker, https://github.com/getsentry/responses/issues
 Project-URL: Changes, https://github.com/getsentry/responses/blob/master/CHANGES
 Project-URL: Documentation, https://github.com/getsentry/responses/blob/master/README.rst
@@ -1455,7 +1455,7 @@ will produce next output:
         status: 202
         url: https://httpstat.us/202
 
-If you are in the REPL, you can also activete the recorder for all following responses:
+If you are in the REPL, you can also activate the recorder for all following responses:
 
 .. code-block:: python
 
@@ -1554,7 +1554,7 @@ testing. You can run all tests by:
 
 .. code-block:: shell
 
-    tox -e py37
+    tox -e py38
     tox -e py310
 
 OR manually activate required version of Python and run

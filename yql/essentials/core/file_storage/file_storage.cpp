@@ -42,6 +42,55 @@
 
 namespace NYql {
 
+namespace NFileStorageUtil {
+
+class TPvPathFinder {
+public:
+    TPvPathFinder() {
+        YQL_LOG(DEBUG) << "Searching for pv utility";
+        // Try standard PATH first
+        TShellCommand cmd("which", {"pv"});
+        cmd.Run().Wait();
+        if (*cmd.GetExitCode() == 0) {
+            Path_ = "pv";
+            YQL_LOG(DEBUG) << "Found pv in PATH";
+            return;
+        }
+        // Try to find pv in current directory tree (from DATA(sbr://...))
+        TShellCommand findCmd("find", {".", "-maxdepth", "5", "-name", "pv", "-type", "f", "-executable"});
+        findCmd.Run().Wait();
+        if (*findCmd.GetExitCode() == 0) {
+            TString output = findCmd.GetOutput();
+            if (!output.empty()) {
+                // Take first line (path to pv)
+                size_t newlinePos = output.find('\n');
+                if (newlinePos != TString::npos) {
+                    output = output.substr(0, newlinePos);
+                }
+                if (!output.empty()) {
+                    Path_ = output;
+                    YQL_LOG(DEBUG) << "Found pv at: " << Path_;
+                    return;
+                }
+            }
+        }
+        ythrow yexception() << "pv utility not found in PATH or current directory tree";
+    }
+
+    const TString& Get() const {
+        return Path_;
+    }
+
+private:
+    TString Path_;
+};
+
+TString GetPvPath() {
+    return Default<TPvPathFinder>().Get();
+}
+
+} // namespace NFileStorageUtil
+
 namespace {
 
 constexpr const char* ComponentName = "file_storage";
@@ -115,10 +164,19 @@ public:
 
         strippedMeta = TUrlMeta();
         const TString storageFileName = md5 + ".file.stripped";
-        TFileLinkPtr result = Storage_.Put(storageFileName, "", "", [&file](const TFsPath& dstPath) {
+        const TString bandwidthLimit = Config_.GetStripBandwidthLimit();
+        TFileLinkPtr result = Storage_.Put(storageFileName, "", "", [file, bandwidthLimit, this](const TFsPath& dstPath) {
             ui64 size;
             TString md5;
-            TShellCommand cmd("strip", {file, "-o", dstPath.GetPath()});
+            const TString tmpFileSuffix = TStringBuilder() << getpid() << "." << (uint64_t)this;
+
+            TShellCommand cmd = bandwidthLimit.empty()
+                                    ? TShellCommand("strip", {file, "-o", dstPath.GetPath()})
+                                    : TShellCommand("sh", {"-c",
+                                                           TStringBuilder() << "strip " << '"' << file << '"'
+                                                                            << " -o /dev/shm/strip_tmp." << tmpFileSuffix << " && " << NFileStorageUtil::GetPvPath() << " -L " << '"' << bandwidthLimit << '"'
+                                                                            << " < /dev/shm/strip_tmp." << tmpFileSuffix << " > " << '"' << dstPath.GetPath() << '"'
+                                                                            << "; rm -f /dev/shm/strip_tmp." << tmpFileSuffix});
             cmd.Run().Wait();
             if (*cmd.GetExitCode() != 0) {
                 ythrow yexception() << "'strip' exited with code " << *cmd.GetExitCode() << ". Stderr: " << cmd.GetError();

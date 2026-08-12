@@ -10,8 +10,7 @@
 #include <ctime>
 #include <algorithm>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 Y_UNIT_TEST_LLVM(TestFoldOverList) {
@@ -73,8 +72,8 @@ Y_UNIT_TEST_LLVM(TestFoldWithAggrAdd) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto data0 = NTest::ConvertValueToLiteralNode(pb, TMaybe<float>{42.f});
-    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TMaybe<float>>{TMaybe<float>{}, 3.f, 2.f, 1.f});
+    auto data0 = NTest::ConvertValueToLiteralNode(pb, TMaybe<float>{42.F});
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TMaybe<float>>{TMaybe<float>{}, 3.F, 2.F, 1.F});
 
     auto pgmReturn = pb.Fold(list, data0,
                              [&](TRuntimeNode item, TRuntimeNode state) {
@@ -415,7 +414,7 @@ Y_UNIT_TEST_LLVM(TestSumListSizes) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto item = NTest::ConvertValueToLiteralNode(pb, float(0.f));
+    auto item = NTest::ConvertValueToLiteralNode(pb, float(0.F));
 
     auto data0 = pb.NewEmptyList(NTest::ConvertToMinikqlType<float>(pb));
     auto data1 = pb.NewList(NTest::ConvertToMinikqlType<float>(pb), {item});
@@ -436,7 +435,7 @@ Y_UNIT_TEST_LLVM(TestHasListsItems) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto item = NTest::ConvertValueToLiteralNode(pb, float(0.f));
+    auto item = NTest::ConvertValueToLiteralNode(pb, float(0.F));
 
     auto data0 = pb.NewEmptyList(NTest::ConvertToMinikqlType<float>(pb));
     auto data1 = pb.NewList(NTest::ConvertToMinikqlType<float>(pb), {item});
@@ -603,14 +602,14 @@ Y_UNIT_TEST_LLVM(TestSumDoubleArrayListPerf) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Fold1(pb.Collect(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Fold1(pb.Collect(TRuntimeNode(list, /*isImmediate=*/false)),
                                     [&](TRuntimeNode item) { return item; },
                                     [&](TRuntimeNode item, TRuntimeNode state) { return pb.AggrAdd(state, item); });
 
     const auto t1 = TInstant::Now();
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
     std::transform(Samples.cbegin(), Samples.cend(), items, &ToValue<double>);
     const auto t2 = TInstant::Now();
     const auto& value = graph->GetValue();
@@ -631,14 +630,14 @@ Y_UNIT_TEST_LLVM(TestSumDoubleLazyListPerf) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Fold1(pb.LazyList(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Fold1(pb.LazyList(TRuntimeNode(list, /*isImmediate=*/false)),
                                     [&](TRuntimeNode item) { return item; },
                                     [&](TRuntimeNode item, TRuntimeNode state) { return pb.AggrAdd(state, item); });
 
     const auto t1 = TInstant::Now();
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
     std::transform(Samples.cbegin(), Samples.cend(), items, &ToValue<double>);
     const auto t2 = TInstant::Now();
     const auto& value = graph->GetValue();
@@ -660,7 +659,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleFilteredArrayListPerf) {
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
     const auto pgmReturn = pb.Fold1(
-        pb.Filter(pb.Collect(TRuntimeNode(list, false)),
+        pb.Filter(pb.Collect(TRuntimeNode(list, /*isImmediate=*/false)),
                   [&](TRuntimeNode item) { return pb.AggrGreater(item, NTest::ConvertValueToLiteralNode(pb, double(0.0))); }),
         [&](TRuntimeNode item) { return item; },
         [&](TRuntimeNode item, TRuntimeNode state) { return pb.AggrAdd(state, item); });
@@ -668,7 +667,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleFilteredArrayListPerf) {
     const auto t1 = TInstant::Now();
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
     std::transform(Samples.cbegin(), Samples.cend(), items, &ToValue<double>);
     const auto t2 = TInstant::Now();
     const auto& value = graph->GetValue();
@@ -690,7 +689,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleFilteredLazyListPerf) {
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
     const auto pgmReturn = pb.Fold1(
-        pb.Filter(pb.LazyList(TRuntimeNode(list, false)),
+        pb.Filter(pb.LazyList(TRuntimeNode(list, /*isImmediate=*/false)),
                   [&](TRuntimeNode item) { return pb.AggrGreater(item, NTest::ConvertValueToLiteralNode(pb, double(0.0))); }),
         [&](TRuntimeNode item) { return item; },
         [&](TRuntimeNode item, TRuntimeNode state) { return pb.AggrAdd(state, item); });
@@ -698,7 +697,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleFilteredLazyListPerf) {
     const auto t1 = TInstant::Now();
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
     std::transform(Samples.cbegin(), Samples.cend(), items, &ToValue<double>);
     const auto t2 = TInstant::Now();
     const auto& value = graph->GetValue();
@@ -710,7 +709,9 @@ Y_UNIT_TEST_LLVM(TestSumDoubleFilteredLazyListPerf) {
 Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleArrayListPerf) {
     TSetup<LLVM> setup;
 
-    double min(Samples.front()), max(Samples.front()), sum(0.0);
+    double min(Samples.front());
+    double max(Samples.front());
+    double sum(0.0);
 
     const auto t = TInstant::Now();
     for (const auto v : Samples) {
@@ -725,14 +726,14 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleArrayListPerf) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Fold1(pb.Collect(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Fold1(pb.Collect(TRuntimeNode(list, /*isImmediate=*/false)),
                                     [&](TRuntimeNode item) { return pb.NewTuple({item, item, item}); },
                                     [&](TRuntimeNode item, TRuntimeNode state) { return pb.NewTuple({pb.AggrMin(pb.Nth(state, 0U), item), pb.AggrMax(pb.Nth(state, 1U), item), pb.AggrAdd(pb.Nth(state, 2U), item)}); });
 
     const auto t1 = TInstant::Now();
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
     std::transform(Samples.cbegin(), Samples.cend(), items, &ToValue<double>);
     const auto t2 = TInstant::Now();
     const auto& value = graph->GetValue();
@@ -744,7 +745,9 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleArrayListPerf) {
 Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleLazyListPerf) {
     TSetup<LLVM> setup;
 
-    double min(Samples.front()), max(Samples.front()), sum(0.0);
+    double min(Samples.front());
+    double max(Samples.front());
+    double sum(0.0);
 
     const auto t = TInstant::Now();
     for (const auto v : Samples) {
@@ -759,14 +762,14 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleLazyListPerf) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Fold1(pb.LazyList(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Fold1(pb.LazyList(TRuntimeNode(list, /*isImmediate=*/false)),
                                     [&](TRuntimeNode item) { return pb.NewTuple({item, item, item}); },
                                     [&](TRuntimeNode item, TRuntimeNode state) { return pb.NewTuple({pb.AggrMin(pb.Nth(state, 0U), item), pb.AggrMax(pb.Nth(state, 1U), item), pb.AggrAdd(pb.Nth(state, 2U), item)}); });
 
     const auto t1 = TInstant::Now();
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
     std::transform(Samples.cbegin(), Samples.cend(), items, &ToValue<double>);
     const auto t2 = TInstant::Now();
     const auto& value = graph->GetValue();
@@ -778,7 +781,9 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleLazyListPerf) {
 Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleFilteredArrayListPerf) {
     TSetup<LLVM> setup;
 
-    double min(std::nan("")), max(std::nan("")), sum(0.0);
+    double min(std::nan(""));
+    double max(std::nan(""));
+    double sum(0.0);
 
     const auto t = TInstant::Now();
     for (const auto v : Samples) {
@@ -796,7 +801,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleFilteredArrayListPerf) {
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
     const auto pgmReturn = pb.Fold1(
-        pb.Filter(pb.Collect(TRuntimeNode(list, false)),
+        pb.Filter(pb.Collect(TRuntimeNode(list, /*isImmediate=*/false)),
                   [&](TRuntimeNode item) { return pb.AggrLess(item, NTest::ConvertValueToLiteralNode(pb, double(0.0))); }),
         [&](TRuntimeNode item) { return pb.NewTuple({item, item, item}); },
         [&](TRuntimeNode item, TRuntimeNode state) {
@@ -806,7 +811,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleFilteredArrayListPerf) {
     const auto t1 = TInstant::Now();
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
     std::transform(Samples.cbegin(), Samples.cend(), items, &ToValue<double>);
     const auto t2 = TInstant::Now();
     const auto& value = graph->GetValue();
@@ -818,7 +823,9 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleFilteredArrayListPerf) {
 Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleFilteredLazyListPerf) {
     TSetup<LLVM> setup;
 
-    double min(std::nan("")), max(std::nan("")), sum(0.0);
+    double min(std::nan(""));
+    double max(std::nan(""));
+    double sum(0.0);
 
     const auto t = TInstant::Now();
     for (const auto v : Samples) {
@@ -836,7 +843,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleFilteredLazyListPerf) {
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
     const auto pgmReturn = pb.Fold1(
-        pb.Filter(pb.LazyList(TRuntimeNode(list, false)),
+        pb.Filter(pb.LazyList(TRuntimeNode(list, /*isImmediate=*/false)),
                   [&](TRuntimeNode item) { return pb.AggrLess(item, NTest::ConvertValueToLiteralNode(pb, double(0.0))); }),
         [&](TRuntimeNode item) { return pb.NewTuple({item, item, item}); },
         [&](TRuntimeNode item, TRuntimeNode state) {
@@ -846,7 +853,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleFilteredLazyListPerf) {
     const auto t1 = TInstant::Now();
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
     std::transform(Samples.cbegin(), Samples.cend(), items, &ToValue<double>);
     const auto t2 = TInstant::Now();
     const auto& value = graph->GetValue();
@@ -867,7 +874,7 @@ Y_UNIT_TEST_LLVM(TestAvgDoubleByTupleFoldArrayListPerf) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto fold = pb.Fold(pb.Collect(TRuntimeNode(list, false)),
+    const auto fold = pb.Fold(pb.Collect(TRuntimeNode(list, /*isImmediate=*/false)),
                               NTest::ConvertValueToLiteralNode(pb, std::tuple<double, ui64>{double(0.0), ui64(0ULL)}),
                               [&](TRuntimeNode item, TRuntimeNode state) {
                                   return pb.NewTuple({pb.AggrAdd(pb.Nth(state, 0), item), pb.Increment(pb.Nth(state, 1))});
@@ -878,7 +885,7 @@ Y_UNIT_TEST_LLVM(TestAvgDoubleByTupleFoldArrayListPerf) {
     const auto t1 = TInstant::Now();
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
     std::transform(Samples.cbegin(), Samples.cend(), items, &ToValue<double>);
     const auto t2 = TInstant::Now();
     const auto& value = graph->GetValue();
@@ -899,7 +906,7 @@ Y_UNIT_TEST_LLVM(TestAvgDoubleByTupleFoldLazyListPerf) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto fold = pb.Fold(pb.LazyList(TRuntimeNode(list, false)),
+    const auto fold = pb.Fold(pb.LazyList(TRuntimeNode(list, /*isImmediate=*/false)),
                               NTest::ConvertValueToLiteralNode(pb, std::tuple<double, ui64>{double(0.0), ui64(0ULL)}),
                               [&](TRuntimeNode item, TRuntimeNode state) {
                                   return pb.NewTuple({pb.AggrAdd(pb.Nth(state, 0U), item), pb.Increment(pb.Nth(state, 1U))});
@@ -910,7 +917,7 @@ Y_UNIT_TEST_LLVM(TestAvgDoubleByTupleFoldLazyListPerf) {
     const auto t1 = TInstant::Now();
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
     std::transform(Samples.cbegin(), Samples.cend(), items, &ToValue<double>);
     const auto t2 = TInstant::Now();
     const auto& value = graph->GetValue();
@@ -931,7 +938,7 @@ Y_UNIT_TEST_LLVM(TestAvgDoubleByCollectFoldLazyListPerf) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto src = pb.Collect(pb.LazyList(TRuntimeNode(list, false)));
+    const auto src = pb.Collect(pb.LazyList(TRuntimeNode(list, /*isImmediate=*/false)));
     const auto pgmReturn = pb.Div(
         pb.Fold(src, NTest::ConvertValueToLiteralNode(pb, double(0.0)),
                 [&](TRuntimeNode item, TRuntimeNode state) { return pb.AggrAdd(state, item); }),
@@ -940,7 +947,7 @@ Y_UNIT_TEST_LLVM(TestAvgDoubleByCollectFoldLazyListPerf) {
     const auto t1 = TInstant::Now();
     const auto graph = setup.BuildGraph(pgmReturn, {list});
     NUdf::TUnboxedValue* items = nullptr;
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(Samples.size(), items));
     std::transform(Samples.cbegin(), Samples.cend(), items, &ToValue<double>);
     const auto t2 = TInstant::Now();
     const auto& value = graph->GetValue();
@@ -950,5 +957,4 @@ Y_UNIT_TEST_LLVM(TestAvgDoubleByCollectFoldLazyListPerf) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

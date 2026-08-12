@@ -3,24 +3,29 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/udf_value_test_support/struct_variant_type.h>
+#include <yql/essentials/minikql/udf_value_test_support/decimal_literal.h>
+#include <yql/essentials/minikql/udf_value_test_support/pg_int.h>
+#include <yql/essentials/minikql/udf_value_test_support/singular_null.h>
+#include <yql/essentials/minikql/udf_value_test_support/singular_void.h>
+#include <yql/essentials/minikql/udf_value_test_support/tagged.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/utf8.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
-
-#include <util/generic/guid.h>
-#include <util/system/unaligned_mem.h>
-
-#include <array>
-#include <tuple>
-#include <type_traits>
-#include <utility>
-#include <variant>
 
 namespace NKikimr::NMiniKQL::NTest {
 
+using NYql::NUdf::NTest::TDecimalLiteral;
+using NYql::NUdf::NTest::TPgInt;
+using NYql::NUdf::NTest::TSingularNull;
+using NYql::NUdf::NTest::TSingularVoid;
 using NYql::NUdf::NTest::TStructMember;
 using NYql::NUdf::NTest::TStructMemberName;
 using NYql::NUdf::NTest::TStructType;
 using NYql::NUdf::NTest::TStructVariant;
+using NYql::NUdf::NTest::TTag;
+using NYql::NUdf::NTest::TTagged;
+using NYql::NUdf::NTest::TTestDyNumber;
+using NYql::NUdf::NTest::TUtf8;
 
 namespace NPrivate {
 
@@ -85,93 +90,6 @@ TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TVector<T>& no
 template <typename... TMembers>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TStructVariant<TMembers...>& value);
 
-class TSingularVoid {
-public:
-    TSingularVoid() = default;
-};
-
-class TSingularNull {
-public:
-    TSingularNull() = default;
-};
-
-struct TTestDyNumber {
-    TString Value;
-
-    TTestDyNumber()
-        : Value("0")
-    {
-    }
-
-    explicit TTestDyNumber(TStringBuf value)
-        : Value(TString{value})
-    {
-    }
-
-    explicit TTestDyNumber(const char* value)
-        : Value(value)
-    {
-    }
-};
-
-enum class TTag {
-    A,
-    B,
-    C
-};
-
-template <typename T, TTag tag>
-class TTagged {
-public:
-    TTagged()
-        : Value_()
-    {};
-
-    explicit TTagged(T value)
-        : Value_(std::move(value))
-    {
-    }
-
-    const T& Value() const {
-        return Value_;
-    }
-
-    TStringBuf Tag() const {
-        switch (tag) {
-            case TTag::A:
-                return "A";
-            case TTag::B:
-                return "B";
-            case TTag::C:
-                return "C";
-        };
-    }
-
-private:
-    T Value_;
-};
-
-class TPgInt {
-public:
-    TPgInt() = default;
-
-    explicit TPgInt(i32 value)
-        : Value_(value)
-    {
-    }
-
-    TMaybe<i32> Value() const {
-        return Value_;
-    }
-
-private:
-    TMaybe<i32> Value_{};
-};
-
-struct TUtf8 {
-    TStringBuf Value;
-};
-
 template <typename T>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, T simpleNode)
     requires(NYql::NUdf::TPrimitiveDataType<T>::Result)
@@ -221,11 +139,6 @@ inline TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, TTestDyNumber
 inline TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TUtf8& utf8Node) {
     return pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(utf8Node.Value);
 }
-
-template <ui8 Precision, ui8 Scale>
-struct TDecimalLiteral {
-    NYql::NDecimal::TInt128 Value{};
-};
 
 template <ui8 Precision, ui8 Scale>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TDecimalLiteral<Precision, Scale>& decimalNode) {
@@ -322,55 +235,3 @@ TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TStructVariant
 }
 
 } // namespace NKikimr::NMiniKQL::NTest
-
-namespace NYql::NUdf::NPrivate {
-
-template <>
-struct TUnboxedValueComparator<NKikimr::NMiniKQL::NTest::TUtf8> {
-    template <CComparatorUtilsUdfValue THolder>
-    static TUnboxedValueComparatorResult IsEqual(const THolder& value, const NKikimr::NMiniKQL::NTest::TUtf8& expected) {
-        const TStringBuf got(value.AsStringRef());
-        if (got != expected.Value) {
-            return std::unexpected(TStringBuilder() << "Expected utf8 string \"" << expected.Value << "\" but got \"" << got << "\"");
-        }
-        return {};
-    }
-};
-
-template <>
-struct TUnboxedValueComparator<TGUID> {
-    template <CComparatorUtilsUdfValue THolder>
-    static TUnboxedValueComparatorResult IsEqual(const THolder& value, const TGUID& expected) {
-        const auto ref = value.AsStringRef();
-        if (ref.Size() != sizeof(TGUID)) {
-            return std::unexpected(TStringBuilder() << "Expected Uuid of " << sizeof(TGUID) << " bytes but got " << ref.Size());
-        }
-        const TGUID got = ReadUnaligned<TGUID>(ref.Data());
-        if (got != expected) {
-            return std::unexpected(TStringBuilder()
-                                   << "Expected Uuid " << expected.AsGuidString()
-                                   << " but got " << got.AsGuidString());
-        }
-        return {};
-    }
-};
-
-template <>
-struct TUnboxedValueComparator<NKikimr::NMiniKQL::NTest::TTestDyNumber> {
-    template <CComparatorUtilsUdfValue THolder>
-    static TUnboxedValueComparatorResult IsEqual(const THolder& value, const NKikimr::NMiniKQL::NTest::TTestDyNumber& expected) {
-        const auto parsed = NKikimr::NDyNumber::ParseDyNumberString(expected.Value);
-        if (!parsed) {
-            return std::unexpected(TStringBuilder() << "Invalid expected DyNumber: " << expected.Value);
-        }
-        if (value.AsStringRef() != NUdf::TStringRef(*parsed)) {
-            const auto& got = NKikimr::NDyNumber::DyNumberToString(value.AsStringRef());
-            return std::unexpected(TStringBuilder()
-                                   << "Expected DyNumber \"" << expected.Value << "\" but got \""
-                                   << (got ? *got : TString("<invalid>")) << "\"");
-        }
-        return {};
-    }
-};
-
-} // namespace NYql::NUdf::NPrivate

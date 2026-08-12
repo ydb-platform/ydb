@@ -116,6 +116,14 @@ public:
         IsMapReduceMap_ = value;
     }
 
+    // Whether this Reduce job's input is sorted by [_yql_key_hash, ...ReduceOperationSpec's
+    // SortBy] (a MapReduce operation's reduce stage) or by SortBy alone with no hash column at
+    // all (a plain Reduce operation reading real YT-sorted input) - see
+    // TReduceTaskParams::SortByHasKeyHashPrefix, which this is set from.
+    void SetSortByHasKeyHashPrefix(bool value) {
+        SortByHasKeyHashPrefix_ = value;
+    }
+
     // Set by the gateway (from execCtx->InputTables_, before this job's state is serialized to
     // workers) whenever the ORIGINAL OPERATION has more than one distinct input position (e.g. a
     // JOIN's mapper reading the same or different tables via multiple sections). This must be a
@@ -180,6 +188,7 @@ private:
     TMaybe<TReduceOperationSpec> ReduceOperationSpec_;
     bool IsMapReduceReducer_ = false;
     bool IsMapReduceMap_ = false;
+    bool SortByHasKeyHashPrefix_ = false;
     bool ForceTableIndexMarking_ = false;
     // End of serializable part
 

@@ -16,6 +16,7 @@
 #include <yql/essentials/core/yql_opt_window.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_opt_match_recognize.h>
+#include <yql/essentials/core/yql_sql_combine_expander.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/utils/log/log.h>
@@ -56,6 +57,7 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(DirectRowInFlatMap));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(Unordered));
         AddHandler(0, &TCoAggregate::Match, HNDL(CountAggregate));
+        AddHandler(0, &TYtReadTable::Match, HNDL(TrimQlFilters));
         AddHandler(0, &TYtReadTable::Match, HNDL(ZeroSampleToZeroLimit));
         AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
         AddHandler(0, &TResPull::Match, HNDL(TrimResPullWorld));
@@ -78,6 +80,7 @@ public:
         AddHandler(1, &TCoExtendBase::Match, HNDL(ExtendOverSameMap));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
         AddHandler(1, &TCoTake::Match, HNDL(TakeOverExtend));
+        AddHandler(1, &TCoSqlCombine::Match, HNDL(SqlCombine));
 
         AddHandler(2, &TCoEquiJoin::Match, HNDL(ConvertToCommonTypeForForcedMergeJoin));
         AddHandler(2, &TCoShuffleByKeys::Match, HNDL(ShuffleByKeys));
@@ -406,6 +409,42 @@ protected:
     }
 
 protected:
+    TMaybeNode<TExprBase> SqlCombine(TExprBase node, TExprContext& ctx) const {
+        auto sqlCombine = node.Cast<TCoSqlCombine>();
+
+        TString usedCluster;
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+
+        TSyncMap syncList;
+        bool hasYtInput = false;
+        for (auto input : { sqlCombine.LeftInput(), sqlCombine.RightInput() }) {
+            if (IsYtProviderInput(input.Input())) {
+                hasYtInput = true;
+                auto cluster = DeriveClusterFromInput(input.Input(), selectionMode);
+                if (!cluster || !UpdateUsedCluster(usedCluster, *cluster, selectionMode)) {
+                    return node;
+                }
+            }
+
+            for (auto lambda : { input.PresortKeyLambda().Raw(), input.KeyExtractorLambda().Raw(), input.ListHandlerLambda().Raw() }) {
+                if (!IsYtCompleteIsolatedLambda(*lambda, syncList, usedCluster, false, selectionMode)) {
+                    return node;
+                }
+            }
+        }
+
+        if (!hasYtInput) {
+            return node;
+        }
+
+        if (!IsYtCompleteIsolatedLambda(sqlCombine.UsingLambda().Ref(), syncList, usedCluster, false, selectionMode)) {
+            return node;
+        }
+
+        return ExpandSqlCombine(node.Ptr(), ctx, *State_->Types);
+    }
+
     TMaybeNode<TExprBase> Aggregate(TExprBase node, TExprContext& ctx) const {
         auto aggregate = node.Cast<TCoAggregateBase>();
 
@@ -2437,7 +2476,7 @@ protected:
             }
 
             // derive common type for all join keys in key set
-            const TTypeAnnotationNode* commonType = UnifyJoinKeyType(equiJoin.Pos(), srcKeyTypes, ctx);
+            const TTypeAnnotationNode* commonType = UnifyJoinKeyType(equiJoin.Pos(), srcKeyTypes, ctx, *State_->Types);
             YQL_ENSURE(commonType);
 
             const TTypeAnnotationNode* commonTypeNoOpt = RemoveOptionalType(commonType);
@@ -2929,6 +2968,16 @@ protected:
 
         return TAggregateExpander::CountAggregateRewrite(aggregate, ctx,
             State_->Types->UseBlocks || State_->Types->BlockEngineMode == EBlockEngineMode::Force);
+    }
+
+    TMaybeNode<TExprBase> TrimQlFilters(TExprBase node, TExprContext& ctx) const {
+        auto read = node.Cast<TYtReadTable>();
+        auto input = RemoveYtQLFilters(read.Input(), ctx);
+        if (input.Raw() == read.Input().Raw()) {
+            return node;
+        }
+
+        return ctx.ChangeChild(read.Ref(), TYtReadTable::idx_Input, input.Ptr());
     }
 
     TMaybeNode<TExprBase> ZeroSampleToZeroLimit(TExprBase node, TExprContext& ctx) const {

@@ -128,8 +128,8 @@ TError ParseYTError(
         ParseJson(&errorStringInput, buildingConsumer.get());
     } catch (const std::exception& ex) {
         return TError("Failed to parse error from response")
-            << TErrorAttribute("source", source)
-            << ex;
+            .With("source", source)
+            .With(ex);
     }
     return buildingConsumer->Finish();
 }
@@ -467,7 +467,7 @@ std::optional<std::pair<i64, i64>> FindBytesRange(const THeadersPtr& headers)
     const std::string bytesPrefix = "bytes=";
     if (!range->starts_with(bytesPrefix)) {
         THROW_ERROR_EXCEPTION("Invalid range header format")
-            << TErrorAttribute("range", *range);
+            .With("range", *range);
     }
 
     auto indices = range->substr(bytesPrefix.size());

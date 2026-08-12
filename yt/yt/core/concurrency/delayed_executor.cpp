@@ -128,7 +128,7 @@ public:
         promise.OnCanceled(BIND_NO_PROPAGATE([=, cookie = std::move(cookie)] (const TError& error) {
             TDelayedExecutor::Cancel(cookie);
             promise.TrySet(TError(NYT::EErrorCode::Canceled, "Delayed callback canceled")
-                << error);
+                .With(error));
         }));
 
         return promise;

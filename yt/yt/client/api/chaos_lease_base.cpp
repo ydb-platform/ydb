@@ -72,7 +72,7 @@ TFuture<void> TChaosLeaseBase::Ping(const TPrerequisitePingOptions& options)
 
                 THROW_ERROR_EXCEPTION("Error pinging chaos lease %v",
                     GetId())
-                    << resultOrError;
+                    .With(resultOrError);
             }
         }));
 }
@@ -112,7 +112,7 @@ TFuture<void> TChaosLeaseBase::Abort(const TPrerequisiteAbortOptions& options)
 
                         abortError = TError("Error aborting chaos lease %v",
                             GetId())
-                            << rspOrError;
+                            .With(rspOrError);
                     }
 
                     auto abortPromise = std::exchange(AbortPromise_, TPromise<void>());

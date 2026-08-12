@@ -1166,14 +1166,18 @@ namespace NYql::NTypeAnnImpl {
         }
 
         auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        if (type->GetKind() != ETypeAnnotationKind::Callable) {
+        switch (type->GetKind()) {
+        case ETypeAnnotationKind::Universal:
+            input->SetTypeAnn(type);
+            return IGraphTransformer::TStatus::Ok;
+        case ETypeAnnotationKind::Callable:
+            output = ExpandType(input->Pos(), *type->Cast<TCallableExprType>()->GetReturnType(), ctx.Expr);
+            return IGraphTransformer::TStatus::Repeat;
+        default:
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()), TStringBuilder() << "Expected callable type, but got: "
                 << *type));
             return IGraphTransformer::TStatus::Error;
         }
-
-        output = ExpandType(input->Pos(), *type->Cast<TCallableExprType>()->GetReturnType(), ctx.Expr);
-        return IGraphTransformer::TStatus::Repeat;
     }
 
     template <>

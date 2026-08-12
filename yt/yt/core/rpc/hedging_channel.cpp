@@ -139,8 +139,8 @@ public:
                 responseHandler->HandleError(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Error parsing response header from backup")
-                    << TErrorAttribute(BackupFailedKey, Request_->GetRequestId())
-                    << TErrorAttribute("request_id", Request_->GetRequestId()),
+                    .With(BackupFailedKey, Request_->GetRequestId())
+                    .With("request_id", Request_->GetRequestId()),
                     address);
                 return;
             }

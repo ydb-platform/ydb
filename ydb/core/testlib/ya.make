@@ -113,6 +113,7 @@ PEERDIR(
     ydb/services/discovery
     ydb/services/ymq
     ydb/core/tx/conveyor/service
+    ydb/core/tx/conveyor/usage
     ydb/core/tx/conveyor_composite/service
     ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/priorities/service

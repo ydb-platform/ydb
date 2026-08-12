@@ -395,8 +395,8 @@ const char* TYamrLenvalBaseParser::ConsumeData(const char* begin, const char* en
             MetEom = true;
             if (Union.Value != RowCount) {
                 THROW_ERROR_EXCEPTION("Row count mismatch")
-                    << TErrorAttribute("eom_marker_row_count", Union.Value)
-                    << TErrorAttribute("actual_row_count", RowCount);
+                    .With("eom_marker_row_count", Union.Value)
+                    .With("actual_row_count", RowCount);
             }
             State = EState::InsideKey;
             ReadingLength = true;

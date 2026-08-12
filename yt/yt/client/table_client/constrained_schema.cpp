@@ -93,8 +93,8 @@ void FromProto(NTableClient::TColumnNameToConstraintMap* constraints, const TCol
             THROW_ERROR_EXCEPTION(
                 "Received duplicate constraints for column %Qv",
                 entry.name())
-                << TErrorAttribute("first_conflicting_constraint", entry.constraint())
-                << TErrorAttribute("second_conflicting_constraint", it->second);
+                .With("first_conflicting_constraint", entry.constraint())
+                .With("second_conflicting_constraint", it->second);
         }
     }
 }

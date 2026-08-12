@@ -456,11 +456,6 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 }
 
 void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
-    auto& usersInfoStorage = Partition()->UsersInfoStorage;
-    for (auto&& [_, userInfo] : usersInfoStorage->GetAll()) {
-        userInfo.AnyCommits = userInfo.Offset > (i64)Partition()->BlobEncoder.StartOffset;
-    }
-
     Done(ctx);
 }
 
@@ -502,20 +497,13 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 
             FillBlobsMetaData(ctx);
             FormHeadAndProceed();
-
-            // AFL_ENSURE(!GetContext().StartOffset || *GetContext().StartOffset >= Partition()->GetStartOffset())
-            //     ("d", "StartOffset from meta and blobs are different")
-            //     ("l", *GetContext().StartOffset)
-            //     ("r", Partition()->GetStartOffset());
-
-            // AFL_ENSURE(!GetContext().EndOffset || *GetContext().EndOffset == Partition()->GetEndOffset())
-            //     ("d", "EndOffset from meta and blobs are different")
-            //     ("l", *GetContext().EndOffset)
-            //     ("r", Partition()->GetEndOffset());
-
-            [[fallthrough]];
+            Done(ctx);
+            break;
 
         case NKikimrProto::NODATA:
+            // Meta offsets were loaded earlier; without FormHeadAndProceed they stay
+            // as Start < End with empty containers and break GetWriteTimeEstimate.
+            NormalizeOffsetsForEmptyData();
             Done(ctx);
             break;
         default:
@@ -788,6 +776,37 @@ TKeyBoundaries SplitBodyHeadAndFastWrite(const std::deque<TDataKey>& keys)
     return b;
 }
 
+void TInitDataRangeStep::NormalizeOffsetsForEmptyData() {
+    auto& fwz = Partition()->BlobEncoder;
+    auto& cz = Partition()->CompactionBlobEncoder;
+
+    // Keep EndOffset from meta as the high-water mark for an empty partition.
+    const ui64 emptyOffset = fwz.EndOffset;
+
+    YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE,
+        "No data keys during partition init; normalizing empty partition offsets",
+        {"logPrefix", LogPrefix()},
+        {"tablet_id", Partition()->TabletId},
+        {"partition", Partition()->Partition},
+        {"metaStartOffset", fwz.StartOffset},
+        {"metaEndOffset", emptyOffset});
+
+    fwz.StartOffset = emptyOffset;
+    fwz.Head.Offset = emptyOffset;
+    fwz.Head.PartNo = 0;
+    fwz.NewHead.Offset = emptyOffset;
+    fwz.NewHead.PartNo = 0;
+    fwz.BodySize = 0;
+
+    cz.StartOffset = emptyOffset;
+    cz.EndOffset = emptyOffset;
+    cz.Head.Offset = emptyOffset;
+    cz.Head.PartNo = 0;
+    cz.NewHead.Offset = emptyOffset;
+    cz.NewHead.PartNo = 0;
+    cz.BodySize = 0;
+}
+
 void TInitDataRangeStep::FormHeadAndProceed() {
     auto& endOffset = Partition()->BlobEncoder.EndOffset;
     auto& startOffset = Partition()->BlobEncoder.StartOffset;
@@ -795,6 +814,11 @@ void TInitDataRangeStep::FormHeadAndProceed() {
 
     auto keys = std::move(dataKeysBody);
     dataKeysBody.clear();
+
+    if (keys.empty()) {
+        NormalizeOffsetsForEmptyData();
+        return;
+    }
 
     auto& cz = Partition()->CompactionBlobEncoder; // Compaction zone
     auto& fwz = Partition()->BlobEncoder;   // FastWrite zone
@@ -1147,6 +1171,14 @@ void TInitFieldsStep::Execute(const TActorContext &ctx) {
     auto& config = Partition()->Config;
 
     Partition()->AutopartitioningManager.reset(CreateAutopartitioningManager(config, Partition()->Partition));
+
+    // After DataRange (FormHead / NormalizeOffsetsForEmptyData) offsets are final.
+    // Recalculate here so AnyCommits matches runtime GetStartOffset(), not the pre-normalize meta StartOffset.
+    for (auto&& [_, userInfo] : Partition()->UsersInfoStorage->GetAll()) {
+        userInfo.AnyCommits = userInfo.Offset > (i64)Partition()->GetStartOffset();
+    }
+
+    Partition()->CreateCompacter();
 
     return Done(ctx);
 }

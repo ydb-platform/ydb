@@ -11,17 +11,17 @@ namespace NKikimr::NPQ::NNameResolver {
  * Converts a topic name to its full path.
  * Also converts a full/legacy topic name to the full path used for reading from mirrored topics.
  *
- * Returns resolved path on success, or error reason on failure
- * (same Valid/Reason semantics and texts as TDiscoveryConverter).
+ * Returns resolved path on success, or error reason on failure.
  *
  * First-class citizen (FCC) mode:
  *   Converts legacy-style names (rt3.*, short legacy with --/@, or bare name without '/').
  *   Modern paths with '/' are joined with database via NormalizePath (full topic path).
  *
- * Federation mode (!FCC) — mirrors TDiscoveryConverter::BuildForFederation:
+ * Federation mode (!FCC):
  *   - Root / PQ database: path with '/' is federation account/topic;
  *     otherwise the name is treated as legacy (rt3. / short / bare).
- *   - User database: path is relative modern path inside that database.
+ *   - User database: path is relative modern path inside that database
+ *     (already mirrored …-mirrored-from-<dc> names are kept as-is).
  *
  * Root for resolved modern paths is LbUserDatabaseRoot from PQConfig, or database if Lb root is empty
  * (for user-database federation paths the request database is preferred).

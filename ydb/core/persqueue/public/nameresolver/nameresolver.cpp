@@ -3,16 +3,16 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/library/actors/core/log.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public/topic_parser.h>
 
 #include <util/string/builder.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr::NPQ::NNameResolver {
 
 namespace {
 
-// Matches CHECK_SET_VALID: Reason = Reason + (reason) + ". ";
+// Error reasons end with ". " for multi-part messages.
 std::unexpected<TString> Fail(const TString& reason) {
     return std::unexpected(reason + ". ");
 }
@@ -62,15 +62,35 @@ bool BasicNameChecks(TStringBuf name) {
 bool IsLegacyStyleName(TStringBuf topic) {
     // Full: rt3.<dc>--...
     // Short without rt3.: account--topic / account@dir--topic
-    // Bare topic without path separators: "topic" (MinimalName in BuildFromLegacyName)
+    // Bare topic without path separators: "topic"
     if (topic.StartsWith("rt3.") || topic.Contains("--") || topic.Contains("@")) {
         return true;
     }
     return !topic.Contains("/");
 }
 
-// Append -mirrored-from-<dc> to the leaf topic name when Dc != LocalDc.
-// Mirrors TDiscoveryConverter::BuildFromLegacyName / ParseModernPath.
+// Prefer LbRoot, else database; empty root leaves modernPath unchanged (no leading '/').
+TString JoinWithRoot(TStringBuf lbRoot, TStringBuf database, TStringBuf modernPath) {
+    if (!lbRoot.empty()) {
+        return NormalizePath(lbRoot, modernPath);
+    }
+    if (!database.empty()) {
+        return NormalizePath(database, modernPath);
+    }
+    return TString{modernPath};
+}
+
+TString JoinWithRoot(TStringBuf lbRoot, TStringBuf database, TString&& modernPath) {
+    if (!lbRoot.empty()) {
+        return NormalizePath(lbRoot, modernPath);
+    }
+    if (!database.empty()) {
+        return NormalizePath(database, modernPath);
+    }
+    return std::move(modernPath);
+}
+
+// Append -mirrored-from-<dc> to the leaf topic name when dc != localDc.
 void ApplyMirrorSuffix(TString& modernPath, TStringBuf dc, TStringBuf localDc) {
     if (localDc.empty() || dc.empty() || dc == localDc) {
         return;
@@ -85,17 +105,7 @@ void ApplyMirrorSuffix(TString& modernPath, TStringBuf dc, TStringBuf localDc) {
     }
 }
 
-TString JoinWithRoot(const TString& lbRoot, TStringBuf database, const TString& modernPath) {
-    if (!lbRoot.empty()) {
-        return CanonizePath(JoinPath({lbRoot, modernPath}));
-    }
-    if (!database.empty()) {
-        return CanonizePath(JoinPath({TString{database}, modernPath}));
-    }
-    return modernPath;
-}
-
-// Mirrors TDiscoveryConverter::BuildFromLegacyName + public GetTopicPath / ConvertOldTopicName.
+// Legacy rt3. / short / bare → modern path (via CorrectName / GetTopicPath / ConvertOldTopicName).
 std::expected<TString, TString> TryParseLegacyToModernPath(
     TStringBuf topic,
     TStringBuf localDc,
@@ -124,14 +134,13 @@ std::expected<TString, TString> TryParseLegacyToModernPath(
         if (NPersQueue::CorrectName(original)) {
             modernPath = TString{NPersQueue::GetTopicPath(original)};
         } else {
-            // Same structural split as BuildFromLegacyName; ConvertOldTopicName on short part.
             modernPath = TString{NPersQueue::ConvertOldTopicName(std::string{shortLegacy})};
         }
         ApplyMirrorSuffix(modernPath, topicDc, localDc);
         return modernPath;
     }
 
-    // Short name without rt3. — mirrors BuildFromLegacyName DC resolution.
+    // Short name without rt3.: dc from argument or localDc.
     if (topicDc.empty()) {
         if (localDc.empty()) {
             return Fail(
@@ -145,22 +154,42 @@ std::expected<TString, TString> TryParseLegacyToModernPath(
     return modernPath;
 }
 
-// Mirrors TDiscoveryConverter::ParseModernPath + BuildFromShortModernName DC check.
-std::expected<TString, TString> TryParseModernTopicPath(
+// true = already mirrored (use path as-is), false = not a mirrored name.
+std::expected<bool, TString> IsAlreadyMirroredModernPath(TStringBuf path, TStringBuf localDc) {
+    if (!path.Contains("-mirrored-from-")) {
+        if (path.Contains("mirrored-from")) {
+            return Fail(
+                "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic");
+        }
+        return false;
+    }
+
+    TStringBuf withoutSuffix;
+    TStringBuf cluster;
+    // Contains("-mirrored-from-") above ⇒ RSplit must succeed.
+    Y_DEBUG_ABORT_UNLESS(path.TryRSplit("-mirrored-from-", withoutSuffix, cluster));
+    if (cluster.empty()) {
+        return Fail("Malformed mirrored topic path - expected to end with valid cluster name");
+    }
+    if (localDc == cluster) {
+        return Fail("Local topic cannot contain '-mirrored-from' part");
+    }
+    return true;
+}
+
+// Modern path that is not already mirrored: apply mirror suffix when needed.
+std::expected<TString, TString> BuildModernTopicPath(
     TStringBuf topic,
     TStringBuf localDc,
     TStringBuf dc
 ) {
     TStringBuf topicDc = !dc.empty() ? dc : localDc;
     if (topicDc.empty()) {
-        // BuildFromShortModernName when Dc falls back to LocalDc.
         return Fail("Cannot determine DC: should specify either with Dc option or LocalDc option");
     }
 
     TString modernPath{topic};
     ApplyMirrorSuffix(modernPath, topicDc, localDc);
-    // BasicNameChecks for modern path is done in ResolveName (ForFederation) before classify;
-    // pathAfterAccount in ParseModernPath cannot introduce '//' via mirror suffix alone.
     return modernPath;
 }
 
@@ -169,7 +198,7 @@ struct TFederationContext {
     TStringBuf Topic;
 };
 
-// Mirrors TDiscoveryConverter::BuildForFederation database/PQ-root classification.
+// Classify topic relative to PQ root vs user database.
 TFederationContext ClassifyFederationTopic(TStringBuf database, TStringBuf topic, TStringBuf pqPrefix) {
     TFederationContext ctx;
     ctx.Topic = topic;
@@ -207,16 +236,16 @@ std::expected<TString, TString> ResolveName(
 
     if (pqConfig.GetTopicsAreFirstClassCitizen()) {
         if (!IsLegacyStyleName(topicName)) {
-            return NormalizePath(TString{database}, TString{name});
+            return NormalizePath(database, name);
         }
         auto parsed = TryParseLegacyToModernPath(topicName, localDc, dc);
         if (!parsed) {
             return std::unexpected(parsed.error());
         }
-        return JoinWithRoot(lbRoot, database, *parsed);
+        return JoinWithRoot(lbRoot, database, std::move(*parsed));
     }
 
-    // Federation mode — same checks as TDiscoveryConverter::ForFederation / BuildForFederation.
+    // Federation mode.
     if (!BasicNameChecks(name)) {
         return std::unexpected(TStringBuilder() << "Bad topic name for federation: " << name);
     }
@@ -235,11 +264,19 @@ std::expected<TString, TString> ResolveName(
     if (!ctx.IsRootDb) {
         // Relative modern path inside user database.
         // database is non-empty here: empty database is classified as root DB.
-        auto parsed = TryParseModernTopicPath(ctx.Topic, localDc, dc);
+        auto mirrored = IsAlreadyMirroredModernPath(ctx.Topic, localDc);
+        if (!mirrored) {
+            return std::unexpected(mirrored.error());
+        }
+        if (*mirrored) {
+            // Keep topic as TStringBuf until the final join — no intermediate copy.
+            return NormalizePath(database, ctx.Topic);
+        }
+        auto parsed = BuildModernTopicPath(ctx.Topic, localDc, dc);
         if (!parsed) {
             return std::unexpected(parsed.error());
         }
-        return CanonizePath(JoinPath({TString{database}, *parsed}));
+        return NormalizePath(database, *parsed);
     }
 
     // Root / PQ database: path with '/' is federation account/topic; otherwise legacy name.
@@ -248,20 +285,28 @@ std::expected<TString, TString> ResolveName(
         // like "account/" and "/topic"; Contains('/') ⇒ TrySplit succeeds.
         TStringBuf account;
         TStringBuf rest;
-        AFL_ENSURE(ctx.Topic.TrySplit("/", account, rest))("topic", ctx.Topic);
-        AFL_ENSURE(!account.empty() && !rest.empty())("topic", ctx.Topic);
-        auto parsed = TryParseModernTopicPath(ctx.Topic, localDc, dc);
+        Y_DEBUG_ABORT_UNLESS(ctx.Topic.TrySplit("/", account, rest));
+        Y_DEBUG_ABORT_UNLESS(!account.empty() && !rest.empty());
+
+        auto mirrored = IsAlreadyMirroredModernPath(ctx.Topic, localDc);
+        if (!mirrored) {
+            return std::unexpected(mirrored.error());
+        }
+        if (*mirrored) {
+            return JoinWithRoot(lbRoot, database, ctx.Topic);
+        }
+        auto parsed = BuildModernTopicPath(ctx.Topic, localDc, dc);
         if (!parsed) {
             return std::unexpected(parsed.error());
         }
-        return JoinWithRoot(lbRoot, database, *parsed);
+        return JoinWithRoot(lbRoot, database, std::move(*parsed));
     }
 
     auto parsed = TryParseLegacyToModernPath(ctx.Topic, localDc, dc);
     if (!parsed) {
         return std::unexpected(parsed.error());
     }
-    return JoinWithRoot(lbRoot, database, *parsed);
+    return JoinWithRoot(lbRoot, database, std::move(*parsed));
 }
 
 } // namespace NKikimr::NPQ::NNameResolver

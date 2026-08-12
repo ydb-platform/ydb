@@ -198,7 +198,7 @@ Y_UNIT_TEST_F(MalformedRt3EmptyShort, TNameResolverFixture) {
         "/Root/LbCommunal");
 }
 
-Y_UNIT_TEST_F(ShortDashDashConvertedLikeConverter, TNameResolverFixture) {
+Y_UNIT_TEST_F(ShortDashDashConverted, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--", "dc1", "")),
         "/Root/LbCommunal/account");
@@ -353,6 +353,40 @@ Y_UNIT_TEST_F(FederationAccountTopicWithoutLbRoot, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "account/topic", "dc1")),
         "account/topic");
+}
+
+Y_UNIT_TEST_F(FederationAlreadyMirroredWithoutDc, TNameResolverFixture) {
+    SetFcc(false);
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root/db1", "dir/topic-mirrored-from-dc2", "", "")),
+        "/Root/db1/dir/topic-mirrored-from-dc2");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root/db1", "dir/topic-mirrored-from-dc2", "dc1", "")),
+        "/Root/db1/dir/topic-mirrored-from-dc2");
+}
+
+Y_UNIT_TEST_F(FederationAlreadyMirroredDoesNotDoubleSuffix, TNameResolverFixture) {
+    SetFcc(false);
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root/db1", "dir/topic-mirrored-from-dc2", "dc1", "dc2")),
+        "/Root/db1/dir/topic-mirrored-from-dc2");
+}
+
+Y_UNIT_TEST_F(FederationBadMirroredFromRejected, TNameResolverFixture) {
+    SetFcc(false);
+    ExpectError(
+        ResolveName("/Root/db1", "dir/mirrored-from-dc2", "dc1", ""),
+        "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic. ");
+    ExpectError(
+        ResolveName("/Root/db1", "dir/topic-mirrored-from-", "dc1", ""),
+        "Malformed mirrored topic path - expected to end with valid cluster name. ");
+}
+
+Y_UNIT_TEST_F(FederationMirroredFromLocalDcRejected, TNameResolverFixture) {
+    SetFcc(false);
+    ExpectError(
+        ResolveName("/Root/db1", "dir/topic-mirrored-from-dc1", "dc1", ""),
+        "Local topic cannot contain '-mirrored-from' part. ");
 }
 
 } // Y_UNIT_TEST_SUITE(TNameResolverTest)

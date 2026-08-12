@@ -259,3 +259,6 @@ class Workload():
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.pool.stop()
         self.driver.stop()
+        from ydb.tests.stress.common.common import shutdown_shared_topic_event_loop
+
+        shutdown_shared_topic_event_loop()

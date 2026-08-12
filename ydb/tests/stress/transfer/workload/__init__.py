@@ -137,3 +137,6 @@ class Workload(unittest.TestCase):
 
         self.pool.stop()
         self.driver.stop()
+        from ydb.tests.stress.common.common import shutdown_shared_topic_event_loop
+
+        shutdown_shared_topic_event_loop()

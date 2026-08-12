@@ -408,5 +408,8 @@ class Workload(unittest.TestCase):
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.driver is not None:
             self.driver.stop()
+        from ydb.tests.stress.common.common import shutdown_shared_topic_event_loop
+
+        shutdown_shared_topic_event_loop()
         for tmp_dir in self.tmp_dirs:
             shutil.rmtree(tmp_dir)

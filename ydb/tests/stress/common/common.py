@@ -11,6 +11,41 @@ ydb.interceptor.monkey_patch_event_handler()
 logger = logging.getLogger(__name__)
 
 
+def shutdown_shared_topic_event_loop(timeout: Optional[float] = 30) -> None:
+    """
+    Stop the process-wide YDB topic asyncio loop thread before interpreter exit.
+
+    Sync topic clients leave "Common ydb topic event loop" in run_forever()/epoll
+    after writer/reader close; joining it avoids a TSan race with Py_FinalizeEx
+    (ydb-platform/ydb#40952). Prefer SDK helper when available (after python-sdk sync).
+    """
+    try:
+        from ydb._topic_common import common as topic_common
+    except ImportError:
+        return
+
+    shutdown = getattr(topic_common, "_shutdown_shared_event_loop", None)
+    if shutdown is not None:
+        shutdown(timeout=timeout)
+        return
+
+    loop = getattr(topic_common, "_shared_event_loop", None)
+    if loop is not None:
+        try:
+            if loop.is_running():
+                loop.call_soon_threadsafe(loop.stop)
+        except RuntimeError:
+            logger.debug("Shared topic event loop already stopped", exc_info=True)
+        topic_common._shared_event_loop = None
+
+    for thread in threading.enumerate():
+        if thread.name == "Common ydb topic event loop" and thread.is_alive():
+            thread.join(timeout=timeout)
+            if thread.is_alive():
+                logger.warning("Shared ydb topic event loop thread did not stop in time")
+            break
+
+
 class YdbClient:
     def __init__(self, endpoint, database, use_query_service=False, sessions=100):
         self.driver = ydb.Driver(endpoint=endpoint, database=database, oauth=None)

@@ -600,42 +600,24 @@ def invoke_bsc_request(request, explicit_host=None, endpoint=None):
         return invoke_grpc_bsc_request(request, endpoint=endpoint)
 
 
-def cms_permission_request(user, host, reason, duration_usec, availability_mode, action_type, services=(), devices=()):
+def cms_host_restart_request(user, host, reason, duration_usec, max_avail):
     cms_request = kikimr_msgbus.TCmsRequest()
     if connection_params.token is not None:
         cms_request.SecurityToken = connection_params.token
     cms_request.PermissionRequest.User = user
     action = cms_request.PermissionRequest.Actions.add()
-    action.Type = action_type
+    action.Type = kikimr_cms.TAction.EType.RESTART_SERVICES
     action.Host = host
-    action.Services.extend(services)
-    action.Devices.extend(devices)
+    action.Services.append('storage')
     action.Duration = duration_usec
     cms_request.PermissionRequest.Reason = reason
     cms_request.PermissionRequest.Duration = duration_usec
-    cms_request.PermissionRequest.AvailabilityMode = availability_mode
+    cms_request.PermissionRequest.AvailabilityMode = kikimr_cms.EAvailabilityMode.MODE_MAX_AVAILABILITY if max_avail else kikimr_cms.EAvailabilityMode.MODE_KEEP_AVAILABLE
     response = invoke_grpc('CmsRequest', cms_request)
     if response.Status.Code == kikimr_cms.TStatus.ECode.ALLOW:
         return None
     else:
         return '%s: %s' % (kikimr_cms.TStatus.ECode.Name(response.Status.Code), response.Status.Reason)
-
-
-def cms_host_restart_request(user, host, reason, duration_usec, max_avail):
-    availability_mode = (
-        kikimr_cms.EAvailabilityMode.MODE_MAX_AVAILABILITY
-        if max_avail
-        else kikimr_cms.EAvailabilityMode.MODE_KEEP_AVAILABLE
-    )
-    return cms_permission_request(
-        user,
-        host,
-        reason,
-        duration_usec,
-        availability_mode,
-        kikimr_cms.TAction.EType.RESTART_SERVICES,
-        services=('storage',),
-    )
 
 
 def get_piles_info():

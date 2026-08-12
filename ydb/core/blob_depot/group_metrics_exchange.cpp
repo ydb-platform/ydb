@@ -120,6 +120,47 @@ namespace NKikimr::NBlobDepot {
         UpdateThroughputs(false);
     }
 
+    void TBlobDepot::Handle(TEvBlobDepot::TEvPushS3RouterMetrics::TPtr ev) {
+        const auto& record = ev->Get()->Record;
+
+        auto inc = [&](NKikimrBlobDepot::ECumulativeCounters counter, ui64 value) {
+            if (value) {
+                TabletCounters->Cumulative()[counter] += value;
+            }
+        };
+
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_REQUESTS, record.GetBalancerRequests());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_ERRORS, record.GetBalancerErrors());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_REQUESTS, record.GetNonBalancerRequests());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_ERRORS, record.GetNonBalancerErrors());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_BYTES_READ, record.GetNonBalancerBytesRead());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_BYTES_WRITTEN, record.GetNonBalancerBytesWritten());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_REQUESTS, record.GetBalancerResolveRequests());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_SUCCESSES, record.GetBalancerResolveSuccesses());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_FAILURES, record.GetBalancerResolveFailures());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_ENDPOINT_SWITCHES, record.GetEndpointSwitches());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_FIVE_XX_REFRESH_TRIGGERS, record.GetFiveXxRefreshTriggers());
+
+        for (const ui64 latencyMs : record.GetBalancerLatencyMs()) {
+            TabletCounters->Percentile()[NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_LATENCY_MS].IncrementFor(latencyMs);
+        }
+        for (const ui64 latencyMs : record.GetNonBalancerLatencyMs()) {
+            TabletCounters->Percentile()[NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_LATENCY_MS].IncrementFor(latencyMs);
+        }
+        for (const ui64 latencyMs : record.GetBalancerResolveLatencyMs()) {
+            TabletCounters->Percentile()[NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_LATENCY_MS].IncrementFor(latencyMs);
+        }
+
+        if (record.HasIsUsingProxy()) {
+            S3RouterIsUsingProxyByNode[record.GetNodeId()] = record.GetIsUsingProxy();
+            ui64 isUsingProxy = 0;
+            for (const auto& [_, value] : S3RouterIsUsingProxyByNode) {
+                isUsingProxy = Max<ui64>(isUsingProxy, value ? 1 : 0);
+            }
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_ROUTER_IS_USING_PROXY] = isUsingProxy;
+        }
+    }
+
     void TBlobDepot::UpdateThroughputs(bool reschedule) {
         static constexpr TDuration Window = TDuration::Seconds(3);
 

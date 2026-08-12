@@ -79,7 +79,7 @@ protected:
         const TDuration latency = TInstant::Now() - Start;
         const bool success = outcome.IsSuccess();
 
-        ReplyAdapter.OnRequestFinished({
+        ReplyAdapter.CollectStats({
             .RequestName = TEvRequest::RequestName,
             .Latency = latency,
             .Success = success,

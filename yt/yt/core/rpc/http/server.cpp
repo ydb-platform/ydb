@@ -254,7 +254,7 @@ private:
             auto decodedType = FromHttpContentType(*contentTypeString);
             if (!decodedType) {
                 return TError("Invalid \"Content-Type\" header value")
-                    << TErrorAttribute("value", *contentTypeString);
+                    .With("value", *contentTypeString);
             }
             rpcHeader->set_request_format(ToProto(*decodedType));
         }
@@ -267,7 +267,7 @@ private:
             auto decodedType = FromHttpContentType(*acceptString);
             if (!decodedType) {
                 return TError("Invalid \"Accept\" header value")
-                    << TErrorAttribute("value", *acceptString);
+                    .With("value", *acceptString);
             }
             rpcHeader->set_response_format(ToProto(*decodedType));
         }
@@ -279,7 +279,7 @@ private:
         if (const auto* requestIdString = httpHeaders->Find(RequestIdHeaderName)) {
             if (!TRequestId::FromString(*requestIdString, requestId)) {
                 return TError("Invalid %Qv header value", RequestIdHeaderName)
-                    << TErrorAttribute("value", *requestIdString);
+                    .With("value", *requestIdString);
             }
         } else {
             *requestId = TRequestId::Create();

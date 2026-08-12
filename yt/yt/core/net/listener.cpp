@@ -74,7 +74,7 @@ public:
                 }
             }
         } catch (const TErrorException& ex) {
-            auto error = TError(ex) << TErrorAttribute("listener", Name_);
+            auto error = TError(ex).With("listener", Name_);
             Abort(error);
             YT_TLOG_FATAL("Listener crashed with fatal error")
                 .With(error);
@@ -141,7 +141,7 @@ public:
                 }
             }
             promise.TrySet(TError(NYT::EErrorCode::Canceled, "Accept canceled")
-                << error);
+                .With(error));
         }));
 
         return promise.ToFuture();
@@ -179,7 +179,7 @@ private:
 
             Pending_ = false;
             Error_ = error
-                << TErrorAttribute("listener", Name_);
+                .With("listener", Name_);
             Acceptor_->Unarm(ServerSocket_, this);
         }
 

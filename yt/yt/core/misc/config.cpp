@@ -39,14 +39,14 @@ void TLogDigestConfig::Register(TRegistrar registrar)
         double bucketCount = log(config->UpperBound / config->LowerBound) / log(1 + config->RelativePrecision);
         if (bucketCount > MaxBucketCount) {
             THROW_ERROR_EXCEPTION("Bucket count is too large")
-                << TErrorAttribute("bucket_count", bucketCount)
-                << TErrorAttribute("max_bucket_count", MaxBucketCount);
+                .With("bucket_count", bucketCount)
+                .With("max_bucket_count", MaxBucketCount);
         }
         if (config->DefaultValue && (*config->DefaultValue < config->LowerBound || *config->DefaultValue > config->UpperBound)) {
             THROW_ERROR_EXCEPTION("Default value should be between lower bound and upper bound")
-                << TErrorAttribute("default_value", *config->DefaultValue)
-                << TErrorAttribute("lower_bound", config->LowerBound)
-                << TErrorAttribute("upper_bound", config->UpperBound);
+                .With("default_value", *config->DefaultValue)
+                .With("lower_bound", config->LowerBound)
+                .With("upper_bound", config->UpperBound);
         }
     });
 }
@@ -79,8 +79,8 @@ void THistogramDigestConfig::Register(TRegistrar registrar)
     registrar.Postprocessor([] (THistogramDigestConfig* config) {
         if (config->UpperBound < config->LowerBound) {
             THROW_ERROR_EXCEPTION("Upper bound should be greater than or equal to lower bound")
-                << TErrorAttribute("lower_bound", config->LowerBound)
-                << TErrorAttribute("upper_bound", config->UpperBound);
+                .With("lower_bound", config->LowerBound)
+                .With("upper_bound", config->UpperBound);
         }
 
         // If there are more buckets, the implementation of THistogramDigest
@@ -89,15 +89,15 @@ void THistogramDigestConfig::Register(TRegistrar registrar)
         double bucketCount = (config->UpperBound - config->LowerBound) / config->AbsolutePrecision;
         if (bucketCount > MaxBucketCount) {
             THROW_ERROR_EXCEPTION("Bucket count is too large")
-                << TErrorAttribute("bucket_count", bucketCount)
-                << TErrorAttribute("max_bucket_count", MaxBucketCount);
+                .With("bucket_count", bucketCount)
+                .With("max_bucket_count", MaxBucketCount);
         }
 
         if (config->DefaultValue && (*config->DefaultValue < config->LowerBound || *config->DefaultValue > config->UpperBound)) {
             THROW_ERROR_EXCEPTION("Default value should be between lower bound and upper bound")
-                << TErrorAttribute("default_value", *config->DefaultValue)
-                << TErrorAttribute("lower_bound", config->LowerBound)
-                << TErrorAttribute("upper_bound", config->UpperBound);
+                .With("default_value", *config->DefaultValue)
+                .With("lower_bound", config->LowerBound)
+                .With("upper_bound", config->UpperBound);
         }
     });
 }
@@ -137,8 +137,8 @@ void TAdaptiveHedgingManagerConfig::Register(TRegistrar registrar)
     registrar.Postprocessor([] (TAdaptiveHedgingManagerConfig* config) {
         if (config->MinHedgingDelay > config->MaxHedgingDelay) {
             THROW_ERROR_EXCEPTION("\"min_hedging_delay\" cannot be greater than \"max_hedging_delay\"")
-                << TErrorAttribute("min_hedging_delay", config->MinHedgingDelay)
-                << TErrorAttribute("max_hedging_delay", config->MaxHedgingDelay);
+                .With("min_hedging_delay", config->MinHedgingDelay)
+                .With("max_hedging_delay", config->MaxHedgingDelay);
         }
     });
 }

@@ -144,8 +144,8 @@ private:
             replyWithError(TError(
                 NRpc::EErrorCode::Unavailable,
                 "Server is not started")
-                << TErrorAttribute("realm_id", realmId)
-                << TErrorAttribute("endpoint", replyBus->GetEndpointDescription()));
+                .With("realm_id", realmId)
+                .With("endpoint", replyBus->GetEndpointDescription()));
             return;
         }
 

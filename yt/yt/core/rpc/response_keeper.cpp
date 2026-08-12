@@ -336,8 +336,8 @@ private:
 
         if (isRetry && IsWarmingUp()) {
             THROW_ERROR_EXCEPTION("Cannot reliably check for a duplicate mutating request")
-                << TErrorAttribute("mutation_id", id)
-                << TErrorAttribute("warmup_time", Config_->WarmupTime);
+                .With("mutation_id", id)
+                .With("warmup_time", Config_->WarmupTime);
         }
 
         return {};
@@ -397,7 +397,7 @@ void ValidateRetry(TMutationId mutationId, bool isRetry)
 {
     if (!isRetry) {
         THROW_ERROR_EXCEPTION("Duplicate request is not marked as \"retry\"")
-             << TErrorAttribute("mutation_id", mutationId);
+             .With("mutation_id", mutationId);
     }
 }
 

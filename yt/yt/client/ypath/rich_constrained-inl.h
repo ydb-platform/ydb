@@ -33,7 +33,7 @@ auto RunAttributeAccessor(const TConstrainedRichYPath<TValidator...>& path, cons
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error parsing attribute %Qv of rich YPath %v",
             key,
-            path.GetPath()) << ex;
+            path.GetPath()).With(ex);
     }
 }
 
@@ -387,8 +387,8 @@ std::vector<NChunkClient::TReadRange> TConstrainedRichYPath<TValidator...>::GetN
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(
                 NYPath::EErrorCode::InvalidReadRange, "Invalid read range")
-                << TErrorAttribute("range", rangeNodeCopy)
-                << ex;
+                .With("range", rangeNodeCopy)
+                .With(ex);
         }
     }
 
@@ -501,7 +501,7 @@ std::optional<i64> TConstrainedRichYPath<TValidator...>::GetRowCountLimit() cons
         auto rowCountLimit = FindAttribute<i64>(*this, "row_count_limit");
         if (rowCountLimit && *rowCountLimit < 0) {
             THROW_ERROR_EXCEPTION("Row count limit should be non-negative")
-                << TErrorAttribute("row_count_limit", rowCountLimit);
+                .With("row_count_limit", rowCountLimit);
         }
         return rowCountLimit;
     });

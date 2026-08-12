@@ -367,9 +367,9 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
 
         if (rsp->GetStatusCode() != EStatusCode::OK) {
             THROW_ERROR_EXCEPTION("HTTP proxy discovery request returned an error")
-                << TErrorAttribute("correlation_id", correlationId)
-                << TErrorAttribute("status_code", rsp->GetStatusCode())
-                << ParseYTError(rsp);
+                .With("correlation_id", correlationId)
+                .With("status_code", rsp->GetStatusCode())
+                .With(ParseYTError(rsp));
         }
 
         auto body = rsp->ReadAll();
@@ -381,8 +381,8 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
         return ConvertTo<std::vector<std::string>>(node);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error discovering RPC proxies via HTTP")
-            << TErrorAttribute("correlation_id", correlationId)
-            << ex;
+            .With("correlation_id", correlationId)
+            .With(ex);
     }
 }
 
@@ -423,7 +423,7 @@ std::vector<std::string> TConnection::DiscoverProxiesViaServiceDiscovery()
     }
 
     if (errors.size() == endpointSets.size()) {
-        THROW_ERROR_EXCEPTION("Error discovering RPC proxies via Service Discovery") << errors;
+        THROW_ERROR_EXCEPTION("Error discovering RPC proxies via Service Discovery").With(errors);
     }
 
     return allAddresses;

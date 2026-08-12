@@ -757,7 +757,9 @@ namespace NKikimr::NPDisk {
 
         auto *header = reinterpret_cast<TMetadataHeader*>(buffer.GetDataMut());
         void *data = header + 1;
-        memcpy(data, metadata.data() + offset, payloadSize);
+        if (payloadSize) {
+            memcpy(data, metadata.data() + offset, payloadSize);
+        }
         TPDiskHashCalculator dataHasher;
         dataHasher.Hash(data, payloadSize);
 

@@ -4377,7 +4377,7 @@ Y_UNIT_TEST(PrefixedReplace) {
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
 }
 
-Y_UNIT_TEST(SelectWithFulltextMatchPrefixedRowIdComplexKey) {
+Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedRowIdComplexKey, Compact) {
     // Prefixed fulltext index over a table with a COMPLEX (multi-column, non-integer) primary key.
     // Fulltext requires a single integer doc-id; for such a PK, adding the index auto-provisions a
     // __ydb_row_id (Uint64 NOT NULL) doc-id column + unique secondary index, backfills existing rows,
@@ -4388,6 +4388,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchPrefixedRowIdComplexKey) {
     featureFlags.SetEnableFulltextIndexPrefix(true);
     featureFlags.SetEnableUniqConstraint(true);
     featureFlags.SetEnableAddUniqueIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(Compact);
     auto kikimr = Kikimr(std::move(featureFlags));
     auto db = kikimr.GetQueryClient();
 
@@ -4450,12 +4451,13 @@ Y_UNIT_TEST(SelectWithFulltextMatchPrefixedRowIdComplexKey) {
 }
 
 // Feature flags for a prefixed fulltext index whose doc-id is an auto-provisioned __ydb_row_id.
-static TKikimrRunner KikimrPrefixRowId() {
+static TKikimrRunner KikimrPrefixRowId(bool compact = false) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
     featureFlags.SetEnableFulltextIndexPrefix(true);
     featureFlags.SetEnableUniqConstraint(true);
     featureFlags.SetEnableAddUniqueIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
     return Kikimr(std::move(featureFlags));
 }
 
@@ -4493,8 +4495,8 @@ static void SetupPrefixedRowIdDocs(NYdb::NQuery::TQueryClient& db) {
 // UPSERT/REPLACE/UPDATE (below) reconcile an existing row's __ydb_row_id; write maintenance threads the
 // stored doc-id (and the prefix columns) into the index input set, so the index stays consistent.
 
-Y_UNIT_TEST(PrefixedRowIdInsertSupported) {
-    auto kikimr = KikimrPrefixRowId();
+Y_UNIT_TEST_TWIN(PrefixedRowIdInsertSupported, Compact) {
+    auto kikimr = KikimrPrefixRowId(Compact);
     auto db = kikimr.GetQueryClient();
     SetupPrefixedRowIdDocs(db);
 
@@ -4531,8 +4533,8 @@ TString PrefixedRowIdSearch(NYdb::NQuery::TQueryClient& db, const TString& tenan
 }
 }
 
-Y_UNIT_TEST(PrefixedRowIdUpsertSupported) {
-    auto kikimr = KikimrPrefixRowId();
+Y_UNIT_TEST_TWIN(PrefixedRowIdUpsertSupported, Compact) {
+    auto kikimr = KikimrPrefixRowId(Compact);
     auto db = kikimr.GetQueryClient();
     SetupPrefixedRowIdDocs(db);
 
@@ -4552,8 +4554,8 @@ Y_UNIT_TEST(PrefixedRowIdUpsertSupported) {
     UNIT_ASSERT_VALUES_EQUAL(PrefixedRowIdSearch(db, "red", "dogs"), "a1");
 }
 
-Y_UNIT_TEST(PrefixedRowIdReplaceSupported) {
-    auto kikimr = KikimrPrefixRowId();
+Y_UNIT_TEST_TWIN(PrefixedRowIdReplaceSupported, Compact) {
+    auto kikimr = KikimrPrefixRowId(Compact);
     auto db = kikimr.GetQueryClient();
     SetupPrefixedRowIdDocs(db);
 
@@ -4565,8 +4567,8 @@ Y_UNIT_TEST(PrefixedRowIdReplaceSupported) {
     UNIT_ASSERT_VALUES_EQUAL(PrefixedRowIdSearch(db, "red", "owls"), "a1");
 }
 
-Y_UNIT_TEST(PrefixedRowIdUpdateSupported) {
-    auto kikimr = KikimrPrefixRowId();
+Y_UNIT_TEST_TWIN(PrefixedRowIdUpdateSupported, Compact) {
+    auto kikimr = KikimrPrefixRowId(Compact);
     auto db = kikimr.GetQueryClient();
     SetupPrefixedRowIdDocs(db);
 

@@ -49,7 +49,7 @@
 
 | Case ID | Name | Description | Issues |  Status |
 |---------|------|-------------|--------|:--------|
-| REQ-PERF-006-6.1 | TPC-H Performance - 10GB | Validate TPC-H benchmark performance with 10GB. |  | Pending |
+| REQ-PERF-006-6.1 | TPC-H Performance - 10GB | Validate TPC\-H benchmark performance with 10GB. |  | Pending |
 
 #### REQ-PERF-007: ClickBench benchmark to test efficiency under different conditions.
 **Description**: Assess system capabilities using ClickBench, targeting different data sizes.

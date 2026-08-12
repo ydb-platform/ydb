@@ -178,7 +178,7 @@ def fetch_sub_issues_by_id(issue_id, github_token):
                 sub_issues.append({
                     'case_id': f"#{node['number']}",
                     'name': node['title'],
-                    'description': node['body'].split('\n')[0],
+                    'description': node['body'].replace('\n','<br>'),
                     'path': node['url'],
                     'issue': node['number'],
                     'status': "Pending",
@@ -197,6 +197,12 @@ def fetch_sub_issues_by_id(issue_id, github_token):
 def to_anchor(s):
     return '#' + re.sub(r'[\s/:()]+', '-', s.lower().replace('/', '').replace('+', '')).strip('-')
 
+def escape_markdown(text):
+    # Экранирование специальных символов Markdown
+    special_chars = ['*', '_', '-', '+', '#', '|', '`']
+    for char in special_chars:
+        text = text.replace(char, "\\" + char)
+    return text
 
 def generate_traceability_matrix(requirements, output_path):
     with open(output_path, 'w', encoding='utf-8') as file:
@@ -237,7 +243,7 @@ def generate_traceability_matrix(requirements, output_path):
                     issues_list = issues_list + ','.join([f"{issue['bage']}" for issue in case['issues']]) 
                 if req.get('issues'):
                     issues_list = issues_list + ','.join([f"{issue['bage']}" for issue in req['issues']] or req['issues'])
-                file.write(f"| {case['case_id']} | {case['name']} | {case['description']} | {issues_list} | {case['status']} |\n")
+                file.write(f"| {case['case_id']} | {case['name']} | {escape_markdown(case['description'])} | {issues_list} | {case['status']} |\n")
             file.write("\n")
             
 def generate_summary(requirements, output_path):

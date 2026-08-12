@@ -99,7 +99,7 @@ void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString s
 void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     bool fired = true;
     ui32 numMatches = 0;
-    const ui32 maxNumOfMatches = 1000;
+    const ui32 maxNumOfMatches = UINT32_MAX;
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
     ui32 computedProps = 0;
 

@@ -3,6 +3,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <limits>
+
 #include <util/stream/file.h>
 
 namespace NKikimr::NKqp {
@@ -65,13 +67,16 @@ std::pair<ui64, ui64> GetNewRboCompileCounters(TKikimrRunner& kikimr) {
 
 Y_UNIT_TEST_SUITE(KqpRboLarge1CRepro) {
     Y_UNIT_TEST(MinimallyAdjustedQueryUsesNewRbo) {
+        constexpr ui32 InfiniteTimeoutMs = std::numeric_limits<ui32>::max();
+        const auto infiniteTimeout = TDuration::MilliSeconds(InfiniteTimeoutMs);
+
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetBackportMode(
             NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-        appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(
-            TDuration::Minutes(30).MilliSeconds());
+        appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(InfiniteTimeoutMs);
+        appConfig.MutableTableServiceConfig()->MutableQueryLimits()->SetDataQueryTimeoutMs(InfiniteTimeoutMs);
         appConfig.MutableFeatureFlags()->SetEnableStatistics(false);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -85,9 +90,9 @@ Y_UNIT_TEST_SUITE(KqpRboLarge1CRepro) {
 
         const auto countersBefore = GetNewRboCompileCounters(kikimr);
         const auto explainSettings = TExplainDataQuerySettings()
-            .ClientTimeout(TDuration::Minutes(30))
-            .OperationTimeout(TDuration::Minutes(30))
-            .CancelAfter(TDuration::Minutes(30));
+            .ClientTimeout(infiniteTimeout)
+            .OperationTimeout(infiniteTimeout)
+            .CancelAfter(infiniteTimeout);
         auto result = session.ExplainDataQuery(ReadFixture(QueryPath), explainSettings).GetValueSync();
         const auto countersAfter = GetNewRboCompileCounters(kikimr);
 

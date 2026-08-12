@@ -847,11 +847,6 @@ public:
 
         TPath dstPath = TPath::ResolveWithInactive(OperationId, dstPathStr, context.SS);
         TPath dstParent = dstPath.Parent();
-        if (dstParent->IsOlapStore()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                "Moving tables into a TABLESTORE is not supported");
-            return result;
-        }
 
         {
             TPath::TChecker checks = dstParent.Check();
@@ -863,6 +858,12 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+
+            if (dstParent->IsOlapStore()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Moving tables into a TABLESTORE is not supported");
                 return result;
             }
 

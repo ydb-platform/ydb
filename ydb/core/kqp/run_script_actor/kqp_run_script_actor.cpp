@@ -244,17 +244,8 @@ private:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS || !FinishInfo.IsFinished()) {
             const auto& issues = ev->Get()->Issues;
-<<<<<<< HEAD
             LOG_E("Got lease watcher finished: " << ev->Sender << " with status " << status << ", issues: " << issues.ToOneLineString());
-            Finish(status, AddRootIssue("Script lease watcher error", issues));
-=======
-            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got lease watcher with status",
-                {"logPrefix", LogPrefix()},
-                {"finished", ev->Sender},
-                {"status", status},
-                {"issues", issues.ToOneLineString()});
             Finish(status == Ydb::StatusIds::SUCCESS ? Ydb::StatusIds::INTERNAL_ERROR : status, AddRootIssue("Script lease watcher error", issues));
->>>>>>> 56a05ee76cb (Fixed sq retries after planing error)
         } else {
             LOG_I("Got lease watcher finished: " << ev->Sender);
             Finish();

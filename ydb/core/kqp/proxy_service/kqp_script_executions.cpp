@@ -1731,21 +1731,12 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-<<<<<<< HEAD
-        KQP_PROXY_LOG_W("Reply " << status << ", issues: " << issues.ToOneLineString());
-=======
         if (status == Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_DEBUG("[ScriptExecutions] Reply success",
-                {"logPrefix", LogPrefix()},
-                {"issues", issues.ToOneLineString()});
+            KQP_PROXY_LOG_D("Reply success, issues: " << issues.ToOneLineString());
         } else {
-            YDB_LOG_WARN("[ScriptExecutions] Reply failed",
-                {"logPrefix", LogPrefix()},
-                {"status", status},
-                {"issues", issues.ToOneLineString()});
+            KQP_PROXY_LOG_W("Reply " << status << ", issues: " << issues.ToOneLineString());
         }
 
->>>>>>> 56a05ee76cb (Fixed sq retries after planing error)
         Send(ReplyActorId, new TEvPrivate::TEvFinalizeScriptLeaseResult(status, {
             .LeaseVerified = LeaseVerified,
             .ExecutionEntryExists = EntryExists,

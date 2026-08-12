@@ -4753,6 +4753,113 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 22\n");
     }
 
+    // A multi-operation write (WriteSeqNums [1, 2]) must be detected as a duplicate
+    // when resent, not rejected as STATUS_BAD_REQUEST on the first operation.
+    Y_UNIT_TEST(PipelinedUncommittedWriteAlreadyAppliedMultiOperation) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const auto& columns = opts.Columns_;
+        const ui64 shard = shards.at(0);
+
+        const ui64 lockTxId = 1234567890001;
+        const ui64 lockNodeId = runtime.GetNodeId(0);
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
+
+        // Helper: send a two-operation write with WriteSeqNums [1, 2]
+        auto sendMultiOp = [&](ui32 key1, ui32 val1, ui32 key2, ui32 val2,
+                               NKikimrDataEvents::TEvWriteResult::EStatus expected =
+                                   NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+            auto req = std::make_unique<NEvents::TDataEvents::TEvWrite>(
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            req->SetLockId(lockTxId, lockNodeId);
+            const std::vector<ui32> columnIds = {1, 2};
+
+            // Operation 1: key1=val1, WriteSeqNum=1
+            {
+                TVector<TCell> cells;
+                cells.emplace_back(TCell((const char*)&key1, sizeof(ui32)));
+                cells.emplace_back(TCell((const char*)&val1, sizeof(ui32)));
+                TSerializedCellMatrix matrix(cells, 1, 2);
+                ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*req)
+                    .AddDataToPayload(matrix.ReleaseBuffer());
+                req->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                    tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+                auto* wsn = req->Record.MutableOperations(0)->MutableWriteSeqNum();
+                wsn->SetWriterIndex(0);
+                wsn->SetWriteSeqNum(1);
+            }
+
+            // Operation 2: key2=val2, WriteSeqNum=2
+            {
+                TVector<TCell> cells;
+                cells.emplace_back(TCell((const char*)&key2, sizeof(ui32)));
+                cells.emplace_back(TCell((const char*)&val2, sizeof(ui32)));
+                TSerializedCellMatrix matrix(cells, 1, 2);
+                ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*req)
+                    .AddDataToPayload(matrix.ReleaseBuffer());
+                req->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                    tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+                auto* wsn = req->Record.MutableOperations(1)->MutableWriteSeqNum();
+                wsn->SetWriterIndex(0);
+                wsn->SetWriteSeqNum(2);
+            }
+
+            return Write(runtime, sender, shard, std::move(req), expected);
+        };
+
+        NKikimrDataEvents::TLock lock;
+        NKikimrQueryStats::TTableAccessStats access;
+        {
+            auto result = sendMultiOp(1, 11, 2, 22);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
+            lock = result.GetTxLocks().at(0);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().TableAccessStatsSize(), 1u);
+            access = result.GetTxStats().GetTableAccessStats(0);
+            UNIT_ASSERT_VALUES_EQUAL(access.GetUpdateRow().GetRows(), 2u);
+        }
+
+        {
+            // A duplicate delivery of the same multi-operation batch must be detected
+            // as a duplicate, not rejected as STATUS_BAD_REQUEST.
+            auto result = sendMultiOp(1, 11, 2, 22,
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT(result.GetIsDuplicate());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
+            const auto& echoed = result.GetTxLocks().at(0);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriterIndex(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriteSeqNum(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(echoed.GetGeneration(), lock.GetGeneration());
+            UNIT_ASSERT_VALUES_EQUAL(echoed.GetCounter(), lock.GetCounter());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().TableAccessStatsSize(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().GetTableAccessStats(0).DebugString(),
+                access.DebugString());
+        }
+
+        {
+            // A stale single-operation write (seq num 1 < current 2) is still an error
+            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns,
+                lockTxId, lockNodeId, 1, 11, 0, 1,
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("already applied"),
+                result.GetIssues(0).message());
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("writer is at 2"),
+                result.GetIssues(0).message());
+        }
+
+        CommitLock(runtime, sender, shard, lock);
+
+        auto tableState = ReadTable(server, shards, tableId);
+        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 22\n");
+    }
+
     // A write that applies no rows still takes a position in the chain
     Y_UNIT_TEST(PipelinedUncommittedWriteAlreadyAppliedMissingRow) {
         TPortManager pm;

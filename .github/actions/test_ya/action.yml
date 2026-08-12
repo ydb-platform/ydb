@@ -468,6 +468,13 @@ runs:
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
           )
 
+          # systemd-run starts a fresh scope; shell ulimit does not apply there.
+          # Default LimitCORE=0 prevents kernel coredumps even with core_pattern=/coredumps/...
+          SYSTEMD_CORE_LIMIT_PROPS=()
+          if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+            SYSTEMD_CORE_LIMIT_PROPS+=(-p LimitCORE=infinity)
+          fi
+
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
 
@@ -478,6 +485,7 @@ runs:
              --unit="${YA_MAKE_SCOPE_NAME}" \
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \
              -p MemorySwapMax=0 \
+             "${SYSTEMD_CORE_LIMIT_PROPS[@]}" \
              -- sudo -n -E -u "$(id -un)" -- \
              "${YA_MAKE_CMD[@]}"
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1

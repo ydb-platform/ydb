@@ -811,24 +811,62 @@ private:
         // the log, which is a way more dangerous kind of starvation
         const i64 maxTotal = Params.SeparateCommonLog ? pool * (i64)Params.StaticGroupChunkReservePerMille / 1000 : 0;
 
+        TStackVec<i64, 8> desired(StaticOwners.size());
         i64 desiredTotal = 0;
-        for (const TStaticOwnerInfo &info : StaticOwners) {
-            desiredTotal += GetDesiredStaticReserve(info);
+        for (size_t idx = 0; idx < StaticOwners.size(); ++idx) {
+            desired[idx] = GetDesiredStaticReserve(StaticOwners[idx]);
+            desiredTotal += desired[idx];
+        }
+        if (desiredTotal > maxTotal) {
+            for (i64 &value : desired) {
+                value = value * maxTotal / desiredTotal;
+            }
+        }
+
+        // Give back everything that is not needed anymore before taking anything. Otherwise a reserve that has to
+        // grow is limited by the free space of the shared quota while the space it needs is still held by another
+        // owner of the very same list, and the surplus released later in the pass is left for the dynamic owners
+        // to grab.
+        for (size_t idx = 0; idx < StaticOwners.size(); ++idx) {
+            ShrinkStaticReserve(StaticOwners[idx].OwnerId, desired[idx]);
+        }
+
+        i64 deficitTotal = 0;
+        for (size_t idx = 0; idx < StaticOwners.size(); ++idx) {
+            deficitTotal += GetStaticReserveDeficit(StaticOwners[idx].OwnerId, desired[idx]);
+        }
+        if (deficitTotal) {
+            const i64 available = Max<i64>(SharedQuota->GetFree(), 0);
+            if (deficitTotal > available) {
+                // There is not enough space for everybody, split it proportionally to what each owner is missing,
+                // so that the first owner of the list can not take it all
+                for (size_t idx = 0; idx < StaticOwners.size(); ++idx) {
+                    GrowStaticReserve(StaticOwners[idx].OwnerId,
+                            GetStaticReserveDeficit(StaticOwners[idx].OwnerId, desired[idx]) * available / deficitTotal);
+                }
+            }
+            // Either every deficit fits into the shared quota, or these are the few chunks lost to the rounding above
+            for (size_t idx = 0; idx < StaticOwners.size(); ++idx) {
+                GrowStaticReserve(StaticOwners[idx].OwnerId,
+                        GetStaticReserveDeficit(StaticOwners[idx].OwnerId, desired[idx]));
+            }
         }
 
         IsStaticReserveDirty = false;
-        for (ui64 idx = 0; idx < StaticOwners.size();) {
+        for (size_t idx = 0; idx < StaticOwners.size();) {
             const TStaticOwnerInfo &info = StaticOwners[idx];
-            i64 desired = GetDesiredStaticReserve(info);
-            if (desiredTotal > maxTotal) {
-                desired = desired * maxTotal / desiredTotal;
+            const i64 current = StaticReserve->GetHardLimit(info.OwnerId);
+            if (current != desired[idx]) {
+                // There was not enough free space in the shared quota for the whole reserve, try again as soon as
+                // some chunks are released
+                IsStaticReserveDirty = true;
             }
-            SetStaticReserve(info.OwnerId, desired);
-
-            if (!info.IsActive && StaticReserve->GetHardLimit(info.OwnerId) == 0) {
+            if (!info.IsActive && current == 0) {
                 StaticReserve->RemoveReserveOwner(info.OwnerId);
                 StaticOwners[idx] = StaticOwners.back();
                 StaticOwners.pop_back();
+                desired[idx] = desired.back();
+                desired.pop_back();
             } else {
                 ++idx;
             }
@@ -839,29 +877,28 @@ private:
         return info.IsActive ? OwnerQuota->GetHardLimit(info.OwnerId) : 0;
     }
 
-    // Moves chunks between the shared quota and the private reserve of a static group owner. Neither of the two is
-    // ever left with negative free space, so an overused disk just gets a smaller reserve, and the reserve grows
-    // back as soon as the chunks are released.
-    void SetStaticReserve(TOwner owner, i64 desired) {
+    i64 GetStaticReserveDeficit(TOwner owner, i64 desired) const {
+        return Max<i64>(desired - StaticReserve->GetHardLimit(owner), 0);
+    }
+
+    // Returns the unused part of a reserve to the shared quota. The reserve is never left with negative free space,
+    // so a reserve the owner still holds chunks of shrinks only as those chunks are released.
+    void ShrinkStaticReserve(TOwner owner, i64 desired) {
         const i64 current = StaticReserve->GetHardLimit(owner);
-        i64 granted = current;
-        if (desired > current) {
-            const i64 increment = Min(desired - current, Max<i64>(SharedQuota->GetFree(), 0));
-            if (increment) {
-                granted = current + increment;
-                SharedQuota->ForceHardLimit(SharedQuota->GetHardLimit() - increment, ChunkLimits);
-                StaticReserve->ForceHardLimit(owner, granted);
-            }
-        } else if (desired < current) {
-            const i64 decrement = Min(current - desired, Max<i64>(StaticReserve->GetFree(owner), 0));
-            if (decrement) {
-                granted = current - decrement;
-                StaticReserve->ForceHardLimit(owner, granted);
-                SharedQuota->ForceHardLimit(SharedQuota->GetHardLimit() + decrement, ChunkLimits);
-            }
+        const i64 decrement = Min(current - desired, Max<i64>(StaticReserve->GetFree(owner), 0));
+        if (decrement > 0) {
+            StaticReserve->ForceHardLimit(owner, current - decrement);
+            SharedQuota->ForceHardLimit(SharedQuota->GetHardLimit() + decrement, ChunkLimits);
         }
-        if (granted != desired) {
-            IsStaticReserveDirty = true;
+    }
+
+    // Takes free space of the shared quota into a reserve. The shared quota is never left with negative free space,
+    // so an overused disk just gets a smaller reserve, and the reserve grows as soon as the chunks are released.
+    void GrowStaticReserve(TOwner owner, i64 increment) {
+        increment = Min(increment, Max<i64>(SharedQuota->GetFree(), 0));
+        if (increment > 0) {
+            SharedQuota->ForceHardLimit(SharedQuota->GetHardLimit() - increment, ChunkLimits);
+            StaticReserve->ForceHardLimit(owner, StaticReserve->GetHardLimit(owner) + increment);
         }
     }
 

@@ -103,14 +103,6 @@ private:
     const ui64 MaxMemoryBytes;
 };
 
-// Default memory budget for one in-memory HNSW index, used when
-// VectorIndexSettings.hnsw_max_memory_bytes is unset (0).
-constexpr ui64 DefaultHnswMaxMemoryBytes = 10_GB;
-
-ui64 EffectiveHnswMaxMemoryBytes(const Ydb::Table::VectorIndexSettings& settings) {
-    return settings.hnsw_max_memory_bytes() != 0 ? settings.hnsw_max_memory_bytes() : DefaultHnswMaxMemoryBytes;
-}
-
 } // namespace
 
 IActor* CreateHnswIndexBuildJob(
@@ -189,6 +181,9 @@ protected:
         }
 
         const auto& settings = alter.GetVectorIndexKmeansTreeDescription().GetSettings().settings();
+        if (settings.hnsw_max_memory_bytes() == 0) {
+            return false;
+        }
         if (settings.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) {
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
                 << " HNSW: unsupported vector type for localTid=" << table.LocalTid
@@ -221,7 +216,7 @@ protected:
         LocalTid = table.LocalTid;
         tx->SetAsyncJobActor(ctx.Register(
             CreateHnswIndexBuildJob(DataShard.SelfId(), op->GetTxId(), settings,
-                std::move(keysAndVectors), EffectiveHnswMaxMemoryBytes(settings)),
+                std::move(keysAndVectors), settings.hnsw_max_memory_bytes()),
             TMailboxType::HTSwap,
             AppData(ctx)->BatchPoolId));
 

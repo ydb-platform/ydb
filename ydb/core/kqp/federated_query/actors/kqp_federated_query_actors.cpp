@@ -378,7 +378,7 @@ public:
         } else {
             YDB_LOG_WARN("Authorize failure",
                     {"status", ev->Get()->Status.ToDebugString()},
-                    {"iteratiom", Backoff.GetIteration()});
+                    {"iteration", Backoff.GetIteration()});
             if (IsRetryableGrpcError(ev->Get()->Status) && Backoff.HasMore()) {
                 auto delay = Backoff.Next();
                 Schedule(delay, new NActors::TEvents::TEvWakeup());

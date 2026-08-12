@@ -4220,15 +4220,13 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
     } else if (isParallelUnionAll && !forceMapTasks && GetMeta().EnableParallelUnionAllConsumerSizing) {
         const auto& settings = stage.GetProgram().GetSettings();
         const bool producerUnderParallelized = partitionsCount <= 2 * nodesCount;
-        const bool autoSizingEligible = producerUnderParallelized && settings.GetHasPhyHashCombine()
-            && !settings.GetHasTop() && !settings.GetHasMapJoin();
+        const bool planAllowsExpansion = settings.GetCanExpandParallelUnionAllConsumer();
+        const bool autoSizingEligible = producerUnderParallelized && planAllowsExpansion;
 
-        // A ParallelUnionAll consumer is not bound to its producers by correctness, but growing every such stage is
-        // not free: short LIMIT pipelines and lookup joins have no demonstrated benefit and can amplify work. Keep the
-        // producer width unless the consumer contains a splittable aggregation and its producers are narrow relative
-        // to the cluster. A stage which already has more than two producer tasks per node has enough parallelism that
-        // resource-only expansion is more likely to amplify partial rows or move the bottleneck downstream. An
-        // explicit TaskCount remains an override and is honored independently of this conservative automatic check.
+        // The physical planner decides whether the stage program is semantically eligible for replication. The
+        // executer applies only the topology/resource admission rule: a stage which already has more than two producer
+        // tasks per node is not expanded automatically. An explicit TaskCount remains an override and is honored
+        // independently of both automatic checks.
         if (stage.GetTaskCount()) {
             stageType = TMaxTasksGraph::FIXED;
             partitionsCount = stage.GetTaskCount();
@@ -4244,11 +4242,9 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
             {"consumers", partitionsCount},
             {"explicitTaskCount", stage.GetTaskCount()},
             {"autoSizingEligible", autoSizingEligible},
+            {"planAllowsExpansion", planAllowsExpansion},
             {"producerUnderParallelized", producerUnderParallelized},
-            {"nodes", nodesCount},
-            {"hasPhyHashCombine", settings.GetHasPhyHashCombine()},
-            {"hasTop", settings.GetHasTop()},
-            {"hasMapJoin", settings.GetHasMapJoin()});
+            {"nodes", nodesCount});
 
         // Tell the channel budget which edges will be wired as a bounded-degree scatter instead of a full mesh - only
         // those where this stage actually ended up wider than its producer (see BuildParallelUnionAllChannels).

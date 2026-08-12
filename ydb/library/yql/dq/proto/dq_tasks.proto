@@ -51,9 +51,9 @@ message TProgram {
 
         bool HasWatermarkGenerator = 17;
         optional uint64 WatermarkGeneratorIdleTimeoutUs = 18;
-        // Structural marker from the final physical program. Unlike the legacy aggregation predictor flags, this is
-        // set after WideCombiner has been lowered to DqPhyHashCombine.
-        bool HasPhyHashCombine = 19;
+        // Physical-planner contract: this program may be replicated into more ParallelUnionAll consumer tasks.
+        // The executer still decides whether and how far to expand it from topology and available resources.
+        bool CanExpandParallelUnionAllConsumer = 19;
     }
 
     uint32 RuntimeVersion = 1;

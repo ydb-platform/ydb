@@ -1180,7 +1180,9 @@ private:
             }
             return true;
         });
-        programProto.MutableSettings()->SetHasPhyHashCombine(hasPhyHashCombine);
+        const auto& programSettings = programProto.GetSettings();
+        programProto.MutableSettings()->SetCanExpandParallelUnionAllConsumer(
+            hasPhyHashCombine && !programSettings.GetHasTop() && !programSettings.GetHasMapJoin());
 
         for (auto member : paramsType->GetItems()) {
             auto paramName = TString(member->GetName());

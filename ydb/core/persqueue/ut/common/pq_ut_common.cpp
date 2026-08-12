@@ -704,6 +704,32 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
     ++msgSeqNo;
 }
 
+NKikimrClient::TCmdReadResult CmdReadAndGetResult(
+    const TPQCmdReadSettings& settings,
+    TTestContext& tc)
+{
+    for (ui32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
+        try {
+            BeginCmdRead(settings, tc);
+            TAutoPtr<IEventHandle> handle;
+            auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            UNIT_ASSERT(result);
+            if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                tc.Runtime->DispatchEvents();
+                retriesLeft = 3;
+                continue;
+            }
+            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
+            UNIT_ASSERT(result->Record.GetPartitionResponse().HasCmdReadResult());
+            return result->Record.GetPartitionResponse().GetCmdReadResult();
+        } catch (NActors::TSchedulingLimitReachedException) {
+            UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2);
+            retriesLeft = 3;
+        }
+    }
+    Y_UNREACHABLE();
+}
+
 void CmdWrite(const TCmdWriteOptions& o) {
     CmdWrite(
         o.Partition,

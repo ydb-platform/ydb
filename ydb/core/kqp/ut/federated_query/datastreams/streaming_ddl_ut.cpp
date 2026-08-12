@@ -94,6 +94,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(2, 1);
         Sleep(TDuration::Seconds(1));
 
+        {
+            auto appCounters = GetCounters("tablets")->GetSubgroup("type", "SchemeShard")->GetSubgroup("category", "app");
+            WaitFor(TDuration::Seconds(60), "StreamingQueryCount and RunningStreamingQueryCount reach 1", [&](TString& error) {
+                auto queryCount = appCounters->GetCounter("SUM(SchemeShard/StreamingQueryCount)", false)->Val();
+                auto runningCount = appCounters->GetCounter("SUM(SchemeShard/RunningStreamingQueryCount)", false)->Val();
+                error = TStringBuilder() << "StreamingQueryCount=" << queryCount << ", RunningStreamingQueryCount=" << runningCount << ", expected both to be 1";
+                return queryCount == 1 && runningCount == 1;
+            });
+        }
+
         WriteTopicMessage(inputTopicName, R"({"key": "key2", "value": "value2"})");
         ReadTopicMessages(outputTopicName, {"key1value1", "value2key2"});
 
@@ -105,6 +115,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         CheckScriptExecutionsCount(2, 0);
+        {
+            auto appCounters = GetCounters("tablets")->GetSubgroup("type", "SchemeShard")->GetSubgroup("category", "app");
+            WaitFor(TDuration::Seconds(60), "StreamingQueryCount and RunningStreamingQueryCount reach 1", [&](TString& error) {
+                auto queryCount = appCounters->GetCounter("SUM(SchemeShard/StreamingQueryCount)", false)->Val();
+                auto runningCount = appCounters->GetCounter("SUM(SchemeShard/RunningStreamingQueryCount)", false)->Val();
+                error = TStringBuilder() << "StreamingQueryCount=" << queryCount << ", RunningStreamingQueryCount=" << runningCount;
+                return queryCount == 1 && runningCount == 0;
+            });
+        }
 
         const auto& result = ExecQuery("SELECT Issues FROM `.sys/streaming_queries`");
         UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
@@ -166,6 +185,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         CheckScriptExecutionsCount(0, 0);
+
+        {
+            auto appCounters = GetCounters("tablets")->GetSubgroup("type", "SchemeShard")->GetSubgroup("category", "app");
+            WaitFor(TDuration::Seconds(60), "StreamingQueryCount and RunningStreamingQueryCount reach 1", [&](TString& error) {
+                auto queryCount = appCounters->GetCounter("SUM(SchemeShard/StreamingQueryCount)", false)->Val();
+                auto runningCount = appCounters->GetCounter("SUM(SchemeShard/RunningStreamingQueryCount)", false)->Val();
+                error = TStringBuilder() << "StreamingQueryCount=" << queryCount << ", RunningStreamingQueryCount=" << runningCount;
+                return queryCount == 0 && runningCount == 0;
+            });
+        }
     }
 
     Y_UNIT_TEST_F(MaxPartitionReadSkewWithRestartAndCheckpoint, TStreamingTestFixture) {

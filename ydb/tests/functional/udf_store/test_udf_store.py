@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-import hashlib
+# import hashlib
 import logging
 import os
-import shutil
+# import shutil
 import subprocess
 import time
 
-import pytest
+# import pytest
 import yatest.common
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR

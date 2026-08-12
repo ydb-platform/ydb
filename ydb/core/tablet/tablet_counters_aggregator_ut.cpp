@@ -5,8 +5,11 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 
+#include <library/cpp/monlib/service/monservice.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/mon.h>
 
 namespace NKikimr {
 
@@ -653,6 +656,90 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             {0, 1, 0, 0, 0},
             tablet1.TabletType
         );
+    }
+
+    Y_UNIT_TEST(SearchCounters) {
+        TTestBasicRuntime runtime(1);
+
+        runtime.Initialize(TAppPrepare().Unwrap());
+        TActorId edge = runtime.AllocateEdgeActor();
+
+        auto aggregator = CreateTabletCountersAggregator(false);
+        auto aggregatorId = runtime.Register(aggregator);
+        runtime.EnableScheduleForActor(aggregatorId);
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        runtime.DispatchEvents(options);
+
+        TTabletWithHist dummyTablet(1, TTabletTypes::Dummy);
+        dummyTablet.SetSimpleCount("JustCount1", 11);
+        dummyTablet.SendUpdate(runtime, aggregatorId, edge);
+
+        TTabletWithHist columnShardTablet(2, TTabletTypes::ColumnShard);
+        columnShardTablet.SetSimpleCount("JustCount1", 22);
+        columnShardTablet.SendUpdate(runtime, aggregatorId, edge);
+
+        struct TTestHttpRequest : NMonitoring::IHttpRequest {
+            HTTP_METHOD Method;
+            TCgiParameters CgiParameters;
+            THttpHeaders HttpHeaders;
+            TString Path;
+
+            TTestHttpRequest(HTTP_METHOD method, TString path)
+                : Method(method)
+                , Path(std::move(path))
+            {
+            }
+
+            const char* GetURI() const override {
+                return "";
+            }
+
+            const char* GetPath() const override {
+                return Path.c_str();
+            }
+
+            const TCgiParameters& GetParams() const override {
+                return CgiParameters;
+            }
+
+            const TCgiParameters& GetPostParams() const override {
+                return CgiParameters;
+            }
+
+            TStringBuf GetPostContent() const override {
+                return {};
+            }
+
+            HTTP_METHOD GetMethod() const override {
+                return Method;
+            }
+
+            const THttpHeaders& GetHeaders() const override {
+                return HttpHeaders;
+            }
+
+            TString GetRemoteAddr() const override {
+                return {};
+            }
+        };
+
+        TTestHttpRequest httpReq(HTTP_METHOD_GET, "/actors/tablet_counters_aggregator/search");
+        httpReq.CgiParameters.emplace("name", "JustCount1");
+        NMonitoring::TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, nullptr, "/search", nullptr);
+        runtime.Send(new IEventHandle(aggregatorId, edge, new NMon::TEvHttpInfo(monReq)));
+
+        TAutoPtr<IEventHandle> handle;
+        auto* resp = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        UNIT_ASSERT(resp);
+
+        const TString& answer = resp->Answer;
+        UNIT_ASSERT_STRING_CONTAINS(answer, "JustCount1");
+        UNIT_ASSERT_STRING_CONTAINS(answer, "TabletID=1");
+        UNIT_ASSERT_STRING_CONTAINS(answer, "TabletID=2");
+        UNIT_ASSERT_STRING_CONTAINS(answer, "<td>11</td>");
+        UNIT_ASSERT_STRING_CONTAINS(answer, "<td>22</td>");
     }
 }
 

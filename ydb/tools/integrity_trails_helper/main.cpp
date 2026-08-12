@@ -6,6 +6,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #define USE_CURRENT_UDF_ABI_VERSION true
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/tx/datashard/datashard_integrity_trails.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/core/sql_types/simple_types.h>

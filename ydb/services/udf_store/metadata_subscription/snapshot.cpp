@@ -17,9 +17,6 @@ bool TSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult&
                 break;
         }
     });
-    ParseSnapshotObjects<TUdfLibrarySource>(rawDataResult.result_sets()[1], [this](TUdfLibrarySource&& library) {
-        Libraries.emplace(library.GetName(), std::move(library));
-    });
     return true;
 }
 

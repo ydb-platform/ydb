@@ -53,15 +53,6 @@ i32 FindColumnIndex(const Ydb::ResultSet& resultSet, const TString& columnName) 
     return -1;
 }
 
-i32 FindColumnIndex(const Ydb::ResultSet& resultSet, const TString& columnName) {
-    for (i32 i = 0; i < resultSet.columns_size(); ++i) {
-        if (resultSet.columns(i).name() == columnName) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 bool ReadUtf8Column(const Ydb::ResultSet& resultSet, const TString& columnName, TString& value) {
     if (resultSet.rows().empty()) {
         return false;

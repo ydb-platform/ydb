@@ -21,10 +21,6 @@ TString GetModuleChunksTablePath() {
     return GetUdfStorePrefix() + "/module_chunks";
 }
 
-TString GetLibrarySourceChunksTablePath() {
-    return GetUdfStorePrefix() + "/library_source_chunks";
-}
-
 TString GetArtifactTablePath(const TString& cpuSpec) {
     return GetUdfStorePrefix() + "/artifacts/" + cpuSpec;
 }

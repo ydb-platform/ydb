@@ -20,7 +20,6 @@ private:
         DeleteArtifactChunks,
         WriteArtifactChunk,
         UpsertArtifact,
-        WriteArtifactChunk,
         UpdateMetaReady,
         UpdateMetaFailed,
     };

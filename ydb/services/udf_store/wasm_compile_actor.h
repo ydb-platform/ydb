@@ -22,7 +22,6 @@ private:
         DeleteArtifactChunks,
         WriteArtifactChunk,
         UpsertModuleArtifact,
-        WriteArtifactChunk,
         UpdateMetaReady,
         UpdateMetaFailed,
     };

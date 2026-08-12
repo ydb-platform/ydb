@@ -242,6 +242,7 @@ public:
 
     TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& nullBitmapRelocationBuffer) override {
         if constexpr (IsNull) {
+            auto bitmap = NYql::NUdf::MakeDenseFalseBitmap(array->length, Pool_);
             nullBitmapRelocationBuffer.push_back(bitmap);
             return {bitmap->data()};
         } else {

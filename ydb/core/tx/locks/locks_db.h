@@ -40,8 +40,8 @@ public:
                 lock.Counter = rowset.template GetValue<typename Schema::Locks::Counter>();
                 lock.CreateTs = rowset.template GetValue<typename Schema::Locks::CreateTimestamp>();
                 lock.Flags = rowset.template GetValue<typename Schema::Locks::Flags>();
-                lock.WriterIndex = rowset.template GetValue<typename Schema::Locks::WriterIndex>();
-                lock.WriteSeqNum = rowset.template GetValue<typename Schema::Locks::WriteSeqNum>();
+                lock.WriteSeqNumState.WriterIndex = rowset.template GetValue<typename Schema::Locks::WriterIndex>();
+                lock.WriteSeqNumState.WriteSeqNum = rowset.template GetValue<typename Schema::Locks::WriteSeqNum>();
                 lockIndex[lock.LockId] = rows.size() - 1;
                 if (!rowset.Next()) {
                     return false;

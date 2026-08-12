@@ -114,7 +114,7 @@ TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
     , VictimQuerySpanId(row.VictimQuerySpanId)
     , BreakerQuerySpanId_(row.BreakerQuerySpanId)
     , BreakerNodeId_(row.BreakerNodeId)
-    , WriteSeqNumState{.WriterIndex = row.WriterIndex, .WriteSeqNum = row.WriteSeqNum}
+    , WriteSeqNumState(row.WriteSeqNumState)
 {
     if (row.BreakVersion != TRowVersion::Max()) {
         BreakVersion.emplace(row.BreakVersion);
@@ -458,6 +458,14 @@ bool TLockInfo::RestoreInMemoryState(const ILocksDb::TLockRow& lockRow) {
         }
     }
 
+    if (!lockRow.WriteSeqNumState.SerializedResult.empty() &&
+        lockRow.WriteSeqNumState.WriterIndex == WriteSeqNumState.WriterIndex &&
+        lockRow.WriteSeqNumState.WriteSeqNum == WriteSeqNumState.WriteSeqNum &&
+        WriteSeqNumState.WriteSeqNum != 0)
+    {
+        SetWriteSeqNumResult(lockRow.WriteSeqNumState.SerializedResult);
+    }
+
     return true;
 }
 
@@ -554,10 +562,7 @@ void TLockInfo::SetFrozen(ILocksDb* db) {
 bool TLockInfo::SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db) {
     WriteSeqNumState.WriterIndex = writerIndex;
     WriteSeqNumState.WriteSeqNum = writeSeqNum;
-    // The result describes the write that is being replaced
-    WriteSeqNumState.HasResult = false;
-    WriteSeqNumState.Issues.clear();
-    WriteSeqNumState.TxStats.Clear();
+    WriteSeqNumState.SerializedResult.clear();
     if (db && IsPersistent()) {
         db->PersistLockWriteSeqNum(LockId, writerIndex, writeSeqNum);
         return true;
@@ -565,14 +570,9 @@ bool TLockInfo::SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db)
     return false;
 }
 
-void TLockInfo::SetWriteSeqNumResult(const NKikimrDataEvents::TEvWriteResult& record) {
+void TLockInfo::SetWriteSeqNumResult(TString serializedResult) {
     Y_ENSURE(WriteSeqNumState.WriteSeqNum, "Result of an uncommitted write imply its position in the chain");
-    WriteSeqNumState.Status = record.GetStatus();
-    WriteSeqNumState.Issues.assign(record.GetIssues().begin(), record.GetIssues().end());
-    if (record.HasTxStats()) {
-        WriteSeqNumState.TxStats = record.GetTxStats();
-    }
-    WriteSeqNumState.HasResult = true;
+    WriteSeqNumState.SerializedResult = std::move(serializedResult);
 }
 
 void TLockInfo::AddWaitPersistentCallback(ILocksDb* db) {

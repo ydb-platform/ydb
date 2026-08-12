@@ -820,6 +820,12 @@ public:
             if (!srcPath->IsTable() && !srcPath->IsColumnTable()) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables");
             }
+            if (srcPath->IsColumnTable() && srcPath.Parent()->IsOlapStore()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Moving tables inside a TABLESTORE is not supported");
+                return result;
+            }
+
             TPath::TChecker checks = srcPath.Check();
             checks
                 .NotEmpty()
@@ -841,6 +847,11 @@ public:
 
         TPath dstPath = TPath::ResolveWithInactive(OperationId, dstPathStr, context.SS);
         TPath dstParent = dstPath.Parent();
+        if (dstParent->IsOlapStore()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Moving tables into a TABLESTORE is not supported");
+            return result;
+        }
 
         {
             TPath::TChecker checks = dstParent.Check();

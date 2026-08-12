@@ -2615,6 +2615,7 @@ private:
                 return result;
             }
 
+            const auto effectiveTableStats = ownTableStats ? ownTableStats : inheritedTableStats;
             for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
                 if (!p.GetMapSafe().contains("Operators") && p.GetMapSafe().contains("CTE Name")) {
                     auto precompute = p.GetMapSafe().at("CTE Name").GetStringSafe();
@@ -2622,7 +2623,7 @@ private:
                         planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false, nullptr));
                     }
                 } else if (p.GetMapSafe().at("Node Type").GetStringSafe().find("Precompute") == TString::npos) {
-                    planInputs.AppendValue(ReconstructImpl(p, 0, taskCount, fromBroadcast, inheritedTableStats));
+                    planInputs.AppendValue(ReconstructImpl(p, 0, taskCount, fromBroadcast, effectiveTableStats));
                 }
             }
             result["Plans"] = planInputs;

@@ -1742,6 +1742,8 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 InitializeKeeperLogParams(params, Cfg, Format);
 
                 params.SpaceColorBorder = GetColorBorderIcb();
+                StaticGroupChunkReservePerMilleCached = StaticGroupChunkReservePerMille;
+                params.StaticGroupChunkReservePerMille = static_cast<ui32>(StaticGroupChunkReservePerMilleCached);
                 ui64 chunkBaseLimitIcb = ChunkBaseLimitPerMille;
                 if (chunkBaseLimitIcb) {
                     params.ChunkBaseLimit = std::clamp(chunkBaseLimitIcb,

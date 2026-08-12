@@ -113,6 +113,11 @@ public:
         return AtomicSub(Free, count) > AtomicGet(Black);
     }
 
+    // The largest count TryAllocate can satisfy right now
+    i64 GetAllocatableFree() const {
+        return Max<i64>(0, AtomicGet(Free) - AtomicGet(Black) - 1);
+    }
+
     // Called only from the main thread
     bool TryAllocate(i64 count, TString &outErrorReason) {
         Y_VERIFY(count > 0);
@@ -204,6 +209,48 @@ public:
         }
     }
 };
+
+// The same ladder as TQuotaRecord::EstimateSpaceColor, for a pool that is a sum of several quota records
+inline NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(const TColorLimits &limits, i64 free, i64 hardLimit,
+        double *occupancy) {
+    using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+    if (hardLimit) {
+        *occupancy = (double)Max<i64>(0, hardLimit - free) / hardLimit;
+    } else {
+        *occupancy = 1.0;
+    }
+
+    i64 value = 0;
+    i64 border[8];
+    size_t idx = 0;
+#define CALCULATE_COLOR(NAME) \
+    value = Max(value, limits.NAME.CalculateQuota(hardLimit)); \
+    border[idx++] = value; \
+    ++value;
+    DISK_SPACE_COLORS(CALCULATE_COLOR)
+#undef CALCULATE_COLOR
+
+    if (free > border[7]) {
+        return TColor::GREEN;
+    } else if (free > border[6]) {
+        return TColor::CYAN;
+    } else if (free > border[5]) {
+        return TColor::LIGHT_YELLOW;
+    } else if (free > border[4]) {
+        return TColor::YELLOW;
+    } else if (free > border[3]) {
+        return TColor::LIGHT_ORANGE;
+    } else if (free > border[2]) {
+        return TColor::PRE_ORANGE;
+    } else if (free > border[1]) {
+        return TColor::ORANGE;
+    } else if (free > border[0]) {
+        return TColor::RED;
+    } else {
+        return TColor::BLACK;
+    }
+}
 
 } // NPDisk
 } // NKikimr

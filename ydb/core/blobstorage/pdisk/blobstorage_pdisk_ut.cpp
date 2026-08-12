@@ -1889,6 +1889,13 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         auto pdiskConfig = testCtx.GetPDiskConfig();
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         pdiskConfig->SpaceColorBorder = TColor::ORANGE;
+
+        // TVDiskMock creates VDisks of static groups, turn off their chunk reserve to measure the shared quota alone
+        TControlWrapper staticGroupChunkReservePerMille(0, 0, 1000);
+        TControlBoard::RegisterSharedControl(staticGroupChunkReservePerMille,
+                testCtx.GetRuntime()->GetAppData().Icb->PDiskControls.StaticGroupChunkReservePerMille);
+        staticGroupChunkReservePerMille = 0;
+
         testCtx.UpdateConfigRecreatePDisk(pdiskConfig);
         // The actual value of SharedQuota.HardLimit is initialized in TActorTestContext
         // with quite a complex formula. The value used here was obtained experimentally.
@@ -2105,6 +2112,46 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(expectedHardLimitChunks, 3u);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->TotalChunks, expectedHardLimitChunks);
         UNIT_ASSERT_LE(ui64(evCheckSpaceResult->TotalChunks) * formatChunkSize, expectedSlotSize);
+    }
+
+    Y_UNIT_TEST(StaticGroupChunkReserve) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TActorTestContext testCtx({});
+
+        // TVDiskMock makes a group id with the top bit clear, i.e. a static group, unless asked otherwise
+        TVDiskMock staticVDisk(&testCtx);
+        TVDiskMock dynamicVDisk(&testCtx, true);
+        staticVDisk.InitFull();
+        dynamicVDisk.InitFull();
+
+        // Let the neighbour from the dynamic group take everything it can
+        ui32 dynamicChunks = 0;
+        for (;;) {
+            const auto reserveResult = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+                new NPDisk::TEvChunkReserve(dynamicVDisk.PDiskParams->Owner, dynamicVDisk.PDiskParams->OwnerRound, 1));
+            if (reserveResult->Status != NKikimrProto::OK) {
+                UNIT_ASSERT_VALUES_EQUAL(reserveResult->Status, NKikimrProto::OUT_OF_SPACE);
+                break;
+            }
+            ++dynamicChunks;
+        }
+        UNIT_ASSERT_GT(dynamicChunks, 0);
+
+        auto dynamicSpace = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(dynamicVDisk.PDiskParams->Owner, dynamicVDisk.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_GE(StatusFlagToSpaceColor(dynamicSpace->StatusFlags), TColor::ORANGE);
+
+        // The VDisk of the static group keeps allocating and committing chunks and still reports free space
+        staticVDisk.ReserveChunk();
+        staticVDisk.CommitReservedChunks();
+
+        auto staticSpace = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(staticVDisk.PDiskParams->Owner, staticVDisk.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(staticSpace->StatusFlags), TColor::GREEN);
+        UNIT_ASSERT_GT(staticSpace->FreeChunks, 0);
     }
 
     Y_UNIT_TEST(PDiskCapacityAlertWithFullCommonLog) {

@@ -57,6 +57,7 @@ constexpr ui64 SmallDiskSizeLogBoundary = 200ull * (1 << 30);
 constexpr ui64 TinyDiskSizeLogBoundary = 8ull * (1 << 30);
 constexpr i64 MaxCommonLogChunks = 200; // default, can also be set from ICB
 constexpr i64 CommonStaticLogChunks = 70; // default, can also be set from ICB
+constexpr ui32 StaticGroupChunkReservePerMille = 500; // default, can also be set from ICB
 constexpr i64 TinyDiskMaxCommonLogChunks = 20;
 constexpr i64 TinyDiskCommonStaticLogChunks = 5;
 

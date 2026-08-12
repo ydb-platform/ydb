@@ -337,19 +337,20 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
     Y_UNIT_TEST(FederationRetryAfterMiss) {
         TDescribeEnv env([](ui32 requestIndex, TNavigate& request, TNavigate::TEntry& entry) {
             if (requestIndex == 0) {
-                // Local resolve under /Root misses federation-style short path.
+                // ResolveName maps account/topic1 → FederationRoot path; first navigate
+                // still uses the request DatabasePath and may miss into account DB.
                 UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
+                UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic1");
                 entry.Status = TNavigate::EStatus::PathErrorUnknown;
                 return;
             }
             if (requestIndex == 1) {
-                // Sync retry still misses.
                 UNIT_ASSERT(entry.SyncVersion);
                 UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
+                UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic1");
                 entry.Status = TNavigate::EStatus::PathErrorUnknown;
                 return;
             }
-            // Federation account DB request.
             UNIT_ASSERT_VALUES_EQUAL(requestIndex, 2u);
             UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root/Federation/account");
             UNIT_ASSERT(!entry.SyncVersion);
@@ -370,11 +371,10 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         TDescribeEnv env([](ui32 requestIndex, TNavigate& request, TNavigate::TEntry& entry) {
             if (requestIndex < 2) {
                 UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
-                UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/account/topic1");
+                UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic1");
                 entry.Status = TNavigate::EStatus::PathErrorUnknown;
                 return;
             }
-            // Must not navigate FederationRoot/Root/account/topic1.
             UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root/Federation/account");
             UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic1");
             FillOkTopic(entry, /*balancerTabletId=*/7);
@@ -394,6 +394,7 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         TDescribeEnv env([](ui32 requestIndex, TNavigate& request, TNavigate::TEntry& entry) {
             if (requestIndex < 2) {
                 UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
+                UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/table1/feed");
                 entry.Status = TNavigate::EStatus::PathErrorUnknown;
                 return;
             }
@@ -427,11 +428,13 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         TDescribeEnv env([&](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
             ++requests;
             UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
+            // Bare name stays under DatabasePath (not rewritten to FederationRoot).
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/topic1");
             entry.Status = TNavigate::EStatus::PathErrorUnknown;
         });
         env.EnableFederationRoot("/Root/Federation");
 
-        // No account/topic shape → ExtractFederationAccount fails → no Federation retry.
+        // No account/topic shape → TryFederationAccountTarget fails → no Federation retry.
         env.StartDescribe({"topic1"});
         auto ev = env.WaitResponse();
 
@@ -469,6 +472,186 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/local"].Status, NDescriber::EStatus::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account/missing"].Status, NDescriber::EStatus::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(LegacyRt3ResolvedUnderFederationRoot) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
+            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic");
+            FillOkTopic(entry, /*balancerTabletId=*/11);
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        UNIT_ASSERT(!env.Runtime.GetAppData().PQConfig.GetTopicsAreFirstClassCitizen());
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.Runtime.GetAppData().PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot(),
+            "/Root/Federation");
+
+        env.StartDescribe({"rt3.dc1--account--topic"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT(ev->Topics.contains("rt3.dc1--account--topic"));
+        auto& info = ev->Topics["rt3.dc1--account--topic"];
+        UNIT_ASSERT_VALUES_EQUAL(info.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(info.RealPath, "/Root/Federation/account/topic");
+    }
+
+    Y_UNIT_TEST(LegacyRt3RemoteDcWithoutLocalDcSkipsMirror) {
+        // Empty localDc/dc in ResolveName → no -mirrored-from- suffix.
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic");
+            FillOkTopic(entry, /*balancerTabletId=*/12);
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        env.StartDescribe({"rt3.dc2--account--topic"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc2--account--topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc2--account--topic"].RealPath, "/Root/Federation/account/topic");
+    }
+
+    Y_UNIT_TEST(LegacyShortNameResolved) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic");
+            FillOkTopic(entry, /*balancerTabletId=*/13);
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        env.StartDescribe({"account--topic"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account--topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account--topic"].RealPath, "/Root/Federation/account/topic");
+    }
+
+    Y_UNIT_TEST(LegacyRt3CdcResolved) {
+        TDescribeEnv env([](ui32 requestIndex, TNavigate& request, TNavigate::TEntry& entry) {
+            if (requestIndex == 0) {
+                UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/table1/feed");
+                FillCdcStream(entry, "feed");
+                return;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/table1/feed/streamImpl");
+            FillOkTopic(entry, /*balancerTabletId=*/14);
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        // Nested path in legacy form: @ → /
+        env.StartDescribe({"rt3.dc1--account@table1--feed"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT(ev->Topics.contains("rt3.dc1--account@table1--feed"));
+        auto& info = ev->Topics["rt3.dc1--account@table1--feed"];
+        UNIT_ASSERT_VALUES_EQUAL(info.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT(info.CdcStream);
+        UNIT_ASSERT_VALUES_EQUAL(info.CdcStreamName, "feed");
+        UNIT_ASSERT_VALUES_EQUAL(info.RealPath, "/Root/Federation/account/table1/feed/streamImpl");
+    }
+
+    Y_UNIT_TEST(LegacyNameResolveBadRequest) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& /*entry*/) {
+            UNIT_FAIL("scheme cache must not be called for invalid legacy name");
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        env.StartDescribe({"rt3.bad"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.bad"].Status, NDescriber::EStatus::BAD_REQUEST);
+        UNIT_ASSERT(!ev->UsedSyncVersion);
+    }
+
+    Y_UNIT_TEST(FccLegacyRt3UsesLbRoot) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
+            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/LbCommunal/account/topic");
+            FillOkTopic(entry, /*balancerTabletId=*/15);
+        });
+        auto& appData = env.Runtime.GetAppData();
+        appData.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        appData.PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/LbCommunal");
+
+        env.StartDescribe({"rt3.dc1--account--topic"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].RealPath, "/Root/LbCommunal/account/topic");
+    }
+
+    Y_UNIT_TEST(MultipleOriginalsSameResolvedPath) {
+        // Two client names resolve to one SchemeCache path — both must get Result.
+        ui32 navigateCalls = 0;
+        TDescribeEnv env([&](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
+            ++navigateCalls;
+            UNIT_ASSERT_VALUES_EQUAL(request.ResultSet.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic");
+            FillOkTopic(entry, /*balancerTabletId=*/16);
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        env.StartDescribe({"rt3.dc1--account--topic", "account--topic"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(navigateCalls, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account--topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].RealPath, "/Root/Federation/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account--topic"].RealPath, "/Root/Federation/account/topic");
+    }
+
+    Y_UNIT_TEST(MultipleOriginalsFederationRetry) {
+        TDescribeEnv env([](ui32 requestIndex, TNavigate& request, TNavigate::TEntry& entry) {
+            UNIT_ASSERT_VALUES_EQUAL(request.ResultSet.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic");
+            if (requestIndex < 2) {
+                UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root");
+                entry.Status = TNavigate::EStatus::PathErrorUnknown;
+                return;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(requestIndex, 2u);
+            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root/Federation/account");
+            FillOkTopic(entry, /*balancerTabletId=*/17);
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        env.StartDescribe({"rt3.dc1--account--topic", "account/topic"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT(ev->UsedSyncVersion);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account/topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].RealPath, "/Root/Federation/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account/topic"].RealPath, "/Root/Federation/account/topic");
+    }
+
+    Y_UNIT_TEST(MultipleOriginalsCdcFanOut) {
+        TDescribeEnv env([](ui32 requestIndex, TNavigate& request, TNavigate::TEntry& entry) {
+            UNIT_ASSERT_VALUES_EQUAL(request.ResultSet.size(), 1u);
+            if (requestIndex == 0) {
+                UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/table1/feed");
+                FillCdcStream(entry, "feed");
+                return;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/table1/feed/streamImpl");
+            FillOkTopic(entry, /*balancerTabletId=*/18);
+        });
+        env.EnableFederationRoot("/Root/Federation");
+
+        env.StartDescribe({"rt3.dc1--account@table1--feed", "account/table1/feed"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics.size(), 2u);
+        for (const auto* key : {"rt3.dc1--account@table1--feed", "account/table1/feed"}) {
+            auto& info = ev->Topics[key];
+            UNIT_ASSERT_VALUES_EQUAL(info.Status, NDescriber::EStatus::SUCCESS);
+            UNIT_ASSERT(info.CdcStream);
+            UNIT_ASSERT_VALUES_EQUAL(info.CdcStreamName, "feed");
+            UNIT_ASSERT_VALUES_EQUAL(info.RealPath, "/Root/Federation/account/table1/feed/streamImpl");
+        }
     }
 
 }

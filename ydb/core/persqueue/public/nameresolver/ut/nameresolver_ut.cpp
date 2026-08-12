@@ -81,6 +81,15 @@ Y_UNIT_TEST_F(FederationRootDbViaDatabasePrefix, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root", "account/topic", "dc1")),
         "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "/Root/account/topic", "dc1")),
+        "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "/Root/rt3.dc1--account--topic", "dc1")),
+        "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "Root/account--topic", "dc1")),
+        "/Root/LbCommunal/account/topic");
 }
 
 Y_UNIT_TEST_F(FederationUserDatabaseRelativePath, TNameResolverFixture) {
@@ -174,10 +183,13 @@ Y_UNIT_TEST_F(DcMismatchReturnsError, TNameResolverFixture) {
         "DC specified both in topic name and separate option and they mismatch. ");
 }
 
-Y_UNIT_TEST_F(ShortWithoutDcReturnsError, TNameResolverFixture) {
-    ExpectError(
-        ResolveName(TString{Database}, "account--topic", "", ""),
-        "Cannot determine DC: should specify either in topic name, Dc option or LocalDc option. ");
+Y_UNIT_TEST_F(ShortWithoutDcIsLocal, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName(TString{Database}, "account--topic", "", "")),
+        "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName(TString{Database}, "topic", "", "")),
+        "/Root/LbCommunal/topic");
 }
 
 Y_UNIT_TEST_F(MalformedRt3NoDashDash, TNameResolverFixture) {
@@ -281,14 +293,69 @@ Y_UNIT_TEST_F(FederationModernPathBadName, TNameResolverFixture) {
         "Bad topic name for federation: dir//topic");
 }
 
+Y_UNIT_TEST_F(FederationExplicitLegacyWithEmptyPqRoot, TNameResolverFixture) {
+    SetFcc(false);
+    ActorSystemStub.AppData.PQConfig.SetRoot("");
+    // /Root prefixes LbRoot → root-like DB even when PQ Root is empty.
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "rt3.dc1--account--topic", "dc1")),
+        "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "account--topic", "dc1")),
+        "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "/Root/rt3.dc1--account--topic", "dc1")),
+        "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "/Root/account/topic", "", "")),
+        "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "account/topic", "", "")),
+        "/Root/LbCommunal/account/topic");
+    // Bare names stay under the request database.
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root", "topic1", "", "")),
+        "/Root/topic1");
+}
+
+Y_UNIT_TEST_F(TryFederationAccountTarget, TNameResolverFixture) {
+    SetFcc(false);
+    {
+        const auto target = TryFederationAccountTarget(
+            "/Root/Federation/account/topic", "/Root/Federation");
+        UNIT_ASSERT(target.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(target->Path, "/Root/Federation/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(target->AccountDatabase, "/Root/Federation/account");
+    }
+    {
+        const auto target = TryFederationAccountTarget(
+            "/Root/Federation/account/table/feed", "/Root/Federation");
+        UNIT_ASSERT(target.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(target->AccountDatabase, "/Root/Federation/account");
+    }
+    {
+        // Trailing slash on federation root and path without leading slash.
+        const auto target = TryFederationAccountTarget(
+            "Root/Federation/account/topic", "/Root/Federation/");
+        UNIT_ASSERT(target.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(target->Path, "/Root/Federation/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(target->AccountDatabase, "/Root/Federation/account");
+    }
+    UNIT_ASSERT(!TryFederationAccountTarget("/Root/Federation/topic1", "/Root/Federation"));
+    UNIT_ASSERT(!TryFederationAccountTarget("/Root/account/topic", "/Root/Federation"));
+    UNIT_ASSERT(!TryFederationAccountTarget("/Root/Federation/account/topic", ""));
+    UNIT_ASSERT(!TryFederationAccountTarget("/Root/Federation", "/Root/Federation"));
+}
+
 Y_UNIT_TEST_F(FederationModernPathWithoutDc, TNameResolverFixture) {
     SetFcc(false);
-    ExpectError(
-        ResolveName("/Root/LbCommunal/account", "dir/topic", "", ""),
-        "Cannot determine DC: should specify either with Dc option or LocalDc option. ");
-    ExpectError(
-        ResolveName("", "account/topic", "", ""),
-        "Cannot determine DC: should specify either with Dc option or LocalDc option. ");
+    // Empty dc/localDc: treat as local — no -mirrored-from- suffix.
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("/Root/LbCommunal/account", "dir/topic", "", "")),
+        "/Root/LbCommunal/account/dir/topic");
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName("", "account/topic", "", "")),
+        "/Root/LbCommunal/account/topic");
 }
 
 Y_UNIT_TEST_F(FederationPqRootWithTrailingSlash, TNameResolverFixture) {

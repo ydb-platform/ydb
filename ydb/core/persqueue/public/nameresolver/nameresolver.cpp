@@ -69,6 +69,11 @@ bool IsLegacyStyleName(TStringBuf topic) {
     return !topic.Contains("/");
 }
 
+bool IsExplicitLegacyName(TStringBuf topic) {
+    // Unlike bare names, these are never relative modern paths inside a user DB.
+    return topic.StartsWith("rt3.") || topic.Contains("--") || topic.Contains("@");
+}
+
 // Prefer LbRoot, else database; empty root leaves modernPath unchanged (no leading '/').
 TString JoinWithRoot(TStringBuf lbRoot, TStringBuf database, TStringBuf modernPath) {
     if (!lbRoot.empty()) {
@@ -141,16 +146,15 @@ std::expected<TString, TString> TryParseLegacyToModernPath(
     }
 
     // Short name without rt3.: dc from argument or localDc.
+    // Empty dc and localDc → local path without -mirrored-from- (same as modern paths).
     if (topicDc.empty()) {
-        if (localDc.empty()) {
-            return Fail(
-                "Cannot determine DC: should specify either in topic name, Dc option or LocalDc option");
-        }
         topicDc = localDc;
     }
 
     TString modernPath = TString{NPersQueue::ConvertOldTopicName(std::string{topic})};
-    ApplyMirrorSuffix(modernPath, topicDc, localDc);
+    if (!topicDc.empty()) {
+        ApplyMirrorSuffix(modernPath, topicDc, localDc);
+    }
     return modernPath;
 }
 
@@ -178,18 +182,17 @@ std::expected<bool, TString> IsAlreadyMirroredModernPath(TStringBuf path, TStrin
 }
 
 // Modern path that is not already mirrored: apply mirror suffix when needed.
+// Empty dc and localDc means "local" — no -mirrored-from- suffix (describe without DC).
 std::expected<TString, TString> BuildModernTopicPath(
     TStringBuf topic,
     TStringBuf localDc,
     TStringBuf dc
 ) {
-    TStringBuf topicDc = !dc.empty() ? dc : localDc;
-    if (topicDc.empty()) {
-        return Fail("Cannot determine DC: should specify either with Dc option or LocalDc option");
-    }
-
     TString modernPath{topic};
-    ApplyMirrorSuffix(modernPath, topicDc, localDc);
+    const TStringBuf topicDc = !dc.empty() ? dc : localDc;
+    if (!topicDc.empty()) {
+        ApplyMirrorSuffix(modernPath, topicDc, localDc);
+    }
     return modernPath;
 }
 
@@ -198,8 +201,14 @@ struct TFederationContext {
     TStringBuf Topic;
 };
 
-// Classify topic relative to PQ root vs user database.
-TFederationContext ClassifyFederationTopic(TStringBuf database, TStringBuf topic, TStringBuf pqPrefix) {
+// Classify topic relative to PQ root / LbRoot vs user database.
+// database is a prefix of lbRoot (e.g. /Root vs /Root/Federation) → root-like.
+TFederationContext ClassifyFederationTopic(
+    TStringBuf database,
+    TStringBuf topic,
+    TStringBuf pqPrefix,
+    TStringBuf lbRoot
+) {
     TFederationContext ctx;
     ctx.Topic = topic;
     ctx.IsRootDb = database.empty();
@@ -208,6 +217,8 @@ TFederationContext ClassifyFederationTopic(TStringBuf database, TStringBuf topic
         if (IsPathPrefix(pqPrefix, database)) {
             ctx.IsRootDb = true;
             SkipPathPrefix(ctx.Topic, pqPrefix);
+        } else if (!lbRoot.empty() && IsPathPrefix(lbRoot, database)) {
+            ctx.IsRootDb = true;
         }
     } else if (IsPathPrefix(ctx.Topic, pqPrefix)) {
         ctx.IsRootDb = true;
@@ -229,20 +240,27 @@ std::expected<TString, TString> ResolveName(
     TStringBuf dc
 ) {
     const auto& pqConfig = AppData()->PQConfig;
-    const TStringBuf topicName = StripLeadingSlash(name);
+    TStringBuf topicName = StripLeadingSlash(name);
     const TStringBuf databaseNorm = StripSlashes(database);
     const TStringBuf pqPrefix = StripSlashes(pqConfig.GetRoot());
-    const TString& lbRoot = pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
+    const TStringBuf lbRoot = StripSlashes(pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot());
+    const TString& lbRootRaw = pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
+
+    // Full path under database: /Root/account/topic + database /Root → account/topic.
+    // Callers (e.g. describer) may pass database-prefixed absolute paths as-is.
+    if (!databaseNorm.empty()) {
+        SkipPathPrefix(topicName, databaseNorm);
+    }
 
     if (pqConfig.GetTopicsAreFirstClassCitizen()) {
         if (!IsLegacyStyleName(topicName)) {
-            return NormalizePath(database, name);
+            return NormalizePath(database, topicName);
         }
         auto parsed = TryParseLegacyToModernPath(topicName, localDc, dc);
         if (!parsed) {
             return std::unexpected(parsed.error());
         }
-        return JoinWithRoot(lbRoot, database, std::move(*parsed));
+        return JoinWithRoot(lbRootRaw, database, std::move(*parsed));
     }
 
     // Federation mode.
@@ -256,13 +274,21 @@ std::expected<TString, TString> ResolveName(
         return Fail("Invalid topic path or trailing '/'");
     }
 
-    const auto ctx = ClassifyFederationTopic(databaseNorm, topicName, pqPrefix);
+    const auto ctx = ClassifyFederationTopic(databaseNorm, topicName, pqPrefix, lbRoot);
     if (ctx.Topic.empty()) {
         return Fail("Bad topic name (only account provided?)");
     }
 
     if (!ctx.IsRootDb) {
         // Relative modern path inside user database.
+        // Explicit legacy (rt3 / -- / @) still converts via LbRoot.
+        if (IsExplicitLegacyName(ctx.Topic)) {
+            auto parsed = TryParseLegacyToModernPath(ctx.Topic, localDc, dc);
+            if (!parsed) {
+                return std::unexpected(parsed.error());
+            }
+            return JoinWithRoot(lbRootRaw, database, std::move(*parsed));
+        }
         // database is non-empty here: empty database is classified as root DB.
         auto mirrored = IsAlreadyMirroredModernPath(ctx.Topic, localDc);
         if (!mirrored) {
@@ -279,7 +305,7 @@ std::expected<TString, TString> ResolveName(
         return NormalizePath(database, *parsed);
     }
 
-    // Root / PQ database: path with '/' is federation account/topic; otherwise legacy name.
+    // Root-like database: path with '/' is federation account/topic; otherwise legacy name.
     if (ctx.Topic.Contains("/")) {
         // EndsWith('/') and StripLeadingSlash already rejected empty account/rest forms
         // like "account/" and "/topic"; Contains('/') ⇒ TrySplit succeeds.
@@ -293,20 +319,63 @@ std::expected<TString, TString> ResolveName(
             return std::unexpected(mirrored.error());
         }
         if (*mirrored) {
-            return JoinWithRoot(lbRoot, database, ctx.Topic);
+            return JoinWithRoot(lbRootRaw, database, ctx.Topic);
         }
         auto parsed = BuildModernTopicPath(ctx.Topic, localDc, dc);
         if (!parsed) {
             return std::unexpected(parsed.error());
         }
-        return JoinWithRoot(lbRoot, database, std::move(*parsed));
+        return JoinWithRoot(lbRootRaw, database, std::move(*parsed));
     }
 
     auto parsed = TryParseLegacyToModernPath(ctx.Topic, localDc, dc);
     if (!parsed) {
         return std::unexpected(parsed.error());
     }
-    return JoinWithRoot(lbRoot, database, std::move(*parsed));
+    // Bare names with a non-empty root-like request database stay under that database
+    // (e.g. /Root/local) instead of LbRoot/local.
+    if (!IsExplicitLegacyName(ctx.Topic) && !database.empty()) {
+        return NormalizePath(database, *parsed);
+    }
+    return JoinWithRoot(lbRootRaw, database, std::move(*parsed));
+}
+
+std::optional<TFederationAccountTarget> TryFederationAccountTarget(
+    TStringBuf path,
+    TStringBuf federationRoot
+) {
+    if (federationRoot.empty() || path.empty()) {
+        return std::nullopt;
+    }
+
+    // Prefer slash-stripped prefix checks over CanonizePath/JoinPath allocations.
+    const TStringBuf root = StripSlashes(federationRoot);
+    TStringBuf rest = StripLeadingSlash(path);
+    if (root.empty() || !IsPathPrefix(rest, root)) {
+        return std::nullopt;
+    }
+    SkipPathPrefix(rest, root);
+    if (rest.empty()) {
+        return std::nullopt;
+    }
+
+    TStringBuf account;
+    TStringBuf topicRest;
+    if (!rest.TrySplit("/", account, topicRest) || account.empty() || topicRest.empty()) {
+        return std::nullopt;
+    }
+
+    TString canonPath;
+    if (path.StartsWith('/') && !path.EndsWith('/') && !path.Contains("//")) {
+        canonPath = TString{path};
+    } else {
+        canonPath = CanonizePath(TString{path});
+    }
+
+    return TFederationAccountTarget{
+        .Path = std::move(canonPath),
+        .AccountDatabase = TStringBuilder() << '/' << root << '/' << account,
+    };
 }
 
 } // namespace NKikimr::NPQ::NNameResolver

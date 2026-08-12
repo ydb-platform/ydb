@@ -479,6 +479,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
             Ydb::StatusIds::UNAUTHORIZED
         );
         UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::UNKNOWN_ERROR), Ydb::StatusIds::INTERNAL_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::BAD_REQUEST), Ydb::StatusIds::BAD_REQUEST);
     }
 
     Y_UNIT_TEST(DescriptionMessages) {
@@ -492,6 +493,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT(!NDescriber::Description(path, NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS)
             .Contains("does not exist"));
         UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::NOT_TOPIC).Contains("is not a topic"));
+        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::BAD_REQUEST).Contains("Invalid topic name"));
         UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::UNKNOWN_ERROR).Contains("Error describing"));
     }
 
@@ -946,6 +948,88 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].Status, NDescriber::EStatus::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].CdcStream, true);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].RealPath, "/Root/table1/feed2/streamImpl");
+    }
+
+    // -------------------------------------------------------------------------
+    // Legacy rt3 / short names via nameresolver
+    // -------------------------------------------------------------------------
+
+    Y_UNIT_TEST(LegacyRt3TopicWithFederationRoot) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        const TString federationRoot = "/Root/Federation";
+        ExecuteDDL(*setup, "CREATE TOPIC `Federation/account/topic1`");
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(federationRoot);
+
+        StartDescribe(runtime, {"rt3.dc1--account--topic1"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("rt3.dc1--account--topic1"));
+        auto& topicInfo = topics["rt3.dc1--account--topic1"];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, federationRoot + "/account/topic1");
+    }
+
+    Y_UNIT_TEST(LegacyShortTopicWithFederationRoot) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        const TString federationRoot = "/Root/Federation";
+        ExecuteDDL(*setup, "CREATE TOPIC `Federation/account/topic1`");
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(federationRoot);
+
+        StartDescribe(runtime, {"account--topic1"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("account--topic1"));
+        auto& topicInfo = topics["account--topic1"];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, federationRoot + "/account/topic1");
+    }
+
+    Y_UNIT_TEST(LegacyRt3CdcWithFederationRoot) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        ExecuteDDL(*setup, "CREATE TABLE `Federation/account/table1` (id Uint64, PRIMARY KEY (id))");
+        ExecuteDDL(*setup, "ALTER TABLE `Federation/account/table1` ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/Federation");
+
+        // Nested path in legacy form: @ → /
+        StartDescribe(runtime, {"rt3.dc1--account@table1--feed"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("rt3.dc1--account@table1--feed"));
+        auto& topicInfo = topics["rt3.dc1--account@table1--feed"];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStream, true);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStreamName, "feed");
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/Federation/account/table1/feed/streamImpl");
+    }
+
+    Y_UNIT_TEST(LegacyNameBadRequest) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/Federation");
+
+        StartDescribe(runtime, {"rt3.bad"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("rt3.bad"));
+        UNIT_ASSERT_VALUES_EQUAL(topics["rt3.bad"].Status, NDescriber::EStatus::BAD_REQUEST);
     }
 
 }

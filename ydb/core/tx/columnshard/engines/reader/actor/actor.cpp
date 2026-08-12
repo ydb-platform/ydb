@@ -198,7 +198,7 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noe
     auto& msg = ev->Get()->Record;
     const TString reason = ev->Get()->GetIssues().ToOneLineString();
 
-    YDB_LOG_COMP(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan got AbortExecution",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan got AbortExecution",
         {"scanActorId", ScanActorId},
         {"txId", TxId},
         {"scanId", ScanId},

@@ -90,6 +90,7 @@ const NCommon::TPKSortPermutation& TSourceData::GetChunksPKOrder() const {
     for (auto&& index : indexes) {
         positions.emplace_back(index.GetAddress(), positions.size());
     }
+    // fast path: records-then-indexes are already in PK order (no interleaved entity ids) => empty permutation, iterate as stored
     if (!std::is_sorted(positions.begin(), positions.end())) {
         std::sort(positions.begin(), positions.end());
         ChunksPKOrder->reserve(positions.size());

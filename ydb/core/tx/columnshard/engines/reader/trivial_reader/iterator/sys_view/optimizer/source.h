@@ -32,8 +32,9 @@ public:
         , OptimizerTasks(std::move(tasks))
         , ExternalPathId(externalPathId)
     {
-        // task order is planner-specific while the sys view PK requires TaskId ascending
-        if (HasAppData() && AppDataVerified().ColumnShardConfig.GetEnableSysViewOrderByLimitPushdown()) {
+        // planner task order differs from the sys view PK (TaskId asc); only sorted scans need it
+        if (context->GetReadMetadata()->IsSorted() && HasAppData() &&
+            AppDataVerified().ColumnShardConfig.GetEnableSysViewOrderByLimitPushdown()) {
             std::sort(OptimizerTasks.begin(), OptimizerTasks.end());
         }
     }

@@ -135,6 +135,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
         AFL_VERIFY(FilledIterators.back().IsFilled());
         std::push_heap(FilledIterators.begin(), FilledIterators.end());
     }
+    // once we stop reordering here, correctness relies on KQP's per-shard TopSort re-sorting and re-limiting the passthrough output
     if (SysViewMaxHeldPortions && source->GetType() == IDataSource::EType::SimpleSysInfo && FilledIterators.size() > SysViewMaxHeldPortions) {
         Passthrough = true;
         FilledIterators.clear();

@@ -15,13 +15,9 @@ import pytest
 import ydb
 from hamcrest import assert_that, equal_to, not_none, has_item, has_items, is_not, contains_string
 from hamcrest import raises, greater_than
-from ydb.tests.library.sqs.test_base import (
-    IS_FIFO_PARAMS,
-    TABLES_FORMAT_PARAMS,
-    KikimrSqsTestBase,
-    get_test_with_sqs_tenant_installation,
-)
+from ydb.tests.library.sqs.test_base import IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 from ydb.tests.library.sqs.cloud_test_base import YandexCloudSqsTestBase
+from ydb.tests.library.sqs.test_base import get_test_with_sqs_tenant_installation
 from ydb.tests.library.sqs.requests_client import REQUEST_TIMEOUT
 from ydb.tests.library.harness.util import LogLevels
 
@@ -393,7 +389,7 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.skipif(
-        not KikimrSqsTestBase._is_topic_migration_stage(),
+        not YandexCloudSqsTestBase._is_topic_migration_stage(),
         reason='Legacy YMQ DLQ readiness race; covered by migration compatibility/finished suites',
     )
     def test_dlq_mechanics_in_cloud(self, is_fifo):

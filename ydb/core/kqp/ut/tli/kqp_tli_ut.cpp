@@ -106,28 +106,6 @@ namespace {
             return std::nullopt;
         }
         TString result = resultOpt.GetRef();
-
-        size_t nextFieldPos = record.find("breakerQueryTexts=");
-        if (nextFieldPos != TString::npos) {
-            nextFieldPos += 18;
-            resultOpt = NStructuredLog::TTextWriter::UnescapeFieldValue(record, nextFieldPos);
-            if (resultOpt.Defined()) {
-                result = resultOpt.GetRef();
-            }
-        }
-
-        auto queryTextStartPos = result.find("QueryText=");
-        if (queryTextStartPos==std::string::npos) {
-            return std::nullopt;
-        }
-        queryTextStartPos+=10;
-
-        auto queryTextEndPos = result.find("]");
-        if (queryTextEndPos==std::string::npos) {
-            return std::nullopt;
-        }
-        result = result.substr(queryTextStartPos, queryTextEndPos - queryTextStartPos);
-
         auto unescapedResult = UnescapeC(result);
         return unescapedResult;
     }
@@ -163,28 +141,6 @@ namespace {
             return std::nullopt;
         }
         TString result = resultOpt.GetRef();
-
-        size_t nextFieldPos = record.find("victimQueryTexts=");
-        if (nextFieldPos != TString::npos) {
-            nextFieldPos += 17;
-            resultOpt = NStructuredLog::TTextWriter::UnescapeFieldValue(record, nextFieldPos);
-            if (resultOpt.Defined()) {
-                result = resultOpt.GetRef();
-            }
-        }
-
-        auto queryTextStartPos = result.find("QueryText=");
-        if (queryTextStartPos==std::string::npos) {
-            return std::nullopt;
-        }
-        queryTextStartPos+=10;
-
-        auto queryTextEndPos = result.find("]");
-        if (queryTextEndPos==std::string::npos) {
-            return std::nullopt;
-        }
-        result = result.substr(queryTextStartPos, queryTextEndPos - queryTextStartPos);
-
         auto unescapedResult = UnescapeC(result);
         return unescapedResult;
     }
@@ -1636,10 +1592,10 @@ Y_UNIT_TEST_SUITE(KqpTli) {
             if (!record.Contains("component=SessionActor")) {
                 continue;
             }
-            if (MatchesMessage(record, patterns.BreakerSessionActorMessagePattern) && record.Contains("TraceId: ")) {
+            if (MatchesMessage(record, patterns.BreakerSessionActorMessagePattern) && record.Contains("traceId=")) {
                 foundTraceIdInBreaker = true;
             }
-            if (MatchesMessage(record, patterns.VictimSessionActorMessagePattern) && record.Contains("TraceId: ")) {
+            if (MatchesMessage(record, patterns.VictimSessionActorMessagePattern) && record.Contains("traceId=")) {
                 foundTraceIdInVictim = true;
             }
         }

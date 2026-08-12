@@ -118,6 +118,8 @@ public:
     // old algorithm if something goes wrong with the new one.
     TControlWrapper UseDeviceOverestimationRatioMerged;
     i64 SemiStrictSpaceIsolationCached = 0;
+    TControlWrapper StaticGroupChunkReservePerMille;
+    i64 StaticGroupChunkReservePerMilleCached = 0;
     TControlWrapper ForcedPDiskSpaceColor;
     NKikimrBlobStorage::TPDiskSpaceColor::E GetColorBorderIcb() {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;

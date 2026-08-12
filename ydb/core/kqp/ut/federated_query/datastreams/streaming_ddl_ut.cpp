@@ -4308,13 +4308,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryRestartsWhenUpsertTableDeletedWhileRunning, TStreamingTestFixture) {
-        // Regression test for YQ-5172 (runtime variant):
-        // When the UPSERT sink table is dropped while the streaming query is actively
-        // running, the write actor used to enter an infinite internal resolve loop
-        // (PlanResolve() → ResolveShards() → PlanResolve() ...) instead of surfacing
-        // the error.  After the fix the write actor raises SCHEME_ERROR after
-        // MaxResolveAttempts, the session actor propagates it as ABORTED, and the
-        // streaming-query infrastructure schedules a new execution (retry).
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
         constexpr char inputTopicName[] = "sqRestartsUpsertMissingTableRuntimeInputTopic";
@@ -4355,39 +4348,30 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
-        // Write a message so the query actually reads from the topic and
-        // the write actor reaches the DataShard with data in flight.
         WriteTopicMessage(inputTopicName, R"({"Key": "key1", "Value": "value1"})");
         Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
         CheckTable(*this, outputTableName, {{"key1", "value1"}});
 
-        // Drop the sink table while the streaming query is actively running.
-        // After the fix, the write actor exhausts MaxResolveAttempts and raises
-        // SCHEME_ERROR, which the streaming-query infrastructure treats as a
-        // retriable failure and starts a new execution.
         ExecQuery(fmt::format(R"(DROP TABLE `{output_table}`;)",
             "output_table"_a = outputTableName
         ));
 
-        // Trigger another batch so the write actor tries to write to the now-deleted
-        // table and kicks off the resolve loop.
+        // Trigger another batch so the write actor tries to write to the now-deleted table.
         WriteTopicMessage(inputTopicName, R"({"Key": "key2", "Value": "value2"})");
 
-        // Wait for the streaming query to detect the error and schedule a new
-        // execution (total executions > 1).  The query should NOT be stuck forever
-        // with a single execution that internally loops inside the write actor.
+     
         WaitFor(TDuration::Seconds(60), "Wait for execution restart after table drop", [&](TString& error) {
             const auto& result = ExecQuery(
-                R"sql(SELECT COUNT(*) FROM `.metadata/script_executions`;)sql"
+                R"sql(SELECT lease_generation FROM `.metadata/script_executions`;)sql"
             );
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
 
-            ui64 count = 0;
+            i64 generation = 0;
             CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
-                count = resultSet.ColumnParser(0).GetUint64();
+                generation = resultSet.ColumnParser(0).GetOptionalInt64().value_or(0);
             });
-            error = TStringBuilder() << "Execution count: " << count;
-            return count > 1;
+            error = TStringBuilder() << "Lease generation: " << generation;
+            return generation > 1;
         });
     }
 }

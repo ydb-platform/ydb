@@ -679,17 +679,14 @@ public:
         }
     }
 
-    bool IsResolving() const {
-        return ResolveAttempts > 0;
-    }
-
     void RetryResolve() {
-        if (!IsResolving()) {
+        if (!ResolvingInProgress) {
             Resolve();
         }
     }
 
     void Resolve() {
+        ResolvingInProgress = true;
         AFL_ENSURE(InconsistentTx || IsOlap);
         TableWriteActorSpan = NWilson::TSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(ParentTraceId),
             "WaitForTableResolve", NWilson::EFlags::AUTO_END);
@@ -749,6 +746,7 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        ResolvingInProgress = false;
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
 
@@ -809,6 +807,7 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        ResolvingInProgress = false;
         auto* request = ev->Get()->Request.Get();
 
         if (request->ErrorCount > 0) {
@@ -1694,6 +1693,7 @@ private:
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
     TPartitioning::TCPtr Partitioning;
     ui64 ResolveAttempts = 0;
+    bool ResolvingInProgress = false;
 
     IKqpTransactionManagerPtr TxManager;
     bool Closed = false;

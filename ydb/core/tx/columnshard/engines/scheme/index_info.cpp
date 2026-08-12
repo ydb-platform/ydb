@@ -506,9 +506,11 @@ NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_
             // without it, like a portion older than the index itself, only the skip optimization is lost. With
             // the flag on, a blob-storage chunk was already split to fit, so an oversize one here is a real bug.
             if (indexStorageId == IStoragesManager::LocalMetadataStorageId || !splitEnabled) {
+                auto indexMeta = GetIndexOptional(indexId);
                 YDB_LOG_WARN("",
                     {"event", "index_skipped"},
                     {"index_id", indexId},
+                    {"index_name", indexMeta.HasObject() ? indexMeta->GetIndexName() : TString{}},
                     {"packed_size", chunk->GetPackedSize()},
                     {"limit", opStorage->GetBlobSplitSettings().GetMaxBlobSize()});
                 return TConclusionStatus::Success();

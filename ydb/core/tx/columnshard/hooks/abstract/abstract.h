@@ -208,7 +208,7 @@ public:
         return DoGetBlobSplitSettings(defaultValue);
     }
 
-    bool GetEnableIndexBlobSplit() {
+    bool GetEnableIndexBlobSplit() const {
         return DoGetEnableIndexBlobSplit(GetConfig().GetEnableIndexBlobSplit());
     }
 

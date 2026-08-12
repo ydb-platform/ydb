@@ -134,8 +134,15 @@ class PrSyncCreator:
         for path in self.overwrite_from_head:
             self.logger.info(f"Overwriting {path} fully from {self.head_branch} for 100% match")
             self.git_run("rm", "-r", "-f", "--ignore-unmatch", path)
-            self.git_run("checkout", self.head_branch, "--", path)
-            self.git_run("add", path)
+            # Absent on head => keep deleted (100% match). Present => restore exact content.
+            exists = self.git_run(
+                "rev-parse", "--verify", "--quiet", f"{self.head_branch}:{path}", fail=False
+            )
+            if exists.returncode == 0:
+                self.git_run("checkout", self.head_branch, "--", path)
+                self.git_run("add", path)
+            else:
+                self.logger.info(f"{path} absent on {self.head_branch}, keeping deleted")
 
         for path in self.overwrite_exclude:
             self.logger.info(f"Preserving excluded path {path} from {self.base_branch}")

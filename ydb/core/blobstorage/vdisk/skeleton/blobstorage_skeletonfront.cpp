@@ -1660,7 +1660,7 @@ namespace NKikimr {
                 TInstant now) {
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, "Replying from SkeletonFront",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                {"type", TypeName(*ev)},
+                {"type", TypeName(*ev->Get())},
                 {"request", ev->Get()->ToString()},
                 {"status", NKikimrProto::EReplyStatus_Name(status)},
                 {"errorReason", errorReason},

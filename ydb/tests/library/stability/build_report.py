@@ -310,16 +310,11 @@ def _cell_status_color(successful: int, total: int) -> str:
     return _COLOR_PARTIAL
 
 
-def _short_host(host: str) -> str:
-    return host.split('.')[0]
-
-
 def __create_workload_iterations_report(execution_result: StressUtilTestResults) -> str:
-    """Create summary + compact per-host matrix for workload iterations.
+    """Create a summary table of workload success per stress type.
 
-    Summary table shows overall success per stress type (and recoverability if present).
-    Compact matrix lists only hosts where the workload was actually deployed
-    (no "Not deployed" noise).
+    Shows overall ok/total, success rate, host count, and recoverability
+    status when present.
     """
     if not execution_result or not execution_result.stress_util_runs:
         return ''
@@ -327,7 +322,6 @@ def __create_workload_iterations_report(execution_result: StressUtilTestResults)
     has_recoverability = execution_result.recoverability_result is not None
     html_parts = ['<div>']
 
-    # --- Summary ---
     html_parts.append('<h3>Workload Summary</h3>')
     html_parts.append(
         '<table border="1" cellpadding="4px" style="border-collapse: collapse; font-size: 13px;">'
@@ -373,52 +367,6 @@ def __create_workload_iterations_report(execution_result: StressUtilTestResults)
                 html_parts.append(
                     f'<td style="background-color: {rec_color}; text-align: center;">{rec_text}</td>'
                 )
-        html_parts.append('</tr>')
-
-    html_parts.append('</table>')
-
-    # --- Compact matrix (only deployed hosts) ---
-    all_deployed_hosts = sorted({
-        host
-        for run_result in execution_result.stress_util_runs.values()
-        for host in run_result.node_runs.keys()
-    })
-    logging.info(f"deployed hosts for compact matrix: {all_deployed_hosts}")
-
-    html_parts.append('<h3>Workload Iterations (deployed hosts)</h3>')
-    html_parts.append(
-        '<p style="font-size: 12px; color: #666;">'
-        'Empty cells mean the workload was not deployed on that host. '
-        'Green = all ok, yellow = partial, red = all failed.'
-        '</p>'
-    )
-    html_parts.append(
-        '<table border="1" cellpadding="2px" style="border-collapse: collapse; font-size: 12px;">'
-        f'<tr style="background-color: {_COLOR_HEADER};"><th>Stress type</th>'
-    )
-    for host in all_deployed_hosts:
-        html_parts.append(f'<th>{_escape_html(_short_host(host))}</th>')
-    html_parts.append('</tr>')
-
-    for stress_name, stress_result in execution_result.stress_util_runs.items():
-        row_ok = stress_result.get_successful_runs()
-        row_total = stress_result.get_total_runs()
-        row_color = _cell_status_color(row_ok, row_total)
-        html_parts.append('<tr>')
-        html_parts.append(
-            f'<td style="background-color: {row_color};">{_escape_html(stress_name)}</td>'
-        )
-        for host in all_deployed_hosts:
-            if host not in stress_result.node_runs:
-                html_parts.append(f'<td style="background-color: {_COLOR_EMPTY};"></td>')
-                continue
-            host_ok = stress_result.node_runs[host].get_successful_runs()
-            host_total = stress_result.node_runs[host].get_total_runs()
-            cell_color = _cell_status_color(host_ok, host_total)
-            html_parts.append(
-                f'<td style="background-color: {cell_color}; text-align: center;">'
-                f'{host_ok}/{host_total}</td>'
-            )
         html_parts.append('</tr>')
 
     html_parts.append('</table></div>')

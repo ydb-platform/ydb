@@ -456,11 +456,6 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 }
 
 void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
-    auto& usersInfoStorage = Partition()->UsersInfoStorage;
-    for (auto&& [_, userInfo] : usersInfoStorage->GetAll()) {
-        userInfo.AnyCommits = userInfo.Offset > (i64)Partition()->BlobEncoder.StartOffset;
-    }
-
     Done(ctx);
 }
 
@@ -1176,6 +1171,14 @@ void TInitFieldsStep::Execute(const TActorContext &ctx) {
     auto& config = Partition()->Config;
 
     Partition()->AutopartitioningManager.reset(CreateAutopartitioningManager(config, Partition()->Partition));
+
+    // After DataRange (FormHead / NormalizeOffsetsForEmptyData) offsets are final.
+    // Recalculate here so AnyCommits matches runtime GetStartOffset(), not the pre-normalize meta StartOffset.
+    for (auto&& [_, userInfo] : Partition()->UsersInfoStorage->GetAll()) {
+        userInfo.AnyCommits = userInfo.Offset > (i64)Partition()->GetStartOffset();
+    }
+
+    Partition()->CreateCompacter();
 
     return Done(ctx);
 }

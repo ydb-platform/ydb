@@ -122,6 +122,12 @@ public:
         return partition.GetEndOffset();
     }
 
+    static bool GetAnyCommits(TPartition& partition, const TString& consumer) {
+        const TUserInfo* userInfo = partition.UsersInfoStorage->GetIfExists(consumer);
+        UNIT_ASSERT(userInfo);
+        return userInfo->AnyCommits;
+    }
+
 private:
     TInitMetaStep* MetaStep;
 };
@@ -7385,7 +7391,9 @@ Y_UNIT_TEST_F(InitWithMetaOffsetsButNoDataKeysNormalizesEmptyPartition, TPartiti
         .Begin = 0,
         .End = metaEnd,
         .Config = {
-            .Consumers = {{.Consumer = "user", .Offset = 0}},
+            // Offset within stale meta range: before normalize AnyCommits would be true
+            // (Offset > BlobEncoder.StartOffset == 0); after normalize StartOffset == metaEnd.
+            .Consumers = {{.Consumer = "user", .Offset = 100}},
         },
         .EndWriteTimestamp = TInstant::Seconds(1),
         .NoDataKeys = true,
@@ -7409,6 +7417,7 @@ Y_UNIT_TEST_F(InitWithMetaOffsetsButNoDataKeysNormalizesEmptyPartition, TPartiti
 
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), TInstant::Zero());
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, metaEnd), TInstant::Zero());
+    UNIT_ASSERT(!TPartitionTestWrapper::GetAnyCommits(*partition, "user"));
 }
 
 Y_UNIT_TEST_F(InitWithMetaOffsetsEmptyOkDataRangeNormalizesEmptyPartition, TPartitionFixture) {

@@ -1033,7 +1033,6 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     InitDone = true;
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_INIT].IncrementFor(InitDuration.MilliSeconds());
 
-    CreateCompacter();
     InitializeMLPConsumers();
 
     InitUserInfoForImportantClients(ctx);

@@ -38,7 +38,7 @@ DEFAULT_REPO = "ydb-platform/ydb"
 # Search token in issue body (HTML comment). No GitHub label required.
 MATCH_SEARCH_QUERY = "perf-duty-match"
 # Closed duty issues older than this are omitted from Now reports.
-CLOSED_ISSUES_MAX_AGE_DAYS = 14
+CLOSED_ISSUES_MAX_AGE_DAYS = 10
 GITHUB_API = "https://api.github.com"
 BLOCK_START = "<!-- perf-duty-match"
 BLOCK_END = "-->"

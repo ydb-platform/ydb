@@ -1979,6 +1979,23 @@ class S3UploadHelpersTests(unittest.TestCase):
                 d / "result.json",
                 {"resolution": "wait_next_wave", "summary": "IC cascade; wait peer abort"},
             )
+            write_json(
+                d / "problems.json",
+                {
+                    "items": [
+                        {
+                            "test": "Query18",
+                            "resolution": "wait_next_wave",
+                            "summary": "peer abort missing",
+                        },
+                        {
+                            "test": "Query12",
+                            "resolution": "update_known",
+                            "related_issue": 49182,
+                        },
+                    ]
+                },
+            )
             meta = {
                 "run_id": "olap-UploadTpch1000-c460199",
                 "stamp": "20260806T135942Z",
@@ -1993,6 +2010,7 @@ class S3UploadHelpersTests(unittest.TestCase):
             assert dec is not None
             self.assertEqual(dec["resolution"], "wait_next_wave")
             self.assertEqual(dec["label"], "2026-08-05_c460199")
+            self.assertEqual(dec["queries"], ["Query18"])
             self.assertEqual(
                 dec["focus_key"],
                 focus_key(

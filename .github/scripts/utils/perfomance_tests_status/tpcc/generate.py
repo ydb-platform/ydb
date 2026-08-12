@@ -33,6 +33,7 @@ from common.duty_decisions import (  # noqa: E402
     fetch_duty_decisions_index,
 )
 from common.duty_issues import (  # noqa: E402
+    CLOSED_ISSUES_MAX_AGE_DAYS,
     attach_tickets_to_report,
     fetch_duty_issues,
 )
@@ -1198,7 +1199,8 @@ def main():
     print(
         f"known_issues: total={len(data.get('known_issues') or [])} "
         f"open={sum(1 for i in (data.get('known_issues') or []) if i.get('state') != 'closed')} "
-        f"closed≤14d={sum(1 for i in (data.get('known_issues') or []) if i.get('state') == 'closed')} "
+        f"closed≤{CLOSED_ISSUES_MAX_AGE_DAYS}d="
+        f"{sum(1 for i in (data.get('known_issues') or []) if i.get('state') == 'closed')} "
         f"suites_with_tickets={n_tick}",
         flush=True,
     )

@@ -527,6 +527,30 @@ def _summary_from_out_dir(out_dir: Path, *, max_len: int = 180) -> str:
     return ""
 
 
+def _queries_for_wait_next(out_dir: Path) -> list[str]:
+    """Query names under wait_next_wave (from problems.json), for per-query badges."""
+    problems = _read_json_file(Path(out_dir) / "problems.json")
+    if isinstance(problems, dict):
+        items = problems.get("items") or []
+    elif isinstance(problems, list):
+        items = problems
+    else:
+        items = []
+    out: list[str] = []
+    seen: set[str] = set()
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        if str(it.get("resolution") or "") != "wait_next_wave":
+            continue
+        test = str(it.get("test") or it.get("query") or "").strip()
+        if not test or test in seen:
+            continue
+        seen.add(test)
+        out.append(test)
+    return out
+
+
 def build_wait_next_wave_decision(
     out_dir: Path,
     meta: dict[str, Any],
@@ -561,6 +585,7 @@ def build_wait_next_wave_decision(
         "analysis_url": analysis_url,
         "result_url": result_url,
         "problems_url": problems_url,
+        "queries": _queries_for_wait_next(out_dir),
         "summary": _summary_from_out_dir(out_dir),
         "updated_at": updated,
         "pointer_key": by_focus_key(**focus),

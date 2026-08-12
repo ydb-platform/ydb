@@ -686,8 +686,8 @@ class CoverageTests(unittest.TestCase):
 class RecentlyClosedFilterTests(unittest.TestCase):
     def test_closed_issues_since_date(self):
         now = datetime(2026, 8, 6, 15, 0, 0, tzinfo=timezone.utc)
-        self.assertEqual(closed_issues_since_date(now=now, max_age_days=14), "2026-07-23")
-        self.assertEqual(CLOSED_ISSUES_MAX_AGE_DAYS, 14)
+        self.assertEqual(closed_issues_since_date(now=now, max_age_days=10), "2026-07-27")
+        self.assertEqual(CLOSED_ISSUES_MAX_AGE_DAYS, 10)
 
     def test_parse_github_ts(self):
         dt = parse_github_ts("2026-08-01T12:00:00Z")
@@ -746,6 +746,7 @@ class DutyDecisionsAttachTests(unittest.TestCase):
             "label": label,
             "analysis_url": "https://example/analysis.md",
             "summary": "IC cascade",
+            "queries": ["Query18"],
         }
         index = merge_decision_into_index(empty_index(), decision)
         data = {
@@ -771,6 +772,7 @@ class DutyDecisionsAttachTests(unittest.TestCase):
         self.assertEqual(n, 1)
         run = data["inbox"][0]["now_runs"][1]
         self.assertEqual(run["duty_decision"]["analysis_url"], "https://example/analysis.md")
+        self.assertEqual(run["duty_decision"]["queries"], ["Query18"])
         self.assertEqual(
             data["inbox"][0]["duty_decision"]["resolution"], "wait_next_wave"
         )

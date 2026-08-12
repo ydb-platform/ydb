@@ -1373,6 +1373,36 @@ function dutyDecisionPillHtml(dec) {
   return `<a class="pill ticket wait-next" href="${esc(url)}" target="_blank" rel="noopener" ` +
     `title="${esc(tip)}" onclick="event.stopPropagation()">wait next</a>`;
 }
+/** Compact duty_decision for context JSON / pills. */
+function packDutyDecision(dec) {
+  if (!dec || String(dec.resolution || '') !== 'wait_next_wave') return null;
+  return {
+    resolution: 'wait_next_wave',
+    summary: dec.summary || null,
+    analysis_url: dec.analysis_url || dec.result_url || null,
+    queries: Array.isArray(dec.queries) ? dec.queries.slice() : [],
+  };
+}
+/** wait_next_wave decision that applies to this query on the focused Last-runs card. */
+function waitNextAppliesToQuery(item, data, queryName) {
+  const suite = data || item || {};
+  const focusIdx = diveFocusRunIndex(item, suite);
+  const focusRun = (suite.now_runs || [])[focusIdx] || null;
+  const dec = (focusRun && focusRun.duty_decision)
+    || item.duty_decision
+    || suite.duty_decision
+    || null;
+  if (!dec || String(dec.resolution || '') !== 'wait_next_wave') return null;
+  const nq = normQueryNameJS(queryName);
+  if (!nq) return null;
+  const listed = (dec.queries || []).map(normQueryNameJS).filter(Boolean);
+  if (listed.length) return listed.includes(nq) ? dec : null;
+  // Legacy index rows without queries[]: uncovered fail/nodata at focus.
+  if (!focusRun) return null;
+  const cov = runCoverageForDisplay(item, focusRun);
+  const uncovered = new Set((cov.uncovered_queries || []).map(normQueryNameJS));
+  return uncovered.has(nq) ? dec : null;
+}
 
 function runTicketsHtml(run) {
   if (!run) return '';
@@ -1397,7 +1427,7 @@ function runTicketsHtml(run) {
       || (failN > 0 && !tickets.length && cov !== 'covered' && cov !== 'wrong_branch')) {
     const uq = (run.uncovered_queries || []).slice(0, 4).join(', ');
     parts.push(
-      `<span class="pill ticket no-ticket" title="${esc('no matching issue (open or closed ≤14d) for: ' + (uq || 'failed / no-data queries'))}">no ticket</span>`
+      `<span class="pill ticket no-ticket" title="${esc('no matching issue (open or closed ≤10d) for: ' + (uq || 'failed / no-data queries'))}">no ticket</span>`
     );
   }
   if (!parts.length && cov === 'wrong_branch') {
@@ -2319,7 +2349,7 @@ function renderHeader() {
     <div class="counter regress"><div class="n">${fmtNM(s.slower, total.slower, !!sel)}</div><div class="lbl">Hard slow</div></div>
     ${fifth}
     <div class="counter ok"><div class="n">${fmtNM(s.ok_slices, total.ok_slices, !!sel)}</div><div class="lbl">OK slices</div></div>
-    <div class="counter ticket" title="GitHub issues with perf-duty-match (kind=olap): ${nOpen} open + ${nClosed} closed ≤14d. Suites = inbox/ok rows with matched tickets. Closed pills are grey.">
+    <div class="counter ticket" title="GitHub issues with perf-duty-match (kind=olap): ${nOpen} open + ${nClosed} closed ≤10d. Suites = inbox/ok rows with matched tickets. Closed pills are grey.">
       <div class="n">${nIssues}<span class="sel">/${nSuitesTick}</span></div>
       <div class="lbl">Issues / suites</div>
     </div>
@@ -3356,10 +3386,17 @@ function ticketsForQuery(item, queryName, qObj) {
   }
   return (qObj && qObj.tickets) || [];
 }
-function queryTicketRowHtml(item, q) {
+function queryTicketRowHtml(item, q, data) {
+  const suite = data || diveData(item);
   const tickets = ticketsForQuery(item, q.test || q.name, q);
-  if (!tickets.length) return '';
-  return `<div class="q-row-tickets">${ticketPillsHtml(tickets, { compact: true, maxTitle: 28 })}</div>`;
+  const waitPill = dutyDecisionPillHtml(waitNextAppliesToQuery(item, suite, q.test || q.name));
+  if (!tickets.length && !waitPill) return '';
+  const parts = [];
+  if (tickets.length) {
+    parts.push(ticketPillsHtml(tickets, { compact: true, maxTitle: 28 }));
+  }
+  if (waitPill) parts.push(waitPill);
+  return `<div class="q-row-tickets">${parts.join(' ')}</div>`;
 }
 function wrapQueryRow(pillHtml, ticketsHtml) {
   if (!ticketsHtml) return pillHtml;
@@ -3432,7 +3469,7 @@ function queryPillHtml(q, diveId, item, data) {
       </span>
       ${extraHtml}
     </button>`;
-    return wrapQueryRow(pill, queryTicketRowHtml(item, q));
+    return wrapQueryRow(pill, queryTicketRowHtml(item, q, data));
   }
   const nowBit = nowM.kind === 'nodata' ? 'no data'
     : (nowM.ydb_pct != null ? pct(nowM.ydb_pct)
@@ -3445,7 +3482,7 @@ function queryPillHtml(q, diveId, item, data) {
     ${nowHtml}
     ${extraHtml}
   </button>`;
-  return wrapQueryRow(pill, queryTicketRowHtml(item, q));
+  return wrapQueryRow(pill, queryTicketRowHtml(item, q, data));
 }
 function buildQueryBlockHtml(item, diveId) {
   const data = diveData(item);
@@ -3472,6 +3509,7 @@ function buildQueryBlockHtml(item, diveId) {
     return `<div>
         <div class="muted"><b>Queries</b> (${catalog.length}) · клик = история${focusNote}${cmpNote} ·
           issue-пилюля под query = match по <code>affected</code> ·
+          <span class="pill ticket wait-next">wait next</span> = duty ждёт следующую волну ·
           <span class="pill qok">ok</span>
           <span class="pill watch">soft</span>
           <span class="pill slow">hard slow</span>
@@ -3495,7 +3533,7 @@ function buildQueryBlockHtml(item, diveId) {
       cls === 'nodata' ? ' · no data'
         : (q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : (q.ydb_now != null ? ' ' + fmt(q.ydb_now) : ''))
     }${err}${q.history ? '' : ' · no hist'}</button>`;
-    return wrapQueryRow(pill, queryTicketRowHtml(item, q));
+    return wrapQueryRow(pill, queryTicketRowHtml(item, q, data));
   };
   return `<div>
         <div class="muted"><b>Slow queries</b> (клик = история · last run vs prev 7)</div>
@@ -3650,6 +3688,7 @@ function packDutyRunSnapshot(item, run) {
       needs_branch: t.needs_branch || null,
       queries: t.queries || [],
     })),
+    duty_decision: packDutyDecision(run.duty_decision),
   };
 }
 function findNowRunForCompare(runs, wave, cmpId) {
@@ -3728,6 +3767,7 @@ function buildDutyContext(item, diveId) {
     if (!q || !q.test || seenQ.has(q.test)) return;
     seenQ.add(q.test);
     const tmeta = queryTicketMeta(item, q.test);
+    const waitDec = waitNextAppliesToQuery(item, data, q.test);
     queries.push({
       test: q.test,
       kind,
@@ -3737,6 +3777,8 @@ function buildDutyContext(item, diveId) {
       fail_rate_late: q.fail_rate_late != null ? q.fail_rate_late : null,
       ticket_coverage: tmeta.ticket_coverage,
       tickets: tmeta.tickets,
+      wait_next: !!waitDec,
+      duty_decision: packDutyDecision(waitDec),
     });
   };
   const catalog = data.queries || item.queries || [];
@@ -3788,6 +3830,7 @@ function buildDutyContext(item, diveId) {
     const q = catalog.find(x => x.test === sticky);
     if (q) {
       const tmeta = queryTicketMeta(item, q.test);
+      const waitDec = waitNextAppliesToQuery(item, data, q.test);
       sticky_detail = {
         test: q.test,
         kind: q.kind || null,
@@ -3798,6 +3841,8 @@ function buildDutyContext(item, diveId) {
         fail_rate_late: q.fail_rate_late != null ? q.fail_rate_late : null,
         ticket_coverage: tmeta.ticket_coverage,
         tickets: tmeta.tickets,
+        wait_next: !!waitDec,
+        duty_decision: packDutyDecision(waitDec),
         history: compactHist(q.history, 24),
       };
     }
@@ -3876,6 +3921,11 @@ function buildDutyContext(item, diveId) {
     needs_branch: t.needs_branch || null,
   }));
 
+  const suiteDecision = packDutyDecision(
+    (focusRun && focusRun.duty_decision) || item.duty_decision || data.duty_decision
+  );
+  const waitNextQueries = queries.filter(q => q.wait_next).map(q => q.test);
+
   return {
     schema: 'perf-duty-context/v1',
     generated_at: new Date().toISOString(),
@@ -3907,6 +3957,8 @@ function buildDutyContext(item, diveId) {
       last_ts: (view && view.last_ts) || item.last_ts || null,
       new_issue_count: newIssueCount,
       ticket_coverage: (focusPack && focusPack.ticket_coverage) || 'ok',
+      duty_decision: suiteDecision,
+      wait_next_queries: waitNextQueries,
     },
     // uncovered fail/nodata first, then covered, then soft samples
     queries: queries.slice(0, 60),
@@ -3919,6 +3971,7 @@ function buildDutyContext(item, diveId) {
       wave_view: waveView(),
       investigate_uncovered_first: uncovered.length > 0 || react.includes('new'),
       compare_active: !!cmpId,
+      wait_next_active: !!suiteDecision,
     },
     ticket_coverage: {
       status: (focusPack && focusPack.ticket_coverage) || (
@@ -3928,9 +3981,11 @@ function buildDutyContext(item, diveId) {
       uncovered_queries: uncovered,
       wrong_branch_queries: wrongBranch,
       covered_queries: covered,
+      wait_next_queries: waitNextQueries,
       investigate_uncovered_first: uncovered.length > 0 || wrongBranch.length > 0 || react.includes('new'),
-      note: 'Uncovered / wrong_branch = problems without an open issue on this branch label — dig these first. Covered → prefer update_known (expand affected), do not open a duplicate.',
+      note: 'Uncovered / wrong_branch = problems without an open issue on this branch label — dig these first. Covered → prefer update_known (expand affected), do not open a duplicate. wait_next = duty already filed wait_next_wave for that query (see analysis_url).',
     },
+    duty_decision: suiteDecision,
     known_tickets,
   };
 }

@@ -6,6 +6,12 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/gateway/behaviour/external_data_source
+    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg
 )
+
+YQL_LAST_ABI_VERSION()
 
 END()

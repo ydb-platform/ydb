@@ -371,6 +371,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttribu
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStdDlq3Consumers
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStdWithConsumersRetentionExtended
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStdWithConsumersRetentionShrinked
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrl
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrlEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrlOfNotExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrlWithConsumer
@@ -474,6 +475,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.Aggregation-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin+UseBlockHashJoin
 ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin-UseBlockHashJoin
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
+ydb/core/kqp/ut/rbo KqpRboYql.FilterPushdownThroughJoin
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
@@ -614,6 +616,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPosti
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.NullEmbedding
+ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.ValidateVectors
 ydb/core/tx/datashard/build_index/ut TTxDataShardValidateUniqueIndexScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardValidateUniqueIndexScan.RunScan
 ydb/core/tx/datashard/build_index/ut unittest.sole chunk

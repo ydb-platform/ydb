@@ -1,4 +1,4 @@
-GTEST()
+UNITTEST()
 
 SIZE(SMALL)
 
@@ -7,10 +7,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/base
     ydb/core/persqueue/public/nameresolver
-    ydb/core/protos
-    ydb/library/actors/core
+    ydb/core/testlib/default
 )
+
+YQL_LAST_ABI_VERSION()
 
 END()

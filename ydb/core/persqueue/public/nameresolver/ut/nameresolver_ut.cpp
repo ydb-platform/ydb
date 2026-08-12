@@ -1,319 +1,287 @@
 #include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/testlib/actor_helpers.h>
 
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/executor_thread.h>
-#include <ydb/library/actors/core/mailbox.h>
-
-#include <library/cpp/testing/gtest/gtest.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <expected>
 
 using namespace NKikimr;
 using namespace NKikimr::NPQ::NNameResolver;
-using namespace NActors;
 
 namespace {
 
 constexpr TStringBuf LbRoot = "/Root/LbCommunal";
 constexpr TStringBuf Database = "/Root/Db";
 
-// Minimal AppData + TLS activation context (avoids ydb/core/testlib ↔ gtest conflict).
-class TNameResolverTest : public ::testing::Test {
-protected:
-    TNameResolverTest()
-        : AppData(0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr)
-    {
-        THolder<TActorSystemSetup> setup(new TActorSystemSetup);
-        System.Reset(new TActorSystem(setup, &AppData));
-        Mailbox.Reset(new TMailbox());
-        ExecutorThread.Reset(new TExecutorThread(0, System.Get(), nullptr, "thread"));
-        Ctx.Reset(new TActorContext(*Mailbox, *ExecutorThread, GetCycleCountFast(), SelfID));
-        PrevCtx = TlsActivationContext;
-        TlsActivationContext = Ctx.Get();
-    }
-
-    ~TNameResolverTest() override {
-        TlsActivationContext = PrevCtx;
-        PrevCtx = nullptr;
-    }
-
-    void SetUp() override {
-        auto& pqConfig = AppData.PQConfig;
+class TNameResolverFixture : public NUnitTest::TBaseFixture {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        auto& pqConfig = ActorSystemStub.AppData.PQConfig;
         pqConfig.SetTopicsAreFirstClassCitizen(true);
         pqConfig.SetRoot("/Root/PQ");
         pqConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(TString{LbRoot});
     }
 
     void SetFcc(bool value) {
-        AppData.PQConfig.SetTopicsAreFirstClassCitizen(value);
+        ActorSystemStub.AppData.PQConfig.SetTopicsAreFirstClassCitizen(value);
     }
 
     void SetLbRoot(const TString& root) {
-        AppData.PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(root);
-    }
-
-    void SetPqRoot(const TString& root) {
-        AppData.PQConfig.SetRoot(root);
+        ActorSystemStub.AppData.PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(root);
     }
 
     static TString Ok(std::expected<TString, TString> result) {
-        EXPECT_TRUE(result.has_value()) << (result ? "" : result.error());
-        return result.value_or(TString{});
+        if (!result.has_value()) {
+            UNIT_FAIL(result.error());
+        }
+        return *result;
     }
 
     static void ExpectError(std::expected<TString, TString> result, TStringBuf reason) {
-        ASSERT_FALSE(result.has_value()) << "got path: " << result.value_or(TString{});
-        EXPECT_EQ(result.error(), reason);
+        if (result.has_value()) {
+            UNIT_FAIL(TStringBuilder() << "got path: " << *result);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(result.error(), reason);
     }
 
-    TAppData AppData;
-    THolder<TActorSystem> System;
-    THolder<TMailbox> Mailbox;
-    THolder<TExecutorThread> ExecutorThread;
-    TActorId SelfID;
-    THolder<TActorContext> Ctx;
-    TActivationContext* PrevCtx = nullptr;
+    TActorSystemStub ActorSystemStub;
 };
 
 } // namespace
 
-TEST_F(TNameResolverTest, FederationRootDbConvertsLegacyRt3) {
+Y_UNIT_TEST_SUITE(TNameResolverTest) {
+
+Y_UNIT_TEST_F(FederationRootDbConvertsLegacyRt3, TNameResolverFixture) {
     SetFcc(false);
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "rt3.dc1--account--topic", "dc1")),
         "/Root/LbCommunal/account/topic");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "rt3.dc2--account--topic", "dc1")),
         "/Root/LbCommunal/account/topic-mirrored-from-dc2");
 }
 
-TEST_F(TNameResolverTest, FederationRootDbAccountTopic) {
+Y_UNIT_TEST_F(FederationRootDbAccountTopic, TNameResolverFixture) {
     SetFcc(false);
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "account/topic", "dc1")),
         "/Root/LbCommunal/account/topic");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "account/topic", "dc1", "dc2")),
         "/Root/LbCommunal/account/topic-mirrored-from-dc2");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "account/dir/topic", "dc1", "dc2")),
         "/Root/LbCommunal/account/dir/topic-mirrored-from-dc2");
 }
 
-TEST_F(TNameResolverTest, FederationRootDbViaDatabasePrefix) {
+Y_UNIT_TEST_F(FederationRootDbViaDatabasePrefix, TNameResolverFixture) {
     SetFcc(false);
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root", "account/topic", "dc1")),
         "/Root/LbCommunal/account/topic");
 }
 
-TEST_F(TNameResolverTest, FederationUserDatabaseRelativePath) {
+Y_UNIT_TEST_F(FederationUserDatabaseRelativePath, TNameResolverFixture) {
     SetFcc(false);
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root/LbCommunal/account", "dir/topic", "dc1")),
         "/Root/LbCommunal/account/dir/topic");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root/LbCommunal/account", "dir/topic", "dc1", "dc2")),
         "/Root/LbCommunal/account/dir/topic-mirrored-from-dc2");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root/LbCommunal/account", "topic", "dc1")),
         "/Root/LbCommunal/account/topic");
 }
 
-TEST_F(TNameResolverTest, ModernPathNormalizedWithDatabase) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(ModernPathNormalizedWithDatabase, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account/topic", "dc1", "")),
         "/Root/Db/account/topic");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "/account/topic", "dc1", "")),
         "/Root/Db/account/topic");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "/Root/Db/account/topic", "dc1", "")),
         "/Root/Db/account/topic");
 }
 
-TEST_F(TNameResolverTest, LocalRt3) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(LocalRt3, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1", "dc1")),
         "/Root/LbCommunal/account/topic");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1", "")),
         "/Root/LbCommunal/account/topic");
 }
 
-TEST_F(TNameResolverTest, RemoteRt3Mirrored) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(RemoteRt3Mirrored, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc2--account--topic", "dc1", "dc2")),
         "/Root/LbCommunal/account/topic-mirrored-from-dc2");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc2--account--topic", "dc1", "")),
         "/Root/LbCommunal/account/topic-mirrored-from-dc2");
 }
 
-TEST_F(TNameResolverTest, Rt3WithDirectories) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(Rt3WithDirectories, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc1--account@dir--topic", "dc1", "")),
         "/Root/LbCommunal/account/dir/topic");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc2--account@dir--topic", "dc1", "")),
         "/Root/LbCommunal/account/dir/topic-mirrored-from-dc2");
 }
 
-TEST_F(TNameResolverTest, ShortLegacyLocal) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(ShortLegacyLocal, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--topic", "dc1", "")),
         "/Root/LbCommunal/account/topic");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account@dir--topic", "dc1", "")),
         "/Root/LbCommunal/account/dir/topic");
 }
 
-TEST_F(TNameResolverTest, ShortLegacyForeignDcMirrored) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(ShortLegacyForeignDcMirrored, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--topic", "dc1", "dc2")),
         "/Root/LbCommunal/account/topic-mirrored-from-dc2");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account@dir--topic", "dc1", "dc2")),
         "/Root/LbCommunal/account/dir/topic-mirrored-from-dc2");
 }
 
-TEST_F(TNameResolverTest, BareTopic) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(BareTopic, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "topic", "dc1", "")),
         "/Root/LbCommunal/topic");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "topic", "dc1", "dc2")),
         "/Root/LbCommunal/topic-mirrored-from-dc2");
 }
 
-TEST_F(TNameResolverTest, AtWithoutDashDashIsLegacy) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(AtWithoutDashDashIsLegacy, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account@dir", "dc1", "")),
         "/Root/LbCommunal/account@dir");
 }
 
-TEST_F(TNameResolverTest, DcMismatchReturnsError) {
+Y_UNIT_TEST_F(DcMismatchReturnsError, TNameResolverFixture) {
     ExpectError(
         ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1", "dc2"),
         "DC specified both in topic name and separate option and they mismatch. ");
 }
 
-TEST_F(TNameResolverTest, ShortWithoutDcReturnsError) {
+Y_UNIT_TEST_F(ShortWithoutDcReturnsError, TNameResolverFixture) {
     ExpectError(
         ResolveName(TString{Database}, "account--topic", "", ""),
         "Cannot determine DC: should specify either in topic name, Dc option or LocalDc option. ");
 }
 
-TEST_F(TNameResolverTest, MalformedRt3NoDashDash) {
+Y_UNIT_TEST_F(MalformedRt3NoDashDash, TNameResolverFixture) {
     ExpectError(
         ResolveName(TString{Database}, "rt3.bad", "dc1", ""),
         "Malformed legacy style topic name: contains 'rt3.', but no '--'. ");
 }
 
-TEST_F(TNameResolverTest, MalformedRt3EmptyDc) {
+Y_UNIT_TEST_F(MalformedRt3EmptyDc, TNameResolverFixture) {
     ExpectError(
         ResolveName(TString{Database}, "rt3.--account--topic", "dc1", ""),
         "Internal error: Could not determine DC for topic: rt3.--account--topic. ");
 }
 
-TEST_F(TNameResolverTest, MalformedRt3EmptyShort) {
-    // CorrectName rejects, but BuildFromLegacyName accepts and converts short part.
-    EXPECT_EQ(
+Y_UNIT_TEST_F(MalformedRt3EmptyShort, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc1--", "dc1", "")),
         "/Root/LbCommunal");
 }
 
-TEST_F(TNameResolverTest, ShortDashDashConvertedLikeConverter) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(ShortDashDashConvertedLikeConverter, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--", "dc1", "")),
         "/Root/LbCommunal/account");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "--topic", "dc1", "")),
         "/Root/LbCommunal/topic");
 }
 
-TEST_F(TNameResolverTest, EmptyNameFccIsLegacyBare) {
-    // FCC: empty is legacy-style (no '/'); ConvertOldTopicName("") -> "".
-    EXPECT_EQ(
+Y_UNIT_TEST_F(EmptyNameFccIsLegacyBare, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "", "dc1", "")),
         "/Root/LbCommunal");
 }
 
-TEST_F(TNameResolverTest, DoubleSlashInLegacyFccConverted) {
-    // BuildFromLegacyName has no BasicNameChecks; CanonizePath collapses "//".
-    EXPECT_EQ(
+Y_UNIT_TEST_F(DoubleSlashInLegacyFccConverted, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--a//b", "dc1", "")),
         "/Root/LbCommunal/account/a/b");
 }
 
-TEST_F(TNameResolverTest, LeadingSlashStripped) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(LeadingSlashStripped, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "/rt3.dc1--account--topic", "dc1", "")),
         "/Root/LbCommunal/account/topic");
 }
 
-TEST_F(TNameResolverTest, MirrorSkippedWhenLocalDcEmpty) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(MirrorSkippedWhenLocalDcEmpty, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc2--account--topic", "", "dc2")),
         "/Root/LbCommunal/account/topic");
 }
 
-TEST_F(TNameResolverTest, FallbackToDatabaseWhenLbRootEmpty) {
+Y_UNIT_TEST_F(FallbackToDatabaseWhenLbRootEmpty, TNameResolverFixture) {
     SetLbRoot("");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1", "")),
         "/Root/Db/account/topic");
 }
 
-TEST_F(TNameResolverTest, NoRootReturnsModernPathOnly) {
+Y_UNIT_TEST_F(NoRootReturnsModernPathOnly, TNameResolverFixture) {
     SetLbRoot("");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "rt3.dc1--account--topic", "dc1", "")),
         "account/topic");
 }
 
-TEST_F(TNameResolverTest, DefaultDcParsesFromRt3Name) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(DefaultDcParsesFromRt3Name, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc2--account--topic", "dc1")),
         "/Root/LbCommunal/account/topic-mirrored-from-dc2");
 }
 
-TEST_F(TNameResolverTest, DefaultDcShortUsesLocalDc) {
-    EXPECT_EQ(
+Y_UNIT_TEST_F(DefaultDcShortUsesLocalDc, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--topic", "dc1")),
         "/Root/LbCommunal/account/topic");
 }
 
-TEST_F(TNameResolverTest, IsPathPrefixExactMatch) {
+Y_UNIT_TEST_F(IsPathPrefixExactMatch, TNameResolverFixture) {
     SetFcc(false);
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root/PQ", "account/topic", "dc1")),
         "/Root/LbCommunal/account/topic");
 }
 
-TEST_F(TNameResolverTest, TopicPathStartsWithPqRoot) {
+Y_UNIT_TEST_F(TopicPathStartsWithPqRoot, TNameResolverFixture) {
     SetFcc(false);
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "/Root/PQ/rt3.dc1--account--topic", "dc1")),
         "/Root/LbCommunal/account/topic");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "/Root/PQ/account/topic", "dc1")),
         "/Root/LbCommunal/account/topic");
 }
 
-TEST_F(TNameResolverTest, FederationModernPathBadName) {
+Y_UNIT_TEST_F(FederationModernPathBadName, TNameResolverFixture) {
     SetFcc(false);
-    // ForFederation BasicNameChecks runs before ParseModernPath.
     ExpectError(
         ResolveName("/Root/LbCommunal/account", "dir//topic", "dc1"),
         "Bad topic name for federation: dir//topic");
 }
 
-TEST_F(TNameResolverTest, FederationModernPathWithoutDc) {
+Y_UNIT_TEST_F(FederationModernPathWithoutDc, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("/Root/LbCommunal/account", "dir/topic", "", ""),
@@ -323,72 +291,68 @@ TEST_F(TNameResolverTest, FederationModernPathWithoutDc) {
         "Cannot determine DC: should specify either with Dc option or LocalDc option. ");
 }
 
-TEST_F(TNameResolverTest, FederationPqRootWithTrailingSlash) {
+Y_UNIT_TEST_F(FederationPqRootWithTrailingSlash, TNameResolverFixture) {
     SetFcc(false);
-    // "/Root/PQ/" → topicName "Root/PQ/" → EndsWith('/') before classify
-    // (same order as TDiscoveryConverter::BuildForFederation).
     ExpectError(
         ResolveName("", "/Root/PQ/", "dc1"),
         "Invalid topic path or trailing '/'. ");
 }
 
-TEST_F(TNameResolverTest, FederationOnlySlash) {
+Y_UNIT_TEST_F(FederationOnlySlash, TNameResolverFixture) {
     SetFcc(false);
-    // "/" → after StripLeadingSlash topic is empty
     ExpectError(
         ResolveName("", "/", "dc1"),
         "Invalid topic path (only account provided?). ");
 }
 
-TEST_F(TNameResolverTest, FederationEmptyTopicAfterExactPqRoot) {
+Y_UNIT_TEST_F(FederationEmptyTopicAfterExactPqRoot, TNameResolverFixture) {
     SetFcc(false);
-    // topic == PQ root (no trailing slash) → SkipPathPrefix clears topic
     ExpectError(
         ResolveName("", "/Root/PQ", "dc1"),
         "Bad topic name (only account provided?). ");
 }
 
-TEST_F(TNameResolverTest, SkipPathPrefixRestoresWhenNoSlashAfterPrefix) {
+Y_UNIT_TEST_F(SkipPathPrefixRestoresWhenNoSlashAfterPrefix, TNameResolverFixture) {
     SetFcc(false);
-    // database is PQ root → SkipPathPrefix(topic, pqPrefix); topic shares byte prefix
-    // without '/' → restore original topic, then legacy-parse it.
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root/PQ", "Root/PQfoo", "dc1")),
         "/Root/LbCommunal/Root/PQfoo");
 }
 
-TEST_F(TNameResolverTest, FederationTrailingSlash) {
+Y_UNIT_TEST_F(FederationTrailingSlash, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("", "account/", "dc1"),
         "Invalid topic path or trailing '/'. ");
 }
 
-TEST_F(TNameResolverTest, FederationEmptyName) {
+Y_UNIT_TEST_F(FederationEmptyName, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("", "", "dc1"),
         "Bad topic name for federation: ");
 }
 
-TEST_F(TNameResolverTest, FederationDoubleSlash) {
+Y_UNIT_TEST_F(FederationDoubleSlash, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("", "account--a//b", "dc1"),
         "Bad topic name for federation: account--a//b");
 }
 
-TEST_F(TNameResolverTest, FederationLegacyParseFailure) {
+Y_UNIT_TEST_F(FederationLegacyParseFailure, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("", "rt3.bad", "dc1"),
         "Malformed legacy style topic name: contains 'rt3.', but no '--'. ");
 }
 
-TEST_F(TNameResolverTest, FederationAccountTopicWithoutLbRoot) {
+Y_UNIT_TEST_F(FederationAccountTopicWithoutLbRoot, TNameResolverFixture) {
     SetFcc(false);
     SetLbRoot("");
-    EXPECT_EQ(
+    UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "account/topic", "dc1")),
         "account/topic");
 }
+
+} // Y_UNIT_TEST_SUITE(TNameResolverTest)

@@ -26,7 +26,7 @@ TInotifyHandle::TInotifyHandle()
     FD_ = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
     if (FD_ < 0) {
         THROW_ERROR_EXCEPTION("Error creating inotify descriptor")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 #endif
 }
@@ -89,7 +89,7 @@ TInotifyWatch::TInotifyWatch(
         WD_ = -1;
         THROW_ERROR_EXCEPTION("Error registering watch for %v",
             Path_)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
     YT_TLOG_DEBUG("Watch registered")
         .With("WD", WD_)

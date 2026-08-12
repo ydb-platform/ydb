@@ -658,6 +658,11 @@ private:
                 return;
             }
 
+            // COMPAT(bulatman): old gRPC clients send an empty yt-user when no user is specified.
+            if (userString->empty()) {
+                return;
+            }
+
             User_ = std::string(*userString);
         }
 
@@ -1043,7 +1048,7 @@ private:
                 auto error = TError(
                     NRpc::EErrorCode::NoSuchService,
                     "Service is not registered")
-                    << TErrorAttribute("service", ServiceName_);
+                    .With("service", ServiceName_);
                 YT_LOG_WARNING(error);
 
                 auto responseMessage = CreateErrorResponseMessage(RequestId_, error);

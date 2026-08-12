@@ -103,7 +103,7 @@ ssize_t WriteToFD(TFileDescriptor fd, const char* buffer, size_t length)
 TError MakeSystemError(TFormatString<> message)
 {
     return TError(message)
-        << TError::FromSystem();
+        .With(TError::FromSystem());
 }
 
 [[maybe_unused]] TErrorOr<int> CheckPipeBytesLeftToRead(TFileDescriptor fd) noexcept
@@ -1244,8 +1244,8 @@ private:
     TError AnnotateError(TError error) const
     {
         return std::move(error)
-            << TErrorAttribute("connection_id", Id_)
-            << TErrorAttribute("connection_endpoint", Endpoint_);
+            .With("connection_id", Id_)
+            .With("connection_endpoint", Endpoint_);
     }
 
     void Init()
@@ -1776,7 +1776,7 @@ TFileDescriptor CreateWriteFDForConnection(
     TFileDescriptorGuard fd(HandleEintr(::open, pipePath.c_str(), flags));
     if (fd.Get() == -1) {
         THROW_ERROR_EXCEPTION(MakeSystemError("Failed to open named pipe"))
-            << TErrorAttribute("path", pipePath);
+            .With("path", pipePath);
     }
 
     try {
@@ -1793,7 +1793,7 @@ TFileDescriptor CreateWriteFDForConnection(
         YT_TLOG_WARNING("Failed to open pipe for writing")
             .With("UseDeliveryFence", useDeliveryFence)
             .With("Capacity", capacity)
-            .With(TError(ex) << TError::FromSystem());
+            .With(TError(ex).With(TError::FromSystem()));
         throw;
     } catch (...) {
         YT_TLOG_WARNING("Failed to open pipe for writing")
@@ -1875,7 +1875,7 @@ IConnectionReaderPtr CreateInputConnectionFromPath(
     TFileDescriptorGuard fd(HandleEintr(::open, pipePath.c_str(), flags));
     if (fd.Get() == -1) {
         THROW_ERROR_EXCEPTION(MakeSystemError("Failed to open named pipe"))
-            << TErrorAttribute("path", pipePath);
+            .With("path", pipePath);
     }
 
     auto connection = New<TFDConnection>(fd.Get(), std::move(poller), std::move(pipeHolder), std::move(pipePath));

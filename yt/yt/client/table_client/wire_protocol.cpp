@@ -1012,7 +1012,7 @@ private:
             THROW_ERROR_EXCEPTION("Versioned row data weight is too large: %v > %v",
                 dataWeight,
                 Options_.MaxVersionedRowDataWeight)
-                << TErrorAttribute("key", ToOwningKey(row));
+                .With("key", ToOwningKey(row));
         }
     }
 };

@@ -198,7 +198,7 @@ private:
                 }
             } catch (const std::exception& ex) {
                 responseHandler->HandleError(
-                    TError(NRpc::EErrorCode::TransportError, "Request serialization failed") << ex,
+                    TError(NRpc::EErrorCode::TransportError, "Request serialization failed").With(ex),
                     channel->EndpointAddress_);
                 return;
             }
@@ -244,7 +244,7 @@ private:
             try {
                 if (!responseOrError.IsOK()) {
                     responseHandler->HandleError(
-                        TError(NRpc::EErrorCode::TransportError, "HTTP client request failed") << responseOrError,
+                        TError(NRpc::EErrorCode::TransportError, "HTTP client request failed").With(responseOrError),
                         address);
                     return;
                 }
@@ -265,7 +265,7 @@ private:
                 if (response->GetStatusCode() != EStatusCode::OK) {
                     responseHandler->HandleError(
                         TError(NRpc::EErrorCode::TransportError, "Unexpected HTTP status code")
-                            << TErrorAttribute("status", response->GetStatusCode()),
+                            .With("status", response->GetStatusCode()),
                         address);
                     return;
                 }
@@ -284,7 +284,7 @@ private:
                 responseHandler->HandleResponse(responseMessage, address);
             } catch (const std::exception& ex) {
                 responseHandler->HandleError(
-                    TError(NRpc::EErrorCode::TransportError, "Response deserialization failed") << ex,
+                    TError(NRpc::EErrorCode::TransportError, "Response deserialization failed").With(ex),
                     address);
             }
         }

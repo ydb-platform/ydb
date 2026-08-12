@@ -60,7 +60,7 @@ void CanonizeAndValidatePath(TYPath& path)
             tokenizer.Advance();
         }
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(TError("Error validating attribute path %Qv", path) << ex);
+        THROW_ERROR_EXCEPTION(TError("Error validating attribute path %Qv", path).With(ex));
     }
 
     path = std::move(result);

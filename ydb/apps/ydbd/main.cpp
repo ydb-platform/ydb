@@ -22,8 +22,9 @@
 namespace {
 
 constexpr TStringBuf TCMallocMaxPerCpuCacheSizeEnv = "YDB_TCMALLOC_MAX_PER_CPU_CACHE_SIZE_BYTES";
+constexpr TStringBuf TCMallocMaxTotalThreadCacheSizeEnv = "YDB_TCMALLOC_MAX_TOTAL_THREAD_CACHE_SIZE_BYTES";
 
-bool ConfigureTCMallocFromEnvironment() {
+bool ConfigureTCMallocMaxPerCpuCacheSizeFromEnvironment() {
     const auto value = TryGetEnv(TString{TCMallocMaxPerCpuCacheSizeEnv});
     if (!value || value->empty()) {
         return true;
@@ -59,6 +60,49 @@ bool ConfigureTCMallocFromEnvironment() {
          << Endl;
     return false;
 #endif
+}
+
+bool ConfigureTCMallocMaxTotalThreadCacheSizeFromEnvironment() {
+    const auto value = TryGetEnv(TString{TCMallocMaxTotalThreadCacheSizeEnv});
+    if (!value || value->empty()) {
+        return true;
+    }
+
+    ui64 bytes = 0;
+    if (!TryFromString(*value, bytes) || bytes > static_cast<ui64>(std::numeric_limits<i64>::max())) {
+        Cerr << "Invalid " << TCMallocMaxTotalThreadCacheSizeEnv << " value '" << *value
+             << "': expected 0 or an integer number of bytes in range [1, "
+             << std::numeric_limits<i64>::max() << "]" << Endl;
+        return false;
+    }
+
+    if (bytes == 0) {
+        return true;
+    }
+
+#ifdef _linux_
+    const auto requestedBytes = static_cast<i64>(bytes);
+    tcmalloc::MallocExtension::SetMaxTotalThreadCacheBytes(requestedBytes);
+    const auto configuredBytes = tcmalloc::MallocExtension::GetMaxTotalThreadCacheBytes();
+    if (configuredBytes != requestedBytes) {
+        Cerr << "Failed to set TCMalloc maximum total thread cache size to " << requestedBytes
+             << " bytes: allocator reports " << configuredBytes << " bytes" << Endl;
+        return false;
+    }
+
+    Cerr << "Configured TCMalloc maximum total thread cache size to " << configuredBytes
+         << " bytes from " << TCMallocMaxTotalThreadCacheSizeEnv << Endl;
+    return true;
+#else
+    Cerr << TCMallocMaxTotalThreadCacheSizeEnv << " is supported only by Linux ydbd builds"
+         << Endl;
+    return false;
+#endif
+}
+
+bool ConfigureTCMallocFromEnvironment() {
+    return ConfigureTCMallocMaxPerCpuCacheSizeFromEnvironment()
+        && ConfigureTCMallocMaxTotalThreadCacheSizeFromEnvironment();
 }
 
 } // anonymous namespace

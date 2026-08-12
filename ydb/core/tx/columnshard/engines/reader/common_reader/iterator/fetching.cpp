@@ -287,8 +287,7 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         const TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
         ReportTracing(source, executionDurationMs, currentExecutionResult, tracingNodeId, tracingCategoryName, tracingProcessor,
             reservedMemoryBeforeExecute);
-        source->MutableExecutionContext().SetPrevNodeTracing(
-            tracingNodeId, conclusion.IsFail() ? TExecutionContext::EPrevNodeResult::Fail : TExecutionContext::ConvertResult(*conclusion));
+        source->MutableExecutionContext().SetPrevNodeTracing(tracingNodeId, conclusion);
         if (conclusion.IsFail()) {
             source->MutableExecutionContext().OnFailedProgramStepExecution();
             return conclusion;

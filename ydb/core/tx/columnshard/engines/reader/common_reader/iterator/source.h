@@ -43,18 +43,11 @@ private:
 
     std::optional<TFetchingScriptCursor> CursorStep;
 
-public:
-    enum class EPrevNodeResult: ui8 {
-        Success,
-        Skipped,
-        InBackground,
-        Fail
-    };
-
 private:
     struct TPrevNodeState {
         ui32 NodeId = 0;
-        EPrevNodeResult Result = EPrevNodeResult::Success;
+        NArrow::NSSA::IResourceProcessor::EExecutionResult Result = NArrow::NSSA::IResourceProcessor::EExecutionResult::Success;
+        bool Failed = false;
         bool Defined = false;
     };
 
@@ -69,27 +62,19 @@ private:
     std::atomic<TPrevNodeState> PrevNode;
 
 public:
-    static EPrevNodeResult ConvertResult(const NArrow::NSSA::IResourceProcessor::EExecutionResult result) {
-        switch (result) {
-            case NArrow::NSSA::IResourceProcessor::EExecutionResult::Success:
-                return EPrevNodeResult::Success;
-            case NArrow::NSSA::IResourceProcessor::EExecutionResult::Skipped:
-                return EPrevNodeResult::Skipped;
-            case NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground:
-                return EPrevNodeResult::InBackground;
-        }
-    }
-
     void SetStartCategoryName(TString&& name) {
         StartCategoryName = std::move(name);
     }
 
-    void SetPrevNodeTracing(const ui32 nodeId, const EPrevNodeResult result) {
-        PrevNode.store(TPrevNodeState{ .NodeId = nodeId, .Result = result, .Defined = true }, std::memory_order_relaxed);
+    void SetPrevNodeTracing(const ui32 nodeId, const TConclusion<NArrow::NSSA::IResourceProcessor::EExecutionResult>& conclusion) {
+        PrevNode.store(TPrevNodeState{ .NodeId = nodeId,
+                           .Result = conclusion.IsFail() ? NArrow::NSSA::IResourceProcessor::EExecutionResult::Success : *conclusion,
+                           .Failed = conclusion.IsFail(),
+                           .Defined = true }, std::memory_order_release);
     }
 
     TString GetPrevCategoryName() const {
-        const TPrevNodeState state = PrevNode.load(std::memory_order_relaxed);
+        const TPrevNodeState state = PrevNode.load(std::memory_order_acquire);
         if (!state.Defined) {
             return StartCategoryName;
         }
@@ -100,20 +85,14 @@ public:
     }
 
     TString GetPrevExecutionResult() const {
-        const TPrevNodeState state = PrevNode.load(std::memory_order_relaxed);
+        const TPrevNodeState state = PrevNode.load(std::memory_order_acquire);
         if (!state.Defined) {
             return TString();
         }
-        switch (state.Result) {
-            case EPrevNodeResult::Success:
-                return "Success";
-            case EPrevNodeResult::Skipped:
-                return "Skipped";
-            case EPrevNodeResult::InBackground:
-                return "InBackground";
-            case EPrevNodeResult::Fail:
-                return "Fail";
+        if (state.Failed) {
+            return "Fail";
         }
+        return ::ToString(state.Result);
     }
 
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);

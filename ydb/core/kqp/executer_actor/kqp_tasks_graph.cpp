@@ -4218,21 +4218,37 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
             partitionsCount = std::max(newPartitionCount, partitionsCount);
         }
     } else if (isParallelUnionAll && !forceMapTasks && GetMeta().EnableParallelUnionAllConsumerSizing) {
-        // A ParallelUnionAll consumer is not bound to its producers by correctness: any row may go to any consumer
-        // task. Size it from resources instead, so a consumer-heavy stage is not capped by the producer count.
+        const auto& settings = stage.GetProgram().GetSettings();
+        const bool producerUnderParallelized = partitionsCount <= 2 * nodesCount;
+        const bool autoSizingEligible = producerUnderParallelized && settings.GetHasPhyHashCombine()
+            && !settings.GetHasTop() && !settings.GetHasMapJoin();
+
+        // A ParallelUnionAll consumer is not bound to its producers by correctness, but growing every such stage is
+        // not free: short LIMIT pipelines and lookup joins have no demonstrated benefit and can amplify work. Keep the
+        // producer width unless the consumer contains a splittable aggregation and its producers are narrow relative
+        // to the cluster. A stage which already has more than two producer tasks per node has enough parallelism that
+        // resource-only expansion is more likely to amplify partial rows or move the bottleneck downstream. An
+        // explicit TaskCount remains an override and is honored independently of this conservative automatic check.
         if (stage.GetTaskCount()) {
             stageType = TMaxTasksGraph::FIXED;
             partitionsCount = stage.GetTaskCount();
-        } else {
+        } else if (autoSizingEligible) {
             // Zero previous-stage count on purpose: CalcTasksOptimalCount clamps its result to that argument, which is
             // exactly the producer-count cap being lifted here.
             auto [newPartitionCount, _] = GetMaxTasksAggregation(stageInfo, 0, nodesCount);
             partitionsCount = std::max(newPartitionCount, partitionsCount);
         }
-        YDB_LOG_DEBUG("Sized ParallelUnionAll consumer stage from resources",
+        YDB_LOG_DEBUG("Selected ParallelUnionAll consumer stage size",
             {"stageId", stageInfo.Id.StageId},
             {"producers", parallelUnionAllTasks},
-            {"consumers", partitionsCount});
+            {"consumers", partitionsCount},
+            {"explicitTaskCount", stage.GetTaskCount()},
+            {"autoSizingEligible", autoSizingEligible},
+            {"producerUnderParallelized", producerUnderParallelized},
+            {"nodes", nodesCount},
+            {"hasPhyHashCombine", settings.GetHasPhyHashCombine()},
+            {"hasTop", settings.GetHasTop()},
+            {"hasMapJoin", settings.GetHasMapJoin()});
 
         // Tell the channel budget which edges will be wired as a bounded-degree scatter instead of a full mesh - only
         // those where this stage actually ended up wider than its producer (see BuildParallelUnionAllChannels).

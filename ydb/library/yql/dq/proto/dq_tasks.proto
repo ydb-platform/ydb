@@ -51,6 +51,9 @@ message TProgram {
 
         bool HasWatermarkGenerator = 17;
         optional uint64 WatermarkGeneratorIdleTimeoutUs = 18;
+        // Structural marker from the final physical program. Unlike the legacy aggregation predictor flags, this is
+        // set after WideCombiner has been lowered to DqPhyHashCombine.
+        bool HasPhyHashCombine = 19;
     }
 
     uint32 RuntimeVersion = 1;

@@ -2976,14 +2976,18 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
             )");
         }
 
-        TTaskDistribution Build(bool enableSizing) {
+        TTaskDistribution Build(TStringBuf query, bool enableSizing) {
             TBuildConfig cfg;
             cfg.NodeCount = 1;
             cfg.NodeComputeActors = 1u << 20;
             cfg.NodeTotalMemoryBytes = 256ULL << 30;
             cfg.EnableParallelUnionAllConsumerSizing = enableSizing;
 
-            return TKqpTasksGraphBuildFixture::BuildTasks(TString(Query), cfg);
+            return TKqpTasksGraphBuildFixture::BuildTasks(TString(query), cfg);
+        }
+
+        TTaskDistribution Build(bool enableSizing) {
+            return Build(Query, enableSizing);
         }
 
         // The scan stage (both union branches read the same table, so the optimizer emits a single shared scan) is
@@ -2993,6 +2997,35 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
             PRAGMA ydb.OptimizerHints = 'Rows(pua_src # 1e9)';
             PRAGMA ydb.OverridePlanner = @@ [
                 {"tx": 0, "stage": 0, "tasks": 2}
+            ] @@;
+            SELECT k, SUM(v) AS s, MIN(v) AS mn, MAX(v) AS mx, COUNT(*) AS c FROM (
+                SELECT k, v FROM pua_src WHERE part = 0
+                UNION ALL
+                SELECT k, v FROM pua_src WHERE part = 1
+            ) GROUP BY k;
+        )";
+
+        // PUA is still present, but this consumer only evaluates a stateless expression and terminates early. It must
+        // retain the producer width: creating extra consumers cannot accelerate a LIMIT and may increase work before
+        // cancellation reaches the scans.
+        static constexpr TStringBuf LimitQuery = R"(
+            PRAGMA ydb.OptimizerHints = 'Rows(pua_src # 1e9)';
+            PRAGMA ydb.OverridePlanner = @@ [
+                {"tx": 0, "stage": 0, "tasks": 2}
+            ] @@;
+            SELECT k, v * RandomNumber(CAST(k AS Uint64)) AS r FROM (
+                SELECT k, v FROM pua_src WHERE part = 0
+                UNION ALL
+                SELECT k, v FROM pua_src WHERE part = 1
+            ) LIMIT 10;
+        )";
+
+        // The consumer has a physical hash combine, but the producer is already much wider than the cluster. Further
+        // resource-only expansion has no evidence of shortening the critical path and can amplify partial rows.
+        static constexpr TStringBuf WideAggregationQuery = R"(
+            PRAGMA ydb.OptimizerHints = 'Rows(pua_src # 1e9)';
+            PRAGMA ydb.OverridePlanner = @@ [
+                {"tx": 0, "stage": 0, "tasks": 8}
             ] @@;
             SELECT k, SUM(v) AS s, MIN(v) AS mn, MAX(v) AS mx, COUNT(*) AS c FROM (
                 SELECT k, v FROM pua_src WHERE part = 0
@@ -3042,6 +3075,26 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
         UNIT_ASSERT_C(consumers > producers,
             "consumer stage must exceed the producer count when sized from resources, got "
                 << consumers << " consumers for " << producers << " producers");
+    }
+
+    Y_UNIT_TEST_F(NonAggregatingLimitConsumerKeepsProducerCount, TFixture) {
+        auto dist = Build(LimitQuery, /* enableSizing */ true);
+        AssertNoCrossNodeCopyChannels(dist);
+
+        auto [consumers, producers] = FindPuaConsumer(dist, LastPhysicalQuery());
+        UNIT_ASSERT_C(producers > 0, "no ParallelUnionAll consumer stage found in the LIMIT plan");
+        UNIT_ASSERT_VALUES_EQUAL_C(consumers, producers,
+            "a non-aggregating LIMIT consumer must keep the producer count");
+    }
+
+    Y_UNIT_TEST_F(WideAggregatingConsumerKeepsProducerCount, TFixture) {
+        auto dist = Build(WideAggregationQuery, /* enableSizing */ true);
+        AssertNoCrossNodeCopyChannels(dist);
+
+        auto [consumers, producers] = FindPuaConsumer(dist, LastPhysicalQuery());
+        UNIT_ASSERT_C(producers > 0, "no ParallelUnionAll consumer stage found in the wide aggregation plan");
+        UNIT_ASSERT_VALUES_EQUAL_C(consumers, producers,
+            "an already-wide aggregation consumer must keep the producer count");
     }
 }
 

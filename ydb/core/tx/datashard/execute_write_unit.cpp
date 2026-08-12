@@ -117,6 +117,35 @@ public:
         return otherLocksBroken.size();
     }
 
+    // Serializes the parts of a write result that must be replayed when the same
+    // pipelined uncommitted write is delivered again (Status, Issues, TxStats).
+    static TString SerializeWriteSeqNumResult(const NKikimrDataEvents::TEvWriteResult& record) {
+        NKikimrDataEvents::TEvWriteResult stored;
+        stored.SetStatus(record.GetStatus());
+        *stored.MutableIssues() = record.GetIssues();
+        if (record.HasTxStats()) {
+            *stored.MutableTxStats() = record.GetTxStats();
+        }
+        TString serialized;
+        Y_ENSURE(stored.SerializeToString(&serialized));
+        return serialized;
+    }
+
+    // Fills a duplicate write response from the stored serialized result.
+    // Falls back to STATUS_COMPLETED when there is no stored result or the blob fails to parse.
+    static void FillDuplicateWriteResult(const TWriteSeqNumState& state, NKikimrDataEvents::TEvWriteResult& record) {
+        NKikimrDataEvents::TEvWriteResult stored;
+        if (!state.SerializedResult.empty() && stored.ParseFromString(state.SerializedResult)) {
+            record.SetStatus(stored.GetStatus());
+            record.MutableIssues()->Swap(stored.MutableIssues());
+            if (stored.HasTxStats()) {
+                record.MutableTxStats()->Swap(stored.MutableTxStats());
+            }
+        } else {
+            record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+    }
+
     // Validates this write's position in its writer's chain; on success records the new
     // position for ApplyLocks to persist. Returns a status when the operation must stop here.
     std::optional<EExecutionStatus> CheckWriteSeqNum(TWriteOperation* writeOp, TSetupSysLocks& guardLocks,
@@ -174,17 +203,7 @@ public:
                 res->Record.SetTxId(writeOp->GetTxId());
                 res->Record.SetIsDuplicate(true);
 
-                const auto& state = lock->GetWriteSeqNumState();
-                if (state.HasResult) {
-                    res->Record.SetStatus(state.Status);
-                    for (const auto& issue : state.Issues) {
-                        *res->Record.AddIssues() = issue;
-                    }
-                    res->Record.MutableTxStats()->CopyFrom(state.TxStats);
-                } else {
-                    // After restart: no stored result, use default status
-                    res->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-                }
+                FillDuplicateWriteResult(lock->GetWriteSeqNumState(), res->Record);
 
                 THashSet<TPathId> tables = lock->GetReadTables();
                 tables.insert(lock->GetWriteTables().begin(), lock->GetWriteTables().end());
@@ -844,7 +863,7 @@ public:
                 // Remembered for a duplicate delivery of this write
                 auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
                 if (lock && lock->GetWriteSeqNum() == lastRequested) {
-                    lock->SetWriteSeqNumResult(writeResult->Record);
+                    lock->SetWriteSeqNumResult(SerializeWriteSeqNumResult(writeResult->Record));
                 }
             }
 

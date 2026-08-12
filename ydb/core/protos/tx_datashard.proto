@@ -2738,6 +2738,13 @@ message TInMemoryVars {
     optional NKikimrProto.TRowVersion UnprotectedReadEdge = 3;
 }
 
+message TWriteSeqNumResult {
+    optional uint64 WriterIndex = 1;
+    optional uint64 WriteSeqNum = 2;
+    // Opaque serialized NKikimrDataEvents.TEvWriteResult
+    optional bytes SerializedResult = 3;
+}
+
 // In-memory locks
 message TInMemoryLockInfo {
     optional uint64 LockId = 1;
@@ -2752,8 +2759,7 @@ message TInMemoryLockInfo {
     optional uint64 VictimQuerySpanId = 10;
     optional uint64 BreakerQuerySpanId = 11;
     optional uint32 BreakerNodeId = 12;
-    optional uint64 WriterIndex = 13;
-    optional uint64 WriteSeqNum = 14;
+    optional TWriteSeqNumResult WriteSeqNumResult = 13;
 }
 
 // In-memory ranges associated with the lock

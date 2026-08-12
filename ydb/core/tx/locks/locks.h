@@ -5,11 +5,7 @@
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
-#include <ydb/core/protos/data_events.pb.h>
-#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
-
-#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <ydb/library/actors/async/event.h>
 
@@ -32,17 +28,15 @@ struct TLockWriteSeqNum {
 };
 
 // All data about the last applied write at this lock's position in the writer's chain.
-// WriterIndex and WriteSeqNum are persisted via local DB columns; the rest is in-memory
-// only and never migrated, so a duplicate that arrives after a restart is answered
-// without the stored result fields.
+// WriterIndex and WriteSeqNum are persisted via local DB columns; SerializedResult is
+// in-memory only and transferred via in-memory state migration, so a duplicate that
+// arrives after a restart is answered without the stored result, while a duplicate
+// that arrives after split/merge/move gets the original result replayed.
 struct TWriteSeqNumState {
     ui64 WriterIndex = 0;
     ui64 WriteSeqNum = 0;
-    // In-memory only: the non-reconstructible parts of the original write's result.
-    NKikimrDataEvents::TEvWriteResult::EStatus Status = NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
-    TVector<Ydb::Issue::IssueMessage> Issues;
-    NKikimrQueryStats::TTxStats TxStats;
-    bool HasResult = false;  // Whether Status/Issues/TxStats are populated
+    // Opaque serialized result of the last applied write, empty when absent.
+    TString SerializedResult;
 };
 
 class ILocksDb {
@@ -64,8 +58,7 @@ public:
         ui64 Counter;
         ui64 CreateTs;
         ui64 Flags;
-        ui64 WriterIndex = 0;
-        ui64 WriteSeqNum = 0;
+        TWriteSeqNumState WriteSeqNumState;
         ui64 VictimQuerySpanId = 0;
         ui64 BreakerQuerySpanId = 0;
         ui32 BreakerNodeId = 0;
@@ -477,7 +470,7 @@ public:
     bool SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
 
     const TWriteSeqNumState& GetWriteSeqNumState() const { return WriteSeqNumState; }
-    void SetWriteSeqNumResult(const NKikimrDataEvents::TEvWriteResult& record);
+    void SetWriteSeqNumResult(TString serializedResult);
 
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 

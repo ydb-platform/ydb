@@ -4958,11 +4958,12 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 222\n");
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteAlreadyAppliedAfterRestart) {
+    Y_UNIT_TEST(PipelinedUncommittedWriteAlreadyAppliedAfterStateMigration) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
         serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4989,10 +4990,10 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             blockedCommits.Unblock();
         }
 
-        // Both the write seq num and the lock's write tables must survive the restart.
+        // The in-memory state actor transfers the lock state, including the serialized result.
         RebootTablet(runtime, shard, sender);
 
-        // A duplicate of write 1 must report the unchanged lock, not an empty one.
+        // A duplicate of write 1 must report the unchanged lock and the replayed result.
         {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1,
                 NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
@@ -5003,11 +5004,10 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriteSeqNum(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetGeneration(), lock.GetGeneration());
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetCounter(), lock.GetCounter());
-            // The lock must report the table it was acquired on
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetSchemeShard(), tableId.PathId.OwnerId);
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetPathId(), tableId.PathId.LocalPathId);
-            // The restart lost the statistics of the write, only its index is restored
-            UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().TableAccessStatsSize(), 0u);
+            // The stored result was replayed via in-memory state migration
+            UNIT_ASSERT(result.GetTxStats().TableAccessStatsSize() > 0);
         }
 
         CommitLock(runtime, sender, shard, lock);

@@ -10,6 +10,7 @@ PEERDIR(
 # Shared test headers (bunit.h, genrand_vect.h, testdataset.h) live in the
 # parent test/ directory.
 ADDINCL(
+    ydb/library/nmslib/include
     ydb/library/nmslib/test
 )
 

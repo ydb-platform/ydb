@@ -530,115 +530,106 @@ TString GetIamSubject(const NACLib::TUserToken& token) {
     return NExternalDataSource::NormalizeIamSubject(token.GetUserSID());
 }
 
-class TIamDelegationDdlActor final
-    : public NActors::TActorBootstrapped<TIamDelegationDdlActor>
+struct TEvIamDelegationDdl {
+    enum EEv {
+        EvStart = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvStatus,
+        EvIamObject,
+        EvCloudId,
+        EvDelegation,
+    };
+
+    struct TEvStart : NActors::TEventLocal<TEvStart, EvStart> {};
+
+    struct TEvStatus : NActors::TEventLocal<TEvStatus, EvStatus> {
+        explicit TEvStatus(TYqlConclusionStatus status)
+            : Status(std::move(status))
+        {}
+        TYqlConclusionStatus Status;
+    };
+
+    struct TEvIamObject : NActors::TEventLocal<TEvIamObject, EvIamObject> {
+        explicit TEvIamObject(TIamObjectDescription description)
+            : Description(std::move(description))
+        {}
+        TIamObjectDescription Description;
+    };
+
+    struct TEvCloudId : NActors::TEventLocal<TEvCloudId, EvCloudId> {
+        explicit TEvCloudId(TCloudIdDescription description)
+            : Description(std::move(description))
+        {}
+        TCloudIdDescription Description;
+    };
+
+    struct TEvDelegation : NActors::TEventLocal<TEvDelegation, EvDelegation> {
+        explicit TEvDelegation(NExternalDataSource::TIamDelegationResult result)
+            : Result(std::move(result))
+        {}
+        NExternalDataSource::TIamDelegationResult Result;
+    };
+};
+
+template <typename TDerived>
+class TIamDelegationDdlActorBase
+    : public NActors::TActorBootstrapped<TDerived>
 {
-    using TThis = TIamDelegationDdlActor;
+protected:
     using TContext = TExternalDataSourceManager::TExternalModificationContext;
     using TStatus = TExternalDataSourceManager::TYqlConclusionStatus;
 
 public:
-    TIamDelegationDdlActor(
+    TIamDelegationDdlActorBase(
         NKikimrSchemeOp::TModifyScheme schemeTx,
         TContext context,
-        NKqpProto::TKqpSchemeOperation::OperationCase operationCase,
         NThreading::TPromise<TStatus> promise)
         : SchemeTx(std::move(schemeTx))
         , Context(std::move(context))
-        , OperationCase(operationCase)
         , Promise(std::move(promise))
     {}
 
-    void Bootstrap() {
-        Become(&TThis::StateWork);
-        Send(SelfId(), new TEvPrivate::TEvStart());
-    }
-
-private:
-    struct TEvPrivate {
-        enum EEv {
-            EvStart = EventSpaceBegin(TEvents::ES_PRIVATE),
-            EvStatus,
-            EvIamObject,
-            EvCloudId,
-            EvDelegation,
-        };
-
-        struct TEvStart : TEventLocal<TEvStart, EvStart> {};
-
-        struct TEvStatus : TEventLocal<TEvStatus, EvStatus> {
-            explicit TEvStatus(TStatus status)
-                : Status(std::move(status))
-            {}
-            TStatus Status;
-        };
-
-        struct TEvIamObject : TEventLocal<TEvIamObject, EvIamObject> {
-            explicit TEvIamObject(TIamObjectDescription description)
-                : Description(std::move(description))
-            {}
-            TIamObjectDescription Description;
-        };
-
-        struct TEvCloudId : TEventLocal<TEvCloudId, EvCloudId> {
-            explicit TEvCloudId(TCloudIdDescription description)
-                : Description(std::move(description))
-            {}
-            TCloudIdDescription Description;
-        };
-
-        struct TEvDelegation : TEventLocal<TEvDelegation, EvDelegation> {
-            explicit TEvDelegation(NExternalDataSource::TIamDelegationResult result)
-                : Result(std::move(result))
-            {}
-            NExternalDataSource::TIamDelegationResult Result;
-        };
-    };
+protected:
 
     static constexpr ui64 StatusCookie = 1;
     static constexpr ui64 IamObjectCookie = 2;
     static constexpr ui64 CloudIdCookie = 3;
     static constexpr ui64 DelegationCookie = 4;
 
-    void HandleStart(TEvPrivate::TEvStart::TPtr) {
-        co_await Execute();
-    }
-
     NActors::async<TStatus> AwaitStatus(TAsyncStatus future) {
-        future.Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId()](const auto& f) {
-            actorSystem->Send(self, new TEvPrivate::TEvStatus(f.GetValue()), 0, StatusCookie);
+        future.Subscribe([actorSystem = TActivationContext::ActorSystem(), self = this->SelfId()](const auto& f) {
+            actorSystem->Send(self, new TEvIamDelegationDdl::TEvStatus(f.GetValue()), 0, StatusCookie);
         });
-        const auto event = co_await NActors::ActorWaitForEvent<TEvPrivate::TEvStatus>(StatusCookie);
+        const auto event = co_await NActors::ActorWaitForEvent<TEvIamDelegationDdl::TEvStatus>(StatusCookie);
         co_return std::move(event->Get()->Status);
     }
 
     NActors::async<TIamObjectDescription> AwaitIamObject(
         NThreading::TFuture<TIamObjectDescription> future)
     {
-        future.Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId()](const auto& f) {
-            actorSystem->Send(self, new TEvPrivate::TEvIamObject(f.GetValue()), 0, IamObjectCookie);
+        future.Subscribe([actorSystem = TActivationContext::ActorSystem(), self = this->SelfId()](const auto& f) {
+            actorSystem->Send(self, new TEvIamDelegationDdl::TEvIamObject(f.GetValue()), 0, IamObjectCookie);
         });
-        const auto event = co_await NActors::ActorWaitForEvent<TEvPrivate::TEvIamObject>(IamObjectCookie);
+        const auto event = co_await NActors::ActorWaitForEvent<TEvIamDelegationDdl::TEvIamObject>(IamObjectCookie);
         co_return std::move(event->Get()->Description);
     }
 
     NActors::async<TCloudIdDescription> AwaitCloudId(
         NThreading::TFuture<TCloudIdDescription> future)
     {
-        future.Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId()](const auto& f) {
-            actorSystem->Send(self, new TEvPrivate::TEvCloudId(f.GetValue()), 0, CloudIdCookie);
+        future.Subscribe([actorSystem = TActivationContext::ActorSystem(), self = this->SelfId()](const auto& f) {
+            actorSystem->Send(self, new TEvIamDelegationDdl::TEvCloudId(f.GetValue()), 0, CloudIdCookie);
         });
-        const auto event = co_await NActors::ActorWaitForEvent<TEvPrivate::TEvCloudId>(CloudIdCookie);
+        const auto event = co_await NActors::ActorWaitForEvent<TEvIamDelegationDdl::TEvCloudId>(CloudIdCookie);
         co_return std::move(event->Get()->Description);
     }
 
     NActors::async<NExternalDataSource::TIamDelegationResult> AwaitDelegation(
         NThreading::TFuture<NExternalDataSource::TIamDelegationResult> future)
     {
-        future.Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId()](const auto& f) {
-            actorSystem->Send(self, new TEvPrivate::TEvDelegation(f.GetValue()), 0, DelegationCookie);
+        future.Subscribe([actorSystem = TActivationContext::ActorSystem(), self = this->SelfId()](const auto& f) {
+            actorSystem->Send(self, new TEvIamDelegationDdl::TEvDelegation(f.GetValue()), 0, DelegationCookie);
         });
-        const auto event = co_await NActors::ActorWaitForEvent<TEvPrivate::TEvDelegation>(DelegationCookie);
+        const auto event = co_await NActors::ActorWaitForEvent<TEvIamDelegationDdl::TEvDelegation>(DelegationCookie);
         co_return std::move(event->Get()->Result);
     }
 
@@ -648,7 +639,34 @@ private:
             : TStatus::Fail(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, result.Error);
     }
 
-    NActors::async<void> ExecuteDrop() {
+    void Finish(TStatus status) {
+        Promise.SetValue(std::move(status));
+        this->PassAway();
+    }
+
+protected:
+    NKikimrSchemeOp::TModifyScheme SchemeTx;
+    const TContext Context;
+    NThreading::TPromise<TStatus> Promise;
+};
+
+class TDropIamDelegationDdlActor final
+    : public TIamDelegationDdlActorBase<TDropIamDelegationDdlActor>
+{
+    using TBase = TIamDelegationDdlActorBase<TDropIamDelegationDdlActor>;
+    using TBase::TBase;
+
+public:
+    void Bootstrap() {
+        Become(&TDropIamDelegationDdlActor::StateWork);
+        Send(SelfId(), new TEvIamDelegationDdl::TEvStart());
+    }
+
+    void HandleStart(TEvIamDelegationDdl::TEvStart::TPtr) {
+        co_await Execute();
+    }
+
+    NActors::async<void> Execute() {
         const TString path = TStringBuilder() << SchemeTx.GetWorkingDir() << '/' << SchemeTx.GetDrop().GetName();
         auto described = co_await AwaitIamObject(DescribeIamObject(path, Context));
         if (described.Status.IsFail()) {
@@ -668,7 +686,29 @@ private:
         Finish(schemeStatus);
     }
 
-    NActors::async<void> ExecuteCreateOrAlter() {
+protected:
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvIamDelegationDdl::TEvStart, HandleStart);
+    )
+};
+
+class TCreateOrAlterIamDelegationDdlActor final
+    : public TIamDelegationDdlActorBase<TCreateOrAlterIamDelegationDdlActor>
+{
+    using TBase = TIamDelegationDdlActorBase<TCreateOrAlterIamDelegationDdlActor>;
+    using TBase::TBase;
+
+public:
+    void Bootstrap() {
+        Become(&TCreateOrAlterIamDelegationDdlActor::StateWork);
+        Send(SelfId(), new TEvIamDelegationDdl::TEvStart());
+    }
+
+    void HandleStart(TEvIamDelegationDdl::TEvStart::TPtr) {
+        co_await Execute();
+    }
+
+    NActors::async<void> Execute() {
         auto previous = TIamObjectDescription{};
         const bool hasIam = SchemeTx.GetCreateExternalDataSource().GetAuth().HasIam();
         if (hasIam) {
@@ -756,31 +796,10 @@ private:
         Finish(schemeStatus);
     }
 
-    NActors::async<void> Execute() {
-        if (OperationCase == NKqpProto::TKqpSchemeOperation::kDropExternalDataSource) {
-            co_await ExecuteDrop();
-        } else if (OperationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
-            co_await ExecuteCreateOrAlter();
-        } else {
-            Finish(TStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                "Unsupported EXTERNAL_DATA_SOURCE operation"));
-        }
-    }
-
-    void Finish(TStatus status) {
-        Promise.SetValue(std::move(status));
-        PassAway();
-    }
-
+protected:
     STRICT_STFUNC(StateWork,
-        hFunc(TEvPrivate::TEvStart, HandleStart);
+        hFunc(TEvIamDelegationDdl::TEvStart, HandleStart);
     )
-
-private:
-    NKikimrSchemeOp::TModifyScheme SchemeTx;
-    const TContext Context;
-    const NKqpProto::TKqpSchemeOperation::OperationCase OperationCase;
-    NThreading::TPromise<TStatus> Promise;
 };
 
 TAsyncStatus ExecuteIamDelegationDdl(
@@ -790,8 +809,16 @@ TAsyncStatus ExecuteIamDelegationDdl(
 {
     auto promise = NThreading::NewPromise<TYqlConclusionStatus>();
     auto future = promise.GetFuture();
-    context.GetActorSystem()->Register(new TIamDelegationDdlActor(
-        schemeTx, context, operationCase, std::move(promise)));
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kDropExternalDataSource) {
+        context.GetActorSystem()->Register(new TDropIamDelegationDdlActor(
+            schemeTx, context, std::move(promise)));
+    } else if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
+        context.GetActorSystem()->Register(new TCreateOrAlterIamDelegationDdlActor(
+            schemeTx, context, std::move(promise)));
+    } else {
+        promise.SetValue(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+            "Unsupported EXTERNAL_DATA_SOURCE operation"));
+    }
     return future;
 }
 

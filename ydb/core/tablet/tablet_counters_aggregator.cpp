@@ -702,7 +702,7 @@ private:
 
             bool Find(const TString& name, TVector<NPrivate::TTabletCounterValue>& results) const {
                 if (!IsInitialized) {
-                    return {};
+                    return false;
                 }
 
                 return AggregatedSimpleCounters.Find(name, results) 
@@ -1486,7 +1486,7 @@ TString TTabletCountersAggregatorActor::RenderSearch(const TStringBuf relPath, c
                         LI() { str << "Cumulative."; }
                     }
                 }
-                LI() { str << "The search stops when the first match is found. It is recommended to specify the full name of the counter."; }
+                LI() { str << "The search stops when the first match for each tablet type is found. It is recommended to specify the full name of the counter."; }
                 LI() { str << "The instantaneous values of the counter are displayed."; }
             }
         }

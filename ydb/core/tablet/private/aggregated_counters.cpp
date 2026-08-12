@@ -165,8 +165,6 @@ void TAggregatedSimpleCounters::RecalcAll() {
 }
 
 bool TAggregatedSimpleCounters::Find(const TString& name, TVector<TTabletCounterValue>& results) const {
-    TVector<TTabletCounterValue> result;
-
     for (ui32 i = 0; i < CounterNames.size(); ++i) {
         if (!CounterNames[i].contains(name)) {
             continue;

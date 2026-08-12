@@ -59,6 +59,7 @@ Mart access goes through [`../common/ydb_client.py`](../common/ydb_client.py) (Y
 | `bisect -o $OUT [-c CONTEXT] [--path …]` | code window on **tested** sha vs prev + focus PR files |
 | `inject-trace -o $OUT` | rebuild `action_tree.json` + inject `<details>` tree into `analysis.md` |
 | `trace-note -o $OUT "…"` | append hypothesis/dig/decision node to the action tree |
+| `known-issues --keys … -o $OUT` | open hits (`update_known`) + **`related_closed`** (recently closed, same keys → link on `open_ticket`) |
 | `validate -o $OUT` | **quality gate** (+ refreshes action tree under the cut) |
 | `write-result -c CONTEXT -o $OUT` | final `result.json` only after validate OK |
 | `upload-report -o $OUT [--issue N]` | put report to S3 (immutable stamp dir) + upsert **[полный отчёт]** into issue body; issue# from `--issue` or `Тикет: #N` in analysis. For `wait_next_wave`: `--no-issue` (publishes `duty_decision` index for dashboard **wait next** badge) |
@@ -424,8 +425,9 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
 
 **Перед `open_ticket`:**  
 1. Ключи из fingerprint (`file.cpp:NN`, `AFL_VERIFY(…)`, symbol) — **не** suite alone.  
-2. `dutyctl known-issues --keys 'read.cpp:59' 'range.Offset'` (или `gh` + parse блоков).  
-3. Если hit → `update_known`: `dutyctl annotate-issue --issue N --suite … --db … --queries …` (расширяет `affected` в body; **по умолчанию без коммента**). Хватает match-блока + `upload-report` (Duty report в Фактуре). Если нужен timeline-коммент — **после** dig стека/coredump и `upload-report`:
+2. `dutyctl known-issues --keys 'read.cpp:59' 'range.Offset' -o $OUT` (или `gh` + parse блоков).  
+   Пишет `known_issues.json`: **`open_hits`** + **`related_closed`** (recently closed, тот же keys overlap).  
+3. Если **open** hit → `update_known`: `dutyctl annotate-issue --issue N --suite … --db … --queries …` (расширяет `affected` в body; **по умолчанию без коммента**). Хватает match-блока + `upload-report` (Duty report в Фактуре). Если нужен timeline-коммент — **после** dig стека/coredump и `upload-report`:
    `dutyctl annotate-issue … --sighting-from $OUT` («Повтор»: branch / commit / Allure / Duty report / coredump + **полный** backtrace `#0…#N` из `host_dig/*crash_stack*` или `stderr/`).  
    **Запрещены** голый `also seen` и таблица без стека при segfault/VERIFY.  
    **Чеклист `annotate-issue` (один вызов или два):**  
@@ -433,8 +435,13 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
    2) **все** pack-nodata query того же suite/db, если они — хвост после abort (не лаг mart).  
    Пример: `--queries Query03 Query17 Query18 Query19 Query20 Query21 Query22 --no-comment`.  
    Не закрывай разбор, пока `ticket_coverage` nodata-хвоста не станет `covered` тем же `#N`.
-4. Context `known_tickets` + `ticket_coverage` из Save — стартовые кандидаты; **uncovered** в pack = кандидат на новый issue (после search).  
-5. Если `compare.active` — сверь симптом на `compare.run` и на `focus_run` (появилось на now / уже было на cmp).
+4. Если open нет, но есть **`related_closed`** → `open_ticket` **ок** (post-close / uncovered), но **обязательно** связать:
+   - в Фактуре строка `| Related closed | [#N](url)… |`;
+   - в **Чинить** / Заключении — «здесь [#new](…); заодно закрытый [#N](…)»;
+   - в `Issues (поиск):` — явно перечислить closed hits.  
+   Не оставлять «no open matches» без упоминания closed того же fingerprint.
+5. Context `known_tickets` + `ticket_coverage` из Save — стартовые кандидаты; **uncovered** в pack = кандидат на новый issue (после search).  
+6. Если `compare.active` — сверь симптом на `compare.run` и на `focus_run` (появилось на now / уже было на cmp).
 
 **После `open_ticket` / `update_known` — полный отчёт в S3 (обязательно):**  
 1. Заведи / обнови issue вручную (Materials Title+Body) — отдельный шаг по команде человека.  
@@ -497,6 +504,7 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
 | Allure | https://proxy.sandbox… |
 | Duty report | [полный отчёт](https://storage.yandexcloud.net/workload-log/…/analysis.md) · [result](…) · [problems](…) |
 | Failed | Query… |
+| Related closed | [#N](…) — тот же fingerprint (если `known-issues` → `related_closed`); иначе строку не пиши |
 
 **Обязательно** строки `| | |` и `|--|--|` перед данными — без них GitHub **не** рисует таблицу. То же для `#### Код`.
 

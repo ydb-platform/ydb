@@ -8,7 +8,7 @@ CLI:
   dig-baseline   fetch plans/logs from good historical run (baseline_candidate)
   dig-prs        product PRs in mart pr_window (suite-stable streak→focus / jump)
   bisect         crash-path window + focus PR files
-  known-issues   search open perf-duty issues by match keys
+  known-issues   search open + recently-closed duty issues by match keys
   annotate-issue expand affected / upsert perf-duty-match on a GitHub issue
   upload-report  put analysis.md (+ result/problems) to S3 (workload-log)
   validate       lint analysis.md
@@ -1205,31 +1205,56 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 
 def cmd_known_issues(args: argparse.Namespace) -> int:
-    """List open perf-duty issues whose keys overlap --keys."""
-    from tools.known_issues import search_open_by_keys
+    """List open + recently-closed duty issues whose keys overlap --keys.
+
+    Open hits → prefer update_known. Related closed → still may open_ticket
+    (post-close), but must link them in Materials (Related closed / «заодно»).
+    """
+    from tools.known_issues import search_keys_with_related
 
     keys = list(args.keys or [])
     if not keys:
         print("known-issues: pass --keys TOKEN [TOKEN…]", file=sys.stderr)
         return 2
-    hits = search_open_by_keys(keys, kind=args.kind)
+    result = search_keys_with_related(keys, kind=args.kind)
+    open_hits = list(result.get("open_hits") or result.get("hits") or [])
+    related_closed = list(result.get("related_closed") or [])
     if args.json:
-        print(json.dumps(hits, ensure_ascii=False, indent=2))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        if not hits:
+        if not open_hits and not related_closed:
+            print("no open or recently-closed matches")
+        if open_hits:
+            print(f"open matches ({len(open_hits)}) — prefer update_known:")
+            for h in open_hits:
+                print(
+                    f"#{h.get('number')} {h.get('title')}\n"
+                    f"  {h.get('url')}\n"
+                    f"  fingerprint={h.get('fingerprint')} keys={h.get('keys')}\n"
+                    f"  affected={h.get('affected')}"
+                )
+        else:
             print("no open matches")
-        for h in hits:
+        if related_closed:
             print(
-                f"#{h.get('number')} {h.get('title')}\n"
-                f"  {h.get('url')}\n"
-                f"  fingerprint={h.get('fingerprint')} keys={h.get('keys')}\n"
-                f"  affected={h.get('affected')}"
+                f"related closed ({len(related_closed)}) — "
+                "open_ticket OK if post-close; must link in Materials:"
             )
+            for h in related_closed:
+                print(
+                    f"#{h.get('number')} [closed] {h.get('title')}\n"
+                    f"  {h.get('url')}\n"
+                    f"  closed_at={h.get('closed_at')} "
+                    f"fingerprint={h.get('fingerprint')} keys={h.get('keys')}\n"
+                    f"  affected={h.get('affected')}"
+                )
+        if result.get("warning"):
+            print(f"warning: {result['warning']}", file=sys.stderr)
     out = getattr(args, "out_dir", None)
     if out:
         out_p = Path(out)
         out_p.mkdir(parents=True, exist_ok=True)
-        write_json(out_p / "known_issues.json", {"keys": keys, "hits": hits})
+        write_json(out_p / "known_issues.json", result)
         print(f"wrote {out_p / 'known_issues.json'}", file=sys.stderr)
     return 0
 
@@ -1690,7 +1715,10 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "known-issues",
-        help="search open perf-duty issues by match keys (before open_ticket)",
+        help=(
+            "search open + recently-closed duty issues by match keys "
+            "(before open_ticket; closed → Related closed / «заодно»)"
+        ),
     )
     p.add_argument(
         "--keys",

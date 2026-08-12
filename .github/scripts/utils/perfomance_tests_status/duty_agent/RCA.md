@@ -25,7 +25,11 @@
 
 1. Detection — что в логе; это origin или место падения?
 2. Dataflow @ tested sha — кто пишет/владеет объектами из стека.
-3. Поиск GH issues — шире Linked/related (`gh search` / `known-issues` по символу/path/fingerprint/suite).
+3. Поиск GH issues — шире Linked/related:
+   `dutyctl known-issues --keys … -o $OUT` (open **и** recently-closed) /
+   `gh search` по символу/path/fingerprint/suite.
+   Closed с тем же fingerprint → в **Чинить** «заодно [#N]» + Фактура `Related closed`
+   (новый тикет ок при post-close; молча игнорировать closed — ошибка).
 4. Отбор: в работе ≤3 кандидатов → в analysis **одна** наиболее вероятная.
 5. Причины + как починить под эту гипотезу; culprit только по evidence bar.
 6. Свести ответ человеку к трём строкам **Проблема / Из‑за чего / Чинить**.

@@ -1224,6 +1224,42 @@ def validate_analysis_md(
                 "(or put Тикет: [#N](url) in analysis and re-run without --issue)"
             )
 
+    # open_ticket + known_issues.related_closed → must link those issues (not silent reopen).
+    if resolution == "open_ticket" and out_dir is not None:
+        ki_path = out_dir / "known_issues.json"
+        if ki_path.is_file():
+            try:
+                ki = read_json(ki_path)
+            except Exception:  # noqa: BLE001
+                ki = {}
+            related = list((ki or {}).get("related_closed") or [])
+            missing_closed: list[str] = []
+            for iss in related:
+                num = iss.get("number") if isinstance(iss, dict) else None
+                if not num:
+                    continue
+                n = int(num)
+                linked = bool(
+                    re.search(
+                        rf"\[#{n}\]\(https://github\.com/ydb-platform/ydb/issues/{n}\)",
+                        body,
+                    )
+                )
+                if not linked:
+                    missing_closed.append(f"#{n}")
+            if missing_closed:
+                errors.append(
+                    "open_ticket: known_issues.related_closed must be linked in analysis "
+                    "(Фактура «Related closed» / Чинить «заодно») — missing "
+                    + ", ".join(missing_closed[:8])
+                    + "; new ticket OK, but do not omit same-fingerprint closed issues"
+                )
+        else:
+            warnings.append(
+                "open_ticket: no known_issues.json — run "
+                "`dutyctl known-issues --keys … -o $OUT` so related_closed can be linked"
+            )
+
     # wait_next_wave: report must be on S3 so the dashboard can show a wait-next badge.
     if resolution_token == "wait_next_wave" and out_dir is not None:
         if not (out_dir / "s3_report.json").is_file():

@@ -19,6 +19,7 @@ from common.duty_issues import (  # noqa: E402
     DEFAULT_REPO,
     MATCH_SEARCH_QUERY,
     affected_would_expand,
+    fetch_duty_issues,
     fetch_open_duty_issues,
     keys_overlap,
     merge_affected,
@@ -38,6 +39,7 @@ __all__ = [
     "keys_overlap",
     "fetch_open_duty_issues",
     "search_open_by_keys",
+    "search_keys_with_related",
     "fetch_issue",
     "patch_issue_body",
     "expand_affected_on_issue",
@@ -354,6 +356,41 @@ def search_open_by_keys(
     """Open duty issues whose match-block keys overlap ``keys``."""
     issues, _warn = fetch_open_duty_issues(kind=kind, repo=repo)
     return [i for i in issues if keys_overlap(keys, i.get("keys"))]
+
+
+def search_keys_with_related(
+    keys: list[str],
+    *,
+    kind: str | None = None,
+    repo: str = DEFAULT_REPO,
+) -> dict[str, Any]:
+    """Open hits + recently-closed key overlaps for Materials linking.
+
+    - ``open_hits`` / ``hits`` — prefer ``update_known`` (do not open a duplicate).
+    - ``related_closed`` — same fingerprint class, closed within
+      ``CLOSED_ISSUES_MAX_AGE_DAYS``; may still ``open_ticket`` (post-close),
+      but analysis/Materials **must** link them (``Related closed`` / «заодно»).
+    """
+    issues, warn = fetch_duty_issues(
+        kind=kind, repo=repo, include_closed=True
+    )
+    open_hits: list[dict[str, Any]] = []
+    related_closed: list[dict[str, Any]] = []
+    for iss in issues:
+        if not keys_overlap(keys, iss.get("keys")):
+            continue
+        state = str(iss.get("state") or "").lower()
+        if state == "closed":
+            related_closed.append(iss)
+        else:
+            open_hits.append(iss)
+    return {
+        "keys": list(keys),
+        "hits": open_hits,  # backward-compatible alias for open
+        "open_hits": open_hits,
+        "related_closed": related_closed,
+        "warning": warn,
+    }
 
 
 def fetch_issue(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:

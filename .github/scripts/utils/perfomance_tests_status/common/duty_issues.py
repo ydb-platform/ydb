@@ -18,8 +18,12 @@ Dashboard joins open **and recently closed** issues to suite rows via ``affected
 (not Title/suite alone). Closed pills = issues closed within
 ``CLOSED_ISSUES_MAX_AGE_DAYS`` (grey). A closed issue covers a fail only when the
 tested point (``version_ts`` / run ``ts`` / day) is **on or before** ``closed_at``;
-a newer SHA/run after close counts as **new issue**. Duty-agent duplicate search
-still uses open-only (``fetch_open_duty_issues``).
+a newer SHA/run after close counts as **new issue**.
+
+Duty-agent ``known-issues``:
+- **open** hits → prefer ``update_known`` (do not open a duplicate);
+- **recently closed** key overlaps → still may ``open_ticket`` (post-close uncovered),
+  but **must** link them in Materials (``Related closed`` / «заодно #N»).
 Agent expands ``affected`` when the same fingerprint appears on another suite/query.
 """
 
@@ -1218,9 +1222,9 @@ def fetch_duty_issues(
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Fetch issues with ``<!-- perf-duty-match`` (open, and recent closed if requested).
 
-    Closed issues are included for report pills only when closed within
-    ``CLOSED_ISSUES_MAX_AGE_DAYS``. Duty-agent duplicate search should use
-    ``fetch_open_duty_issues`` (open only).
+    Closed issues are included when closed within ``CLOSED_ISSUES_MAX_AGE_DAYS``.
+    For duty-agent: open hits drive ``update_known``; closed overlaps are
+    ``related_closed`` hints (link on ``open_ticket``, do not annotate closed).
     """
     open_list, warn_open = _fetch_duty_issues_state(
         state="open", kind=kind, repo=repo, limit=limit

@@ -101,11 +101,13 @@ Fingerprint в Title + `keys` в match-блоке достаточно. В «К�
 | Allure | https://proxy.sandbox.yandex-team.ru/{id}/index.html |
 | Duty report | [полный отчёт](https://storage.yandexcloud.net/workload-log/perfomance_tests_status/duty_artifacts/{run_id}/{stamp}/analysis.md) · [result](…) · [problems](…) |
 | Failed | Query… (кратко: VERIFY / node down) |
+| Related closed | [#N](url) — тот же fingerprint из `known-issues` → `related_closed` (если есть) |
 
 `Duty report` — после `dutyctl upload-report -o $OUT` (нужен `Тикет: #N` или `--issue N`).  
 Bucket `workload-log`, путь с `{stamp}` (immutable). Labels: **полный отчёт** / result / problems.  
 Не весь отчёт в body.  
-Без Kind / CI version / Fingerprint / Search keys в этой таблице — они в Title и в `perf-duty-match`.
+Без Kind / CI version / Fingerprint / Search keys в этой таблице — они в Title и в `perf-duty-match`.  
+`Related closed` — только если `dutyctl known-issues` вернул recently-closed с overlap keys; при `open_ticket` их **нужно** упомянуть (новый тикет ок, но связать). Строку без hits не добавляй.
 
 #### Что сломалось
 1–3 предложения: симптом → где упало (функция/путь). Без списка «не путать с …».
@@ -117,7 +119,7 @@ Bucket `workload-log`, путь с `{stamp}` (immutable). Labels: **полный
 По-русски: кто реально ломает. Если кадр стека — только место падения, так и скажи; корень ещё не найден — напиши прямо. **Не** «файл не менялся».
 
 #### Чинить
-Уже [#N](url) / [PR#M](url) — **или** здесь (этот issue); если фикс закроет ещё тикеты — перечисли. Одной–двумя фразами что делать.
+Уже [#N](url) / [PR#M](url) — **или** здесь (этот issue); **заодно** закрытые/связанные [#A](url)… из `related_closed`. Одной–двумя фразами что делать.
 
 #### Детали ошибки
 Цитата VERIFY / `Received signal N` / backtrace **открытым** code-блоком (не под катом).

@@ -2078,6 +2078,179 @@ class S3UploadHelpersTests(unittest.TestCase):
             self.assertEqual(detect_issue_number(d), 48256)
 
 
+class KnownIssuesRelatedClosedTests(unittest.TestCase):
+    def test_search_keys_splits_open_and_related_closed(self):
+        from tools import known_issues as ki
+
+        fake = [
+            {
+                "number": 10,
+                "title": "open hit",
+                "state": "open",
+                "keys": ["blob_cache.cpp:468", "TBlobCache::SendResult"],
+                "fingerprint": "blob_cache.cpp:468",
+                "url": "https://github.com/ydb-platform/ydb/issues/10",
+                "affected": [],
+            },
+            {
+                "number": 47872,
+                "title": "closed same keys",
+                "state": "closed",
+                "closed_at": "2026-07-28T14:18:04Z",
+                "keys": ["blob_cache.cpp:468", "TBlobCache::SendResult"],
+                "fingerprint": "blob_cache.cpp:468",
+                "url": "https://github.com/ydb-platform/ydb/issues/47872",
+                "affected": [],
+            },
+            {
+                "number": 99,
+                "title": "other fingerprint",
+                "state": "closed",
+                "keys": ["scan.cpp:194"],
+                "fingerprint": "scan.cpp:194",
+                "url": "https://github.com/ydb-platform/ydb/issues/99",
+                "affected": [],
+            },
+        ]
+
+        def _fake_fetch(**_kwargs):
+            return fake, None
+
+        old = ki.fetch_duty_issues
+        ki.fetch_duty_issues = _fake_fetch  # type: ignore[assignment]
+        try:
+            out = ki.search_keys_with_related(
+                ["blob_cache.cpp:468", "TBlobCache::SendResult"]
+            )
+        finally:
+            ki.fetch_duty_issues = old  # type: ignore[assignment]
+
+        self.assertEqual([h["number"] for h in out["open_hits"]], [10])
+        self.assertEqual([h["number"] for h in out["hits"]], [10])
+        self.assertEqual([h["number"] for h in out["related_closed"]], [47872])
+        self.assertEqual(out["keys"][0], "blob_cache.cpp:468")
+
+    def test_validate_open_ticket_requires_related_closed_links(self):
+        from tools.validate_report import validate_analysis_md
+
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            (d / "detect_type.json").write_text(
+                json.dumps({"analysis_types": ["olap_fail"], "rollup": "olap_fail"}),
+                encoding="utf-8",
+            )
+            (d / "known_issues.json").write_text(
+                json.dumps(
+                    {
+                        "keys": ["blob_cache.cpp:468"],
+                        "open_hits": [],
+                        "hits": [],
+                        "related_closed": [
+                            {
+                                "number": 47872,
+                                "title": "old",
+                                "state": "closed",
+                                "url": "https://github.com/ydb-platform/ydb/issues/47872",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            # Minimal analysis that reaches the related_closed gate
+            md = """# Perf duty — t
+
+## Заключение
+- **Проблема:** crash
+- **Из‑за чего:** место падения
+- **Чинить:** здесь
+- **Решение:** `open_ticket`
+- **Виновник:** unknown
+- **Уверенность:** средняя
+- **Давность:** этот прогон
+- **Механика:** SIGSEGV
+
+## Гипотезы происхождения
+- **H1** (наиболее вероятна): x — [`blob_cache.cpp`](https://github.com/ydb-platform/ydb/blob/abc1234/ydb/core/tx/columnshard/blob_cache.cpp)
+- Issues (поиск): known-issues — открытых нет
+
+## Причины
+- suspect PR неизвестен
+
+## Как починить
+1. ASan
+
+## Проблемы
+### P1 — crash
+- Тип: `olap_fail`
+- Что сломалось: Query06
+- Почему / механика: SIGSEGV
+- Логи: kikimr__stderr dig; kikimr__logs cascade
+- Код ([`abc1234`](https://github.com/ydb-platform/ydb/commit/abc1234)): blob_cache
+- Кто: unknown
+- Гипотеза проверена: partial
+
+## Что дальше
+1. тикет
+
+## Материалы для issue
+### Title
+```
+OLAP: SIGSEGV blob_cache.cpp:468
+```
+### Body
+#### Фактура
+
+| | |
+|--|--|
+| Suite / DB | UploadTpch100 / sas_small_column |
+| Branch · Version | main · [`abc1234`](https://github.com/ydb-platform/ydb/commit/abc1234) |
+| Run | label · ts |
+| Allure | https://proxy.sandbox.yandex-team.ru/1/index.html |
+| Failed | Query06 |
+
+#### Что сломалось
+crash
+
+#### К чему приводит
+- node down
+
+#### Из‑за чего
+место падения
+
+#### Чинить
+здесь
+
+#### Детали ошибки
+stderr empty
+
+#### Код
+
+| | |
+|--|--|
+| Место падения | blob_cache |
+| Связанный issue | нет |
+"""
+            (d / "analysis.md").write_text(md, encoding="utf-8")
+            report = validate_analysis_md(md, out_dir=d)
+            joined = " ".join(report.get("errors") or [])
+            self.assertIn("related_closed", joined)
+            self.assertIn("#47872", joined)
+
+            md2 = md.replace(
+                "| Failed | Query06 |",
+                "| Failed | Query06 |\n"
+                "| Related closed | [#47872](https://github.com/ydb-platform/ydb/issues/47872) |",
+            ).replace(
+                "#### Чинить\nздесь",
+                "#### Чинить\nздесь; заодно [#47872](https://github.com/ydb-platform/ydb/issues/47872)",
+            )
+            (d / "analysis.md").write_text(md2, encoding="utf-8")
+            report2 = validate_analysis_md(md2, out_dir=d)
+            joined2 = " ".join(report2.get("errors") or [])
+            self.assertNotIn("related_closed must be linked", joined2)
+
+
 class SightingCommentTests(unittest.TestCase):
     def test_format_sighting_has_links(self):
         from tools.known_issues import format_sighting_comment

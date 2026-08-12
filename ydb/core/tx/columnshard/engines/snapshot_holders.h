@@ -69,9 +69,6 @@ public:
         if (MinSnapshotForNewReads < dropSnapshot) {
             return true;
         }
-        if (TxInFlight.empty()) {
-            return false;
-        }
         return !TxInFlight.empty() && TxInFlight.front() < dropSnapshot;
     }
 };
